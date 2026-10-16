@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
 
 /// Width the stat popup sits at when its value fits.

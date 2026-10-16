@@ -26,7 +26,6 @@ import 'package:voyager/features/dev/dev_geometric_texture_tile.dart';
 import 'package:voyager/features/dev/dev_geometric_wave_tile.dart';
 import 'package:voyager/features/dev/dev_leaf_gallery_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
-import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/study/study_debug_generator.dart';
@@ -141,30 +140,6 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.disablePetalField = v;
             ref.read(devDisablePetalFieldProvider.notifier).state = v;
-          },
-        ),
-        SwitchListTile(
-          title: const Text('Life Tracker restore button'),
-          subtitle: const Text(
-            'Show a button on the Life Tracker page that toggles every leaf '
-            'between the tree and the ground',
-          ),
-          value: ref.watch(lifeTrackerShowRestoreButtonProvider),
-          onChanged: (v) {
-            DevFlags.showLifeTrackerRestore = v;
-            ref.read(lifeTrackerShowRestoreButtonProvider.notifier).state = v;
-          },
-        ),
-        SwitchListTile(
-          title: const Text('Life Tracker segment debug colors'),
-          subtitle: const Text(
-            'Highlight each segment of the tree trunk, roots, and branches in '
-            'distinct glowing colors and labels',
-          ),
-          value: ref.watch(lifeTrackerShowDebugColorsProvider),
-          onChanged: (v) {
-            DevFlags.showLifeTreeSegmentDebug = v;
-            ref.read(lifeTrackerShowDebugColorsProvider.notifier).state = v;
           },
         ),
         SwitchListTile(

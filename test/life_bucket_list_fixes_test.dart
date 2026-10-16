@@ -16,8 +16,6 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
-import 'package:voyager/features/life_tracker/life_tree_canvas.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 import 'package:voyager/features/life_tracker/life_tree_popover.dart';
 
 import 'fakes/fake_weather_api_client.dart';
@@ -135,14 +133,5 @@ void main() {
     expect(title.size.height, greaterThan(40));
     // A short title keeps the old one-line height.
     expect(tester.getSize(find.text('Short')).height, lessThan(24));
-  });
-
-  test('BUG-139 no two fallen leaves share an x at the edges', () {
-    final geometry = generateLifeTreeGeometry();
-    final xs = [
-      for (var i = 0; i < 4160; i++) groundPositionFor(i, geometry).dx,
-    ];
-    expect(xs.every((x) => x >= 0.04 && x <= 0.96), isTrue);
-    expect(xs.where((x) => x == 0.96 || x == 0.04), isEmpty);
   });
 }

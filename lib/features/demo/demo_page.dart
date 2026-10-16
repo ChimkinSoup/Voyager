@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/features/demo/weeping_cherry_canvas.dart';
+import 'package:voyager/features/life_tracker/weeping_cherry_canvas.dart';
 import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
 
 /// Demo page showcasing a watercolour weeping cherry in a night sky, its

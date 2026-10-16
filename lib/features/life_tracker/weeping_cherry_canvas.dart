@@ -3,34 +3,120 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/motion/ambient_clock.dart';
 import 'package:voyager/core/motion/window_visibility.dart';
-import 'package:voyager/features/demo/weeping_cherry_geometry.dart';
+import 'package:voyager/features/life_tracker/weeping_cherry_geometry.dart';
 
 /// The night tone the page's chrome is set in.
 const weepingNightColor = Color(0xFF15131C);
 
-const _skyWash = Color(0xFF242037);
-const _skyPlum = Color(0xFF2A1A2C);
-const _halo = Color(0xFF3B3452);
-const _groundColor = Color(0xFF0D0B11);
+/// The painting's pigments. Night is the original moonlit study; day is the
+/// same tree on the cream page, its blossom deepened to hold against the
+/// paper rather than glow out of the dark.
+class _Palette {
+  const _Palette({
+    required this.skyWash,
+    required this.skyPlum,
+    required this.skyStrength,
+    required this.halo,
+    required this.groundColor,
+    required this.woodColor,
+    required this.woodCrevice,
+    required this.woodLight,
+    required this.barkStreak,
+    required this.blossomFar,
+    required this.blossomMid,
+    required this.blossomNear,
+    required this.petalLight,
+    required this.petalHeart,
+    required this.blossomLilac,
+    required this.petalTones,
+    required this.groundTint,
+  });
 
-const _woodColor = Color(0xFF1B1520);
-const _woodCrevice = Color(0xFF060408);
-const _woodLight = Color(0xFFA79CB6);
-const _barkStreak = Color(0xFF453B4E);
+  final Color skyWash;
+  final Color skyPlum;
 
-/// Blossom ramp, far to near. Pools layer with plain source-over, which
-/// converges *toward* the pigment however many overlap — so the dense middle
-/// of the curtain settles on these tones instead of blowing out to white.
-const _blossomFar = Color(0xFF6A3756);
-const _blossomMid = Color(0xFFC07892);
-const _blossomNear = Color(0xFFF0B3C6);
-const _petalLight = Color(0xFFFCDDE6);
-const _petalHeart = Color(0xFFC94E7C);
-const _blossomLilac = Color(0xFF9C7FB4);
+  /// Scales the sky washes' pigment — kept faint by day, where the page
+  /// itself is the sky and heavy washes read as grey smudges.
+  final double skyStrength;
+  final Color halo;
+  final Color groundColor;
+
+  final Color woodColor;
+  final Color woodCrevice;
+  final Color woodLight;
+  final Color barkStreak;
+
+  /// Blossom ramp, far to near. Pools layer with plain source-over, which
+  /// converges *toward* the pigment however many overlap — so the dense
+  /// middle of the curtain settles on these tones instead of blowing out.
+  final Color blossomFar;
+  final Color blossomMid;
+  final Color blossomNear;
+  final Color petalLight;
+  final Color petalHeart;
+  final Color blossomLilac;
+
+  /// The week petals' sprite tones, one row each.
+  final List<Color> petalTones;
+
+  /// Multiplied into a petal once it lies on the ground, as 0xRRGGBB.
+  final int groundTint;
+}
+
+const _nightPalette = _Palette(
+  skyWash: Color(0xFF242037),
+  skyPlum: Color(0xFF2A1A2C),
+  skyStrength: 1.0,
+  halo: Color(0xFF3B3452),
+  groundColor: Color(0xFF0D0B11),
+  woodColor: Color(0xFF1B1520),
+  woodCrevice: Color(0xFF060408),
+  woodLight: Color(0xFFA79CB6),
+  barkStreak: Color(0xFF453B4E),
+  blossomFar: Color(0xFF6A3756),
+  blossomMid: Color(0xFFC07892),
+  blossomNear: Color(0xFFF0B3C6),
+  petalLight: Color(0xFFFCDDE6),
+  petalHeart: Color(0xFFC94E7C),
+  blossomLilac: Color(0xFF9C7FB4),
+  petalTones: [
+    Color(0xFFF0B3C6),
+    Color(0xFFFCDDE6),
+    Color(0xFFF5C3D2),
+    Color(0xFFE59AB2),
+  ],
+  groundTint: 0xB9A3B4,
+);
+
+const _dayPalette = _Palette(
+  skyWash: Color(0xFFB7C6D6),
+  skyPlum: Color(0xFFD9C3D3),
+  skyStrength: 0.45,
+  halo: Color(0xFFFFFFFF),
+  groundColor: Color(0xFF7F8C6B),
+  woodColor: Color(0xFF2E2226),
+  woodCrevice: Color(0xFF120B0D),
+  woodLight: Color(0xFFE6CDB4),
+  barkStreak: Color(0xFF5C474B),
+  blossomFar: Color(0xFF9A3563),
+  blossomMid: Color(0xFFD4517D),
+  blossomNear: Color(0xFFEE7398),
+  petalLight: Color(0xFFFFB0C6),
+  petalHeart: Color(0xFFA11D4D),
+  blossomLilac: Color(0xFF8B55AC),
+  petalTones: [
+    Color(0xFFEE7398),
+    Color(0xFFFFB0C6),
+    Color(0xFFF593B1),
+    Color(0xFFD65B83),
+  ],
+  groundTint: 0xE5899F,
+);
 
 /// Whether this app run has already played the weeks falling — per the
 /// original Life Tracker design, the fall plays once per restart and every
@@ -254,7 +340,8 @@ class _Flight {
   }
 }
 
-/// Weeping cherry painted as night watercolour. Everything except the sway and
+/// Weeping cherry painted as watercolour — a night study, or by day the same
+/// tree in deeper pigment for the cream page. Everything except the sway and
 /// the petals is baked to images once per size; see [_Scene].
 ///
 /// One petal per week of an 80-year life hangs on the curtain. The weeks
@@ -265,6 +352,8 @@ class WeepingCherryCanvas extends StatefulWidget {
     super.key,
     required this.weeksLived,
     this.replayCount = 0,
+    this.brightness = Brightness.dark,
+    this.pointer,
   });
 
   /// Null while it isn't known yet — the tree waits to fall until it is.
@@ -273,6 +362,13 @@ class WeepingCherryCanvas extends StatefulWidget {
   /// Bumped to play the fall again.
   final int replayCount;
 
+  /// Picks the night or day palette.
+  final Brightness brightness;
+
+  /// Where the pointer is over the canvas, null while it's elsewhere. The
+  /// curtain and the drifting petals give way where it moves through them.
+  final ValueListenable<Offset?>? pointer;
+
   @override
   State<WeepingCherryCanvas> createState() => _WeepingCherryCanvasState();
 }
@@ -280,7 +376,6 @@ class WeepingCherryCanvas extends StatefulWidget {
 class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
     with WindowVisibility<WeepingCherryCanvas> {
   static final _geometry = generateWeepingCherryGeometry();
-  static final _petals = _FallingPetal.generate();
 
   /// Advanced by the shared [AmbientClock] at about 60fps rather than by a
   /// [Ticker], which would ask for a frame on every vsync — and every frame
@@ -297,7 +392,17 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
 
   _Scene? _scene;
   Timer? _resizeSettle;
-  late final ui.Image _sprites = _petalSprites();
+
+  /// Whether [_scene] was baked for the other brightness. Re-baking is a few
+  /// hundred milliseconds on the UI thread, so a theme change made while the
+  /// tree is out of sight waits until it's next in sight.
+  var _sceneStale = false;
+  _Palette get _palette =>
+      widget.brightness == Brightness.light ? _dayPalette : _nightPalette;
+
+  late var _petals = _FallingPetal.generate(_palette);
+  late var _sprites = _petalSprites(_palette);
+  late final _wake = _PointerWake(_petals.length);
 
   static final Future<ui.FragmentProgram?> _crossfadeProgram =
       ui.FragmentProgram.fromAsset(
@@ -312,7 +417,7 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
   List<int> _lived = const [];
 
   /// Each lived petal's way down, by petal index; null for the rest.
-  List<_Flight?> _flights = const [];
+  List<_Flight?> _flights = List.filled(_geometry.weekPetals.length, null);
 
   /// When the last of [_flights] has landed and settled, from the fall's
   /// start.
@@ -337,6 +442,13 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
   void didUpdateWidget(WeepingCherryCanvas old) {
     super.didUpdateWidget(old);
     if (old.weeksLived != widget.weeksLived) _applyWeeks();
+    if (old.brightness != widget.brightness) {
+      _sprites.dispose();
+      _sprites = _petalSprites(_palette);
+      _petals = _FallingPetal.generate(_palette);
+      _sceneStale = true;
+      _resizeSettle?.cancel();
+    }
     if (old.replayCount != widget.replayCount && _weeks > 0) {
       _fallStart = _time.value;
     }
@@ -390,7 +502,10 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
   }
 
   @override
-  void onWindowVisibilityChanged() => _syncAnimation();
+  void onWindowVisibilityChanged() {
+    _syncAnimation();
+    if (_sceneStale && _subscribed) setState(() {});
+  }
 
   void _syncAnimation() {
     final run = _tickerModeEnabled && windowVisible;
@@ -437,18 +552,24 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
     ];
   }
 
-  _Scene _bake(Size size, double dpr) => _Scene.bake(
-    _geometry,
-    size,
-    dpr,
-    weeks: _weeks,
-    fade: _clusterFade(),
-    withFull: _fallStart != null,
-  );
+  _Scene _bake(Size size, double dpr) {
+    _sceneStale = false;
+    return _Scene.bake(
+      _geometry,
+      size,
+      dpr,
+      weeks: _weeks,
+      fade: _clusterFade(),
+      withFull: _fallStart != null,
+      palette: _palette,
+    );
+  }
 
   _Scene _sceneFor(Size size, double dpr) {
     final scene = _scene;
-    if (scene == null || scene.weeks != _weeks) {
+    if (scene == null ||
+        scene.weeks != _weeks ||
+        (_sceneStale && _subscribed)) {
       scene?.dispose();
       return _scene = _bake(size, dpr);
     }
@@ -487,10 +608,13 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
               geometry: _geometry,
               petals: _petals,
               sprites: _sprites,
+              palette: _palette,
               flights: _flights,
               fallStart: _fallStart,
               fallEnd: _fallEnd,
               time: _time,
+              wake: _wake,
+              pointer: widget.pointer,
             ),
           ),
         );
@@ -498,6 +622,15 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
     );
   }
 }
+
+/// Where [treePoint] (in tree space) lands on a [WeepingCherryCanvas] of
+/// [size] — for laying things over the painting.
+Offset weepingCanvasPoint(Offset treePoint, Size size) =>
+    _Frame(size).map(treePoint);
+
+/// The trunk's outline on a [WeepingCherryCanvas] of [size], up to the fork.
+Path weepingTrunkPath(Size size) =>
+    _limbPath(_WeepingCherryCanvasState._geometry.limbs.first, _Frame(size));
 
 /// Maps tree space onto a canvas: scaled by height, centred, ground near the
 /// bottom.
@@ -532,6 +665,7 @@ class _BandImage {
 /// are falling, the unthinned canopy it crossfades from.
 class _Scene {
   _Scene._(
+    this.palette,
     this.size,
     this.dpr,
     this.weeks,
@@ -551,6 +685,7 @@ class _Scene {
     required int weeks,
     required List<double> fade,
     required bool withFull,
+    required _Palette palette,
   }) {
     final scale = math.min(dpr, 2.0);
     final frame = _Frame(size);
@@ -558,7 +693,7 @@ class _Scene {
       final background = _rasterize(
         Offset.zero & size,
         scale,
-        (canvas) => _paintNight(canvas, size, frame, grainShader),
+        (canvas) => _paintNight(canvas, size, frame, grainShader, palette),
       );
 
       var woodBounds = Rect.zero;
@@ -575,26 +710,32 @@ class _Scene {
       final wood = _rasterize(
         woodBounds,
         scale,
-        (canvas) => _paintWood(canvas, g, frame, grainShader),
+        (canvas) => _paintWood(canvas, g, frame, grainShader, palette),
       );
 
       final full = withFull && weeks > 0;
 
       return _Scene._(
+        palette,
         size,
         dpr,
         weeks,
         background,
         wood,
         woodBounds,
-        _bakeBands(g, frame, scale, false, grainShader, fade),
-        _bakeBands(g, frame, scale, true, grainShader, fade),
-        full ? _bakeBands(g, frame, scale, false, grainShader, null) : null,
-        full ? _bakeBands(g, frame, scale, true, grainShader, null) : null,
+        _bakeBands(g, frame, scale, false, grainShader, fade, palette),
+        _bakeBands(g, frame, scale, true, grainShader, fade, palette),
+        full
+            ? _bakeBands(g, frame, scale, false, grainShader, null, palette)
+            : null,
+        full
+            ? _bakeBands(g, frame, scale, true, grainShader, null, palette)
+            : null,
       );
     });
   }
 
+  final _Palette palette;
   final Size size;
   final double dpr;
   final int weeks;
@@ -628,8 +769,8 @@ class _Scene {
     final frame = _Frame(size);
     final scale = math.min(dpr, 2.0);
     _withGrain((grainShader) {
-      fullBack = _bakeBands(g, frame, scale, false, grainShader, null);
-      fullFront = _bakeBands(g, frame, scale, true, grainShader, null);
+      fullBack = _bakeBands(g, frame, scale, false, grainShader, null, palette);
+      fullFront = _bakeBands(g, frame, scale, true, grainShader, null, palette);
     });
   }
 
@@ -703,9 +844,10 @@ List<_BandImage> _bakeBands(
   bool front,
   Shader grain,
   List<double>? fade,
+  _Palette p,
 ) => [
   for (var b = 0; b < weepingBandCount; b++)
-    ?_bakeBand(g, frame, scale, b, front, grain, fade),
+    ?_bakeBand(g, frame, scale, b, front, grain, fade, p),
 ];
 
 ui.Image _rasterize(Rect rect, double scale, void Function(Canvas) paint) {
@@ -781,7 +923,13 @@ Path _blob(Offset c, double r, math.Random rand, {double wobble = 0.22}) {
 
 /// The sky and ground the tree stands in. No opaque stock: the washes lie
 /// straight over the app's own background.
-void _paintNight(Canvas canvas, Size size, _Frame frame, Shader grain) {
+void _paintNight(
+  Canvas canvas,
+  Size size,
+  _Frame frame,
+  Shader grain,
+  _Palette p,
+) {
   final rect = Offset.zero & size;
 
   // Moonlit haze behind the crown, so the dark wood has something to stand
@@ -792,8 +940,8 @@ void _paintNight(Canvas canvas, Size size, _Frame frame, Shader grain) {
     frame.scale * 0.75,
     Paint()
       ..shader = ui.Gradient.radial(crown, frame.scale * 0.75, [
-        _halo.withValues(alpha: 0.55),
-        _halo.withValues(alpha: 0.0),
+        p.halo.withValues(alpha: 0.55),
+        p.halo.withValues(alpha: 0.0),
       ]),
   );
 
@@ -805,12 +953,14 @@ void _paintNight(Canvas canvas, Size size, _Frame frame, Shader grain) {
       rand.nextDouble() * size.height * 0.75,
     );
     final r = size.shortestSide * (0.18 + rand.nextDouble() * 0.25);
-    final color = rand.nextBool() ? _skyWash : _skyPlum;
+    final color = rand.nextBool() ? p.skyWash : p.skyPlum;
     final path = _blob(c, r, rand, wobble: 0.16);
     canvas.drawPath(
       path,
       Paint()
-        ..color = color.withValues(alpha: 0.16 + rand.nextDouble() * 0.12)
+        ..color = color.withValues(
+          alpha: (0.16 + rand.nextDouble() * 0.12) * p.skyStrength,
+        )
         ..maskFilter = rand.nextDouble() < 0.5
             ? ui.MaskFilter.blur(ui.BlurStyle.normal, r * 0.12)
             : null,
@@ -818,7 +968,7 @@ void _paintNight(Canvas canvas, Size size, _Frame frame, Shader grain) {
     canvas.drawPath(
       path,
       Paint()
-        ..color = color.withValues(alpha: 0.22)
+        ..color = color.withValues(alpha: 0.22 * p.skyStrength)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2,
     );
@@ -843,7 +993,7 @@ void _paintNight(Canvas canvas, Size size, _Frame frame, Shader grain) {
   canvas.drawPath(
     ground,
     Paint()
-      ..color = _groundColor.withValues(alpha: 0.85)
+      ..color = p.groundColor.withValues(alpha: 0.85)
       ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, 2),
   );
 
@@ -856,7 +1006,7 @@ void _paintNight(Canvas canvas, Size size, _Frame frame, Shader grain) {
       height: frame.scale * 0.07,
     ),
     Paint()
-      ..color = _blossomFar.withValues(alpha: 0.35)
+      ..color = p.blossomFar.withValues(alpha: 0.35)
       ..maskFilter = ui.MaskFilter.blur(
         ui.BlurStyle.normal,
         frame.scale * 0.02,
@@ -931,6 +1081,7 @@ void _paintWood(
   WeepingCherryGeometry g,
   _Frame frame,
   Shader grain,
+  _Palette p,
 ) {
   final paths = [for (final limb in g.limbs) _limbPath(limb, frame)];
   final bounds = paths
@@ -941,7 +1092,7 @@ void _paintWood(
   // Damp halo where the ink crept into the paper.
   canvas.saveLayer(bounds, Paint()..color = const Color(0x55000000));
   final bleed = Paint()
-    ..color = _woodColor
+    ..color = p.woodColor
     ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, frame.scale * 0.004);
   for (final path in paths) {
     canvas.drawPath(path, bleed);
@@ -949,7 +1100,7 @@ void _paintWood(
   canvas.restore();
 
   canvas.saveLayer(bounds, Paint()..color = const Color(0xF0FFFFFF));
-  final body = Paint()..color = _woodColor;
+  final body = Paint()..color = p.woodColor;
   for (final path in paths) {
     canvas.drawPath(path, body);
   }
@@ -974,7 +1125,7 @@ void _paintWood(
       if (rand.nextDouble() < 0.5) {
         mark
           ..style = PaintingStyle.fill
-          ..color = (rand.nextBool() ? _barkStreak : _woodCrevice).withValues(
+          ..color = (rand.nextBool() ? p.barkStreak : p.woodCrevice).withValues(
             alpha: 0.18 + rand.nextDouble() * 0.2,
           )
           ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, half * 0.25);
@@ -1003,7 +1154,7 @@ void _paintWood(
             0.7,
             half * (0.03 + rand.nextDouble() * 0.04),
           )
-          ..color = (rand.nextDouble() < 0.6 ? _barkStreak : _woodCrevice)
+          ..color = (rand.nextDouble() < 0.6 ? p.barkStreak : p.woodCrevice)
               .withValues(alpha: 0.35 + rand.nextDouble() * 0.35);
         canvas.drawLine(at - n * length / 2, at + n * length / 2, mark);
       }
@@ -1021,7 +1172,7 @@ void _paintWood(
       ..blendMode = BlendMode.srcATop
       ..color = const Color(0x8CFFFFFF),
   );
-  final lit = Paint()..color = _woodLight;
+  final lit = Paint()..color = p.woodLight;
   for (final path in paths) {
     canvas.drawPath(path, lit);
   }
@@ -1069,6 +1220,7 @@ _BandImage? _bakeBand(
   bool front,
   Shader grain,
   List<double>? fade,
+  _Palette p,
 ) {
   final strands = [
     for (final s in g.strands)
@@ -1112,7 +1264,9 @@ _BandImage? _bakeBand(
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = frame.scale * 0.022
-          ..color = (front ? _blossomMid : _blossomFar).withValues(alpha: 0.06)
+          ..color = (front ? p.blossomMid : p.blossomFar).withValues(
+            alpha: 0.06,
+          )
           ..maskFilter = ui.MaskFilter.blur(
             ui.BlurStyle.normal,
             frame.scale * 0.010,
@@ -1134,7 +1288,7 @@ _BandImage? _bakeBand(
     }
 
     for (final i in clusters) {
-      _paintCluster(canvas, g.clusters[i], frame, fade?[i] ?? 1.0);
+      _paintCluster(canvas, g.clusters[i], frame, fade?[i] ?? 1.0, p);
     }
 
     // Granulation: pigment knocked out where the paper's tooth stood proud.
@@ -1156,7 +1310,13 @@ _BandImage? _bakeBand(
   );
 }
 
-void _paintCluster(Canvas canvas, BlossomCluster c, _Frame frame, double fade) {
+void _paintCluster(
+  Canvas canvas,
+  BlossomCluster c,
+  _Frame frame,
+  double fade,
+  _Palette p,
+) {
   final rand = math.Random(c.seed);
   final center = frame.map(c.center);
   final r = c.radius * frame.scale;
@@ -1169,9 +1329,9 @@ void _paintCluster(Canvas canvas, BlossomCluster c, _Frame frame, double fade) {
   );
   final depth = c.depth * (0.55 + 0.45 * lit);
   var tone = depth < 0.5
-      ? Color.lerp(_blossomFar, _blossomMid, depth * 2)!
-      : Color.lerp(_blossomMid, _blossomNear, (depth - 0.5) * 2)!;
-  tone = Color.lerp(tone, _blossomLilac, rand.nextDouble() * 0.3)!;
+      ? Color.lerp(p.blossomFar, p.blossomMid, depth * 2)!
+      : Color.lerp(p.blossomMid, p.blossomNear, (depth - 0.5) * 2)!;
+  tone = Color.lerp(tone, p.blossomLilac, rand.nextDouble() * 0.3)!;
 
   if (c.wet) {
     canvas.drawPath(
@@ -1199,7 +1359,7 @@ void _paintCluster(Canvas canvas, BlossomCluster c, _Frame frame, double fade) {
           ..strokeWidth = math.max(0.7, r * 0.06)
           ..color = Color.lerp(
             tone,
-            _petalHeart,
+            p.petalHeart,
             0.25,
           )!.withValues(alpha: 0.22 * fade),
       );
@@ -1217,7 +1377,7 @@ void _paintCluster(Canvas canvas, BlossomCluster c, _Frame frame, double fade) {
           (rand.nextDouble() - 0.5) * r * 1.1,
         );
     final fr = r * (0.16 + rand.nextDouble() * 0.14);
-    final color = Color.lerp(tone, _petalLight, 0.3 + depth * 0.5)!;
+    final color = Color.lerp(tone, p.petalLight, 0.3 + depth * 0.5)!;
     canvas.drawPath(
       _blob(at, fr, rand, wobble: 0.35),
       Paint()
@@ -1227,7 +1387,7 @@ void _paintCluster(Canvas canvas, BlossomCluster c, _Frame frame, double fade) {
       canvas.drawCircle(
         at,
         math.max(0.5, fr * 0.22),
-        Paint()..color = _petalHeart.withValues(alpha: 0.45 * depth * fade),
+        Paint()..color = p.petalHeart.withValues(alpha: 0.45 * depth * fade),
       );
     }
   }
@@ -1256,7 +1416,7 @@ class _FallingPetal {
   final double tumble;
   final Color color;
 
-  static List<_FallingPetal> generate() {
+  static List<_FallingPetal> generate(_Palette p) {
     final rand = math.Random(909);
     return [
       for (var i = 0; i < 34; i++)
@@ -1269,7 +1429,7 @@ class _FallingPetal {
           size: 0.0055 + rand.nextDouble() * 0.0045,
           spin: (rand.nextDouble() - 0.5) * 2.4,
           tumble: 0.8 + rand.nextDouble() * 1.6,
-          color: Color.lerp(_blossomNear, _petalLight, rand.nextDouble())!,
+          color: Color.lerp(p.blossomNear, p.petalLight, rand.nextDouble())!,
         ),
     ];
   }
@@ -1292,18 +1452,11 @@ const _spriteCell = 48.0;
 /// A petal's length within its cell.
 const _spritePetal = 40.0;
 
-const _petalTones = [
-  _blossomNear,
-  _petalLight,
-  Color(0xFFF5C3D2),
-  Color(0xFFE59AB2),
-];
-
-ui.Image _petalSprites() {
+ui.Image _petalSprites(_Palette p) {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   for (var tone = 0; tone < petalToneCount; tone++) {
-    final color = _petalTones[tone];
+    final color = p.petalTones[tone];
     for (var q = 0; q < petalSquashLevels; q++) {
       canvas.save();
       canvas.translate(
@@ -1321,7 +1474,7 @@ ui.Image _petalSprites() {
           ..shader = ui.Gradient.linear(
             Offset.zero,
             const Offset(0, -1),
-            [Color.lerp(color, _petalHeart, 0.45)!, color, color],
+            [Color.lerp(color, p.petalHeart, 0.45)!, color, color],
             const [0, 0.45, 1],
           ),
       );
@@ -1352,7 +1505,7 @@ class _PetalBatch {
   final Int32List _colors;
 
   /// For [sway]: each petal's translation before any lean, how far below its
-  /// band's pivot it hangs, and which of the lean slots it follows.
+  /// band's pivot it hangs (negative above, in the crown), and which of the lean slots it follows.
   final Float32List _restX;
   final Float32List _below;
   final Int32List _bands;
@@ -1396,9 +1549,22 @@ class _PetalBatch {
 
   /// Leans every petal with its band, so a frame where only the breeze moves
   /// patches one number per petal instead of laying the batch out again.
-  void sway(Float64List leans) {
+  void sway(Float64List leans, _PointerWake wake) {
+    // Most chains hang straight, and their petals need no wake lookup.
+    final strandsBent = [
+      for (var s = 0; s < leans.length; s++) wake.strands.bent(s),
+    ];
+    final crownBent = [
+      for (var s = 0; s < leans.length; s++) wake.crown.bent(s),
+    ];
     for (var k = 0; k < _count; k++) {
-      _transforms[k * 4 + 2] = _restX[k] + leans[_bands[k]] * _below[k];
+      final band = _bands[k];
+      final below = _below[k];
+      final bent = below >= 0 ? strandsBent[band] : crownBent[band];
+      _transforms[k * 4 + 2] =
+          _restX[k] +
+          leans[band] * math.max(below, 0) +
+          (bent ? wake.shiftAt(band, below) : 0);
     }
   }
 
@@ -1416,9 +1582,6 @@ class _PetalBatch {
   }
 }
 
-/// Multiplied into a petal once it lies on the ground.
-const _groundTint = 0xB9A3B4;
-
 /// White lerped [t] of the way to [tint], as 0xRRGGBB — without the [Color]
 /// a lerp allocates, since every flying petal needs one a frame.
 int _tintToward(int tint, double t) {
@@ -1435,26 +1598,309 @@ double _smoothstep(double x) {
   return t * t * (3 - 2 * t);
 }
 
+/// One side of every band's pivot as a chain of joints out from it: the
+/// pointer drags the joints it moves past, and the chain carries the bend
+/// along before it settles back to where the breeze has it. The pivot never
+/// moves; the far end is free.
+///
+/// Neighbouring joints damp each other's motion as well as pull on each
+/// other, so the quick ripples a chain of springs would otherwise wobble
+/// with die out almost at once, and what's left is the slow swing of the
+/// whole strand.
+class _Chain {
+  _Chain({
+    required this.joints,
+    required this.give,
+    required this.tension,
+    required this.hanging,
+    required this.stiffness,
+    required this.drag,
+    required this.internalDrag,
+    required this.reach,
+  }) : _shifts = Float64List(weepingBandCount * 2 * joints),
+       _velocities = Float64List(weepingBandCount * 2 * joints),
+       _forces = Float64List(joints);
+
+  final int joints;
+
+  /// The share of the pointer's speed the joints are dragged toward.
+  final double give;
+
+  /// How hard each joint pulls its neighbours along.
+  final double tension;
+
+  /// Whether the chain hangs: each link then carries the weight of those
+  /// below it, so it's taut at the pivot and loose at the tip, and swings
+  /// like a strand rather than a ruler.
+  final bool hanging;
+
+  /// How hard each joint is held toward rest on its own, as the wood holds
+  /// the crown.
+  final double stiffness;
+
+  /// The air's drag on each joint.
+  final double drag;
+
+  /// How hard neighbouring joints damp the motion between them.
+  final double internalDrag;
+
+  /// The furthest a joint goes, in tree widths.
+  final double reach;
+
+  /// Each joint's sideways shift in logical pixels, by lean slot then joint
+  /// out from the pivot (exclusive).
+  final Float64List _shifts;
+  final Float64List _velocities;
+  final Float64List _forces;
+
+  /// Each slot's length from the pivot to the chain's end, as of the last
+  /// step.
+  final _spans = Float64List(weepingBandCount * 2);
+
+  /// The shift of joint [j] of [slot]; joint 0 is the pivot.
+  double joint(int slot, int j) => j == 0 ? 0 : _shifts[slot * joints + j - 1];
+
+  bool bent(int slot) {
+    for (var j = 1; j <= joints; j++) {
+      if (joint(slot, j).abs() > 0.05) return true;
+    }
+    return false;
+  }
+
+  /// The shift [out] from the pivot of [slot], between its joints.
+  double shiftAt(int slot, double out) {
+    final span = _spans[slot];
+    if (span <= 0) return 0;
+    final u = (out / span * joints).clamp(0.0, joints * 1.0);
+    final j = math.min(u.floor(), joints - 1);
+    final a = joint(slot, j);
+    return a + (joint(slot, j + 1) - a) * (u - j);
+  }
+
+  /// How taut the link from joint [s] to [s] + 1 is.
+  double _link(int s) => hanging ? (joints - s) / joints : 1;
+
+  /// Steps [slot]'s chain on by [dt]: [span] long from [pivotY], running
+  /// down when [down], else up. [across] is how near the pointer is to the
+  /// band's middle, 0 to 1.
+  void step(
+    int slot,
+    double pivotY,
+    double span,
+    bool down,
+    double across,
+    Offset? pointer,
+    double pointerSpeed,
+    double dt,
+    double scale,
+  ) {
+    _spans[slot] = span;
+    final o = slot * joints;
+    final limit = scale * reach;
+    if (pointer != null && across > 0.01) {
+      for (var j = 0; j < joints; j++) {
+        final out = span * (j + 1) / joints;
+        final d =
+            (pointer.dy - (down ? pivotY + out : pivotY - out)) /
+            (scale * 0.05);
+        final near = across * math.exp(-d * d);
+        _velocities[o + j] +=
+            math.min(4 * near * dt, 1) *
+            (give * pointerSpeed - _velocities[o + j]);
+      }
+    }
+    // In short substeps: the taut links near the pivot are too stiff to
+    // take a whole frame in one.
+    final substeps = (dt * 240).ceil();
+    final h = dt / substeps;
+    for (var n = 0; n < substeps; n++) {
+      for (var j = 0; j < joints; j++) {
+        final x = _shifts[o + j];
+        final v = _velocities[o + j];
+        // The link in toward the pivot, and out toward the free end.
+        final inner = _link(j);
+        final xIn = j == 0 ? 0.0 : _shifts[o + j - 1];
+        final vIn = j == 0 ? 0.0 : _velocities[o + j - 1];
+        var f =
+            inner * (tension * (xIn - x) + internalDrag * (vIn - v)) -
+            stiffness * x -
+            drag * v;
+        if (j < joints - 1) {
+          final outer = _link(j + 1);
+          f +=
+              outer *
+              (tension * (_shifts[o + j + 1] - x) +
+                  internalDrag * (_velocities[o + j + 1] - v));
+        }
+        _forces[j] = f;
+      }
+      for (var j = 0; j < joints; j++) {
+        final v = _velocities[o + j] + _forces[j] * h;
+        _velocities[o + j] = v;
+        _shifts[o + j] = (_shifts[o + j] + v * h).clamp(-limit, limit);
+      }
+    }
+  }
+}
+
+/// The pointer stirring the tree as it passes: each band's hanging strands,
+/// and more stiffly its crown above them, bend in segments where it moves
+/// through ([_Chain]). Each drifting petal hangs on a damped spring of its
+/// own.
+class _PointerWake {
+  _PointerWake(int petalCount)
+    : _petalOffsets = Float64List(petalCount * 2),
+      _petalVelocities = Float64List(petalCount * 2);
+
+  /// Below each band's pivot, where the strands hang free: a swing of about
+  /// two seconds that overshoots once, softly.
+  final strands = _Chain(
+    joints: 6,
+    give: 0.6,
+    tension: 250,
+    hanging: true,
+    stiffness: 0,
+    drag: 1,
+    internalDrag: 30,
+    reach: 0.035,
+  );
+
+  /// Above it, where the blossom is held on the wood: it gives less, and
+  /// eases back without swinging past.
+  final crown = _Chain(
+    joints: 4,
+    give: 0.3,
+    tension: 15,
+    hanging: false,
+    stiffness: 20,
+    drag: 7,
+    internalDrag: 2,
+    reach: 0.02,
+  );
+
+  final Float64List _petalOffsets;
+  final Float64List _petalVelocities;
+
+  double? _time;
+  Offset? _pointer;
+  Offset _pointerVelocity = Offset.zero;
+  double _dt = 0;
+
+  /// Moves on to time [t], with the pointer at [pointer] — null while it's
+  /// off the canvas.
+  void advance(double t, Offset? pointer) {
+    final last = _time;
+    _time = t;
+    _dt = last == null ? 0 : (t - last).clamp(0.0, 0.1);
+    // A repaint without the clock moving changes nothing.
+    if (last != null && _dt == 0) return;
+    final from = _pointer;
+    _pointer = pointer;
+    _pointerVelocity = from == null || pointer == null || _dt == 0
+        ? Offset.zero
+        : (pointer - from) / _dt;
+  }
+
+  /// The shift [below] the pivot of [slot] — above it where negative.
+  double shiftAt(int slot, double below) =>
+      below >= 0 ? strands.shiftAt(slot, below) : crown.shiftAt(slot, -below);
+
+  /// Steps [bands]' chains on. The pointer drags the joints nearest it, in
+  /// the bands it's among; the far layer is behind the near one, so it takes
+  /// less of the push.
+  void swayBands(List<_BandImage> bands, bool front, double scale) {
+    if (_dt == 0) return;
+    final p = _pointer;
+    for (final band in bands) {
+      final slot = band.band * 2 + (front ? 1 : 0);
+      var across = 0.0;
+      if (p != null) {
+        final d = (p.dx - band.rect.center.dx) / (scale * 0.07);
+        across = (front ? 1.0 : 0.6) * math.exp(-d * d);
+      }
+      final pivot = band.pivotY;
+      final speed = _pointerVelocity.dx;
+      strands.step(
+        slot,
+        pivot,
+        math.max(band.rect.bottom - pivot, 0.0),
+        true,
+        across,
+        p,
+        speed,
+        _dt,
+        scale,
+      );
+      crown.step(
+        slot,
+        pivot,
+        math.max(pivot - band.rect.top, 0.0),
+        false,
+        across,
+        p,
+        speed,
+        _dt,
+        scale,
+      );
+    }
+  }
+
+  /// Where drifting petal [i], which the breeze has at [at], is once the
+  /// pointer has had its way with it. Lighter than the whips, it's batted
+  /// further and wanders back slowly, the air's drag soon stopping it.
+  Offset petal(int i, Offset at, double scale) {
+    var x = _petalOffsets[i * 2];
+    var y = _petalOffsets[i * 2 + 1];
+    if (_dt == 0) return at.translate(x, y);
+    var vx = _petalVelocities[i * 2];
+    var vy = _petalVelocities[i * 2 + 1];
+    final p = _pointer;
+    if (p != null) {
+      final d = (at.translate(x, y) - p).distance / (scale * 0.035);
+      final drag = math.min(6 * math.exp(-d * d) * _dt, 1);
+      vx += drag * (_pointerVelocity.dx - vx);
+      vy += drag * (_pointerVelocity.dy - vy);
+    }
+    vx += (-2 * x - 4 * vx) * _dt;
+    vy += (-2 * y - 4 * vy) * _dt;
+    x += vx * _dt;
+    y += vy * _dt;
+    _petalOffsets
+      ..[i * 2] = x
+      ..[i * 2 + 1] = y;
+    _petalVelocities
+      ..[i * 2] = vx
+      ..[i * 2 + 1] = vy;
+    return at.translate(x, y);
+  }
+}
+
 class _WeepingCherryPainter extends CustomPainter {
   _WeepingCherryPainter({
     required this.scene,
     required this.geometry,
     required this.petals,
     required this.sprites,
+    required this.palette,
     required this.flights,
     required this.fallStart,
     required this.fallEnd,
     required this.time,
+    required this.wake,
+    required this.pointer,
   }) : super(repaint: time);
 
   final _Scene scene;
   final WeepingCherryGeometry geometry;
   final List<_FallingPetal> petals;
   final ui.Image sprites;
+  final _Palette palette;
   final List<_Flight?> flights;
   final double? fallStart;
   final double fallEnd;
   final ValueNotifier<double> time;
+  final _PointerWake wake;
+  final ValueListenable<Offset?>? pointer;
 
   late final _treeBack = _PetalBatch(geometry.weekPetals.length);
   late final _treeFront = _PetalBatch(geometry.weekPetals.length);
@@ -1476,6 +1922,10 @@ class _WeepingCherryPainter extends CustomPainter {
   late final _launchLeans = Float64List(geometry.weekPetals.length)
     ..fillRange(0, geometry.weekPetals.length, double.nan);
 
+  /// The pointer wake's shift each flying petal let go with, by petal; set
+  /// alongside [_launchLeans].
+  late final _launchShifts = Float64List(geometry.weekPetals.length);
+
   /// Whether the batches hold the settled layout. With nothing falling the
   /// petals only sway, so later frames just lean the curtain's batches.
   var _settled = false;
@@ -1494,6 +1944,15 @@ class _WeepingCherryPainter extends CustomPainter {
               0.3 *
               _smoothstep(fall) *
               _smoothstep((fallEnd - fall) / 1.5);
+    // Into the bake's space, which a stale bake is stretched from.
+    final p = pointer?.value;
+    wake.advance(
+      t,
+      p?.scale(scene.size.width / size.width, scene.size.height / size.height),
+    );
+    final scale = _Frame(scene.size).scale;
+    wake.swayBands(scene.back, false, scale);
+    wake.swayBands(scene.front, true, scale);
     for (final band in scene.back) {
       _leans[band.band * 2] = _shear(band, t, false);
     }
@@ -1509,8 +1968,8 @@ class _WeepingCherryPainter extends CustomPainter {
     );
     if (fall != null || !_settled) _layoutPetals(fall);
     _settled = fall == null;
-    _treeBack.sway(_leans);
-    _treeFront.sway(_leans);
+    _treeBack.sway(_leans, wake);
+    _treeFront.sway(_leans, wake);
     final imagePaint = Paint()..filterQuality = FilterQuality.medium;
     final spritePaint = Paint()..filterQuality = FilterQuality.medium;
     _drawImage(canvas, scene.background, Offset.zero & scene.size, imagePaint);
@@ -1616,10 +2075,15 @@ class _WeepingCherryPainter extends CustomPainter {
     // them.
     Rect? bounds;
     for (final band in bands) {
+      final slot = band.band * 2 + (front ? 1 : 0);
+      var bend = 0.0;
+      for (final chain in [wake.strands, wake.crown]) {
+        for (var j = 1; j <= chain.joints; j++) {
+          bend = math.max(bend, chain.joint(slot, j).abs());
+        }
+      }
       final lean =
-          (_leans[band.band * 2 + (front ? 1 : 0)] *
-                  (band.rect.bottom - band.pivotY))
-              .abs();
+          (_leans[slot] * (band.rect.bottom - band.pivotY)).abs() + bend;
       final rect = band.rect.inflate(lean);
       bounds = bounds?.expandToInclude(rect) ?? rect;
     }
@@ -1654,45 +2118,73 @@ class _WeepingCherryPainter extends CustomPainter {
   /// Each band is sheared below the height its strands leave the wood: the
   /// attachment stays put and the tips swing, while the crown above holds
   /// still rather than tilting the other way about the same point. Both
-  /// halves meet at zero offset, so the join doesn't show. [draw] paints band
-  /// [i] in place, once per half.
+  /// halves meet at zero offset, so the join doesn't show. Where the pointer
+  /// has bent a half, it goes in a slice per segment of its [_Chain], each
+  /// sheared to run from one joint's shift to the next's. [draw] paints band
+  /// [i] in place, once per piece.
   void _drawBandSet(
     Canvas canvas,
     List<_BandImage> bands,
     bool front,
     void Function(int i) draw,
   ) {
-    final w = scene.size.width;
     for (var i = 0; i < bands.length; i++) {
       final band = bands[i];
-      final pivot = band.pivotY;
-      // Hard clips on the same edge, so the halves neither gap nor double
-      // up along the join.
-      if (band.rect.top < pivot) {
-        canvas.save();
-        canvas.clipRect(
-          Rect.fromLTRB(-w, band.rect.top, 2 * w, pivot),
-          doAntiAlias: false,
-        );
-        draw(i);
-        canvas.restore();
+      final slot = band.band * 2 + (front ? 1 : 0);
+      if (band.rect.top < band.pivotY) {
+        _drawHalf(canvas, band, slot, wake.crown, 0, () => draw(i));
       }
-      if (band.rect.bottom > pivot) {
-        canvas.save();
-        canvas.clipRect(
-          Rect.fromLTRB(-w, pivot, 2 * w, band.rect.bottom),
-          doAntiAlias: false,
+      if (band.rect.bottom > band.pivotY) {
+        _drawHalf(
+          canvas,
+          band,
+          slot,
+          wake.strands,
+          _leans[slot],
+          () => draw(i),
         );
-        canvas.translate(0, pivot);
-        canvas.transform(
-          (Matrix4.identity()
-                ..setEntry(0, 1, _leans[band.band * 2 + (front ? 1 : 0)]))
-              .storage,
-        );
-        canvas.translate(0, -pivot);
-        draw(i);
-        canvas.restore();
       }
+    }
+  }
+
+  /// Paints [band]'s half on [chain]'s side of the pivot, leaning by [lean]
+  /// as well as bent by the chain.
+  void _drawHalf(
+    Canvas canvas,
+    _BandImage band,
+    int slot,
+    _Chain chain,
+    double lean,
+    void Function() draw,
+  ) {
+    final w = scene.size.width;
+    final pivot = band.pivotY;
+    final end = chain == wake.strands ? band.rect.bottom : band.rect.top;
+    final bent = chain.bent(slot);
+    // At rest, one piece: a slice each would only multiply the draws.
+    final pieces = bent ? chain.joints : 1;
+    for (var j = 0; j < pieces; j++) {
+      final from = pivot + (end - pivot) * j / pieces;
+      // Hard clips on shared edges, so the pieces neither gap nor double up
+      // along the joins.
+      final to = j == pieces - 1
+          ? end
+          : pivot + (end - pivot) * (j + 1) / pieces;
+      final a = bent ? chain.joint(slot, j) : 0.0;
+      final b = bent ? chain.joint(slot, j + 1) : 0.0;
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTRB(-w, math.min(from, to), 2 * w, math.max(from, to)),
+        doAntiAlias: false,
+      );
+      canvas.translate(a + lean * (from - pivot), from);
+      canvas.transform(
+        (Matrix4.identity()..setEntry(0, 1, lean + (b - a) / (to - from)))
+            .storage,
+      );
+      canvas.translate(0, -from);
+      draw();
+      canvas.restore();
     }
   }
 
@@ -1724,9 +2216,10 @@ class _WeepingCherryPainter extends CustomPainter {
       final slot = cluster.band * 2 + (front ? 1 : 0);
       final band = bands[slot];
       final home = frame.map(petal.position);
-      // How far below its band's pivot it hangs — the lever the lean acts
-      // on. Nothing for a band with no image, which never sways.
-      final below = band == null ? 0.0 : math.max(home.dy - band.pivotY, 0.0);
+      // How far below its band's pivot it hangs (above it where negative) —
+      // the lever the lean acts on. Nothing for a band with no image, which
+      // never sways.
+      final below = band == null ? 0.0 : home.dy - band.pivotY;
 
       if (flight == null || (fall != null && fall < flight.detach)) {
         (front ? _treeFront : _treeBack).add(
@@ -1764,7 +2257,7 @@ class _WeepingCherryPainter extends CustomPainter {
                       (flight.groundSquash - flight.landSquash) * s)
                   .round(),
           alpha: groundAlpha,
-          tint: _groundTint,
+          tint: palette.groundTint,
         );
         continue;
       }
@@ -1777,8 +2270,10 @@ class _WeepingCherryPainter extends CustomPainter {
         launchLean = _launchLeans[i] = band == null
             ? 0.0
             : _shear(band, fallStart! + flight.detach, front);
+        // Where the pointer had bent its strand as it let go.
+        _launchShifts[i] = band == null ? 0.0 : wake.shiftAt(slot, below);
       }
-      final swayed = launchLean * below;
+      final swayed = launchLean * math.max(below, 0) + _launchShifts[i];
       final progress = tau / flight.landTime;
       final air = frame.map(Offset(flight.x(tau), flight.y(tau)));
       (front ? _flyingFront : _flyingBack).add(
@@ -1793,7 +2288,7 @@ class _WeepingCherryPainter extends CustomPainter {
         tone: petal.tone,
         squash: flight.squashAt(tau).round(),
         alpha: 0.9 - (0.9 - groundAlpha) * progress,
-        tint: _tintToward(_groundTint, progress),
+        tint: _tintToward(palette.groundTint, progress),
       );
     }
   }
@@ -1802,7 +2297,8 @@ class _WeepingCherryPainter extends CustomPainter {
   void _drawPetals(Canvas canvas, Size size, double t) {
     final frame = _Frame(size);
     final paint = Paint();
-    for (final petal in petals) {
+    for (var i = 0; i < petals.length; i++) {
+      final petal = petals[i];
       final u = (t / petal.period + petal.phase) % 1.0;
       final y = petal.startY + u * (weepingGroundY - petal.startY);
       final x =
@@ -1810,7 +2306,7 @@ class _WeepingCherryPainter extends CustomPainter {
           petal.drift * u +
           0.025 * math.sin(t * 0.9 + petal.phase * 12);
       final fade = math.min(1.0, math.min(u / 0.08, (1 - u) / 0.10));
-      final at = frame.map(Offset(x, y));
+      final at = wake.petal(i, frame.map(Offset(x, y)), frame.scale);
       final s = petal.size * frame.scale;
       canvas.save();
       canvas.translate(at.dx, at.dy);
@@ -1829,6 +2325,7 @@ class _WeepingCherryPainter extends CustomPainter {
   @override
   bool shouldRepaint(_WeepingCherryPainter old) =>
       old.scene != scene ||
+      old.sprites != sprites ||
       old.fallStart != fallStart ||
       old.flights != flights;
 }

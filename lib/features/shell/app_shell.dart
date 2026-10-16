@@ -31,6 +31,7 @@ import 'package:voyager/features/shell/shell_bottom_nav.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
 import 'package:voyager/features/shell/shell_nav_theme.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
 import 'package:voyager/features/shell/weather_forecast_sheet.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -168,7 +169,8 @@ class _ExpandedShell extends StatelessWidget {
               orderedDestinations: orderedDestinations,
             ),
           ),
-          const VerticalDivider(width: 12),
+          const SizedBox(width: shellRailGutter),
+          const VerticalDivider(width: 1),
           Expanded(child: child),
         ],
       ),

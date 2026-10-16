@@ -9,7 +9,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/life_tracker/blossom_stat_popup.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
+import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
 import 'package:voyager/features/life_tracker/life_tree_popover.dart';
 
 class _FixedSettings extends SettingsNotifier {

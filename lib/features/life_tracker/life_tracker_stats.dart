@@ -1,7 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:intl/intl.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
+import 'package:voyager/features/life_tracker/weeping_cherry_geometry.dart';
+
+/// Which life statistic a label points at. Fixed set per the Life Tracker spec.
+enum LifeStat {
+  weeksRemaining,
+  heartbeats,
+  sleepTime,
+  tasksConquered,
+  lifetimeMood,
+  kmTraveled,
+  fullMoons,
+}
 
 /// Assumed average resting heart rate, since the app has no biometric data.
 /// Purely a display estimate, same spirit as [assumedSleepHoursPerNight].
@@ -16,7 +27,7 @@ const double earthOrbitalSpeedKmh = 107208.0;
 /// Average synodic (full-moon-to-full-moon) month, in days.
 const double synodicMonthDays = 29.530588;
 
-const int lifespanWeeks = totalLeafCount;
+const int lifespanWeeks = weekPetalCount;
 
 /// Weeks per year as the tree counts them. Derived from the same 80-year /
 /// 4,160-week lifespan the canopy is built on, so a full life converts back to

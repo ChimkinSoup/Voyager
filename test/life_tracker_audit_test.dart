@@ -16,9 +16,8 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
 import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
-import 'package:voyager/features/life_tracker/life_tree_canvas.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 import 'package:voyager/features/life_tracker/life_tree_popover.dart';
+import 'package:voyager/features/life_tracker/weeping_cherry_canvas.dart';
 
 BucketListItem _item({
   required String id,
@@ -290,30 +289,15 @@ void main() {
 
   // Never pumpAndSettle a page holding this: the canopy's ticker never stops.
   testWidgets('an idle canopy repaints without rebuilding', (tester) async {
-    final controller = LifeTreeCanvasController();
-    addTearDown(controller.dispose);
-    final geometry = generateLifeTreeGeometry();
-
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: LifeTreeCanvas(
-            geometry: geometry,
-            leafColors: const [Color(0xFFF3C5CE)],
-            inkColor: const Color(0xFF241F1B),
-            paperColor: const Color(0xFFF3F1EA),
-            grassColor: const Color(0xFF8C9A79),
-            groundedLeafIndices: const <int>{},
-            controller: controller,
-            accentColor: const Color(0xFF7C9EFF),
-          ),
-        ),
+      const MaterialApp(
+        home: Scaffold(body: WeepingCherryCanvas(weeksLived: 0)),
       ),
     );
     await tester.pump(const Duration(milliseconds: 16));
 
     final canvas = find.descendant(
-      of: find.byType(LifeTreeCanvas),
+      of: find.byType(WeepingCherryCanvas),
       matching: find.byType(CustomPaint),
     );
     final before = tester.widget<CustomPaint>(canvas.last).painter;
@@ -321,19 +305,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
     // A new painter instance means the whole subtree was rebuilt to deliver a
-    // value only the painter reads — which is what the frame timer used to do
-    // sixty times a second.
+    // value only the painter reads — sixty times a second.
     expect(
       identical(tester.widget<CustomPaint>(canvas.last).painter, before),
       isTrue,
     );
-  });
-
-  test('the leaves are ordered by angle once, not on every read', () {
-    final geometry = generateLifeTreeGeometry();
-    final first = geometry.leafIndicesByAngle;
-    expect(identical(geometry.leafIndicesByAngle, first), isTrue);
-    expect(first.length, geometry.leaves.length);
-    expect(first.toSet().length, geometry.leaves.length);
   });
 }

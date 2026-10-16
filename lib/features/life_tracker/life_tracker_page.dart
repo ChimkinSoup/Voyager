@@ -2,27 +2,22 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
-import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/life_tracker/blossom_stat_popup.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
 import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
 import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
-import 'package:voyager/features/life_tracker/life_tree_canvas.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 import 'package:voyager/features/life_tracker/life_tree_popover.dart';
 import 'package:voyager/features/life_tracker/stat_leader_label.dart';
+import 'package:voyager/features/life_tracker/weeping_cherry_canvas.dart';
 
-/// The Unified Canvas: a watercolour cherry tree annotated with one life
-/// statistic per leader label, a figure resting on the trunk that opens the
-/// bucket list, and one leaf already resting on the ground for every week
-/// already lived. See LIFE_TRACKER.md for the spec.
+/// The Unified Canvas: a watercolour weeping cherry, one petal per week of
+/// life and the weeks lived fallen to the ground, annotated with one life
+/// statistic per leader label. Tapping the trunk opens the bucket list. See
+/// LIFE_TRACKER.md for the spec.
 ///
-/// The look is ink and wash on paper. The canvas is transparent in both
-/// themes and composites straight onto the app's own background — the paper
-/// in light, the animated triangle grid in dark.
+/// The canvas has no stock of its own: it composites straight onto the app's
+/// background, full-bleed.
 class LifeTrackerPage extends ConsumerStatefulWidget {
   const LifeTrackerPage({super.key});
 
@@ -30,51 +25,33 @@ class LifeTrackerPage extends ConsumerStatefulWidget {
   ConsumerState<LifeTrackerPage> createState() => _LifeTrackerPageState();
 }
 
-/// The paper and the ink it is painted with. Light is the cream stock the
-/// painting was authored on; dark is the same painting worked on toned stock,
-/// with the ink pulled up to bone so the brushwork still reads. The canvas
-/// doesn't fill with the paper — it's the bark's dry-brush and the labels'
-/// halo.
+/// The ink the labels are set in, and the halo that keeps them readable over
+/// the blossom.
 const _paperColor = Color(0xFFF3F1EA);
 const _inkColor = Color(0xFF241F1B);
-const _grassColor = Color(0xFF8C9A79);
 
 const _nightPaperColor = Color(0xFF17151C);
 const _nightInkColor = Color(0xFFE8E2D8);
-const _nightGrassColor = Color(0xFF6F8268);
 
 class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   final _stackKey = GlobalKey();
-  final _canvasController = LifeTreeCanvasController();
 
   /// Which leader label the pointer is over, so its line and dot can light up
   /// with it. -1 for none.
   int _hoveredLabel = -1;
 
-  /// Whether the pointer is over the tree itself (outside the stat labels) —
-  /// drives the whole-tree hover glow and marks where a tap opens the bucket
-  /// list.
-  bool _treeHovered = false;
-
-  /// Memoized result of [_groundedLeavesFor], with the week count it was built
-  /// for. Choosing the leaves sorts all 4,160 of them by angle, and the page
-  /// rebuilds on every hover.
-  Set<int>? _livedLeaves;
-  int? _livedLeavesWeeks;
+  /// Where the pointer is over the page, for the tree to give way to it.
+  final _pointer = ValueNotifier<Offset?>(null);
 
   @override
   void dispose() {
-    _canvasController.dispose();
+    _pointer.dispose();
     super.dispose();
   }
 
-  Offset _globalCenterFor(Offset normalizedPos, Size size) {
+  Offset _toGlobal(Offset local) {
     final box = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return Offset.zero;
-    final local = Offset(
-      normalizedPos.dx * size.width,
-      normalizedPos.dy * size.height,
-    );
     return box.localToGlobal(local);
   }
 
@@ -83,11 +60,9 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     Size size,
     Color accent,
   ) async {
-    final anchor = _globalCenterFor(blossom.position, size);
-    _canvasController.gustAt(blossom.position);
     await showTreePopover(
       context: context,
-      anchorGlobalCenter: anchor,
+      anchorGlobalCenter: _toGlobal(weepingCanvasPoint(blossom.position, size)),
       width: statPopupWidth,
       maxWidth: statPopupMaxWidth,
       accentColor: accent,
@@ -95,16 +70,12 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     );
   }
 
-  Future<void> _openBucketList(
-    Offset normalizedAnchor,
-    Size size,
-    Color accent,
-  ) async {
-    final anchor = _globalCenterFor(normalizedAnchor, size);
-    _canvasController.gustAt(normalizedAnchor, radius: 0.3, strength: 0.4);
+  Future<void> _openBucketList(Size size, Color accent) async {
     await showTreePopover(
       context: context,
-      anchorGlobalCenter: anchor,
+      // Centred on the page rather than on the trunk, which sits low enough
+      // to push the popup toward the bottom edge.
+      anchorGlobalCenter: _toGlobal(size.center(Offset.zero)),
       width: 480,
       height: 460,
       accentColor: accent,
@@ -112,273 +83,134 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     );
   }
 
-  /// Debug-only: puts every leaf back on the tree so the canopy can be looked
-  /// at whole, and drops them back to the ground on a second press. An empty
-  /// grounded set overrides the derived one; null hands it back.
-  void _toggleAllLeaves() {
-    final notifier = ref.read(lifeTreeGroundedLeavesProvider.notifier);
-    notifier.state = notifier.state == null ? const <int>{} : null;
-  }
-
-  /// One leaf on the ground for every week already lived, spread evenly around
-  /// the canopy. Derived from the birth date rather than animated into place,
-  /// so the page opens straight onto the settled state.
-  Set<int> _groundedLeavesFor(
-    LifeTreeGeometry geometry,
-    DateTime? birthDate,
-    DateTime now,
-  ) {
-    final weeks = weeksLivedFor(birthDate, now) ?? 0;
-    if (weeks == _livedLeavesWeeks) return _livedLeaves!;
-
-    final orderedIndices = geometry.leafIndicesByAngle;
-    final count = weeks.clamp(0, orderedIndices.length);
-    final stride = count == 0 ? 0.0 : orderedIndices.length / count;
-    final chosen = <int>{
-      for (var i = 0; i < count; i++)
-        orderedIndices[(i * stride).floor().clamp(
-          0,
-          orderedIndices.length - 1,
-        )],
-    };
-
-    _livedLeavesWeeks = weeks;
-    _livedLeaves = chosen;
-    return chosen;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? _nightInkColor : _inkColor;
     final paper = isDark ? _nightPaperColor : _paperColor;
-    final grass = isDark ? _nightGrassColor : _grassColor;
 
-    final geometry = ref.watch(lifeTreeGeometryProvider);
-    final settings = ref.watch(settingsProvider.settled).valueOrNull;
+    final settingsAsync = ref.watch(settingsProvider.settled);
+    final settings = settingsAsync.valueOrNull;
     final statsAsync = ref.watch(lifeTrackerStatsProvider.settled);
     final now = ref.watch(lifeClockProvider);
-    final grounded =
-        ref.watch(lifeTreeGroundedLeavesProvider) ??
-        _groundedLeavesFor(geometry, settings?.birthDate, now);
-
-    final minorColors = (settings?.minorPetalColors ?? const <int>[])
-        .map(Color.new)
-        .toList();
-    if (minorColors.isEmpty) {
-      minorColors.addAll(const [
-        Color(0xFFF3C5CE),
-        Color(0xFFEAA6B5),
-        Color(0xFFDF8B9C),
-      ]);
-    }
-    final leafColors = <Color>[
-      Color(settings?.petalColor ?? defaultPetalColor),
-      ...minorColors,
-    ];
+    // Null until settings load, so the tree doesn't fall for zero weeks and
+    // then again for the real count. A failed load counts as zero.
+    final weeks = settingsAsync.hasValue || settingsAsync.hasError
+        ? weeksLivedFor(settings?.birthDate, now) ?? 0
+        : null;
     final accent = Color(settings?.accentColor ?? 0xFF7C9EFF);
 
-    final canvas = LayoutBuilder(
+    return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) return const SizedBox.shrink();
 
         final labelWidth = math.min(230.0, size.width * 0.21);
-        final hub = geometry.branchHubRect;
-        final hotspot = Rect.fromLTRB(
-          hub.left * size.width,
-          hub.top * size.height,
-          hub.right * size.width,
-          hub.bottom * size.height,
-        );
+        final labels = leaderLabelLayout(lifeStatBlossoms, size);
 
-        return Stack(
-          key: _stackKey,
-          children: [
-            Positioned.fill(
-              child: LifeTreeCanvas(
-                geometry: geometry,
-                leafColors: leafColors,
-                inkColor: ink,
-                paperColor: paper,
-                grassColor: grass,
-                brightness: brightness,
-                groundedLeafIndices: grounded,
-                controller: _canvasController,
-                accentColor: accent,
-                hovered: _treeHovered,
-                showDebugColors: ref.watch(lifeTrackerShowDebugColorsProvider),
-              ),
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: LeaderLinePainter(
-                    blossoms: geometry.blossoms,
-                    inkColor: ink,
-                    accentColor: accent,
-                    highlighted: _hoveredLabel,
-                  ),
+        // Around the whole stack rather than on the canvas, so the pointer
+        // still stirs the tree over the trunk's and labels' targets.
+        return MouseRegion(
+          opaque: false,
+          onHover: (event) => _pointer.value = event.localPosition,
+          onExit: (_) => _pointer.value = null,
+          child: Stack(
+            key: _stackKey,
+            children: [
+              Positioned.fill(
+                child: WeepingCherryCanvas(
+                  weeksLived: weeks,
+                  brightness: Theme.of(context).brightness,
+                  pointer: _pointer,
                 ),
               ),
-            ),
-            Positioned.fill(
-              child: _TreeHoverRegion(
-                geometry: geometry,
-                onHoverChanged: (hovered) {
-                  if (hovered == _treeHovered) return;
-                  setState(() => _treeHovered = hovered);
-                },
-                onTap: () => _openBucketList(
-                  Offset(
-                    hotspot.center.dx / size.width,
-                    hotspot.center.dy / size.height,
-                  ),
-                  size,
-                  accent,
-                ),
-              ),
-            ),
-            for (var i = 0; i < geometry.blossoms.length; i++)
-              () {
-                final blossom = geometry.blossoms[i];
-                final resolved = resolveLifeStat(
-                  stat: blossom.stat,
-                  birthDate: settings?.birthDate,
-                  now: now,
-                  // Nullable rather than defaulted: the cached stats are a
-                  // chain of table reads on a cold open, and a substituted 0
-                  // renders as a real count for the whole of it.
-                  tasksConquered: statsAsync.valueOrNull?.tasksConquered,
-                  lifetimeMood: statsAsync.valueOrNull?.lifetimeMood,
-                  moodKnown: statsAsync.hasValue,
-                );
-                final x = blossom.labelAnchor.dx * size.width;
-                return Positioned(
-                  left: blossom.onLeft ? null : x,
-                  right: blossom.onLeft ? size.width - x : null,
-                  top: blossom.labelAnchor.dy * size.height,
-                  child: FractionalTranslation(
-                    translation: const Offset(0, -0.5),
-                    child: SizedBox(
-                      // Never wider than the room left before the canvas
-                      // edge, or a long value runs off it at small sizes.
-                      width: math.max(
-                        0,
-                        math.min(
-                          labelWidth,
-                          (blossom.onLeft ? x : size.width - x) - 8,
-                        ),
-                      ),
-                      child: StatLeaderLabel(
-                        name: resolved.shortLabel,
-                        value: resolved.value,
-                        valueIsProse: resolved.isPlaceholder,
-                        onLeft: blossom.onLeft,
-                        inkColor: ink,
-                        accentColor: accent,
-                        haloColor: paper,
-                        onTap: () => _openBlossomPopup(blossom, size, accent),
-                        onHoverChanged: (hovered) =>
-                            setState(() => _hoveredLabel = hovered ? i : -1),
-                      ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: LeaderLinePainter(
+                      blossoms: lifeStatBlossoms,
+                      inkColor: ink,
+                      accentColor: accent,
+                      highlighted: _hoveredLabel,
                     ),
                   ),
-                );
-              }(),
-            if (ref.watch(lifeTrackerShowRestoreButtonProvider))
-              Positioned(
-                right: 16,
-                top: 16,
-                child: Tooltip(
-                  message: ref.watch(lifeTreeGroundedLeavesProvider) == null
-                      ? 'Put every fallen leaf back on the tree'
-                      : 'Put the leaves back on the ground',
-                  child: IconButton.filledTonal(
-                    icon: const Icon(PhosphorIconsRegular.tree),
-                    onPressed: _toggleAllLeaves,
+                ),
+              ),
+              // The trunk is the bucket list's tap target. Below the stat
+              // labels in the stack, so their own targets still win over it.
+              Positioned.fill(
+                child: ClipPath(
+                  clipper: const _TrunkClipper(),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _openBucketList(size, accent),
+                    ),
                   ),
                 ),
               ),
-          ],
+              for (var i = 0; i < lifeStatBlossoms.length; i++)
+                () {
+                  final blossom = lifeStatBlossoms[i];
+                  final resolved = resolveLifeStat(
+                    stat: blossom.stat,
+                    birthDate: settings?.birthDate,
+                    now: now,
+                    // Nullable rather than defaulted: the cached stats are a
+                    // chain of table reads on a cold open, and a substituted 0
+                    // renders as a real count for the whole of it.
+                    tasksConquered: statsAsync.valueOrNull?.tasksConquered,
+                    lifetimeMood: statsAsync.valueOrNull?.lifetimeMood,
+                    moodKnown: statsAsync.hasValue,
+                  );
+                  final x = labels.anchors[i].dx;
+                  return Positioned(
+                    left: blossom.onLeft ? null : x,
+                    right: blossom.onLeft ? size.width - x : null,
+                    top: labels.anchors[i].dy,
+                    child: FractionalTranslation(
+                      translation: const Offset(0, -0.5),
+                      child: SizedBox(
+                        // Never wider than the room left before the canvas
+                        // edge, or a long value runs off it at small sizes.
+                        width: math.max(
+                          0,
+                          math.min(
+                            labelWidth,
+                            (blossom.onLeft ? x : size.width - x) - 8,
+                          ),
+                        ),
+                        child: StatLeaderLabel(
+                          name: resolved.shortLabel,
+                          value: resolved.value,
+                          valueIsProse: resolved.isPlaceholder,
+                          onLeft: blossom.onLeft,
+                          inkColor: ink,
+                          accentColor: accent,
+                          haloColor: paper,
+                          onTap: () => _openBlossomPopup(blossom, size, accent),
+                          onHoverChanged: (hovered) =>
+                              setState(() => _hoveredLabel = hovered ? i : -1),
+                        ),
+                      ),
+                    ),
+                  );
+                }(),
+            ],
+          ),
         );
       },
     );
-
-    // Dark frames the canvas: inset, rounded and hairline-edged, so the
-    // painting sits in the theme's chrome rather than running full-bleed into
-    // the grid. No shadow — under a transparent canvas it would bleed through
-    // as a dark smear. The wrapper is the same widgets in both themes, so
-    // switching theme does not remount the canvas.
-    final vc = VoyagerColors.of(context);
-    const frameRadius = BorderRadius.all(Radius.circular(18));
-
-    return Padding(
-      padding: EdgeInsets.all(isDark ? 12 : 0),
-      child: DecoratedBox(
-        decoration: isDark
-            ? BoxDecoration(
-                borderRadius: frameRadius,
-                border: Border.all(color: vc.strongHairline),
-              )
-            : const BoxDecoration(),
-        position: DecorationPosition.foreground,
-        child: ClipRRect(
-          borderRadius: isDark ? frameRadius : BorderRadius.zero,
-          clipBehavior: isDark ? Clip.antiAlias : Clip.none,
-          child: canvas,
-        ),
-      ),
-    );
   }
 }
 
-/// The hover/tap target over the trunk and branches — its silhouette is
-/// baked into the canvas texture, so this is a transparent region clipped to
-/// just that shape and laid over it. Hovering it lights the tree (see
-/// [LifeTreeCanvas.hovered]); tapping it opens the bucket list. One and the
-/// same region for both, since only the trunk and branches respond to
-/// either — not the root flares or the canopy cloud. Placed below the stat
-/// labels in the stack, so their own tap/hover targets still win over this
-/// one.
-class _TreeHoverRegion extends StatelessWidget {
-  const _TreeHoverRegion({
-    required this.geometry,
-    required this.onHoverChanged,
-    required this.onTap,
-  });
-
-  final LifeTreeGeometry geometry;
-  final ValueChanged<bool> onHoverChanged;
-  final Future<void> Function() onTap;
+class _TrunkClipper extends CustomClipper<Path> {
+  const _TrunkClipper();
 
   @override
-  Widget build(BuildContext context) {
-    return ClipPath(
-      clipper: _TrunkAndBranchesClipper(geometry),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => onHoverChanged(true),
-        onExit: (_) => onHoverChanged(false),
-        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap),
-      ),
-    );
-  }
-}
-
-/// The exact trunk-and-branches silhouette (per user request — not the root
-/// flares, not the canopy cloud) — clips both the hover glow's trigger and
-/// the bucket-list tap target down to just that shape.
-class _TrunkAndBranchesClipper extends CustomClipper<Path> {
-  const _TrunkAndBranchesClipper(this.geometry);
-
-  final LifeTreeGeometry geometry;
+  Path getClip(Size size) => weepingTrunkPath(size);
 
   @override
-  Path getClip(Size size) => buildTrunkAndBranchesPath(geometry, size);
-
-  @override
-  bool shouldReclip(covariant _TrunkAndBranchesClipper oldClipper) =>
-      oldClipper.geometry != geometry;
+  bool shouldReclip(covariant _TrunkClipper oldClipper) => false;
 }

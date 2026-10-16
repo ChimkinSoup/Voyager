@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-/// Weeping cherry (shidarezakura) for the demo page — pure data in "tree
+/// Weeping cherry (shidarezakura) for the Life Tracker — pure data in "tree
 /// space", generated once and scaled at paint time.
 ///
 /// Tree space is square: x runs from about -0.85 to 0.85 with the trunk at 0,

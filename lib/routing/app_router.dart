@@ -54,6 +54,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                   if (!_preloadedShellPaths.contains(shellDestinations[i].path))
                     i,
               },
+              // The Life tree's sky runs right up to the rail's divider.
+              fullBleed: {
+                for (var i = 0; i < shellDestinations.length; i++)
+                  if (shellDestinations[i].path == '/life-tracker') i,
+              },
               // Like the login warm-ups, off while the dev cache flag is. Off
               // in debug builds too, where page builds cost far more: there
               // the warm-up took the first 40s' stalls from ~10s to 46s in

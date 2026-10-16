@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
 
 /// Duration of a nav-section switch.
@@ -11,6 +12,11 @@ import 'package:voyager/core/motion/motion.dart';
 /// frequent action, and the full 400ms reads as sluggish at that rate. The
 /// shape — curve, layer order — is the same.
 const Duration kShellBranchSwitchDuration = Duration(milliseconds: 260);
+
+/// The clear strip between the rail's divider and a page on the desktop
+/// shell. Applied per branch by [shellBranchContainerBuilder] rather than in
+/// the shell, so a full-bleed page (Life) can run right up to the divider.
+const shellRailGutter = 5.5;
 
 /// While true, branch switches land at once instead of crossfading. Held by
 /// the global hotkeys' navigation: the capture opening over the page is the
@@ -335,8 +341,14 @@ class _BranchFocusNode extends FocusNode {
 }
 
 /// See [ShellBranchContainer.mountLater] and [ShellBranchContainer.shouldWarm].
+///
+/// Every branch but those in [fullBleed] is inset by [shellRailGutter] from
+/// the rail's divider on the desktop shell. The [Padding] wraps every branch
+/// in every layout, only its value changing, so resizing across the compact
+/// breakpoint never reparents a branch's navigator.
 ShellNavigationContainerBuilder shellBranchContainerBuilder({
   Set<int> mountLater = const {},
+  Set<int> fullBleed = const {},
   bool Function(int index)? shouldWarm,
 }) =>
     (
@@ -352,6 +364,16 @@ ShellNavigationContainerBuilder shellBranchContainerBuilder({
         ],
         mountLater: mountLater,
         shouldWarm: shouldWarm,
-        children: children,
+        children: [
+          for (var i = 0; i < children.length; i++)
+            Padding(
+              padding: EdgeInsets.only(
+                left: context.isCompactWidth || fullBleed.contains(i)
+                    ? 0
+                    : shellRailGutter,
+              ),
+              child: children[i],
+            ),
+        ],
       );
     };

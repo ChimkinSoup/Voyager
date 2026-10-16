@@ -10,12 +10,6 @@ class DevFlags {
   // app, without needing a rebuild.
   static bool disablePetalField = false;
   static bool disableCache = false;
-  // Shows a button on the Life Tracker page that toggles every leaf between
-  // the tree and the ground, for looking at the full canopy.
-  static bool showLifeTrackerRestore = false;
-  // Highlights each segment of the tree trunk, roots, and branches in distinct
-  // glowing debug colors and labels.
-  static bool showLifeTreeSegmentDebug = false;
   // Cuts the app off from the network without touching the PC's: the Dev page
   // toggle also disables Firestore's network, and the connectivity probe,
   // media storage, settings uploads, Geoapify search and map tiles fail via
