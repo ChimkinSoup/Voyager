@@ -968,7 +968,14 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   /// [settings] carries them: the repository doesn't write them (see
   /// [saveSnippets]), so a caller holding an older copy must not make a
   /// snippet that arrived since disappear from the screen.
+  ///
+  /// The inbox tracker order is taken from this notifier's state for a
+  /// similar reason: [saveInboxTrackerOrder] sets it without telling anyone,
+  /// so a caller's copy of the settings can predate it.
   Future<void> saveSettings(AppSettings settings) async {
+    settings = settings.copyWith(
+      inboxTrackerOrder: state.valueOrNull?.inboxTrackerOrder,
+    );
     final current = state.valueOrNull;
     state = AsyncData(
       current == null
@@ -976,10 +983,39 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
           : settings.copyWith(
               snippets: current.snippets,
               jobExperienceSnippets: current.jobExperienceSnippets,
+              // Not written by the repository either; an older copy would
+              // flip the inbox's Log stats section against the stored value.
+              inboxLogStatsExpanded: current.inboxLogStatsExpanded,
             ),
     );
     await ref.read(settingsRepositoryProvider).saveSettings(settings);
   }
+
+  /// Persists [AppSettings.inboxTrackerOrder] and takes it into this
+  /// notifier's state without notifying: a publish would rebuild every page in
+  /// the shell on each drop of a Log stats row. The list, the only reader,
+  /// rebuilds itself. Set before the await, so it reads the new order at once.
+  Future<void> saveInboxTrackerOrder(List<String> ids) async {
+    final current = state.valueOrNull;
+    if (current != null) {
+      _quiet = true;
+      try {
+        state = AsyncData(current.copyWith(inboxTrackerOrder: ids));
+      } finally {
+        _quiet = false;
+      }
+    }
+    await ref.read(settingsRepositoryProvider).saveInboxTrackerOrder(ids);
+  }
+
+  /// Set while [saveInboxTrackerOrder] updates the state.
+  bool _quiet = false;
+
+  @override
+  bool updateShouldNotify(
+    AsyncValue<AppSettings> previous,
+    AsyncValue<AppSettings> next,
+  ) => !_quiet && super.updateShouldNotify(previous, next);
 
   /// Persists the user's edit to [AppSettings.snippets] — [before] is the list
   /// the editor started from, [after] the one it produced — as a change to
@@ -2256,30 +2292,23 @@ final trackerCacheInvalidatorProvider = Provider<void Function(String)>((ref) {
   };
 });
 
-/// Number of daily trackers that have no entry recorded for today's local date.
+/// Number of trackers with no entry recorded for the period today falls in:
+/// today itself for a daily tracker, this week, month or year for the rest.
 /// Feeds the notification bell's semi-important state.
 final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
   ref.keepAlive();
   final trackers = await ref.watch(trackersProvider.future);
+  final prompt = ref.watch(periodicPromptServiceProvider);
   final today = DateTime.now();
-  final todayLocal = DateTime(today.year, today.month, today.day);
   // Counters are never "due": there's no value for a day to be missing.
-  final dailyTrackers = trackers.where(
-    (t) =>
-        t.cadence == TrackerCadence.daily &&
-        t.type != TrackerType.counter &&
-        t.deletedAt == null,
+  final dueTrackers = trackers.where(
+    (t) => t.type != TrackerType.counter && t.deletedAt == null,
   );
   var pending = 0;
-  for (final tracker in dailyTrackers) {
+  for (final tracker in dueTrackers) {
     final values = await ref.watch(trackerValuesProvider(tracker.id).future);
-    final hasToday = values.any(
-      (v) =>
-          v.periodStart.year == todayLocal.year &&
-          v.periodStart.month == todayLocal.month &&
-          v.periodStart.day == todayLocal.day,
-    );
-    if (!hasToday) pending++;
+    final period = prompt.trackerPeriodStartFor(today, tracker.cadence);
+    if (!hasValueForPeriod(values, period)) pending++;
   }
   return pending;
 });

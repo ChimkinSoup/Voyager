@@ -337,7 +337,7 @@ class _VoyagerNavigationRail extends StatelessWidget {
           const SizedBox(height: 4),
           const _SyncActivityIndicator(axis: Axis.vertical),
           NotificationBell(accent: accent),
-          const SizedBox(height: 20),
+          const SizedBox(height: 4),
         ],
       ),
     );

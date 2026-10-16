@@ -320,18 +320,19 @@ public static class Voy
         SetCursorPos(p.X, p.Y);
     }
 
-    public static void Drag(int x1, int y1, int x2, int y2, int steps = 20)
+    public static void Drag(int x1, int y1, int x2, int y2, int steps = 20, int holdMs = 0, int endHoldMs = 60)
     {
         Guard();
         var a = ToScreen(x1, y1); var b = ToScreen(x2, y2);
         SetCursorPos(a.X, a.Y); Thread.Sleep(60);
         mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        if (holdMs > 0) Thread.Sleep(holdMs);
         for (int i = 1; i <= steps; i++)
         {
             SetCursorPos(a.X + (b.X - a.X) * i / steps, a.Y + (b.Y - a.Y) * i / steps);
             Thread.Sleep(15);
         }
-        Thread.Sleep(60);
+        Thread.Sleep(endHoldMs);
         mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     }
 

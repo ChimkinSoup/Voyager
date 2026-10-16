@@ -206,6 +206,17 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
       _commit(listOpen ? _suggestions[_selected] : _controller.text);
       return KeyEventResult.handled;
     }
+    // Tab takes the highlighted suggestion too, as it does in the `#` popup.
+    // Left alone it moves focus, and blur commits the half-typed text instead.
+    // An empty box (where the list opens on focus alone) and Shift+Tab still
+    // just move focus.
+    if (key == LogicalKeyboardKey.tab &&
+        listOpen &&
+        _controller.text.trim().isNotEmpty &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _commit(_suggestions[_selected]);
+      return KeyEventResult.handled;
+    }
     // Backspace into the chips, but only from an empty box, so it never eats a
     // chip while there is still typing in front of it to delete.
     if (key == LogicalKeyboardKey.backspace &&

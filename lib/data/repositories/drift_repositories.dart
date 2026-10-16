@@ -4553,6 +4553,9 @@ class DriftSettingsRepository implements SettingsRepository {
           ? const []
           : List<String>.from(jsonDecode(row.jobsHiddenColumnsJson!) as List),
       jobsIncludeArchived: row.jobsIncludeArchived,
+      inboxTrackerOrder: row.inboxTrackerOrderJson == null
+          ? const []
+          : List<String>.from(jsonDecode(row.inboxTrackerOrderJson!) as List),
       rankingsCollapsedQueueCategories:
           row.rankingsCollapsedQueueCategoriesJson == null
           ? const []
@@ -4584,6 +4587,7 @@ class DriftSettingsRepository implements SettingsRepository {
       customStartupPage: row.customStartupPage,
       lastSeenNavPage: row.lastSeenNavPage,
       todoCompletedSectionExpanded: row.todoCompletedSectionExpanded,
+      inboxLogStatsExpanded: row.inboxLogStatsExpanded,
       showAnnualizedSubscriptionCost: row.showAnnualizedSubscriptionCost,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
       dreamSplitWidth: row.dreamSplitWidth,
@@ -4666,6 +4670,25 @@ class DriftSettingsRepository implements SettingsRepository {
         rankingsDeviceLongitude: Value(location.longitude),
       ),
     );
+  }
+
+  @override
+  Future<void> saveInboxLogStatsExpanded(bool expanded) async {
+    await (_db.update(_db.settingsTable)..where((t) => t.id.equals(1))).write(
+      SettingsTableCompanion(inboxLogStatsExpanded: Value(expanded)),
+    );
+  }
+
+  @override
+  Future<void> saveInboxTrackerOrder(List<String> ids) async {
+    // Read afresh, not taken from a caller, so the order is the only change
+    // [saveSettings] sees, stamps and uploads.
+    // In one transaction so a save landing between the read and the write
+    // can't be overwritten with the stale copy.
+    await _db.transaction(() async {
+      final current = await getSettings();
+      await saveSettings(current.copyWith(inboxTrackerOrder: ids));
+    });
   }
 
   bool _sameSyncedSettings(AppSettings a, AppSettings b) {
@@ -4876,6 +4899,11 @@ class DriftSettingsRepository implements SettingsRepository {
                   : jsonEncode(settings.jobsHiddenColumns),
             ),
             jobsIncludeArchived: Value(settings.jobsIncludeArchived),
+            inboxTrackerOrderJson: Value(
+              settings.inboxTrackerOrder.isEmpty
+                  ? null
+                  : jsonEncode(settings.inboxTrackerOrder),
+            ),
             rankingsCollapsedQueueCategoriesJson: Value(
               settings.rankingsCollapsedQueueCategories.isEmpty
                   ? null

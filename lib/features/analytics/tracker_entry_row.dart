@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,35 @@ import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/analytics/counter_controls.dart';
+
+/// Sort comparator for trackers within a single group (starred, or one
+/// cadence): manual [StatisticTracker.sortOrder] first, falling back to
+/// creation order so freshly-created trackers — which all default to
+/// sortOrder 0 — still land in a stable, sensible position.
+int compareTrackerOrder(StatisticTracker a, StatisticTracker b) {
+  if (a.sortOrder != b.sortOrder) return a.sortOrder.compareTo(b.sortOrder);
+  return a.createdAt.compareTo(b.createdAt);
+}
+
+/// Like [ReorderableDelayedDragStartListener], but lifts into a drag after a
+/// shorter hold. The framework default ([ReorderableDelayedDragStartListener],
+/// via [DelayedMultiDragGestureRecognizer]) is [kLongPressTimeout] = 500 ms;
+/// stat rows drag from a 200 ms hold so reordering feels quicker without
+/// colliding with the plain tap that opens the detail popup.
+class QuickDelayedDragStartListener extends ReorderableDragStartListener {
+  const QuickDelayedDragStartListener({
+    super.key,
+    required super.child,
+    required super.index,
+  });
+
+  static const _delay = Duration(milliseconds: 200);
+
+  @override
+  MultiDragGestureRecognizer createRecognizer() {
+    return DelayedMultiDragGestureRecognizer(delay: _delay, debugOwner: this);
+  }
+}
 
 /// A single tracker's inline entry editor for [date] — name and a
 /// type-specific input (integer/boolean/enum, colored to the tracker's own
@@ -59,10 +89,16 @@ class TrackerEntryRow extends ConsumerStatefulWidget {
     required this.tracker,
     required this.date,
     this.onDirtyChanged,
+    this.dragIndex,
   });
 
   final StatisticTracker tracker;
   final DateTime date;
+
+  /// This row's position in an enclosing reorderable list, which makes its
+  /// name a press-and-hold drag handle. Only the name: the editor beside it
+  /// keeps its own taps. Null when the row isn't reorderable.
+  final int? dragIndex;
 
   /// Notified with `true` when this row has an unsaved integer edit pending,
   /// and `false` once it's saved (or reverted). Lets the section aggregate
@@ -110,7 +146,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.date != widget.date) {
       if (_dirty) {
-        _commitPendingForDateChange(_existing, oldWidget.date);
+        _commitPendingForDateChange(_existing, _periodOf(oldWidget.date));
         widget.onDirtyChanged?.call(false);
       }
       setState(() {
@@ -188,6 +224,13 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     }
   }
 
+  /// The start of the period [date] falls in, which is the date this
+  /// tracker's value for it is stored under: [date] itself for a daily
+  /// tracker, else its week's Monday, its month's 1st or its year's Jan 1.
+  DateTime _periodOf(DateTime date) => ref
+      .read(periodicPromptServiceProvider)
+      .trackerPeriodStartFor(date, widget.tracker.cadence);
+
   /// Ordered, not trusted — a tracker can carry a lower limit above its upper
   /// one and `num.clamp` throws on an inverted range, which this reaches from
   /// [_handleIntFocusChange] on plain focus loss. See [clampToTrackerRange].
@@ -206,12 +249,13 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
 
     return valuesAsync.when(
       data: (values) {
+        final period = _periodOf(widget.date);
         final existing = values.cast<TrackerValue?>().firstWhere(
           (v) =>
               v != null &&
-              v.periodStart.year == widget.date.year &&
-              v.periodStart.month == widget.date.month &&
-              v.periodStart.day == widget.date.day,
+              v.periodStart.year == period.year &&
+              v.periodStart.month == period.month &&
+              v.periodStart.day == period.day,
           orElse: () => null,
         );
         _existing = existing;
@@ -245,18 +289,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                flex: 3,
-                child: Text(
-                  widget.tracker.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
+              Expanded(flex: 3, child: _buildName(theme)),
               const SizedBox(width: 10),
               Expanded(flex: 2, child: _buildEditor(existing, theme, accent)),
               const SizedBox(width: 6),
@@ -306,18 +339,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
         children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              widget.tracker.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
+          Expanded(flex: 3, child: _buildName(theme)),
           const SizedBox(width: 10),
           Expanded(
             flex: 2,
@@ -339,6 +361,35 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
           ),
           const SizedBox(width: 6 + _trailingSlotWidth),
         ],
+      ),
+    );
+  }
+
+  Widget _buildName(ThemeData theme) {
+    final name = Text(
+      widget.tracker.name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall?.copyWith(
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    final dragIndex = widget.dragIndex;
+    if (dragIndex == null) return name;
+    // Filled out to the editor's height and painted (transparently) so the
+    // whole cell takes the press, not just the glyphs.
+    return QuickDelayedDragStartListener(
+      index: dragIndex,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: ColoredBox(
+          color: Colors.transparent,
+          child: SizedBox(
+            height: _editorHeight,
+            child: Align(alignment: Alignment.centerLeft, child: name),
+          ),
+        ),
       ),
     );
   }
@@ -493,7 +544,8 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   }) async {
     final now = utcNow();
     final repo = ref.read(trackerRepositoryProvider);
-    final id = current?.id ?? trackerValueId(widget.tracker.id, widget.date);
+    final period = _periodOf(widget.date);
+    final id = current?.id ?? trackerValueId(widget.tracker.id, period);
     // Read back from disk, not from [current]: `listValues` filters
     // soft-deleted rows out, so re-entering a value on a deleted period sees
     // a null `current` even though the row still exists at a higher version.
@@ -508,7 +560,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
       TrackerValue(
         id: id,
         trackerId: widget.tracker.id,
-        periodStart: widget.date,
+        periodStart: period,
         intValue: intValue ?? kept.intValue,
         boolValue: boolValue ?? kept.boolValue,
         enumValue: enumValue ?? kept.enumValue,

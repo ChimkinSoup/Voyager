@@ -159,6 +159,16 @@ bool hasReadingOfType(TrackerValue value, TrackerType type) => switch (type) {
   TrackerType.counter => true,
 };
 
+/// Whether [values] hold a row for the period starting [periodStart] — a
+/// day for a daily tracker, else the week, month or year's first day.
+bool hasValueForPeriod(Iterable<TrackerValue> values, DateTime periodStart) =>
+    values.any(
+      (v) =>
+          v.periodStart.year == periodStart.year &&
+          v.periodStart.month == periodStart.month &&
+          v.periodStart.day == periodStart.day,
+    );
+
 /// The readings [row] holds for types other than [type], which a write of a
 /// [type] reading carries over so switching the type back brings them back.
 /// The field for [type] itself is always null. A missing or deleted row holds

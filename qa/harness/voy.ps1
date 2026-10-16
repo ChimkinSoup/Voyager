@@ -30,7 +30,9 @@
 #                              Text, tip:<tooltip> or key:<ValueKey value> (vm.ps1 locate)
 #   find [query]               list on-screen texts/tooltips/keys with centre coords (vm.ps1 find)
 #   field                      focused text field: selection|vimMode|length|text (vm.ps1 field)
-#   move <x> <y> | wheel <x> <y> <notches> (+up/-down) | drag <x1> <y1> <x2> <y2>
+#   move <x> <y> | wheel <x> <y> <notches> (+up/-down) | drag <x1> <y1> <x2> <y2> [holdMs]
+#                              holdMs (fg only): press and hold that long before moving
+#                              drag ... <holdMs> <endHoldMs> (fg only): also hold at the end before release
 #   hotkey <chord>             fg: global hotkey (only sent if registered), e.g. hotkey ctrl+alt+t
 #   wait <ms>                  sleep
 #   at <unix-ms>               sleep until that instant (together.ps1 releases two runs at once)
@@ -114,7 +116,7 @@ function Invoke-Step([string]$line) {
     'field' { Invoke-Vm field }
     'move' { if ($bg) { [Bg]::Move([int]$a[0], [int]$a[1]) } else { [Voy]::Move([int]$a[0], [int]$a[1]) } }
     'wheel' { if ($bg) { Invoke-Vm scroll $a[0] $a[1] $a[2] | Out-Null; Start-Sleep -Milliseconds 150 } else { [Voy]::Wheel([int]$a[0], [int]$a[1], [int]$a[2]) } }
-    'drag' { if ($bg) { [Bg]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } else { [Voy]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } }
+    'drag' { $hold = if ($a.Count -gt 4) { [int]$a[4] } else { 0 }; $endHold = if ($a.Count -gt 5) { [int]$a[5] } else { 60 }; if ($bg) { if ($hold) { throw 'drag holdMs needs mode fg: bg presses are cancelled by WM_MOUSELEAVE' }; [Bg]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } else { [Voy]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20, $hold, $endHold) } }
     'hotkey' { [Voy]::GlobalHotkey($arg.Trim()) }
     'wait' { Start-Sleep -Milliseconds ([int]$a[0]) }
     'at' {

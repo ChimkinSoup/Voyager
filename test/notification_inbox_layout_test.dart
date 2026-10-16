@@ -162,7 +162,10 @@ void main() {
   ) async {
     await _pumpInbox(tester, withTracker: true);
 
-    expect(find.text('Log stats'), findsOneWidget);
+    // Off screen counts: the panel is a sliver list, which reports what's
+    // past its edge as offstage.
+    final logStats = find.text('Log stats', skipOffstage: false);
+    expect(logStats, findsOneWidget);
     expect(
       find.byType(TrackerEntryRow),
       findsNothing,
@@ -170,7 +173,7 @@ void main() {
     );
 
     // Below the fold in this short window, under the Scheduled section.
-    await tester.ensureVisible(find.text('Log stats'));
+    await tester.ensureVisible(logStats);
     await tester.pumpAndSettle();
     // The trigger's ink sits behind the label so the whole row highlights,
     // so tap that rather than the (pointer-ignoring) label itself.

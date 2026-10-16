@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:collection/collection.dart' show mergeSort;
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +31,7 @@ import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
@@ -47,7 +52,6 @@ import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Width of the inbox popover.
 ///
@@ -59,6 +63,71 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 /// delegate takes a width as a hard constraint and only slides the panel left
 /// to make it fit, so this is wider than a phone screen.
 const double kNotificationPopoverWidth = 532;
+
+/// Whether the inbox's Log stats section is open.
+///
+/// Held here rather than read off [settingsProvider] so a toggle rebuilds only
+/// the section: publishing settings rebuilds every page in the shell, which
+/// stalled the section's open and close. Seeded from the stored value, which
+/// [SettingsRepository.saveInboxLogStatsExpanded] keeps in step — and which
+/// a settings publish can't move, since [SettingsRepository.saveSettings]
+/// never writes it.
+final _logStatsExpandedProvider = StateProvider<bool>(
+  (ref) => ref.watch(
+    settingsProvider.select(
+      (s) => s.valueOrNull?.inboxLogStatsExpanded ?? false,
+    ),
+  ),
+);
+
+/// Where a growing section sits in the inbox's scroll content — its top, and
+/// the gap from its bottom to the end of the content — for as long as
+/// [_PinnedGrowthPhysics] should keep its bottom edge in view.
+class _GrowthPin {
+  ({double top, double below})? section;
+}
+
+/// Keeps the [_GrowthPin]ned section's bottom at the bottom of the inbox while
+/// the section grows, without letting its top scroll off.
+///
+/// Applied in layout, as the content's new extent comes in, so the scroll
+/// moves in the very frame the section grows. Until the panel reaches its
+/// max height there is nothing to scroll and the panel just grows; past it,
+/// the same growth carries on as a scroll, with no hand-off between the two.
+class _PinnedGrowthPhysics extends ScrollPhysics {
+  const _PinnedGrowthPhysics(this.pin, {super.parent});
+
+  final _GrowthPin pin;
+
+  @override
+  _PinnedGrowthPhysics applyTo(ScrollPhysics? ancestor) =>
+      _PinnedGrowthPhysics(pin, parent: buildParent(ancestor));
+
+  @override
+  double adjustPositionForNewDimensions({
+    required ScrollMetrics oldPosition,
+    required ScrollMetrics newPosition,
+    required bool isScrolling,
+    required double velocity,
+  }) {
+    final pixels = super.adjustPositionForNewDimensions(
+      oldPosition: oldPosition,
+      newPosition: newPosition,
+      isScrolling: isScrolling,
+      velocity: velocity,
+    );
+    final section = pin.section;
+    if (section == null || isScrolling) return pixels;
+    // Content ends `below` past the section, so this is the offset that puts
+    // the section's bottom at the viewport's — capped where its top would
+    // pass the viewport's.
+    final pinned = math.min(
+      newPosition.maxScrollExtent - section.below,
+      section.top,
+    );
+    return math.max(pixels, pinned);
+  }
+}
 
 /// The notification bell's popover content: pinned quick-reminders, the
 /// unified urgency-sorted feed, a hidden/dismissed browser, and an embedded
@@ -77,6 +146,8 @@ class _NotificationInboxPopoverState
   /// panel — a sibling, not an ancestor.
   final _hiddenKey = GlobalKey<_HiddenSectionState>();
 
+  final _growthPin = _GrowthPin();
+
   @override
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.75;
@@ -88,24 +159,31 @@ class _NotificationInboxPopoverState
         // viewport, so dragging anywhere in the panel — the reminders
         // included — moves the whole thing as a single sheet. It is also
         // what [Scrollable.ensureVisible] scrolls when Hidden expands.
-        child: VoyagerScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _Header(
+        //
+        // Slivers rather than one box, so the Log stats rows are a list of
+        // this scroll view's own: dragging one to an edge scrolls the panel.
+        child: CustomScrollView(
+          shrinkWrap: true,
+          // Every section built, scrolled to or not, as in a Column: the
+          // header's Show hidden reaches the Hidden section by its key. Not
+          // infinity, which a shrink-wrapping viewport turns into NaN.
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1e6),
+          physics: _PinnedGrowthPhysics(_growthPin),
+          slivers: [
+            SliverToBoxAdapter(
+              child: _Header(
                 onClearAll: _clearAll,
                 onShowHidden: () => _hiddenKey.currentState?.reveal(),
               ),
-              const _BackupAlertSection(),
-              const _FolderBackupAlertSection(),
-              const _PinnedNotesSection(),
-              const ScheduledRemindersSection(),
-              const _FeedSection(),
-              const _AnalyticsSection(),
-              _HiddenSection(key: _hiddenKey),
-            ],
-          ),
+            ),
+            const SliverToBoxAdapter(child: _BackupAlertSection()),
+            const SliverToBoxAdapter(child: _FolderBackupAlertSection()),
+            const SliverToBoxAdapter(child: _PinnedNotesSection()),
+            const SliverToBoxAdapter(child: ScheduledRemindersSection()),
+            const SliverToBoxAdapter(child: _FeedSection()),
+            _AnalyticsSection(growthPin: _growthPin),
+            SliverToBoxAdapter(child: _HiddenSection(key: _hiddenKey)),
+          ],
         ),
       ),
     );
@@ -1915,13 +1993,55 @@ class _FooterTrigger extends StatelessWidget {
             ),
             if (trailing != null)
               Padding(
-                padding: const EdgeInsets.only(right: 12),
+                padding: const EdgeInsets.only(right: 20),
                 child: trailing,
               ),
           ],
         ),
       ],
     );
+  }
+}
+
+/// A [_FooterTrigger] action drawn as bare text on the header's own
+/// background, so it reads as part of the title row rather than a chip.
+class _FooterTextButton extends StatelessWidget {
+  const _FooterTextButton({
+    required this.onTap,
+    this.label,
+    this.icon,
+    this.tooltip,
+  });
+
+  final VoidCallback onTap;
+  final String? label;
+  final IconData? icon;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final button = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) Icon(icon, size: 14, color: muted),
+            if (icon != null && label != null) const SizedBox(width: 6),
+            if (label != null)
+              Text(
+                label!,
+                style: theme.textTheme.labelMedium?.copyWith(color: muted),
+              ),
+          ],
+        ),
+      ),
+    );
+    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
   }
 }
 
@@ -2066,16 +2186,11 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection>
           trailing: !_expanded
               ? null
               : _selected.isNotEmpty
-              ? GlassButton(
-                  onPressed: _restoreSelected,
+              ? _FooterTextButton(
+                  onTap: _restoreSelected,
                   label: 'Restore (${_selected.length})',
-                  dense: true,
                 )
-              : GlassButton(
-                  onPressed: _restoreAll,
-                  label: 'Restore all',
-                  dense: true,
-                ),
+              : _FooterTextButton(onTap: _restoreAll, label: 'Restore all'),
         ),
         // Animates both ways — growing open and shrinking closed — instead
         // of the row list just appearing/disappearing and snapping the
@@ -2202,7 +2317,10 @@ class _MiniCheckbox extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _AnalyticsSection extends ConsumerStatefulWidget {
-  const _AnalyticsSection();
+  const _AnalyticsSection({required this.growthPin});
+
+  /// Set while the body grows open, so the inbox scrolls with it.
+  final _GrowthPin growthPin;
 
   @override
   ConsumerState<_AnalyticsSection> createState() => _AnalyticsSectionState();
@@ -2213,18 +2331,93 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
   final Map<String, GlobalKey<TrackerEntryRowState>> _rowKeys = {};
   final Set<String> _dirtyTrackerIds = {};
 
+  /// Weekly, monthly and yearly trackers listed for [_selectedDate] so far.
+  /// Each stays listed until the date changes, so logging one doesn't pull
+  /// its row away mid-edit. See [_isListed].
+  final Set<String> _keptTrackerIds = {};
+
   /// Collapsed until asked for. Logging a stat is a deliberate errand, not
   /// something to be presented with every time the bell is clicked — and
-  /// leaving the body unbuilt keeps the trackers, their fields and their
-  /// providers out of the popover (and out of [NotificationPopoverWarmup])
-  /// until they are wanted.
-  bool _expanded = false;
+  /// leaving the body unbuilt keeps the trackers and their fields out of the
+  /// popover (and out of [NotificationPopoverWarmup]) until they are wanted.
+  /// Only their data is loaded ahead — see [_prewarm]. Once opened it stays open, across popovers and
+  /// restarts, until closed again — see [_logStatsExpandedProvider].
+  bool get _expanded => ref.read(_logStatsExpandedProvider);
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _selectedDate = DateTime(now.year, now.month, now.day);
+    if (!_expanded) unawaited(_prewarm());
+  }
+
+  /// Loads what the body's rows show while the section is still closed.
+  ///
+  /// Otherwise the first open lays the body out around loading bars, then
+  /// again a frame later as the values arrive, and the rows jump mid-reveal.
+  /// Every one of these providers is kept alive, so a read
+  /// here is all the warming they need.
+  Future<void> _prewarm() async {
+    final trackers = await ref.read(trackersProvider.future);
+    if (!mounted) return;
+    for (final tracker in trackers) {
+      if (tracker.deletedAt != null) continue;
+      unawaited(
+        tracker.type == TrackerType.counter
+            ? ref.read(counterAdjustmentsProvider(tracker.id).future)
+            : ref.read(trackerValuesProvider(tracker.id).future),
+      );
+    }
+  }
+
+  void _toggleExpanded() {
+    final expanded = !_expanded;
+    ref.read(_logStatsExpandedProvider.notifier).state = expanded;
+    // Only a tap scrolls: a section restored open leaves the popover at
+    // its top.
+    if (expanded) {
+      _pinWhileGrowing();
+    } else {
+      widget.growthPin.section = null;
+    }
+    unawaited(
+      ref.read(settingsRepositoryProvider).saveInboxLogStatsExpanded(expanded),
+    );
+  }
+
+  /// Has the inbox scroll along as the body grows open, keeping the section's
+  /// bottom at the bottom of the visible area — or, once the section is
+  /// taller than that, its header at the top. See [_PinnedGrowthPhysics].
+  ///
+  /// Measured now, from the collapsed layout: nothing above the section or
+  /// below it moves while it grows.
+  void _pinWhileGrowing() {
+    final position = Scrollable.of(context).position;
+    final sliver = context.findRenderObject()! as RenderSliver;
+    final top = sliver.constraints.precedingScrollExtent;
+    final content = position.maxScrollExtent + position.viewportDimension;
+    widget.growthPin.section = (
+      top: top,
+      below: content - top - sliver.geometry!.scrollExtent,
+    );
+    _unpinOnceSettled();
+  }
+
+  /// Lets go of the pin once the section's height holds still between two
+  /// frames, rather than when the reveal ends: the body can still resize
+  /// after that, as the tracker rows' entries load.
+  void _unpinOnceSettled([double? lastHeight]) {
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (!mounted || !_expanded) return;
+        final height = (context.findRenderObject()! as RenderSliver)
+            .geometry!
+            .scrollExtent;
+        if (height != lastHeight) return _unpinOnceSettled(height);
+        widget.growthPin.section = null;
+      })
+      ..scheduleFrame();
   }
 
   Future<void> _pickDate() async {
@@ -2235,14 +2428,52 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
       firstDate: DateTime(now.year - 5),
       lastDate: now,
     );
-    if (picked != null && mounted) {
-      setState(() => _selectedDate = picked);
-    }
+    if (picked != null && mounted) await _setDate(picked);
   }
 
   void _resetToToday() {
     final now = DateTime.now();
-    setState(() => _selectedDate = DateTime(now.year, now.month, now.day));
+    unawaited(_setDate(DateTime(now.year, now.month, now.day)));
+  }
+
+  /// Saves any typed-but-unsaved number before moving to [date]: a weekly,
+  /// monthly or yearly row can drop out of the list on the new date, and
+  /// would take its edit with it.
+  Future<void> _setDate(DateTime date) async {
+    await _saveAll();
+    if (!mounted) return;
+    setState(() {
+      _selectedDate = date;
+      _keptTrackerIds.clear();
+    });
+  }
+
+  /// Whether [tracker] gets a row for [_selectedDate]. Daily trackers and
+  /// counters always do: a counter's cadence only sets its graph's
+  /// resolution, and its changes are always per day. A weekly, monthly or
+  /// yearly one does on every day of its period until that period has a
+  /// value — and then, once listed, for as long as this date is showing.
+  /// Null while that tracker's values are still loading.
+  bool? _isListed(WidgetRef ref, StatisticTracker tracker) {
+    if (tracker.cadence == TrackerCadence.daily ||
+        tracker.type == TrackerType.counter ||
+        _keptTrackerIds.contains(tracker.id)) {
+      return true;
+    }
+    // Not `.settled`: a refresh still serves the values from before it, and
+    // those can predate the very log it is refreshing for.
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final values = valuesAsync.valueOrNull;
+    if (values == null) return null;
+    final period = ref
+        .read(periodicPromptServiceProvider)
+        .trackerPeriodStartFor(_selectedDate, tracker.cadence);
+    if (hasValueForPeriod(values, period)) return false;
+    // Only a finished read is kept, so a stale one can't pin a logged row.
+    // Recorded during build, without a rebuild of its own: it changes no
+    // output now, only what a later build keeps.
+    if (!valuesAsync.isLoading) _keptTrackerIds.add(tracker.id);
+    return true;
   }
 
   String _formatDate(DateTime d) {
@@ -2267,6 +2498,36 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
     });
   }
 
+  /// Moves the row at [oldIndex] of [listed] to [newIndex] (counted with it
+  /// already taken out) within [all], the full order that also holds the
+  /// trackers not listed on this date, and saves that order to settings. It lands just above the listed row it
+  /// was dropped on, or just below the last one, so the unlisted trackers
+  /// keep their places relative to everything else.
+  void _reorder(
+    List<StatisticTracker> all,
+    List<StatisticTracker> listed,
+    int oldIndex,
+    int newIndex,
+  ) {
+    final moved = listed[oldIndex].id;
+    final rest = [for (final t in listed) t.id]..removeAt(oldIndex);
+    if (rest.isEmpty) return;
+    final before = [for (final t in all) t.id];
+    final ids = [...before]..remove(moved);
+    if (newIndex < rest.length) {
+      ids.insert(ids.indexOf(rest[newIndex]), moved);
+    } else {
+      ids.insert(ids.indexOf(rest.last) + 1, moved);
+    }
+    // Dropped back where it was: saving would still move the settings clock
+    // and upload them.
+    if (listEquals(ids, before)) return;
+    // Taken into the settings before it is written, so the rows take the new
+    // order in the very next frame — rebuilt here, as the save tells no one.
+    unawaited(ref.read(settingsProvider.notifier).saveInboxTrackerOrder(ids));
+    setState(() {});
+  }
+
   Future<void> _saveAll() async {
     for (final key in _rowKeys.values.toList()) {
       await key.currentState?.commit();
@@ -2283,99 +2544,142 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final expanded = ref.watch(_logStatsExpandedProvider);
     final isToday = _isSameDate(_selectedDate, DateTime.now());
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return SliverMainAxisGroup(
+      slivers: [
         // The trigger doubles as the section's title row: caret, icon and
         // label on the left, the date controls it is titling on the right.
-        _FooterTrigger(
-          expanded: _expanded,
-          icon: PhosphorIconsRegular.chartBar,
-          label: 'Log stats',
-          onTap: () => setState(() => _expanded = !_expanded),
-          trailing: _expanded
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!isToday) ...[
-                      GlassButton(
-                        onPressed: _resetToToday,
-                        icon: const Icon(PhosphorIconsRegular.target, size: 14),
-                        tooltip: 'Jump to today',
-                        dense: true,
+        SliverToBoxAdapter(
+          child: _FooterTrigger(
+            expanded: expanded,
+            icon: PhosphorIconsRegular.chartBar,
+            label: 'Log stats',
+            onTap: _toggleExpanded,
+            trailing: expanded
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isToday) ...[
+                        _FooterTextButton(
+                          onTap: _resetToToday,
+                          icon: PhosphorIconsRegular.target,
+                          tooltip: 'Jump to today',
+                        ),
+                        const SizedBox(width: 2),
+                      ],
+                      _FooterTextButton(
+                        onTap: _pickDate,
+                        icon: PhosphorIconsRegular.calendar,
+                        label: _formatDate(_selectedDate),
                       ),
-                      const SizedBox(width: 6),
                     ],
-                    GlassButton(
-                      onPressed: _pickDate,
-                      icon: const Icon(PhosphorIconsRegular.calendar, size: 14),
-                      label: _formatDate(_selectedDate),
-                      dense: true,
-                    ),
-                  ],
-                )
-              : null,
+                  )
+                : null,
+          ),
         ),
-        AnimatedSize(
+        _SliverReveal(
+          open: expanded,
           duration: const Duration(milliseconds: 220),
           curve: VoyagerMotion.reduced(context)
               ? Curves.easeOut
               : VoyagerSpring.moveCurve,
-          alignment: Alignment.topCenter,
-          child: _expanded ? _body(context) : const SizedBox.shrink(),
+          // In a Consumer of its own: [_SliverReveal] builds the body after
+          // this build has ended, too late for this element's ref to keep
+          // the body's watches.
+          builder: (context) =>
+              Consumer(builder: (context, ref, _) => _body(context, ref)),
         ),
       ],
     );
   }
 
-  Widget _body(BuildContext context) {
+  Widget _body(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final trackersAsync = ref.watch(trackersProvider.settled);
-    final body = PopScope(
-      canPop: _dirtyTrackerIds.isEmpty,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        _flushAndClose();
-      },
+    // Watched for an order pulled from another device; read for this one's
+    // own, which [SettingsNotifier.saveInboxTrackerOrder] sets silently.
+    ref.watch(settingsProvider.select((s) => s.valueOrNull?.inboxTrackerOrder));
+    final savedOrder =
+        ref.read(settingsProvider).valueOrNull?.inboxTrackerOrder ??
+        const <String>[];
+    Widget note(Widget child) => SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: trackersAsync.when(
-          data: (trackers) {
-            // A counter's cadence only sets its graph's resolution; its
-            // changes are always per day, so it's listed whatever it is.
-            final daily = trackers
-                .where(
-                  (t) =>
-                      (t.cadence == TrackerCadence.daily ||
-                          t.type == TrackerType.counter) &&
-                      t.deletedAt == null,
-                )
-                .toList();
-            if (daily.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  'No daily trackers yet.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              );
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: child,
+      ),
+    );
+    final content = trackersAsync.when(
+      data: (trackers) {
+        // Every live tracker, listed on this date or not: a drag places the
+        // moved row among them all. See [_reorder].
+        final all = trackers.where((t) => t.deletedAt == null).toList()
+          // Until the list is first dragged — and for a tracker made since —
+          // the Analytics heatmap's layout: starred first, then by cadence,
+          // each group in its manual order.
+          ..sort((a, b) {
+            if (a.starred != b.starred) return a.starred ? -1 : 1;
+            if (!a.starred && a.cadence != b.cadence) {
+              return a.cadence.index.compareTo(b.cadence.index);
             }
-            return Column(
-              children: [
-                for (final tracker in daily)
-                  TrackerEntryRow(
-                    key: _keyFor(tracker.id),
-                    tracker: tracker,
-                    date: _selectedDate,
-                    onDirtyChanged: (dirty) =>
-                        _onDirtyChanged(tracker.id, dirty),
-                  ),
-                const SizedBox(height: 4),
-                Align(
+            return compareTrackerOrder(a, b);
+          });
+        // Then the saved order, with the trackers it doesn't name after it.
+        final rank = {
+          for (var i = 0; i < savedOrder.length; i++) savedOrder[i]: i,
+        };
+        int at(StatisticTracker t) => rank[t.id] ?? savedOrder.length;
+        mergeSort(all, compare: (a, b) => at(a).compareTo(at(b)));
+
+        final listing = [for (final t in all) _isListed(ref, t)];
+        final listed = [
+          for (var i = 0; i < all.length; i++)
+            if (listing[i] ?? false) all[i],
+        ];
+        if (listed.isEmpty) {
+          // Not "nothing left" while a tracker's values are still loading.
+          if (listing.contains(null)) {
+            return note(const LinearProgressIndicator());
+          }
+          return note(
+            Text(
+              all.isEmpty
+                  ? 'No trackers yet.'
+                  : 'Nothing left to log for this day.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverReorderableList(
+              itemCount: listed.length,
+              onReorderItem: (oldIndex, newIndex) =>
+                  _reorder(all, listed, oldIndex, newIndex),
+              proxyDecorator: (child, index, animation) =>
+                  Material(type: MaterialType.transparency, child: child),
+              // Per row rather than around the section, which is slivers
+              // here. Ungated, unlike the button: commit() skips any row
+              // that isn't dirty.
+              itemBuilder: (context, i) => CtrlEnterToSubmitScope(
+                key: ValueKey(listed[i].id),
+                onSubmit: _saveAll,
+                child: TrackerEntryRow(
+                  key: _keyFor(listed[i].id),
+                  tracker: listed[i],
+                  date: _selectedDate,
+                  dragIndex: i,
+                  onDirtyChanged: (dirty) =>
+                      _onDirtyChanged(listed[i].id, dirty),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Align(
                   alignment: Alignment.centerRight,
                   child: GlassButton(
                     onPressed: _dirtyTrackerIds.isEmpty ? null : _saveAll,
@@ -2387,24 +2691,197 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                     dense: true,
                   ),
                 ),
-              ],
-            );
-          },
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: LinearProgressIndicator(),
-          ),
-          error: (e, _) => Text('$e'),
-        ),
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => note(const LinearProgressIndicator()),
+      error: (e, _) => SliverToBoxAdapter(child: Text('$e')),
+    );
+    return PopScope(
+      canPop: _dirtyTrackerIds.isEmpty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _flushAndClose();
+      },
+      child: SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        sliver: content,
       ),
     );
-    // Scoped to this section, so it only fires with a tracker row focused.
-    // Ungated, unlike the button: commit() skips any row that isn't dirty.
-    return CtrlEnterToSubmitScope(onSubmit: _saveAll, child: body);
   }
 
   bool _isSameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// [AnimatedSize] for a sliver: grows [builder]'s sliver open from its top
+/// edge when [open] turns true, and shrinks it away when it turns false.
+///
+/// Builds nothing while closed, so a closed section costs no rows. Starts
+/// where [open] says without animating, as [AnimatedSize] does.
+class _SliverReveal extends StatefulWidget {
+  const _SliverReveal({
+    required this.open,
+    required this.duration,
+    required this.curve,
+    required this.builder,
+  });
+
+  final bool open;
+  final Duration duration;
+  final Curve curve;
+  final WidgetBuilder builder;
+
+  @override
+  State<_SliverReveal> createState() => _SliverRevealState();
+}
+
+class _SliverRevealState extends State<_SliverReveal>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+    value: widget.open ? 1 : 0,
+  )..addStatusListener(_onStatus);
+  late final _curved = CurvedAnimation(
+    parent: _controller,
+    curve: widget.curve,
+  );
+
+  void _onStatus(AnimationStatus status) {
+    // Fully closed: drop the body.
+    if (status.isDismissed) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(_SliverReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.duration;
+    _curved.curve = widget.curve;
+    if (widget.open != oldWidget.open) {
+      widget.open ? _controller.forward() : _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _curved.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.open && _controller.isDismissed) {
+      return const SliverToBoxAdapter();
+    }
+    return _RevealSliver(factor: _curved, sliver: widget.builder(context));
+  }
+}
+
+/// Shows [factor] of [sliver]'s extent, clipping the rest away below.
+class _RevealSliver extends SingleChildRenderObjectWidget {
+  const _RevealSliver({required this.factor, required Widget sliver})
+    : super(child: sliver);
+
+  final Animation<double> factor;
+
+  @override
+  _RenderRevealSliver createRenderObject(BuildContext context) =>
+      _RenderRevealSliver(factor);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderRevealSliver renderObject,
+  ) {
+    renderObject.factor = factor;
+  }
+}
+
+class _RenderRevealSliver extends RenderProxySliver {
+  _RenderRevealSliver(this._factor);
+
+  Animation<double> _factor;
+  set factor(Animation<double> value) {
+    if (identical(value, _factor)) return;
+    if (attached) {
+      _factor.removeListener(markNeedsLayout);
+      value.addListener(markNeedsLayout);
+    }
+    _factor = value;
+    markNeedsLayout();
+  }
+
+  final _clip = LayerHandle<ClipRectLayer>();
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _factor.addListener(markNeedsLayout);
+  }
+
+  @override
+  void detach() {
+    _factor.removeListener(markNeedsLayout);
+    super.detach();
+  }
+
+  @override
+  void dispose() {
+    _clip.layer = null;
+    super.dispose();
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child!;
+    child.layout(constraints, parentUsesSize: true);
+    final childGeometry = child.geometry!;
+    if (childGeometry.scrollOffsetCorrection != null) {
+      geometry = SliverGeometry(
+        scrollOffsetCorrection: childGeometry.scrollOffsetCorrection,
+      );
+      return;
+    }
+    final extent = childGeometry.scrollExtent * _factor.value;
+    final paintExtent = calculatePaintOffset(constraints, from: 0, to: extent);
+    geometry = SliverGeometry(
+      scrollExtent: extent,
+      paintExtent: paintExtent,
+      maxPaintExtent: extent,
+      cacheExtent: calculateCacheOffset(constraints, from: 0, to: extent),
+      hasVisualOverflow:
+          childGeometry.hasVisualOverflow ||
+          extent < childGeometry.scrollExtent,
+    );
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null || !geometry!.visible) {
+      _clip.layer = null;
+      return;
+    }
+    final childOffset =
+        offset + (child.parentData! as SliverPhysicalParentData).paintOffset;
+    if (_factor.value >= 1) {
+      _clip.layer = null;
+      context.paintChild(child, childOffset);
+      return;
+    }
+    // The popover only scrolls down, so what's hidden is below.
+    _clip.layer = context.pushClipRect(
+      needsCompositing,
+      offset,
+      Offset.zero & Size(constraints.crossAxisExtent, geometry!.paintExtent),
+      (context, _) => context.paintChild(child, childOffset),
+      oldLayer: _clip.layer,
+    );
+  }
 }
 
 /// Pre-renders the notification inbox popover offscreen for two frames

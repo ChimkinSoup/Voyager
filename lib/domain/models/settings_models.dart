@@ -146,6 +146,8 @@ class AppSettings {
     this.customStartupPage,
     this.lastSeenNavPage,
     this.todoCompletedSectionExpanded = true,
+    this.inboxLogStatsExpanded = false,
+    this.inboxTrackerOrder = const [],
     this.showAnnualizedSubscriptionCost = false,
     this.jobsHiddenColumns = const [],
     this.jobsIncludeArchived = false,
@@ -413,6 +415,15 @@ class AppSettings {
   /// app restarts.
   final bool todoCompletedSectionExpanded;
 
+  /// Whether the notification inbox's Log stats section is open. Device-local,
+  /// like [todoCompletedSectionExpanded], and written only through
+  /// `SettingsRepository.saveInboxLogStatsExpanded`.
+  final bool inboxLogStatsExpanded;
+
+  /// Tracker ids in the order the notification inbox's Log stats list was
+  /// last dragged into. A tracker missing from it sorts after the rest.
+  final List<String> inboxTrackerOrder;
+
   /// Whether the Bill Radar shows each subscription's annualized cost in faint
   /// text next to it (e.g. "$180/yr" beside a $15/month plan).
   final bool showAnnualizedSubscriptionCost;
@@ -662,6 +673,8 @@ class AppSettings {
     String? customStartupPage,
     String? lastSeenNavPage,
     bool? todoCompletedSectionExpanded,
+    bool? inboxLogStatsExpanded,
+    List<String>? inboxTrackerOrder,
     bool? showAnnualizedSubscriptionCost,
     List<String>? jobsHiddenColumns,
     bool? jobsIncludeArchived,
@@ -934,6 +947,9 @@ class AppSettings {
           : (lastSeenNavPage ?? this.lastSeenNavPage),
       todoCompletedSectionExpanded:
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
+      inboxLogStatsExpanded:
+          inboxLogStatsExpanded ?? this.inboxLogStatsExpanded,
+      inboxTrackerOrder: inboxTrackerOrder ?? this.inboxTrackerOrder,
       showAnnualizedSubscriptionCost:
           showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
       jobsHiddenColumns: jobsHiddenColumns ?? this.jobsHiddenColumns,

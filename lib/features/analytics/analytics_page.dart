@@ -796,7 +796,7 @@ class _StatTileState extends State<_StatTile> {
     );
     final dragIndex = widget.dragIndex;
     if (dragIndex != null) {
-      tapTarget = _QuickDelayedDragStartListener(
+      tapTarget = QuickDelayedDragStartListener(
         index: dragIndex,
         child: tapTarget,
       );
@@ -825,25 +825,6 @@ class _StatTileState extends State<_StatTile> {
         ],
       ),
     );
-  }
-}
-
-/// Like [ReorderableDelayedDragStartListener], but lifts into a drag after a
-/// shorter hold. The framework default ([ReorderableDelayedDragStartListener],
-/// via [DelayedMultiDragGestureRecognizer]) is [kLongPressTimeout] = 500 ms;
-/// stat rows drag from a 200 ms hold so reordering feels quicker without
-/// colliding with the plain tap that opens the detail popup.
-class _QuickDelayedDragStartListener extends ReorderableDragStartListener {
-  const _QuickDelayedDragStartListener({
-    required super.child,
-    required super.index,
-  });
-
-  static const _delay = Duration(milliseconds: 200);
-
-  @override
-  MultiDragGestureRecognizer createRecognizer() {
-    return DelayedMultiDragGestureRecognizer(delay: _delay, debugOwner: this);
   }
 }
 
@@ -877,7 +858,7 @@ class _SparklineStackState extends ConsumerState<_SparklineStack> {
   @override
   void initState() {
     super.initState();
-    _items = List.of(widget.trackers)..sort(_compareTrackerOrder);
+    _items = List.of(widget.trackers)..sort(compareTrackerOrder);
   }
 
   @override
@@ -886,7 +867,7 @@ class _SparklineStackState extends ConsumerState<_SparklineStack> {
     if (!_sameTrackerIds(widget.trackers, _items)) {
       // Membership changed (tracker added, removed, or switched tracking
       // style) — adopt the incoming set outright.
-      _items = List.of(widget.trackers)..sort(_compareTrackerOrder);
+      _items = List.of(widget.trackers)..sort(compareTrackerOrder);
       return;
     }
     // Same membership: refresh the tracker objects (an edited name or colour)
@@ -1486,15 +1467,6 @@ class _SparklineRow extends ConsumerWidget {
 // Heatmap Grid
 // ---------------------------------------------------------------------------
 
-/// Sort comparator for trackers within a single group (starred, or one
-/// cadence): manual [StatisticTracker.sortOrder] first, falling back to
-/// creation order so freshly-created trackers — which all default to
-/// sortOrder 0 — still land in a stable, sensible position.
-int _compareTrackerOrder(StatisticTracker a, StatisticTracker b) {
-  if (a.sortOrder != b.sortOrder) return a.sortOrder.compareTo(b.sortOrder);
-  return a.createdAt.compareTo(b.createdAt);
-}
-
 /// Largest recorded [TrackerValue.intValue] between [fromYear] and [toYear]
 /// inclusive, floored at 1.
 ///
@@ -1659,14 +1631,14 @@ class _HeatmapGrid extends ConsumerWidget {
     final userTrackers = trackers.where((t) => !t.isDefault).toList();
 
     final starred = userTrackers.where((t) => t.starred).toList()
-      ..sort(_compareTrackerOrder);
+      ..sort(compareTrackerOrder);
 
     final byCadence = <TrackerCadence, List<StatisticTracker>>{};
     for (final t in userTrackers.where((t) => !t.starred)) {
       byCadence.putIfAbsent(t.cadence, () => []).add(t);
     }
     for (final group in byCadence.values) {
-      group.sort(_compareTrackerOrder);
+      group.sort(compareTrackerOrder);
     }
     final cadenceGroups = TrackerCadence.values
         .where((c) => byCadence.containsKey(c))

@@ -3849,7 +3849,8 @@ bool _remoteClears(Map<String, dynamic> data, String key) =>
 ///    `workoutLibraryWidth`, which are sized for the screen they were dragged
 ///    on;
 ///  - where the user is: `lastSeenNavPage`, the `lastViewed*Id`s, the
-///    `*ShowAll*` scopes and `todoCompletedSectionExpanded`. These change on
+///    `*ShowAll*` scopes, `todoCompletedSectionExpanded` and
+///    `inboxLogStatsExpanded`. These change on
 ///    every page or list switch, and while they synced, merely navigating on a
 ///    device that hadn't pulled moved the clock and re-uploaded its stale copy
 ///    of every other setting over newer edits made elsewhere.
@@ -3934,6 +3935,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'navPageOrder': s.navPageOrder,
   'hiddenNavPages': s.hiddenNavPages,
   'jobsHiddenColumns': s.jobsHiddenColumns,
+  'inboxTrackerOrder': s.inboxTrackerOrder,
   'jobsIncludeArchived': s.jobsIncludeArchived,
   'rankingsCollapsedQueueCategories': s.rankingsCollapsedQueueCategories,
   'rankingsMapViewCategories': s.rankingsMapViewCategories,
@@ -4233,6 +4235,7 @@ AppSettings mergeSettingsFromRemote(
     clearNavPageOrder: _remoteClears(data, 'navPageOrder'),
     hiddenNavPages: _stringListOrNull(data['hiddenNavPages']),
     jobsHiddenColumns: _stringListOrNull(data['jobsHiddenColumns']),
+    inboxTrackerOrder: _stringListOrNull(data['inboxTrackerOrder']),
     jobsIncludeArchived: data['jobsIncludeArchived'] as bool?,
     rankingsCollapsedQueueCategories: _stringListOrNull(
       data['rankingsCollapsedQueueCategories'],

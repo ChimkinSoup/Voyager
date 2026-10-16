@@ -41,6 +41,10 @@ Finder _offered(String tag) => find.descendant(
   matching: find.text(tag),
 );
 
+/// [tag] shown as a chip on the field, rather than as a row of the list.
+int _chips(String tag) =>
+    find.text(tag).evaluate().length - _offered(tag).evaluate().length;
+
 void main() {
   testWidgets('typing narrows the list to tags that start with it', (
     tester,
@@ -77,6 +81,51 @@ void main() {
     expect(find.text('test'), findsOneWidget);
     expect(_offered('test'), findsNothing);
     expect(_offered('arst'), findsOneWidget);
+  });
+
+  // Tab used to move focus on, and blur committed the half-typed `te`.
+  testWidgets('Tab adds the highlighted suggestion, not the typed text', (
+    tester,
+  ) async {
+    await _pumpField(tester, suggestions: ['test', 'arst']);
+
+    await tester.showKeyboard(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), 'te');
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+
+    expect(find.text('test'), findsOneWidget);
+    expect(find.text('te'), findsNothing);
+  });
+
+  // The list opens on focus alone, so Tab from an empty box must still just
+  // leave the field rather than add the first suggestion.
+  testWidgets('Tab from an empty box adds nothing', (tester) async {
+    await _pumpField(tester, suggestions: ['test', 'arst']);
+
+    await tester.showKeyboard(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+
+    expect(_chips('test'), 0);
+  });
+
+  testWidgets('Shift+Tab does not take the highlighted suggestion', (
+    tester,
+  ) async {
+    await _pumpField(tester, suggestions: ['test', 'arst']);
+
+    await tester.showKeyboard(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), 'te');
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+
+    expect(_chips('test'), 0);
   });
 
   testWidgets('tapping a chip puts the tag back in the list', (tester) async {

@@ -833,6 +833,15 @@ abstract class SettingsRepository {
   /// reason: [saveSettings] leaves it alone.
   Future<void> saveRankingsDeviceLocation(RankingsDeviceLocation location);
 
+  /// Records [AppSettings.inboxLogStatsExpanded] on its own, for the same
+  /// reason: [saveSettings] leaves it alone.
+  Future<void> saveInboxLogStatsExpanded(bool expanded);
+
+  /// Records [AppSettings.inboxTrackerOrder] against the stored row, so
+  /// nothing else in it moves. Synced, unlike the savers above: it is stamped
+  /// and uploaded as [saveSettings] does for any synced setting.
+  Future<void> saveInboxTrackerOrder(List<String> ids);
+
   Future<Map<String, int>> getTagColors();
 
   /// Tag colors with their sync metadata, as distinct from [getTagColors]'

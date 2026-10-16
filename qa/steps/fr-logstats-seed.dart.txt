@@ -1,0 +1,18 @@
+final tr = c.read(trackerRepositoryProvider);
+final now = DateTime.now().toUtc();
+for (var i = 1; i <= 24; i++) {
+  final n = i < 10 ? '0$i' : '$i';
+  await tr.upsertTracker(StatisticTracker(id: 'fr-t$n', createdAt: now.add(Duration(seconds: i)), updatedAt: now, version: 1, name: 'Habit $n', type: TrackerType.boolean, cadence: TrackerCadence.daily, sortOrder: i));
+}
+final r = c.read(remoteSyncServiceProvider);
+final rr = c.read(rankingRepositoryProvider);
+final rc = RankingCategory(id: 'fr-rcat', createdAt: now, updatedAt: now, version: 1, name: 'FR Cafes', colorValue: 0xFFDD8800, iconKey: 'star', childUnitsEnabled: false, childUnitLabel: 'Visit', locationEnabled: false);
+await rr.upsertCategory(rc);
+r.pushRankingCategory(rc);
+final p1 = RankingParent(id: 'fr-rp-1', createdAt: now, updatedAt: now, version: 1, categoryId: 'fr-rcat', title: 'FR Tagged', overallScore: 4.0, notes: '', tags: const ['coffee', 'cozy'], starred: false, locations: const []);
+await rr.upsertParent(p1);
+r.pushRankingParent(p1);
+final p2 = RankingParent(id: 'fr-rp-2', createdAt: now, updatedAt: now, version: 1, categoryId: 'fr-rcat', title: 'FR Untagged', overallScore: 3.0, notes: '', tags: const [], starred: false, locations: const []);
+await rr.upsertParent(p2);
+r.pushRankingParent(p2);
+invalidateAllDataProvidersIn(c);

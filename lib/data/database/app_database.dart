@@ -966,6 +966,14 @@ class SettingsTable extends Table {
   TextColumn get lastSeenNavPage => text().nullable()();
   BoolColumn get todoCompletedSectionExpanded =>
       boolean().withDefault(const Constant(true))();
+
+  /// Whether the notification inbox's Log stats section is open. Device-local
+  /// like [todoCompletedSectionExpanded].
+  BoolColumn get inboxLogStatsExpanded =>
+      boolean().withDefault(const Constant(false))();
+
+  /// [AppSettings.inboxTrackerOrder] as a JSON list, null when empty.
+  TextColumn get inboxTrackerOrderJson => text().nullable()();
   BoolColumn get showAnnualizedSubscriptionCost =>
       boolean().withDefault(const Constant(false))();
 
@@ -2016,7 +2024,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 146;
+  int get schemaVersion => 149;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3669,6 +3677,20 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           "UPDATE media_assets_table SET upload_state = 'uploaded' "
           "WHERE upload_state = 'localOnly' AND download_state != 'present'",
+        );
+      }
+      if (from < 147) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.inboxLogStatsExpanded,
+        );
+      }
+      // 148 added a tracker column for the inbox order, since moved to
+      // settings; a database that ran it keeps the unused column.
+      if (from < 149) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.inboxTrackerOrderJson,
         );
       }
     },
