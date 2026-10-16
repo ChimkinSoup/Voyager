@@ -377,6 +377,15 @@ class DriftJournalRepository implements JournalRepository {
         .toList();
   }
 
+  @override
+  Future<Set<String>> getAllEntryIds() async {
+    final id = _db.journalEntriesTable.id;
+    final rows = await (_db.selectOnly(
+      _db.journalEntriesTable,
+    )..addColumns([id])).get();
+    return {for (final row in rows) row.read(id)!};
+  }
+
   Journal _mapJournal(JournalsTableData row) => Journal(
     id: row.id,
     name: row.name,

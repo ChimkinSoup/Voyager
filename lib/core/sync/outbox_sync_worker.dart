@@ -504,6 +504,21 @@ class OutboxSyncWorker {
           DriftLeetCodeRepository(_db).getReviewLog,
           leetCodeReviewLogToFirestore,
         );
+      case FirestoreCollections.leetcodeCheatTabs:
+        return byId(
+          DriftLeetCodeRepository(_db).getCheatTab,
+          leetCodeCheatTabToFirestore,
+        );
+      case FirestoreCollections.leetcodeCheatSections:
+        return byId(
+          DriftLeetCodeRepository(_db).getCheatSection,
+          leetCodeCheatSectionToFirestore,
+        );
+      case FirestoreCollections.leetcodeCheatEntries:
+        return byId(
+          DriftLeetCodeRepository(_db).getCheatEntry,
+          leetCodeCheatEntryToFirestore,
+        );
       case FirestoreCollections.studyFolders:
         return byId(
           DriftStudyRepository(_db).getFolder,

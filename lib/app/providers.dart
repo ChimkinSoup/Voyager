@@ -758,7 +758,7 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
     remoteSync: ref.watch(remoteSyncServiceProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
     onChanged: (collection) {
-      invalidateAllDataProviders(ref);
+      invalidateProvidersForRemoteChange(ref, collection);
       // An entry another device just wrote may carry a quote this journal
       // should now hold back.
       ref.invalidate(quoteHistoryProvider);
@@ -1118,11 +1118,11 @@ final journalEntriesProvider = FutureProvider((ref) {
   return ref.watch(lazyLoadProvider).loadRecentEntries();
 });
 
+/// Every live entry, newest first. Shares the journal page's read of the same
+/// rows rather than reading them all a second time (BUG-281).
 final allJournalEntriesProvider = FutureProvider((ref) {
   ref.keepAlive();
-  return ref
-      .watch(journalRepositoryProvider)
-      .getAllEntries(includeDeleted: false);
+  return ref.watch(journalListEntriesProvider(allJournalEntriesScope).future);
 });
 
 /// Journal entry list scope: [allJournalEntriesScope] for recent entries across
@@ -1154,12 +1154,9 @@ final journalEntryCountsProvider = FutureProvider<Map<String, int>>((
 /// Used by the journal page to evict stale in-memory pending entries that were
 /// soft-deleted (e.g. by an import), which wouldn't appear in the
 /// non-deleted [journalListEntriesProvider] list.
-final journalAllEntryIdsProvider = FutureProvider<Set<String>>((ref) async {
+final journalAllEntryIdsProvider = FutureProvider<Set<String>>((ref) {
   ref.keepAlive();
-  final entries = await ref
-      .watch(journalRepositoryProvider)
-      .getAllEntries(includeDeleted: true);
-  return {for (final e in entries) e.id};
+  return ref.watch(journalRepositoryProvider).getAllEntryIds();
 });
 
 final journalListEntriesProvider =
@@ -1888,6 +1885,32 @@ void invalidateAllDataProviders(Ref ref) {
   }
   invalidateWorkoutProviders(ref);
   invalidateSecondaryDataProviders(ref);
+}
+
+/// The providers a live sync tick of [collection] can make stale.
+///
+/// Reloading every provider for each change cost a steady stream of journal
+/// entries from another device (one a second) over a CPU core and a third of
+/// the frame rate, growing with the account (BUG-281). A journal pull writes
+/// entries, revives their journal (BUG-278), and can quarantine a conflict or
+/// tombstone a row the trash lists. Other collections still reload everything.
+///
+/// Through the container: in a debug build `ref.invalidate` first builds a
+/// provider no one has read, so each change read the whole trash (every
+/// collection) and the recent-entries list with no one showing them.
+void invalidateProvidersForRemoteChange(Ref ref, String collection) {
+  final container = ref.container;
+  switch (collection) {
+    case FirestoreCollections.journals || FirestoreCollections.journalEntries:
+      for (final provider in _journalEntryProviders) {
+        container.invalidate(provider);
+      }
+      container.invalidate(journalsProvider);
+      container.invalidate(syncConflictsProvider);
+      container.invalidate(trashItemsProvider);
+    default:
+      invalidateAllDataProviders(ref);
+  }
 }
 
 /// An async provider as its watchers need it: an invalidate's refresh reads the

@@ -142,19 +142,41 @@ class FirestoreSyncRepository implements SyncRepository {
     String collection, {
     DateTime? changedSince,
   }) {
-    return _changedSince(collection, changedSince).snapshots().map(
-      (snap) => {
+    return _changedSince(collection, changedSince).snapshots().asyncMap((
+      snap,
+    ) async {
+      // Our own pending write leaves the write time unset in the cache, so the
+      // document drops out of `changedSince` until the server confirms it.
+      // Read as a deletion, that threw away the open editor's session on every
+      // upload, and a keystroke during the reload seeded one from the editor's
+      // text (BUG-282). A document the cache still holds was not deleted.
+      final removed = [
         for (final change in snap.docChanges)
-          if (change.type == DocumentChangeType.removed)
+          if (change.type == DocumentChangeType.removed) change.doc.id,
+      ];
+      final cached = await Future.wait([
+        for (final id in removed)
+          _doc(collection, id)
+              .get(const GetOptions(source: Source.cache))
+              .then((doc) => doc.exists, onError: (_) => false),
+      ]);
+      final deleted = {
+        for (var i = 0; i < removed.length; i++)
+          if (!cached[i]) removed[i],
+      };
+      return {
+        for (final change in snap.docChanges)
+          if (deleted.contains(change.doc.id))
             change.doc.id: const <String, dynamic>{}
-          else if (change.doc.data() != null &&
+          else if (change.type != DocumentChangeType.removed &&
+              change.doc.data() != null &&
               !isUnconfirmedStampedWrite(
                 hasPendingWrites: change.doc.metadata.hasPendingWrites,
                 data: change.doc.data()!,
               ))
             change.doc.id: _unstamped(change.doc.data()!),
-      },
-    );
+      };
+    });
   }
 
   @override

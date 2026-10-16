@@ -57,6 +57,9 @@ abstract class JournalRepository {
   Future<void> hardDeleteEntry(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<JournalEntry>> getAllEntries({bool includeDeleted = true});
+
+  /// Every entry id, deleted ones included, without reading the rows.
+  Future<Set<String>> getAllEntryIds();
 }
 
 abstract class DreamRepository {

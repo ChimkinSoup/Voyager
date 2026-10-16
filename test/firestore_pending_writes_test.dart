@@ -60,4 +60,52 @@ void main() {
 
     expect((await delivered)['cal-1'], {'name': 'Work'});
   });
+
+  group('a document leaving the listener query (BUG-282)', () {
+    late FakeFirebaseFirestore firestore;
+    late FirestoreSyncRepository repository;
+    final since = DateTime.utc(2026, 1, 1);
+
+    setUp(() {
+      firestore = FakeFirebaseFirestore();
+      repository = FirestoreSyncRepository(
+        firestore,
+        'user-1',
+        writeGate: FirestoreWriteGate(waitForPendingWrites: () async {}),
+      );
+    });
+
+    test('is not a deletion while the document still exists', () async {
+      // Our own pending write leaves the write time unset in the cache, so the
+      // document drops out of `changedSince` until the server confirms it.
+      // Reported as removed, it threw away the open editor's session.
+      final events = <Map<String, Map<String, dynamic>>>[];
+      final sub = repository
+          .watchCollection('journal_entries', changedSince: since)
+          .listen(events.add);
+      addTearDown(sub.cancel);
+      await repository.upsertDocument('journal_entries', 'e-1', {'body': 'a'});
+      await pumpEventQueue();
+      await firestore.doc('users/user-1/journal_entries/e-1').update({
+        '_serverWrittenAt': DateTime.utc(2025),
+      });
+      await pumpEventQueue();
+
+      expect(events.where((e) => e['e-1']?.isEmpty ?? false), isEmpty);
+    });
+
+    test('is a deletion once the document is gone', () async {
+      final events = <Map<String, Map<String, dynamic>>>[];
+      final sub = repository
+          .watchCollection('journal_entries', changedSince: since)
+          .listen(events.add);
+      addTearDown(sub.cancel);
+      await repository.upsertDocument('journal_entries', 'e-1', {'body': 'a'});
+      await pumpEventQueue();
+      await firestore.doc('users/user-1/journal_entries/e-1').delete();
+      await pumpEventQueue();
+
+      expect(events.last, {'e-1': <String, dynamic>{}});
+    });
+  });
 }

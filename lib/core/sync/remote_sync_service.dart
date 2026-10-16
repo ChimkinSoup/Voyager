@@ -645,20 +645,42 @@ class RemoteSyncService {
     required String documentId,
     required String target,
   }) async {
-    final ops = await _listRemoteCharOps(
-      firestoreDocumentIdForLocal(collection, documentId),
-    );
+    final firestoreId = firestoreDocumentIdForLocal(collection, documentId);
+    var ops = await _listRemoteCharOps(firestoreId);
+    Map<String, dynamic>? cloud;
+    if (ops.isEmpty &&
+        _charOpRegistry.session(collection, documentId) == null) {
+      cloud = await _syncRepository.getDocument(collection, firestoreId);
+      // A device appends its operations before it mirrors the text, so any
+      // characters this text holds are in the log by now. Seeding them while
+      // ignoring that log would upload them a second time.
+      ops = await _listRemoteCharOps(firestoreId);
+    }
     // Folded into an open editor's session rather than replacing it: loading
     // a fresh session threw away the keystrokes it had not uploaded yet.
-    if (_charOpRegistry.session(collection, documentId) == null) {
+    if (_charOpRegistry.session(collection, documentId) != null) {
+      _charOpRegistry.absorbRemote(collection, documentId, ops);
+    } else if (ops.isEmpty) {
+      // No characters in the log yet: an editor opening the document seeds
+      // the cloud's text under ids every device derives alike. Recorded from
+      // nothing instead, the target went up as a second copy of that text
+      // under fresh ids, and the two interleaved (BUG-282).
+      _charOpRegistry.ensureSession(
+        collection: collection,
+        documentId: documentId,
+        clientId: deviceId,
+        initialText:
+            cloud?[FirestoreCollections.crdtTextField(collection)] as String? ??
+            '',
+        markSeedsAsPending: true,
+      );
+    } else {
       _charOpRegistry.loadSession(
         collection: collection,
         documentId: documentId,
         clientId: deviceId,
         operations: ops,
       );
-    } else {
-      _charOpRegistry.absorbRemote(collection, documentId, ops);
     }
     final session = _charOpRegistry.session(collection, documentId);
     if (session == null) return;
@@ -850,6 +872,17 @@ class RemoteSyncService {
     _purgingDocuments.add(key);
     final int operationsDeleted;
     try {
+      // Before the delete, so no device can see the document gone without
+      // the record being there to find (see [FirestoreCollections.purges]).
+      await _syncRepository.upsertDocument(
+        FirestoreCollections.purges,
+        '${collection}__$firestoreDocId',
+        {
+          'collection': collection,
+          'documentId': firestoreDocId,
+          'deviceId': deviceId,
+        },
+      );
       await _syncRepository.deleteDocument(collection, firestoreDocId);
       // The Firestore id, not the local one: the uploads store operations
       // under whatever id the document itself lives at, and for a legacy-id
@@ -896,6 +929,22 @@ class RemoteSyncService {
       return;
     }
     await _reseedAfterLogLoss(collection, documentId);
+  }
+
+  /// [forgetRemovedDocument] for a [FirestoreCollections.purges] record
+  /// another device wrote.
+  ///
+  /// Waits for this device's own pending writes first: operations it had in
+  /// flight land in the purged log after the purge, and a re-seed that read
+  /// the log before they arrived would not know about them, which leaves
+  /// characters in the log no session accounts for. Never throws.
+  Future<void> forgetPurgedDocument(Map<String, dynamic> record) async {
+    if (record['deviceId'] == deviceId) return;
+    await _syncRepository.waitForPendingWrites().catchError((_) {});
+    await forgetRemovedDocument(
+      record['collection'] as String,
+      record['documentId'] as String,
+    );
   }
 
   /// Never throws: a purge has already succeeded by the time this runs, and
@@ -7661,6 +7710,24 @@ class LiveSyncController {
             }),
       );
     }
+    // Only purges from about now on: editing sessions live in memory, so one
+    // from before this launch has none left to rebuild. The hour's margin
+    // covers a device clock running ahead of the server's.
+    _subscriptions.add(
+      _syncRepository
+          .watchCollection(
+            FirestoreCollections.purges,
+            changedSince: DateTime.now().toUtc().subtract(
+              const Duration(hours: 1),
+            ),
+          )
+          .listen((records) {
+            for (final record in records.values) {
+              if (record.isEmpty) continue;
+              unawaited(_remoteSync.forgetPurgedDocument(record));
+            }
+          }),
+    );
   }
 
   Future<void> _handleRemoteChange(
@@ -7719,12 +7786,13 @@ class LiveSyncController {
             _requeueAttempts.remove(entry.key);
             // Skip the refresh entirely when every id in this batch turned
             // out to be an echo of our own write — onChanged invalidates
-            // nearly every data provider in the app, and callers that
+            // the collection's data providers (for most collections, every
+            // one in the app), and callers that
             // triggered the write (e.g. the todo page's completion batch)
             // already do their own narrower, coalesced refresh.
             if (applied) {
               PerfStallLogger.instance.breadcrumb(
-                'live sync reloaded EVERY data provider: ${entry.key} '
+                'live sync reloaded data providers: ${entry.key} '
                 '(${entry.value.length} id(s))',
               );
               if (DevFlags.verboseSync) {

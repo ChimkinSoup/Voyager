@@ -61,7 +61,10 @@ void main() {
     await tester.pumpAndSettle();
 
     Widget page() => tester.widget(find.byType(KeepAliveScrollView));
+    // As the journal page's save does: allJournalEntriesProvider shares the
+    // all-journals list's read.
     Future<void> journalSaved() async {
+      container.invalidate(journalListEntriesProvider(allJournalEntriesScope));
       container.invalidate(allJournalEntriesProvider);
       await tester.runAsync(
         () => container.read(allJournalEntriesProvider.future),

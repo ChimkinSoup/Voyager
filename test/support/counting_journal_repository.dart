@@ -12,17 +12,23 @@ class CountingJournalRepository implements JournalRepository {
   final JournalRepository _delegate;
 
   var listEntriesCalls = 0;
+
+  /// The [listEntriesCalls] with no limit: those that read every row.
+  var unlimitedListEntriesCalls = 0;
   var getAllEntriesCalls = 0;
   var countEntriesCalls = 0;
+  var entryIdsCalls = 0;
 
   /// Whole-table reads since [resetCounts].
   int get tableScans =>
-      listEntriesCalls + getAllEntriesCalls + countEntriesCalls;
+      listEntriesCalls + getAllEntriesCalls + countEntriesCalls + entryIdsCalls;
 
   void resetCounts() {
     listEntriesCalls = 0;
+    unlimitedListEntriesCalls = 0;
     getAllEntriesCalls = 0;
     countEntriesCalls = 0;
+    entryIdsCalls = 0;
   }
 
   @override
@@ -34,6 +40,7 @@ class CountingJournalRepository implements JournalRepository {
     bool includeDeleted = false,
   }) {
     listEntriesCalls++;
+    if (limit == null) unlimitedListEntriesCalls++;
     return _delegate.listEntries(
       journalId: journalId,
       from: from,
@@ -47,6 +54,12 @@ class CountingJournalRepository implements JournalRepository {
   Future<List<JournalEntry>> getAllEntries({bool includeDeleted = true}) {
     getAllEntriesCalls++;
     return _delegate.getAllEntries(includeDeleted: includeDeleted);
+  }
+
+  @override
+  Future<Set<String>> getAllEntryIds() {
+    entryIdsCalls++;
+    return _delegate.getAllEntryIds();
   }
 
   @override

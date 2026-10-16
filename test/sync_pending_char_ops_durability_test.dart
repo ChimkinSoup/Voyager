@@ -571,6 +571,32 @@ void main() {
       await b.pullJournalEntries();
       expect((await repoB.getEntry(id))!.body, 'Hello there!');
     });
+
+    test('leaves the row stamped as the cloud has it (BUG-280)', () async {
+      // An entry typed offline, uploaded on reconnect, and pulled back while
+      // its editor was still open: the page's flush applied the buffered copy
+      // and restamped the row "now" at the same version, without uploading
+      // it, so the devices disagreed on its `updated_at` for good.
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      a.setDocumentEditing(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        isEditing: true,
+      );
+      await a.pullJournalEntries();
+      final before = (await journalRepo.getEntry(id))!;
+
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await a.applyPendingJournalEntryTextMerge(
+        entryId: id,
+        currentLocalText: before.body,
+      );
+
+      final after = (await journalRepo.getEntry(id))!;
+      expect(after.version, before.version);
+      expect(after.updatedAt, before.updatedAt);
+    });
   });
 
   group('opening an entry whose remote log is ahead of this device', () {

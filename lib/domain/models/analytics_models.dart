@@ -517,11 +517,16 @@ List<TrackerValue> counterSeriesValues(
 /// one boolean-`true` [TrackerValue] per local calendar day that has at least
 /// one journal entry. Days with no entry get no value (rendered as empty).
 List<TrackerValue> journalEntriesTrackerValues(List<JournalEntry> entries) {
-  final days = <DateTime>{};
+  // Keyed by an int first: building a local DateTime is the costly part, so
+  // it is done once per day rather than once per entry (BUG-281).
+  final dayKeys = <int>{};
   for (final entry in entries) {
     final d = entry.entryDate.toLocal();
-    days.add(DateTime(d.year, d.month, d.day));
+    dayKeys.add(d.year * 10000 + d.month * 100 + d.day);
   }
+  final days = [
+    for (final k in dayKeys) DateTime(k ~/ 10000, k ~/ 100 % 100, k % 100),
+  ];
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   return [
     for (final day in days)

@@ -1521,6 +1521,19 @@ Keep this table and each phase's **Status** line in sync.
 - **Result (2026-10-15):** 9 of 9 passed (BUG-272 after one rebuild). Found BUG-282 (Minor, not fixed). End: `DBDIFF SAME (63 tables, 873 rows)`, outboxes 0; no exception or overflow in the six run logs, error logs only APP START. Both instances ended `SIGNED-OUT`.
 - **Not covered:** BUG-270/271 for dream bodies and task notes (same code path, tests only); BUG-276's "Keep Remote" pressed before the other device's revision arrives (the stale snapshot is still what it resolves from).
 
+### FV-48 — BUG-279 … BUG-282 (cheat-sheet outbox, offline stamp, live-sync reloads, restore during typing)
+- **Change (2026-10-15, uncommitted, on `0dedb60`):** BUG-279: `OutboxSyncWorker._payloadsFor` resolves cheat-sheet tabs, sections and entries. BUG-280: none (already fixed by BUG-256's `applyPendingJournalEntryTextMerge` change); test added. BUG-281: live sync reloads only the journal providers (plus journals, conflicts, trash) for journal and journal-entry changes. BUG-282: `_rebaseCharOpsOnLiveChain` seeds a log with no characters from the cloud's text under shared seed ids; `watchCollection` no longer reports our own pending write as a removed document.
+- **Tests:** `sync_outbox_routing_test.dart` (BUG-279), `sync_pending_char_ops_durability_test.dart` (BUG-280), new `live_sync_narrow_reload_test.dart` (BUG-281), `sync_saving_regressions_test.dart` (BUG-282). Each fails without its change (BUG-280's against the soak build's line).
+- **Flows (new account qa-091 on `qa` (A) + `qb` (B)):**
+  - [x] BUG-279: `md17-cheat.sh` (rb, offline v2 + v3): v3 everywhere; `md17-blindx.py` create/edit/delete: v3 tombstones everywhere.
+  - [x] BUG-280: two offline windows with UI-typed entries, reconnect, page switches: `DBDIFF SAME`, cloud stamp equal.
+  - [~] BUG-281: debug build: CPU and per-arrival build down, stall count unchanged. Profile build (second pass, qa-092): frames fine (UI p90 0.45 ms, no Dart blocks); ~12 ms main-thread work per arrival (row re-reads + `trackerValuesProvider`) still grows with the account.
+  - [x] BUG-282 (sibling): restore during B's typing on `md13-je-02` and `md13-je-01`: clean cut, equal everywhere.
+  - [x] BUG-282 (cause, second pass, qa-092): qa-090's log decoded; instrumented build showed a false "removed" from the listener on every upload resetting the editor's session; reproduced live; fixed in `watchCollection`; no session drops after, restore during typing clean, real purge still delivered.
+- **Result (2026-10-15):** 3 of 4 pass; BUG-281 partly. End: `DBDIFF SAME (63 tables, 696 rows)`, outboxes 0, no exceptions in the run logs. Both instances ended `SIGNED-OUT`.
+- **Third pass (2026-10-15, qa-092):** BUG-281's remaining cost: one full entry read per arrival instead of three, ids-only read for the id set, tracker values per day, and (debug builds) no trash or recent-list build from invalidating unread providers. Test: `live_sync_narrow_reload_test.dart`. Profile build, 240 at 1/s into 687 entries: row re-reads 3.6 ms per arrival (was 6.65), tracker values 2.3 ms (was 4.9), UI p90 0.52 ms, no frame over 16.7 ms. Full suite 4,943 passed, 16 skipped. Both instances ended `SIGNED-OUT`.
+- **Not covered:** BUG-281's one remaining full read per arrival still grows with the account (smaller, not removed).
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

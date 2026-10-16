@@ -14,6 +14,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 FirebaseException firestoreError(String code) =>
@@ -196,6 +197,86 @@ void main() {
     expect(snap.data()?['note'], 'Coffee');
     expect(await allRows(), isEmpty);
   });
+
+  test(
+    'queued cheat-sheet tabs, sections and entries drain (BUG-279)',
+    () async {
+      // The drain had no way to read these back, so their queued rows were
+      // cleared as orphans: every save refused while offline after the first
+      // was owed to nobody, and other devices kept the older copy for good.
+      final firestore = FakeFirebaseFirestore();
+      final worker = OutboxSyncWorker(
+        db,
+        firestore,
+        () => 'user-1',
+        yieldDelay: Duration.zero,
+      );
+      final repo = DriftLeetCodeRepository(db);
+      final at = DateTime.utc(2026, 10, 14);
+      await repo.upsertCheatTab(
+        LeetCodeCheatTab(
+          id: 'tab-1',
+          createdAt: at,
+          updatedAt: at,
+          version: 3,
+          name: 'tab v3',
+          position: 1,
+        ),
+        recordLocalActivity: false,
+      );
+      await repo.upsertCheatSection(
+        LeetCodeCheatSection(
+          id: 'sec-1',
+          createdAt: at,
+          updatedAt: at,
+          version: 3,
+          tabId: 'tab-1',
+          name: 'section v3',
+          position: 1,
+        ),
+        recordLocalActivity: false,
+      );
+      await repo.upsertCheatEntry(
+        LeetCodeCheatEntry(
+          id: 'ent-1',
+          createdAt: at,
+          updatedAt: at,
+          version: 3,
+          deletedAt: at,
+          sectionId: 'sec-1',
+          command: 'entry v3',
+          position: 1,
+        ),
+        recordLocalActivity: false,
+      );
+      for (final (collection, id) in [
+        (FirestoreCollections.leetcodeCheatTabs, 'tab-1'),
+        (FirestoreCollections.leetcodeCheatSections, 'sec-1'),
+        (FirestoreCollections.leetcodeCheatEntries, 'ent-1'),
+      ]) {
+        await worker.enqueue(collection: collection, documentId: id);
+      }
+
+      await worker.startDraining();
+
+      Future<Map<String, dynamic>?> doc(String collection, String id) async =>
+          (await firestore.doc('users/user-1/$collection/$id').get()).data();
+      final tab = await doc(FirestoreCollections.leetcodeCheatTabs, 'tab-1');
+      final section = await doc(
+        FirestoreCollections.leetcodeCheatSections,
+        'sec-1',
+      );
+      final entry = await doc(
+        FirestoreCollections.leetcodeCheatEntries,
+        'ent-1',
+      );
+      expect(tab?['name'], 'tab v3');
+      expect(section?['name'], 'section v3');
+      expect(entry?['command'], 'entry v3');
+      expect(entry?['deletedAt'], isNotNull);
+      expect(await allRows(), isEmpty);
+    },
+  );
 
   test('a drained upload is visible to an incremental pull', () async {
     // The outbox writes to Firestore directly rather than through

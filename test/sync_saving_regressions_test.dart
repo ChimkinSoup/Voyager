@@ -1526,6 +1526,34 @@ void main() {
       );
     });
 
+    test('a restore over a log with no characters yet does not add a second '
+        'copy of the text an editor elsewhere seeded (BUG-282)', () async {
+      // An entry written without an editor (an import, a seed) has no
+      // characters in its log. B's editor seeds its text under shared ids;
+      // A's restore recorded the same text from nothing, under fresh ids, and
+      // the two copies interleaved on every device.
+      await a.journals.upsertEntry(
+        entry(id: 'doc-1', body: 'body 01').copyWith(bumpVersion: true),
+      );
+      a.sync.pushJournalEntryNow((await a.journals.getEntry('doc-1'))!);
+      await pumpEventQueue();
+      await deliver(b, journal.collection);
+      final other = await reopen(b);
+      for (final ch in ' bone btwo'.split('')) {
+        other.type(ch);
+      }
+
+      await restore(a, 'body 01');
+      await autosave(other);
+      await deliver(b, journal.collection);
+      await autosave(other);
+      await deliver(a, journal.collection);
+
+      expect(other.text, 'body 01 bone btwo');
+      expect(await body(a), 'body 01 bone btwo');
+      expect(await body(b), 'body 01 bone btwo');
+    });
+
     test('changes left for the flush all land, not just the last', () async {
       final editor = await openEditor(a, journal, 'hello world');
       await save(editor, journal);

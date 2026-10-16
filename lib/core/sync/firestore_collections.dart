@@ -98,6 +98,12 @@ abstract final class FirestoreCollections {
   static const flaggedWords = 'flagged_words';
   static const syncOperations = 'sync_operations';
 
+  /// One record per document `permanentlyDeleteFromRemote` purged, written
+  /// before the purge. A device with an upload pending on that document can't
+  /// see it vanish — its own write keeps the document out of its listener —
+  /// so it learns of the purge here, a collection it never writes to.
+  static const purges = 'purges';
+
   /// Not a collection of records but a single document — `settings/app`, the
   /// one the weather service already keeps the saved location in. Used as a
   /// collection name wherever the sync layer dispatches on one.
@@ -107,8 +113,9 @@ abstract final class FirestoreCollections {
   /// Every collection of records under `users/{uid}/`.
   ///
   /// [settings] is absent because it is a single document rather than a
-  /// collection, and [syncOperations] because it is the character-level CRDT
-  /// log rather than a collection of user records. Anything added here must
+  /// collection, [syncOperations] because it is the character-level CRDT
+  /// log rather than a collection of user records, and [purges] because it is
+  /// sync bookkeeping. Anything added here must
   /// also be added to the backup registry — `backup_collections_test` fails
   /// until it is.
   static const records = {
