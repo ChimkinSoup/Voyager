@@ -361,6 +361,40 @@ abstract class NotificationRepository {
   });
   Future<void> deletePinnedNote(String id);
 
+  /// Records that the server now holds [version] of the note — see
+  /// [SyncedNote.syncedVersion]. Never moves it backwards, nor past the row's
+  /// own version.
+  Future<void> markPinnedNoteSynced(String id, int version);
+
+  /// Secure Notes — ciphertext in, ciphertext out. See [SecureNote].
+  Future<List<SecureNote>> listSecureNotes({bool includeDeleted = false});
+  Future<SecureNote?> getSecureNote(String id);
+  Future<void> upsertSecureNote(
+    SecureNote note, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> deleteSecureNote(String id);
+
+  /// [markPinnedNoteSynced] for a Secure Note.
+  Future<void> markSecureNoteSynced(String id, int version);
+
+  /// This device's copy of the vault header, as `SecureVaultHeader.toJson`
+  /// wrote it; null when there is no vault.
+  Future<Map<String, dynamic>?> getSecureVaultHeader();
+
+  /// Replaces the local copy of the vault header. Local only: the server's
+  /// copy is written by its own transaction.
+  Future<void> saveSecureVaultHeader(
+    Map<String, dynamic> header, {
+    required String vaultId,
+    required int headerVersion,
+  });
+
+  /// How many notes made on this device a vault reset elsewhere left behind,
+  /// still to be told to the user. Kept beside the local header, never synced.
+  Future<int> lostSecureNoteCount();
+  Future<void> setLostSecureNoteCount(int count);
+
   /// Dismissal keys currently recorded (see [NotificationFeedItem.dismissalKey]).
   Future<Set<String>> listDismissals();
 
@@ -1327,6 +1361,18 @@ abstract class SyncRepository {
   /// Writes every synced setting [settings] changed more recently than the
   /// remote document — see `settingsUploadPatch`.
   Future<void> uploadSettings(AppSettings settings);
+
+  /// Reads [collection]/[id] and, in one transaction, writes what [decide]
+  /// returns for the copy it read — nothing when it returns null. Returns the
+  /// copy read, null when there was none.
+  ///
+  /// Fails while offline rather than queueing as a plain write would, so the
+  /// write falls back to the outbox and is checked again once online.
+  Future<Map<String, dynamic>?> writeAfterReading(
+    String collection,
+    String id,
+    Map<String, dynamic>? Function(Map<String, dynamic>? remote) decide,
+  );
 
   /// Whether writes are already piling up unacknowledged.
   ///

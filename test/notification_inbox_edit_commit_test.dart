@@ -28,7 +28,7 @@ import 'fakes/fake_weather_api_client.dart';
 const _note = 'Water the plants';
 const _grown = 'Water the plants\nand the basil\nand the mint\nand the thyme';
 
-Future<void> _pumpInbox(WidgetTester tester) async {
+Future<ProviderContainer> _pumpInbox(WidgetTester tester) async {
   tester.view.physicalSize = const Size(600, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -68,6 +68,7 @@ Future<void> _pumpInbox(WidgetTester tester) async {
   for (var i = 0; i < 6; i++) {
     await tester.pump(const Duration(milliseconds: 80));
   }
+  return container;
 }
 
 void main() {
@@ -134,5 +135,33 @@ void main() {
       await tester.pump(const Duration(milliseconds: 80));
     }
     expect(find.text(_note), findsNothing);
+  });
+
+  testWidgets('an edit over a note a sync rewrote is kept as a new note', (
+    tester,
+  ) async {
+    final container = await _pumpInbox(tester);
+    final repository = container.read(notificationRepositoryProvider);
+    // A sync lands a newer version under the row, which still shows the old.
+    final stored = (await repository.listPinnedNotes()).single;
+    await repository.upsertPinnedNote(
+      stored.copyWith(text: 'Water the garden', version: stored.version + 1),
+      recordLocalActivity: false,
+    );
+
+    await tester.tap(find.text(_note));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.enterText(find.byType(TextField).last, 'Water the plants now');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 80));
+    }
+
+    final notes = await tester.runAsync(repository.listPinnedNotes);
+    expect(
+      [for (final note in notes!) note.text],
+      ['Water the garden', 'Water the plants now'],
+    );
   });
 }

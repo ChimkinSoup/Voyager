@@ -66,26 +66,46 @@ class NotificationFeedItem {
   }
 }
 
+/// A note whose uploads are checked against the server copy before they are
+/// written — Pinned Notes and Secure Notes. See `resolveNoteSync`.
+abstract interface class SyncedNote {
+  String get id;
+  DateTime get updatedAt;
+  int get version;
+
+  /// The server version this copy was last in step with; null when unknown.
+  /// A [version] past it is an edit the server hasn't taken yet.
+  int? get syncedVersion;
+  DateTime? get deletedAt;
+}
+
 /// A short freeform quick-capture reminder shown in the notification
 /// popover's "Pinned Canvas" section.
-class PinnedNote {
+class PinnedNote implements SyncedNote {
   const PinnedNote({
     required this.id,
     required this.text,
     required this.createdAt,
     required this.updatedAt,
     this.version = 0,
+    this.syncedVersion,
     this.deletedAt,
   });
 
+  @override
   final String id;
   final String text;
   final DateTime createdAt;
+  @override
   final DateTime updatedAt;
+  @override
   final int version;
+  @override
+  final int? syncedVersion;
 
   /// Set when the note is unpinned. Kept as a tombstone rather than deleted so
   /// the unpin reaches the user's other devices.
+  @override
   final DateTime? deletedAt;
 
   PinnedNote copyWith({
@@ -101,6 +121,65 @@ class PinnedNote {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
+      syncedVersion: syncedVersion,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    );
+  }
+}
+
+/// A Secure Note as it is stored and synced: ciphertext only. The text exists
+/// only in memory, while the vault is unlocked (see `SecureVault`).
+class SecureNote implements SyncedNote {
+  const SecureNote({
+    required this.id,
+    required this.ciphertext,
+    required this.nonce,
+    required this.vaultId,
+    required this.createdAt,
+    required this.updatedAt,
+    this.version = 0,
+    this.syncedVersion,
+    this.deletedAt,
+  });
+
+  @override
+  final String id;
+
+  /// Base64, GCM tag included.
+  final String ciphertext;
+
+  /// Base64.
+  final String nonce;
+
+  /// The vault the note was sealed under.
+  final String vaultId;
+  final DateTime createdAt;
+  @override
+  final DateTime updatedAt;
+  @override
+  final int version;
+  @override
+  final int? syncedVersion;
+  @override
+  final DateTime? deletedAt;
+
+  SecureNote copyWith({
+    String? ciphertext,
+    String? nonce,
+    DateTime? updatedAt,
+    int? version,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+  }) {
+    return SecureNote(
+      id: id,
+      ciphertext: ciphertext ?? this.ciphertext,
+      nonce: nonce ?? this.nonce,
+      vaultId: vaultId,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      syncedVersion: syncedVersion,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }

@@ -7,6 +7,7 @@ import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
+import 'package:voyager/core/sync/note_sync.dart';
 import 'package:voyager/core/sync/sync_error_classification.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart'
@@ -313,6 +314,37 @@ class OutboxSyncWorker {
             continue;
           }
 
+          // Notes upload only over the server copy this device last saw,
+          // which a batch can't express either — see [uploadNote].
+          if (_noteUploaderFor(collection, userId) case final upload?) {
+            for (final pending in entry.value) {
+              if (_writeGate.isPaused) break;
+              final firestoreId = firestoreDocumentIdForLocal(
+                collection,
+                pending.documentId,
+              );
+              try {
+                await upload(
+                  pending.documentId,
+                  (decide) => _writeGate.run(
+                    () => FirestoreSyncRepository.writeAfterReadingDoc(
+                      _firestore,
+                      _firestore.doc('users/$userId/$collection/$firestoreId'),
+                      decide,
+                    ),
+                  ),
+                );
+                await _clearPending([pending]);
+                pushed = true;
+              } catch (error) {
+                // A sign-out's refusal, not the row's: keep it queued.
+                if (_userId() != userId) break;
+                if (await _handleUploadFailure(pending, error)) pushed = true;
+              }
+            }
+            continue;
+          }
+
           final Map<String, Map<String, dynamic>> payloads;
           try {
             payloads = await _payloadsFor(collection, {
@@ -422,6 +454,33 @@ class OutboxSyncWorker {
       drain.complete();
     }
   }
+
+  Future<void> Function(String id, NoteTransaction transact)? _noteUploaderFor(
+    String collection,
+    String userId,
+  ) => switch (collection) {
+    FirestoreCollections.pinnedNotes => (id, transact) => uploadNote(
+      pinnedNoteSyncStore(DriftNotificationRepository(_db)),
+      id,
+      transact,
+    ),
+    FirestoreCollections.secureNotes => (id, transact) => uploadNote(
+      secureNoteSyncStore(
+        DriftNotificationRepository(_db),
+        serverHeader: () async =>
+            (await _firestore
+                    .doc(
+                      'users/$userId/${FirestoreCollections.secureVault}/'
+                      '${FirestoreCollections.secureVaultHeaderId}',
+                    )
+                    .get())
+                .data(),
+      ),
+      id,
+      transact,
+    ),
+    _ => null,
+  };
 
   /// [_payloadsFor], for a pull checking what it brought against this device's
   /// rows — see `RemoteSyncService._repushWinningCopies`.
@@ -730,6 +789,11 @@ class OutboxSyncWorker {
         return byId(
           DriftNotificationRepository(_db).getPinnedNote,
           pinnedNoteToFirestore,
+        );
+      case FirestoreCollections.secureNotes:
+        return byId(
+          DriftNotificationRepository(_db).getSecureNote,
+          secureNoteToFirestore,
         );
       case FirestoreCollections.dismissedNotifications:
         return byId(

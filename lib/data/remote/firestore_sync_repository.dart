@@ -273,6 +273,34 @@ class FirestoreSyncRepository implements SyncRepository {
   }
 
   @override
+  Future<Map<String, dynamic>?> writeAfterReading(
+    String collection,
+    String id,
+    Map<String, dynamic>? Function(Map<String, dynamic>? remote) decide,
+  ) => _write(
+    () => writeAfterReadingDoc(_firestore, _doc(collection, id), decide),
+  );
+
+  /// [writeAfterReading] on [doc], for the outbox, which holds no repository.
+  ///
+  /// Refused under Dev → Force offline, as [writeSettings] is.
+  static Future<Map<String, dynamic>?> writeAfterReadingDoc(
+    FirebaseFirestore firestore,
+    DocumentReference<Map<String, dynamic>> doc,
+    Map<String, dynamic>? Function(Map<String, dynamic>? remote) decide,
+  ) async {
+    DevFlags.throwIfForcedOffline();
+    return firestore.runTransaction((txn) async {
+      final snap = await txn.get(doc);
+      final data = snap.data();
+      final remote = snap.exists && data != null ? _unstamped(data) : null;
+      final write = decide(remote);
+      if (write != null) txn.set(doc, stamped(write));
+      return remote;
+    });
+  }
+
+  @override
   Future<void> ping() async {
     // Plain HTTPS to Firestore's host first, not a read through the SDK: the
     // SDK runs everything on one worker, so a document read waited behind a
@@ -768,6 +796,13 @@ class FirestoreSyncRepository implements SyncRepository {
 class NoOpSyncRepository implements SyncRepository {
   @override
   bool get hasUnsentWriteBacklog => false;
+
+  @override
+  Future<Map<String, dynamic>?> writeAfterReading(
+    String collection,
+    String id,
+    Map<String, dynamic>? Function(Map<String, dynamic>? remote) decide,
+  ) async => null;
 
   @override
   Future<void> waitForPendingWrites() async {}

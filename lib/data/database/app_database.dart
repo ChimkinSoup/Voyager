@@ -537,7 +537,53 @@ class PinnedNotesTable extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   IntColumn get version => integer().withDefault(const Constant(0))();
+
+  /// The server version this row was last in step with — see
+  /// `resolveNoteSync`. Null when it isn't known, which falls back to the
+  /// later-save-wins rule once.
+  IntColumn get syncedVersion => integer().nullable()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Secure Notes: each body is AES-GCM ciphertext under the vault's data key
+/// (see `SecureVault`), never plaintext. Syncs like [PinnedNotesTable],
+/// conflict check included.
+class SecureNotesTable extends Table {
+  TextColumn get id => text()();
+
+  /// Base64, GCM tag included.
+  TextColumn get ciphertext => text()();
+  TextColumn get nonce => text()();
+
+  /// The vault the note was sealed under. A note from any other vault — one
+  /// since reset — is never shown.
+  TextColumn get vaultId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().nullable()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// This device's copy of the Secure Notes vault header — one row, so the
+/// vault can be unlocked offline.
+class SecureVaultHeaderTable extends Table {
+  IntColumn get id => integer()();
+  TextColumn get vaultId => text()();
+  IntColumn get headerVersion => integer()();
+
+  /// The whole header as JSON, as `SecureVaultHeader.toJson` writes it.
+  TextColumn get headerJson => text()();
+
+  /// Notes made on this device that a reset elsewhere left behind, not yet
+  /// told to the user. This device's alone; never synced.
+  IntColumn get lostNoteCount => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1978,6 +2024,8 @@ class LeetCodeCheatEntriesTable extends Table {
     SavingsGoalsTable,
     GoalAllocationsTable,
     PinnedNotesTable,
+    SecureNotesTable,
+    SecureVaultHeaderTable,
     DismissedNotificationsTable,
     DeviceRegistrationsTable,
     ScheduledReminderRulesTable,
@@ -2024,7 +2072,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 149;
+  int get schemaVersion => 152;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3691,6 +3739,35 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.inboxTrackerOrderJson,
+        );
+      }
+      if (from < 150) {
+        await _addColumnIfNotExists(
+          migrator,
+          'pinned_notes_table',
+          pinnedNotesTable,
+          pinnedNotesTable.syncedVersion,
+        );
+        // A note with nothing waiting in the outbox is in step with the
+        // server at its own version. One still owed an upload has no known
+        // base, and keeps the later-save-wins rule for that upload rather than
+        // being mistaken for a conflict.
+        await customStatement(
+          'UPDATE pinned_notes_table SET synced_version = version '
+          'WHERE id NOT IN (SELECT document_id FROM pending_uploads_table '
+          "WHERE collection_name = 'pinned_notes')",
+        );
+      }
+      if (from < 151) {
+        await migrator.createTable(secureNotesTable);
+        await migrator.createTable(secureVaultHeaderTable);
+      }
+      if (from < 152) {
+        await _addColumnIfNotExists(
+          migrator,
+          'secure_vault_header_table',
+          secureVaultHeaderTable,
+          secureVaultHeaderTable.lostNoteCount,
         );
       }
     },

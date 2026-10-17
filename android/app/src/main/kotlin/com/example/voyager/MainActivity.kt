@@ -1,5 +1,44 @@
 package com.example.voyager
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
+import android.os.PersistableBundle
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity()
+class MainActivity : FlutterActivity() {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        // Secure Notes' clipboard (see secure_clipboard.dart).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "voyager/secure_clipboard")
+            .setMethodCallHandler { call, result ->
+                val clipboard = getSystemService(ClipboardManager::class.java)
+                when (call.method) {
+                    "copy" -> {
+                        val clip = ClipData.newPlainText("", call.arguments as String)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            // ClipDescription.EXTRA_IS_SENSITIVE (API 33); keyboards
+                            // read the same key below it.
+                            clip.description.extras = PersistableBundle().apply {
+                                putBoolean("android.content.extra.IS_SENSITIVE", true)
+                            }
+                        }
+                        clipboard.setPrimaryClip(clip)
+                        result.success(null)
+                    }
+                    "clear" -> {
+                        // Needs no focus, unlike reading the clipboard.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            clipboard.clearPrimaryClip()
+                        } else {
+                            clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                        }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+}

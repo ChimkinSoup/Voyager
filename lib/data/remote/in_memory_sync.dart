@@ -75,6 +75,19 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
+  Future<Map<String, dynamic>?> writeAfterReading(
+    String collection,
+    String id,
+    Map<String, dynamic>? Function(Map<String, dynamic>? remote) decide,
+  ) async {
+    final current = _documents[_key(collection, id)];
+    final remote = current == null ? null : Map<String, dynamic>.from(current);
+    final write = decide(remote);
+    if (write != null) await upsertDocument(collection, id, write);
+    return remote;
+  }
+
+  @override
   Future<void> ping() async {}
 
   @override

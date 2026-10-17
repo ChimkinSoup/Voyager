@@ -25424,6 +25424,17 @@ class $PinnedNotesTableTable extends PinnedNotesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _deletedAtMeta = const VerificationMeta(
     'deletedAt',
   );
@@ -25442,6 +25453,7 @@ class $PinnedNotesTableTable extends PinnedNotesTable
     createdAt,
     updatedAt,
     version,
+    syncedVersion,
     deletedAt,
   ];
   @override
@@ -25489,6 +25501,15 @@ class $PinnedNotesTableTable extends PinnedNotesTable
         version.isAcceptableOrUnknown(data['version']!, _versionMeta),
       );
     }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
     if (data.containsKey('deleted_at')) {
       context.handle(
         _deletedAtMeta,
@@ -25524,6 +25545,10 @@ class $PinnedNotesTableTable extends PinnedNotesTable
         DriftSqlType.int,
         data['${effectivePrefix}version'],
       )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      ),
       deletedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
@@ -25544,6 +25569,11 @@ class PinnedNotesTableData extends DataClass
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
+
+  /// The server version this row was last in step with — see
+  /// `resolveNoteSync`. Null when it isn't known, which falls back to the
+  /// later-save-wins rule once.
+  final int? syncedVersion;
   final DateTime? deletedAt;
   const PinnedNotesTableData({
     required this.id,
@@ -25551,6 +25581,7 @@ class PinnedNotesTableData extends DataClass
     required this.createdAt,
     required this.updatedAt,
     required this.version,
+    this.syncedVersion,
     this.deletedAt,
   });
   @override
@@ -25561,6 +25592,9 @@ class PinnedNotesTableData extends DataClass
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
+    if (!nullToAbsent || syncedVersion != null) {
+      map['synced_version'] = Variable<int>(syncedVersion);
+    }
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
@@ -25574,6 +25608,9 @@ class PinnedNotesTableData extends DataClass
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
+      syncedVersion: syncedVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedVersion),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
@@ -25591,6 +25628,7 @@ class PinnedNotesTableData extends DataClass
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
+      syncedVersion: serializer.fromJson<int?>(json['syncedVersion']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
@@ -25603,6 +25641,7 @@ class PinnedNotesTableData extends DataClass
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
+      'syncedVersion': serializer.toJson<int?>(syncedVersion),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
@@ -25613,6 +25652,7 @@ class PinnedNotesTableData extends DataClass
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
+    Value<int?> syncedVersion = const Value.absent(),
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => PinnedNotesTableData(
     id: id ?? this.id,
@@ -25620,6 +25660,9 @@ class PinnedNotesTableData extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
+    syncedVersion: syncedVersion.present
+        ? syncedVersion.value
+        : this.syncedVersion,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   PinnedNotesTableData copyWithCompanion(PinnedNotesTableCompanion data) {
@@ -25629,6 +25672,9 @@ class PinnedNotesTableData extends DataClass
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
@@ -25641,14 +25687,22 @@ class PinnedNotesTableData extends DataClass
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
+          ..write('syncedVersion: $syncedVersion, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, body, createdAt, updatedAt, version, deletedAt);
+  int get hashCode => Object.hash(
+    id,
+    body,
+    createdAt,
+    updatedAt,
+    version,
+    syncedVersion,
+    deletedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -25658,6 +25712,7 @@ class PinnedNotesTableData extends DataClass
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
+          other.syncedVersion == this.syncedVersion &&
           other.deletedAt == this.deletedAt);
 }
 
@@ -25667,6 +25722,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
+  final Value<int?> syncedVersion;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const PinnedNotesTableCompanion({
@@ -25675,6 +25731,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -25684,6 +25741,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -25695,6 +25753,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
+    Expression<int>? syncedVersion,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
@@ -25704,6 +25763,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -25715,6 +25775,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
+    Value<int?>? syncedVersion,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
@@ -25724,6 +25785,7 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -25747,6 +25809,9 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
@@ -25764,8 +25829,951 @@ class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
+          ..write('syncedVersion: $syncedVersion, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SecureNotesTableTable extends SecureNotesTable
+    with TableInfo<$SecureNotesTableTable, SecureNotesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SecureNotesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ciphertextMeta = const VerificationMeta(
+    'ciphertext',
+  );
+  @override
+  late final GeneratedColumn<String> ciphertext = GeneratedColumn<String>(
+    'ciphertext',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nonceMeta = const VerificationMeta('nonce');
+  @override
+  late final GeneratedColumn<String> nonce = GeneratedColumn<String>(
+    'nonce',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _vaultIdMeta = const VerificationMeta(
+    'vaultId',
+  );
+  @override
+  late final GeneratedColumn<String> vaultId = GeneratedColumn<String>(
+    'vault_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    ciphertext,
+    nonce,
+    vaultId,
+    createdAt,
+    updatedAt,
+    version,
+    syncedVersion,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'secure_notes_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SecureNotesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('ciphertext')) {
+      context.handle(
+        _ciphertextMeta,
+        ciphertext.isAcceptableOrUnknown(data['ciphertext']!, _ciphertextMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ciphertextMeta);
+    }
+    if (data.containsKey('nonce')) {
+      context.handle(
+        _nonceMeta,
+        nonce.isAcceptableOrUnknown(data['nonce']!, _nonceMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nonceMeta);
+    }
+    if (data.containsKey('vault_id')) {
+      context.handle(
+        _vaultIdMeta,
+        vaultId.isAcceptableOrUnknown(data['vault_id']!, _vaultIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_vaultIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SecureNotesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SecureNotesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      ciphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ciphertext'],
+      )!,
+      nonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nonce'],
+      )!,
+      vaultId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vault_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      ),
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $SecureNotesTableTable createAlias(String alias) {
+    return $SecureNotesTableTable(attachedDatabase, alias);
+  }
+}
+
+class SecureNotesTableData extends DataClass
+    implements Insertable<SecureNotesTableData> {
+  final String id;
+
+  /// Base64, GCM tag included.
+  final String ciphertext;
+  final String nonce;
+
+  /// The vault the note was sealed under. A note from any other vault — one
+  /// since reset — is never shown.
+  final String vaultId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final int? syncedVersion;
+  final DateTime? deletedAt;
+  const SecureNotesTableData({
+    required this.id,
+    required this.ciphertext,
+    required this.nonce,
+    required this.vaultId,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.syncedVersion,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['ciphertext'] = Variable<String>(ciphertext);
+    map['nonce'] = Variable<String>(nonce);
+    map['vault_id'] = Variable<String>(vaultId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || syncedVersion != null) {
+      map['synced_version'] = Variable<int>(syncedVersion);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  SecureNotesTableCompanion toCompanion(bool nullToAbsent) {
+    return SecureNotesTableCompanion(
+      id: Value(id),
+      ciphertext: Value(ciphertext),
+      nonce: Value(nonce),
+      vaultId: Value(vaultId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      syncedVersion: syncedVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedVersion),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory SecureNotesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SecureNotesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      ciphertext: serializer.fromJson<String>(json['ciphertext']),
+      nonce: serializer.fromJson<String>(json['nonce']),
+      vaultId: serializer.fromJson<String>(json['vaultId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      syncedVersion: serializer.fromJson<int?>(json['syncedVersion']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'ciphertext': serializer.toJson<String>(ciphertext),
+      'nonce': serializer.toJson<String>(nonce),
+      'vaultId': serializer.toJson<String>(vaultId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'syncedVersion': serializer.toJson<int?>(syncedVersion),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  SecureNotesTableData copyWith({
+    String? id,
+    String? ciphertext,
+    String? nonce,
+    String? vaultId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<int?> syncedVersion = const Value.absent(),
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => SecureNotesTableData(
+    id: id ?? this.id,
+    ciphertext: ciphertext ?? this.ciphertext,
+    nonce: nonce ?? this.nonce,
+    vaultId: vaultId ?? this.vaultId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    syncedVersion: syncedVersion.present
+        ? syncedVersion.value
+        : this.syncedVersion,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  SecureNotesTableData copyWithCompanion(SecureNotesTableCompanion data) {
+    return SecureNotesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      ciphertext: data.ciphertext.present
+          ? data.ciphertext.value
+          : this.ciphertext,
+      nonce: data.nonce.present ? data.nonce.value : this.nonce,
+      vaultId: data.vaultId.present ? data.vaultId.value : this.vaultId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecureNotesTableData(')
+          ..write('id: $id, ')
+          ..write('ciphertext: $ciphertext, ')
+          ..write('nonce: $nonce, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    ciphertext,
+    nonce,
+    vaultId,
+    createdAt,
+    updatedAt,
+    version,
+    syncedVersion,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SecureNotesTableData &&
+          other.id == this.id &&
+          other.ciphertext == this.ciphertext &&
+          other.nonce == this.nonce &&
+          other.vaultId == this.vaultId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.syncedVersion == this.syncedVersion &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SecureNotesTableCompanion extends UpdateCompanion<SecureNotesTableData> {
+  final Value<String> id;
+  final Value<String> ciphertext;
+  final Value<String> nonce;
+  final Value<String> vaultId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<int?> syncedVersion;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const SecureNotesTableCompanion({
+    this.id = const Value.absent(),
+    this.ciphertext = const Value.absent(),
+    this.nonce = const Value.absent(),
+    this.vaultId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SecureNotesTableCompanion.insert({
+    required String id,
+    required String ciphertext,
+    required String nonce,
+    required String vaultId,
+    required DateTime createdAt,
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       ciphertext = Value(ciphertext),
+       nonce = Value(nonce),
+       vaultId = Value(vaultId),
+       createdAt = Value(createdAt);
+  static Insertable<SecureNotesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? ciphertext,
+    Expression<String>? nonce,
+    Expression<String>? vaultId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<int>? syncedVersion,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (ciphertext != null) 'ciphertext': ciphertext,
+      if (nonce != null) 'nonce': nonce,
+      if (vaultId != null) 'vault_id': vaultId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SecureNotesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? ciphertext,
+    Value<String>? nonce,
+    Value<String>? vaultId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<int?>? syncedVersion,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SecureNotesTableCompanion(
+      id: id ?? this.id,
+      ciphertext: ciphertext ?? this.ciphertext,
+      nonce: nonce ?? this.nonce,
+      vaultId: vaultId ?? this.vaultId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (ciphertext.present) {
+      map['ciphertext'] = Variable<String>(ciphertext.value);
+    }
+    if (nonce.present) {
+      map['nonce'] = Variable<String>(nonce.value);
+    }
+    if (vaultId.present) {
+      map['vault_id'] = Variable<String>(vaultId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecureNotesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('ciphertext: $ciphertext, ')
+          ..write('nonce: $nonce, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SecureVaultHeaderTableTable extends SecureVaultHeaderTable
+    with TableInfo<$SecureVaultHeaderTableTable, SecureVaultHeaderTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SecureVaultHeaderTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _vaultIdMeta = const VerificationMeta(
+    'vaultId',
+  );
+  @override
+  late final GeneratedColumn<String> vaultId = GeneratedColumn<String>(
+    'vault_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _headerVersionMeta = const VerificationMeta(
+    'headerVersion',
+  );
+  @override
+  late final GeneratedColumn<int> headerVersion = GeneratedColumn<int>(
+    'header_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _headerJsonMeta = const VerificationMeta(
+    'headerJson',
+  );
+  @override
+  late final GeneratedColumn<String> headerJson = GeneratedColumn<String>(
+    'header_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lostNoteCountMeta = const VerificationMeta(
+    'lostNoteCount',
+  );
+  @override
+  late final GeneratedColumn<int> lostNoteCount = GeneratedColumn<int>(
+    'lost_note_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    vaultId,
+    headerVersion,
+    headerJson,
+    lostNoteCount,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'secure_vault_header_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SecureVaultHeaderTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('vault_id')) {
+      context.handle(
+        _vaultIdMeta,
+        vaultId.isAcceptableOrUnknown(data['vault_id']!, _vaultIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_vaultIdMeta);
+    }
+    if (data.containsKey('header_version')) {
+      context.handle(
+        _headerVersionMeta,
+        headerVersion.isAcceptableOrUnknown(
+          data['header_version']!,
+          _headerVersionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_headerVersionMeta);
+    }
+    if (data.containsKey('header_json')) {
+      context.handle(
+        _headerJsonMeta,
+        headerJson.isAcceptableOrUnknown(data['header_json']!, _headerJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_headerJsonMeta);
+    }
+    if (data.containsKey('lost_note_count')) {
+      context.handle(
+        _lostNoteCountMeta,
+        lostNoteCount.isAcceptableOrUnknown(
+          data['lost_note_count']!,
+          _lostNoteCountMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SecureVaultHeaderTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SecureVaultHeaderTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      vaultId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vault_id'],
+      )!,
+      headerVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}header_version'],
+      )!,
+      headerJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}header_json'],
+      )!,
+      lostNoteCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lost_note_count'],
+      )!,
+    );
+  }
+
+  @override
+  $SecureVaultHeaderTableTable createAlias(String alias) {
+    return $SecureVaultHeaderTableTable(attachedDatabase, alias);
+  }
+}
+
+class SecureVaultHeaderTableData extends DataClass
+    implements Insertable<SecureVaultHeaderTableData> {
+  final int id;
+  final String vaultId;
+  final int headerVersion;
+
+  /// The whole header as JSON, as `SecureVaultHeader.toJson` writes it.
+  final String headerJson;
+
+  /// Notes made on this device that a reset elsewhere left behind, not yet
+  /// told to the user. This device's alone; never synced.
+  final int lostNoteCount;
+  const SecureVaultHeaderTableData({
+    required this.id,
+    required this.vaultId,
+    required this.headerVersion,
+    required this.headerJson,
+    required this.lostNoteCount,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['vault_id'] = Variable<String>(vaultId);
+    map['header_version'] = Variable<int>(headerVersion);
+    map['header_json'] = Variable<String>(headerJson);
+    map['lost_note_count'] = Variable<int>(lostNoteCount);
+    return map;
+  }
+
+  SecureVaultHeaderTableCompanion toCompanion(bool nullToAbsent) {
+    return SecureVaultHeaderTableCompanion(
+      id: Value(id),
+      vaultId: Value(vaultId),
+      headerVersion: Value(headerVersion),
+      headerJson: Value(headerJson),
+      lostNoteCount: Value(lostNoteCount),
+    );
+  }
+
+  factory SecureVaultHeaderTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SecureVaultHeaderTableData(
+      id: serializer.fromJson<int>(json['id']),
+      vaultId: serializer.fromJson<String>(json['vaultId']),
+      headerVersion: serializer.fromJson<int>(json['headerVersion']),
+      headerJson: serializer.fromJson<String>(json['headerJson']),
+      lostNoteCount: serializer.fromJson<int>(json['lostNoteCount']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'vaultId': serializer.toJson<String>(vaultId),
+      'headerVersion': serializer.toJson<int>(headerVersion),
+      'headerJson': serializer.toJson<String>(headerJson),
+      'lostNoteCount': serializer.toJson<int>(lostNoteCount),
+    };
+  }
+
+  SecureVaultHeaderTableData copyWith({
+    int? id,
+    String? vaultId,
+    int? headerVersion,
+    String? headerJson,
+    int? lostNoteCount,
+  }) => SecureVaultHeaderTableData(
+    id: id ?? this.id,
+    vaultId: vaultId ?? this.vaultId,
+    headerVersion: headerVersion ?? this.headerVersion,
+    headerJson: headerJson ?? this.headerJson,
+    lostNoteCount: lostNoteCount ?? this.lostNoteCount,
+  );
+  SecureVaultHeaderTableData copyWithCompanion(
+    SecureVaultHeaderTableCompanion data,
+  ) {
+    return SecureVaultHeaderTableData(
+      id: data.id.present ? data.id.value : this.id,
+      vaultId: data.vaultId.present ? data.vaultId.value : this.vaultId,
+      headerVersion: data.headerVersion.present
+          ? data.headerVersion.value
+          : this.headerVersion,
+      headerJson: data.headerJson.present
+          ? data.headerJson.value
+          : this.headerJson,
+      lostNoteCount: data.lostNoteCount.present
+          ? data.lostNoteCount.value
+          : this.lostNoteCount,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecureVaultHeaderTableData(')
+          ..write('id: $id, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('headerVersion: $headerVersion, ')
+          ..write('headerJson: $headerJson, ')
+          ..write('lostNoteCount: $lostNoteCount')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, vaultId, headerVersion, headerJson, lostNoteCount);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SecureVaultHeaderTableData &&
+          other.id == this.id &&
+          other.vaultId == this.vaultId &&
+          other.headerVersion == this.headerVersion &&
+          other.headerJson == this.headerJson &&
+          other.lostNoteCount == this.lostNoteCount);
+}
+
+class SecureVaultHeaderTableCompanion
+    extends UpdateCompanion<SecureVaultHeaderTableData> {
+  final Value<int> id;
+  final Value<String> vaultId;
+  final Value<int> headerVersion;
+  final Value<String> headerJson;
+  final Value<int> lostNoteCount;
+  const SecureVaultHeaderTableCompanion({
+    this.id = const Value.absent(),
+    this.vaultId = const Value.absent(),
+    this.headerVersion = const Value.absent(),
+    this.headerJson = const Value.absent(),
+    this.lostNoteCount = const Value.absent(),
+  });
+  SecureVaultHeaderTableCompanion.insert({
+    this.id = const Value.absent(),
+    required String vaultId,
+    required int headerVersion,
+    required String headerJson,
+    this.lostNoteCount = const Value.absent(),
+  }) : vaultId = Value(vaultId),
+       headerVersion = Value(headerVersion),
+       headerJson = Value(headerJson);
+  static Insertable<SecureVaultHeaderTableData> custom({
+    Expression<int>? id,
+    Expression<String>? vaultId,
+    Expression<int>? headerVersion,
+    Expression<String>? headerJson,
+    Expression<int>? lostNoteCount,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (vaultId != null) 'vault_id': vaultId,
+      if (headerVersion != null) 'header_version': headerVersion,
+      if (headerJson != null) 'header_json': headerJson,
+      if (lostNoteCount != null) 'lost_note_count': lostNoteCount,
+    });
+  }
+
+  SecureVaultHeaderTableCompanion copyWith({
+    Value<int>? id,
+    Value<String>? vaultId,
+    Value<int>? headerVersion,
+    Value<String>? headerJson,
+    Value<int>? lostNoteCount,
+  }) {
+    return SecureVaultHeaderTableCompanion(
+      id: id ?? this.id,
+      vaultId: vaultId ?? this.vaultId,
+      headerVersion: headerVersion ?? this.headerVersion,
+      headerJson: headerJson ?? this.headerJson,
+      lostNoteCount: lostNoteCount ?? this.lostNoteCount,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (vaultId.present) {
+      map['vault_id'] = Variable<String>(vaultId.value);
+    }
+    if (headerVersion.present) {
+      map['header_version'] = Variable<int>(headerVersion.value);
+    }
+    if (headerJson.present) {
+      map['header_json'] = Variable<String>(headerJson.value);
+    }
+    if (lostNoteCount.present) {
+      map['lost_note_count'] = Variable<int>(lostNoteCount.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecureVaultHeaderTableCompanion(')
+          ..write('id: $id, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('headerVersion: $headerVersion, ')
+          ..write('headerJson: $headerJson, ')
+          ..write('lostNoteCount: $lostNoteCount')
           ..write(')'))
         .toString();
   }
@@ -51425,6 +52433,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PinnedNotesTableTable pinnedNotesTable = $PinnedNotesTableTable(
     this,
   );
+  late final $SecureNotesTableTable secureNotesTable = $SecureNotesTableTable(
+    this,
+  );
+  late final $SecureVaultHeaderTableTable secureVaultHeaderTable =
+      $SecureVaultHeaderTableTable(this);
   late final $DismissedNotificationsTableTable dismissedNotificationsTable =
       $DismissedNotificationsTableTable(this);
   late final $DeviceRegistrationsTableTable deviceRegistrationsTable =
@@ -51598,6 +52611,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savingsGoalsTable,
     goalAllocationsTable,
     pinnedNotesTable,
+    secureNotesTable,
+    secureVaultHeaderTable,
     dismissedNotificationsTable,
     deviceRegistrationsTable,
     scheduledReminderRulesTable,
@@ -63011,6 +64026,7 @@ typedef $$PinnedNotesTableTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
+      Value<int?> syncedVersion,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -63021,6 +64037,7 @@ typedef $$PinnedNotesTableTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
+      Value<int?> syncedVersion,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -63056,6 +64073,11 @@ class $$PinnedNotesTableTableFilterComposer
 
   ColumnFilters<int> get version => $composableBuilder(
     column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -63099,6 +64121,11 @@ class $$PinnedNotesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
@@ -63128,6 +64155,11 @@ class $$PinnedNotesTableTableAnnotationComposer
 
   GeneratedColumn<int> get version =>
       $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
@@ -63175,6 +64207,7 @@ class $$PinnedNotesTableTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
+                Value<int?> syncedVersion = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PinnedNotesTableCompanion(
@@ -63183,6 +64216,7 @@ class $$PinnedNotesTableTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
+                syncedVersion: syncedVersion,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -63193,6 +64227,7 @@ class $$PinnedNotesTableTableTableManager
                 required DateTime createdAt,
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
+                Value<int?> syncedVersion = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PinnedNotesTableCompanion.insert(
@@ -63201,6 +64236,7 @@ class $$PinnedNotesTableTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
+                syncedVersion: syncedVersion,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -63231,6 +64267,515 @@ typedef $$PinnedNotesTableTableProcessedTableManager =
         >,
       ),
       PinnedNotesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$SecureNotesTableTableCreateCompanionBuilder =
+    SecureNotesTableCompanion Function({
+      required String id,
+      required String ciphertext,
+      required String nonce,
+      required String vaultId,
+      required DateTime createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<int?> syncedVersion,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SecureNotesTableTableUpdateCompanionBuilder =
+    SecureNotesTableCompanion Function({
+      Value<String> id,
+      Value<String> ciphertext,
+      Value<String> nonce,
+      Value<String> vaultId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<int?> syncedVersion,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SecureNotesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SecureNotesTableTable> {
+  $$SecureNotesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ciphertext => $composableBuilder(
+    column: $table.ciphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nonce => $composableBuilder(
+    column: $table.nonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SecureNotesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SecureNotesTableTable> {
+  $$SecureNotesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ciphertext => $composableBuilder(
+    column: $table.ciphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nonce => $composableBuilder(
+    column: $table.nonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SecureNotesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SecureNotesTableTable> {
+  $$SecureNotesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get ciphertext => $composableBuilder(
+    column: $table.ciphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get nonce =>
+      $composableBuilder(column: $table.nonce, builder: (column) => column);
+
+  GeneratedColumn<String> get vaultId =>
+      $composableBuilder(column: $table.vaultId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SecureNotesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SecureNotesTableTable,
+          SecureNotesTableData,
+          $$SecureNotesTableTableFilterComposer,
+          $$SecureNotesTableTableOrderingComposer,
+          $$SecureNotesTableTableAnnotationComposer,
+          $$SecureNotesTableTableCreateCompanionBuilder,
+          $$SecureNotesTableTableUpdateCompanionBuilder,
+          (
+            SecureNotesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SecureNotesTableTable,
+              SecureNotesTableData
+            >,
+          ),
+          SecureNotesTableData,
+          PrefetchHooks Function()
+        > {
+  $$SecureNotesTableTableTableManager(
+    _$AppDatabase db,
+    $SecureNotesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SecureNotesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SecureNotesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SecureNotesTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> ciphertext = const Value.absent(),
+                Value<String> nonce = const Value.absent(),
+                Value<String> vaultId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<int?> syncedVersion = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SecureNotesTableCompanion(
+                id: id,
+                ciphertext: ciphertext,
+                nonce: nonce,
+                vaultId: vaultId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                syncedVersion: syncedVersion,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String ciphertext,
+                required String nonce,
+                required String vaultId,
+                required DateTime createdAt,
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<int?> syncedVersion = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SecureNotesTableCompanion.insert(
+                id: id,
+                ciphertext: ciphertext,
+                nonce: nonce,
+                vaultId: vaultId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                syncedVersion: syncedVersion,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SecureNotesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SecureNotesTableTable,
+      SecureNotesTableData,
+      $$SecureNotesTableTableFilterComposer,
+      $$SecureNotesTableTableOrderingComposer,
+      $$SecureNotesTableTableAnnotationComposer,
+      $$SecureNotesTableTableCreateCompanionBuilder,
+      $$SecureNotesTableTableUpdateCompanionBuilder,
+      (
+        SecureNotesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SecureNotesTableTable,
+          SecureNotesTableData
+        >,
+      ),
+      SecureNotesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$SecureVaultHeaderTableTableCreateCompanionBuilder =
+    SecureVaultHeaderTableCompanion Function({
+      Value<int> id,
+      required String vaultId,
+      required int headerVersion,
+      required String headerJson,
+      Value<int> lostNoteCount,
+    });
+typedef $$SecureVaultHeaderTableTableUpdateCompanionBuilder =
+    SecureVaultHeaderTableCompanion Function({
+      Value<int> id,
+      Value<String> vaultId,
+      Value<int> headerVersion,
+      Value<String> headerJson,
+      Value<int> lostNoteCount,
+    });
+
+class $$SecureVaultHeaderTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SecureVaultHeaderTableTable> {
+  $$SecureVaultHeaderTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get headerVersion => $composableBuilder(
+    column: $table.headerVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get headerJson => $composableBuilder(
+    column: $table.headerJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lostNoteCount => $composableBuilder(
+    column: $table.lostNoteCount,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SecureVaultHeaderTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SecureVaultHeaderTableTable> {
+  $$SecureVaultHeaderTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get headerVersion => $composableBuilder(
+    column: $table.headerVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get headerJson => $composableBuilder(
+    column: $table.headerJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lostNoteCount => $composableBuilder(
+    column: $table.lostNoteCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SecureVaultHeaderTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SecureVaultHeaderTableTable> {
+  $$SecureVaultHeaderTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get vaultId =>
+      $composableBuilder(column: $table.vaultId, builder: (column) => column);
+
+  GeneratedColumn<int> get headerVersion => $composableBuilder(
+    column: $table.headerVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get headerJson => $composableBuilder(
+    column: $table.headerJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lostNoteCount => $composableBuilder(
+    column: $table.lostNoteCount,
+    builder: (column) => column,
+  );
+}
+
+class $$SecureVaultHeaderTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SecureVaultHeaderTableTable,
+          SecureVaultHeaderTableData,
+          $$SecureVaultHeaderTableTableFilterComposer,
+          $$SecureVaultHeaderTableTableOrderingComposer,
+          $$SecureVaultHeaderTableTableAnnotationComposer,
+          $$SecureVaultHeaderTableTableCreateCompanionBuilder,
+          $$SecureVaultHeaderTableTableUpdateCompanionBuilder,
+          (
+            SecureVaultHeaderTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SecureVaultHeaderTableTable,
+              SecureVaultHeaderTableData
+            >,
+          ),
+          SecureVaultHeaderTableData,
+          PrefetchHooks Function()
+        > {
+  $$SecureVaultHeaderTableTableTableManager(
+    _$AppDatabase db,
+    $SecureVaultHeaderTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SecureVaultHeaderTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SecureVaultHeaderTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SecureVaultHeaderTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> vaultId = const Value.absent(),
+                Value<int> headerVersion = const Value.absent(),
+                Value<String> headerJson = const Value.absent(),
+                Value<int> lostNoteCount = const Value.absent(),
+              }) => SecureVaultHeaderTableCompanion(
+                id: id,
+                vaultId: vaultId,
+                headerVersion: headerVersion,
+                headerJson: headerJson,
+                lostNoteCount: lostNoteCount,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String vaultId,
+                required int headerVersion,
+                required String headerJson,
+                Value<int> lostNoteCount = const Value.absent(),
+              }) => SecureVaultHeaderTableCompanion.insert(
+                id: id,
+                vaultId: vaultId,
+                headerVersion: headerVersion,
+                headerJson: headerJson,
+                lostNoteCount: lostNoteCount,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SecureVaultHeaderTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SecureVaultHeaderTableTable,
+      SecureVaultHeaderTableData,
+      $$SecureVaultHeaderTableTableFilterComposer,
+      $$SecureVaultHeaderTableTableOrderingComposer,
+      $$SecureVaultHeaderTableTableAnnotationComposer,
+      $$SecureVaultHeaderTableTableCreateCompanionBuilder,
+      $$SecureVaultHeaderTableTableUpdateCompanionBuilder,
+      (
+        SecureVaultHeaderTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SecureVaultHeaderTableTable,
+          SecureVaultHeaderTableData
+        >,
+      ),
+      SecureVaultHeaderTableData,
       PrefetchHooks Function()
     >;
 typedef $$DismissedNotificationsTableTableCreateCompanionBuilder =
@@ -76166,6 +77711,13 @@ class $AppDatabaseManager {
       $$GoalAllocationsTableTableTableManager(_db, _db.goalAllocationsTable);
   $$PinnedNotesTableTableTableManager get pinnedNotesTable =>
       $$PinnedNotesTableTableTableManager(_db, _db.pinnedNotesTable);
+  $$SecureNotesTableTableTableManager get secureNotesTable =>
+      $$SecureNotesTableTableTableManager(_db, _db.secureNotesTable);
+  $$SecureVaultHeaderTableTableTableManager get secureVaultHeaderTable =>
+      $$SecureVaultHeaderTableTableTableManager(
+        _db,
+        _db.secureVaultHeaderTable,
+      );
   $$DismissedNotificationsTableTableTableManager
   get dismissedNotificationsTable =>
       $$DismissedNotificationsTableTableTableManager(

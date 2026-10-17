@@ -56,6 +56,14 @@ abstract final class FirestoreCollections {
   static const savingsGoals = 'savings_goals';
   static const goalAllocations = 'goal_allocations';
   static const pinnedNotes = 'pinned_notes';
+
+  /// Secure Notes: ciphertext only — see `SecureNote`.
+  static const secureNotes = 'secure_notes';
+
+  /// The Secure Notes vault's header, one document ([secureVaultHeaderId]).
+  /// Not a record collection: it syncs by its own transactions.
+  static const secureVault = 'secure_vault';
+  static const secureVaultHeaderId = 'header';
   static const dismissedNotifications = 'dismissed_notifications';
   static const deviceRegistrations = 'device_registrations';
   static const scheduledReminderRules = 'scheduled_reminder_rules';
@@ -159,6 +167,7 @@ abstract final class FirestoreCollections {
     savingsGoals,
     goalAllocations,
     pinnedNotes,
+    secureNotes,
     dismissedNotifications,
     deviceRegistrations,
     scheduledReminderRules,

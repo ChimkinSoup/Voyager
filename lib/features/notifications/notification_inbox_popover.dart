@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart' show mergeSort;
 import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -40,7 +41,10 @@ import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
+import 'package:voyager/core/secure_vault/secure_clipboard.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
+import 'package:voyager/features/notifications/secure_vault_dialogs.dart';
+import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/settings/folder_backup_list_dialog.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
@@ -133,7 +137,11 @@ class _PinnedGrowthPhysics extends ScrollPhysics {
 /// unified urgency-sorted feed, a hidden/dismissed browser, and an embedded
 /// daily-stats logger.
 class NotificationInboxPopover extends ConsumerStatefulWidget {
-  const NotificationInboxPopover({super.key});
+  const NotificationInboxPopover({super.key, this.prewarm = false});
+
+  /// The offscreen copy [NotificationPopoverWarmup] builds. It never shows
+  /// Secure Notes, and its going away doesn't lock the vault.
+  final bool prewarm;
 
   @override
   ConsumerState<NotificationInboxPopover> createState() =>
@@ -148,42 +156,90 @@ class _NotificationInboxPopoverState
 
   final _growthPin = _GrowthPin();
 
+  /// The vault session, as of the last build — held for [dispose], where
+  /// `ref` can no longer be read. A new account brings a new one, and a
+  /// rebuild with it.
+  SecureVaultSessionNotifier? _session;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.prewarm) HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    if (!widget.prewarm) {
+      HardwareKeyboard.instance.removeHandler(_onKey);
+      // Closing the inbox locks the vault — just after, since a provider may
+      // not change while the tree is being torn down. A session disposed by
+      // then has locked itself.
+      if (_session case final session?) scheduleMicrotask(session.lock);
+    }
+    super.dispose();
+  }
+
+  /// Any key pressed while the inbox is open is activity, for the vault's
+  /// idle lock. Never claims the key.
+  bool _onKey(KeyEvent event) {
+    _touchVault();
+    return false;
+  }
+
+  void _touchVault() => _session?.touch();
+
   @override
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.75;
+    final unlocked =
+        !widget.prewarm &&
+        ref.watch(secureVaultSessionProvider.select((s) => s != null));
+    if (!widget.prewarm) {
+      _session = ref.read(secureVaultSessionProvider.notifier);
+    }
     return Material(
       type: MaterialType.transparency,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        // One scroll region, not several: no section carries its own
-        // viewport, so dragging anywhere in the panel — the reminders
-        // included — moves the whole thing as a single sheet. It is also
-        // what [Scrollable.ensureVisible] scrolls when Hidden expands.
-        //
-        // Slivers rather than one box, so the Log stats rows are a list of
-        // this scroll view's own: dragging one to an edge scrolls the panel.
-        child: CustomScrollView(
-          shrinkWrap: true,
-          // Every section built, scrolled to or not, as in a Column: the
-          // header's Show hidden reaches the Hidden section by its key. Not
-          // infinity, which a shrink-wrapping viewport turns into NaN.
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1e6),
-          physics: _PinnedGrowthPhysics(_growthPin),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _Header(
-                onClearAll: _clearAll,
-                onShowHidden: () => _hiddenKey.currentState?.reveal(),
+      // Pointer activity anywhere in the panel holds off the vault's idle
+      // lock, as typing does (see [_onKey]).
+      child: Listener(
+        onPointerDown: (_) => _touchVault(),
+        onPointerMove: (_) => _touchVault(),
+        onPointerHover: (_) => _touchVault(),
+        onPointerSignal: (_) => _touchVault(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          // One scroll region, not several: no section carries its own
+          // viewport, so dragging anywhere in the panel — the reminders
+          // included — moves the whole thing as a single sheet. It is also
+          // what [Scrollable.ensureVisible] scrolls when Hidden expands.
+          //
+          // Slivers rather than one box, so the Log stats rows are a list of
+          // this scroll view's own: dragging one to an edge scrolls the panel.
+          child: CustomScrollView(
+            shrinkWrap: true,
+            // Every section built, scrolled to or not, as in a Column: the
+            // header's Show hidden reaches the Hidden section by its key. Not
+            // infinity, which a shrink-wrapping viewport turns into NaN.
+            scrollCacheExtent: const ScrollCacheExtent.pixels(1e6),
+            physics: _PinnedGrowthPhysics(_growthPin),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _Header(
+                  onClearAll: _clearAll,
+                  onShowHidden: () => _hiddenKey.currentState?.reveal(),
+                ),
               ),
-            ),
-            const SliverToBoxAdapter(child: _BackupAlertSection()),
-            const SliverToBoxAdapter(child: _FolderBackupAlertSection()),
-            const SliverToBoxAdapter(child: _PinnedNotesSection()),
-            const SliverToBoxAdapter(child: ScheduledRemindersSection()),
-            const SliverToBoxAdapter(child: _FeedSection()),
-            _AnalyticsSection(growthPin: _growthPin),
-            SliverToBoxAdapter(child: _HiddenSection(key: _hiddenKey)),
-          ],
+              const SliverToBoxAdapter(child: _BackupAlertSection()),
+              const SliverToBoxAdapter(child: _FolderBackupAlertSection()),
+              const SliverToBoxAdapter(child: _PinnedNotesSection()),
+              if (unlocked)
+                const SliverToBoxAdapter(child: _SecureNotesSection()),
+              const SliverToBoxAdapter(child: ScheduledRemindersSection()),
+              const SliverToBoxAdapter(child: _FeedSection()),
+              _AnalyticsSection(growthPin: _growthPin),
+              SliverToBoxAdapter(child: _HiddenSection(key: _hiddenKey)),
+            ],
+          ),
         ),
       ),
     );
@@ -302,10 +358,28 @@ class _Header extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Inbox',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                // Holding the title is the only way into Secure Notes, so
+                // nothing gives it away: no cursor change, no semantics.
+                RawGestureDetector(
+                  excludeFromSemantics: true,
+                  gestures: {
+                    LongPressGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                          LongPressGestureRecognizer
+                        >(
+                          () => LongPressGestureRecognizer(
+                            duration: _kSecureVaultHold,
+                          ),
+                          (recognizer) =>
+                              recognizer.onLongPress = () =>
+                                  unawaited(toggleSecureVault(context, ref)),
+                        ),
+                  },
+                  child: Text(
+                    'Inbox',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (sublabel != null)
@@ -410,12 +484,29 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
       return;
     }
     if (trimmed == note.text) return;
-    final updated = note.copyWith(
-      text: trimmed,
-      updatedAt: utcNow(),
-      version: note.version + 1,
-    );
-    await ref.read(notificationRepositoryProvider).upsertPinnedNote(updated);
+    final repository = ref.read(notificationRepositoryProvider);
+    final current = await repository.getPinnedNote(note.id);
+    if (current != null && current.version != note.version) {
+      // A sync rewrote the note under this snapshot: written over it, the
+      // edit would take a version the server already has and be dropped. Kept
+      // as a new note instead, as a conflict's fork is.
+      await repository.upsertPinnedNote(
+        PinnedNote(
+          id: newId(),
+          text: trimmed,
+          createdAt: note.createdAt.add(const Duration(milliseconds: 1)),
+          updatedAt: utcNow(),
+        ),
+      );
+    } else {
+      await repository.upsertPinnedNote(
+        note.copyWith(
+          text: trimmed,
+          updatedAt: utcNow(),
+          version: note.version + 1,
+        ),
+      );
+    }
     ref.invalidate(pinnedNotesProvider);
   }
 
@@ -513,9 +604,251 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
                   for (final note in notes)
                     _PinnedNoteRow(
                       key: ValueKey(note.id),
-                      note: note,
+                      text: note.text,
                       onUpdate: (newText) => _updateNote(note, newText),
                       onDelete: () => _deleteNoteWithUndo(note),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// How long the inbox title has to be held to open, or lock, Secure Notes.
+const _kSecureVaultHold = Duration(milliseconds: 1500);
+
+// ---------------------------------------------------------------------------
+// Secure notes
+// ---------------------------------------------------------------------------
+
+/// The unlocked vault's notes. Only built while it is unlocked, so locking
+/// takes the rows — their text, controllers and undo history — with it.
+class _SecureNotesSection extends ConsumerStatefulWidget {
+  const _SecureNotesSection();
+
+  @override
+  ConsumerState<_SecureNotesSection> createState() =>
+      _SecureNotesSectionState();
+}
+
+class _SecureNotesSectionState extends ConsumerState<_SecureNotesSection> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  final _menuKey = GlobalKey<ContextMenuRegionState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if ((event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        unawaited(_addNote());
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addNote() async {
+    final text = _controller.text.trim();
+    final session = ref.read(secureVaultSessionProvider);
+    if (text.isEmpty || session == null) return;
+    final sealed = await sealSecureText(session, text);
+    final now = utcNow();
+    await ref
+        .read(notificationRepositoryProvider)
+        .upsertSecureNote(
+          SecureNote(
+            id: newId(),
+            ciphertext: sealed.ciphertext,
+            nonce: sealed.nonce,
+            vaultId: session.vaultId,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+    ref.invalidate(secureNotesProvider);
+    _controller.clear();
+  }
+
+  Future<void> _updateNote(SecureNoteText entry, String newText) async {
+    final trimmed = newText.trim();
+    if (trimmed.isEmpty) {
+      await _deleteNote(entry.note.id);
+      return;
+    }
+    final session = ref.read(secureVaultSessionProvider);
+    if (trimmed == entry.text || session == null) return;
+    final sealed = await sealSecureText(session, trimmed);
+    final repository = ref.read(notificationRepositoryProvider);
+    final note = entry.note;
+    final current = await repository.getSecureNote(note.id);
+    if (current != null && current.version != note.version) {
+      // See [_PinnedNotesSectionState._updateNote].
+      await repository.upsertSecureNote(
+        SecureNote(
+          id: newId(),
+          ciphertext: sealed.ciphertext,
+          nonce: sealed.nonce,
+          vaultId: session.vaultId,
+          createdAt: note.createdAt.add(const Duration(milliseconds: 1)),
+          updatedAt: utcNow(),
+        ),
+      );
+    } else {
+      await repository.upsertSecureNote(
+        note.copyWith(
+          ciphertext: sealed.ciphertext,
+          nonce: sealed.nonce,
+          updatedAt: utcNow(),
+          version: note.version + 1,
+        ),
+      );
+    }
+    ref.invalidate(secureNotesProvider);
+  }
+
+  Future<void> _deleteNote(String id) async {
+    await ref.read(notificationRepositoryProvider).deleteSecureNote(id);
+    ref.invalidate(secureNotesProvider);
+  }
+
+  /// [_PinnedNotesSectionState._deleteNoteWithUndo], minus the text: the
+  /// toast says only that a note went, and the undo holds the ciphertext.
+  Future<void> _deleteNoteWithUndo(SecureNote note) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: 'Secure note deleted',
+      delete: () => _deleteNote(note.id),
+      restore: () async {
+        final repository = container.read(notificationRepositoryProvider);
+        final current = await repository.getSecureNote(note.id);
+        abortIfAlreadyRestored(
+          found: current != null,
+          deletedAt: current?.deletedAt,
+        );
+        await repository.upsertSecureNote(
+          note.copyWith(
+            clearDeletedAt: true,
+            updatedAt: utcNow(),
+            version: restoreVersionFrom(
+              preDeleteVersion: note.version,
+              currentVersion: current?.version,
+            ),
+          ),
+        );
+        container.invalidate(secureNotesProvider);
+      },
+    );
+  }
+
+  void _openMenu(BuildContext anchor) {
+    final box = anchor.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    _menuKey.currentState?.openMenuAt(
+      box.localToGlobal(box.size.bottomLeft(Offset.zero)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final notes =
+        ref.watch(secureNoteTextsProvider).valueOrNull ??
+        const <SecureNoteText>[];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ContextMenuRegion(
+              key: _menuKey,
+              itemsBuilder: () => [
+                ContextMenuItem(
+                  label: 'Change password',
+                  icon: PhosphorIconsRegular.key,
+                  onTap: () =>
+                      unawaited(showChangeVaultPasswordDialog(context, ref)),
+                ),
+                ContextMenuItem(
+                  label: 'Lock',
+                  icon: PhosphorIconsRegular.lock,
+                  onTap: () =>
+                      ref.read(secureVaultSessionProvider.notifier).lock(),
+                ),
+              ],
+              child: Row(
+                children: [
+                  Text(
+                    'Secure notes',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (anchor) => GlassButton(
+                      onPressed: () => _openMenu(anchor),
+                      icon: const Icon(
+                        PhosphorIconsRegular.dotsThree,
+                        size: 14,
+                      ),
+                      tooltip: 'Secure notes options',
+                      dense: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          VoyagerTextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            sensitive: true,
+            style: theme.textTheme.bodySmall,
+            borderRadius: _kReminderFieldRadius,
+            maxLines: null,
+            minLines: 1,
+            keyboardType: TextInputType.multiline,
+            onSubmitted: (_) => unawaited(_addNote()),
+            decoration: const InputDecoration(
+              hintText: 'Type a secure note…',
+              isDense: true,
+              contentPadding: _kReminderFieldPadding,
+            ),
+          ),
+          if (notes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final entry in notes)
+                    _PinnedNoteRow(
+                      key: ValueKey(entry.note.id),
+                      text: entry.text,
+                      secure: true,
+                      onUpdate: (newText) => _updateNote(entry, newText),
+                      onDelete: () => _deleteNoteWithUndo(entry.note),
+                      onCopy: () => unawaited(SecureClipboard.copy(entry.text)),
                     ),
                 ],
               ),
@@ -764,14 +1097,21 @@ class _WrapMarkPainter extends CustomPainter {
 class _PinnedNoteRow extends StatefulWidget {
   const _PinnedNoteRow({
     super.key,
-    required this.note,
+    required this.text,
     required this.onUpdate,
     required this.onDelete,
+    this.secure = false,
+    this.onCopy,
   });
 
-  final PinnedNote note;
+  final String text;
   final Future<void> Function(String newText) onUpdate;
   final Future<void> Function() onDelete;
+
+  /// A Secure Note: no spellcheck, snippets or autocorrect, no keyboard
+  /// suggestions or learning — Vim stays — and a copy button.
+  final bool secure;
+  final VoidCallback? onCopy;
 
   @override
   State<_PinnedNoteRow> createState() => _PinnedNoteRowState();
@@ -802,7 +1142,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
       vsync: this,
       duration: const Duration(milliseconds: 160),
     );
-    _editController = TextEditingController(text: widget.note.text);
+    _editController = TextEditingController(text: widget.text);
     _editFocusNode = FocusNode()
       ..addListener(() {
         if (!_editFocusNode.hasFocus && _isEditing) {
@@ -840,11 +1180,11 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   @override
   void didUpdateWidget(covariant _PinnedNoteRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.note.text != oldWidget.note.text) {
+    if (widget.text != oldWidget.text) {
       // Whatever the new text is — the edit landing, or a change from
       // somewhere else — the stored note is now the fresher of the two.
       _pendingText = null;
-      if (!_isEditing) _editController.text = widget.note.text;
+      if (!_isEditing) _editController.text = widget.text;
     }
   }
 
@@ -860,7 +1200,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
 
   /// The note's text as this row should show it: the edit still in flight if
   /// there is one, the stored note otherwise.
-  String get _text => _pendingText ?? widget.note.text;
+  String get _text => _pendingText ?? widget.text;
 
   void _startEditing() {
     setState(() {
@@ -918,6 +1258,8 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
         controller: _editController,
         multiline: true,
         proseEmphasis: true,
+        snippetsAllowed: !widget.secure,
+        autocorrectAllowed: !widget.secure,
         builder: (context, vim) {
           final overlayPadding = vimOverlayPadding(
             contentPadding: fieldContentPadding,
@@ -943,13 +1285,15 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
             style: textStyle,
             accentColor: theme.colorScheme.primary,
             overlayPadding: overlayPadding,
-            underlay: SpellCheckSquiggleLayer(
-              spanBuilder: _prose.overlaySpan,
-              controller: _prose,
-              focusNode: _editFocusNode,
-              style: textStyle,
-              suppressActiveWord: vim.suppressSpellcheckActiveWord,
-            ),
+            underlay: widget.secure
+                ? null
+                : SpellCheckSquiggleLayer(
+                    spanBuilder: _prose.overlaySpan,
+                    controller: _prose,
+                    focusNode: _editFocusNode,
+                    style: textStyle,
+                    suppressActiveWord: vim.suppressSpellcheckActiveWord,
+                  ),
             child: wrapWithSecondaryTapWordSelect(
               fieldKey: _fieldKey,
               child: TextField(
@@ -966,11 +1310,14 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
                 contextMenuBuilder: voyagerTextContextMenuBuilder(
                   context,
                   snippetsAllowed: vim.snippetsAllowed,
-                  spellcheckAllowed: true,
+                  spellcheckAllowed: !widget.secure,
                   autocorrectSession: vim.autocorrectSession,
                 ),
                 spellCheckConfiguration:
                     const SpellCheckConfiguration.disabled(),
+                enableSuggestions: !widget.secure,
+                autocorrect: !widget.secure,
+                enableIMEPersonalizedLearning: !widget.secure,
                 keyboardType: TextInputType.multiline,
                 onSubmitted: (_) => unawaited(_submitEdit()),
                 style: textStyle,
@@ -1016,7 +1363,9 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
       );
     } else {
       content = Tooltip(
-        message: 'Click to edit reminder',
+        message: widget.secure
+            ? 'Click to edit note'
+            : 'Click to edit reminder',
         child: Padding(
           padding: _kPinnedNoteTextPadding,
           child: VoyagerProseText(_text, style: noteStyle),
@@ -1088,10 +1437,32 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
           SizedBox(
             width: double.infinity,
             child: Padding(
-              padding: EdgeInsetsDirectional.only(end: _inboxDismissSlotSize),
+              padding: EdgeInsetsDirectional.only(
+                end: _inboxDismissSlotSize * (widget.onCopy == null ? 1 : 2),
+              ),
               child: content,
             ),
           ),
+          if (!_isEditing && widget.onCopy != null)
+            PositionedDirectional(
+              top: 0,
+              bottom: 0,
+              end: _inboxDismissSlotSize,
+              width: _inboxDismissSlotSize,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: _HoverRevealed(
+                    revealed: _hovered,
+                    child: _InboxDismissButton(
+                      onPressed: widget.onCopy!,
+                      icon: PhosphorIconsRegular.copy,
+                      tooltip: 'Copy',
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (!_isEditing)
             PositionedDirectional(
               top: 0,
@@ -2950,7 +3321,7 @@ class _NotificationPopoverWarmupState extends State<NotificationPopoverWarmup> {
           height: 400,
           child: Material(
             type: MaterialType.transparency,
-            child: const NotificationInboxPopover(),
+            child: const NotificationInboxPopover(prewarm: true),
           ),
         ),
       ),
@@ -2966,16 +3337,24 @@ const double _kInboxDismissSize = 30;
 
 double get _inboxDismissSlotSize => isAndroid ? 48 : _kInboxDismissSize;
 
-/// Compact dismiss ✕ used on inbox reminder and feed rows.
+/// Compact dismiss ✕ used on inbox reminder and feed rows — or, given
+/// another [icon], a control of the same size beside it.
 class _InboxDismissButton extends StatelessWidget {
-  const _InboxDismissButton({required this.onPressed});
+  const _InboxDismissButton({
+    required this.onPressed,
+    this.icon = PhosphorIconsRegular.x,
+    this.tooltip,
+  });
 
   final VoidCallback onPressed;
+  final IconData icon;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: const Icon(PhosphorIconsRegular.x, size: 14),
+      icon: Icon(icon, size: 14),
+      tooltip: tooltip,
       padding: EdgeInsets.zero,
       // `constraints` alone would not have shrunk it: IconButton's default
       // padded tap target wraps the whole thing back out to 48 whatever the

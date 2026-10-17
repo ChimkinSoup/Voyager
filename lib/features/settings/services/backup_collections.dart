@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:voyager/core/secure_vault/secure_vault.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -869,6 +870,54 @@ List<BackupCollection> buildBackupCollections({
           recordLocalActivity: false,
         );
         return note;
+      },
+    ),
+    // Ciphertext only, as stored: a backup never holds a Secure Note's text.
+    BackupCollection(
+      name: FirestoreCollections.secureNotes,
+      read: () async => [
+        for (final note in await notificationRepository.listSecureNotes(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: note.id, data: secureNoteToFirestore(note)),
+      ],
+      restore: (id, data) async {
+        final note = secureNoteFromRemote(data, id);
+        await notificationRepository.upsertSecureNote(
+          note,
+          recordLocalActivity: false,
+        );
+        return note;
+      },
+    ),
+    // The header the notes above need to be read. Restored only over an older
+    // one, and uploaded only to an account with none (see
+    // `RemoteSyncService.pushRecords`): a pull brings a newer one back down.
+    BackupCollection(
+      name: FirestoreCollections.secureVault,
+      read: () async => [
+        if (await notificationRepository.getSecureVaultHeader()
+            case final header?)
+          BackupRecord(
+            id: FirestoreCollections.secureVaultHeaderId,
+            data: header,
+          ),
+      ],
+      restore: (id, data) async {
+        // Parsed first: a malformed header stored here would lock the vault
+        // out.
+        final header = SecureVaultHeader.fromJson(data);
+        final local = await notificationRepository.getSecureVaultHeader();
+        if (local == null ||
+            header.headerVersion > (local['headerVersion'] as num).toInt()) {
+          await notificationRepository.saveSecureVaultHeader(
+            header.toJson(),
+            vaultId: header.vaultId,
+            headerVersion: header.headerVersion,
+          );
+        }
+        // What is in place now, which is what may go up.
+        return (await notificationRepository.getSecureVaultHeader())!;
       },
     ),
     BackupCollection(

@@ -668,6 +668,34 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await notificationRepo.upsertSecureNote(
+    SecureNote(
+      id: 'secure-1',
+      ciphertext: 'c2VhbGVk',
+      nonce: 'bm9uY2U=',
+      vaultId: 'vault-1',
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await notificationRepo.saveSecureVaultHeader(
+    {
+      'vaultId': 'vault-1',
+      'kdf': {
+        'name': 'argon2id',
+        'memoryKiB': 19456,
+        'iterations': 2,
+        'parallelism': 1,
+      },
+      'salt': 'c2FsdA==',
+      'wrappedKey': 'a2V5',
+      'wrapNonce': 'bm9uY2U=',
+      'headerVersion': 1,
+      'updatedAt': now.toIso8601String(),
+    },
+    vaultId: 'vault-1',
+    headerVersion: 1,
+  );
   await notificationRepo.upsertDismissal(
     DismissedNotification(key: 'task:task-1', dismissedAt: now, updatedAt: now),
   );
@@ -1116,7 +1144,12 @@ void main() {
 
       final names = collectionsFor(db).map((c) => c.name).toList();
 
-      expect(names.toSet(), FirestoreCollections.records);
+      // Plus the Secure Notes vault header, which is no record collection
+      // but is what makes the backed-up notes readable.
+      expect(names.toSet(), {
+        ...FirestoreCollections.records,
+        FirestoreCollections.secureVault,
+      });
       expect(
         names.length,
         names.toSet().length,
@@ -1244,6 +1277,8 @@ void main() {
         'savings_goals_table',
         'goal_allocations_table',
         'pinned_notes_table',
+        'secure_notes_table',
+        'secure_vault_header_table',
         'dismissed_notifications_table',
         'device_registrations_table',
         'scheduled_reminder_rules_table',

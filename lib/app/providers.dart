@@ -23,6 +23,8 @@ import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/reminders/reminder_os_notifier.dart';
+import 'package:voyager/core/secure_vault/secure_vault.dart';
+import 'package:voyager/core/secure_vault/secure_vault_service.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
@@ -1860,6 +1862,8 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   savingsGoalsProvider,
   goalAllocationsProvider,
   pinnedNotesProvider,
+  secureNotesProvider,
+  secureVaultHeaderProvider,
   notificationDismissalsProvider,
   notificationFeedProvider,
   scheduledReminderRulesProvider,
@@ -2316,6 +2320,24 @@ final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
 final pinnedNotesProvider = FutureProvider<List<PinnedNote>>((ref) {
   ref.keepAlive();
   return ref.watch(notificationRepositoryProvider).listPinnedNotes();
+});
+
+/// Secure Notes as stored — ciphertext. Read through
+/// `secureNoteTextsProvider` while the vault is unlocked.
+final secureNotesProvider = FutureProvider<List<SecureNote>>((ref) {
+  return ref.watch(notificationRepositoryProvider).listSecureNotes();
+});
+
+/// This device's copy of the Secure Notes vault header; null with no vault.
+final secureVaultHeaderProvider = FutureProvider<SecureVaultHeader?>((ref) {
+  return ref.watch(secureVaultServiceProvider).localHeader();
+});
+
+final secureVaultServiceProvider = Provider<SecureVaultService>((ref) {
+  return SecureVaultService(
+    repository: ref.watch(notificationRepositoryProvider),
+    sync: ref.watch(syncRepositoryProvider),
+  );
 });
 
 final scheduledReminderRulesProvider =

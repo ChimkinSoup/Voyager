@@ -2313,21 +2313,46 @@ class DriftNotificationRepository implements NotificationRepository {
     PinnedNote note, {
     bool recordLocalActivity = true,
   }) async {
+    final row = PinnedNotesTableCompanion(
+      id: Value(note.id),
+      body: Value(note.text),
+      createdAt: Value(note.createdAt),
+      updatedAt: Value(note.updatedAt),
+      version: Value(note.version),
+      syncedVersion: Value(note.syncedVersion),
+      deletedAt: Value(note.deletedAt),
+    );
     await _db
         .into(_db.pinnedNotesTable)
-        .insertOnConflictUpdate(
-          PinnedNotesTableCompanion(
-            id: Value(note.id),
-            body: Value(note.text),
-            createdAt: Value(note.createdAt),
-            updatedAt: Value(note.updatedAt),
-            version: Value(note.version),
-            deletedAt: Value(note.deletedAt),
+        .insert(
+          row,
+          // Only a sync or restore knows the server's version; a local
+          // edit keeps the row's, which its snapshot may predate.
+          onConflict: DoUpdate(
+            (_) => recordLocalActivity
+                ? row.copyWith(syncedVersion: const Value.absent())
+                : row,
           ),
         );
     if (recordLocalActivity) {
       _syncedWrites?.notifyOne(FirestoreCollections.pinnedNotes, note);
     }
+  }
+
+  /// Kept below or at the row's version, so an edit made while the upload
+  /// was in flight still counts as not uploaded — but on the version that
+  /// did land, so that edit's own upload isn't then taken for a conflict.
+  @override
+  Future<void> markPinnedNoteSynced(String id, int version) async {
+    final table = _db.pinnedNotesTable;
+    await (_db.update(table)..where(
+          (t) =>
+              t.id.equals(id) &
+              t.version.isBiggerOrEqualValue(version) &
+              (t.syncedVersion.isNull() |
+                  t.syncedVersion.isSmallerThanValue(version)),
+        ))
+        .write(PinnedNotesTableCompanion(syncedVersion: Value(version)));
   }
 
   @override
@@ -2341,6 +2366,124 @@ class DriftNotificationRepository implements NotificationRepository {
         deletedAt: utcNow(),
       ),
     );
+  }
+
+  @override
+  Future<List<SecureNote>> listSecureNotes({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.secureNotesTable,
+    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapSecureNote)
+        .toList();
+  }
+
+  @override
+  Future<SecureNote?> getSecureNote(String id) async {
+    final row = await (_db.select(
+      _db.secureNotesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapSecureNote(row);
+  }
+
+  @override
+  Future<void> upsertSecureNote(
+    SecureNote note, {
+    bool recordLocalActivity = true,
+  }) async {
+    final row = SecureNotesTableCompanion(
+      id: Value(note.id),
+      ciphertext: Value(note.ciphertext),
+      nonce: Value(note.nonce),
+      vaultId: Value(note.vaultId),
+      createdAt: Value(note.createdAt),
+      updatedAt: Value(note.updatedAt),
+      version: Value(note.version),
+      syncedVersion: Value(note.syncedVersion),
+      deletedAt: Value(note.deletedAt),
+    );
+    await _db
+        .into(_db.secureNotesTable)
+        .insert(
+          row,
+          // Only a sync or restore knows the server's version; a local
+          // edit keeps the row's, which its snapshot may predate.
+          onConflict: DoUpdate(
+            (_) => recordLocalActivity
+                ? row.copyWith(syncedVersion: const Value.absent())
+                : row,
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.secureNotes, note);
+    }
+  }
+
+  @override
+  Future<void> deleteSecureNote(String id) async {
+    final note = await getSecureNote(id);
+    if (note == null) return;
+    await upsertSecureNote(
+      note.copyWith(
+        updatedAt: utcNow(),
+        version: note.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> markSecureNoteSynced(String id, int version) async {
+    final table = _db.secureNotesTable;
+    await (_db.update(table)..where(
+          (t) =>
+              t.id.equals(id) &
+              t.version.isBiggerOrEqualValue(version) &
+              (t.syncedVersion.isNull() |
+                  t.syncedVersion.isSmallerThanValue(version)),
+        ))
+        .write(SecureNotesTableCompanion(syncedVersion: Value(version)));
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getSecureVaultHeader() async {
+    final row = await _db.select(_db.secureVaultHeaderTable).getSingleOrNull();
+    if (row == null) return null;
+    return jsonDecode(row.headerJson) as Map<String, dynamic>;
+  }
+
+  @override
+  Future<void> saveSecureVaultHeader(
+    Map<String, dynamic> header, {
+    required String vaultId,
+    required int headerVersion,
+  }) async {
+    await _db
+        .into(_db.secureVaultHeaderTable)
+        .insertOnConflictUpdate(
+          SecureVaultHeaderTableCompanion(
+            id: const Value(1),
+            vaultId: Value(vaultId),
+            headerVersion: Value(headerVersion),
+            headerJson: Value(jsonEncode(header)),
+          ),
+        );
+  }
+
+  @override
+  Future<int> lostSecureNoteCount() async {
+    final row = await _db.select(_db.secureVaultHeaderTable).getSingleOrNull();
+    return row?.lostNoteCount ?? 0;
+  }
+
+  @override
+  Future<void> setLostSecureNoteCount(int count) async {
+    await _db
+        .update(_db.secureVaultHeaderTable)
+        .write(SecureVaultHeaderTableCompanion(lostNoteCount: Value(count)));
   }
 
   @override
@@ -2426,6 +2569,12 @@ class DriftNotificationRepository implements NotificationRepository {
               _notOwedUpload(_db, FirestoreCollections.pinnedNotes, t.id),
         ))
         .go();
+    await (_db.delete(_db.secureNotesTable)..where(
+          (t) =>
+              _expired(t.deletedAt, cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.secureNotes, t.id),
+        ))
+        .go();
     await (_db.delete(_db.dismissedNotificationsTable)..where(
           (t) =>
               _expired(t.deletedAt, cutoff) &
@@ -2444,6 +2593,19 @@ class DriftNotificationRepository implements NotificationRepository {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
+    syncedVersion: row.syncedVersion,
+    deletedAt: row.deletedAt,
+  );
+
+  SecureNote _mapSecureNote(SecureNotesTableData row) => SecureNote(
+    id: row.id,
+    ciphertext: row.ciphertext,
+    nonce: row.nonce,
+    vaultId: row.vaultId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    syncedVersion: row.syncedVersion,
     deletedAt: row.deletedAt,
   );
 

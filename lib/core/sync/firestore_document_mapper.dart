@@ -3315,6 +3315,16 @@ PinnedNote mergePinnedNoteFromRemote(
   )) {
     return local!;
   }
+  return pinnedNoteFromRemote(data, id, local: local);
+}
+
+/// The server's copy of a pinned note as a row, [syncedVersion] and all.
+PinnedNote pinnedNoteFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  PinnedNote? local,
+  int? syncedVersion,
+}) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   return PinnedNote(
     id: id,
@@ -3325,8 +3335,104 @@ PinnedNote mergePinnedNoteFromRemote(
         remoteUpdated,
     updatedAt: remoteUpdated,
     version: parseVersion(data),
+    syncedVersion: syncedVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
+}
+
+Map<String, dynamic> secureNoteToFirestore(SecureNote note) => {
+  'id': note.id,
+  'ciphertext': note.ciphertext,
+  'nonce': note.nonce,
+  'vaultId': note.vaultId,
+  'createdAt': _dateToFirestoreRequired(note.createdAt),
+  'updatedAt': _dateToFirestoreRequired(note.updatedAt),
+  'version': note.version,
+  'deletedAt': _dateToFirestore(note.deletedAt),
+};
+
+/// The server's copy of a Secure Note as a row — ciphertext as it came, so
+/// this works while the vault is locked.
+SecureNote secureNoteFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  SecureNote? local,
+  int? syncedVersion,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return SecureNote(
+    id: id,
+    ciphertext: data['ciphertext'] as String? ?? local?.ciphertext ?? '',
+    nonce: data['nonce'] as String? ?? local?.nonce ?? '',
+    vaultId: data['vaultId'] as String? ?? local?.vaultId ?? '',
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    syncedVersion: syncedVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+/// What a pull or an upload does with a note once it holds the server's copy
+/// — see [resolveNoteSync].
+enum NoteSyncAction {
+  /// The row takes the server's copy (and with it, its version as the base).
+  applyRemote,
+
+  /// The row stays as it is; an upload writes it.
+  keepLocal,
+
+  /// Both sides changed since the version they last agreed on. The row takes
+  /// the server's copy, and this device's copy is saved as a new note.
+  fork,
+}
+
+/// Decides between this device's copy of a note ([local], null when there
+/// is no row) and the server's ([remote], null when there is no document),
+/// for Pinned Notes and Secure Notes alike.
+///
+/// An edit not yet uploaded ([SyncedNote.version] past
+/// [SyncedNote.syncedVersion]) meeting a server copy that has also moved past
+/// that version is a conflict. Nothing is silently dropped: the server's copy
+/// keeps the note, and this device's text survives as a [NoteSyncAction.fork]
+/// — unless it is a deletion, or the same content ([sameContent]) the server
+/// already has, neither of which needs keeping.
+///
+/// A row with no known base falls back to the later-save-wins rule once.
+NoteSyncAction resolveNoteSync({
+  required SyncedNote? local,
+  required Map<String, dynamic>? remote,
+  required bool sameContent,
+}) {
+  if (local == null) return NoteSyncAction.applyRemote;
+  if (remote == null) return NoteSyncAction.keepLocal;
+  final base = local.syncedVersion;
+  if (base == null) {
+    return _remoteRecordWins(
+          remote,
+          localVersion: local.version,
+          localUpdatedAt: local.updatedAt,
+          localDeletedAt: local.deletedAt,
+        )
+        ? NoteSyncAction.applyRemote
+        : NoteSyncAction.keepLocal;
+  }
+  final unsent = local.version != base;
+  if (!unsent) {
+    // An older copy than the one already agreed on is stale, not news.
+    return parseVersion(remote) < base
+        ? NoteSyncAction.keepLocal
+        : NoteSyncAction.applyRemote;
+  }
+  if (parseVersion(remote) == base) return NoteSyncAction.keepLocal;
+  final remoteDeleted = parseFirestoreDate(remote['deletedAt']) != null;
+  if (local.deletedAt != null || (!remoteDeleted && sameContent)) {
+    return NoteSyncAction.applyRemote;
+  }
+  return NoteSyncAction.fork;
 }
 
 Map<String, dynamic> dismissedNotificationToFirestore(

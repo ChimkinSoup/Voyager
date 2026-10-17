@@ -51,6 +51,7 @@ class VoyagerTextField extends StatefulWidget {
     this.snippetsAllowed = true,
     this.autocorrectAllowed = true,
     this.scrollPastEnd = 0,
+    this.sensitive = false,
   }) : assert(
          tagScope == null || controller != null,
          'Tag completion reads and rewrites the field text, so it needs a '
@@ -107,6 +108,11 @@ class VoyagerTextField extends StatefulWidget {
   /// How far the text can scroll beyond its last line, for a field with
   /// something floating over its bottom corner. See [PastEndScrollController].
   final double scrollPastEnd;
+
+  /// For text that must go nowhere but the field — a Secure Note. Turns off
+  /// spellcheck, snippets and autocorrect, and asks the keyboard for no
+  /// suggestions and no learning. Vim stays.
+  final bool sensitive;
 
   @override
   State<VoyagerTextField> createState() => _VoyagerTextFieldState();
@@ -223,8 +229,9 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         keyboardType: widget.keyboardType,
         inputFormatters: widget.inputFormatters,
       ),
-      snippetsAllowed: widget.snippetsAllowed && suits,
-      autocorrectAllowed: widget.autocorrectAllowed && suits,
+      snippetsAllowed: widget.snippetsAllowed && !widget.sensitive && suits,
+      autocorrectAllowed:
+          widget.autocorrectAllowed && !widget.sensitive && suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
       proseEmphasis: _prose != null,
@@ -326,9 +333,12 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         contextMenuBuilder: voyagerTextContextMenuBuilder(
           context,
           snippetsAllowed: vim.snippetsAllowed,
-          spellcheckAllowed: spellcheckOn,
+          spellcheckAllowed: spellcheckOn && !widget.sensitive,
           autocorrectSession: vim.autocorrectSession,
         ),
+        enableSuggestions: !widget.sensitive,
+        autocorrect: !widget.sensitive,
+        enableIMEPersonalizedLearning: !widget.sensitive,
         // No spell config: squiggles come from [SpellCheckSquiggleLayer] and
         // the right-click corrections from [misspellingAtCursor]. Giving
         // EditableText results of its own makes it build the paragraph itself
@@ -460,7 +470,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
                 ),
               ),
             ),
-          if (spellcheckOn)
+          if (spellcheckOn && !widget.sensitive)
             Positioned.fill(
               child: IgnorePointer(
                 child: Padding(

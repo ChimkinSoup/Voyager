@@ -18,6 +18,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/note_sync.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
@@ -2405,6 +2406,13 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.secureNotes:
+        return pullSecureNotes(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.secureVault:
+        return pullSecureVaultHeader();
       case FirestoreCollections.dismissedNotifications:
         return pullDismissedNotifications(
           documentIds: documentIds,
@@ -5936,6 +5944,20 @@ class RemoteSyncService {
       if (settings is AppSettings) await pushSettings(settings);
       return;
     }
+    if (collection == FirestoreCollections.pinnedNotes) {
+      await _pushNotes(_pinnedNoteStore, records);
+      return;
+    }
+    if (collection == FirestoreCollections.secureNotes) {
+      await _pushNotes(_secureNoteStore, records);
+      return;
+    }
+    if (collection == FirestoreCollections.secureVault) {
+      final header = records.last;
+      if (header is Map<String, dynamic>)
+        await _pushRestoredVaultHeader(header);
+      return;
+    }
 
     final payloads = <String, Map<String, dynamic>>{};
     // Outbox rows are keyed by the *local* id throughout — that is what
@@ -5961,6 +5983,77 @@ class RemoteSyncService {
       localIds,
       () => _pushRecordsNow(collection, payloads, localIds, echoes),
     );
+  }
+
+  /// Puts a vault header a backup restored back on an account that has none.
+  /// A header already there is never replaced: changing one is
+  /// `SecureVaultService`'s, by transactions that check what they replace.
+  Future<void> _pushRestoredVaultHeader(Map<String, dynamic> header) async {
+    try {
+      await _syncRepository.writeAfterReading(
+        FirestoreCollections.secureVault,
+        FirestoreCollections.secureVaultHeaderId,
+        (remote) => remote == null ? header : null,
+      );
+    } catch (error) {
+      // Not queued: the next restore, or the vault's own setup, tries again.
+      debugPrint('[sync] restored vault header not uploaded: $error');
+    }
+  }
+
+  late final _pinnedNoteStore = pinnedNoteSyncStore(_notificationRepository);
+  late final _secureNoteStore = secureNoteSyncStore(
+    _notificationRepository,
+    serverHeader: () => _syncRepository.getDocument(
+      FirestoreCollections.secureVault,
+      FirestoreCollections.secureVaultHeaderId,
+    ),
+  );
+
+  /// [pushRecords] for the note collections, whose uploads are checked
+  /// against the server's copy rather than written blind — see [uploadNote].
+  Future<void> _pushNotes<T extends SyncedNote>(
+    NoteSyncStore<T> store,
+    List<Object> records,
+  ) async {
+    // Signed out, nothing reaches a server, so nothing may count as synced;
+    // the full push at sign-in checks these against the server's copies.
+    if (_syncRepository is NoOpSyncRepository) return;
+    final collection = store.collection;
+    for (final note in records.whereType<T>()) {
+      _markSelfEcho(collection, note.id, store.toFirestore(note));
+      final echoes = _unsettledEchoes(collection, [note.id]);
+      await _runInDocumentChains(collection, [note.id], () async {
+        try {
+          await uploadNote(
+            store,
+            note.id,
+            (decide) => _syncRepository.writeAfterReading(
+              collection,
+              _firestoreDocumentId(collection, note.id),
+              decide,
+            ),
+          );
+          _settleEchoes(echoes);
+          _syncActivity?.recordUpload(collection);
+          await OutboxSyncWorker.recordSuccess(
+            collection: collection,
+            documentId: note.id,
+          );
+        } catch (error, stackTrace) {
+          _settleEchoes(echoes, error: error);
+          debugPrint(
+            '[sync] upload failed for $collection ${note.id}: '
+            '$error\n$stackTrace',
+          );
+          await OutboxSyncWorker.recordFailure(
+            collection: collection,
+            documentId: note.id,
+            error: error,
+          );
+        }
+      });
+    }
   }
 
   Future<void> _pushRecordsNow(
@@ -6459,6 +6552,9 @@ class RemoteSyncService {
       case FirestoreCollections.pinnedNotes:
         if (record is! PinnedNote) return null;
         return (id: record.id, payload: pinnedNoteToFirestore(record));
+      case FirestoreCollections.secureNotes:
+        if (record is! SecureNote) return null;
+        return (id: record.id, payload: secureNoteToFirestore(record));
       case FirestoreCollections.dismissedNotifications:
         if (record is! DismissedNotification) return null;
         return (
@@ -6943,14 +7039,38 @@ class RemoteSyncService {
       onlyFirestoreDocumentIds: documentIds,
       documentData: documentData,
       resolveCrdt: false,
-      apply: (id, data, {required fromCrdt}) async {
-        final local = await _notificationRepository.getPinnedNote(id);
-        await _notificationRepository.upsertPinnedNote(
-          mergePinnedNoteFromRemote(data, id, local: local),
-          recordLocalActivity: false,
-        );
-      },
+      apply: (id, data, {required fromCrdt}) =>
+          applyRemoteNote(_pinnedNoteStore, id, data),
     );
+  }
+
+  Future<bool> pullSecureNotes({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final changed = await _pullCollection(
+      FirestoreCollections.secureNotes,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) =>
+          applyRemoteNote(_secureNoteStore, id, data),
+    );
+    // A device that missed the reset may still have uploaded into the old
+    // vault before it heard of it.
+    final retired = await retireSecureNotes(_notificationRepository);
+    return changed || retired > 0;
+  }
+
+  /// Takes the server's vault header when it is newer than this device's —
+  /// see [adoptSecureVaultHeader].
+  Future<bool> pullSecureVaultHeader() async {
+    final remote = await _syncRepository.getDocument(
+      FirestoreCollections.secureVault,
+      FirestoreCollections.secureVaultHeaderId,
+    );
+    if (remote == null) return false;
+    return adoptSecureVaultHeader(_notificationRepository, remote);
   }
 
   Future<bool> pullDismissedNotifications({
@@ -7348,6 +7468,7 @@ class RemoteSyncService {
       _inOrder([pullContributionRooms, pullAssetRoomEvents]),
       _inOrder([pullSavingsGoals, pullGoalAllocations]),
       pullPinnedNotes(),
+      _inOrder([pullSecureVaultHeader, pullSecureNotes]),
       pullDismissedNotifications(),
       pullDeviceRegistrations(),
       _inOrder([
@@ -7477,6 +7598,10 @@ class RemoteSyncService {
     await pushRecords(
       FirestoreCollections.pinnedNotes,
       await _notificationRepository.listPinnedNotes(includeDeleted: true),
+    );
+    await pushRecords(
+      FirestoreCollections.secureNotes,
+      await _notificationRepository.listSecureNotes(includeDeleted: true),
     );
     await pushRecords(
       FirestoreCollections.dismissedNotifications,
@@ -7666,6 +7791,10 @@ class LiveSyncController {
     FirestoreCollections.savingsGoals,
     FirestoreCollections.goalAllocations,
     FirestoreCollections.pinnedNotes,
+    FirestoreCollections.secureNotes,
+    // A reset elsewhere has to lock a vault unlocked here before it writes
+    // more notes under the old one.
+    FirestoreCollections.secureVault,
     FirestoreCollections.dismissedNotifications,
     FirestoreCollections.deviceRegistrations,
     FirestoreCollections.scheduledReminderRules,
