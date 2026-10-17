@@ -29,6 +29,7 @@ class _ReminderFloaterState extends ConsumerState<ReminderFloater> {
         _saved ? floaters.completeWith('Reminder added') : floaters.dismiss(),
       ),
       leading: const FloaterAppIcon(PhosphorIconsRegular.bellRinging, size: 20),
+      onHeight: floaters.setHeight,
     );
   }
 }

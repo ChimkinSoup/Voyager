@@ -792,6 +792,8 @@ class SettingsTable extends Table {
       text().withDefault(const Constant(defaultFinanceHotkey))();
   TextColumn get reminderHotkey =>
       text().withDefault(const Constant(defaultReminderHotkey))();
+  TextColumn get calendarHotkey =>
+      text().withDefault(const Constant(defaultCalendarHotkey))();
   TextColumn get calendarNavigateLeftKey =>
       text().withDefault(const Constant(defaultCalendarNavigateLeftKey))();
   TextColumn get calendarNavigateRightKey =>
@@ -2078,7 +2080,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 153;
+  int get schemaVersion => 154;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3783,6 +3785,12 @@ class AppDatabase extends _$AppDatabase {
         ]) {
           await _addSettingsColumnIfNotExists(migrator, column);
         }
+      }
+      if (from < 154) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.calendarHotkey,
+        );
       }
     },
   );

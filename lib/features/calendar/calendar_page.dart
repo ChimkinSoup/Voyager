@@ -41,6 +41,7 @@ import 'package:voyager/features/calendar/calendar_import_dialog.dart';
 import 'package:voyager/features/calendar/calendar_manage_sheet.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 import 'package:voyager/features/calendar/calendar_week_morph_entries.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 
@@ -141,6 +142,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   final _eventTapState = CalendarEventTapState();
 
   final _calendarAreaKey = GlobalKey();
+
+  /// The toolbar's "Add event" button, which the calendar hotkey's new event
+  /// is anchored to as well.
+  final _addEventButtonKey = GlobalKey();
 
   late final AnimationController _zoomController;
   late final ScrollController _weekTimelineScrollController;
@@ -814,7 +819,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _resetSidebar();
       return;
     }
-    final now = utcNow();
     // The panel was handed an occurrence view, so its start/end are expressed
     // at [occurrenceDay], not at the series anchor. The scope decides whether
     // they stay there or get mapped back.
@@ -847,25 +851,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // it to 0 — losing every later conflict adjudication for this event — as
     // well as silently dropping [deletedAt].
     final edited = event == null
-        ? CalendarEvent(
-            // The panel names the new event, so a bell set on it lands on
-            // this row.
-            id: result['id'] as String? ?? newId(),
-            calendarId:
-                result['calendarId'] as String? ??
-                _selectedCalendarId ??
-                legacyCalendarId,
-            title: result['title'] as String,
-            start: result['start'] as DateTime,
-            end: result['end'] as DateTime,
-            isFullDay: result['isFullDay'] as bool,
-            colorValue: result['colorValue'] as int,
-            notes: result['notes'] as String,
-            recurrence:
-                result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
-            createdAt: now,
-            updatedAt: now,
-          )
+        ? newCalendarEventFromPanel(result)
         : carryDoneAcrossRepeatChange(
             event,
             occurrenceDay ?? event.start,
@@ -1161,6 +1147,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     Rect? anchorRect,
   }) async {
     _openEventSidebar(event: event, day: day, anchorRect: anchorRect);
+  }
+
+  /// The toolbar's "Add event", and the calendar hotkey's in-app path.
+  void _addEvent() {
+    final box =
+        _addEventButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    _openEditor(
+      day: _defaultNewEventDate(),
+      // Not the cursor, which a hotkey press says nothing about.
+      anchorRect: box == null
+          ? _calendarAreaCentreRect()
+          : box.localToGlobal(Offset.zero) & box.size,
+    );
   }
 
   /// Date the toolbar's "Add event" button seeds a new event with.
@@ -2884,6 +2883,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       ref.read(revealRequestProvider.notifier).state = null;
       _revealCalendarEvent(event, day: next.day);
     });
+    // The calendar hotkey's in-app path.
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind == QuickCaptureKind.calendar) _addEvent();
+    });
 
     // Editing the open calendar's overlay list, or any event write, reloads
     // these; keep drawing the old set meanwhile, and rebuild once, when the
@@ -3018,7 +3021,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                         // filled plate, so it sits with the rest of the
                         // toolbar; tinted like the selected calendar.
                         Builder(
-                          builder: (btnCtx) => ExcludeFocus(
+                          key: _addEventButtonKey,
+                          builder: (_) => ExcludeFocus(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 // Light darkens a pale tint to read on cream
@@ -3039,19 +3043,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                                   ),
                                 ),
                               ),
-                              onPressed: () {
-                                final box =
-                                    btnCtx.findRenderObject() as RenderBox?;
-                                Rect? anchor;
-                                if (box != null) {
-                                  final origin = box.localToGlobal(Offset.zero);
-                                  anchor = origin & box.size;
-                                }
-                                _openEditor(
-                                  day: _defaultNewEventDate(),
-                                  anchorRect: anchor,
-                                );
-                              },
+                              onPressed: _addEvent,
                               icon: const Icon(
                                 PhosphorIconsRegular.plus,
                                 size: 16,

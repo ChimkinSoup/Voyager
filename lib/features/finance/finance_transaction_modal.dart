@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +13,7 @@ import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/report_height.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -100,11 +100,9 @@ Future<void> showFinanceTransactionModal(
 /// is not a route: [onClose] stands in for the sheet's pop, after a save and
 /// from the close button alike.
 ///
-/// [onSaveErrorHeight] reports how tall the failed-save line is, zero when
-/// there is none. The floater's window is sized to the form, and that line is
-/// the one part of it whose height nothing can predict — the message carries
-/// an exception string — so the window grows by what this reports instead of
-/// the form scrolling inside it.
+/// [onHeight] reports the form's height, for the floater's window to be sized
+/// to it: the amount's error line and a failed save's message grow the window
+/// rather than the form scrolling inside it.
 ///
 /// [leading] goes before the title.
 Widget financeTransactionForm({
@@ -113,7 +111,7 @@ Widget financeTransactionForm({
   FinanceTransactionDraft? draft,
   Future<void> Function(FinancialTransaction saved)? onSaved,
   ValueChanged<FinanceTransactionDraft?>? onDraft,
-  ValueChanged<double>? onSaveErrorHeight,
+  ValueChanged<double>? onHeight,
   Widget? leading,
   bool autofocus = true,
 }) {
@@ -123,7 +121,7 @@ Widget financeTransactionForm({
     onSaved: onSaved,
     onClose: onClose,
     onDraft: onDraft,
-    onSaveErrorHeight: onSaveErrorHeight,
+    onHeight: onHeight,
     leading: leading,
     autofocus: autofocus,
   );
@@ -137,7 +135,7 @@ class _TransactionModal extends ConsumerStatefulWidget {
     this.onSaved,
     this.onClose,
     this.onDraft,
-    this.onSaveErrorHeight,
+    this.onHeight,
     this.leading,
     this.autofocus = true,
   });
@@ -153,7 +151,7 @@ class _TransactionModal extends ConsumerStatefulWidget {
   final ValueChanged<FinanceTransactionDraft?>? onDraft;
 
   /// See [financeTransactionForm].
-  final ValueChanged<double>? onSaveErrorHeight;
+  final ValueChanged<double>? onHeight;
 
   /// See [financeTransactionForm].
   final Widget? leading;
@@ -527,216 +525,212 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
               theme.scaffoldBackgroundColor,
             ),
           );
-    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
     final linked = widget.existing?.roomEventId != null;
 
     final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header row
-              Row(
-                children: [
-                  if (widget.leading case final leading?) ...[
-                    leading,
-                    const SizedBox(width: 8),
+        child: _reportHeight(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header row
+                Row(
+                  children: [
+                    if (widget.leading case final leading?) ...[
+                      leading,
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      widget.existing == null
+                          ? 'New transaction'
+                          : 'Edit transaction',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _close,
+                      icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                      tooltip: 'Close',
+                      padding: EdgeInsets.zero,
+                      constraints: kMinTouchTarget,
+                    ),
                   ],
+                ),
+                if (linked) ...[
                   Text(
-                    widget.existing == null
-                        ? 'New transaction'
-                        : 'Edit transaction',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _close,
-                    icon: const Icon(PhosphorIconsRegular.x, size: 18),
-                    tooltip: 'Close',
-                    padding: EdgeInsets.zero,
-                    constraints: kMinTouchTarget,
-                  ),
-                ],
-              ),
-              if (linked) ...[
-                Text(
-                  'Linked to a contribution room. Amount, date and note '
-                  'changes update it too; update the asset for its value.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ],
-              const SizedBox(height: 12),
-              // Expense / Deposit toggle. Inside the text fields' tap region,
-              // so a click on it doesn't count as a click outside the focused
-              // field: "click Deposit, type the amount" keeps typing into
-              // Amount instead of dropping focus (the button never takes it).
-              TextFieldTapRegion(
-                child: SegmentedButton<TransactionType>(
-                  showSelectedIcon: false,
-                  style: SegmentedButton.styleFrom(
-                    selectedBackgroundColor: amountColor.withValues(
-                      alpha: 0.18,
-                    ),
-                    selectedForegroundColor: amountInk,
-                  ),
-                  segments: const [
-                    ButtonSegment(
-                      value: TransactionType.expense,
-                      icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
-                      label: Text('Expense'),
-                    ),
-                    ButtonSegment(
-                      value: TransactionType.deposit,
-                      icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
-                      label: Text('Deposit'),
-                    ),
-                  ],
-                  selected: {_type},
-                  // Locked when linked: the type is what makes it a
-                  // contribution or a withdrawal.
-                  onSelectionChanged: linked
-                      ? null
-                      : (set) {
-                          if (set.isNotEmpty) _setType(set.first);
-                        },
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Amount. Only this field and the save button read the typed
-              // figure, so only they rebuild as it is typed: a `setState`
-              // listener on the controller rebuilt the whole sheet per
-              // keystroke, which also made its heavy GlassSurface re-blur a
-              // window-sized backdrop for every character.
-              ListenableBuilder(
-                listenable: _amountController,
-                builder: (context, _) => VoyagerTextField(
-                  controller: _amountController,
-                  autofocus: widget.autofocus && widget.existing == null,
-                  accentColor: amountInk,
-                  cursorColor: amountColor,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    AmountInputFormatter(),
-                    // Bounded so a long paste can't reach the range where
-                    // double.parse returns Infinity.
-                    LengthLimitingTextInputFormatter(12),
-                  ],
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: amountInk,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Amount',
-                    prefixText: r'$ ',
-                    errorText: _amountError,
-                  ),
-                  // Enter walks Amount → Store/Source → Note → Tags, and Enter
-                  // in Tags saves.
-                  onSubmitted: (_) => _originFocusNode.requestFocus(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Store / Source
-              FinanceOriginField(
-                controller: _originController,
-                focusNode: _originFocusNode,
-                // Watched, so a row deleted or restored while the sheet is
-                // open reaches the list without reopening it.
-                origins: recentTransactionOrigins(
-                  ref.watch(transactionsProvider.settled).valueOrNull ??
-                      const [],
-                  _type,
-                  DateTime.now(),
-                ),
-                label: isDeposit ? 'Source' : 'Store',
-                hintText: isDeposit ? 'Employer' : 'Walmart',
-                accentColor: accent,
-                onSubmitted: (_) => _noteFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: 16),
-              // Note
-              VoyagerTextField(
-                controller: _noteController,
-                focusNode: _noteFocusNode,
-                accentColor: accent,
-                decoration: InputDecoration(
-                  labelText: 'Note',
-                  hintText: isDeposit ? 'Paycheque' : 'Toothpaste',
-                ),
-                onSubmitted: (_) => _tagsFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: 16),
-              // Tags
-              VoyagerTextField(
-                controller: _tagsController,
-                focusNode: _tagsFocusNode,
-                accentColor: accent,
-                tagScope: TagScope.finance,
-                decoration: const InputDecoration(
-                  labelText: 'Tags',
-                  hintText: '#groceries #travel',
-                ),
-                // Only reached with the tag popup closed — an open popup takes
-                // Enter for its suggestion. _save refuses an invalid form.
-                onSubmitted: (_) => _save(),
-              ),
-              const SizedBox(height: 16),
-              // Date
-              Row(
-                children: [
-                  Text(
-                    'Date',
-                    style: theme.textTheme.labelLarge?.copyWith(
+                    'Linked to a contribution room. Amount, date and note '
+                    'changes update it too; update the asset for its value.',
+                    style: theme.textTheme.labelSmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const Spacer(),
-                  Builder(
-                    builder: (buttonContext) => SelectorPill(
-                      icon: PhosphorIconsRegular.calendar,
-                      label: _formatDate(_date),
-                      isActive: _datePopoverOpen,
-                      accentColor: accent,
-                      onTap: () => _pickDate(buttonContext),
+                  const SizedBox(height: 4),
+                ],
+                const SizedBox(height: 12),
+                // Expense / Deposit toggle. Inside the text fields' tap region,
+                // so a click on it doesn't count as a click outside the focused
+                // field: "click Deposit, type the amount" keeps typing into
+                // Amount instead of dropping focus (the button never takes it).
+                TextFieldTapRegion(
+                  child: SegmentedButton<TransactionType>(
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(
+                      selectedBackgroundColor: amountColor.withValues(
+                        alpha: 0.18,
+                      ),
+                      selectedForegroundColor: amountInk,
+                    ),
+                    segments: const [
+                      ButtonSegment(
+                        value: TransactionType.expense,
+                        icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
+                        label: Text('Expense'),
+                      ),
+                      ButtonSegment(
+                        value: TransactionType.deposit,
+                        icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
+                        label: Text('Deposit'),
+                      ),
+                    ],
+                    selected: {_type},
+                    // Locked when linked: the type is what makes it a
+                    // contribution or a withdrawal.
+                    onSelectionChanged: linked
+                        ? null
+                        : (set) {
+                            if (set.isNotEmpty) _setType(set.first);
+                          },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Amount. Only this field and the save button read the typed
+                // figure, so only they rebuild as it is typed: a `setState`
+                // listener on the controller rebuilt the whole sheet per
+                // keystroke, which also made its heavy GlassSurface re-blur a
+                // window-sized backdrop for every character.
+                ListenableBuilder(
+                  listenable: _amountController,
+                  builder: (context, _) => VoyagerTextField(
+                    controller: _amountController,
+                    autofocus: widget.autofocus && widget.existing == null,
+                    accentColor: amountInk,
+                    cursorColor: amountColor,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      AmountInputFormatter(),
+                      // Bounded so a long paste can't reach the range where
+                      // double.parse returns Infinity.
+                      LengthLimitingTextInputFormatter(12),
+                    ],
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: amountInk,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Amount',
+                      prefixText: r'$ ',
+                      errorText: _amountError,
+                    ),
+                    // Enter walks Amount → Store/Source → Note → Tags, and Enter
+                    // in Tags saves.
+                    onSubmitted: (_) => _originFocusNode.requestFocus(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Store / Source
+                FinanceOriginField(
+                  controller: _originController,
+                  focusNode: _originFocusNode,
+                  // Watched, so a row deleted or restored while the sheet is
+                  // open reaches the list without reopening it.
+                  origins: recentTransactionOrigins(
+                    ref.watch(transactionsProvider.settled).valueOrNull ??
+                        const [],
+                    _type,
+                    DateTime.now(),
+                  ),
+                  label: isDeposit ? 'Source' : 'Store',
+                  hintText: isDeposit ? 'Employer' : 'Walmart',
+                  accentColor: accent,
+                  onSubmitted: (_) => _noteFocusNode.requestFocus(),
+                ),
+                const SizedBox(height: 16),
+                // Note
+                VoyagerTextField(
+                  controller: _noteController,
+                  focusNode: _noteFocusNode,
+                  accentColor: accent,
+                  decoration: InputDecoration(
+                    labelText: 'Note',
+                    hintText: isDeposit ? 'Paycheque' : 'Toothpaste',
+                  ),
+                  onSubmitted: (_) => _tagsFocusNode.requestFocus(),
+                ),
+                const SizedBox(height: 16),
+                // Tags
+                VoyagerTextField(
+                  controller: _tagsController,
+                  focusNode: _tagsFocusNode,
+                  accentColor: accent,
+                  tagScope: TagScope.finance,
+                  decoration: const InputDecoration(
+                    labelText: 'Tags',
+                    hintText: '#groceries #travel',
+                  ),
+                  // Only reached with the tag popup closed — an open popup takes
+                  // Enter for its suggestion. _save refuses an invalid form.
+                  onSubmitted: (_) => _save(),
+                ),
+                const SizedBox(height: 16),
+                // Date
+                Row(
+                  children: [
+                    Text(
+                      'Date',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(),
+                    Builder(
+                      builder: (buttonContext) => SelectorPill(
+                        icon: PhosphorIconsRegular.calendar,
+                        label: _formatDate(_date),
+                        isActive: _datePopoverOpen,
+                        accentColor: accent,
+                        onTap: () => _pickDate(buttonContext),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_saveError != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _saveError!,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.error,
                     ),
                   ),
                 ],
-              ),
-              // Mounted even with no error, so its height is reported as
-              // zero and the floater's window shrinks back by it.
-              _reportSaveErrorHeight(
-                _saveError == null
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          _saveError!,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.error,
-                          ),
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 24),
-              ListenableBuilder(
-                listenable: _amountController,
-                builder: (context, _) => GlassButton(
-                  onPressed: _parsedCents != null && !_saving ? _save : null,
-                  label: widget.existing == null ? 'Add' : 'Save',
-                  color: amountColor,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                const SizedBox(height: 24),
+                ListenableBuilder(
+                  listenable: _amountController,
+                  builder: (context, _) => GlassButton(
+                    onPressed: _parsedCents != null && !_saving ? _save : null,
+                    label: widget.existing == null ? 'Add' : 'Save',
+                    color: amountColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -746,13 +740,13 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 
-  /// Wraps the failed-save line in its height report, for the floater; the
-  /// sheet, which scrolls inside a window it doesn't own, wants none.
-  Widget _reportSaveErrorHeight(Widget child) {
-    final onHeight = widget.onSaveErrorHeight;
+  /// Wraps the form in its height report, for the floater; the sheet, which
+  /// scrolls inside a window it doesn't own, wants none.
+  Widget _reportHeight(Widget child) {
+    final onHeight = widget.onHeight;
     return onHeight == null
         ? child
-        : _ReportHeight(onHeight: onHeight, child: child);
+        : ReportHeight(onHeight: onHeight, child: child);
   }
 
   String _formatDate(DateTime d) {
@@ -763,43 +757,5 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       return 'Yesterday';
     }
     return DateFormat('MMM d, yyyy').format(d);
-  }
-}
-
-/// Reports its child's height after every layout that changes it.
-///
-/// Measured in the render tree rather than from a build because the failed
-/// save that grows it is a `setState` deep inside the form, and reported off
-/// the frame rather than in a post-frame callback because the listener resizes
-/// the OS window: Win32's `SetWindowPlacement` pumps the message loop, which
-/// re-enters Flutter's frame, and that asserts from anywhere inside one.
-class _ReportHeight extends SingleChildRenderObjectWidget {
-  const _ReportHeight({required this.onHeight, required super.child});
-
-  final ValueChanged<double> onHeight;
-
-  @override
-  _RenderReportHeight createRenderObject(BuildContext context) =>
-      _RenderReportHeight(onHeight);
-
-  @override
-  void updateRenderObject(BuildContext context, _RenderReportHeight box) =>
-      box.onHeight = onHeight;
-}
-
-class _RenderReportHeight extends RenderProxyBox {
-  _RenderReportHeight(this.onHeight);
-
-  ValueChanged<double> onHeight;
-  double? _reported;
-
-  @override
-  void performLayout() {
-    super.performLayout();
-    if (size.height == _reported) return;
-    _reported = size.height;
-    Timer.run(() {
-      if (attached) onHeight(size.height);
-    });
   }
 }

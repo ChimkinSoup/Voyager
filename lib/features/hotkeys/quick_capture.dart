@@ -8,7 +8,8 @@ enum QuickCaptureKind {
   todo('/todo'),
   journal('/journal'),
   finance('/finance'),
-  reminder(null);
+  reminder(null),
+  calendar('/calendar');
 
   const QuickCaptureKind(this.path);
 

@@ -228,6 +228,8 @@ This is simpler than append-only sections or CRDT merge and matches “plain pas
 
 Always-on-top window hosting the **full** existing transaction entry flow (`showFinanceTransactionModal` field set and validation): expense/deposit, amount, store/source, note, tags, date; last-used store/tag suggestions unchanged in spirit.
 
+The window opens at the empty form's height and then follows the height the form reports (`FloaterController.setHeight`): the amount's error line and a failed save's message grow it, and it shrinks back when they clear (updated 2026-10-16; the amount error's room used to be reserved).
+
 ### 7.2 Draft & dismiss
 
 - Click-outside: dismiss, **keep** in-memory draft for next open.
@@ -251,11 +253,28 @@ Centered always-on-top window hosting the Inbox's **“New reminder”** editor 
 
 - **No draft**: a reminder is a short one-shot form, so click-outside/replace discards what was typed and the next open starts fresh.
 - Successful save: “Reminder added” confirmation over the floater, then dismiss.
-- Window height is fixed, with room reserved for the validation line; a device list longer than one row scrolls inside it.
+- The window opens at the default form's height and then follows the height the form reports (`FloaterController.setHeight`): the validation line on Create, a weekly rule's day pills and devices that wrap to another row all grow it (updated 2026-10-16). It only scrolls if the form outgrows the screen.
 
 ### 7a.3 In-app path (main focused)
 
 No page owns reminders, so there is **no navigation**: sheets and dialogs over the app are cleared and the same editor opens over whatever page is showing (`AppShell` listens for the request). The floater's icon does the same, after showing the main window.
+
+## 7b. Calendar floater (added 2026-10-16)
+
+### 7b.1 UI
+
+Centered always-on-top window hosting the calendar's **new-event panel** (`CalendarEventPanel`) — the one the calendar toolbar's **Add event** opens — with the floater's app icon and “New event” in the headroom opposite the close ✕. Defaults match that button: **today, all day**, in the calendar the calendar page last had open (the default calendar while it shows all calendars). Title focused.
+
+### 7b.2 Draft & dismiss
+
+- **No draft**, like the reminder floater: click-outside/replace/Cancel discards what was typed and the next open starts fresh. (The in-app popover saves a valid form on click-outside; the floater does not, since losing focus to another app is not a decision to save.)
+- Successful save: “Event added” confirmation over the floater, then dismiss. A bell set in the panel is saved with the event.
+- The window follows the height the panel reports (`FloaterController.setHeight`). Save with an empty title grows it by the “Title cannot be empty” line; the next keystroke clears the line and shrinks it back.
+- Each resize waits two DWM compositions (`DwmFlush`) before `SetWindowPos`, so the frame that changed the height is on screen first. Resized while that frame was still rasterizing, DWM stretched it to the new size, and the panel seemed to swell and snap back.
+
+### 7b.3 In-app path (main focused)
+
+Navigate to Calendar and open the new-event popover anchored to the toolbar's **Add event** button, exactly as clicking it would. The floater's icon does the same after showing the main window (what was typed in the floater is not carried over).
 
 ---
 
@@ -267,8 +286,9 @@ No page owns reminders, so there is **no navigation**: sheets and dialogs over t
 | Journal | `Ctrl+Alt+J` | Bottom-right notepad | Journal page + today’s QJE |
 | Finance | `Ctrl+Alt+F` | Full transaction floater | Finance page + transaction flow |
 | Reminder | `Ctrl+Alt+R` | “New reminder” editor | Editor over the current page |
+| Calendar | `Ctrl+Alt+C` | New-event panel | Calendar page + new-event popover |
 
-Settings continue to **display** combos as read-only on Windows; no editor in this work. Persist `financeHotkey` and `reminderHotkey` alongside existing journal/todo settings fields.
+Settings continue to **display** combos as read-only on Windows; no editor in this work. Persist `financeHotkey`, `reminderHotkey` and `calendarHotkey` alongside existing journal/todo settings fields.
 
 ---
 

@@ -331,6 +331,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
               todoHotkey: settings.todoHotkey,
               financeHotkey: settings.financeHotkey,
               reminderHotkey: settings.reminderHotkey,
+              calendarHotkey: settings.calendarHotkey,
               onHotkey: floaters.onHotkey,
             );
       if (mounted) ref.read(unavailableHotkeysProvider.notifier).state = taken;

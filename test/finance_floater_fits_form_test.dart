@@ -1,13 +1,8 @@
-// The finance floater's window is a fixed size the form cannot talk back to,
-// so the size has to be the form's own: room for the one line it routinely
-// grows by — the error under the amount field — and nothing beyond that, or it
-// opens above a band of dead background. Measured in the real theme and faces,
-// which is what the form is actually laid out in: the stock Material theme
-// puts the figure 50-odd pixels out.
-//
-// The failed-save line is the exception. Its message carries an exception
-// string, so no fixed height covers it; the form reports how tall it is and
-// the window grows by that instead of scrolling.
+// The finance floater's window opens at the form's own height, or it opens
+// above a band of dead background, and then follows the height the form
+// reports: the amount's error line and a failed save's message grow it.
+// Measured in the real theme and faces, which is what the form is actually
+// laid out in: the stock Material theme puts the figure 50-odd pixels out.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
@@ -54,8 +49,8 @@ void main() {
       await container.read(settingsProvider.future);
       await container.read(transactionsProvider.future);
 
-      // The failed-save line's height, as the floater would be told it.
-      var saveErrorHeight = 0.0;
+      // The form's height, as the floater would be told it.
+      var reportedHeight = 0.0;
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -68,7 +63,7 @@ void main() {
                 // Runs after the row is written, so this is the long
                 // "saved, but the step after it failed" message.
                 onSaved: (_) async => throw Exception('x' * 120),
-                onSaveErrorHeight: (h) => saveErrorHeight = h,
+                onHeight: (h) => reportedHeight = h,
                 leading: const FloaterAppIcon(
                   PhosphorIconsRegular.wallet,
                   size: 20,
@@ -83,27 +78,30 @@ void main() {
       double formHeight() =>
           tester.getRect(find.byType(GlassButton)).bottom + _bottomPadding;
 
-      // An amount over the cap puts the error line under the field: the
-      // tallest the form goes on its own, and the window's own height.
+      // The window opens at the empty form's height, to the pixel, and what
+      // the form reports is the whole of it.
+      expect(formHeight(), lessThanOrEqualTo(kFinanceFloaterSize.height));
+      expect(kFinanceFloaterSize.height - formHeight(), lessThan(1.0));
+      expect(reportedHeight, closeTo(formHeight(), 0.01));
+      final opened = reportedHeight;
+
+      // An amount over the cap puts the error line under the field, and the
+      // reported height grows to take it in.
       await tester.enterText(find.byType(EditableText).first, '999999999.99');
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Max ${formatCents(kMaxAmountCents)}'), findsOneWidget);
-      expect(formHeight(), kFinanceFloaterSize.height);
+      expect(reportedHeight, greaterThan(opened));
+      expect(reportedHeight, closeTo(formHeight(), 0.01));
 
-      // Without it the form is that one line short of the window, and no more:
-      // the line's room is reserved, nothing else is.
+      // A valid amount takes it away again.
       await tester.enterText(find.byType(EditableText).first, '12.50');
       await tester.pump();
-      expect(formHeight(), lessThan(kFinanceFloaterSize.height));
-      expect(
-        kFinanceFloaterSize.height - formHeight(),
-        lessThanOrEqualTo(24.0),
-      );
-      expect(saveErrorHeight, 0);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(reportedHeight, opened);
 
-      // A failed save adds a message of no predictable height. It overflows
-      // the window, and the reported height is what the window grows by, so
-      // the form still does not have to scroll.
+      // A failed save adds a message of no predictable height, which the
+      // reported height takes in too.
       await tester.tap(find.text('Add'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
@@ -111,12 +109,8 @@ void main() {
         find.textContaining('Saved, but the step after it failed'),
         findsOneWidget,
       );
-      expect(formHeight(), greaterThan(kFinanceFloaterSize.height));
-      expect(saveErrorHeight, greaterThan(0));
-      expect(
-        formHeight(),
-        lessThanOrEqualTo(kFinanceFloaterSize.height + saveErrorHeight),
-      );
+      expect(reportedHeight, greaterThan(opened));
+      expect(reportedHeight, closeTo(formHeight(), 0.01));
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

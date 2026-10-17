@@ -369,6 +369,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                             ),
                           ),
                         ),
+                        ListTile(
+                          title: const Text('Calendar hotkey'),
+                          subtitle: _HotkeySubtitle(
+                            settings.calendarHotkey,
+                            taken: takenHotkeys.contains(
+                              QuickCaptureKind.calendar,
+                            ),
+                          ),
+                        ),
                         const _LaunchAtLoginTile(),
                       ],
                       if (isAndroid)

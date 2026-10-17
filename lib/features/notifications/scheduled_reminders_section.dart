@@ -19,6 +19,7 @@ import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/report_height.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -570,16 +571,19 @@ Future<void> showScheduledReminderEditor(
 /// close button and after a save alike, and [onSaved] runs in between once
 /// the rule is written.
 ///
-/// [leading] goes before the title.
+/// [leading] goes before the title. [onHeight] reports the form's height,
+/// for the floater's window to be sized to it.
 Widget scheduledReminderForm({
   required VoidCallback onClose,
   VoidCallback? onSaved,
   Widget? leading,
+  ValueChanged<double>? onHeight,
 }) {
   return _ScheduledReminderEditor(
     onClose: onClose,
     onSaved: onSaved,
     leading: leading,
+    onHeight: onHeight,
   );
 }
 
@@ -589,6 +593,7 @@ class _ScheduledReminderEditor extends ConsumerStatefulWidget {
     this.onClose,
     this.onSaved,
     this.leading,
+    this.onHeight,
   });
 
   final ScheduledReminderRule? existing;
@@ -601,6 +606,9 @@ class _ScheduledReminderEditor extends ConsumerStatefulWidget {
 
   /// See [scheduledReminderForm].
   final Widget? leading;
+
+  /// See [scheduledReminderForm]. Null in the dialog.
+  final ValueChanged<double>? onHeight;
 
   @override
   ConsumerState<_ScheduledReminderEditor> createState() =>
@@ -817,6 +825,14 @@ class _ScheduledReminderEditorState
     _close();
   }
 
+  /// Wraps the floater's form in its height report.
+  Widget _reportHeight(Widget child) {
+    final onHeight = widget.onHeight;
+    return onHeight == null
+        ? child
+        : ReportHeight(onHeight: onHeight, child: child);
+  }
+
   void _close() {
     final onClose = widget.onClose;
     if (onClose == null) {
@@ -833,9 +849,10 @@ class _ScheduledReminderEditorState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final existing = widget.existing;
-    final devices =
-        ref.watch(deviceRegistrationsProvider.settled).valueOrNull ??
-        const <DeviceRegistration>[];
+    final loadedDevices = ref
+        .watch(deviceRegistrationsProvider.settled)
+        .valueOrNull;
+    final devices = loadedDevices ?? const <DeviceRegistration>[];
     final thisDeviceId = ref.watch(deviceIdProvider);
 
     final timeLabel = _kind == ReminderScheduleKind.once
@@ -985,7 +1002,9 @@ class _ScheduledReminderEditorState
                 ),
             ],
           ),
-          if (devices.isEmpty)
+          // Not while the list loads: shown for the frames before it
+          // arrives, the line made the floater's window jump.
+          if (loadedDevices != null && loadedDevices.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
@@ -1081,59 +1100,61 @@ class _ScheduledReminderEditorState
     } else {
       // The floater window is the dialog's surface: same form at the same
       // width, with the title row and the actions the dialog draws for it
-      // laid out flush to the window instead. Everything scrolls together, so
-      // a weekly rule's day pills or a long device list grow inside a window
-      // whose height is fixed.
+      // laid out flush to the window instead. The window is sized to the
+      // form through [onHeight]; it only scrolls when the form outgrows the
+      // screen.
       body = VoyagerScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            _kTogglePadding,
-            12,
-            _kTogglePadding,
-            20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: _kTogglePadding,
-                ),
-                child: Row(
-                  children: [
-                    if (widget.leading case final leading?) ...[
-                      leading,
-                      const SizedBox(width: 8),
-                    ],
-                    Text('New reminder', style: theme.textTheme.titleMedium),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _close,
-                      icon: const Icon(PhosphorIconsRegular.x, size: 18),
-                      tooltip: 'Close',
-                      padding: EdgeInsets.zero,
-                      constraints: kMinTouchTarget,
-                    ),
-                  ],
-                ),
-              ),
-              form,
-              ...footer,
-              Padding(
-                padding: const EdgeInsets.fromLTRB(_kTogglePadding, 8, 0, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    for (final action in actions)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: action,
+        child: _reportHeight(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              _kTogglePadding,
+              12,
+              _kTogglePadding,
+              20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: _kTogglePadding,
+                  ),
+                  child: Row(
+                    children: [
+                      if (widget.leading case final leading?) ...[
+                        leading,
+                        const SizedBox(width: 8),
+                      ],
+                      Text('New reminder', style: theme.textTheme.titleMedium),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: _close,
+                        icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                        tooltip: 'Close',
+                        padding: EdgeInsets.zero,
+                        constraints: kMinTouchTarget,
                       ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                form,
+                ...footer,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(_kTogglePadding, 8, 0, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      for (final action in actions)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: action,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );

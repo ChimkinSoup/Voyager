@@ -220,10 +220,78 @@ class FloaterWindow {
     await frame();
   }
 
-  /// Resizes a borrowed window in place, keeping [anchor]'s edge fixed.
-  void resize(Size size, FloaterAnchor anchor) {
+  /// Resizes a borrowed window in place: its top edge stays where it is — its
+  /// bottom edge for [FloaterAnchor.bottomRight] — and it stays centred on
+  /// itself across, so the floater's content never moves on screen and only
+  /// the far edge does.
+  ///
+  /// One `SetWindowPos`, not [_place]: the window is already restored and on
+  /// its monitor, so there is no placement to set. [_place]'s two calls showed
+  /// a frame at an in-between size, and its re-centring moved the whole
+  /// floater by half of every change.
+  ///
+  /// Completes once the engine has painted at the new size. Until then the
+  /// area a grow uncovers shows black — the engine can't paint while this
+  /// call holds its thread, and doesn't hold the resize back for a frame the
+  /// way it does a drag — so content that needs the room is best shown after,
+  /// in a frame that has the room to show it in.
+  Future<void> resize(Size size, FloaterAnchor anchor) async {
     if (!isBorrowed) return;
-    _place(_window, size, anchor);
+    final hwnd = _window;
+    final window = calloc<RECT>();
+    final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
+    try {
+      GetWindowRect(hwnd, window);
+      GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), info);
+      final scale = GetDpiForWindow(hwnd) / 96;
+      final (frameWidth, frameHeight) = _frameSize(hwnd);
+      final work = info.ref.rcWork;
+      final width = ((size.width * scale).round() + frameWidth)
+          .clamp(1, work.right - work.left)
+          .toInt();
+      // Up, so a form the window is sized to never scrolls by a fraction.
+      final height = ((size.height * scale).ceil() + frameHeight)
+          .clamp(1, work.bottom - work.top)
+          .toInt();
+      final old = window.ref;
+      final x = switch (anchor) {
+        FloaterAnchor.bottomRight => old.right - width,
+        _ => old.left + (old.right - old.left - width) ~/ 2,
+      };
+      final y = switch (anchor) {
+        FloaterAnchor.bottomRight => old.bottom - height,
+        _ => old.top,
+      };
+      final left = x.clamp(work.left, work.right - width).toInt();
+      final top = y.clamp(work.top, work.bottom - height).toInt();
+      if (left == old.left &&
+          top == old.top &&
+          width == old.right - old.left &&
+          height == old.bottom - old.top) {
+        return;
+      }
+      // A frame still on its way to the screen when the size changes is shown
+      // stretched or squashed to the new size: the content swells and snaps
+      // back. That's the frame that changed the form's height, rasterizing as
+      // this runs, so the change waits for it — one composition for it to be
+      // presented, one for it to be shown. The thread is held meanwhile, so
+      // no newer frame can start.
+      DwmFlush();
+      DwmFlush();
+      SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        left,
+        top,
+        width,
+        height,
+        SWP_NOACTIVATE,
+      );
+    } finally {
+      free(window);
+      free(info);
+    }
+    await _paintedAt(_clientSize(_flutterView(hwnd)), resized: true);
   }
 
   /// Gives the window back.
@@ -503,26 +571,32 @@ class FloaterWindow {
       final workWidth = work.right - work.left;
       final workHeight = work.bottom - work.top;
       final margin = (24 * scale).round();
-      final width = (size.width * scale).round().clamp(1, workWidth).toInt();
-      final height = (size.height * scale).round().clamp(1, workHeight).toInt();
-      final (x, y) = switch (anchor) {
-        FloaterAnchor.upperCenter => (
-          work.left + (workWidth - width) ~/ 2,
-          work.top + (workHeight * 0.22).round(),
-        ),
-        FloaterAnchor.center => (
-          work.left + (workWidth - width) ~/ 2,
-          work.top + (workHeight - height) ~/ 2,
-        ),
-        FloaterAnchor.bottomRight => (
-          work.right - width - margin,
-          work.bottom - height - margin,
-        ),
-      };
-      final top = y.clamp(work.top, work.bottom - height).toInt();
+      final clientWidth = (size.width * scale).round();
+      final clientHeight = (size.height * scale).ceil();
+      ({int x, int top, int width, int height}) rectFor(int w, int h) {
+        final width = w.clamp(1, workWidth).toInt();
+        final height = h.clamp(1, workHeight).toInt();
+        final (x, y) = switch (anchor) {
+          FloaterAnchor.upperCenter => (
+            work.left + (workWidth - width) ~/ 2,
+            work.top + (workHeight * 0.22).round(),
+          ),
+          FloaterAnchor.center => (
+            work.left + (workWidth - width) ~/ 2,
+            work.top + (workHeight - height) ~/ 2,
+          ),
+          FloaterAnchor.bottomRight => (
+            work.right - width - margin,
+            work.bottom - height - margin,
+          ),
+        };
+        final top = y.clamp(work.top, work.bottom - height).toInt();
+        return (x: x, top: top, width: width, height: height);
+      }
 
       // Un-maximizes (a maximized window ignores size changes) and shows, in
       // one call. rcNormalPosition is in workspace coordinates.
+      final first = rectFor(clientWidth, clientHeight);
       final monitorRect = info.ref.rcMonitor;
       final offsetX = work.left - monitorRect.left;
       final offsetY = work.top - monitorRect.top;
@@ -530,21 +604,57 @@ class FloaterWindow {
         ..showCmd = SW_SHOWNORMAL
         ..flags = 0;
       placement.ref.rcNormalPosition
-        ..left = x - offsetX
-        ..top = top - offsetY
-        ..right = x - offsetX + width
-        ..bottom = top - offsetY + height;
+        ..left = first.x - offsetX
+        ..top = first.top - offsetY
+        ..right = first.x - offsetX + first.width
+        ..bottom = first.top - offsetY + first.height;
       SetWindowPlacement(hwnd, placement);
+      // [size] is the client area the floater is laid out in, but these calls
+      // size the whole window, frame included: the resize border left around
+      // the hidden title bar (16x9 px at 200%) came off the floater's content,
+      // and pushed a panel sized to the pixel past the window's bottom edge.
+      // Measured here, now that the window is restored and at this monitor's
+      // DPI, and added on.
+      final (frameWidth, frameHeight) = _frameSize(hwnd);
+      final rect = rectFor(
+        clientWidth + frameWidth,
+        clientHeight + frameHeight,
+      );
       // Again in screen coordinates, and after any WM_DPICHANGED the move to
       // another monitor raised: the runner resizes to Windows' suggested rect
       // there, which scales the size a second time.
-      SetWindowPos(hwnd, HWND_TOPMOST, x, top, width, height, SWP_SHOWWINDOW);
+      SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        rect.x,
+        rect.top,
+        rect.width,
+        rect.height,
+        SWP_SHOWWINDOW,
+      );
     } finally {
       free(point);
       free(info);
       free(dpiX);
       free(dpiY);
       free(placement);
+    }
+  }
+
+  /// How much wider and taller [hwnd]'s window is than its client area.
+  static (int, int) _frameSize(int hwnd) {
+    final window = calloc<RECT>();
+    final client = calloc<RECT>();
+    try {
+      GetWindowRect(hwnd, window);
+      GetClientRect(hwnd, client);
+      return (
+        (window.ref.right - window.ref.left) - client.ref.right,
+        (window.ref.bottom - window.ref.top) - client.ref.bottom,
+      );
+    } finally {
+      free(window);
+      free(client);
     }
   }
 

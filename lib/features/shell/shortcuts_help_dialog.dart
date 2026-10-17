@@ -20,6 +20,8 @@ List<ShortcutHelpSection> shortcutHelpSections(AppSettings settings) {
       (keys: settings.financeHotkey, action: 'Quick transaction'),
     if (settings.reminderHotkey.isNotEmpty)
       (keys: settings.reminderHotkey, action: 'Quick reminder'),
+    if (settings.calendarHotkey.isNotEmpty)
+      (keys: settings.calendarHotkey, action: 'Quick event'),
   ];
   final expandKey = switch (settings.snippetExpandKey) {
     SnippetExpandKey.tab => 'Tab',

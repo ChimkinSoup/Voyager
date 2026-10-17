@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/features/hotkeys/floaters/calendar_floater.dart';
 import 'package:voyager/features/hotkeys/floaters/finance_floater.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/journal_floater.dart';
@@ -106,6 +107,7 @@ class _FloaterSurface extends StatelessWidget {
                       QuickCaptureKind.journal => const JournalFloater(),
                       QuickCaptureKind.finance => const FinanceFloater(),
                       QuickCaptureKind.reminder => const ReminderFloater(),
+                      QuickCaptureKind.calendar => const CalendarFloater(),
                     },
                   ),
                 ),

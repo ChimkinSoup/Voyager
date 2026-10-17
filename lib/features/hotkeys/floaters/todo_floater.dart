@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -87,20 +89,28 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         legacyTodoListId;
   }
 
-  void _togglePanel(_Panel panel, int listCount) {
+  Future<void> _togglePanel(_Panel panel, int listCount) async {
     final next = _panel == panel ? null : panel;
-    setState(() => _panel = next);
-    ref.read(floaterControllerProvider).setExtraHeight(switch (next) {
-      null => 0,
+    final floaters = ref.read(floaterControllerProvider);
+    if (next == null) {
+      setState(() => _panel = null);
+      unawaited(floaters.setExtraHeight(0));
+      _titleFocus.requestFocus();
+      return;
+    }
+    // The window grows first and the panel comes after, into a window already
+    // painted at the new size: built in the frame the window grows in, the
+    // panel made that frame slow enough for the uncovered area to show black.
+    await floaters.setExtraHeight(switch (next) {
       _Panel.due => _datePanelHeight,
       _Panel.list => (listCount * _listRowHeight + 16).clamp(0, 320),
     });
-    if (next == null) _titleFocus.requestFocus();
+    if (mounted) setState(() => _panel = next);
   }
 
   void _closePanel() {
     setState(() => _panel = null);
-    ref.read(floaterControllerProvider).setExtraHeight(0);
+    unawaited(ref.read(floaterControllerProvider).setExtraHeight(0));
     _titleFocus.requestFocus();
   }
 

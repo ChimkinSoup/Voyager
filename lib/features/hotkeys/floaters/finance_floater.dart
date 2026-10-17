@@ -37,8 +37,8 @@ class _FinanceFloaterState extends ConsumerState<FinanceFloater> {
         );
       },
       onDraft: (draft) => storeFinanceCaptureDraft(container, draft),
-      onSaveErrorHeight: (height) =>
-          container.read(floaterControllerProvider).setExtraHeight(height),
+      onHeight: (height) =>
+          container.read(floaterControllerProvider).setHeight(height),
       leading: const FloaterAppIcon(PhosphorIconsRegular.wallet, size: 20),
     );
   }

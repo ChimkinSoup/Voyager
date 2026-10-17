@@ -14,31 +14,34 @@ import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// The finance floater's window: the width the same form has in the app's
-/// modal (see `showVoyagerModal`), and the transaction form's own height (506)
-/// plus the error line under the amount field (23).
+/// modal (see `showVoyagerModal`), and the height it opens at, the form's own.
 ///
-/// Its height is sized to the form rather than roomily, so it doesn't open
-/// above a band of empty background. The amount's error line has its room
-/// reserved rather than resizing the window, because it comes and goes
-/// mid-keystroke — every amount under a dollar passes through it — and a
-/// window that jumped while being typed into would be worse than the strip it
-/// saves. The failed-save line, which is rare and of no height that can be
-/// known in advance, does resize the window, through
-/// [FloaterController.setExtraHeight].
-/// `finance_floater_fits_form_test.dart` holds all of it to the real form.
-const kFinanceFloaterSize = Size(640, 529);
+/// The form reports its height and the window follows it, through
+/// [FloaterController.setHeight]: the amount's error line and a failed save's
+/// message grow the window, and it shrinks back when they go.
+/// `finance_floater_fits_form_test.dart` holds this to the real form.
+const kFinanceFloaterSize = Size(640, 506);
 
 /// The reminder floater's window: the editor's own width (see
-/// [kReminderFormWidth]) and the height of its default form — a daily rule
-/// with this device registered — plus the validation line under it (17).
+/// [kReminderFormWidth]) and the height it opens at, that of its default form
+/// — a daily rule with this device registered.
 ///
-/// Sized to the form rather than roomily, so it doesn't open above a band of
-/// empty background. The validation line has its room reserved because it is
-/// one Create away in the ordinary course of things and would otherwise push
-/// the buttons out of the window. Nothing resizes this window: what grows
-/// beyond that — more devices than fit a row — scrolls inside it.
-/// `reminder_floater_fits_form_test.dart` holds both figures to the real form.
-const kReminderFloaterSize = Size(kReminderFormWidth, 516);
+/// The form reports its height and the window follows it, through
+/// [FloaterController.setHeight]: a weekly rule's day pills, devices that
+/// wrap to another row and the validation line all grow the window.
+/// `reminder_floater_fits_form_test.dart` holds this to the real form.
+const kReminderFloaterSize = Size(kReminderFormWidth, 499);
+
+/// The calendar floater's window: the width the same panel has in the
+/// calendar's popover, and the height it opens at, the panel's for a new
+/// all-day event.
+///
+/// The panel reports its height and the window follows it, through
+/// [FloaterController.setHeight]: the empty-title line grows the window, and
+/// it shrinks back on the next keystroke. The date picker, the tallest thing
+/// the panel opens, fits in the window.
+/// `calendar_floater_fits_form_test.dart` holds this to the real panel.
+const kCalendarFloaterSize = Size(384, 420.4);
 
 /// Routes global hotkeys and owns the floater lifecycle.
 ///
@@ -79,11 +82,9 @@ class FloaterController extends ChangeNotifier with WindowListener {
       switch (kind) {
         QuickCaptureKind.todo => Size(680, 68 + extraHeight),
         QuickCaptureKind.journal => const Size(380, 320),
-        QuickCaptureKind.finance => Size(
-          kFinanceFloaterSize.width,
-          kFinanceFloaterSize.height + extraHeight,
-        ),
+        QuickCaptureKind.finance => kFinanceFloaterSize,
         QuickCaptureKind.reminder => kReminderFloaterSize,
+        QuickCaptureKind.calendar => kCalendarFloaterSize,
       };
 
   static FloaterAnchor _anchorFor(QuickCaptureKind kind) => switch (kind) {
@@ -91,6 +92,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
     QuickCaptureKind.journal => FloaterAnchor.bottomRight,
     QuickCaptureKind.finance => FloaterAnchor.center,
     QuickCaptureKind.reminder => FloaterAnchor.center,
+    QuickCaptureKind.calendar => FloaterAnchor.center,
   };
 
   /// Operations run one at a time: a blur, a hotkey and a save can all land
@@ -200,12 +202,35 @@ class FloaterController extends ChangeNotifier with WindowListener {
   });
 
   /// For content that needs more room than the floater's own height — the
-  /// todo bar's date and list pickers, the finance form's failed-save line.
-  void setExtraHeight(double extraHeight) {
+  /// todo bar's date and list pickers.
+  ///
+  /// Completes once the window has been painted at its new size.
+  Future<void> setExtraHeight(double extraHeight) async {
     final kind = _active;
     if (kind == null) return;
-    _window.resize(_sizeFor(kind, extraHeight), _anchorFor(kind));
+    await _window.resize(_sizeFor(kind, extraHeight), _anchorFor(kind));
   }
+
+  /// Sizes the window to a form's height, which the finance, reminder and
+  /// calendar floaters report as it changes. Queued behind the floater's
+  /// opening, which lays the form out — and so reports it — before the
+  /// window is on screen. Each resize takes the latest height reported, so a
+  /// height the form only passed through as it built is never shown.
+  Future<void> setHeight(double height) {
+    _height = height;
+    return _serial(() async {
+      final kind = _active;
+      final height = _height;
+      _height = null;
+      if (kind == null || height == null) return;
+      await _window.resize(
+        Size(_sizeFor(kind, 0).width, height),
+        _anchorFor(kind),
+      );
+    });
+  }
+
+  double? _height;
 
   /// The open floater's pending-edit flush, run before it is dismissed or
   /// replaced.

@@ -1,13 +1,11 @@
-// The reminder floater's window is a fixed size the form cannot talk back to,
-// so the size has to be the form's own: the editor at its default — a daily
-// rule, this device registered, no validation line — with nothing left over,
-// or it opens above a band of dead background. Measured in the real theme and
-// faces, which is what the form is actually laid out in.
+// The reminder floater's window is sized to the form: the editor at its
+// default — a daily rule, this device registered, no validation line — with
+// nothing left over, or it opens above a band of dead background. Measured in
+// the real theme and faces, which is what the form is actually laid out in.
 //
-// The validation line under the form is the exception, and has its room
-// reserved: it is one Create away in the ordinary course of things, and it
-// would push the buttons out of a window sized without it. What the form grows
-// by beyond that — more devices than fit a row — scrolls inside the window.
+// The validation line under the form is not reserved: the form reports its
+// height and the window grows by that. What the form grows by beyond that —
+// more devices than fit a row — scrolls inside the window.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
@@ -69,6 +67,8 @@ void main() {
       await container.read(settingsProvider.future);
       await container.read(deviceRegistrationsProvider.future);
 
+      // The form's height, as the floater would be told it.
+      var reportedHeight = 0.0;
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -81,6 +81,7 @@ void main() {
                   PhosphorIconsRegular.bellRinging,
                   size: 20,
                 ),
+                onHeight: (h) => reportedHeight = h,
               ),
             ),
           ),
@@ -92,20 +93,21 @@ void main() {
           tester.getRect(find.widgetWithText(GlassButton, 'Create')).bottom +
           _bottomPadding;
 
-      // The default form is that one line short of the window, and no more: the
-      // validation line's room is reserved, nothing else is.
-      expect(formHeight(), lessThan(kReminderFloaterSize.height));
-      expect(
-        kReminderFloaterSize.height - formHeight(),
-        lessThanOrEqualTo(24.0),
-      );
+      // The window opens at the default form's height, to the pixel, and
+      // what the form reports is the whole of it.
+      expect(formHeight(), lessThanOrEqualTo(kReminderFloaterSize.height));
+      expect(kReminderFloaterSize.height - formHeight(), lessThan(1.0));
+      expect(reportedHeight, closeTo(formHeight(), 0.01));
+      final opened = reportedHeight;
 
-      // Create with an empty title puts the validation line above the buttons:
-      // the tallest the form goes on its own, and the window's own height.
+      // Create with an empty title puts the validation line above the
+      // buttons, and the reported height grows to take it in.
       await tester.tap(find.widgetWithText(GlassButton, 'Create'));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Give the reminder a title'), findsOneWidget);
-      expect(formHeight(), kReminderFloaterSize.height);
+      expect(reportedHeight, greaterThan(opened));
+      expect(reportedHeight, closeTo(formHeight(), 0.01));
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

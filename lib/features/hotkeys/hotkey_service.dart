@@ -13,12 +13,13 @@ final unavailableHotkeysProvider = StateProvider<Set<QuickCaptureKind>>(
 );
 
 abstract class HotkeyService {
-  /// Registers the four hotkeys and returns the ones another app holds.
+  /// Registers the five hotkeys and returns the ones another app holds.
   Future<Set<QuickCaptureKind>> register({
     required String journalHotkey,
     required String todoHotkey,
     required String financeHotkey,
     required String reminderHotkey,
+    required String calendarHotkey,
     required void Function(QuickCaptureKind kind) onHotkey,
   });
 
@@ -42,6 +43,7 @@ class WindowsHotkeyService implements HotkeyService {
     required String todoHotkey,
     required String financeHotkey,
     required String reminderHotkey,
+    required String calendarHotkey,
     required void Function(QuickCaptureKind kind) onHotkey,
   }) async {
     await dispose();
@@ -51,6 +53,7 @@ class WindowsHotkeyService implements HotkeyService {
       QuickCaptureKind.todo: todoHotkey,
       QuickCaptureKind.finance: financeHotkey,
       QuickCaptureKind.reminder: reminderHotkey,
+      QuickCaptureKind.calendar: calendarHotkey,
     };
     for (final MapEntry(key: kind, value: combo) in combos.entries) {
       final key = parseHotKey(combo);
@@ -119,6 +122,7 @@ class NoOpHotkeyService implements HotkeyService {
     required String todoHotkey,
     required String financeHotkey,
     required String reminderHotkey,
+    required String calendarHotkey,
     required void Function(QuickCaptureKind kind) onHotkey,
   }) async => const {};
 

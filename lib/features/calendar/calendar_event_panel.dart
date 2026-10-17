@@ -60,6 +60,7 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
     this.focusTitleOnOpen = false,
     this.initialIsFullDay = true,
     this.onToggleDone,
+    this.leading,
   });
 
   final CalendarEvent? event;
@@ -81,8 +82,33 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
   /// to all-day would throw away the only thing the tap said.
   final bool initialIsFullDay;
 
+  /// The calendar hotkey floater's icon, drawn opposite the close ✕ with a
+  /// "New event" label, in the headroom the ✕ already takes. Null in the
+  /// popover.
+  final Widget? leading;
+
   @override
   ConsumerState<CalendarEventPanel> createState() => _CalendarEventPanelState();
+}
+
+/// The new event a [CalendarEventPanel]'s save payload describes, as both the
+/// calendar page and the calendar hotkey floater create it.
+CalendarEvent newCalendarEventFromPanel(Map<String, dynamic> result) {
+  final now = utcNow();
+  return CalendarEvent(
+    // The panel names the new event, so a bell set on it lands on this row.
+    id: result['id'] as String,
+    calendarId: result['calendarId'] as String,
+    title: result['title'] as String,
+    start: result['start'] as DateTime,
+    end: result['end'] as DateTime,
+    isFullDay: result['isFullDay'] as bool,
+    colorValue: result['colorValue'] as int,
+    notes: result['notes'] as String,
+    recurrence: result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
+    createdAt: now,
+    updatedAt: now,
+  );
 }
 
 class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
@@ -371,7 +397,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
 
   void _discard() {
     _intentionalDiscard = true;
-    Navigator.of(context).pop();
+    widget.onCancel();
   }
 
   void _handleDismissPop() {
@@ -904,6 +930,19 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       clipBehavior: Clip.none,
       children: [
         CtrlEnterToSubmitScope(onSubmit: _submit, child: panel),
+        if (widget.leading case final leading?)
+          Positioned(
+            top: _kCloseButtonTop,
+            left: 14,
+            height: _kCloseButtonSize,
+            child: Row(
+              children: [
+                leading,
+                const SizedBox(width: 8),
+                Text('New event', style: baseTheme.textTheme.titleSmall),
+              ],
+            ),
+          ),
         Positioned(
           top: _kCloseButtonTop,
           right: 6,
