@@ -1110,7 +1110,7 @@ class _ScheduledReminderEditorState
               _kTogglePadding,
               12,
               _kTogglePadding,
-              20,
+              14,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

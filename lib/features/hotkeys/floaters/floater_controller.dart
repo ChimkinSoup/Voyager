@@ -80,7 +80,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
 
   static Size _sizeFor(QuickCaptureKind kind, double extraHeight) =>
       switch (kind) {
-        QuickCaptureKind.todo => Size(680, 68 + extraHeight),
+        QuickCaptureKind.todo => Size(680, 64 + extraHeight),
         QuickCaptureKind.journal => const Size(380, 320),
         QuickCaptureKind.finance => kFinanceFloaterSize,
         QuickCaptureKind.reminder => kReminderFloaterSize,

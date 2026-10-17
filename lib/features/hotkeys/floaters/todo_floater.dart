@@ -40,6 +40,13 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   _Panel? _panel;
   var _saving = false;
 
+  /// The bar's height: the whole window when no picker is open, measured
+  /// rather than taken from the 64 the window is asked for, since the
+  /// frameless frame still takes a few pixels of client area. Held while a
+  /// picker resizes the window, so the bar doesn't stretch into the room.
+  double _barHeight = 60;
+  var _resizing = false;
+
   /// Read off disk: the Todo page records list touches straight through the
   /// repository, so [settingsProvider] can lag them.
   String? _lastTouchedId;
@@ -89,19 +96,22 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         legacyTodoListId;
   }
 
+  Future<void> _setExtraHeight(double extraHeight) async {
+    _resizing = true;
+    await ref.read(floaterControllerProvider).setExtraHeight(extraHeight);
+    if (mounted) setState(() => _resizing = false);
+  }
+
   Future<void> _togglePanel(_Panel panel, int listCount) async {
     final next = _panel == panel ? null : panel;
-    final floaters = ref.read(floaterControllerProvider);
     if (next == null) {
-      setState(() => _panel = null);
-      unawaited(floaters.setExtraHeight(0));
-      _titleFocus.requestFocus();
+      _closePanel();
       return;
     }
     // The window grows first and the panel comes after, into a window already
     // painted at the new size: built in the frame the window grows in, the
     // panel made that frame slow enough for the uncovered area to show black.
-    await floaters.setExtraHeight(switch (next) {
+    await _setExtraHeight(switch (next) {
       _Panel.due => _datePanelHeight,
       _Panel.list => (listCount * _listRowHeight + 16).clamp(0, 320),
     });
@@ -109,8 +119,11 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   }
 
   void _closePanel() {
+    // Flagged before the rebuild below, which would otherwise measure the
+    // window before it has shrunk.
+    _resizing = true;
     setState(() => _panel = null);
-    unawaited(ref.read(floaterControllerProvider).setExtraHeight(0));
+    unawaited(_setExtraHeight(0));
     _titleFocus.requestFocus();
   }
 
@@ -231,105 +244,112 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         .firstOrNull;
     final due = draft.dueDate;
 
-    // Shorter than the window's 68: the frameless frame still takes a few
-    // pixels of client area.
-    final bar = SizedBox(
-      height: 60,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        child: Row(
-          children: [
-            const FloaterAppIcon(PhosphorIconsRegular.checkCircle, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-              child: VoyagerTextField(
-                controller: _title,
-                focusNode: _titleFocus,
-                autofocus: true,
-                accentColor: accent,
-                style: theme.textTheme.titleMedium,
-                decoration: const InputDecoration(
-                  hintText: 'Add a task',
-                  isDense: true,
-                ),
-                onSubmitted: (_) => _save(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SelectorPill(
-              icon: PhosphorIconsRegular.calendar,
-              label: due == null ? 'Due' : DateFormat.MMMd().format(due),
-              isActive: _panel == _Panel.due,
+    final bar = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Row(
+        children: [
+          const FloaterAppIcon(PhosphorIconsRegular.checkCircle, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: VoyagerTextField(
+              controller: _title,
+              focusNode: _titleFocus,
+              autofocus: true,
               accentColor: accent,
-              onTap: () => _togglePanel(_Panel.due, lists.length),
-            ),
-            const SizedBox(width: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 150),
-              child: SelectorPill(
-                icon: PhosphorIconsRegular.listBullets,
-                label: targetName ?? 'List',
-                isActive: _panel == _Panel.list,
-                accentColor: accent,
-                onTap: () => _togglePanel(_Panel.list, lists.length),
+              style: theme.textTheme.titleMedium,
+              decoration: const InputDecoration(
+                hintText: 'Add a task',
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
               ),
+              onSubmitted: (_) => _save(),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          SelectorPill(
+            icon: PhosphorIconsRegular.calendar,
+            label: due == null ? 'Due' : DateFormat.MMMd().format(due),
+            isActive: _panel == _Panel.due,
+            accentColor: accent,
+            onTap: () => _togglePanel(_Panel.due, lists.length),
+          ),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: SelectorPill(
+              icon: PhosphorIconsRegular.listBullets,
+              label: targetName ?? 'List',
+              isActive: _panel == _Panel.list,
+              accentColor: accent,
+              onTap: () => _togglePanel(_Panel.list, lists.length),
+            ),
+          ),
+        ],
       ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        bar,
-        if (_panel == _Panel.due)
-          Expanded(
-            child: Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: SizedBox(
-                      width: 320,
-                      child: DateSelectorPopover(
-                        initialStartDate: due ?? DateTime.now(),
-                        initialEndDate: due ?? DateTime.now(),
-                        singleDateMode: true,
-                        inlineMode: true,
-                        accentColor: accent,
-                        onDateSelected: _pickDue,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (_panel == null && !_resizing) _barHeight = constraints.maxHeight;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: _barHeight, child: bar),
+            if (_panel == _Panel.due)
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: SizedBox(
+                          width: 320,
+                          child: DateSelectorPopover(
+                            initialStartDate: due ?? DateTime.now(),
+                            initialEndDate: due ?? DateTime.now(),
+                            singleDateMode: true,
+                            inlineMode: true,
+                            accentColor: accent,
+                            onDateSelected: _pickDue,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    if (due != null)
+                      TextButton(
+                        onPressed: () => _pickDue(null),
+                        child: const Text('No due date'),
+                      ),
+                  ],
                 ),
-                if (due != null)
-                  TextButton(
-                    onPressed: () => _pickDue(null),
-                    child: const Text('No due date'),
+              ),
+            if (_panel == _Panel.list)
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
                   ),
-              ],
-            ),
-          ),
-        if (_panel == _Panel.list)
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              children: [
-                for (final list in lists)
-                  SizedBox(
-                    height: _listRowHeight,
-                    child: ListTile(
-                      dense: true,
-                      selected: list.id == targetId,
-                      selectedColor: accent,
-                      title: Text(list.name),
-                      onTap: () => _pickList(list.id),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
+                  children: [
+                    for (final list in lists)
+                      SizedBox(
+                        height: _listRowHeight,
+                        child: ListTile(
+                          dense: true,
+                          selected: list.id == targetId,
+                          selectedColor: accent,
+                          title: Text(list.name),
+                          onTap: () => _pickList(list.id),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

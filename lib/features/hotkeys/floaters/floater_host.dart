@@ -13,7 +13,7 @@ import 'package:voyager/features/hotkeys/quick_capture.dart';
 ///
 /// The app is never unmounted — its pages keep their state, drafts and
 /// editing sessions — only hidden, kept out of focus and its tickers, and
-/// laid out at the size it had before, so a 68px-tall window can't reflow
+/// laid out at the size it had before, so a 64px-tall window can't reflow
 /// it into the phone layout.
 class FloaterHost extends ConsumerStatefulWidget {
   const FloaterHost({super.key, required this.child});

@@ -533,7 +533,14 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       child: VoyagerScrollView(
         child: _reportHeight(
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            // The floater's bottom matches the other floaters' (the calendar
+            // panel's 14); the sheet keeps its own.
+            padding: EdgeInsets.fromLTRB(
+              20,
+              10,
+              20,
+              widget.onHeight == null ? 24 : 14,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
