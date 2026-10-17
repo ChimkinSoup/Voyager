@@ -180,10 +180,9 @@ packages:
   cloud_firestore:
     dependency: "direct main"
     description:
-      name: cloud_firestore
-      sha256: f0dba6cedc1e1c84bb811c32ce1343cde4f1aa796dc4b5d00344e16a5342aed0
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/cloud_firestore-6.6.0"
+      relative: true
+    source: path
     version: "6.6.0"
   cloud_firestore_platform_interface:
     dependency: "direct main"

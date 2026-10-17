@@ -169,6 +169,10 @@ dev_dependencies:
 # copy stays at the camera's zoom (lib/src/marker_cluster_layer.dart, marked
 # VOYAGER PATCH). Re-apply it if upgrading past 8.2.2.
 dependency_overrides:
+  # Patched: a transaction's server read no longer blocks the platform thread
+  # on Windows — see `VOYAGER PATCH` in windows/cloud_firestore_plugin.cpp.
+  cloud_firestore:
+    path: third_party/cloud_firestore-6.6.0
   firebase_auth:
     path: third_party/firebase_auth-6.5.3
   firebase_storage:
