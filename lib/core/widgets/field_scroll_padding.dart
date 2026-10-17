@@ -65,7 +65,7 @@ class VoyagerFieldScrollPhysics extends ScrollPhysics {
 ///
 /// The field passes every change to its text controller to
 /// [handleFieldChanged], which keeps the caret clear of the corner while
-/// typing.
+/// typing. The position lifts it too when the corner gets taller.
 class PastEndScrollController extends ScrollController {
   PastEndScrollController({
     required this.fieldKey,
@@ -78,6 +78,11 @@ class PastEndScrollController extends ScrollController {
 
   String _lastText;
   bool _liftScheduled = false;
+  bool _liftOnlyIfOnScreen = false;
+
+  /// The [pastEnd] the range was last laid out with. Read first at the first
+  /// layout, so a field built with its corner already up does not lift.
+  late double _laidOutPastEnd = pastEnd();
 
   /// After an edit, once the frame is laid out, lifts the caret above the
   /// bottom [pastEnd] pixels as far as the range allows. [EditableText]
@@ -88,7 +93,26 @@ class PastEndScrollController extends ScrollController {
   void handleFieldChanged(String text) {
     final edited = text != _lastText;
     _lastText = text;
-    if (!edited || _liftScheduled || pastEnd() <= 0) return;
+    if (edited) _scheduleLift(onlyIfOnScreen: false);
+  }
+
+  /// The same lift when the range is laid out with a taller [pastEnd] — an
+  /// image fan appearing over the line being typed, which comes with no edit
+  /// of its own. Unlike an edit, nothing has brought the caret into view
+  /// first, so a caret scrolled out of sight is left there rather than
+  /// pulling the text to it.
+  void _handleLaidOut(double pastEnd) {
+    if (pastEnd > _laidOutPastEnd) _scheduleLift(onlyIfOnScreen: true);
+    _laidOutPastEnd = pastEnd;
+  }
+
+  void _scheduleLift({required bool onlyIfOnScreen}) {
+    if (pastEnd() <= 0) return;
+    // An edit in the same frame has revealed the caret, so it lifts as one.
+    _liftOnlyIfOnScreen = _liftScheduled
+        ? _liftOnlyIfOnScreen && onlyIfOnScreen
+        : onlyIfOnScreen;
+    if (_liftScheduled) return;
     _liftScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _liftScheduled = false;
@@ -104,6 +128,10 @@ class PastEndScrollController extends ScrollController {
     if (!selection.isValid) return;
     final render = editable.renderEditable;
     final caret = render.getLocalRectForCaret(selection.extent);
+    if (_liftOnlyIfOnScreen &&
+        (caret.top < 0 || caret.bottom > render.size.height)) {
+      return;
+    }
     final overlap = caret.bottom - (render.size.height - pastEnd());
     final target = math.min(
       position.pixels + overlap,
@@ -153,6 +181,7 @@ class _PastEndScrollPosition extends ScrollPositionWithSingleContext {
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
     final pastEnd = _owner.pastEnd();
+    _owner._handleLaidOut(pastEnd);
     final room = pastEnd > 0 && hasViewportDimension
         ? _owner._roomForText()
         : null;

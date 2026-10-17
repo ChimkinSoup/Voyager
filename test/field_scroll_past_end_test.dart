@@ -143,4 +143,95 @@ void main() {
       expect(position.pixels, position.maxScrollExtent - 72);
     });
   });
+
+  group('the corner appearing', () {
+    Widget field(
+      TextEditingController controller,
+      FocusNode focusNode,
+      double pastEnd,
+    ) => ProviderScope(
+      child: MaterialApp(
+        home: VimEnabledScope(
+          enabled: false,
+          child: Scaffold(
+            body: SizedBox(
+              height: 300,
+              child: TagHighlightedTextField(
+                controller: controller,
+                focusNode: focusNode,
+                expands: true,
+                scrollPastEnd: pastEnd,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Future<ScrollPosition> pumpWithCaretAt(
+      WidgetTester tester,
+      TextEditingController controller,
+      FocusNode focusNode,
+      int offset,
+    ) async {
+      await tester.pumpWidget(field(controller, focusNode, 0));
+      focusNode.requestFocus();
+      controller.selection = TextSelection.collapsed(offset: offset);
+      await tester.pumpAndSettle();
+      return tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byType(EditableText),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position;
+    }
+
+    testWidgets('lifts a caret on the last line clear of it', (tester) async {
+      final text = _lines(40);
+      final controller = TextEditingController(text: text);
+      final focusNode = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+      final position = await pumpWithCaretAt(
+        tester,
+        controller,
+        focusNode,
+        text.length,
+      );
+      final maxBefore = position.maxScrollExtent;
+      expect(position.pixels, maxBefore);
+
+      await tester.pumpWidget(field(controller, focusNode, 72));
+      await tester.pumpAndSettle();
+
+      expect(position.maxScrollExtent, maxBefore + 72);
+      expect(position.pixels, maxBefore + 72);
+    });
+
+    testWidgets('leaves a caret scrolled out of sight where it is', (
+      tester,
+    ) async {
+      final text = _lines(40);
+      final controller = TextEditingController(text: text);
+      final focusNode = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+      final position = await pumpWithCaretAt(
+        tester,
+        controller,
+        focusNode,
+        text.length,
+      );
+      // Scrolled up to reread, the caret still on the last line below.
+      position.jumpTo(0);
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(field(controller, focusNode, 72));
+      await tester.pumpAndSettle();
+
+      expect(position.pixels, 0);
+    });
+  });
 }
