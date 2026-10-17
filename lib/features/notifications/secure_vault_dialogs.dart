@@ -302,14 +302,15 @@ class _VaultDialogState extends State<_VaultDialog> {
       ),
       actions: [
         if (widget.secondaryLabel case final label?)
-          TextButton(
+          GlassButton(
             onPressed: _busy
                 ? null
                 : () {
                     widget.onSecondary?.call();
                     Navigator.pop(context);
                   },
-            child: Text(label),
+            label: label,
+            dense: true,
           ),
         GlassButton(
           onPressed: () => Navigator.pop(context),
