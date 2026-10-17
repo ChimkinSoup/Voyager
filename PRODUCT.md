@@ -130,6 +130,9 @@ Developer tools · Settings. Plus a Login surface and the Windows hotkey popups.
 - Lazy loading at startup; older data pulls from the local database on demand.
 - `firebase_auth` is pinned to a local patched copy at `third_party/firebase_auth-6.5.3`
   to fix a Windows platform-thread violation; re-apply when upgrading.
+- `cloud_firestore` is pinned to a local patched copy at `third_party/cloud_firestore-6.6.0`
+  so a transaction's server read doesn't block the platform thread on Windows (it froze
+  the UI for a round trip on every settings save and note edit); re-apply when upgrading.
 - Custom fragment shader at `shaders/geometric_texture.frag` backs the textured canvas.
 
 **Explicitly undecided / incomplete:** remote sync currently covers journals, journal

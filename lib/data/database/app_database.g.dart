@@ -9685,6 +9685,28 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _inboxPinnedNoteOrderJsonMeta =
+      const VerificationMeta('inboxPinnedNoteOrderJson');
+  @override
+  late final GeneratedColumn<String> inboxPinnedNoteOrderJson =
+      GeneratedColumn<String>(
+        'inbox_pinned_note_order_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _inboxSecureNoteOrderJsonMeta =
+      const VerificationMeta('inboxSecureNoteOrderJson');
+  @override
+  late final GeneratedColumn<String> inboxSecureNoteOrderJson =
+      GeneratedColumn<String>(
+        'inbox_secure_note_order_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _showAnnualizedSubscriptionCostMeta =
       const VerificationMeta('showAnnualizedSubscriptionCost');
   @override
@@ -10297,6 +10319,8 @@ class $SettingsTableTable extends SettingsTable
     todoCompletedSectionExpanded,
     inboxLogStatsExpanded,
     inboxTrackerOrderJson,
+    inboxPinnedNoteOrderJson,
+    inboxSecureNoteOrderJson,
     showAnnualizedSubscriptionCost,
     jobsHiddenColumnsJson,
     jobsIncludeArchived,
@@ -11351,6 +11375,24 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('inbox_pinned_note_order_json')) {
+      context.handle(
+        _inboxPinnedNoteOrderJsonMeta,
+        inboxPinnedNoteOrderJson.isAcceptableOrUnknown(
+          data['inbox_pinned_note_order_json']!,
+          _inboxPinnedNoteOrderJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inbox_secure_note_order_json')) {
+      context.handle(
+        _inboxSecureNoteOrderJsonMeta,
+        inboxSecureNoteOrderJson.isAcceptableOrUnknown(
+          data['inbox_secure_note_order_json']!,
+          _inboxSecureNoteOrderJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('show_annualized_subscription_cost')) {
       context.handle(
         _showAnnualizedSubscriptionCostMeta,
@@ -12165,6 +12207,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}inbox_tracker_order_json'],
       ),
+      inboxPinnedNoteOrderJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}inbox_pinned_note_order_json'],
+      ),
+      inboxSecureNoteOrderJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}inbox_secure_note_order_json'],
+      ),
       showAnnualizedSubscriptionCost: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}show_annualized_subscription_cost'],
@@ -12509,6 +12559,12 @@ class SettingsTableData extends DataClass
 
   /// [AppSettings.inboxTrackerOrder] as a JSON list, null when empty.
   final String? inboxTrackerOrderJson;
+
+  /// [AppSettings.inboxPinnedNoteOrder] as a JSON list, null when empty.
+  final String? inboxPinnedNoteOrderJson;
+
+  /// [AppSettings.inboxSecureNoteOrder] as a JSON list, null when empty.
+  final String? inboxSecureNoteOrderJson;
   final bool showAnnualizedSubscriptionCost;
 
   /// Jobs table columns the user has switched off, as a JSON list of column
@@ -12718,6 +12774,8 @@ class SettingsTableData extends DataClass
     required this.todoCompletedSectionExpanded,
     required this.inboxLogStatsExpanded,
     this.inboxTrackerOrderJson,
+    this.inboxPinnedNoteOrderJson,
+    this.inboxSecureNoteOrderJson,
     required this.showAnnualizedSubscriptionCost,
     this.jobsHiddenColumnsJson,
     required this.jobsIncludeArchived,
@@ -13026,6 +13084,16 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || inboxTrackerOrderJson != null) {
       map['inbox_tracker_order_json'] = Variable<String>(inboxTrackerOrderJson);
     }
+    if (!nullToAbsent || inboxPinnedNoteOrderJson != null) {
+      map['inbox_pinned_note_order_json'] = Variable<String>(
+        inboxPinnedNoteOrderJson,
+      );
+    }
+    if (!nullToAbsent || inboxSecureNoteOrderJson != null) {
+      map['inbox_secure_note_order_json'] = Variable<String>(
+        inboxSecureNoteOrderJson,
+      );
+    }
     map['show_annualized_subscription_cost'] = Variable<bool>(
       showAnnualizedSubscriptionCost,
     );
@@ -13308,6 +13376,12 @@ class SettingsTableData extends DataClass
       inboxTrackerOrderJson: inboxTrackerOrderJson == null && nullToAbsent
           ? const Value.absent()
           : Value(inboxTrackerOrderJson),
+      inboxPinnedNoteOrderJson: inboxPinnedNoteOrderJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inboxPinnedNoteOrderJson),
+      inboxSecureNoteOrderJson: inboxSecureNoteOrderJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inboxSecureNoteOrderJson),
       showAnnualizedSubscriptionCost: Value(showAnnualizedSubscriptionCost),
       jobsHiddenColumnsJson: jobsHiddenColumnsJson == null && nullToAbsent
           ? const Value.absent()
@@ -13657,6 +13731,12 @@ class SettingsTableData extends DataClass
       inboxTrackerOrderJson: serializer.fromJson<String?>(
         json['inboxTrackerOrderJson'],
       ),
+      inboxPinnedNoteOrderJson: serializer.fromJson<String?>(
+        json['inboxPinnedNoteOrderJson'],
+      ),
+      inboxSecureNoteOrderJson: serializer.fromJson<String?>(
+        json['inboxSecureNoteOrderJson'],
+      ),
       showAnnualizedSubscriptionCost: serializer.fromJson<bool>(
         json['showAnnualizedSubscriptionCost'],
       ),
@@ -13957,6 +14037,12 @@ class SettingsTableData extends DataClass
       'inboxTrackerOrderJson': serializer.toJson<String?>(
         inboxTrackerOrderJson,
       ),
+      'inboxPinnedNoteOrderJson': serializer.toJson<String?>(
+        inboxPinnedNoteOrderJson,
+      ),
+      'inboxSecureNoteOrderJson': serializer.toJson<String?>(
+        inboxSecureNoteOrderJson,
+      ),
       'showAnnualizedSubscriptionCost': serializer.toJson<bool>(
         showAnnualizedSubscriptionCost,
       ),
@@ -14143,6 +14229,8 @@ class SettingsTableData extends DataClass
     bool? todoCompletedSectionExpanded,
     bool? inboxLogStatsExpanded,
     Value<String?> inboxTrackerOrderJson = const Value.absent(),
+    Value<String?> inboxPinnedNoteOrderJson = const Value.absent(),
+    Value<String?> inboxSecureNoteOrderJson = const Value.absent(),
     bool? showAnnualizedSubscriptionCost,
     Value<String?> jobsHiddenColumnsJson = const Value.absent(),
     bool? jobsIncludeArchived,
@@ -14390,6 +14478,12 @@ class SettingsTableData extends DataClass
     inboxTrackerOrderJson: inboxTrackerOrderJson.present
         ? inboxTrackerOrderJson.value
         : this.inboxTrackerOrderJson,
+    inboxPinnedNoteOrderJson: inboxPinnedNoteOrderJson.present
+        ? inboxPinnedNoteOrderJson.value
+        : this.inboxPinnedNoteOrderJson,
+    inboxSecureNoteOrderJson: inboxSecureNoteOrderJson.present
+        ? inboxSecureNoteOrderJson.value
+        : this.inboxSecureNoteOrderJson,
     showAnnualizedSubscriptionCost:
         showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
     jobsHiddenColumnsJson: jobsHiddenColumnsJson.present
@@ -14813,6 +14907,12 @@ class SettingsTableData extends DataClass
       inboxTrackerOrderJson: data.inboxTrackerOrderJson.present
           ? data.inboxTrackerOrderJson.value
           : this.inboxTrackerOrderJson,
+      inboxPinnedNoteOrderJson: data.inboxPinnedNoteOrderJson.present
+          ? data.inboxPinnedNoteOrderJson.value
+          : this.inboxPinnedNoteOrderJson,
+      inboxSecureNoteOrderJson: data.inboxSecureNoteOrderJson.present
+          ? data.inboxSecureNoteOrderJson.value
+          : this.inboxSecureNoteOrderJson,
       showAnnualizedSubscriptionCost:
           data.showAnnualizedSubscriptionCost.present
           ? data.showAnnualizedSubscriptionCost.value
@@ -15078,6 +15178,8 @@ class SettingsTableData extends DataClass
           )
           ..write('inboxLogStatsExpanded: $inboxLogStatsExpanded, ')
           ..write('inboxTrackerOrderJson: $inboxTrackerOrderJson, ')
+          ..write('inboxPinnedNoteOrderJson: $inboxPinnedNoteOrderJson, ')
+          ..write('inboxSecureNoteOrderJson: $inboxSecureNoteOrderJson, ')
           ..write(
             'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost, ',
           )
@@ -15246,6 +15348,8 @@ class SettingsTableData extends DataClass
     todoCompletedSectionExpanded,
     inboxLogStatsExpanded,
     inboxTrackerOrderJson,
+    inboxPinnedNoteOrderJson,
+    inboxSecureNoteOrderJson,
     showAnnualizedSubscriptionCost,
     jobsHiddenColumnsJson,
     jobsIncludeArchived,
@@ -15427,6 +15531,8 @@ class SettingsTableData extends DataClass
               this.todoCompletedSectionExpanded &&
           other.inboxLogStatsExpanded == this.inboxLogStatsExpanded &&
           other.inboxTrackerOrderJson == this.inboxTrackerOrderJson &&
+          other.inboxPinnedNoteOrderJson == this.inboxPinnedNoteOrderJson &&
+          other.inboxSecureNoteOrderJson == this.inboxSecureNoteOrderJson &&
           other.showAnnualizedSubscriptionCost ==
               this.showAnnualizedSubscriptionCost &&
           other.jobsHiddenColumnsJson == this.jobsHiddenColumnsJson &&
@@ -15588,6 +15694,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> todoCompletedSectionExpanded;
   final Value<bool> inboxLogStatsExpanded;
   final Value<String?> inboxTrackerOrderJson;
+  final Value<String?> inboxPinnedNoteOrderJson;
+  final Value<String?> inboxSecureNoteOrderJson;
   final Value<bool> showAnnualizedSubscriptionCost;
   final Value<String?> jobsHiddenColumnsJson;
   final Value<bool> jobsIncludeArchived;
@@ -15743,6 +15851,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.inboxLogStatsExpanded = const Value.absent(),
     this.inboxTrackerOrderJson = const Value.absent(),
+    this.inboxPinnedNoteOrderJson = const Value.absent(),
+    this.inboxSecureNoteOrderJson = const Value.absent(),
     this.showAnnualizedSubscriptionCost = const Value.absent(),
     this.jobsHiddenColumnsJson = const Value.absent(),
     this.jobsIncludeArchived = const Value.absent(),
@@ -15899,6 +16009,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.inboxLogStatsExpanded = const Value.absent(),
     this.inboxTrackerOrderJson = const Value.absent(),
+    this.inboxPinnedNoteOrderJson = const Value.absent(),
+    this.inboxSecureNoteOrderJson = const Value.absent(),
     this.showAnnualizedSubscriptionCost = const Value.absent(),
     this.jobsHiddenColumnsJson = const Value.absent(),
     this.jobsIncludeArchived = const Value.absent(),
@@ -16055,6 +16167,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? todoCompletedSectionExpanded,
     Expression<bool>? inboxLogStatsExpanded,
     Expression<String>? inboxTrackerOrderJson,
+    Expression<String>? inboxPinnedNoteOrderJson,
+    Expression<String>? inboxSecureNoteOrderJson,
     Expression<bool>? showAnnualizedSubscriptionCost,
     Expression<String>? jobsHiddenColumnsJson,
     Expression<bool>? jobsIncludeArchived,
@@ -16292,6 +16406,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'inbox_log_stats_expanded': inboxLogStatsExpanded,
       if (inboxTrackerOrderJson != null)
         'inbox_tracker_order_json': inboxTrackerOrderJson,
+      if (inboxPinnedNoteOrderJson != null)
+        'inbox_pinned_note_order_json': inboxPinnedNoteOrderJson,
+      if (inboxSecureNoteOrderJson != null)
+        'inbox_secure_note_order_json': inboxSecureNoteOrderJson,
       if (showAnnualizedSubscriptionCost != null)
         'show_annualized_subscription_cost': showAnnualizedSubscriptionCost,
       if (jobsHiddenColumnsJson != null)
@@ -16477,6 +16595,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? todoCompletedSectionExpanded,
     Value<bool>? inboxLogStatsExpanded,
     Value<String?>? inboxTrackerOrderJson,
+    Value<String?>? inboxPinnedNoteOrderJson,
+    Value<String?>? inboxSecureNoteOrderJson,
     Value<bool>? showAnnualizedSubscriptionCost,
     Value<String?>? jobsHiddenColumnsJson,
     Value<bool>? jobsIncludeArchived,
@@ -16690,6 +16810,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           inboxLogStatsExpanded ?? this.inboxLogStatsExpanded,
       inboxTrackerOrderJson:
           inboxTrackerOrderJson ?? this.inboxTrackerOrderJson,
+      inboxPinnedNoteOrderJson:
+          inboxPinnedNoteOrderJson ?? this.inboxPinnedNoteOrderJson,
+      inboxSecureNoteOrderJson:
+          inboxSecureNoteOrderJson ?? this.inboxSecureNoteOrderJson,
       showAnnualizedSubscriptionCost:
           showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
       jobsHiddenColumnsJson:
@@ -17230,6 +17354,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         inboxTrackerOrderJson.value,
       );
     }
+    if (inboxPinnedNoteOrderJson.present) {
+      map['inbox_pinned_note_order_json'] = Variable<String>(
+        inboxPinnedNoteOrderJson.value,
+      );
+    }
+    if (inboxSecureNoteOrderJson.present) {
+      map['inbox_secure_note_order_json'] = Variable<String>(
+        inboxSecureNoteOrderJson.value,
+      );
+    }
     if (showAnnualizedSubscriptionCost.present) {
       map['show_annualized_subscription_cost'] = Variable<bool>(
         showAnnualizedSubscriptionCost.value,
@@ -17536,6 +17670,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           )
           ..write('inboxLogStatsExpanded: $inboxLogStatsExpanded, ')
           ..write('inboxTrackerOrderJson: $inboxTrackerOrderJson, ')
+          ..write('inboxPinnedNoteOrderJson: $inboxPinnedNoteOrderJson, ')
+          ..write('inboxSecureNoteOrderJson: $inboxSecureNoteOrderJson, ')
           ..write(
             'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost, ',
           )
@@ -56766,6 +56902,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> inboxLogStatsExpanded,
       Value<String?> inboxTrackerOrderJson,
+      Value<String?> inboxPinnedNoteOrderJson,
+      Value<String?> inboxSecureNoteOrderJson,
       Value<bool> showAnnualizedSubscriptionCost,
       Value<String?> jobsHiddenColumnsJson,
       Value<bool> jobsIncludeArchived,
@@ -56923,6 +57061,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> inboxLogStatsExpanded,
       Value<String?> inboxTrackerOrderJson,
+      Value<String?> inboxPinnedNoteOrderJson,
+      Value<String?> inboxSecureNoteOrderJson,
       Value<bool> showAnnualizedSubscriptionCost,
       Value<String?> jobsHiddenColumnsJson,
       Value<bool> jobsIncludeArchived,
@@ -57550,6 +57690,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get inboxTrackerOrderJson => $composableBuilder(
     column: $table.inboxTrackerOrderJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get inboxPinnedNoteOrderJson => $composableBuilder(
+    column: $table.inboxPinnedNoteOrderJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get inboxSecureNoteOrderJson => $composableBuilder(
+    column: $table.inboxSecureNoteOrderJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58346,6 +58496,16 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get inboxPinnedNoteOrderJson => $composableBuilder(
+    column: $table.inboxPinnedNoteOrderJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get inboxSecureNoteOrderJson => $composableBuilder(
+    column: $table.inboxSecureNoteOrderJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get showAnnualizedSubscriptionCost =>
       $composableBuilder(
         column: $table.showAnnualizedSubscriptionCost,
@@ -59131,6 +59291,16 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get inboxPinnedNoteOrderJson => $composableBuilder(
+    column: $table.inboxPinnedNoteOrderJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get inboxSecureNoteOrderJson => $composableBuilder(
+    column: $table.inboxSecureNoteOrderJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get showAnnualizedSubscriptionCost =>
       $composableBuilder(
         column: $table.showAnnualizedSubscriptionCost,
@@ -59500,6 +59670,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> inboxLogStatsExpanded = const Value.absent(),
                 Value<String?> inboxTrackerOrderJson = const Value.absent(),
+                Value<String?> inboxPinnedNoteOrderJson = const Value.absent(),
+                Value<String?> inboxSecureNoteOrderJson = const Value.absent(),
                 Value<bool> showAnnualizedSubscriptionCost =
                     const Value.absent(),
                 Value<String?> jobsHiddenColumnsJson = const Value.absent(),
@@ -59663,6 +59835,8 @@ class $$SettingsTableTableTableManager
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 inboxLogStatsExpanded: inboxLogStatsExpanded,
                 inboxTrackerOrderJson: inboxTrackerOrderJson,
+                inboxPinnedNoteOrderJson: inboxPinnedNoteOrderJson,
+                inboxSecureNoteOrderJson: inboxSecureNoteOrderJson,
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
                 jobsHiddenColumnsJson: jobsHiddenColumnsJson,
                 jobsIncludeArchived: jobsIncludeArchived,
@@ -59843,6 +60017,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> inboxLogStatsExpanded = const Value.absent(),
                 Value<String?> inboxTrackerOrderJson = const Value.absent(),
+                Value<String?> inboxPinnedNoteOrderJson = const Value.absent(),
+                Value<String?> inboxSecureNoteOrderJson = const Value.absent(),
                 Value<bool> showAnnualizedSubscriptionCost =
                     const Value.absent(),
                 Value<String?> jobsHiddenColumnsJson = const Value.absent(),
@@ -60006,6 +60182,8 @@ class $$SettingsTableTableTableManager
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 inboxLogStatsExpanded: inboxLogStatsExpanded,
                 inboxTrackerOrderJson: inboxTrackerOrderJson,
+                inboxPinnedNoteOrderJson: inboxPinnedNoteOrderJson,
+                inboxSecureNoteOrderJson: inboxSecureNoteOrderJson,
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
                 jobsHiddenColumnsJson: jobsHiddenColumnsJson,
                 jobsIncludeArchived: jobsIncludeArchived,

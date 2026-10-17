@@ -4718,6 +4718,16 @@ class DriftSettingsRepository implements SettingsRepository {
       inboxTrackerOrder: row.inboxTrackerOrderJson == null
           ? const []
           : List<String>.from(jsonDecode(row.inboxTrackerOrderJson!) as List),
+      inboxPinnedNoteOrder: row.inboxPinnedNoteOrderJson == null
+          ? const []
+          : List<String>.from(
+              jsonDecode(row.inboxPinnedNoteOrderJson!) as List,
+            ),
+      inboxSecureNoteOrder: row.inboxSecureNoteOrderJson == null
+          ? const []
+          : List<String>.from(
+              jsonDecode(row.inboxSecureNoteOrderJson!) as List,
+            ),
       rankingsCollapsedQueueCategories:
           row.rankingsCollapsedQueueCategoriesJson == null
           ? const []
@@ -4792,6 +4802,26 @@ class DriftSettingsRepository implements SettingsRepository {
     AppSettings settings, {
     bool recordLocalActivity = true,
   }) async {
+    final upload = await _writeSettings(
+      settings,
+      recordLocalActivity: recordLocalActivity,
+    );
+    if (upload != null) {
+      _syncedWrites?.notifyOne(FirestoreCollections.settings, upload);
+    }
+  }
+
+  /// [saveSettings] short of telling the sync layer: returns the settings to
+  /// upload, or null when nothing synced changed.
+  ///
+  /// Split out for the savers that write inside a transaction. The upload
+  /// started from there runs in the transaction's zone, and its outbox
+  /// bookkeeping, landing after the network round trip, finds the transaction
+  /// closed — so they announce the write once it has committed.
+  Future<AppSettings?> _writeSettings(
+    AppSettings settings, {
+    required bool recordLocalActivity,
+  }) async {
     // Only a change to a *synced* setting moves the last-write-wins clock and
     // reaches the sync layer. Most saves are device-local — a weather refresh,
     // a dev-flag toggle, remembering which page you were on — and letting
@@ -4810,9 +4840,7 @@ class DriftSettingsRepository implements SettingsRepository {
 
     await _saveSettingsRow(effective);
 
-    if (recordLocalActivity && syncedFieldsChanged) {
-      _syncedWrites?.notifyOne(FirestoreCollections.settings, effective);
-    }
+    return recordLocalActivity && syncedFieldsChanged ? effective : null;
   }
 
   @override
@@ -4847,10 +4875,41 @@ class DriftSettingsRepository implements SettingsRepository {
     // [saveSettings] sees, stamps and uploads.
     // In one transaction so a save landing between the read and the write
     // can't be overwritten with the stale copy.
-    await _db.transaction(() async {
+    final upload = await _db.transaction(() async {
       final current = await getSettings();
-      await saveSettings(current.copyWith(inboxTrackerOrder: ids));
+      return _writeSettings(
+        current.copyWith(inboxTrackerOrder: ids),
+        recordLocalActivity: true,
+      );
     });
+    if (upload != null) {
+      _syncedWrites?.notifyOne(FirestoreCollections.settings, upload);
+    }
+  }
+
+  @override
+  Future<void> saveInboxNoteOrder(
+    List<String> ids, {
+    required bool secure,
+  }) async {
+    // As [saveInboxTrackerOrder].
+    final upload = await _db.transaction(() async {
+      final current = await getSettings();
+      return _writeSettings(
+        secure
+            ? current.copyWith(inboxSecureNoteOrder: ids)
+            : current.copyWith(inboxPinnedNoteOrder: ids),
+        recordLocalActivity: true,
+      );
+    });
+    // A drag drops rows in bursts — see
+    // `RemoteSyncService.pushSettingsDebounced`.
+    if (upload != null) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.settings,
+        const DebouncedSettingsWrite(),
+      );
+    }
   }
 
   bool _sameSyncedSettings(AppSettings a, AppSettings b) {
@@ -5065,6 +5124,16 @@ class DriftSettingsRepository implements SettingsRepository {
               settings.inboxTrackerOrder.isEmpty
                   ? null
                   : jsonEncode(settings.inboxTrackerOrder),
+            ),
+            inboxPinnedNoteOrderJson: Value(
+              settings.inboxPinnedNoteOrder.isEmpty
+                  ? null
+                  : jsonEncode(settings.inboxPinnedNoteOrder),
+            ),
+            inboxSecureNoteOrderJson: Value(
+              settings.inboxSecureNoteOrder.isEmpty
+                  ? null
+                  : jsonEncode(settings.inboxSecureNoteOrder),
             ),
             rankingsCollapsedQueueCategoriesJson: Value(
               settings.rankingsCollapsedQueueCategories.isEmpty

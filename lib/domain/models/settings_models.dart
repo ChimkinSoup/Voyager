@@ -148,6 +148,8 @@ class AppSettings {
     this.todoCompletedSectionExpanded = true,
     this.inboxLogStatsExpanded = false,
     this.inboxTrackerOrder = const [],
+    this.inboxPinnedNoteOrder = const [],
+    this.inboxSecureNoteOrder = const [],
     this.showAnnualizedSubscriptionCost = false,
     this.jobsHiddenColumns = const [],
     this.jobsIncludeArchived = false,
@@ -424,6 +426,14 @@ class AppSettings {
   /// last dragged into. A tracker missing from it sorts after the rest.
   final List<String> inboxTrackerOrder;
 
+  /// Pinned Note ids in the order the inbox's Reminders were last dragged
+  /// into. A note missing from it sorts after the rest, oldest first.
+  final List<String> inboxPinnedNoteOrder;
+
+  /// [inboxPinnedNoteOrder] for Secure Notes. Ids only — nothing of a note's
+  /// text — so it syncs in the clear with the rest of the settings.
+  final List<String> inboxSecureNoteOrder;
+
   /// Whether the Bill Radar shows each subscription's annualized cost in faint
   /// text next to it (e.g. "$180/yr" beside a $15/month plan).
   final bool showAnnualizedSubscriptionCost;
@@ -675,6 +685,8 @@ class AppSettings {
     bool? todoCompletedSectionExpanded,
     bool? inboxLogStatsExpanded,
     List<String>? inboxTrackerOrder,
+    List<String>? inboxPinnedNoteOrder,
+    List<String>? inboxSecureNoteOrder,
     bool? showAnnualizedSubscriptionCost,
     List<String>? jobsHiddenColumns,
     bool? jobsIncludeArchived,
@@ -950,6 +962,8 @@ class AppSettings {
       inboxLogStatsExpanded:
           inboxLogStatsExpanded ?? this.inboxLogStatsExpanded,
       inboxTrackerOrder: inboxTrackerOrder ?? this.inboxTrackerOrder,
+      inboxPinnedNoteOrder: inboxPinnedNoteOrder ?? this.inboxPinnedNoteOrder,
+      inboxSecureNoteOrder: inboxSecureNoteOrder ?? this.inboxSecureNoteOrder,
       showAnnualizedSubscriptionCost:
           showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
       jobsHiddenColumns: jobsHiddenColumns ?? this.jobsHiddenColumns,

@@ -876,6 +876,10 @@ abstract class SettingsRepository {
   /// and uploaded as [saveSettings] does for any synced setting.
   Future<void> saveInboxTrackerOrder(List<String> ids);
 
+  /// [saveInboxTrackerOrder] for [AppSettings.inboxSecureNoteOrder] when
+  /// [secure], [AppSettings.inboxPinnedNoteOrder] otherwise.
+  Future<void> saveInboxNoteOrder(List<String> ids, {required bool secure});
+
   Future<Map<String, int>> getTagColors();
 
   /// Tag colors with their sync metadata, as distinct from [getTagColors]'

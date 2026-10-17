@@ -971,12 +971,15 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   /// [saveSnippets]), so a caller holding an older copy must not make a
   /// snippet that arrived since disappear from the screen.
   ///
-  /// The inbox tracker order is taken from this notifier's state for a
-  /// similar reason: [saveInboxTrackerOrder] sets it without telling anyone,
-  /// so a caller's copy of the settings can predate it.
+  /// The inbox tracker and note orders are taken from this notifier's state
+  /// for a similar reason: [saveInboxTrackerOrder] and [saveInboxNoteOrder]
+  /// set them without telling anyone, so a caller's copy of the settings can
+  /// predate them.
   Future<void> saveSettings(AppSettings settings) async {
     settings = settings.copyWith(
       inboxTrackerOrder: state.valueOrNull?.inboxTrackerOrder,
+      inboxPinnedNoteOrder: state.valueOrNull?.inboxPinnedNoteOrder,
+      inboxSecureNoteOrder: state.valueOrNull?.inboxSecureNoteOrder,
     );
     final current = state.valueOrNull;
     state = AsyncData(
@@ -1010,7 +1013,32 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await ref.read(settingsRepositoryProvider).saveInboxTrackerOrder(ids);
   }
 
-  /// Set while [saveInboxTrackerOrder] updates the state.
+  /// [saveInboxTrackerOrder] for the inbox's Reminders, or its Secure Notes
+  /// when [secure].
+  Future<void> saveInboxNoteOrder(
+    List<String> ids, {
+    required bool secure,
+  }) async {
+    final current = state.valueOrNull;
+    if (current != null) {
+      _quiet = true;
+      try {
+        state = AsyncData(
+          secure
+              ? current.copyWith(inboxSecureNoteOrder: ids)
+              : current.copyWith(inboxPinnedNoteOrder: ids),
+        );
+      } finally {
+        _quiet = false;
+      }
+    }
+    await ref
+        .read(settingsRepositoryProvider)
+        .saveInboxNoteOrder(ids, secure: secure);
+  }
+
+  /// Set while [saveInboxTrackerOrder] or [saveInboxNoteOrder] updates the
+  /// state.
   bool _quiet = false;
 
   @override

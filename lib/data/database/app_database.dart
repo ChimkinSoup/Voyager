@@ -1020,6 +1020,12 @@ class SettingsTable extends Table {
 
   /// [AppSettings.inboxTrackerOrder] as a JSON list, null when empty.
   TextColumn get inboxTrackerOrderJson => text().nullable()();
+
+  /// [AppSettings.inboxPinnedNoteOrder] as a JSON list, null when empty.
+  TextColumn get inboxPinnedNoteOrderJson => text().nullable()();
+
+  /// [AppSettings.inboxSecureNoteOrder] as a JSON list, null when empty.
+  TextColumn get inboxSecureNoteOrderJson => text().nullable()();
   BoolColumn get showAnnualizedSubscriptionCost =>
       boolean().withDefault(const Constant(false))();
 
@@ -2072,7 +2078,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 152;
+  int get schemaVersion => 153;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3769,6 +3775,14 @@ class AppDatabase extends _$AppDatabase {
           secureVaultHeaderTable,
           secureVaultHeaderTable.lostNoteCount,
         );
+      }
+      if (from < 153) {
+        for (final column in [
+          settingsTable.inboxPinnedNoteOrderJson,
+          settingsTable.inboxSecureNoteOrderJson,
+        ]) {
+          await _addSettingsColumnIfNotExists(migrator, column);
+        }
       }
     },
   );

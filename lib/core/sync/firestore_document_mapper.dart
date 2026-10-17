@@ -4042,6 +4042,8 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'hiddenNavPages': s.hiddenNavPages,
   'jobsHiddenColumns': s.jobsHiddenColumns,
   'inboxTrackerOrder': s.inboxTrackerOrder,
+  'inboxPinnedNoteOrder': s.inboxPinnedNoteOrder,
+  'inboxSecureNoteOrder': s.inboxSecureNoteOrder,
   'jobsIncludeArchived': s.jobsIncludeArchived,
   'rankingsCollapsedQueueCategories': s.rankingsCollapsedQueueCategories,
   'rankingsMapViewCategories': s.rankingsMapViewCategories,
@@ -4342,6 +4344,8 @@ AppSettings mergeSettingsFromRemote(
     hiddenNavPages: _stringListOrNull(data['hiddenNavPages']),
     jobsHiddenColumns: _stringListOrNull(data['jobsHiddenColumns']),
     inboxTrackerOrder: _stringListOrNull(data['inboxTrackerOrder']),
+    inboxPinnedNoteOrder: _stringListOrNull(data['inboxPinnedNoteOrder']),
+    inboxSecureNoteOrder: _stringListOrNull(data['inboxSecureNoteOrder']),
     jobsIncludeArchived: data['jobsIncludeArchived'] as bool?,
     rankingsCollapsedQueueCategories: _stringListOrNull(
       data['rankingsCollapsedQueueCategories'],

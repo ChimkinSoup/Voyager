@@ -1,3 +1,10 @@
+/// A settings write whose upload can wait for the next one, sent through
+/// [SyncedWriteNotifier] under the settings collection in place of the
+/// `AppSettings` themselves. See `RemoteSyncService.pushSettingsDebounced`.
+class DebouncedSettingsWrite {
+  const DebouncedSettingsWrite();
+}
+
 /// Tells the sync layer that records changed locally and need uploading.
 ///
 /// The collections wired through this — calendars, trackers, finance, the

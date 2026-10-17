@@ -18,6 +18,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/sync/note_sync.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
@@ -5940,8 +5941,18 @@ class RemoteSyncService {
   /// do, so a write lost to a dropped connection is still recorded somewhere.
   Future<void> pushRecords(String collection, List<Object> records) async {
     if (collection == FirestoreCollections.settings) {
-      final settings = records.last;
-      if (settings is AppSettings) await pushSettings(settings);
+      if (records.last is DebouncedSettingsWrite) {
+        pushSettingsDebounced();
+      } else {
+        // The settings pushed below are the newest write, so they already
+        // carry whatever a waiting debounced upload would have sent.
+        cancelDocument(
+          FirestoreCollections.settings,
+          FirestoreCollections.settingsDocumentId,
+        );
+      }
+      final settings = records.whereType<AppSettings>().lastOrNull;
+      if (settings != null) await pushSettings(settings);
       return;
     }
     if (collection == FirestoreCollections.pinnedNotes) {
@@ -7334,6 +7345,33 @@ class RemoteSyncService {
         error: error,
       );
     }
+  }
+
+  /// [pushSettings] once the writes stop coming — a drag of inbox notes drops
+  /// one row after another, and only the last order needs to reach the
+  /// server. The settings are read when the timer fires, so the upload carries
+  /// every change made by then.
+  ///
+  /// Owed on the outbox from the start, not only at teardown: the process can
+  /// exit inside the debounce, and [pullSettings] keeps a newer local copy
+  /// without uploading it, so nothing else would send it.
+  void pushSettingsDebounced() {
+    unawaited(
+      OutboxSyncWorker.recordOwedUpload(
+        collection: FirestoreCollections.settings,
+        documentId: FirestoreCollections.settingsDocumentId,
+      ),
+    );
+    _scheduleRemoteUpload(
+      FirestoreCollections.settings,
+      FirestoreCollections.settingsDocumentId,
+      () async {
+        await _syncRepository.uploadSettings(
+          await _settingsRepository.getSettings(),
+        );
+        _syncActivity?.recordUpload(FirestoreCollections.settings);
+      },
+    );
   }
 
   /// Applies the remote settings document, whole-document last-write-wins.

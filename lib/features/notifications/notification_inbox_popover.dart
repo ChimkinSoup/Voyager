@@ -36,6 +36,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
@@ -231,9 +232,8 @@ class _NotificationInboxPopoverState
               ),
               const SliverToBoxAdapter(child: _BackupAlertSection()),
               const SliverToBoxAdapter(child: _FolderBackupAlertSection()),
-              const SliverToBoxAdapter(child: _PinnedNotesSection()),
-              if (unlocked)
-                const SliverToBoxAdapter(child: _SecureNotesSection()),
+              const _PinnedNotesSection(),
+              if (unlocked) const _SecureNotesSection(),
               const SliverToBoxAdapter(child: ScheduledRemindersSection()),
               const SliverToBoxAdapter(child: _FeedSection()),
               _AnalyticsSection(growthPin: _growthPin),
@@ -558,10 +558,13 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final notesAsync = ref.watch(pinnedNotesProvider.settled);
-    final notes = notesAsync.valueOrNull ?? const [];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-      child: Column(
+    final notes = _inSavedOrder(
+      notesAsync.valueOrNull ?? const <PinnedNote>[],
+      _watchNoteOrder(ref, secure: false),
+      (note) => note.id,
+    );
+    return _NoteSectionSlivers(
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
@@ -592,23 +595,117 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
               contentPadding: _kReminderFieldPadding,
             ),
           ),
-          if (notes.isNotEmpty)
-            Padding(
+        ],
+      ),
+      ids: [for (final note in notes) note.id],
+      secure: false,
+      onReordered: () => setState(() {}),
+      itemBuilder: (context, i) => _PinnedNoteRow(
+        text: notes[i].text,
+        dragIndex: i,
+        onUpdate: (newText) => _updateNote(notes[i], newText),
+        onDelete: () => _deleteNoteWithUndo(notes[i]),
+      ),
+    );
+  }
+}
+
+/// [notes] in [order], the one they were last dragged into. A note it doesn't
+/// name — one added since — follows the rest, in the order [notes] came in.
+List<T> _inSavedOrder<T>(
+  List<T> notes,
+  List<String> order,
+  String Function(T note) idOf,
+) {
+  final rank = {for (var i = 0; i < order.length; i++) order[i]: i};
+  int at(T note) => rank[idOf(note)] ?? order.length;
+  final sorted = [...notes];
+  mergeSort(sorted, compare: (a, b) => at(a).compareTo(at(b)));
+  return sorted;
+}
+
+/// The saved order of the Reminders, or of the Secure Notes when [secure].
+///
+/// Watched for an order pulled from another device; read for this one's own,
+/// which [SettingsNotifier.saveInboxNoteOrder] sets silently.
+List<String> _watchNoteOrder(WidgetRef ref, {required bool secure}) {
+  List<String>? orderOf(AppSettings? s) =>
+      secure ? s?.inboxSecureNoteOrder : s?.inboxPinnedNoteOrder;
+  ref.watch(settingsProvider.select((s) => orderOf(s.valueOrNull)));
+  return orderOf(ref.read(settingsProvider).valueOrNull) ?? const [];
+}
+
+/// A note section as slivers: [header] — its title and input — then its rows
+/// as a list of the popover's own scroll view, so dragging one to an edge of
+/// the panel scrolls it. Holding a row picks it up; dropping it saves the new
+/// order of [ids] to the synced settings, then calls [onReordered] so the
+/// section rebuilds in it — the save tells no one (see [_watchNoteOrder]).
+///
+/// [itemBuilder] builds the row for `ids[i]`; this keys it.
+class _NoteSectionSlivers extends ConsumerStatefulWidget {
+  const _NoteSectionSlivers({
+    required this.header,
+    required this.ids,
+    required this.secure,
+    required this.onReordered,
+    required this.itemBuilder,
+  });
+
+  final Widget header;
+  final List<String> ids;
+  final bool secure;
+  final VoidCallback onReordered;
+  final IndexedWidgetBuilder itemBuilder;
+
+  @override
+  ConsumerState<_NoteSectionSlivers> createState() =>
+      _NoteSectionSliversState();
+}
+
+class _NoteSectionSliversState extends ConsumerState<_NoteSectionSlivers> {
+  /// One per note, held across builds. The list keys each row by its index
+  /// as well as by the key it is given, so a drop builds every row whose
+  /// index changed anew — controllers, focus node, laid-out text and all —
+  /// unless a global key carries the row's state to its new place, as the
+  /// Log stats rows' do.
+  final _rowKeys = <String, GlobalKey>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final ids = widget.ids;
+    final shown = ids.toSet();
+    _rowKeys.removeWhere((id, _) => !shown.contains(id));
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+      sliver: SliverMainAxisGroup(
+        slivers: [
+          SliverToBoxAdapter(child: widget.header),
+          if (ids.isNotEmpty)
+            SliverPadding(
               padding: const EdgeInsets.only(top: 8),
-              // Free-running: the list is as tall as it needs to be and the
-              // popover's own scroll view carries it.
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final note in notes)
-                    _PinnedNoteRow(
-                      key: ValueKey(note.id),
-                      text: note.text,
-                      onUpdate: (newText) => _updateNote(note, newText),
-                      onDelete: () => _deleteNoteWithUndo(note),
-                    ),
-                ],
+              sliver: SliverReorderableList(
+                itemCount: ids.length,
+                // [newIndex] is counted with the moved row already taken out.
+                onReorderItem: (oldIndex, newIndex) {
+                  if (oldIndex == newIndex) return;
+                  final order = [...ids];
+                  order.insert(newIndex, order.removeAt(oldIndex));
+                  unawaited(
+                    ref
+                        .read(settingsProvider.notifier)
+                        .saveInboxNoteOrder(order, secure: widget.secure),
+                  );
+                  widget.onReordered();
+                },
+                proxyDecorator: (child, index, animation) =>
+                    Material(type: MaterialType.transparency, child: child),
+                itemBuilder: (context, i) => KeyedSubtree(
+                  key: ValueKey(ids[i]),
+                  child: KeyedSubtree(
+                    key: _rowKeys.putIfAbsent(ids[i], GlobalKey.new),
+                    child: widget.itemBuilder(context, i),
+                  ),
+                ),
               ),
             ),
         ],
@@ -768,12 +865,14 @@ class _SecureNotesSectionState extends ConsumerState<_SecureNotesSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final notes =
-        ref.watch(secureNoteTextsProvider).valueOrNull ??
-        const <SecureNoteText>[];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-      child: Column(
+    final notes = _inSavedOrder(
+      ref.watch(secureNoteTextsProvider).valueOrNull ??
+          const <SecureNoteText>[],
+      _watchNoteOrder(ref, secure: true),
+      (entry) => entry.note.id,
+    );
+    return _NoteSectionSlivers(
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
@@ -834,26 +933,18 @@ class _SecureNotesSectionState extends ConsumerState<_SecureNotesSection> {
               contentPadding: _kReminderFieldPadding,
             ),
           ),
-          if (notes.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final entry in notes)
-                    _PinnedNoteRow(
-                      key: ValueKey(entry.note.id),
-                      text: entry.text,
-                      secure: true,
-                      onUpdate: (newText) => _updateNote(entry, newText),
-                      onDelete: () => _deleteNoteWithUndo(entry.note),
-                      onCopy: () => unawaited(SecureClipboard.copy(entry.text)),
-                    ),
-                ],
-              ),
-            ),
         ],
+      ),
+      ids: [for (final entry in notes) entry.note.id],
+      secure: true,
+      onReordered: () => setState(() {}),
+      itemBuilder: (context, i) => _PinnedNoteRow(
+        text: notes[i].text,
+        dragIndex: i,
+        secure: true,
+        onUpdate: (newText) => _updateNote(notes[i], newText),
+        onDelete: () => _deleteNoteWithUndo(notes[i].note),
+        onCopy: () => unawaited(SecureClipboard.copy(notes[i].text)),
       ),
     );
   }
@@ -1098,6 +1189,7 @@ class _PinnedNoteRow extends StatefulWidget {
   const _PinnedNoteRow({
     super.key,
     required this.text,
+    required this.dragIndex,
     required this.onUpdate,
     required this.onDelete,
     this.secure = false,
@@ -1105,6 +1197,9 @@ class _PinnedNoteRow extends StatefulWidget {
   });
 
   final String text;
+
+  /// The row's place in its section's [SliverReorderableList].
+  final int dragIndex;
   final Future<void> Function(String newText) onUpdate;
   final Future<void> Function() onDelete;
 
@@ -1413,6 +1508,12 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         // The highlight above already covers this on hover.
         hoverColor: Colors.transparent,
+        child: content,
+      );
+      // Press and hold to drag, press and release to edit. Not while editing,
+      // where a drag selects text.
+      content = QuickDelayedDragStartListener(
+        index: widget.dragIndex,
         child: content,
       );
     }
