@@ -225,6 +225,8 @@ class _VoyagerDropdownFieldControlState<T>
 
     return Focus(
       canRequestFocus: widget.enabled,
+      // The InkWell below is the field's Tab stop; this one showed no focus.
+      skipTraversal: true,
       // Around the whole field, which shows hover and focus the way a text
       // field does: an ink fill on the inner row sat flush against the value.
       child: InkWell(

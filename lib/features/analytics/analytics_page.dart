@@ -6720,8 +6720,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                         contentPadding: _kTrackerFieldPadding,
                       ),
                       onChanged: (_) {
-                        if (_nameError != null)
+                        if (_nameError != null) {
                           setState(() => _nameError = null);
+                        }
                       },
                       onSubmitted: (_) => _submit(),
                     ),
