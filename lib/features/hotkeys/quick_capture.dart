@@ -24,14 +24,18 @@ class TodoCaptureDraft {
   const TodoCaptureDraft({
     this.title = '',
     this.dueDate,
+    this.dueHasTime = false,
     this.listId,
     this.listIdBasis,
   });
 
   final String title;
 
-  /// Local midnight of the picked day.
+  /// The picked local date and time, or local midnight for a date alone.
   final DateTime? dueDate;
+
+  /// See [TodoTask.dueHasTime].
+  final bool dueHasTime;
 
   /// A list picked in the bar, or null for the last-touched list.
   final String? listId;
@@ -43,11 +47,13 @@ class TodoCaptureDraft {
   TodoCaptureDraft copyWith({
     String? title,
     DateTime? dueDate,
+    bool? dueHasTime,
     bool clearDueDate = false,
   }) {
     return TodoCaptureDraft(
       title: title ?? this.title,
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
+      dueHasTime: clearDueDate ? false : (dueHasTime ?? this.dueHasTime),
       listId: listId,
       listIdBasis: listIdBasis,
     );

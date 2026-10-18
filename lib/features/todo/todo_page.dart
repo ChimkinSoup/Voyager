@@ -66,6 +66,7 @@ typedef _RowSignature = ({
   String title,
   String? notes,
   DateTime? dueDate,
+  bool dueHasTime,
   bool completed,
   bool starred,
   bool isSelected,
@@ -1946,13 +1947,13 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
-  /// Sets (or replaces) a task's due date from the right-click menu. [localDue]
+  /// Sets (or replaces) a task's due date from the right-click menu. [pick]
   /// is a local wall-clock time; a date-only selection arrives as local
-  /// midnight (hour/minute == 0), matching the edit panel's picker contract.
-  Future<void> _setTaskDueDate(TodoTask task, DateTime localDue) async {
+  /// midnight with no time, matching the edit panel's picker contract.
+  Future<void> _setTaskDueDate(TodoTask task, DateTimePick pick) async {
     final activeInList = _activeInList(_lastActiveAll, task.listId);
-    final due = localDue.toUtc();
-    if (task.dueDate == due) return;
+    final due = pick.dateTime.toUtc();
+    if (task.dueDate == due && task.dueHasTime == pick.hasTime) return;
     // Picking a date here is a manual reschedule, exactly as it is in the edit
     // panel, so it re-anchors the repeat the same way. Without this, an "every
     // month on the 3rd" task rescheduled to the 20th from this menu would roll
@@ -1962,6 +1963,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       activeInList,
       dueDate: due,
       clearDueDate: false,
+      dueHasTime: pick.hasTime,
     );
     setState(() {
       _applySortBatchOptimistic(batch, activeInList);
@@ -2346,6 +2348,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       title: task.title,
       notes: task.notes,
       dueDate: task.dueDate,
+      dueHasTime: task.dueHasTime,
       completed: task.completed,
       starred: task.starred,
       isSelected: isSelected,
@@ -2586,6 +2589,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       onTaskOptimistic: (task) {
         final dueDateChanged =
             task.dueDate != panelTask.dueDate ||
+            task.dueHasTime != panelTask.dueHasTime ||
             task.dueDateSetAt != panelTask.dueDateSetAt;
         final movedList = task.listId != panelTask.listId;
 
@@ -2607,6 +2611,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
             listActive,
             dueDate: task.dueDate,
             clearDueDate: task.dueDate == null && panelTask.dueDate != null,
+            dueHasTime: task.dueHasTime,
           );
           final sortedTask = batch.tasks.firstWhere(
             (updated) => updated.id == task.id,
@@ -2744,6 +2749,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
       panelTask.copyWith(
         listId: task.listId,
         dueDate: task.dueDate ?? panelTask.dueDate,
+        dueHasTime: task.dueDate != null
+            ? task.dueHasTime
+            : panelTask.dueHasTime,
         dueDateSetAt: task.dueDateSetAt ?? panelTask.dueDateSetAt,
         starred: task.starred,
       ),
@@ -3846,8 +3854,9 @@ class _TaskRow extends StatefulWidget {
   final VoidCallback onEdit;
 
   /// Applies a due date picked from the right-click menu. The value is a local
-  /// wall-clock time (date-only selections arrive as local midnight).
-  final ValueChanged<DateTime> onSetDueDate;
+  /// wall-clock time (date-only selections arrive as local midnight, without a
+  /// time).
+  final ValueChanged<DateTimePick> onSetDueDate;
 
   /// Clears the task's due date (resets it to nothing).
   final VoidCallback onClearDueDate;
@@ -4261,21 +4270,18 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
     );
   }
 
-  String? _formatDue(DateTime? dueDate) {
+  String? _formatDue(TodoTask task) {
+    final dueDate = task.dueDate;
     if (dueDate == null) return null;
     final local = dueDate.toLocal();
-    // Midnight is the app-wide sentinel for "date only" (see the edit panel and
-    // _isDueDatePast); don't render a spurious "12:00 AM" for those.
-    if (local.hour == 0 && local.minute == 0) {
-      return DateFormat.MMMd().format(local);
-    }
+    if (!task.dueHasTime) return DateFormat.MMMd().format(local);
     return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dueDate)}';
   }
 
-  bool _isDueDatePast(DateTime dueDate) {
-    final local = dueDate.toLocal();
+  bool _isDueDatePast(TodoTask task) {
+    final local = task.dueDate!.toLocal();
     final now = DateTime.now();
-    if (local.hour == 0 && local.minute == 0) {
+    if (!task.dueHasTime) {
       return DateUtils.dateOnly(local).isBefore(DateUtils.dateOnly(now));
     }
     return local.isBefore(now);
@@ -4311,12 +4317,12 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
       ContextMenuItem(
         label: 'Due today',
         icon: PhosphorIconsRegular.calendarDot,
-        onTap: () => widget.onSetDueDate(today),
+        onTap: () => widget.onSetDueDate((dateTime: today, hasTime: false)),
       ),
       ContextMenuItem(
         label: 'Due tomorrow',
         icon: PhosphorIconsRegular.calendarPlus,
-        onTap: () => widget.onSetDueDate(tomorrow),
+        onTap: () => widget.onSetDueDate((dateTime: tomorrow, hasTime: false)),
       ),
       ContextMenuItem(
         label: 'Pick a date',
@@ -4367,16 +4373,14 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
     final listColor = widget.listColor == null
         ? null
         : Color(widget.listColor!);
-    final localDue = task.dueDate?.toLocal();
-    final hasTime =
-        localDue != null && (localDue.hour != 0 || localDue.minute != 0);
+    final hasTime = task.dueDate != null && task.dueHasTime;
     final initialDt = task.dueDate != null && hasTime
         ? task.dueDate!.toLocal()
         : (task.dueDate != null
               ? task.dueDate!.toLocal().copyWith(hour: 12, minute: 0)
               : DateTime.now());
 
-    final picked = await showContextualPopover<DateTime>(
+    final picked = await showContextualPopover<DateTimePick>(
       context: context,
       buttonContext: context,
       width: kDateTimeSelectorPopoverSize.width,
@@ -4396,9 +4400,9 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     _noteRowBuild();
-    final dueLabel = _formatDue(widget.task.dueDate);
+    final dueLabel = _formatDue(widget.task);
     final dueDatePast =
-        widget.task.dueDate != null && _isDueDatePast(widget.task.dueDate!);
+        widget.task.dueDate != null && _isDueDatePast(widget.task);
     final listColor = widget.listColor == null
         ? null
         : Color(widget.listColor!);

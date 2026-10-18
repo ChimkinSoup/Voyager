@@ -131,13 +131,12 @@ ReminderOccurrence? nextRuleFire(ScheduledReminderRule rule, DateTime now) {
 
 /// The local time a todo's bell counts back from, or null without a due date.
 ///
-/// A due date with no time is stored as local midnight, the same reading the
-/// todo panel uses to decide whether to print a time — so a task due at
-/// exactly 12:00 AM is treated as date-only and reminded at 9:00 AM.
+/// A due date with no time is reminded at 9:00 AM on its day; one due at
+/// 12:00 AM is reminded at midnight.
 DateTime? todoReminderBase(TodoTask task) {
   final due = task.dueDate?.toLocal();
   if (due == null) return null;
-  if (due.hour == 0 && due.minute == 0) {
+  if (!task.dueHasTime) {
     return atLocalMinutes(due, kDateOnlyReminderMinutes);
   }
   return due;

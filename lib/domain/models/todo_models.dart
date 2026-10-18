@@ -53,6 +53,7 @@ class TodoTask extends SoftDeletable {
     required this.title,
     this.notes,
     this.dueDate,
+    this.dueHasTime = false,
     this.completed = false,
     this.completedAt,
     this.starred = false,
@@ -67,6 +68,11 @@ class TodoTask extends SoftDeletable {
   final String title;
   final String? notes;
   final DateTime? dueDate;
+
+  /// Whether [dueDate] carries a time of day. Without one it names the day
+  /// alone, stored as that day's local midnight; with one, midnight is a real
+  /// 12:00 AM.
+  final bool dueHasTime;
   final bool completed;
 
   /// When [completed] last went true; null while the task is open, and on
@@ -100,6 +106,7 @@ class TodoTask extends SoftDeletable {
     String? title,
     String? notes,
     DateTime? dueDate,
+    bool? dueHasTime,
     bool clearDueDate = false,
     bool clearNotes = false,
     bool? completed,
@@ -126,6 +133,7 @@ class TodoTask extends SoftDeletable {
       title: title ?? this.title,
       notes: clearNotes ? null : (notes ?? this.notes),
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
+      dueHasTime: clearDueDate ? false : (dueHasTime ?? this.dueHasTime),
       completed: completed ?? this.completed,
       // Follows [completed]: stamped when it turns true, cleared when it turns
       // false, and left alone otherwise — so every path that ticks a task
@@ -158,6 +166,7 @@ class TodoTask extends SoftDeletable {
     'title': title,
     'notes': notes,
     'dueDate': dueDate?.toUtc().toIso8601String(),
+    'dueHasTime': dueHasTime,
     'completed': completed,
     'completedAt': completedAt?.toUtc().toIso8601String(),
     'starred': starred,
@@ -169,6 +178,9 @@ class TodoTask extends SoftDeletable {
   };
 
   factory TodoTask.fromJson(Map<String, dynamic> json) {
+    final dueDate = json['dueDate'] != null
+        ? DateTime.parse(json['dueDate'] as String).toUtc()
+        : null;
     return TodoTask(
       id: json['id'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
@@ -180,9 +192,8 @@ class TodoTask extends SoftDeletable {
       listId: json['listId'] as String,
       title: json['title'] as String,
       notes: json['notes'] as String?,
-      dueDate: json['dueDate'] != null
-          ? DateTime.parse(json['dueDate'] as String).toUtc()
-          : null,
+      dueDate: dueDate,
+      dueHasTime: json['dueHasTime'] as bool? ?? legacyDueHasTime(dueDate),
       completed: json['completed'] as bool? ?? false,
       completedAt: json['completedAt'] != null
           ? DateTime.parse(json['completedAt'] as String).toUtc()
@@ -199,6 +210,14 @@ class TodoTask extends SoftDeletable {
           : null,
     );
   }
+}
+
+/// Whether a due date written before [TodoTask.dueHasTime] existed carries a
+/// time. Those writers stored a date alone as local midnight, so midnight
+/// reads as no time.
+bool legacyDueHasTime(DateTime? due) {
+  final local = due?.toLocal();
+  return local != null && (local.hour != 0 || local.minute != 0);
 }
 
 /// The id of [taskId]'s completion against [dueDate]: one row per occurrence.

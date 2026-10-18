@@ -68,15 +68,17 @@ EntityReminder _bell(
   armedAt: armedAt ?? DateTime(2026, 9, 1),
 );
 
-TodoTask _task(DateTime? due, {bool completed = false}) => TodoTask(
-  id: 'x',
-  createdAt: _stamp,
-  updatedAt: _stamp,
-  listId: 'l',
-  title: 'Pay rent',
-  dueDate: due?.toUtc(),
-  completed: completed,
-);
+TodoTask _task(DateTime? due, {bool completed = false, bool? hasTime}) =>
+    TodoTask(
+      id: 'x',
+      createdAt: _stamp,
+      updatedAt: _stamp,
+      listId: 'l',
+      title: 'Pay rent',
+      dueDate: due?.toUtc(),
+      dueHasTime: hasTime ?? legacyDueHasTime(due),
+      completed: completed,
+    );
 
 CalendarEvent _event({
   required DateTime start,
@@ -423,6 +425,15 @@ void main() {
       expect(
         nextTodoFire(task, bell, monday)?.fireAt,
         DateTime(2026, 9, 14, 8, 45),
+      );
+    });
+
+    test('a due time of 12:00 AM counts back from midnight', () {
+      final bell = _bell(ReminderSourceKind.todo, offsetMinutes: 15);
+      final task = _task(DateTime(2026, 9, 14), hasTime: true);
+      expect(
+        nextTodoFire(task, bell, DateTime(2026, 9, 13, 12))?.fireAt,
+        DateTime(2026, 9, 13, 23, 45),
       );
     });
 

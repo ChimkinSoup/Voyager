@@ -231,17 +231,26 @@ TodoSortBatch applyStarToggle(TodoTask task, List<TodoTask> activeTasks) {
   return _applyStar(task, activeTasks);
 }
 
+/// [dueHasTime] null keeps the task's own, as a repeat rolling forward does.
 TodoSortBatch applyDueDateChange(
   TodoTask task,
   List<TodoTask> activeTasks, {
   required DateTime? dueDate,
   required bool clearDueDate,
+  bool? dueHasTime,
 }) {
   if (!clearDueDate &&
       dueDate != null &&
       task.dueDate != null &&
       task.dueDate == dueDate) {
-    return TodoSortBatch(tasks: [task]);
+    // The same instant sorts the same, with or without its time shown.
+    return TodoSortBatch(
+      tasks: [
+        dueHasTime == null || dueHasTime == task.dueHasTime
+            ? task
+            : task.copyWith(dueHasTime: dueHasTime),
+      ],
+    );
   }
 
   final now = utcNow();
@@ -271,7 +280,11 @@ TodoSortBatch applyDueDateChange(
     return TodoSortBatch(tasks: [task]);
   }
 
-  final dated = task.copyWith(dueDate: dueDate, dueDateSetAt: now);
+  final dated = task.copyWith(
+    dueDate: dueDate,
+    dueHasTime: dueHasTime,
+    dueDateSetAt: now,
+  );
 
   if (task.starred) {
     return _batchFromOrder(

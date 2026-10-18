@@ -1938,7 +1938,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             : Theme.of(context).colorScheme.primary.toARGB32(),
       );
 
-      pickedDt = await showContextualPopover<DateTime>(
+      pickedDt = (await showContextualPopover<DateTimePick>(
         context: context,
         buttonContext: buttonContext,
         width: kDateTimeSelectorPopoverSize.width,
@@ -1948,7 +1948,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           initialDateTime: entry.entryDate.toLocal(),
           accentColor: accentColor,
         ),
-      );
+      ))?.dateTime;
     } finally {
       // Left set by a throwing read or route, the date pill would render in
       // its active state for the life of the page — and the button would

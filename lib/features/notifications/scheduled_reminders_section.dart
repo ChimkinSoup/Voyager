@@ -703,7 +703,7 @@ class _ScheduledReminderEditorState
       // nothing else on it to crowd.
       final viewport = MediaQuery.sizeOf(context);
       final narrowed = viewport.width - 16 < _oncePickerSize.width;
-      final picked = await showContextualPopover<DateTime>(
+      final picked = (await showContextualPopover<DateTimePick>(
         context: context,
         buttonContext: buttonContext,
         width: _oncePickerSize.width,
@@ -713,7 +713,7 @@ class _ScheduledReminderEditorState
         builder: (_) => DateTimeSelectorPopover(
           initialDateTime: atLocalMinutes(_onceDate, _minutes),
         ),
-      );
+      ))?.dateTime;
       if (picked == null || !mounted) return;
       final local = picked.toLocal();
       setState(() {

@@ -3742,6 +3742,7 @@ class RemoteSyncService {
                 title: merged.title,
                 notes: owed.isEmpty ? null : owed,
                 dueDate: merged.dueDate,
+                dueHasTime: merged.dueHasTime,
                 completed: merged.completed,
                 completedAt: merged.completedAt,
                 starred: merged.starred,

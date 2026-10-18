@@ -908,7 +908,7 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
       if (!mounted || !buttonContext.mounted) return;
 
       final accent = Theme.of(context).colorScheme.primary;
-      picked = await showContextualPopover<DateTime>(
+      picked = (await showContextualPopover<DateTimePick>(
         context: context,
         buttonContext: buttonContext,
         width: kDateTimeSelectorPopoverSize.width,
@@ -918,7 +918,7 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
           initialDateTime: entry.entryDate.toLocal(),
           accentColor: accent,
         ),
-      );
+      ))?.dateTime;
     } finally {
       // Left set by a throwing flush, builder or route, the date pill would
       // render in its active state for the life of the page — and the button

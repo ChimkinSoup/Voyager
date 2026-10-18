@@ -159,6 +159,7 @@ Future<void> restoreTaskWithSubtasks(
         title: task.title,
         notes: task.notes,
         dueDate: task.dueDate,
+        dueHasTime: task.dueHasTime,
         completed: task.completed,
         completedAt: task.completedAt,
         starred: task.starred,

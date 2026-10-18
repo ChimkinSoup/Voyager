@@ -151,7 +151,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    DateTime? picked;
+    DateTimePick? picked;
     await tester.pumpWidget(
       datePickerSettingsScope(
         MaterialApp(
@@ -160,7 +160,7 @@ void main() {
               child: Builder(
                 builder: (context) => ElevatedButton(
                   onPressed: () async {
-                    picked = await showContextualPopover<DateTime>(
+                    picked = await showContextualPopover<DateTimePick>(
                       context: context,
                       buttonContext: context,
                       width: 500,
@@ -192,6 +192,6 @@ void main() {
     await _pressEnter(tester, ctrl: false);
 
     expect(find.byType(DateTimeSelectorPopover), findsNothing);
-    expect(picked, DateTime(2026, 10, 5));
+    expect(picked, (dateTime: DateTime(2026, 10, 5), hasTime: false));
   });
 }

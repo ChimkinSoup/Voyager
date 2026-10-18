@@ -1497,7 +1497,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
     );
 
     setState(() => _isDatePickerOpen = true);
-    final pickedDt = await showContextualPopover<DateTime>(
+    final pickedDt = (await showContextualPopover<DateTimePick>(
       context: context,
       buttonContext: buttonContext,
       width: kDateTimeSelectorPopoverSize.width,
@@ -1507,7 +1507,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
         initialDateTime: _entry.entryDate.toLocal(),
         accentColor: accentColor,
       ),
-    );
+    ))?.dateTime;
     if (mounted) setState(() => _isDatePickerOpen = false);
     if (pickedDt == null) return;
 
@@ -2041,7 +2041,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
 
   Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
     setState(() => _isDatePickerOpen = true);
-    final pickedDt = await showContextualPopover<DateTime>(
+    final pickedDt = (await showContextualPopover<DateTimePick>(
       context: context,
       buttonContext: buttonContext,
       width: kDateTimeSelectorPopoverSize.width,
@@ -2051,7 +2051,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
         initialDateTime: _entry.entryDate.toLocal(),
         accentColor: widget.accentColor,
       ),
-    );
+    ))?.dateTime;
     if (mounted) setState(() => _isDatePickerOpen = false);
     if (pickedDt == null) return;
 

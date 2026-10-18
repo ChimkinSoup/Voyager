@@ -20,6 +20,8 @@ import 'package:voyager/domain/models/settings_models.dart'
     show JobExperienceSnippet, Snippet, defaultPetalColor;
 import 'package:voyager/domain/models/calendar_models.dart'
     show CalendarDoneMark;
+import 'package:voyager/domain/models/todo_models.dart'
+    show TodoTask, legacyDueHasTime;
 import 'package:voyager/domain/services/calendar_recurrence.dart'
     show decodeExceptionDates, encodeDoneMarks;
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -195,6 +197,9 @@ class TodoTasksTable extends Table {
   TextColumn get title => text()();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get dueDate => dateTime().nullable()();
+
+  /// See [TodoTask.dueHasTime].
+  BoolColumn get dueHasTime => boolean().withDefault(const Constant(false))();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
 
   /// See [TodoTask.completedAt].
@@ -2085,7 +2090,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 155;
+  int get schemaVersion => 156;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3803,6 +3808,15 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.assetValuationsExpanded,
         );
       }
+      if (from < 156) {
+        await _addColumnIfNotExists(
+          migrator,
+          'todo_tasks_table',
+          todoTasksTable,
+          todoTasksTable.dueHasTime,
+        );
+        await _backfillTodoDueHasTime();
+      }
     },
   );
 
@@ -3857,13 +3871,14 @@ class AppDatabase extends _$AppDatabase {
       final unused = <String>{};
       for (final row in asSeeded) {
         if (referenced.contains(row.id)) {
-          await (update(exercisesTable)..where((t) => t.id.equals(row.id)))
-              .write(
-                ExercisesTableCompanion(
-                  version: const Value(1),
-                  updatedAt: Value(now),
-                ),
-              );
+          await (update(
+            exercisesTable,
+          )..where((t) => t.id.equals(row.id))).write(
+            ExercisesTableCompanion(
+              version: const Value(1),
+              updatedAt: Value(now),
+            ),
+          );
           await owe(row.id);
         } else {
           await (delete(
@@ -4251,6 +4266,35 @@ class AppDatabase extends _$AppDatabase {
       );
     }
     await migrator.dropColumn(calendarEventsTable, 'done_dates');
+  }
+
+  /// v156: due dates used to mark "no time" as local midnight. Sets
+  /// [TodoTask.dueHasTime] on every row that reads as having a time under
+  /// that rule; the rest keep the column's default of no time. Not uploaded:
+  /// a cloud copy without the field is read by the same rule.
+  Future<void> _backfillTodoDueHasTime() async {
+    final rows = await customSelect(
+      'SELECT id, due_date FROM todo_tasks_table WHERE due_date IS NOT NULL',
+    ).get();
+    final timed = [
+      for (final row in rows)
+        if (legacyDueHasTime(row.read<DateTime>('due_date')))
+          row.read<String>('id'),
+    ];
+    // In chunks, under SQLite's cap on bound parameters per statement.
+    const chunk = 500;
+    for (var i = 0; i < timed.length; i += chunk) {
+      final ids = timed.sublist(
+        i,
+        i + chunk < timed.length ? i + chunk : timed.length,
+      );
+      await customUpdate(
+        'UPDATE todo_tasks_table SET due_has_time = 1 '
+        'WHERE id IN (${List.filled(ids.length, '?').join(', ')})',
+        variables: [for (final id in ids) Variable.withString(id)],
+        updates: {todoTasksTable},
+      );
+    }
   }
 
   /// Skips ADD COLUMN when the local DB already has it (e.g. after branch churn,

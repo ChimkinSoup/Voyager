@@ -2988,6 +2988,21 @@ class $TodoTasksTableTable extends TodoTasksTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _dueHasTimeMeta = const VerificationMeta(
+    'dueHasTime',
+  );
+  @override
+  late final GeneratedColumn<bool> dueHasTime = GeneratedColumn<bool>(
+    'due_has_time',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("due_has_time" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _completedMeta = const VerificationMeta(
     'completed',
   );
@@ -3129,6 +3144,7 @@ class $TodoTasksTableTable extends TodoTasksTable
     title,
     notes,
     dueDate,
+    dueHasTime,
     completed,
     completedAt,
     starred,
@@ -3193,6 +3209,15 @@ class $TodoTasksTableTable extends TodoTasksTable
       context.handle(
         _dueDateMeta,
         dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    }
+    if (data.containsKey('due_has_time')) {
+      context.handle(
+        _dueHasTimeMeta,
+        dueHasTime.isAcceptableOrUnknown(
+          data['due_has_time']!,
+          _dueHasTimeMeta,
+        ),
       );
     }
     if (data.containsKey('completed')) {
@@ -3307,6 +3332,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_date'],
       ),
+      dueHasTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}due_has_time'],
+      )!,
       completed: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}completed'],
@@ -3368,6 +3397,9 @@ class TodoTasksTableData extends DataClass
   final String title;
   final String? notes;
   final DateTime? dueDate;
+
+  /// See [TodoTask.dueHasTime].
+  final bool dueHasTime;
   final bool completed;
 
   /// See [TodoTask.completedAt].
@@ -3396,6 +3428,7 @@ class TodoTasksTableData extends DataClass
     required this.title,
     this.notes,
     this.dueDate,
+    required this.dueHasTime,
     required this.completed,
     this.completedAt,
     required this.starred,
@@ -3423,6 +3456,7 @@ class TodoTasksTableData extends DataClass
     if (!nullToAbsent || dueDate != null) {
       map['due_date'] = Variable<DateTime>(dueDate);
     }
+    map['due_has_time'] = Variable<bool>(dueHasTime);
     map['completed'] = Variable<bool>(completed);
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
@@ -3459,6 +3493,7 @@ class TodoTasksTableData extends DataClass
       dueDate: dueDate == null && nullToAbsent
           ? const Value.absent()
           : Value(dueDate),
+      dueHasTime: Value(dueHasTime),
       completed: Value(completed),
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3493,6 +3528,7 @@ class TodoTasksTableData extends DataClass
       title: serializer.fromJson<String>(json['title']),
       notes: serializer.fromJson<String?>(json['notes']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
+      dueHasTime: serializer.fromJson<bool>(json['dueHasTime']),
       completed: serializer.fromJson<bool>(json['completed']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       starred: serializer.fromJson<bool>(json['starred']),
@@ -3518,6 +3554,7 @@ class TodoTasksTableData extends DataClass
       'title': serializer.toJson<String>(title),
       'notes': serializer.toJson<String?>(notes),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
+      'dueHasTime': serializer.toJson<bool>(dueHasTime),
       'completed': serializer.toJson<bool>(completed),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'starred': serializer.toJson<bool>(starred),
@@ -3539,6 +3576,7 @@ class TodoTasksTableData extends DataClass
     String? title,
     Value<String?> notes = const Value.absent(),
     Value<DateTime?> dueDate = const Value.absent(),
+    bool? dueHasTime,
     bool? completed,
     Value<DateTime?> completedAt = const Value.absent(),
     bool? starred,
@@ -3557,6 +3595,7 @@ class TodoTasksTableData extends DataClass
     title: title ?? this.title,
     notes: notes.present ? notes.value : this.notes,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
+    dueHasTime: dueHasTime ?? this.dueHasTime,
     completed: completed ?? this.completed,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     starred: starred ?? this.starred,
@@ -3581,6 +3620,9 @@ class TodoTasksTableData extends DataClass
       title: data.title.present ? data.title.value : this.title,
       notes: data.notes.present ? data.notes.value : this.notes,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      dueHasTime: data.dueHasTime.present
+          ? data.dueHasTime.value
+          : this.dueHasTime,
       completed: data.completed.present ? data.completed.value : this.completed,
       completedAt: data.completedAt.present
           ? data.completedAt.value
@@ -3612,6 +3654,7 @@ class TodoTasksTableData extends DataClass
           ..write('title: $title, ')
           ..write('notes: $notes, ')
           ..write('dueDate: $dueDate, ')
+          ..write('dueHasTime: $dueHasTime, ')
           ..write('completed: $completed, ')
           ..write('completedAt: $completedAt, ')
           ..write('starred: $starred, ')
@@ -3635,6 +3678,7 @@ class TodoTasksTableData extends DataClass
     title,
     notes,
     dueDate,
+    dueHasTime,
     completed,
     completedAt,
     starred,
@@ -3657,6 +3701,7 @@ class TodoTasksTableData extends DataClass
           other.title == this.title &&
           other.notes == this.notes &&
           other.dueDate == this.dueDate &&
+          other.dueHasTime == this.dueHasTime &&
           other.completed == this.completed &&
           other.completedAt == this.completedAt &&
           other.starred == this.starred &&
@@ -3677,6 +3722,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<String> title;
   final Value<String?> notes;
   final Value<DateTime?> dueDate;
+  final Value<bool> dueHasTime;
   final Value<bool> completed;
   final Value<DateTime?> completedAt;
   final Value<bool> starred;
@@ -3696,6 +3742,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.title = const Value.absent(),
     this.notes = const Value.absent(),
     this.dueDate = const Value.absent(),
+    this.dueHasTime = const Value.absent(),
     this.completed = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.starred = const Value.absent(),
@@ -3716,6 +3763,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     required String title,
     this.notes = const Value.absent(),
     this.dueDate = const Value.absent(),
+    this.dueHasTime = const Value.absent(),
     this.completed = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.starred = const Value.absent(),
@@ -3740,6 +3788,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<String>? title,
     Expression<String>? notes,
     Expression<DateTime>? dueDate,
+    Expression<bool>? dueHasTime,
     Expression<bool>? completed,
     Expression<DateTime>? completedAt,
     Expression<bool>? starred,
@@ -3760,6 +3809,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (title != null) 'title': title,
       if (notes != null) 'notes': notes,
       if (dueDate != null) 'due_date': dueDate,
+      if (dueHasTime != null) 'due_has_time': dueHasTime,
       if (completed != null) 'completed': completed,
       if (completedAt != null) 'completed_at': completedAt,
       if (starred != null) 'starred': starred,
@@ -3782,6 +3832,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<String>? title,
     Value<String?>? notes,
     Value<DateTime?>? dueDate,
+    Value<bool>? dueHasTime,
     Value<bool>? completed,
     Value<DateTime?>? completedAt,
     Value<bool>? starred,
@@ -3802,6 +3853,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       title: title ?? this.title,
       notes: notes ?? this.notes,
       dueDate: dueDate ?? this.dueDate,
+      dueHasTime: dueHasTime ?? this.dueHasTime,
       completed: completed ?? this.completed,
       completedAt: completedAt ?? this.completedAt,
       starred: starred ?? this.starred,
@@ -3837,6 +3889,9 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     }
     if (dueDate.present) {
       map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
+    if (dueHasTime.present) {
+      map['due_has_time'] = Variable<bool>(dueHasTime.value);
     }
     if (completed.present) {
       map['completed'] = Variable<bool>(completed.value);
@@ -3886,6 +3941,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('title: $title, ')
           ..write('notes: $notes, ')
           ..write('dueDate: $dueDate, ')
+          ..write('dueHasTime: $dueHasTime, ')
           ..write('completed: $completed, ')
           ..write('completedAt: $completedAt, ')
           ..write('starred: $starred, ')
@@ -54351,6 +54407,7 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       required String title,
       Value<String?> notes,
       Value<DateTime?> dueDate,
+      Value<bool> dueHasTime,
       Value<bool> completed,
       Value<DateTime?> completedAt,
       Value<bool> starred,
@@ -54372,6 +54429,7 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String?> notes,
       Value<DateTime?> dueDate,
+      Value<bool> dueHasTime,
       Value<bool> completed,
       Value<DateTime?> completedAt,
       Value<bool> starred,
@@ -54422,6 +54480,11 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<DateTime> get dueDate => $composableBuilder(
     column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get dueHasTime => $composableBuilder(
+    column: $table.dueHasTime,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -54520,6 +54583,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get dueHasTime => $composableBuilder(
+    column: $table.dueHasTime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get completed => $composableBuilder(
     column: $table.completed,
     builder: (column) => ColumnOrderings(column),
@@ -54604,6 +54672,11 @@ class $$TodoTasksTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get dueDate =>
       $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<bool> get dueHasTime => $composableBuilder(
+    column: $table.dueHasTime,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get completed =>
       $composableBuilder(column: $table.completed, builder: (column) => column);
@@ -54690,6 +54763,7 @@ class $$TodoTasksTableTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
+                Value<bool> dueHasTime = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
@@ -54709,6 +54783,7 @@ class $$TodoTasksTableTableTableManager
                 title: title,
                 notes: notes,
                 dueDate: dueDate,
+                dueHasTime: dueHasTime,
                 completed: completed,
                 completedAt: completedAt,
                 starred: starred,
@@ -54730,6 +54805,7 @@ class $$TodoTasksTableTableTableManager
                 required String title,
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
+                Value<bool> dueHasTime = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
@@ -54749,6 +54825,7 @@ class $$TodoTasksTableTableTableManager
                 title: title,
                 notes: notes,
                 dueDate: dueDate,
+                dueHasTime: dueHasTime,
                 completed: completed,
                 completedAt: completedAt,
                 starred: starred,

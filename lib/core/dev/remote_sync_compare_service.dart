@@ -584,6 +584,11 @@ class RemoteSyncCompareService {
       parseFirestoreDate(remote['dueDate']),
     );
     compare(
+      'dueHasTime',
+      '${local.dueHasTime}',
+      '${remote['dueHasTime'] as bool? ?? legacyDueHasTime(parseFirestoreDate(remote['dueDate']))}',
+    );
+    compare(
       'parentTaskId',
       local.parentTaskId ?? '',
       remote['parentTaskId'] as String? ?? '',

@@ -8,7 +8,8 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -20,7 +21,7 @@ import 'package:voyager/features/hotkeys/quick_capture.dart';
 enum _Panel { due, list }
 
 /// The picker plus the "No due date" button under it.
-final double _datePanelHeight = kDateSelectorPopoverSize.height + 50;
+final double _datePanelHeight = kDateTimeSelectorPopoverSize.height + 50;
 const double _listRowHeight = 40;
 
 /// The todo hotkey's Spotlight-style quick-add bar.
@@ -40,6 +41,10 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   _Panel? _panel;
   var _saving = false;
 
+  /// The open date picker's pick before Done or Enter, kept when the panel is
+  /// closed another way, as a dismissed picker keeps it on the Todo page.
+  DateTimePick? _pendingDue;
+
   /// The bar's height: the whole window when no picker is open, measured
   /// rather than taken from the 64 the window is asked for, since the
   /// frameless frame still takes a few pixels of client area. Held while a
@@ -51,9 +56,14 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   /// repository, so [settingsProvider] can lag them.
   String? _lastTouchedId;
 
+  late final FloaterController _floaters;
+
   @override
   void initState() {
     super.initState();
+    // A dismiss with the date picker open keeps its pick too.
+    _floaters = ref.read(floaterControllerProvider)
+      ..registerFlush(_flushPendingDue);
     _title = TextEditingController(
       text: ref.read(todoCaptureDraftProvider).title,
     )..addListener(_keepTitleInDraft);
@@ -66,6 +76,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
 
   @override
   void dispose() {
+    _floaters.unregisterFlush(_flushPendingDue);
     _title
       ..removeListener(_keepTitleInDraft)
       ..dispose();
@@ -103,6 +114,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   }
 
   Future<void> _togglePanel(_Panel panel, int listCount) async {
+    _keepPendingDue();
     final next = _panel == panel ? null : panel;
     if (next == null) {
       _closePanel();
@@ -118,6 +130,19 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     if (mounted) setState(() => _panel = next);
   }
 
+  Future<void> _flushPendingDue() async => _keepPendingDue();
+
+  void _keepPendingDue() {
+    final due = _pendingDue;
+    if (due == null) return;
+    _pendingDue = null;
+    final notifier = ref.read(todoCaptureDraftProvider.notifier);
+    notifier.state = notifier.state.copyWith(
+      dueDate: due.dateTime,
+      dueHasTime: due.hasTime,
+    );
+  }
+
   void _closePanel() {
     // Flagged before the rebuild below, which would otherwise measure the
     // window before it has shrunk.
@@ -127,12 +152,14 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     _titleFocus.requestFocus();
   }
 
-  void _pickDue(DateTime? day) {
+  void _pickDue(DateTimePick? due) {
+    _pendingDue = null;
     final notifier = ref.read(todoCaptureDraftProvider.notifier);
-    notifier.state = day == null
+    notifier.state = due == null
         ? notifier.state.copyWith(clearDueDate: true)
         : notifier.state.copyWith(
-            dueDate: DateTime(day.year, day.month, day.day),
+            dueDate: due.dateTime,
+            dueHasTime: due.hasTime,
           );
     _closePanel();
   }
@@ -143,6 +170,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     notifier.state = TodoCaptureDraft(
       title: draft.title,
       dueDate: draft.dueDate,
+      dueHasTime: draft.dueHasTime,
       listId: listId,
       listIdBasis: _lastTouchedId,
     );
@@ -160,6 +188,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
       return;
     }
     _saving = true;
+    _keepPendingDue();
     final container = ProviderScope.containerOf(context, listen: false);
     final draft = ref.read(todoCaptureDraftProvider);
     try {
@@ -188,6 +217,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         listId: listId,
         title: title,
         dueDate: due,
+        dueHasTime: due != null && draft.dueHasTime,
         dueDateSetAt: due == null ? null : now,
         createdAt: now,
         updatedAt: now,
@@ -243,6 +273,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         .map((list) => list.name)
         .firstOrNull;
     final due = draft.dueDate;
+    final hasTime = due != null && draft.dueHasTime;
 
     final bar = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -271,7 +302,10 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
           const SizedBox(width: 8),
           SelectorPill(
             icon: PhosphorIconsRegular.calendar,
-            label: due == null ? 'Due' : DateFormat.MMMd().format(due),
+            label: due == null
+                ? 'Due'
+                : DateFormat.MMMd().format(due) +
+                      (hasTime ? ' at ${formatTime12Hour(due)}' : ''),
             isActive: _panel == _Panel.due,
             accentColor: accent,
             onTap: () => _togglePanel(_Panel.due, lists.length),
@@ -304,15 +338,15 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
                   children: [
                     Expanded(
                       child: Center(
-                        child: SizedBox(
-                          width: 320,
-                          child: DateSelectorPopover(
-                            initialStartDate: due ?? DateTime.now(),
-                            initialEndDate: due ?? DateTime.now(),
-                            singleDateMode: true,
-                            inlineMode: true,
+                        child: SizedBox.fromSize(
+                          size: kDateTimeSelectorPopoverSize,
+                          child: DateTimeSelectorPopover(
+                            initialDateTime: due ?? DateTime.now(),
                             accentColor: accent,
-                            onDateSelected: _pickDue,
+                            optionalTime: true,
+                            initialHasTime: hasTime,
+                            onSubmitted: _pickDue,
+                            onChanged: (due) => _pendingDue = due,
                           ),
                         ),
                       ),

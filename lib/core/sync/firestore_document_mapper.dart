@@ -2062,6 +2062,7 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'title': task.title,
   'notes': task.notes,
   'dueDate': _dateToFirestore(task.dueDate),
+  'dueHasTime': task.dueHasTime,
   'completed': task.completed,
   'completedAt': _dateToFirestore(task.completedAt),
   'starred': task.starred,
@@ -2118,6 +2119,20 @@ TodoTask mergeTodoTaskFromRemote(
       ? remoteUpdated
       : local?.updatedAt ?? remoteUpdated;
 
+  final dueDate = metadataRemoteWins
+      ? (data.containsKey('dueDate')
+            ? parseFirestoreDate(data['dueDate'])
+            : local?.dueDate)
+      : local!.dueDate;
+  // A document from a build before the field says nothing: read its due date
+  // the way that build wrote it.
+  final dueHasTime = metadataRemoteWins
+      ? (data['dueHasTime'] as bool? ??
+            (data.containsKey('dueDate')
+                ? legacyDueHasTime(dueDate)
+                : local?.dueHasTime ?? false))
+      : local!.dueHasTime;
+
   return TodoTask(
     id: id,
     listId: listId,
@@ -2125,11 +2140,8 @@ TodoTask mergeTodoTaskFromRemote(
         ? (data['title'] as String? ?? local?.title ?? '')
         : local!.title,
     notes: notes,
-    dueDate: metadataRemoteWins
-        ? (data.containsKey('dueDate')
-              ? parseFirestoreDate(data['dueDate'])
-              : local?.dueDate)
-        : local!.dueDate,
+    dueDate: dueDate,
+    dueHasTime: dueHasTime,
     completed: metadataRemoteWins
         ? (data['completed'] as bool? ?? local?.completed ?? false)
         : local!.completed,

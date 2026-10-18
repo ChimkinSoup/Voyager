@@ -11,11 +11,25 @@ import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
 /// calendar half to fit all six week rows above the Done bar.
 const kDateTimeSelectorPopoverSize = Size(500, 440);
 
+/// What [DateTimeSelectorPopover] returns. [hasTime] is false only for an
+/// optional time left unset, when [dateTime] is the day's local midnight; a
+/// picked 12:00 AM has it true.
+typedef DateTimePick = ({DateTime dateTime, bool hasTime});
+
 class DateTimeSelectorPopover extends StatefulWidget {
   final DateTime initialDateTime;
   final Color? accentColor;
   final bool optionalTime;
   final bool initialHasTime;
+
+  /// Set when shown inline rather than as a route: Done and Enter hand the
+  /// pick here instead of popping.
+  final ValueChanged<DateTimePick>? onSubmitted;
+
+  /// Inline only: the pick as it stands after each change, so a host that
+  /// closes the picker some other way can keep it, as a route's dismissal
+  /// does.
+  final ValueChanged<DateTimePick>? onChanged;
 
   const DateTimeSelectorPopover({
     super.key,
@@ -23,6 +37,8 @@ class DateTimeSelectorPopover extends StatefulWidget {
     this.accentColor,
     this.optionalTime = false,
     this.initialHasTime = true,
+    this.onSubmitted,
+    this.onChanged,
   });
 
   @override
@@ -70,6 +86,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
             // When focusing, if time wasn't selected, select it now.
             if (!_timeSelected && widget.optionalTime) {
               _timeSelected = true;
+              _changed();
             }
             _timeController.text = _formatTime(_currentDateTime);
             _selectAllNextTap = true;
@@ -116,7 +133,10 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
 
         if (route.animation?.status == AnimationStatus.completed) {
           _focusRequested = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Deferred past the date grid's own first-frame focus grab, which
+          // is queued after this one and would otherwise win.
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await Future<void>.value();
             if (mounted) {
               if (_timeSelected) {
                 _timeFocus.requestFocus();
@@ -152,8 +172,24 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
       setState(() {
         _currentDateTime = parsed;
       });
+      _changed();
     }
   }
+
+  /// The pick as Done would return it: the date alone while an optional time
+  /// is unset.
+  DateTimePick get _result => widget.optionalTime && !_timeSelected
+      ? (
+          dateTime: DateTime(
+            _currentDateTime.year,
+            _currentDateTime.month,
+            _currentDateTime.day,
+          ),
+          hasTime: false,
+        )
+      : (dateTime: _currentDateTime, hasTime: true);
+
+  void _changed() => widget.onChanged?.call(_result);
 
   void _submit() {
     if (!mounted) return;
@@ -175,18 +211,13 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
         _currentDateTime = parsed;
       }
     }
-    setState(() => _canPop = true);
-    if (widget.optionalTime && !_timeSelected) {
-      Navigator.of(context).maybePop(
-        DateTime(
-          _currentDateTime.year,
-          _currentDateTime.month,
-          _currentDateTime.day,
-        ),
-      );
-    } else {
-      Navigator.of(context).maybePop(_currentDateTime);
+    final onSubmitted = widget.onSubmitted;
+    if (onSubmitted != null) {
+      onSubmitted(_result);
+      return;
     }
+    setState(() => _canPop = true);
+    Navigator.of(context).maybePop(_result);
   }
 
   @override
@@ -212,25 +243,13 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
     );
 
     return PopScope(
-      canPop: _canPop,
+      canPop: _canPop || widget.onSubmitted != null,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (mounted) {
           setState(() => _canPop = true);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              if (widget.optionalTime && !_timeSelected) {
-                Navigator.of(context).pop(
-                  DateTime(
-                    _currentDateTime.year,
-                    _currentDateTime.month,
-                    _currentDateTime.day,
-                  ),
-                );
-              } else {
-                Navigator.of(context).pop(_currentDateTime);
-              }
-            }
+            if (mounted) Navigator.of(context).pop(_result);
           });
         }
       },
@@ -273,6 +292,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                               _currentDateTime.minute,
                             );
                           });
+                          _changed();
                           _mainFocus.requestFocus();
                         },
                       ),
@@ -319,6 +339,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                                           _currentDateTime,
                                         );
                                       });
+                                      _changed();
                                     },
                                   ),
                                 ),
@@ -367,6 +388,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                                       _mainFocus.requestFocus();
                                     }
                                   });
+                                  _changed();
                                 },
                               ),
                             ),

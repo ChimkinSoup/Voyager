@@ -104,6 +104,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   String? _subtaskDraftTaskId;
   final GlobalKey _subtaskListKey = GlobalKey();
   DateTime? _dueDate;
+  bool _dueHasTime = false;
   late RecurrenceRule _recurrence;
   bool _isRepeatPickerOpen = false;
   List<TodoTask> _subtasks = [];
@@ -144,6 +145,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _subtaskDrafts = ref.read(todoSubtaskDraftStoreProvider);
     _loadSubtaskDraft();
     _dueDate = widget.task.dueDate;
+    _dueHasTime = widget.task.dueHasTime;
     _recurrence = widget.task.recurrence;
     _loadSubtasks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -185,6 +187,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _notesUndo.reset();
       _lastNotesText = _notesController.text;
       _dueDate = widget.task.dueDate;
+      _dueHasTime = widget.task.dueHasTime;
       _recurrence = widget.task.recurrence;
       // Cleared, not left to the query below: until it resolves the panel
       // would otherwise still be listing the previous task's subtasks, and
@@ -198,12 +201,14 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _registerPendingNotesListener(widget.task.id);
       _setNotesEditingFlag(_notesFocusNode.hasFocus);
       _beginEditingSession(ref.read(remoteSyncServiceProvider));
-    } else if (oldWidget.task.dueDate != widget.task.dueDate) {
+    } else if (oldWidget.task.dueDate != widget.task.dueDate ||
+        oldWidget.task.dueHasTime != widget.task.dueHasTime) {
       // Same task, but its due date changed externally (e.g. via the row's
       // right-click menu while this panel is open). Sync the locally-held
       // _dueDate so the pill updates instantly instead of only after the user
       // reselects the task.
       _dueDate = widget.task.dueDate;
+      _dueHasTime = widget.task.dueHasTime;
       _recurrence = widget.task.recurrence;
     }
   }
@@ -529,6 +534,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     String? title,
     String? notes,
     DateTime? dueDate,
+    bool? dueHasTime,
     RecurrenceRule? recurrence,
     bool clearDueDate = false,
     String? listId,
@@ -574,6 +580,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     if (_closeIfDeleted(stored)) return;
 
     final effectiveDue = clearDueDate ? null : (dueDate ?? _dueDate);
+    final effectiveHasTime = clearDueDate ? false : (dueHasTime ?? _dueHasTime);
     // Against the stored row too: the move put an optimistic copy carrying
     // the destination into the page, and by the time the read above returns
     // the page may already have handed that copy to this panel as
@@ -602,6 +609,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       notes: notesText.isEmpty ? null : notesText,
       clearNotes: notesText.isEmpty,
       dueDate: effectiveDue,
+      dueHasTime: effectiveHasTime,
       clearDueDate: clearDueDate,
       recurrence: effectiveRule,
       recurrenceAnchor: anchor,
@@ -621,6 +629,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             notes: baseUpdate.notes,
             clearNotes: baseUpdate.notes == null,
             dueDate: baseUpdate.dueDate,
+            dueHasTime: baseUpdate.dueHasTime,
             clearDueDate: clearDueDate,
             dueDateSetAt: baseUpdate.dueDateSetAt,
             clearDueDateSetAt: clearDueDate,
@@ -655,6 +664,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         active,
         dueDate: effectiveDue,
         clearDueDate: clearDueDate,
+        dueHasTime: effectiveHasTime,
       );
       TodoTask? savedTask;
       for (final task in batch.tasks) {
@@ -695,6 +705,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               ? widget.task.notes == null
               : notesText == widget.task.notes) &&
           effectiveDue == widget.task.dueDate &&
+          // Against the stored row: the instant is unchanged, so only the
+          // flag says this is an edit, and widget.task may already be the
+          // optimistic copy carrying it (as in BUG-227).
+          effectiveHasTime == stored.dueHasTime &&
           effectiveRule == widget.task.recurrence &&
           anchor == widget.task.recurrenceAnchor;
       if (!unchanged) {
@@ -875,7 +889,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   Future<void> _clearDueDate() async {
     final hadDueDate = widget.task.dueDate != null;
-    setState(() => _dueDate = null);
+    setState(() {
+      _dueDate = null;
+      _dueHasTime = false;
+    });
     widget.onTaskOptimistic?.call(widget.task.copyWith(clearDueDate: true));
     unawaited(_save(clearDueDate: true, reorderDueDate: hadDueDate));
   }
@@ -1032,6 +1049,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       title: subtask.title,
       notes: subtask.notes,
       dueDate: subtask.dueDate,
+      dueHasTime: subtask.dueHasTime,
       completed: subtask.completed,
       completedAt: subtask.completedAt,
       starred: subtask.starred,
@@ -1365,9 +1383,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     child: Builder(
                       builder: (context) {
                         final localDue = _dueDate?.toLocal();
-                        final hasTime =
-                            localDue != null &&
-                            (localDue.hour != 0 || localDue.minute != 0);
+                        final hasTime = localDue != null && _dueHasTime;
                         final label = localDue == null
                             ? 'Set date & time'
                             : DateFormat(
@@ -1394,8 +1410,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                                         ) // default time 12:00 PM if none
                                       : DateTime.now().toLocal());
 
-                            final pickedDt =
-                                await showContextualPopover<DateTime>(
+                            final picked =
+                                await showContextualPopover<DateTimePick>(
                                   context: context,
                                   buttonContext: context,
                                   width: kDateTimeSelectorPopoverSize.width,
@@ -1412,19 +1428,24 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                             if (mounted)
                               setState(() => _isDatePickerOpen = false);
 
-                            if (pickedDt != null) {
-                              final newDue = pickedDt.toUtc();
+                            if (picked != null) {
+                              final newDue = picked.dateTime.toUtc();
                               final previousDue = widget.task.dueDate;
-                              setState(() => _dueDate = newDue);
+                              setState(() {
+                                _dueDate = newDue;
+                                _dueHasTime = picked.hasTime;
+                              });
                               widget.onTaskOptimistic?.call(
                                 widget.task.copyWith(
                                   dueDate: newDue,
+                                  dueHasTime: picked.hasTime,
                                   dueDateSetAt: utcNow(),
                                 ),
                               );
                               unawaited(
                                 _save(
                                   dueDate: newDue,
+                                  dueHasTime: picked.hasTime,
                                   reorderDueDate: previousDue != newDue,
                                 ),
                               );

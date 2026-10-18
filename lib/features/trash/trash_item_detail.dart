@@ -479,7 +479,8 @@ class _TrashItemDetail extends ConsumerWidget {
         else
           (PhosphorIconsRegular.circle, 'Not completed'),
         if (task.starred) (PhosphorIconsRegular.star, 'Starred'),
-        if (due != null) (PhosphorIconsRegular.calendarBlank, _dueLabel(due)),
+        if (due != null)
+          (PhosphorIconsRegular.calendarBlank, _dueLabel(due, task.dueHasTime)),
         if (task.recurrence.repeats)
           (
             PhosphorIconsRegular.repeat,
@@ -1101,10 +1102,9 @@ class _TrashItemDetail extends ConsumerWidget {
     );
   }
 
-  String _dueLabel(DateTime due) {
+  String _dueLabel(DateTime due, bool hasTime) {
     final local = due.toLocal();
-    // Midnight is the app-wide "date only" sentinel.
-    if (local.hour == 0 && local.minute == 0) {
+    if (!hasTime) {
       return 'Due ${DateFormat.yMMMd().format(local)}';
     }
     return 'Due ${DateFormat.yMMMd().format(local)} · ${formatTime12Hour(due)}';

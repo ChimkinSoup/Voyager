@@ -52,6 +52,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
   late bool _completed;
   late String _listId;
   DateTime? _dueDate;
+  bool _dueHasTime = false;
   String? _titleError;
   bool _intentionalDiscard = false;
   bool _closingAfterSave = false;
@@ -112,6 +113,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
     _completed = widget.task.completed;
     _listId = widget.task.listId;
     _dueDate = widget.task.dueDate;
+    _dueHasTime = widget.task.dueHasTime;
     _scheduleTitleFocusIfNeeded();
   }
 
@@ -132,6 +134,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
       _completed = widget.task.completed;
       _listId = widget.task.listId;
       _dueDate = widget.task.dueDate;
+      _dueHasTime = widget.task.dueHasTime;
       _titleError = null;
     }
     if (widget.focusTitleOnOpen && !oldWidget.focusTitleOnOpen) {
@@ -175,6 +178,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
         completed: _completed,
         listId: _listId,
         dueDate: _dueDate,
+        dueHasTime: _dueHasTime,
         clearDueDate: _dueDate == null,
       ),
     );
@@ -329,9 +333,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                     Builder(
                       builder: (context) {
                         final localDue = _dueDate?.toLocal();
-                        final hasTime =
-                            localDue != null &&
-                            (localDue.hour != 0 || localDue.minute != 0);
+                        final hasTime = localDue != null && _dueHasTime;
                         final label = localDue == null
                             ? 'Set date & time'
                             : DateFormat(
@@ -359,8 +361,8 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                                         )
                                       : DateTime.now().toLocal());
 
-                            final pickedDt =
-                                await showContextualPopover<DateTime>(
+                            final picked =
+                                await showContextualPopover<DateTimePick>(
                                   context: context,
                                   buttonContext: context,
                                   width: kDateTimeSelectorPopoverSize.width,
@@ -377,8 +379,11 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                             if (mounted)
                               setState(() => _isDatePickerOpen = false);
 
-                            if (pickedDt != null) {
-                              setState(() => _dueDate = pickedDt.toUtc());
+                            if (picked != null) {
+                              setState(() {
+                                _dueDate = picked.dateTime.toUtc();
+                                _dueHasTime = picked.hasTime;
+                              });
                             }
                           },
                         );
