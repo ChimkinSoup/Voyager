@@ -1020,6 +1020,11 @@ class SettingsTable extends Table {
   BoolColumn get inboxLogStatsExpanded =>
       boolean().withDefault(const Constant(false))();
 
+  /// Whether the asset sheet's Valuations list is open, one state for every
+  /// asset. Device-local like [todoCompletedSectionExpanded].
+  BoolColumn get assetValuationsExpanded =>
+      boolean().withDefault(const Constant(false))();
+
   /// [AppSettings.inboxTrackerOrder] as a JSON list, null when empty.
   TextColumn get inboxTrackerOrderJson => text().nullable()();
 
@@ -2080,7 +2085,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 154;
+  int get schemaVersion => 155;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3790,6 +3795,12 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.calendarHotkey,
+        );
+      }
+      if (from < 155) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.assetValuationsExpanded,
         );
       }
     },

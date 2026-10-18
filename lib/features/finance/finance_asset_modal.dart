@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -411,19 +413,12 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 ],
               ),
               if (existing != null) ...[
-                const SizedBox(height: 20),
-                Text(
-                  'Valuations',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _ValuationHistory(
+                const SizedBox(height: 12),
+                _ValuationsSection(
                   assetId: existing.id,
                   container: widget.container,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 _RoomSection(assetId: existing.id, container: widget.container),
               ],
               const SizedBox(height: 16),
@@ -537,6 +532,87 @@ class _RoomSection extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         RoomEventHistory(asset: asset, container: container),
+      ],
+    );
+  }
+}
+
+/// Whether the Valuations list is open. One state for every asset, seeded from
+/// the stored value and held here so a toggle rebuilds only the section — the
+/// same arrangement as the inbox's Log stats section.
+final _valuationsExpandedProvider = StateProvider<bool>(
+  (ref) => ref.watch(
+    settingsProvider.select(
+      (s) => s.valueOrNull?.assetValuationsExpanded ?? false,
+    ),
+  ),
+);
+
+/// The Valuations heading, which opens and closes [_ValuationHistory] below
+/// it. Collapsed until first opened; after that it stays as left, across
+/// assets and restarts.
+class _ValuationsSection extends ConsumerWidget {
+  const _ValuationsSection({required this.assetId, required this.container});
+
+  final String assetId;
+  final ProviderContainer container;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final expanded = ref.watch(_valuationsExpandedProvider);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () {
+            // From the provider, not the built `expanded`: two taps before a
+            // rebuild would otherwise both write the same state.
+            final next = ref
+                .read(_valuationsExpandedProvider.notifier)
+                .update((open) => !open);
+            unawaited(
+              ref
+                  .read(settingsRepositoryProvider)
+                  .saveAssetValuationsExpanded(next),
+            );
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  expanded
+                      ? PhosphorIconsRegular.caretDown
+                      : PhosphorIconsRegular.caretRight,
+                  size: 12,
+                  color: color,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Valuations',
+                  style: theme.textTheme.labelLarge?.copyWith(color: color),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: expanded
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: _ValuationHistory(
+                    assetId: assetId,
+                    container: container,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
       ],
     );
   }

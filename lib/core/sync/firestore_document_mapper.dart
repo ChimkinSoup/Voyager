@@ -3955,8 +3955,8 @@ bool _remoteClears(Map<String, dynamic> data, String key) =>
 ///    `workoutLibraryWidth`, which are sized for the screen they were dragged
 ///    on;
 ///  - where the user is: `lastSeenNavPage`, the `lastViewed*Id`s, the
-///    `*ShowAll*` scopes, `todoCompletedSectionExpanded` and
-///    `inboxLogStatsExpanded`. These change on
+///    `*ShowAll*` scopes, `todoCompletedSectionExpanded`,
+///    `inboxLogStatsExpanded` and `assetValuationsExpanded`. These change on
 ///    every page or list switch, and while they synced, merely navigating on a
 ///    device that hadn't pulled moved the clock and re-uploaded its stale copy
 ///    of every other setting over newer edits made elsewhere.

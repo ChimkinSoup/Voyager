@@ -9686,6 +9686,21 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _assetValuationsExpandedMeta =
+      const VerificationMeta('assetValuationsExpanded');
+  @override
+  late final GeneratedColumn<bool> assetValuationsExpanded =
+      GeneratedColumn<bool>(
+        'asset_valuations_expanded',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("asset_valuations_expanded" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _inboxTrackerOrderJsonMeta =
       const VerificationMeta('inboxTrackerOrderJson');
   @override
@@ -10331,6 +10346,7 @@ class $SettingsTableTable extends SettingsTable
     lastSeenNavPage,
     todoCompletedSectionExpanded,
     inboxLogStatsExpanded,
+    assetValuationsExpanded,
     inboxTrackerOrderJson,
     inboxPinnedNoteOrderJson,
     inboxSecureNoteOrderJson,
@@ -11388,6 +11404,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('asset_valuations_expanded')) {
+      context.handle(
+        _assetValuationsExpandedMeta,
+        assetValuationsExpanded.isAcceptableOrUnknown(
+          data['asset_valuations_expanded']!,
+          _assetValuationsExpandedMeta,
+        ),
+      );
+    }
     if (data.containsKey('inbox_tracker_order_json')) {
       context.handle(
         _inboxTrackerOrderJsonMeta,
@@ -12229,6 +12254,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}inbox_log_stats_expanded'],
       )!,
+      assetValuationsExpanded: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}asset_valuations_expanded'],
+      )!,
       inboxTrackerOrderJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}inbox_tracker_order_json'],
@@ -12584,6 +12613,10 @@ class SettingsTableData extends DataClass
   /// like [todoCompletedSectionExpanded].
   final bool inboxLogStatsExpanded;
 
+  /// Whether the asset sheet's Valuations list is open, one state for every
+  /// asset. Device-local like [todoCompletedSectionExpanded].
+  final bool assetValuationsExpanded;
+
   /// [AppSettings.inboxTrackerOrder] as a JSON list, null when empty.
   final String? inboxTrackerOrderJson;
 
@@ -12801,6 +12834,7 @@ class SettingsTableData extends DataClass
     this.lastSeenNavPage,
     required this.todoCompletedSectionExpanded,
     required this.inboxLogStatsExpanded,
+    required this.assetValuationsExpanded,
     this.inboxTrackerOrderJson,
     this.inboxPinnedNoteOrderJson,
     this.inboxSecureNoteOrderJson,
@@ -13110,6 +13144,7 @@ class SettingsTableData extends DataClass
       todoCompletedSectionExpanded,
     );
     map['inbox_log_stats_expanded'] = Variable<bool>(inboxLogStatsExpanded);
+    map['asset_valuations_expanded'] = Variable<bool>(assetValuationsExpanded);
     if (!nullToAbsent || inboxTrackerOrderJson != null) {
       map['inbox_tracker_order_json'] = Variable<String>(inboxTrackerOrderJson);
     }
@@ -13403,6 +13438,7 @@ class SettingsTableData extends DataClass
           : Value(lastSeenNavPage),
       todoCompletedSectionExpanded: Value(todoCompletedSectionExpanded),
       inboxLogStatsExpanded: Value(inboxLogStatsExpanded),
+      assetValuationsExpanded: Value(assetValuationsExpanded),
       inboxTrackerOrderJson: inboxTrackerOrderJson == null && nullToAbsent
           ? const Value.absent()
           : Value(inboxTrackerOrderJson),
@@ -13759,6 +13795,9 @@ class SettingsTableData extends DataClass
       inboxLogStatsExpanded: serializer.fromJson<bool>(
         json['inboxLogStatsExpanded'],
       ),
+      assetValuationsExpanded: serializer.fromJson<bool>(
+        json['assetValuationsExpanded'],
+      ),
       inboxTrackerOrderJson: serializer.fromJson<String?>(
         json['inboxTrackerOrderJson'],
       ),
@@ -14066,6 +14105,9 @@ class SettingsTableData extends DataClass
         todoCompletedSectionExpanded,
       ),
       'inboxLogStatsExpanded': serializer.toJson<bool>(inboxLogStatsExpanded),
+      'assetValuationsExpanded': serializer.toJson<bool>(
+        assetValuationsExpanded,
+      ),
       'inboxTrackerOrderJson': serializer.toJson<String?>(
         inboxTrackerOrderJson,
       ),
@@ -14261,6 +14303,7 @@ class SettingsTableData extends DataClass
     Value<String?> lastSeenNavPage = const Value.absent(),
     bool? todoCompletedSectionExpanded,
     bool? inboxLogStatsExpanded,
+    bool? assetValuationsExpanded,
     Value<String?> inboxTrackerOrderJson = const Value.absent(),
     Value<String?> inboxPinnedNoteOrderJson = const Value.absent(),
     Value<String?> inboxSecureNoteOrderJson = const Value.absent(),
@@ -14509,6 +14552,8 @@ class SettingsTableData extends DataClass
     todoCompletedSectionExpanded:
         todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
     inboxLogStatsExpanded: inboxLogStatsExpanded ?? this.inboxLogStatsExpanded,
+    assetValuationsExpanded:
+        assetValuationsExpanded ?? this.assetValuationsExpanded,
     inboxTrackerOrderJson: inboxTrackerOrderJson.present
         ? inboxTrackerOrderJson.value
         : this.inboxTrackerOrderJson,
@@ -14941,6 +14986,9 @@ class SettingsTableData extends DataClass
       inboxLogStatsExpanded: data.inboxLogStatsExpanded.present
           ? data.inboxLogStatsExpanded.value
           : this.inboxLogStatsExpanded,
+      assetValuationsExpanded: data.assetValuationsExpanded.present
+          ? data.assetValuationsExpanded.value
+          : this.assetValuationsExpanded,
       inboxTrackerOrderJson: data.inboxTrackerOrderJson.present
           ? data.inboxTrackerOrderJson.value
           : this.inboxTrackerOrderJson,
@@ -15215,6 +15263,7 @@ class SettingsTableData extends DataClass
             'todoCompletedSectionExpanded: $todoCompletedSectionExpanded, ',
           )
           ..write('inboxLogStatsExpanded: $inboxLogStatsExpanded, ')
+          ..write('assetValuationsExpanded: $assetValuationsExpanded, ')
           ..write('inboxTrackerOrderJson: $inboxTrackerOrderJson, ')
           ..write('inboxPinnedNoteOrderJson: $inboxPinnedNoteOrderJson, ')
           ..write('inboxSecureNoteOrderJson: $inboxSecureNoteOrderJson, ')
@@ -15386,6 +15435,7 @@ class SettingsTableData extends DataClass
     lastSeenNavPage,
     todoCompletedSectionExpanded,
     inboxLogStatsExpanded,
+    assetValuationsExpanded,
     inboxTrackerOrderJson,
     inboxPinnedNoteOrderJson,
     inboxSecureNoteOrderJson,
@@ -15570,6 +15620,7 @@ class SettingsTableData extends DataClass
           other.todoCompletedSectionExpanded ==
               this.todoCompletedSectionExpanded &&
           other.inboxLogStatsExpanded == this.inboxLogStatsExpanded &&
+          other.assetValuationsExpanded == this.assetValuationsExpanded &&
           other.inboxTrackerOrderJson == this.inboxTrackerOrderJson &&
           other.inboxPinnedNoteOrderJson == this.inboxPinnedNoteOrderJson &&
           other.inboxSecureNoteOrderJson == this.inboxSecureNoteOrderJson &&
@@ -15734,6 +15785,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> lastSeenNavPage;
   final Value<bool> todoCompletedSectionExpanded;
   final Value<bool> inboxLogStatsExpanded;
+  final Value<bool> assetValuationsExpanded;
   final Value<String?> inboxTrackerOrderJson;
   final Value<String?> inboxPinnedNoteOrderJson;
   final Value<String?> inboxSecureNoteOrderJson;
@@ -15892,6 +15944,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastSeenNavPage = const Value.absent(),
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.inboxLogStatsExpanded = const Value.absent(),
+    this.assetValuationsExpanded = const Value.absent(),
     this.inboxTrackerOrderJson = const Value.absent(),
     this.inboxPinnedNoteOrderJson = const Value.absent(),
     this.inboxSecureNoteOrderJson = const Value.absent(),
@@ -16051,6 +16104,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastSeenNavPage = const Value.absent(),
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.inboxLogStatsExpanded = const Value.absent(),
+    this.assetValuationsExpanded = const Value.absent(),
     this.inboxTrackerOrderJson = const Value.absent(),
     this.inboxPinnedNoteOrderJson = const Value.absent(),
     this.inboxSecureNoteOrderJson = const Value.absent(),
@@ -16210,6 +16264,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? lastSeenNavPage,
     Expression<bool>? todoCompletedSectionExpanded,
     Expression<bool>? inboxLogStatsExpanded,
+    Expression<bool>? assetValuationsExpanded,
     Expression<String>? inboxTrackerOrderJson,
     Expression<String>? inboxPinnedNoteOrderJson,
     Expression<String>? inboxSecureNoteOrderJson,
@@ -16449,6 +16504,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'todo_completed_section_expanded': todoCompletedSectionExpanded,
       if (inboxLogStatsExpanded != null)
         'inbox_log_stats_expanded': inboxLogStatsExpanded,
+      if (assetValuationsExpanded != null)
+        'asset_valuations_expanded': assetValuationsExpanded,
       if (inboxTrackerOrderJson != null)
         'inbox_tracker_order_json': inboxTrackerOrderJson,
       if (inboxPinnedNoteOrderJson != null)
@@ -16640,6 +16697,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? lastSeenNavPage,
     Value<bool>? todoCompletedSectionExpanded,
     Value<bool>? inboxLogStatsExpanded,
+    Value<bool>? assetValuationsExpanded,
     Value<String?>? inboxTrackerOrderJson,
     Value<String?>? inboxPinnedNoteOrderJson,
     Value<String?>? inboxSecureNoteOrderJson,
@@ -16855,6 +16913,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
       inboxLogStatsExpanded:
           inboxLogStatsExpanded ?? this.inboxLogStatsExpanded,
+      assetValuationsExpanded:
+          assetValuationsExpanded ?? this.assetValuationsExpanded,
       inboxTrackerOrderJson:
           inboxTrackerOrderJson ?? this.inboxTrackerOrderJson,
       inboxPinnedNoteOrderJson:
@@ -17399,6 +17459,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         inboxLogStatsExpanded.value,
       );
     }
+    if (assetValuationsExpanded.present) {
+      map['asset_valuations_expanded'] = Variable<bool>(
+        assetValuationsExpanded.value,
+      );
+    }
     if (inboxTrackerOrderJson.present) {
       map['inbox_tracker_order_json'] = Variable<String>(
         inboxTrackerOrderJson.value,
@@ -17720,6 +17785,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             'todoCompletedSectionExpanded: $todoCompletedSectionExpanded, ',
           )
           ..write('inboxLogStatsExpanded: $inboxLogStatsExpanded, ')
+          ..write('assetValuationsExpanded: $assetValuationsExpanded, ')
           ..write('inboxTrackerOrderJson: $inboxTrackerOrderJson, ')
           ..write('inboxPinnedNoteOrderJson: $inboxPinnedNoteOrderJson, ')
           ..write('inboxSecureNoteOrderJson: $inboxSecureNoteOrderJson, ')
@@ -56953,6 +57019,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> lastSeenNavPage,
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> inboxLogStatsExpanded,
+      Value<bool> assetValuationsExpanded,
       Value<String?> inboxTrackerOrderJson,
       Value<String?> inboxPinnedNoteOrderJson,
       Value<String?> inboxSecureNoteOrderJson,
@@ -57113,6 +57180,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> lastSeenNavPage,
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> inboxLogStatsExpanded,
+      Value<bool> assetValuationsExpanded,
       Value<String?> inboxTrackerOrderJson,
       Value<String?> inboxPinnedNoteOrderJson,
       Value<String?> inboxSecureNoteOrderJson,
@@ -57743,6 +57811,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get inboxLogStatsExpanded => $composableBuilder(
     column: $table.inboxLogStatsExpanded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get assetValuationsExpanded => $composableBuilder(
+    column: $table.assetValuationsExpanded,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58554,6 +58627,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get assetValuationsExpanded => $composableBuilder(
+    column: $table.assetValuationsExpanded,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get inboxTrackerOrderJson => $composableBuilder(
     column: $table.inboxTrackerOrderJson,
     builder: (column) => ColumnOrderings(column),
@@ -59354,6 +59432,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get assetValuationsExpanded => $composableBuilder(
+    column: $table.assetValuationsExpanded,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get inboxTrackerOrderJson => $composableBuilder(
     column: $table.inboxTrackerOrderJson,
     builder: (column) => column,
@@ -59738,6 +59821,7 @@ class $$SettingsTableTableTableManager
                 Value<String?> lastSeenNavPage = const Value.absent(),
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> inboxLogStatsExpanded = const Value.absent(),
+                Value<bool> assetValuationsExpanded = const Value.absent(),
                 Value<String?> inboxTrackerOrderJson = const Value.absent(),
                 Value<String?> inboxPinnedNoteOrderJson = const Value.absent(),
                 Value<String?> inboxSecureNoteOrderJson = const Value.absent(),
@@ -59904,6 +59988,7 @@ class $$SettingsTableTableTableManager
                 lastSeenNavPage: lastSeenNavPage,
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 inboxLogStatsExpanded: inboxLogStatsExpanded,
+                assetValuationsExpanded: assetValuationsExpanded,
                 inboxTrackerOrderJson: inboxTrackerOrderJson,
                 inboxPinnedNoteOrderJson: inboxPinnedNoteOrderJson,
                 inboxSecureNoteOrderJson: inboxSecureNoteOrderJson,
@@ -60087,6 +60172,7 @@ class $$SettingsTableTableTableManager
                 Value<String?> lastSeenNavPage = const Value.absent(),
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> inboxLogStatsExpanded = const Value.absent(),
+                Value<bool> assetValuationsExpanded = const Value.absent(),
                 Value<String?> inboxTrackerOrderJson = const Value.absent(),
                 Value<String?> inboxPinnedNoteOrderJson = const Value.absent(),
                 Value<String?> inboxSecureNoteOrderJson = const Value.absent(),
@@ -60253,6 +60339,7 @@ class $$SettingsTableTableTableManager
                 lastSeenNavPage: lastSeenNavPage,
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 inboxLogStatsExpanded: inboxLogStatsExpanded,
+                assetValuationsExpanded: assetValuationsExpanded,
                 inboxTrackerOrderJson: inboxTrackerOrderJson,
                 inboxPinnedNoteOrderJson: inboxPinnedNoteOrderJson,
                 inboxSecureNoteOrderJson: inboxSecureNoteOrderJson,

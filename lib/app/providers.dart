@@ -991,6 +991,7 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
               // Not written by the repository either; an older copy would
               // flip the inbox's Log stats section against the stored value.
               inboxLogStatsExpanded: current.inboxLogStatsExpanded,
+              assetValuationsExpanded: current.assetValuationsExpanded,
             ),
     );
     await ref.read(settingsRepositoryProvider).saveSettings(settings);

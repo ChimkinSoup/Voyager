@@ -511,6 +511,8 @@ void main() {
       ),
     );
     await _open(tester);
+    await tester.tap(find.text('Valuations'));
+    await _settle(tester);
 
     expect(find.text(r'$300.00'), findsOneWidget);
     expect(find.text(r'$9,500.00'), findsOneWidget);
@@ -525,6 +527,72 @@ void main() {
     await tester.tap(find.text('Undo'));
     await _settle(tester);
     expect((await repo.listAssetValuations(assetId: 'a1')).length, 2);
+  });
+
+  testWidgets('Valuations starts collapsed and stays as left across assets', (
+    tester,
+  ) async {
+    final a = _asset();
+    final now = utcNow();
+    final b = Asset(id: 'b1', createdAt: now, updatedAt: now, name: 'RRSP B');
+    late ProviderContainer container;
+    await _pump(
+      tester,
+      seed: (repo) async {
+        await repo.upsertAsset(a);
+        await repo.upsertAsset(b);
+        await repo.upsertAssetValuation(_valuation('v1', 30000, _today));
+      },
+      home: () => Consumer(
+        builder: (context, ref, _) {
+          container = ProviderScope.containerOf(context);
+          return Column(
+            children: [
+              TextButton(
+                onPressed: () => showAssetModal(context, ref, existing: a),
+                child: const Text('open A'),
+              ),
+              TextButton(
+                onPressed: () => showAssetModal(context, ref, existing: b),
+                child: const Text('open B'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    Future<bool> stored() async =>
+        (await container.read(settingsRepositoryProvider).getSettings())
+            .assetValuationsExpanded;
+    Future<void> openSheet(String label) async {
+      await tester.tap(find.text(label));
+      await _settle(tester);
+    }
+
+    Future<void> closeSheet() async {
+      await tester.tap(find.byTooltip('Close'));
+      await _settle(tester);
+    }
+
+    await openSheet('open A');
+    expect(find.text(r'$300.00'), findsNothing);
+    await tester.tap(find.text('Valuations'));
+    await _settle(tester);
+    expect(find.text(r'$300.00'), findsOneWidget);
+    expect(await stored(), isTrue);
+    await closeSheet();
+
+    // B has no valuations: open, its list says so straight away.
+    await openSheet('open B');
+    expect(find.text('Not valued yet.'), findsOneWidget);
+    await tester.tap(find.text('Valuations'));
+    await _settle(tester);
+    expect(find.text('Not valued yet.'), findsNothing);
+    expect(await stored(), isFalse);
+    await closeSheet();
+
+    await openSheet('open A');
+    expect(find.text(r'$300.00'), findsNothing);
   });
 
   testWidgets('BUG-135 deleting an asset offers Undo, which restores it all', (

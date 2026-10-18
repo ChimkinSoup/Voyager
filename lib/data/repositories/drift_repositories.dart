@@ -4761,6 +4761,7 @@ class DriftSettingsRepository implements SettingsRepository {
       lastSeenNavPage: row.lastSeenNavPage,
       todoCompletedSectionExpanded: row.todoCompletedSectionExpanded,
       inboxLogStatsExpanded: row.inboxLogStatsExpanded,
+      assetValuationsExpanded: row.assetValuationsExpanded,
       showAnnualizedSubscriptionCost: row.showAnnualizedSubscriptionCost,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
       dreamSplitWidth: row.dreamSplitWidth,
@@ -4867,6 +4868,13 @@ class DriftSettingsRepository implements SettingsRepository {
   Future<void> saveInboxLogStatsExpanded(bool expanded) async {
     await (_db.update(_db.settingsTable)..where((t) => t.id.equals(1))).write(
       SettingsTableCompanion(inboxLogStatsExpanded: Value(expanded)),
+    );
+  }
+
+  @override
+  Future<void> saveAssetValuationsExpanded(bool expanded) async {
+    await (_db.update(_db.settingsTable)..where((t) => t.id.equals(1))).write(
+      SettingsTableCompanion(assetValuationsExpanded: Value(expanded)),
     );
   }
 

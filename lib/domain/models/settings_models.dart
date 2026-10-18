@@ -148,6 +148,7 @@ class AppSettings {
     this.lastSeenNavPage,
     this.todoCompletedSectionExpanded = true,
     this.inboxLogStatsExpanded = false,
+    this.assetValuationsExpanded = false,
     this.inboxTrackerOrder = const [],
     this.inboxPinnedNoteOrder = const [],
     this.inboxSecureNoteOrder = const [],
@@ -424,6 +425,11 @@ class AppSettings {
   /// `SettingsRepository.saveInboxLogStatsExpanded`.
   final bool inboxLogStatsExpanded;
 
+  /// Whether the asset sheet's Valuations list is open — one state shared by
+  /// every asset. Device-local, and written only through
+  /// `SettingsRepository.saveAssetValuationsExpanded`.
+  final bool assetValuationsExpanded;
+
   /// Tracker ids in the order the notification inbox's Log stats list was
   /// last dragged into. A tracker missing from it sorts after the rest.
   final List<String> inboxTrackerOrder;
@@ -687,6 +693,7 @@ class AppSettings {
     String? lastSeenNavPage,
     bool? todoCompletedSectionExpanded,
     bool? inboxLogStatsExpanded,
+    bool? assetValuationsExpanded,
     List<String>? inboxTrackerOrder,
     List<String>? inboxPinnedNoteOrder,
     List<String>? inboxSecureNoteOrder,
@@ -965,6 +972,8 @@ class AppSettings {
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
       inboxLogStatsExpanded:
           inboxLogStatsExpanded ?? this.inboxLogStatsExpanded,
+      assetValuationsExpanded:
+          assetValuationsExpanded ?? this.assetValuationsExpanded,
       inboxTrackerOrder: inboxTrackerOrder ?? this.inboxTrackerOrder,
       inboxPinnedNoteOrder: inboxPinnedNoteOrder ?? this.inboxPinnedNoteOrder,
       inboxSecureNoteOrder: inboxSecureNoteOrder ?? this.inboxSecureNoteOrder,
