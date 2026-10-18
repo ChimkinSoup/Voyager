@@ -23,7 +23,7 @@ import 'fakes/fake_weather_api_client.dart';
 import 'narrow_window_harness.dart';
 
 /// The form's bottom padding, below the Add button.
-const _bottomPadding = 24.0;
+const _bottomPadding = 14.0;
 
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);

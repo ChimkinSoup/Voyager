@@ -79,11 +79,16 @@ class FloaterWindow {
   /// Shows the floater at [size] (logical pixels) on the monitor under the
   /// cursor. Called again while borrowed, it only moves and resizes.
   ///
-  /// [onShow] swaps the floater in, out of sight: see [_cloaked].
+  /// [onShow] swaps the floater in, out of sight: see [_cloaked]. [fit], for
+  /// a floater whose content reports its height, runs once the floater has
+  /// been painted at [size], still out of sight, to size the window to the
+  /// height reported then — so an opening height that is off is never seen
+  /// as a resize.
   Future<void> show(
     Size size,
     FloaterAnchor anchor, {
     required void Function() onShow,
+    Future<void> Function()? fit,
   }) async {
     await desktopWindowReady;
     final hwnd = _window;
@@ -103,6 +108,10 @@ class FloaterWindow {
       await _borrow(hwnd);
       onShow();
       _place(hwnd, size, anchor);
+      if (fit != null) {
+        await _paintedAt(_clientSize(_flutterView(hwnd)), resized: true);
+        await fit();
+      }
     });
     SetForegroundWindow(hwnd);
   }
@@ -140,6 +149,7 @@ class FloaterWindow {
   /// corner of the app, or whichever floater was up before.
   Future<void> _cloaked(int hwnd, Future<void> Function() change) async {
     _setCloaked(hwnd, true);
+    _isCloaked = true;
     try {
       final view = _flutterView(hwnd);
       final before = _clientSize(view);
@@ -149,9 +159,13 @@ class FloaterWindow {
         await _paintedAt(after, resized: after != before);
       }
     } finally {
+      _isCloaked = false;
       _setCloaked(hwnd, false);
     }
   }
+
+  /// Inside [_cloaked]: nothing the window paints is seen.
+  var _isCloaked = false;
 
   /// DWM neither draws a cloaked window nor animates its showing, maximizing
   /// or restoring; the engine goes on painting it.
@@ -275,9 +289,11 @@ class FloaterWindow {
       // back. That's the frame that changed the form's height, rasterizing as
       // this runs, so the change waits for it — one composition for it to be
       // presented, one for it to be shown. The thread is held meanwhile, so
-      // no newer frame can start.
-      DwmFlush();
-      DwmFlush();
+      // no newer frame can start. A cloaked window shows no frame at all.
+      if (!_isCloaked) {
+        DwmFlush();
+        DwmFlush();
+      }
       SetWindowPos(
         hwnd,
         HWND_TOPMOST,

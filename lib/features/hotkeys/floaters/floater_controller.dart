@@ -20,7 +20,7 @@ import 'package:window_manager/window_manager.dart';
 /// [FloaterController.setHeight]: the amount's error line and a failed save's
 /// message grow the window, and it shrinks back when they go.
 /// `finance_floater_fits_form_test.dart` holds this to the real form.
-const kFinanceFloaterSize = Size(640, 506);
+const kFinanceFloaterSize = Size(640, 496);
 
 /// The reminder floater's window: the editor's own width (see
 /// [kReminderFormWidth]) and the height it opens at, that of its default form
@@ -30,7 +30,7 @@ const kFinanceFloaterSize = Size(640, 506);
 /// [FloaterController.setHeight]: a weekly rule's day pills, devices that
 /// wrap to another row and the validation line all grow the window.
 /// `reminder_floater_fits_form_test.dart` holds this to the real form.
-const kReminderFloaterSize = Size(kReminderFormWidth, 499);
+const kReminderFloaterSize = Size(kReminderFormWidth, 493);
 
 /// The calendar floater's window: the width the same panel has in the
 /// calendar's popover, and the height it opens at, the panel's for a new
@@ -87,6 +87,15 @@ class FloaterController extends ChangeNotifier with WindowListener {
         QuickCaptureKind.calendar => kCalendarFloaterSize,
       };
 
+  /// The finance, reminder and calendar forms report their height; the todo
+  /// bar and the notepad are sized by [_sizeFor] alone.
+  Future<void> Function()? _fitFor(QuickCaptureKind kind) => switch (kind) {
+    QuickCaptureKind.todo || QuickCaptureKind.journal => null,
+    QuickCaptureKind.finance ||
+    QuickCaptureKind.reminder ||
+    QuickCaptureKind.calendar => _fitHeight,
+  };
+
   static FloaterAnchor _anchorFor(QuickCaptureKind kind) => switch (kind) {
     QuickCaptureKind.todo => FloaterAnchor.upperCenter,
     QuickCaptureKind.journal => FloaterAnchor.bottomRight,
@@ -128,8 +137,10 @@ class FloaterController extends ChangeNotifier with WindowListener {
         _anchorFor(kind),
         onShow: () {
           _active = kind;
+          _height = null;
           notifyListeners();
         },
+        fit: _fitFor(kind),
       );
       return;
     }
@@ -144,9 +155,11 @@ class FloaterController extends ChangeNotifier with WindowListener {
       _anchorFor(kind),
       onShow: () {
         _active = kind;
+        _height = null;
         notifyListeners();
         mainContentOnScreen.value = false;
       },
+      fit: _fitFor(kind),
     );
   });
 
@@ -212,25 +225,27 @@ class FloaterController extends ChangeNotifier with WindowListener {
   }
 
   /// Sizes the window to a form's height, which the finance, reminder and
-  /// calendar floaters report as it changes. Queued behind the floater's
-  /// opening, which lays the form out — and so reports it — before the
-  /// window is on screen. Each resize takes the latest height reported, so a
-  /// height the form only passed through as it built is never shown.
+  /// calendar floaters report as it changes. The height reported as the
+  /// floater opens is applied before the window is on screen (see
+  /// [FloaterWindow.show]). Each resize takes the latest height reported, so
+  /// a height the form only passed through as it built is never shown.
   Future<void> setHeight(double height) {
     _height = height;
-    return _serial(() async {
-      final kind = _active;
-      final height = _height;
-      _height = null;
-      if (kind == null || height == null) return;
-      await _window.resize(
-        Size(_sizeFor(kind, 0).width, height),
-        _anchorFor(kind),
-      );
-    });
+    return _serial(_fitHeight);
   }
 
   double? _height;
+
+  Future<void> _fitHeight() async {
+    final kind = _active;
+    final height = _height;
+    _height = null;
+    if (kind == null || height == null) return;
+    await _window.resize(
+      Size(_sizeFor(kind, 0).width, height),
+      _anchorFor(kind),
+    );
+  }
 
   /// The open floater's pending-edit flush, run before it is dismissed or
   /// replaced.
