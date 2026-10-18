@@ -2,9 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +13,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -94,13 +94,6 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   /// showing an entry on the map, would otherwise do both every time.
   static const _fixFresh = Duration(minutes: 10);
 
-  /// How hard the map brakes after a push: it glides `speed / 6` pixels, so
-  /// a gentle 800 px/s push travels ~130 px and a hard 3000 px/s one ~500.
-  /// flutter_map's own fling always travels the map's short side, however
-  /// soft the push, so it is switched off for this.
-  static const _glideFriction = 0.0025;
-  static const _glideId = 'glide';
-
   static const _flyId = 'fly';
   late final AnimationController _fly;
 
@@ -122,11 +115,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   /// Whether the mouse is over a name that a press makes an entry of.
   var _overName = false;
 
-  /// The pointer dragging the map, tracked from its own event timestamps.
-  VelocityTracker? _dragVelocity;
-  int? _dragPointer;
-  late final AnimationController _glide;
-  ({Offset from, Offset direction, double zoom})? _glidePath;
+  late final RankingsMapGlide _glide;
 
   /// Where the device was last found, drawn as a dot.
   LatLng? _devicePoint;
@@ -194,12 +183,12 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     super.initState();
     _container = ProviderScope.containerOf(context, listen: false);
     _devicePoint = _lastDevice;
+    _glide = RankingsMapGlide(vsync: this, map: _map);
     _fitPending =
         widget.loading && _initialViewport == null && _savedDevice == null;
-    _glide = AnimationController.unbounded(vsync: this)
-      ..addListener(_glideStep);
     _fly = AnimationController(vsync: this)..addListener(_flyStep);
     if (!_fitPending) _findDeviceOnOpen();
+    HardwareKeyboard.instance.addHandler(_handleFindShortcut);
   }
 
   @override
@@ -388,9 +377,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     maxZoom: rankingsMapMaxZoom,
     // The style's own land colour, so a tile still loading is not a hole.
     backgroundColor: Theme.of(context).colorScheme.surface,
-    interactionOptions: const InteractionOptions(
-      flags: InteractiveFlag.all & ~InteractiveFlag.flingAnimation,
-    ),
+    interactionOptions: const InteractionOptions(flags: rankingsMapFlags),
     onMapEvent: _onMapEvent,
     onPositionChanged: (camera, _) => _scheduleViewportSave(camera),
     onTap: (_, point) => _onTap(point),
@@ -400,6 +387,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleFindShortcut);
     _viewportSave?.cancel();
     // A move still inside the debounce is stored rather than dropped — after
     // this frame, as a provider cannot be written while the tree is torn down.
@@ -413,79 +401,17 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
 
   void _onPointerDown(PointerDownEvent event) {
     _touched = true;
-    _glide.stop();
+    _glide.onPointerDown(event);
     _fly.stop();
-    // A second finger is a pinch, which ends as one and never glides.
-    if (_dragPointer != null) return;
-    _dragPointer = event.pointer;
-    _dragVelocity = VelocityTracker.withKind(event.kind)
-      ..addPosition(event.timeStamp, event.position);
-  }
-
-  void _onPointerMove(PointerMoveEvent event) {
-    if (event.pointer == _dragPointer) {
-      _dragVelocity?.addPosition(event.timeStamp, event.position);
-    }
-  }
-
-  void _onPointerEnd(PointerEvent event) {
-    if (event.pointer == _dragPointer) _dragPointer = null;
   }
 
   void _onMapEvent(MapEvent event) {
-    switch (event.source) {
-      case MapEventSource.dragEnd:
-        _startGlide(event.camera);
-      case MapEventSource.mapController:
-        // The zoom buttons, Fit and a focused location take the camera over.
-        if (event is! MapEventMove || event.id != _glideId) _glide.stop();
-        if (event is! MapEventMove || event.id != _flyId) _fly.stop();
-      default:
-        _glide.stop();
-        _fly.stop();
-    }
-  }
-
-  void _startGlide(MapCamera camera) {
-    // The finger's velocity on screen; the camera centre travels against it,
-    // turned into the map's own frame the way flutter_map turns a drag.
-    final finger = _dragVelocity?.getVelocity().pixelsPerSecond ?? Offset.zero;
-    final speed = finger.distance;
-    // flutter_map's own threshold for a fling.
-    if (speed < 800) return;
-    final cos = math.cos(camera.rotationRad);
-    final sin = math.sin(camera.rotationRad);
-    final away = -finger / speed;
-    _glidePath = (
-      from: camera.projectAtZoom(camera.center),
-      direction: Offset(
-        cos * away.dx + sin * away.dy,
-        cos * away.dy - sin * away.dx,
-      ),
-      zoom: camera.zoom,
-    );
-    _glide
-      ..value = 0
-      ..animateWith(
-        FrictionSimulation(
-          _glideFriction,
-          0,
-          speed.clamp(0, kMaxFlingVelocity).toDouble(),
-        ),
-      );
-  }
-
-  void _glideStep() {
-    final path = _glidePath;
-    if (path == null) return;
-    _map.move(
-      _map.camera.unprojectAtZoom(
-        path.from + path.direction * _glide.value,
-        path.zoom,
-      ),
-      path.zoom,
-      id: _glideId,
-    );
+    _glide.onMapEvent(event);
+    // Anything but the flight's own steps or a drag's end takes the camera
+    // over: a drag, the zoom buttons, Fit, a focused location.
+    if (event.source == MapEventSource.dragEnd) return;
+    if (event is MapEventMove && event.id == _flyId) return;
+    _fly.stop();
   }
 
   void _scheduleViewportSave(MapCamera camera) {
@@ -573,7 +499,34 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     if (over != _overName) setState(() => _overName = over);
   }
 
-  Future<void> _newEntryAt(LatLng point, {String title = ''}) async {
+  /// Ctrl+F / Cmd+F starts an entry by finding its place: the dialog opens
+  /// on the place field, its map enlarged. A [HardwareKeyboard] handler, as
+  /// on the To-Do page, so it fires whatever holds focus, including nothing.
+  bool _handleFindShortcut(KeyEvent event) {
+    if (!mounted || widget.createIn.isEmpty) return false;
+    // Without a key there is no map to find a place on, nor a camera to
+    // search around.
+    if (ref.read(geoapifyClientProvider) == null) return false;
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyF) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return false;
+    // Only while this branch is the visible one and nothing is open over it.
+    if (!subtreeIsVisible(context) || focusIsInPopupRoute()) return false;
+    if (Navigator.maybeOf(context, rootNavigator: true)?.canPop() ?? false) {
+      return false;
+    }
+    unawaited(_newEntryAt(null, findPlace: true));
+    return true;
+  }
+
+  /// [point] is where the pin starts, if anywhere; [findPlace] as
+  /// [showRankingLocationDialog] takes it.
+  Future<void> _newEntryAt(
+    LatLng? point, {
+    String title = '',
+    bool findPlace = false,
+  }) async {
     final actions = RankingsActions.detached(_container);
     final category = widget.createIn.length == 1
         ? widget.createIn.single
@@ -587,6 +540,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       near: _map.camera.center,
       withTitle: true,
       initialTitle: title,
+      findPlace: findPlace,
     );
     if (pick == null) return;
     final created = await actions.createParentAt(
@@ -823,9 +777,9 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       children: [
         Listener(
           onPointerDown: _onPointerDown,
-          onPointerMove: _onPointerMove,
-          onPointerUp: _onPointerEnd,
-          onPointerCancel: _onPointerEnd,
+          onPointerMove: _glide.onPointerMove,
+          onPointerUp: _glide.onPointerEnd,
+          onPointerCancel: _glide.onPointerEnd,
           onPointerSignal: (_) => _touched = true,
           child: MouseRegion(
             cursor: _overName ? SystemMouseCursors.click : MouseCursor.defer,

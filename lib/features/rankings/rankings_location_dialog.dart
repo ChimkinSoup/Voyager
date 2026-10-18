@@ -36,7 +36,9 @@ typedef RankingLocationPick = ({
 /// [near] is where a typed name is searched around and where the map opens
 /// when there is no [initialPoint]. [existing] are the locations the entry
 /// already has, which a new one may not sit on top of. [withTitle] adds the
-/// title a new entry needs, starting as [initialTitle].
+/// title a new entry needs, starting as [initialTitle]. [findPlace] opens it
+/// on finding the place rather than naming it: the place field focused and
+/// the map enlarged.
 Future<RankingLocationPick?> showRankingLocationDialog(
   BuildContext context, {
   required Color accent,
@@ -48,6 +50,7 @@ Future<RankingLocationPick?> showRankingLocationDialog(
   List<RankingLocation> existing = const [],
   bool withTitle = false,
   String initialTitle = '',
+  bool findPlace = false,
 }) => showVoyagerDialog<RankingLocationPick>(
   context: context,
   builder: (context) => _LocationDialog(
@@ -60,6 +63,7 @@ Future<RankingLocationPick?> showRankingLocationDialog(
     existing: existing,
     withTitle: withTitle,
     initialTitle: initialTitle,
+    findPlace: findPlace,
   ),
 );
 
@@ -88,6 +92,7 @@ class _LocationDialog extends ConsumerStatefulWidget {
     required this.existing,
     required this.withTitle,
     required this.initialTitle,
+    required this.findPlace,
   });
 
   final Color accent;
@@ -99,12 +104,14 @@ class _LocationDialog extends ConsumerStatefulWidget {
   final List<RankingLocation> existing;
   final bool withTitle;
   final String initialTitle;
+  final bool findPlace;
 
   @override
   ConsumerState<_LocationDialog> createState() => _LocationDialogState();
 }
 
-class _LocationDialogState extends ConsumerState<_LocationDialog> {
+class _LocationDialogState extends ConsumerState<_LocationDialog>
+    with SingleTickerProviderStateMixin {
   static const _searchDebounce = Duration(milliseconds: 300);
   static const _minSearchLength = 3;
   static const _pinZoom = 18.75;
@@ -116,11 +123,24 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   final _inputFocus = FocusNode();
   final _title = TextEditingController();
   final _map = MapController();
+  late final RankingsMapGlide _glide;
   final _tiles = GlobalKey<RankingsTileLayerState>();
   Timer? _debounce;
 
   /// Whether the mouse is over a place to eat or drink's name or dot.
   var _overName = false;
+
+  /// Whether the map is grown to fill the window, for finding a place by
+  /// looking around rather than by name.
+  late var _expanded = widget.findPlace;
+
+  /// The title the last pick gave a new entry, trimmed. While the title
+  /// still reads this, a later pick renames it; once typed over, it is kept.
+  String _autoTitle = '';
+
+  /// Keeps the dialog's contents, the map's camera and the fields' focus
+  /// among them, as enlarging moves them out of the scroll view and back.
+  final _contents = GlobalKey();
 
   LatLng? _pin;
   String _address = '';
@@ -181,8 +201,10 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   void initState() {
     super.initState();
     _pin = widget.initialPoint;
+    _glide = RankingsMapGlide(vsync: this, map: _map);
     _address = widget.initialAddress;
     _title.text = widget.initialTitle;
+    _autoTitle = widget.initialTitle.trim();
     if (_pin != null && _address.isEmpty) unawaited(_reverseGeocode());
     unawaited(_loadSaved());
   }
@@ -234,6 +256,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     _input.dispose();
     _inputFocus.dispose();
     _title.dispose();
+    _glide.dispose();
     _map.dispose();
     super.dispose();
   }
@@ -341,9 +364,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
       _refuseLink("Couldn't find a location in that link");
       return;
     }
-    if (widget.withTitle && _title.text.trim().isEmpty && place.name != null) {
-      _title.text = place.name!;
-    }
+    if (place.name != null) _nameAfter(place.name!);
     _setPin(LatLng(place.latitude, place.longitude));
     unawaited(_reverseGeocode());
   }
@@ -365,23 +386,29 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     if (pin != null && _address.isEmpty) unawaited(_reverseGeocode());
   }
 
-  /// Pins a searched [place], and names a new entry after it if it has no
-  /// title yet.
+  /// Names a new entry after [name], unless its title has been typed: blank,
+  /// or still what an earlier pick named it, it follows the latest pick.
+  void _nameAfter(String name) {
+    if (!widget.withTitle) return;
+    final title = _title.text.trim();
+    if (title.isNotEmpty && title != _autoTitle) return;
+    _title.text = name;
+    _autoTitle = name.trim();
+  }
+
+  /// Pins a searched [place], and names a new entry after it — see
+  /// [_nameAfter].
   void _pickPlace(GeoapifyPlace place) {
-    if (widget.withTitle && _title.text.trim().isEmpty) {
-      _title.text = place.name;
-    }
+    _nameAfter(place.name);
     _setPin(LatLng(place.latitude, place.longitude), address: place.address);
   }
 
   /// A press on a place to eat or drink's name or dot puts the pin on that
-  /// place, and names a new entry after it if it has no title yet. Anywhere
-  /// else, the pin goes where pressed.
+  /// place, and names a new entry after it — see [_nameAfter]. Anywhere else,
+  /// the pin goes where pressed.
   void _onTap(LatLng point) {
     final name = _tiles.currentState?.nameAt(point);
-    if (name != null && widget.withTitle && _title.text.trim().isEmpty) {
-      _title.text = name.text;
-    }
+    if (name != null) _nameAfter(name.text);
     _setPin(name?.point ?? point);
     unawaited(_reverseGeocode());
   }
@@ -488,292 +515,311 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
       color: theme.colorScheme.onSurfaceVariant,
     );
 
+    final column = Column(
+      key: _contents,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.withTitle) ...[
+          LabeledTextField(
+            label: 'Title',
+            controller: _title,
+            autofocus: !widget.findPlace,
+            accentColor: widget.accent,
+            // Left to its default Enter takes the focus out of the
+            // field, up above the scope that hears Ctrl+Enter.
+            onEditingComplete: () {},
+          ),
+          const SizedBox(height: 12),
+        ],
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            LabeledTextField(
+              label: hasKey
+                  ? 'Place name or Google Maps link'
+                  : 'Google Maps link',
+              controller: _input,
+              focusNode: _inputFocus,
+              autofocus: !widget.withTitle || widget.findPlace,
+              accentColor: widget.accent,
+              onChanged: _onInputChanged,
+              onSubmitted: _onInputSubmitted,
+              // Left to its default Enter takes the focus out of the
+              // field, up above the scope that hears Ctrl+Enter.
+              onEditingComplete: () {},
+            ),
+            if (_searching)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 14,
+                child: IgnorePointer(
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: widget.accent,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        for (final place in _listed.take(5))
+          InkWell(
+            onTap: () {
+              _pickPlace(place);
+              // The row goes with the list, and the focus with it,
+              // up above the scope that hears Ctrl+Enter.
+              _inputFocus.requestFocus();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          place.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        Text(
+                          place.address,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // One of your own entries, not a Geoapify find.
+                  if (_savedMatches.contains(place))
+                    Tooltip(
+                      message: 'Saved entry',
+                      child: Icon(
+                        PhosphorIconsRegular.bookmarkSimple,
+                        size: 14,
+                        color: muted?.color,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
+        if (_offerEverywhere) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GlassButton(
+              dense: true,
+              label: 'Search everywhere',
+              onPressed: () => unawaited(_search(everywhere: true)),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        // Grown, the map takes whatever height the dialog has left.
+        // Flex 0 lays it out like any other row in the scroll view.
+        Flexible(
+          flex: _expanded ? 1 : 0,
+          child: SizedBox(
+            height: _expanded
+                ? null
+                : hasKey
+                ? 240
+                : 48,
+            child: hasKey
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Listener(
+                          onPointerDown: _glide.onPointerDown,
+                          onPointerMove: _glide.onPointerMove,
+                          onPointerUp: _glide.onPointerEnd,
+                          onPointerCancel: _glide.onPointerEnd,
+                          child: MouseRegion(
+                            cursor: _overName
+                                ? SystemMouseCursors.click
+                                : MouseCursor.defer,
+                            onHover: (event) => _onHover(event.localPosition),
+                            onExit: (_) => _onHover(null),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final minZoom = rankingsMapMinZoomAt(
+                                  constraints.maxWidth,
+                                );
+                                // A wider map raises the floor, which the
+                                // camera only meets on its next move: meet
+                                // it now.
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
+                                  if (mounted && _map.camera.zoom < minZoom) {
+                                    _map.move(_map.camera.center, minZoom);
+                                  }
+                                });
+                                return FlutterMap(
+                                  mapController: _map,
+                                  options: MapOptions(
+                                    initialCenter:
+                                        pin ??
+                                        widget.near ??
+                                        const LatLng(20, 0),
+                                    initialZoom: math.max(
+                                      minZoom,
+                                      pin != null || widget.near != null
+                                          ? _pinZoom
+                                          : 2,
+                                    ),
+                                    minZoom: minZoom,
+                                    maxZoom: rankingsMapMaxZoom,
+                                    backgroundColor: theme.colorScheme.surface,
+                                    // Left to its default the map takes
+                                    // the focus from the field above.
+                                    interactionOptions:
+                                        const InteractionOptions(
+                                          flags: rankingsMapFlags,
+                                          keyboardOptions: KeyboardOptions(
+                                            autofocus: false,
+                                          ),
+                                        ),
+                                    onMapEvent: _glide.onMapEvent,
+                                    onTap: (_, point) => _onTap(point),
+                                  ),
+                                  children: [
+                                    RankingsTileLayer(
+                                      key: _tiles,
+                                      pins: [
+                                        if (pin != null)
+                                          (
+                                            point: pin,
+                                            title: '',
+                                            titleFrom: double.infinity,
+                                          ),
+                                      ],
+                                    ),
+                                    if (pin != null)
+                                      MarkerLayer(
+                                        markers: [
+                                          Marker(
+                                            point: pin,
+                                            width: _pinSize,
+                                            height: _pinSize,
+                                            child: RawGestureDetector(
+                                              gestures: {
+                                                _PinDragRecognizer:
+                                                    GestureRecognizerFactoryWithHandlers<
+                                                      _PinDragRecognizer
+                                                    >(
+                                                      _PinDragRecognizer.new,
+                                                      (recognizer) => recognizer
+                                                        ..onUpdate = _dragPin
+                                                        ..onEnd = (_) =>
+                                                            unawaited(
+                                                              _reverseGeocode(),
+                                                            ),
+                                                    ),
+                                              },
+                                              child: FittedBox(
+                                                child: SizedBox.square(
+                                                  dimension:
+                                                      RankingsMapPin.size,
+                                                  child: RankingsMapPin(
+                                                    color: widget.accent,
+                                                    selected: true,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: RankingsMapButton(
+                            tooltip: _expanded ? 'Shrink map' : 'Enlarge map',
+                            icon: _expanded
+                                ? PhosphorIconsRegular.arrowsIn
+                                : PhosphorIconsRegular.arrowsOut,
+                            onPressed: () =>
+                                setState(() => _expanded = !_expanded),
+                          ),
+                        ),
+                        const Positioned(
+                          right: 4,
+                          bottom: 4,
+                          child: RankingsMapAttribution(),
+                        ),
+                      ],
+                    ),
+                  )
+                : const RankingsMapUnavailable(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                pin == null
+                    ? hasKey
+                          ? 'Click the map to drop a pin.'
+                          : 'Paste a link with coordinates in it.'
+                    : _address.isNotEmpty
+                    ? _address
+                    : '${pin.latitude.toStringAsFixed(5)}, '
+                          '${pin.longitude.toStringAsFixed(5)}',
+                style: muted,
+              ),
+            ),
+            if (_geocoding) ...[
+              const SizedBox(width: 8),
+              SizedBox.square(
+                dimension: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: widget.accent,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+
     return CtrlEnterToSubmitScope(
       onSubmit: _submit,
       child: AlertDialog(
         title: Text(widget.heading),
         content: SizedBox(
-          width: 440,
-          child: VoyagerScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (widget.withTitle) ...[
-                  LabeledTextField(
-                    label: 'Title',
-                    controller: _title,
-                    autofocus: true,
-                    accentColor: widget.accent,
-                    // Left to its default Enter takes the focus out of the
-                    // field, up above the scope that hears Ctrl+Enter.
-                    onEditingComplete: () {},
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    LabeledTextField(
-                      label: hasKey
-                          ? 'Place name or Google Maps link'
-                          : 'Google Maps link',
-                      controller: _input,
-                      focusNode: _inputFocus,
-                      autofocus: !widget.withTitle,
-                      accentColor: widget.accent,
-                      onChanged: _onInputChanged,
-                      onSubmitted: _onInputSubmitted,
-                      // Left to its default Enter takes the focus out of the
-                      // field, up above the scope that hears Ctrl+Enter.
-                      onEditingComplete: () {},
-                    ),
-                    if (_searching)
-                      Positioned(
-                        top: 0,
-                        bottom: 0,
-                        right: 14,
-                        child: IgnorePointer(
-                          child: Center(
-                            child: SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: widget.accent,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                for (final place in _listed.take(5))
-                  InkWell(
-                    onTap: () {
-                      _pickPlace(place);
-                      // The row goes with the list, and the focus with it,
-                      // up above the scope that hears Ctrl+Enter.
-                      _inputFocus.requestFocus();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  place.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                                Text(
-                                  place.address,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: muted,
-                                ),
-                              ],
-                            ),
-                          ),
-                          // One of your own entries, not a Geoapify find.
-                          if (_savedMatches.contains(place))
-                            Tooltip(
-                              message: 'Saved entry',
-                              child: Icon(
-                                PhosphorIconsRegular.bookmarkSimple,
-                                size: 14,
-                                color: muted?.color,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _error!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ],
-                if (_offerEverywhere) ...[
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GlassButton(
-                      dense: true,
-                      label: 'Search everywhere',
-                      onPressed: () => unawaited(_search(everywhere: true)),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: hasKey ? 240 : 48,
-                  child: hasKey
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              MouseRegion(
-                                cursor: _overName
-                                    ? SystemMouseCursors.click
-                                    : MouseCursor.defer,
-                                onHover: (event) =>
-                                    _onHover(event.localPosition),
-                                onExit: (_) => _onHover(null),
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final minZoom = rankingsMapMinZoomAt(
-                                      constraints.maxWidth,
-                                    );
-                                    // A wider map raises the floor, which the
-                                    // camera only meets on its next move: meet
-                                    // it now.
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                          if (mounted &&
-                                              _map.camera.zoom < minZoom) {
-                                            _map.move(
-                                              _map.camera.center,
-                                              minZoom,
-                                            );
-                                          }
-                                        });
-                                    return FlutterMap(
-                                      mapController: _map,
-                                      options: MapOptions(
-                                        initialCenter:
-                                            pin ??
-                                            widget.near ??
-                                            const LatLng(20, 0),
-                                        initialZoom: math.max(
-                                          minZoom,
-                                          pin != null || widget.near != null
-                                              ? _pinZoom
-                                              : 2,
-                                        ),
-                                        minZoom: minZoom,
-                                        maxZoom: rankingsMapMaxZoom,
-                                        backgroundColor:
-                                            theme.colorScheme.surface,
-                                        // Left to its default the map takes
-                                        // the focus from the field above.
-                                        interactionOptions:
-                                            const InteractionOptions(
-                                              keyboardOptions: KeyboardOptions(
-                                                autofocus: false,
-                                              ),
-                                            ),
-                                        onTap: (_, point) => _onTap(point),
-                                      ),
-                                      children: [
-                                        RankingsTileLayer(
-                                          key: _tiles,
-                                          pins: [
-                                            if (pin != null)
-                                              (
-                                                point: pin,
-                                                title: '',
-                                                titleFrom: double.infinity,
-                                              ),
-                                          ],
-                                        ),
-                                        if (pin != null)
-                                          MarkerLayer(
-                                            markers: [
-                                              Marker(
-                                                point: pin,
-                                                width: _pinSize,
-                                                height: _pinSize,
-                                                child: RawGestureDetector(
-                                                  gestures: {
-                                                    _PinDragRecognizer:
-                                                        GestureRecognizerFactoryWithHandlers<
-                                                          _PinDragRecognizer
-                                                        >(
-                                                          _PinDragRecognizer
-                                                              .new,
-                                                          (
-                                                            recognizer,
-                                                          ) => recognizer
-                                                            ..onUpdate =
-                                                                _dragPin
-                                                            ..onEnd = (_) =>
-                                                                unawaited(
-                                                                  _reverseGeocode(),
-                                                                ),
-                                                        ),
-                                                  },
-                                                  child: FittedBox(
-                                                    child: SizedBox.square(
-                                                      dimension:
-                                                          RankingsMapPin.size,
-                                                      child: RankingsMapPin(
-                                                        color: widget.accent,
-                                                        selected: true,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ),
-                              const Positioned(
-                                right: 4,
-                                bottom: 4,
-                                child: RankingsMapAttribution(),
-                              ),
-                            ],
-                          ),
-                        )
-                      : const RankingsMapUnavailable(),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        pin == null
-                            ? hasKey
-                                  ? 'Click the map to drop a pin.'
-                                  : 'Paste a link with coordinates in it.'
-                            : _address.isNotEmpty
-                            ? _address
-                            : '${pin.latitude.toStringAsFixed(5)}, '
-                                  '${pin.longitude.toStringAsFixed(5)}',
-                        style: muted,
-                      ),
-                    ),
-                    if (_geocoding) ...[
-                      const SizedBox(width: 8),
-                      SizedBox.square(
-                        dimension: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          color: widget.accent,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
+          // Grown, the dialog's own bounds clamp it to the window.
+          width: _expanded ? MediaQuery.sizeOf(context).width : 440,
+          child: _expanded ? column : VoyagerScrollView(child: column),
         ),
         actions: [
           GlassButton(

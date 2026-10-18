@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -851,6 +853,113 @@ class RankingsMapAttribution extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
+    );
+  }
+}
+
+/// What a map lets the pointer do: everything but flutter_map's own fling,
+/// which [RankingsMapGlide] stands in for.
+const rankingsMapFlags = InteractiveFlag.all & ~InteractiveFlag.flingAnimation;
+
+/// Carries [map] on after a push, for a map with [rankingsMapFlags].
+/// Its pointer handlers go on a [Listener] around the map, and [onMapEvent]
+/// is the map's `onMapEvent`.
+class RankingsMapGlide {
+  RankingsMapGlide({required TickerProvider vsync, required this.map})
+    : _glide = AnimationController.unbounded(vsync: vsync) {
+    _glide.addListener(_step);
+  }
+
+  /// How hard the map brakes after a push: it glides `speed / 6` pixels, so
+  /// a gentle 800 px/s push travels ~130 px and a hard 3000 px/s one ~500.
+  /// flutter_map's own fling always travels the map's short side, however
+  /// soft the push, so it is switched off for this.
+  static const _friction = 0.0025;
+  static const _id = 'glide';
+
+  final MapController map;
+  final AnimationController _glide;
+  ({Offset from, Offset direction, double zoom})? _path;
+
+  /// The pointer dragging the map, tracked from its own event timestamps.
+  VelocityTracker? _velocity;
+  int? _pointer;
+
+  void onPointerDown(PointerDownEvent event) {
+    _glide.stop();
+    // A second finger is a pinch, which ends as one and never glides.
+    if (_pointer != null) return;
+    _pointer = event.pointer;
+    _velocity = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
+  }
+
+  void onPointerMove(PointerMoveEvent event) {
+    if (event.pointer == _pointer) {
+      _velocity?.addPosition(event.timeStamp, event.position);
+    }
+  }
+
+  void onPointerEnd(PointerEvent event) {
+    if (event.pointer == _pointer) _pointer = null;
+  }
+
+  /// Starts the glide as a drag ends; any other move of the camera, its own
+  /// steps aside, stops it.
+  void onMapEvent(MapEvent event) {
+    switch (event.source) {
+      case MapEventSource.dragEnd:
+        _start(event.camera);
+      case MapEventSource.mapController:
+        if (event is! MapEventMove || event.id != _id) stop();
+      default:
+        stop();
+    }
+  }
+
+  void stop() => _glide.stop();
+
+  void dispose() => _glide.dispose();
+
+  void _start(MapCamera camera) {
+    // The finger's velocity on screen; the camera centre travels against it,
+    // turned into the map's own frame the way flutter_map turns a drag.
+    final finger = _velocity?.getVelocity().pixelsPerSecond ?? Offset.zero;
+    final speed = finger.distance;
+    // flutter_map's own threshold for a fling.
+    if (speed < 800) return;
+    final cos = math.cos(camera.rotationRad);
+    final sin = math.sin(camera.rotationRad);
+    final away = -finger / speed;
+    _path = (
+      from: camera.projectAtZoom(camera.center),
+      direction: Offset(
+        cos * away.dx + sin * away.dy,
+        cos * away.dy - sin * away.dx,
+      ),
+      zoom: camera.zoom,
+    );
+    _glide
+      ..value = 0
+      ..animateWith(
+        FrictionSimulation(
+          _friction,
+          0,
+          speed.clamp(0, kMaxFlingVelocity).toDouble(),
+        ),
+      );
+  }
+
+  void _step() {
+    final path = _path;
+    if (path == null) return;
+    map.move(
+      map.camera.unprojectAtZoom(
+        path.from + path.direction * _glide.value,
+        path.zoom,
+      ),
+      path.zoom,
+      id: _id,
     );
   }
 }

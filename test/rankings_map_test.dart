@@ -936,6 +936,274 @@ void main() {
     await settleMap(tester);
   });
 
+  mapTest("a new entry's title follows each pick until it is typed", (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      geoapify: fakeGeoapify(),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    String title() =>
+        tester.widget<TextField>(labeledField('Title')).controller!.text;
+    Future<void> search(String text) async {
+      await tester.enterText(
+        labeledField('Place name or Google Maps link'),
+        text,
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+    }
+
+    // Searched for the mall, then the place in it: the title follows.
+    await search('pasta');
+    await tester.tap(find.text('Pasta Bar'));
+    await tester.pumpAndSettle();
+    expect(title(), 'Pasta Bar');
+    await search('ennio');
+    expect(title(), "Ennio's Pasta House");
+
+    // Typed over, it stays put.
+    await tester.enterText(labeledField('Title'), 'Matter');
+    await search('pasta');
+    await tester.tap(find.text('Pasta Bar'));
+    await tester.pumpAndSettle();
+    expect(title(), 'Matter');
+
+    await tester.tap(dialogAdd());
+    await tester.pumpAndSettle();
+    final created = (await storedParents(
+      harness.db,
+    )).singleWhere((parent) => parent.title == 'Matter');
+    expect(created.locations.single.address, '1 Pasta Lane, Waterloo');
+    await settleMap(tester);
+  });
+
+  mapTest("the dialog's map enlarges to the window and shrinks back", (
+    tester,
+  ) async {
+    await pumpRankingsPage(
+      tester,
+      geoapify: fakeGeoapify(),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    final dialogMapFinder = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(FlutterMap),
+    );
+    Size dialogMap() => tester.getSize(dialogMapFinder);
+    final small = dialogMap();
+    expect(small.height, 240);
+    LatLng center() => MapCamera.of(
+      find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(RankingsTileLayer),
+          )
+          .evaluate()
+          .single,
+    ).center;
+    bool placeFocused() => tester
+        .widget<EditableText>(
+          find.descendant(
+            of: labeledField('Place name or Google Maps link'),
+            matching: find.byType(EditableText),
+          ),
+        )
+        .focusNode
+        .hasFocus;
+
+    // Looked around, and the place field taken, before enlarging.
+    final opened = center();
+    await tester.dragFrom(
+      tester.getCenter(dialogMapFinder) + const Offset(80, 60),
+      const Offset(-50, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(center(), isNot(opened));
+    await tester.tap(labeledField('Place name or Google Maps link'));
+    await tester.pumpAndSettle();
+    final looked = center();
+    final mapState = tester.state(dialogMapFinder);
+
+    await tester.tap(find.byTooltip('Enlarge map'));
+    await tester.pumpAndSettle();
+    final large = dialogMap();
+    expect(large.width, greaterThan(small.width));
+    expect(large.height, greaterThan(small.height));
+    expect(tester.takeException(), isNull);
+    // The same map, not one built anew: its tiles and names are kept, as are
+    // where it was looking and the field holding the focus.
+    expect(tester.state(dialogMapFinder), same(mapState));
+    expect(center(), looked);
+    expect(placeFocused(), isTrue);
+
+    await tester.tap(find.byTooltip('Shrink map'));
+    await tester.pumpAndSettle();
+    expect(dialogMap(), small);
+    expect(tester.state(dialogMapFinder), same(mapState));
+    expect(center(), looked);
+    await settleMap(tester);
+  });
+
+  mapTest('Ctrl+F on the map starts an entry on the place field, its map '
+      'enlarged', (tester) async {
+    await pumpRankingsPage(
+      tester,
+      geoapify: fakeGeoapify(),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    Future<void> ctrlF() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    // The list has no map to find a place on.
+    await ctrlF();
+    expect(find.byType(AlertDialog), findsNothing);
+
+    await openMap(tester);
+    await ctrlF();
+    expect(find.text('New Restaurants entry'), findsOneWidget);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: labeledField('Place name or Google Maps link'),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    expect(find.byTooltip('Shrink map'), findsOneWidget);
+    expect(
+      tester
+          .getSize(
+            find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(FlutterMap),
+            ),
+          )
+          .height,
+      greaterThan(240),
+    );
+
+    // Pressed again over the dialog, it opens no second one.
+    await ctrlF();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await settleMap(tester);
+  });
+
+  mapTest("a push glides the dialog's map as far as it was pushed", (
+    tester,
+  ) async {
+    await pumpRankingsPage(
+      tester,
+      geoapify: fakeGeoapify(),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    final dialogMap = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(FlutterMap),
+    );
+    MapCamera camera() => MapCamera.of(
+      find
+          .descendant(of: dialogMap, matching: find.byType(RankingsTileLayer))
+          .evaluate()
+          .single,
+    );
+    final before = camera();
+    final from = before.projectAtZoom(before.center);
+
+    // Clear of the pin at the centre, which takes a drag as its own.
+    await tester.flingFrom(
+      tester.getCenter(dialogMap) + const Offset(80, 60),
+      const Offset(-60, 0),
+      900,
+    );
+    await tester.pumpAndSettle();
+    final moved =
+        (camera().projectAtZoom(camera().center, before.zoom) - from).distance;
+    // The drag, then speed / 6 more. flutter_map's own fling went on most
+    // of the map's height, however soft the push: 282 here.
+    expect(moved, closeTo(60 + 900 / 6, 30));
+    await settleMap(tester);
+  });
+
   mapTest('right-clicking the map adds the point to an existing entry', (
     tester,
   ) async {
@@ -2114,6 +2382,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Map unavailable — no Geoapify key'), findsOneWidget);
     expect(find.byType(FlutterMap), findsNothing);
+  });
+
+  mapTest('with no key, Ctrl+F on the map opens nothing', (tester) async {
+    await pumpRankingsPage(
+      tester,
+      withKey: false,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await tester.tap(find.widgetWithText(InkWell, 'Map'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   mapTest('with no key, clicking a location row neither throws nor leaves a '
