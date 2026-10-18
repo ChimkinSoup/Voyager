@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/platform/windows_folder_picker.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -260,91 +261,120 @@ class _FolderBackupSourceDialogState
     );
 
     return AlertDialog(
-      title: Text(_editing ? 'Edit folder backup' : 'Add folder backup'),
+      // The body is inset by [kHoverRowInset] except for the switch row, so
+      // its hover fill can reach the dialog's padding while its label lines
+      // up with the title and the fields.
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Text(_editing ? 'Edit folder backup' : 'Add folder backup'),
+      ),
       content: SizedBox(
         width: 600,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            pathRow('Folder', folder, _editing ? null : _pickFolder),
-            if (bytes != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 110, bottom: 4),
-                child: Text(
-                  'About ${formatFolderBackupBytes(bytes)} · a full rotation '
-                  'takes about ${formatFolderBackupBytes(rotation!)} '
-                  '(7 × the folder)',
-                  style: tight
-                      ? muted?.copyWith(color: Colors.amber.shade800)
-                      : muted,
-                ),
-              ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            const SizedBox(height: 12),
-            pathRow('Destination', destination, _pickDestination),
-            if (folder != null &&
-                destination != null &&
-                folderBackupSameDrive(folder, destination))
-              Padding(
-                padding: const EdgeInsets.only(left: 110, bottom: 4),
-                child: Text(
-                  "This won't protect against that drive failing.",
-                  style: muted,
-                ),
-              ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const SizedBox(width: 110, child: Text('Every')),
-                SizedBox(
-                  width: 180,
-                  child: VoyagerDropdownButtonFormField<Duration>(
-                    initialValue: _interval,
-                    isExpanded: true,
-                    items: [
-                      for (final interval in folderBackupIntervals)
-                        DropdownMenuItem(
-                          value: interval,
-                          child: Text(formatFolderBackupInterval(interval)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  pathRow('Folder', folder, _editing ? null : _pickFolder),
+                  if (bytes != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 110, bottom: 4),
+                      child: Text(
+                        'About ${formatFolderBackupBytes(bytes)} · a full rotation '
+                        'takes about ${formatFolderBackupBytes(rotation!)} '
+                        '(7 × the folder)',
+                        style: tight
+                            ? muted?.copyWith(color: Colors.amber.shade800)
+                            : muted,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _name,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                  const SizedBox(height: 12),
+                  pathRow('Destination', destination, _pickDestination),
+                  if (folder != null &&
+                      destination != null &&
+                      folderBackupSameDrive(folder, destination))
+                    Padding(
+                      padding: const EdgeInsets.only(left: 110, bottom: 4),
+                      child: Text(
+                        "This won't protect against that drive failing.",
+                        style: muted,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const SizedBox(width: 110, child: Text('Every')),
+                      SizedBox(
+                        width: 180,
+                        child: VoyagerDropdownButtonFormField<Duration>(
+                          initialValue: _interval,
+                          isExpanded: true,
+                          items: [
+                            for (final interval in folderBackupIntervals)
+                              DropdownMenuItem(
+                                value: interval,
+                                child: Text(
+                                  formatFolderBackupInterval(interval),
+                                ),
+                              ),
+                          ],
+                          onChanged: (v) => setState(() => _interval = v!),
                         ),
+                      ),
                     ],
-                    onChanged: (v) => setState(() => _interval = v!),
                   ),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                const SizedBox(width: 110, child: Text('Warn if it shrinks')),
-                Expanded(
-                  child: Slider(
-                    value: _threshold.toDouble(),
-                    min: minSizeDropThreshold.toDouble(),
-                    max: maxSizeDropThreshold.toDouble(),
-                    divisions:
-                        (maxSizeDropThreshold - minSizeDropThreshold) ~/ 5,
-                    label: '$_threshold%',
-                    onChanged: (v) => setState(() => _threshold = v.round()),
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 110,
+                        child: Text('Warn if it shrinks'),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: _threshold.toDouble(),
+                          min: minSizeDropThreshold.toDouble(),
+                          max: maxSizeDropThreshold.toDouble(),
+                          divisions:
+                              (maxSizeDropThreshold - minSizeDropThreshold) ~/
+                              5,
+                          label: '$_threshold%',
+                          onChanged: (v) =>
+                              setState(() => _threshold = v.round()),
+                        ),
+                      ),
+                      SizedBox(width: 48, child: Text('$_threshold%')),
+                    ],
                   ),
-                ),
-                SizedBox(width: 48, child: Text('$_threshold%')),
-              ],
+                ],
+              ),
             ),
             if (_editing)
               SwitchListTile(
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: kHoverRowInset,
+                ),
                 title: const Text('Back up this folder'),
                 value: _enabled,
                 onChanged: (v) => setState(() => _enabled = v),
               ),
             if (_error case final error?)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.fromLTRB(
+                  kHoverRowInset,
+                  8,
+                  kHoverRowInset,
+                  0,
+                ),
                 child: Text(
                   error,
                   style: theme.textTheme.bodySmall?.copyWith(

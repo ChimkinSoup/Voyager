@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -92,7 +93,11 @@ class _TodoListSettingsDialog extends ConsumerWidget {
           );
 
     return AlertDialog(
-      title: Text('${list.name} settings'),
+      // Inset by [kHoverRowInset] to line up with the switch rows' labels.
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Text('${list.name} settings'),
+      ),
       content: SizedBox(
         width: 420,
         // Scrollable rather than a bare Column, matching the journal sheet:
@@ -149,7 +154,7 @@ class _TodoListSettingsDialog extends ConsumerWidget {
     String? subtitle,
   }) {
     return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       activeThumbColor: accent,
       title: Text(title),
       subtitle: subtitle == null

@@ -52,25 +52,22 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
                ),
              );
            }
-           return InputDecorator(
-             key: state.decoratorKey,
+           return _VoyagerDropdownFieldControl<T>(
+             field: field,
+             decoratorKey: state.decoratorKey,
              decoration: fieldDecoration,
-             isEmpty: field.value == null,
-             child: _VoyagerDropdownFieldControl<T>(
-               field: field,
-               items: items,
-               enabled: dropdown.enabled,
-               isExpanded: isExpanded,
-               showCaret: dropdown.showCaret,
-               autofocus: dropdown.autofocus,
-               style: dropdown.style,
-               accentColor: dropdown.accentColor,
-               onMenuStateChanged: dropdown.onMenuStateChanged,
-               onChanged: (value) {
-                 field.didChange(value);
-                 onChanged?.call(value);
-               },
-             ),
+             items: items,
+             enabled: dropdown.enabled,
+             isExpanded: isExpanded,
+             showCaret: dropdown.showCaret,
+             autofocus: dropdown.autofocus,
+             style: dropdown.style,
+             accentColor: dropdown.accentColor,
+             onMenuStateChanged: dropdown.onMenuStateChanged,
+             onChanged: (value) {
+               field.didChange(value);
+               onChanged?.call(value);
+             },
            );
          },
        );
@@ -112,6 +109,8 @@ class _VoyagerDropdownFormFieldState<T> extends FormFieldState<T> {
 class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
   const _VoyagerDropdownFieldControl({
     required this.field,
+    required this.decoratorKey,
+    required this.decoration,
     required this.items,
     required this.enabled,
     required this.isExpanded,
@@ -124,6 +123,8 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
   });
 
   final FormFieldState<T> field;
+  final GlobalKey decoratorKey;
+  final InputDecoration decoration;
   final List<DropdownMenuItem<T>> items;
   final bool enabled;
   final bool isExpanded;
@@ -145,6 +146,9 @@ class _VoyagerDropdownFieldControlState<T>
   /// previous open is discarded if the menu is reopened before it fires.
   int _menuGeneration = 0;
 
+  bool _hovering = false;
+  bool _focused = false;
+
   DropdownMenuItem<T>? _selectedItem() {
     final value = widget.field.value;
     for (final item in widget.items) {
@@ -156,10 +160,8 @@ class _VoyagerDropdownFieldControlState<T>
   Future<void> _openMenu() async {
     if (!widget.enabled) return;
 
-    final decoratorKey =
-        (widget.field as _VoyagerDropdownFormFieldState<T>).decoratorKey;
     final buttonBox =
-        decoratorKey.currentContext?.findRenderObject() as RenderBox?;
+        widget.decoratorKey.currentContext?.findRenderObject() as RenderBox?;
     if (buttonBox == null) return;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
@@ -223,30 +225,42 @@ class _VoyagerDropdownFieldControlState<T>
 
     return Focus(
       canRequestFocus: widget.enabled,
+      // Around the whole field, which shows hover and focus the way a text
+      // field does: an ink fill on the inner row sat flush against the value.
       child: InkWell(
         autofocus: widget.autofocus,
         onTap: widget.enabled ? _openMenu : null,
-        child: Row(
-          children: [
-            Expanded(
-              child: DefaultTextStyle(
-                style: labelStyle!,
-                overflow: TextOverflow.ellipsis,
-                // With nothing picked, a blank line of the field's own text
-                // keeps it one line tall: without a caret beside it, an empty
-                // box here collapsed the tap target to nothing.
-                child: selected?.child ?? const Text(' '),
-              ),
-            ),
-            if (widget.showCaret)
-              Icon(
-                PhosphorIconsRegular.caretDown,
-                size: 18,
-                color: theme.colorScheme.onSurface.withValues(
-                  alpha: widget.enabled ? 0.8 : 0.38,
+        onHover: (hovering) => setState(() => _hovering = hovering),
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        child: InputDecorator(
+          key: widget.decoratorKey,
+          decoration: widget.decoration,
+          isEmpty: widget.field.value == null,
+          isHovering: _hovering && widget.enabled,
+          isFocused: _focused,
+          child: Row(
+            children: [
+              Expanded(
+                child: DefaultTextStyle(
+                  style: labelStyle!,
+                  overflow: TextOverflow.ellipsis,
+                  // With nothing picked, a blank line of the field's own text
+                  // keeps it one line tall: without a caret beside it, an empty
+                  // box here collapsed the tap target to nothing.
+                  child: selected?.child ?? const Text(' '),
                 ),
               ),
-          ],
+              if (widget.showCaret)
+                Icon(
+                  PhosphorIconsRegular.caretDown,
+                  size: 18,
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: widget.enabled ? 0.8 : 0.38,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

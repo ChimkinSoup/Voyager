@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/snippet_editor.dart';
@@ -119,22 +120,33 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
     );
 
     return AlertDialog(
-      title: const Text('Text snippets'),
+      // The body is inset by [kHoverRowInset] except for its rows, so their
+      // hover fill can reach the dialog's padding while their labels line up
+      // with the title and the text.
+      title: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Text('Text snippets'),
+      ),
       content: SizedBox(
         width: 640,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Type a trigger in any text box and it expands. Use \$0, \$1 … '
-              'in the replacement to mark where the caret should stop — Tab '
-              'moves between them. Write \\\$0 for a literal "\$0".',
-              style: muted,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: Text(
+                'Type a trigger in any text box and it expands. Use \$0, \$1 … '
+                'in the replacement to mark where the caret should stop — Tab '
+                'moves between them. Write \\\$0 for a literal "\$0".',
+                style: muted,
+              ),
             ),
             const SizedBox(height: 12),
             SwitchListTile(
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: kHoverRowInset,
+              ),
               dense: true,
               title: const Text('Enable snippets'),
               value: settings.snippetsEnabled,
@@ -145,7 +157,9 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
                   ),
             ),
             ListTile(
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: kHoverRowInset,
+              ),
               dense: true,
               title: const Text('Expand key'),
               subtitle: Text(
@@ -239,18 +253,21 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: GlassButton(
-                dense: true,
-                onPressed: _editingId == _newRowId
-                    ? null
-                    : () => setState(() {
-                        _editingId = _newRowId;
-                        _editError = null;
-                      }),
-                icon: const Icon(PhosphorIconsRegular.plus),
-                label: 'Add snippet',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: GlassButton(
+                  dense: true,
+                  onPressed: _editingId == _newRowId
+                      ? null
+                      : () => setState(() {
+                          _editingId = _newRowId;
+                          _editError = null;
+                        }),
+                  icon: const Icon(PhosphorIconsRegular.plus),
+                  label: 'Add snippet',
+                ),
               ),
             ),
           ],
@@ -288,7 +305,7 @@ class _SnippetRow extends StatelessWidget {
     );
     return ListTile(
       dense: true,
-      contentPadding: const EdgeInsets.only(left: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       onTap: onEdit,
       title: Row(
         children: [

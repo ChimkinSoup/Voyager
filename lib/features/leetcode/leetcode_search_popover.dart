@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -76,15 +77,20 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          VoyagerTextField(
-            controller: _controller,
-            autofocus: true,
-            accentColor: accent,
-            decoration: const InputDecoration(
-              labelText: 'Search problems',
-              hintText: 'Two Sum',
+          // Inset to line up with the results' titles, whose hover fill
+          // takes up the [kHoverRowInset] either side.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+            child: VoyagerTextField(
+              controller: _controller,
+              autofocus: true,
+              accentColor: accent,
+              decoration: const InputDecoration(
+                labelText: 'Search problems',
+                hintText: 'Two Sum',
+              ),
+              onSubmitted: (_) => _search(),
             ),
-            onSubmitted: (_) => _search(),
           ),
           const SizedBox(height: 8),
           Expanded(
@@ -132,7 +138,9 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
         final q = results[index];
         return ListTile(
           dense: true,
-          contentPadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: kHoverRowInset,
+          ),
           // Matching happens on LeetCode's side, so a result whose title
           // doesn't literally contain the query simply shows no highlight.
           title: keywordHighlightedText(

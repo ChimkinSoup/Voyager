@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -110,7 +111,11 @@ class _JournalSettingsDialog extends ConsumerWidget {
     final globalQuotesOff = settings?.showQuotes == false;
 
     return AlertDialog(
-      title: Text('${journal.name} settings'),
+      // Inset by [kHoverRowInset] to line up with the switch rows' labels.
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Text('${journal.name} settings'),
+      ),
       content: SizedBox(
         width: 420,
         // Scrollable rather than a bare Column: five switch rows plus their
@@ -152,7 +157,9 @@ class _JournalSettingsDialog extends ConsumerWidget {
                     _saveJournal(ref, (j) => j.copyWith(showQuotes: v)),
               ),
               ListTile(
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: kHoverRowInset,
+                ),
                 title: const Text('On this day'),
                 subtitle: Text(
                   'Resurface entries from this day in past years, or from one '
@@ -160,35 +167,38 @@ class _JournalSettingsDialog extends ConsumerWidget {
                   style: theme.textTheme.bodySmall,
                 ),
               ),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<OnThisDayCadence>(
-                  segments: const [
-                    ButtonSegment(
-                      value: OnThisDayCadence.off,
-                      label: Text('Off'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<OnThisDayCadence>(
+                    segments: const [
+                      ButtonSegment(
+                        value: OnThisDayCadence.off,
+                        label: Text('Off'),
+                      ),
+                      ButtonSegment(
+                        value: OnThisDayCadence.yearly,
+                        label: Text('Yearly'),
+                      ),
+                      ButtonSegment(
+                        value: OnThisDayCadence.monthlyAndYearly,
+                        label: Text('Monthly + yearly', softWrap: false),
+                      ),
+                    ],
+                    selected: {journal.onThisDayCadence},
+                    showSelectedIcon: false,
+                    // Segments split the width evenly, and the default padding
+                    // left "Monthly + yearly" a few pixels short of one line.
+                    style: SegmentedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      selectedBackgroundColor: accent.withValues(alpha: 0.18),
+                      selectedForegroundColor: accent,
                     ),
-                    ButtonSegment(
-                      value: OnThisDayCadence.yearly,
-                      label: Text('Yearly'),
+                    onSelectionChanged: (selection) => _saveJournal(
+                      ref,
+                      (j) => j.copyWith(onThisDayCadence: selection.first),
                     ),
-                    ButtonSegment(
-                      value: OnThisDayCadence.monthlyAndYearly,
-                      label: Text('Monthly + yearly', softWrap: false),
-                    ),
-                  ],
-                  selected: {journal.onThisDayCadence},
-                  showSelectedIcon: false,
-                  // Segments split the width evenly, and the default padding
-                  // left "Monthly + yearly" a few pixels short of one line.
-                  style: SegmentedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    selectedBackgroundColor: accent.withValues(alpha: 0.18),
-                    selectedForegroundColor: accent,
-                  ),
-                  onSelectionChanged: (selection) => _saveJournal(
-                    ref,
-                    (j) => j.copyWith(onThisDayCadence: selection.first),
                   ),
                 ),
               ),
@@ -240,7 +250,7 @@ class _JournalSettingsDialog extends ConsumerWidget {
     String? subtitle,
   }) {
     return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       activeThumbColor: accent,
       title: Text(title),
       subtitle: subtitle == null

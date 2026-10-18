@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/spellcheck/dictionary_search.dart';
 import 'package:voyager/core/spellcheck/flagged_word_rules.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
@@ -368,73 +369,88 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
     final canAdd = ready && !_saving && word.isNotEmpty && !known;
 
     return AlertDialog(
-      title: const Text('Dictionary'),
+      // The body is inset by [kHoverRowInset] except for its word rows, so
+      // their hover fill can reach the dialog's padding while their words
+      // line up with the title and the field.
+      title: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Text('Dictionary'),
+      ),
       content: SizedBox(
         width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Words you add here are accepted by the spell checker everywhere '
-              'in the app, and words you flag are marked everywhere. Search to '
-              'see whether a word is already known.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: Text(
+                'Words you add here are accepted by the spell checker everywhere '
+                'in the app, and words you flag are marked everywhere. Search to '
+                'see whether a word is already known.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: LabeledTextField(
-                      label: '',
-                      showLabel: false,
-                      hintText: 'Search or add a word',
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      dense: true,
-                      // Typing a word that isn't in the dictionary yet is the
-                      // whole point of this field, so it must not be a fight
-                      // with squiggles or an expanding snippet. (Single-line
-                      // fields are already exempt from spellcheck.)
-                      snippetsAllowed: false,
-                      autocorrectAllowed: false,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 15,
-                        vertical: 8,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: LabeledTextField(
+                        label: '',
+                        showLabel: false,
+                        hintText: 'Search or add a word',
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        dense: true,
+                        // Typing a word that isn't in the dictionary yet is the
+                        // whole point of this field, so it must not be a fight
+                        // with squiggles or an expanding snippet. (Single-line
+                        // fields are already exempt from spellcheck.)
+                        snippetsAllowed: false,
+                        autocorrectAllowed: false,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 8,
+                        ),
+                        onSubmitted: (_) => _add(bundled, custom, flagged),
+                        // Left to its default Enter takes the focus out of the
+                        // field, so a word turned away could not be fixed from
+                        // the keyboard (BUG-026).
+                        onEditingComplete: () {},
                       ),
-                      onSubmitted: (_) => _add(bundled, custom, flagged),
-                      // Left to its default Enter takes the focus out of the
-                      // field, so a word turned away could not be fixed from
-                      // the keyboard (BUG-026).
-                      onEditingComplete: () {},
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  GlassButton(
-                    dense: true,
-                    onPressed: canAdd
-                        ? () => _add(bundled, custom, flagged)
-                        : null,
-                    icon: const Icon(PhosphorIconsRegular.plus),
-                    tooltip: known && word.isNotEmpty
-                        ? '"$word" is already known'
-                        : 'Add word',
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    GlassButton(
+                      dense: true,
+                      onPressed: canAdd
+                          ? () => _add(bundled, custom, flagged)
+                          : null,
+                      icon: const Icon(PhosphorIconsRegular.plus),
+                      tooltip: known && word.isNotEmpty
+                          ? '"$word" is already known'
+                          : 'Add word',
+                    ),
+                  ],
+                ),
               ),
             ),
             if (_error != null || _notice != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _error ?? _notice!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _error != null
-                      ? theme.colorScheme.error
-                      : theme.colorScheme.onSurfaceVariant,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Text(
+                  _error ?? _notice!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: _error != null
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
@@ -552,7 +568,12 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
           );
         }
         return Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+          padding: const EdgeInsets.fromLTRB(
+            kHoverRowInset,
+            8,
+            kHoverRowInset,
+            4,
+          ),
           child: Text(
             'Showing the first $dictionarySearchLimit matches — '
             'type more to narrow.',
@@ -606,7 +627,7 @@ class _CustomWordRow extends StatelessWidget {
     final theme = Theme.of(context);
     return ListTile(
       dense: true,
-      contentPadding: const EdgeInsets.only(left: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       // The whole row opens the editor, so a word added with a typo in it is
       // one click from being fixed; the pencil is there to say so.
       onTap: onEdit,
@@ -651,7 +672,7 @@ class _BundledWordRow extends StatelessWidget {
     final faint = theme.colorScheme.onSurfaceVariant;
     return ListTile(
       dense: true,
-      contentPadding: const EdgeInsets.only(left: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       title: Text(
         word,
         style: theme.textTheme.bodyMedium?.copyWith(color: faint),
@@ -696,7 +717,7 @@ class _FlaggedWordRow extends StatelessWidget {
     final faint = theme.colorScheme.onSurfaceVariant;
     return ListTile(
       dense: true,
-      contentPadding: const EdgeInsets.only(left: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       // Same affordance as a custom row: the whole row opens the editor.
       onTap: onEdit,
       title: Row(
@@ -806,7 +827,10 @@ class _WordEditorState extends State<_WordEditor> {
       // Six, not four: the field inside is 28px tall and the [ListTile] this
       // row replaces is 40, so 4px of padding left the list jumping 4px
       // shorter the moment a word was opened for renaming.
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kHoverRowInset,
+        vertical: 6,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

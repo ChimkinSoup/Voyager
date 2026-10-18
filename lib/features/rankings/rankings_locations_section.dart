@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
@@ -132,15 +133,20 @@ class RankingLocationsSection extends ConsumerWidget {
       children: [
         if (locations.isNotEmpty &&
             ref.watch(geoapifyClientProvider) != null) ...[
-          RankingLocationPreview(
-            parent: parent,
-            accent: accent,
-            // Beside an open map, a press pans it there, as a row's does.
-            onTap: mapShowing
-                ? (location) =>
-                      ref.read(rankingMapFocusProvider.notifier).state =
-                          location
-                : onShowOnMap,
+          // Inset to line up with the rows' content, whose hover fill takes
+          // up the [kHoverRowInset] either side.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+            child: RankingLocationPreview(
+              parent: parent,
+              accent: accent,
+              // Beside an open map, a press pans it there, as a row's does.
+              onTap: mapShowing
+                  ? (location) =>
+                        ref.read(rankingMapFocusProvider.notifier).state =
+                            location
+                  : onShowOnMap,
+            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -200,20 +206,26 @@ class RankingLocationsSection extends ConsumerWidget {
           ),
         if (!readOnly) ...[
           if (locations.isNotEmpty) const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: GlassButton(
-              dense: true,
-              icon: const Icon(PhosphorIconsRegular.mapPinPlus, size: 13),
-              label: 'Add location',
-              onPressed: () => _add(context, ref),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: GlassButton(
+                dense: true,
+                icon: const Icon(PhosphorIconsRegular.mapPinPlus, size: 13),
+                label: 'Add location',
+                onPressed: () => _add(context, ref),
+              ),
             ),
           ),
         ] else if (locations.isEmpty)
-          Text(
-            'No locations',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+            child: Text(
+              'No locations',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
       ],
@@ -294,7 +306,10 @@ class _LocationRowState extends State<_LocationRow> {
         onTap: widget.onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            horizontal: kHoverRowInset,
+            vertical: 4,
+          ),
           child: Row(
             children: [
               if (!readOnly)

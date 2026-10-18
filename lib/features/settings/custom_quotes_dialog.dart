@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -148,22 +149,33 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
     final customOnly = settings?.customQuotesOnly ?? false;
 
     return AlertDialog(
-      title: const Text('Custom quotes'),
+      // The body is inset by [kHoverRowInset] except for its hover rows, so
+      // their fill can reach the dialog's padding while their labels line up
+      // with the title and the field.
+      title: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Text('Custom quotes'),
+      ),
       content: SizedBox(
         width: 620,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Quotes you add here join the pool a new journal entry picks '
-              'from at random.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: Text(
+                'Quotes you add here join the pool a new journal entry picks '
+                'from at random.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             SwitchListTile(
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: kHoverRowInset,
+              ),
               title: const Text('Only my quotes'),
               subtitle: Text(
                 customOnly && quotesAsync.valueOrNull?.isEmpty == true
@@ -184,41 +196,47 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
                         ),
             ),
             const SizedBox(height: 12),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: LabeledTextField(
-                      label: '',
-                      showLabel: false,
-                      hintText: 'Add a quote',
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 15,
-                        vertical: 8,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: LabeledTextField(
+                        label: '',
+                        showLabel: false,
+                        hintText: 'Add a quote',
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 8,
+                        ),
+                        onSubmitted: (_) => _add(),
                       ),
-                      onSubmitted: (_) => _add(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  GlassButton(
-                    dense: true,
-                    onPressed: _saving ? null : _add,
-                    icon: const Icon(PhosphorIconsRegular.plus),
-                    tooltip: 'Add quote',
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    GlassButton(
+                      dense: true,
+                      onPressed: _saving ? null : _add,
+                      icon: const Icon(PhosphorIconsRegular.plus),
+                      tooltip: 'Add quote',
+                    ),
+                  ],
+                ),
               ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Text(
+                  _error!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ),
             ],
@@ -271,7 +289,9 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
                         }
                         return ListTile(
                           dense: true,
-                          contentPadding: const EdgeInsets.only(left: 4),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: kHoverRowInset,
+                          ),
                           // The whole row opens the editor, so a quote with a
                           // typo in it is one click from being fixed; the pencil
                           // is there to say so.
@@ -384,7 +404,10 @@ class _QuoteEditorState extends State<_QuoteEditor> {
       // Six, not four: the field inside is 28px tall and the [ListTile] this
       // row replaces is 40, so 4px of padding left the list jumping 4px
       // shorter the moment a quote was opened for editing.
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kHoverRowInset,
+        vertical: 6,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

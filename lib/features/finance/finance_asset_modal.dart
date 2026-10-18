@@ -25,6 +25,7 @@ import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
 import 'package:voyager/features/finance/finance_room_bar.dart';
 import 'package:voyager/features/finance/finance_room_history.dart';
 import 'package:voyager/features/finance/finance_soft_delete.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/finance/finance_amount_formatter.dart';
@@ -302,115 +303,127 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Text(
-                    existing == null ? 'New asset' : 'Update asset',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const Spacer(),
-                  if (existing != null)
-                    IconButton(
-                      onPressed: _saving ? null : _delete,
-                      icon: Icon(
-                        PhosphorIconsRegular.trash,
-                        size: 18,
-                        color: theme.colorScheme.error,
-                      ),
-                      tooltip: 'Delete',
-                      padding: EdgeInsets.zero,
-                      constraints: kMinTouchTarget,
+              // Everything but the Valuations row is inset by
+              // [kHoverRowInset], so that row's hover fill can reach the
+              // sheet's edge while its label lines up with the rest.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          existing == null ? 'New asset' : 'Update asset',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const Spacer(),
+                        if (existing != null)
+                          IconButton(
+                            onPressed: _saving ? null : _delete,
+                            icon: Icon(
+                              PhosphorIconsRegular.trash,
+                              size: 18,
+                              color: theme.colorScheme.error,
+                            ),
+                            tooltip: 'Delete',
+                            padding: EdgeInsets.zero,
+                            constraints: kMinTouchTarget,
+                          ),
+                        IconButton(
+                          onPressed: Navigator.of(context).pop,
+                          icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                          tooltip: 'Close',
+                          padding: EdgeInsets.zero,
+                          constraints: kMinTouchTarget,
+                        ),
+                      ],
                     ),
-                  IconButton(
-                    onPressed: Navigator.of(context).pop,
-                    icon: const Icon(PhosphorIconsRegular.x, size: 18),
-                    tooltip: 'Close',
-                    padding: EdgeInsets.zero,
-                    constraints: kMinTouchTarget,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (existing != null) ...[
-                AssetValueChart(assetId: existing.id, color: accent),
-                const SizedBox(height: 16),
-              ],
-              VoyagerTextField(
-                controller: _nameController,
-                autofocus: existing == null,
-                accentColor: accent,
-                decoration: const InputDecoration(
-                  labelText: 'Asset name',
-                  hintText: 'Index fund',
-                ),
-                onSubmitted: (_) => _valueFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: 16),
-              // Only the parts that read the typed text rebuild as it is
-              // typed. A `setState` listener on the controllers rebuilt the
-              // whole sheet instead — ~570 widgets per character, each of
-              // which also made the sheet's heavy GlassSurface re-blur a
-              // window-sized backdrop.
-              ListenableBuilder(
-                listenable: _valueController,
-                builder: (context, _) => VoyagerTextField(
-                  controller: _valueController,
-                  focusNode: _valueFocusNode,
-                  // Updating an asset is updating its value; the sheet used
-                  // to open with nothing focused (BUG-117).
-                  autofocus: existing != null,
-                  accentColor: accent,
-                  cursorColor: accent,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: true,
-                  ),
-                  inputFormatters: [
-                    AmountInputFormatter(signed: true),
-                    // Bounded so a long paste can't reach the range where
-                    // double.parse returns Infinity.
-                    LengthLimitingTextInputFormatter(13),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Current value',
-                    prefixText: r'$ ',
-                    hintText: 'Use a minus sign for a debt',
-                    errorText: _valueError,
-                  ),
-                  onSubmitted: (_) => _noteFocusNode.requestFocus(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              VoyagerTextField(
-                controller: _noteController,
-                focusNode: _noteFocusNode,
-                accentColor: accent,
-                decoration: const InputDecoration(
-                  labelText: 'Note',
-                  hintText: 'Brokerage account',
-                ),
-                onSubmitted: (_) => _save(),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text(
-                    'Valued as of',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const Spacer(),
-                  Builder(
-                    builder: (buttonContext) => SelectorPill(
-                      icon: PhosphorIconsRegular.calendar,
-                      label: DateFormat('MMM d, yyyy').format(_asOf),
-                      isActive: _datePopoverOpen,
+                    const SizedBox(height: 12),
+                    if (existing != null) ...[
+                      AssetValueChart(assetId: existing.id, color: accent),
+                      const SizedBox(height: 16),
+                    ],
+                    VoyagerTextField(
+                      controller: _nameController,
+                      autofocus: existing == null,
                       accentColor: accent,
-                      onTap: () => _pickDate(buttonContext),
+                      decoration: const InputDecoration(
+                        labelText: 'Asset name',
+                        hintText: 'Index fund',
+                      ),
+                      onSubmitted: (_) => _valueFocusNode.requestFocus(),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    // Only the parts that read the typed text rebuild as it is
+                    // typed. A `setState` listener on the controllers rebuilt the
+                    // whole sheet instead — ~570 widgets per character, each of
+                    // which also made the sheet's heavy GlassSurface re-blur a
+                    // window-sized backdrop.
+                    ListenableBuilder(
+                      listenable: _valueController,
+                      builder: (context, _) => VoyagerTextField(
+                        controller: _valueController,
+                        focusNode: _valueFocusNode,
+                        // Updating an asset is updating its value; the sheet used
+                        // to open with nothing focused (BUG-117).
+                        autofocus: existing != null,
+                        accentColor: accent,
+                        cursorColor: accent,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: true,
+                        ),
+                        inputFormatters: [
+                          AmountInputFormatter(signed: true),
+                          // Bounded so a long paste can't reach the range where
+                          // double.parse returns Infinity.
+                          LengthLimitingTextInputFormatter(13),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Current value',
+                          prefixText: r'$ ',
+                          hintText: 'Use a minus sign for a debt',
+                          errorText: _valueError,
+                        ),
+                        onSubmitted: (_) => _noteFocusNode.requestFocus(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    VoyagerTextField(
+                      controller: _noteController,
+                      focusNode: _noteFocusNode,
+                      accentColor: accent,
+                      decoration: const InputDecoration(
+                        labelText: 'Note',
+                        hintText: 'Brokerage account',
+                      ),
+                      onSubmitted: (_) => _save(),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(
+                          'Valued as of',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const Spacer(),
+                        Builder(
+                          builder: (buttonContext) => SelectorPill(
+                            icon: PhosphorIconsRegular.calendar,
+                            label: DateFormat('MMM d, yyyy').format(_asOf),
+                            isActive: _datePopoverOpen,
+                            accentColor: accent,
+                            onTap: () => _pickDate(buttonContext),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               if (existing != null) ...[
                 const SizedBox(height: 12),
@@ -418,36 +431,50 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                   assetId: existing.id,
                   container: widget.container,
                 ),
-                const SizedBox(height: 12),
-                _RoomSection(assetId: existing.id, container: widget.container),
               ],
-              const SizedBox(height: 16),
-              ColorPickerField(
-                label: 'Color',
-                value: _colorValue,
-                onChanged: (c) => setState(() => _colorValue = c),
-                swatchRadius: 16,
-              ),
-              if (_saveError != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _saveError!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              ListenableBuilder(
-                listenable: Listenable.merge([
-                  _nameController,
-                  _valueController,
-                ]),
-                builder: (context, _) => GlassButton(
-                  onPressed: _canSave ? _save : null,
-                  label: existing == null ? 'Add' : 'Save',
-                  color: accent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (existing != null) ...[
+                      const SizedBox(height: 12),
+                      _RoomSection(
+                        assetId: existing.id,
+                        container: widget.container,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ColorPickerField(
+                      label: 'Color',
+                      value: _colorValue,
+                      onChanged: (c) => setState(() => _colorValue = c),
+                      swatchRadius: 16,
+                    ),
+                    if (_saveError != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        _saveError!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    ListenableBuilder(
+                      listenable: Listenable.merge([
+                        _nameController,
+                        _valueController,
+                      ]),
+                      builder: (context, _) => GlassButton(
+                        onPressed: _canSave ? _save : null,
+                        label: existing == null ? 'Add' : 'Save',
+                        color: accent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -580,7 +607,10 @@ class _ValuationsSection extends ConsumerWidget {
           },
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(
+              horizontal: kHoverRowInset,
+              vertical: 8,
+            ),
             child: Row(
               children: [
                 Icon(
@@ -605,7 +635,12 @@ class _ValuationsSection extends ConsumerWidget {
           alignment: Alignment.topCenter,
           child: expanded
               ? Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.fromLTRB(
+                    kHoverRowInset,
+                    4,
+                    kHoverRowInset,
+                    0,
+                  ),
                   child: _ValuationHistory(
                     assetId: assetId,
                     container: container,

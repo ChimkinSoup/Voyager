@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -338,135 +339,157 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
               // anything above its viewport, and at the panel's old 4 the
               // ascenders of 'Title' were being shaved off.
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              // Everything but the location rows is inset by
+              // [kHoverRowInset], so their hover fill can reach the panel's
+              // padding while their names line up with the rest.
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _section(
-                    'title',
-                    [accent, widget.readOnly],
-                    () => LabeledTextField(
-                      label: 'Title',
-                      controller: _titleController,
-                      enabled: !widget.readOnly,
-                      accentColor: accent,
-                      // Shorter than the 18 a field defaults to: the panel opens
-                      // on this box, and the slack above and below one line of
-                      // title was the tallest thing in the editor. The box drops
-                      // under Material's 48px minimum doing it, so it also has
-                      // to opt out of the stretch that would otherwise re-centre
-                      // its text away from the padding — see [allowShortHeight].
-                      allowShortHeight: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      onChanged: (_) {
-                        _scheduleTextSave();
-                        _publishDraft();
-                      },
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: kHoverRowInset,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  RankingOverallRow(
-                    value: _current.overallScore,
-                    scoreMax: category.parentScoreMax,
-                    precision: category.parentScorePrecision,
-                    accentColor: accent,
-                    label: 'Overall',
-                    semanticLabel: _current.overallScore == null
-                        ? 'Not scored'
-                        : 'Overall '
-                              '${formatRankingScore(_current.overallScore!)}',
-                    // The row holds what it wrote until the re-read lands.
-                    onChanged: widget.readOnly
-                        ? null
-                        : (score) {
-                            _draftScore = null;
-                            _save(
-                              score == null
-                                  ? _current.copyWith(clearOverallScore: true)
-                                  : _current.copyWith(overallScore: score),
-                              rebuild: false,
-                            );
-                          },
-                    onDraftChanged: (draft) {
-                      _draftScore = draft == null ? null : (score: draft);
-                      _publishDraft();
-                    },
-                  ),
-                  if (category.showsProgress)
-                    _section(
-                      'progress',
-                      [
-                        accent,
-                        widget.readOnly,
-                        category,
-                        widget.children,
-                        _current.id,
-                        _current.progressChildId,
-                        _current.progressSeconds,
-                      ],
-                      () {
-                        final child = rankingProgressChild(
-                          _current,
-                          widget.children,
-                        );
-                        if (child == null) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: _ContinueLine(
-                            parentId: _current.id,
-                            child: child,
-                            seconds: _current.progressSeconds,
-                            category: category,
-                            hasNext:
-                                rankingNextChild(child, widget.children) !=
-                                null,
-                            accent: accent,
-                            readOnly: widget.readOnly,
-                          ),
-                        );
-                      },
-                    ),
-                  const SizedBox(height: 12),
-                  _section(
-                    'tags',
-                    [
-                      accent,
-                      widget.readOnly,
-                      _current.tags.join('\n'),
-                      widget.tagSuggestions.join('\n'),
-                    ],
-                    () => RankingTagsField(
-                      tags: _current.tags,
-                      suggestions: widget.tagSuggestions,
-                      accentColor: accent,
-                      enabled: !widget.readOnly,
-                      onChanged: (tags) =>
-                          _save(_current.copyWith(tags: tags), rebuild: false),
-                      onChipRemoved: (tag, index) => offerRankingTagUndo(
-                        context,
-                        ref,
-                        parentId: _current.id,
-                        tag: tag,
-                        index: index,
-                      ),
-                    ),
-                  ),
-                  if (category.parentCountEnabled) ...[
-                    const SizedBox(height: 12),
-                    RankingCountStepper(
-                      entryId: _current.id,
-                      accent: accent,
-                      onAdjust: widget.readOnly
-                          ? null
-                          : (delta) => _actions.adjustCount(
-                              _current.id,
-                              parentId: _current.id,
-                              delta: delta,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _section(
+                          'title',
+                          [accent, widget.readOnly],
+                          () => LabeledTextField(
+                            label: 'Title',
+                            controller: _titleController,
+                            enabled: !widget.readOnly,
+                            accentColor: accent,
+                            // Shorter than the 18 a field defaults to: the panel opens
+                            // on this box, and the slack above and below one line of
+                            // title was the tallest thing in the editor. The box drops
+                            // under Material's 48px minimum doing it, so it also has
+                            // to opt out of the stretch that would otherwise re-centre
+                            // its text away from the padding — see [allowShortHeight].
+                            allowShortHeight: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
                             ),
+                            onChanged: (_) {
+                              _scheduleTextSave();
+                              _publishDraft();
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        RankingOverallRow(
+                          value: _current.overallScore,
+                          scoreMax: category.parentScoreMax,
+                          precision: category.parentScorePrecision,
+                          accentColor: accent,
+                          label: 'Overall',
+                          semanticLabel: _current.overallScore == null
+                              ? 'Not scored'
+                              : 'Overall '
+                                    '${formatRankingScore(_current.overallScore!)}',
+                          // The row holds what it wrote until the re-read lands.
+                          onChanged: widget.readOnly
+                              ? null
+                              : (score) {
+                                  _draftScore = null;
+                                  _save(
+                                    score == null
+                                        ? _current.copyWith(
+                                            clearOverallScore: true,
+                                          )
+                                        : _current.copyWith(
+                                            overallScore: score,
+                                          ),
+                                    rebuild: false,
+                                  );
+                                },
+                          onDraftChanged: (draft) {
+                            _draftScore = draft == null ? null : (score: draft);
+                            _publishDraft();
+                          },
+                        ),
+                        if (category.showsProgress)
+                          _section(
+                            'progress',
+                            [
+                              accent,
+                              widget.readOnly,
+                              category,
+                              widget.children,
+                              _current.id,
+                              _current.progressChildId,
+                              _current.progressSeconds,
+                            ],
+                            () {
+                              final child = rankingProgressChild(
+                                _current,
+                                widget.children,
+                              );
+                              if (child == null) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: _ContinueLine(
+                                  parentId: _current.id,
+                                  child: child,
+                                  seconds: _current.progressSeconds,
+                                  category: category,
+                                  hasNext:
+                                      rankingNextChild(
+                                        child,
+                                        widget.children,
+                                      ) !=
+                                      null,
+                                  accent: accent,
+                                  readOnly: widget.readOnly,
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 12),
+                        _section(
+                          'tags',
+                          [
+                            accent,
+                            widget.readOnly,
+                            _current.tags.join('\n'),
+                            widget.tagSuggestions.join('\n'),
+                          ],
+                          () => RankingTagsField(
+                            tags: _current.tags,
+                            suggestions: widget.tagSuggestions,
+                            accentColor: accent,
+                            enabled: !widget.readOnly,
+                            onChanged: (tags) => _save(
+                              _current.copyWith(tags: tags),
+                              rebuild: false,
+                            ),
+                            onChipRemoved: (tag, index) => offerRankingTagUndo(
+                              context,
+                              ref,
+                              parentId: _current.id,
+                              tag: tag,
+                              index: index,
+                            ),
+                          ),
+                        ),
+                        if (category.parentCountEnabled) ...[
+                          const SizedBox(height: 12),
+                          RankingCountStepper(
+                            entryId: _current.id,
+                            accent: accent,
+                            onAdjust: widget.readOnly
+                                ? null
+                                : (delta) => _actions.adjustCount(
+                                    _current.id,
+                                    parentId: _current.id,
+                                    delta: delta,
+                                  ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
                   if (category.locationEnabled) ...[
                     const SizedBox(height: 12),
                     RankingLocationsSection(
@@ -477,157 +500,171 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       readOnly: widget.readOnly,
                     ),
                   ],
-                  if (!_current.isRanked) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        for (final status in RankingStatus.values) ...[
-                          SelectorPill(
-                            label: status == RankingStatus.inProgress
-                                ? 'In progress'
-                                : 'Queued',
-                            dense: true,
-                            accentColor: accent,
-                            isActive: _current.status == status,
-                            // Filled rather than outlined: these two are a
-                            // one-of-two choice, and a border alone read as
-                            // "focused" more than as "picked".
-                            fillWhenActive: true,
-                            onTap: widget.readOnly
-                                ? () {}
-                                : () =>
-                                      _save(_current.copyWith(status: status)),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                      ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: kHoverRowInset,
                     ),
-                  ],
-                  if (fields.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    RankingTemplateFieldsBand(
-                      accent: accent,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final (index, field) in fields.indexed)
-                            RankingFieldEditor(
-                              key: ValueKey(field.id),
-                              field: field,
-                              showTopDivider: index > 0,
-                              value:
-                                  _current.fieldValues[field.id] ??
-                                  const RankingFieldValue(),
-                              precision: rankingFieldPrecision(
-                                field,
-                                overallPrecision: category.parentScorePrecision,
-                              ),
-                              accentColor: accent,
-                              readOnly: widget.readOnly,
-                              onChanged: (value) => _save(
-                                _current.copyWith(
-                                  fieldValues: {
-                                    ..._current.fieldValues,
-                                    field.id: value,
-                                  },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!_current.isRanked) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              for (final status in RankingStatus.values) ...[
+                                SelectorPill(
+                                  label: status == RankingStatus.inProgress
+                                      ? 'In progress'
+                                      : 'Queued',
+                                  dense: true,
+                                  accentColor: accent,
+                                  isActive: _current.status == status,
+                                  // Filled rather than outlined: these two are a
+                                  // one-of-two choice, and a border alone read as
+                                  // "focused" more than as "picked".
+                                  fillWhenActive: true,
+                                  onTap: widget.readOnly
+                                      ? () {}
+                                      : () => _save(
+                                          _current.copyWith(status: status),
+                                        ),
                                 ),
-                                rebuild: false,
+                                const SizedBox(width: 6),
+                              ],
+                            ],
+                          ),
+                        ],
+                        if (fields.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          RankingTemplateFieldsBand(
+                            accent: accent,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (final (index, field) in fields.indexed)
+                                  RankingFieldEditor(
+                                    key: ValueKey(field.id),
+                                    field: field,
+                                    showTopDivider: index > 0,
+                                    value:
+                                        _current.fieldValues[field.id] ??
+                                        const RankingFieldValue(),
+                                    precision: rankingFieldPrecision(
+                                      field,
+                                      overallPrecision:
+                                          category.parentScorePrecision,
+                                    ),
+                                    accentColor: accent,
+                                    readOnly: widget.readOnly,
+                                    onChanged: (value) => _save(
+                                      _current.copyWith(
+                                        fieldValues: {
+                                          ..._current.fieldValues,
+                                          field.id: value,
+                                        },
+                                      ),
+                                      rebuild: false,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ] else
+                          // With no template the band that carried this gap is not
+                          // built, and the notes box ended up flush against the
+                          // overall row's stars. Keep the same breathing room
+                          // either way.
+                          const SizedBox(height: 20),
+                        _section(
+                          'notes',
+                          [accent, widget.readOnly, theme.textTheme.bodySmall],
+                          () => TagHighlightedTextField(
+                            controller: _notesController,
+                            focusNode: _notesFocusNode,
+                            onChanged: (_) => _scheduleTextSave(),
+                            label: 'Notes',
+                            accentColor: accent,
+                            readOnly: widget.readOnly,
+                            style: theme.textTheme.bodySmall,
+                            minLines: 4,
+                            maxLines: 14,
+                          ),
+                        ),
+                        if (category.imagesOnParent) ...[
+                          const SizedBox(height: 16),
+                          _section(
+                            'images',
+                            [accent, _current.id],
+                            () => MediaGalleryStrip(
+                              collection: FirestoreCollections.rankings,
+                              documentId: _current.id,
+                              accentColor: accent,
+                            ),
+                          ),
+                        ],
+                        if (category.childUnitsEnabled) ...[
+                          const SizedBox(height: 20),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+                          // Kept across a change to the entry's own fields: the list
+                          // reads only the entry's id and category off it.
+                          _section(
+                            'units',
+                            [
+                              _current.id,
+                              category,
+                              widget.children,
+                              widget.readOnly,
+                              scoredChildren,
+                              _current.progressChildId,
+                              _current.progressSeconds,
+                            ],
+                            () => RankingsChildList(
+                              parent: _current,
+                              category: category,
+                              children: widget.children,
+                              readOnly: widget.readOnly,
+                              scoredChildren: scoredChildren,
+                              onAverageFromChildren: () async {
+                                final average = rankingAverageFromChildren(
+                                  widget.children,
+                                  scoreMax: category.parentScoreMax,
+                                  childScoreMax: category.childScoreMax,
+                                  precision: category.parentScorePrecision,
+                                );
+                                if (average == null) return;
+                                await _save(
+                                  _current.copyWith(overallScore: average),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                        // Last thing in the panel, and unlabelled: the date an entry
+                        // was started is the least of what this screen holds, and a
+                        // lone date capsule needs no word in front of it.
+                        const SizedBox(height: 20),
+                        _section(
+                          'created',
+                          [accent, widget.readOnly, _current.createdAt],
+                          () => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Builder(
+                              builder: (pillContext) => SelectorPill(
+                                label: DateFormat.yMMMd().format(
+                                  _current.createdAt.toLocal(),
+                                ),
+                                dense: true,
+                                accentColor: accent,
+                                onTap: widget.readOnly
+                                    ? () {}
+                                    : () => _pickCreatedAt(pillContext),
                               ),
                             ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ] else
-                    // With no template the band that carried this gap is not
-                    // built, and the notes box ended up flush against the
-                    // overall row's stars. Keep the same breathing room
-                    // either way.
-                    const SizedBox(height: 20),
-                  _section(
-                    'notes',
-                    [accent, widget.readOnly, theme.textTheme.bodySmall],
-                    () => TagHighlightedTextField(
-                      controller: _notesController,
-                      focusNode: _notesFocusNode,
-                      onChanged: (_) => _scheduleTextSave(),
-                      label: 'Notes',
-                      accentColor: accent,
-                      readOnly: widget.readOnly,
-                      style: theme.textTheme.bodySmall,
-                      minLines: 4,
-                      maxLines: 14,
-                    ),
-                  ),
-                  if (category.imagesOnParent) ...[
-                    const SizedBox(height: 16),
-                    _section(
-                      'images',
-                      [accent, _current.id],
-                      () => MediaGalleryStrip(
-                        collection: FirestoreCollections.rankings,
-                        documentId: _current.id,
-                        accentColor: accent,
-                      ),
-                    ),
-                  ],
-                  if (category.childUnitsEnabled) ...[
-                    const SizedBox(height: 20),
-                    const Divider(height: 1),
-                    const SizedBox(height: 12),
-                    // Kept across a change to the entry's own fields: the list
-                    // reads only the entry's id and category off it.
-                    _section(
-                      'units',
-                      [
-                        _current.id,
-                        category,
-                        widget.children,
-                        widget.readOnly,
-                        scoredChildren,
-                        _current.progressChildId,
-                        _current.progressSeconds,
-                      ],
-                      () => RankingsChildList(
-                        parent: _current,
-                        category: category,
-                        children: widget.children,
-                        readOnly: widget.readOnly,
-                        scoredChildren: scoredChildren,
-                        onAverageFromChildren: () async {
-                          final average = rankingAverageFromChildren(
-                            widget.children,
-                            scoreMax: category.parentScoreMax,
-                            childScoreMax: category.childScoreMax,
-                            precision: category.parentScorePrecision,
-                          );
-                          if (average == null) return;
-                          await _save(_current.copyWith(overallScore: average));
-                        },
-                      ),
-                    ),
-                  ],
-                  // Last thing in the panel, and unlabelled: the date an entry
-                  // was started is the least of what this screen holds, and a
-                  // lone date capsule needs no word in front of it.
-                  const SizedBox(height: 20),
-                  _section(
-                    'created',
-                    [accent, widget.readOnly, _current.createdAt],
-                    () => Align(
-                      alignment: Alignment.centerLeft,
-                      child: Builder(
-                        builder: (pillContext) => SelectorPill(
-                          label: DateFormat.yMMMd().format(
-                            _current.createdAt.toLocal(),
                           ),
-                          dense: true,
-                          accentColor: accent,
-                          onTap: widget.readOnly
-                              ? () {}
-                              : () => _pickCreatedAt(pillContext),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],

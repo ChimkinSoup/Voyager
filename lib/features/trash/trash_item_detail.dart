@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
@@ -188,12 +189,18 @@ class _TrashItemDetail extends ConsumerWidget {
     ];
 
     return AlertDialog(
-      title: Row(
-        children: [
-          Icon(trashFeatureIcon(item.kind.feature)),
-          const SizedBox(width: 12),
-          Expanded(child: Text(trashItemLabel(item))),
-        ],
+      // The body is inset by [kHoverRowInset] except for its link rows, so
+      // their hover fill can reach the dialog's padding while their icons
+      // line up with the title and the text.
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+        child: Row(
+          children: [
+            Icon(trashFeatureIcon(item.kind.feature)),
+            const SizedBox(width: 12),
+            Expanded(child: Text(trashItemLabel(item))),
+          ],
+        ),
       ),
       contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
       // Breathing room between the content and the buttons.
@@ -205,13 +212,24 @@ class _TrashItemDetail extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                trashItemDetail(item, DateTime.now().toUtc()),
-                style: _labelStyle(context),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Text(
+                  trashItemDetail(item, DateTime.now().toUtc()),
+                  style: _labelStyle(context),
+                ),
               ),
               if (depth > 0) ...[
                 const SizedBox(height: 16),
-                Text('Deleted as part of', style: theme.textTheme.titleSmall),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  child: Text(
+                    'Deleted as part of',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 // Back down to the delete itself, where it can be undone.
                 _linkTile(
@@ -224,10 +242,30 @@ class _TrashItemDetail extends ConsumerWidget {
                   },
                 ),
               ],
-              if (body.isNotEmpty) ...[const SizedBox(height: 16), ...body],
+              if (body.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: body,
+                  ),
+                ),
+              ],
               if (children.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text('Deleted with it', style: theme.textTheme.titleSmall),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  child: Text(
+                    'Deleted with it',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 for (final child in children)
                   _linkTile(
@@ -276,7 +314,7 @@ class _TrashItemDetail extends ConsumerWidget {
   Widget _linkTile(TrashItem target, {required VoidCallback onTap}) {
     return ListTile(
       key: ValueKey('trash-detail-${target.id}'),
-      contentPadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       dense: true,
       leading: Icon(trashFeatureIcon(target.kind.feature)),
       title: Text(

@@ -23,6 +23,7 @@ import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
 import 'package:voyager/features/finance/finance_room_bar.dart';
 import 'package:voyager/features/finance/finance_room_event_modal.dart';
 import 'package:voyager/features/finance/finance_search.dart';
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
@@ -1525,24 +1526,33 @@ class _CategoryManager extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        // Everything but the category rows is inset by [kHoverRowInset], so
+        // their hover fill can reach the sheet's edge while their content
+        // lines up with the rest.
         children: [
-          Row(
-            children: [
-              Text('Categories', style: theme.textTheme.titleMedium),
-              const Spacer(),
-              IconButton(
-                onPressed: Navigator.of(context).pop,
-                icon: const Icon(PhosphorIconsRegular.x, size: 18),
-                tooltip: 'Close',
-                padding: EdgeInsets.zero,
-                constraints: kMinTouchTarget,
-              ),
-            ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+            child: Row(
+              children: [
+                Text('Categories', style: theme.textTheme.titleMedium),
+                const Spacer(),
+                IconButton(
+                  onPressed: Navigator.of(context).pop,
+                  icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                  tooltip: 'Close',
+                  padding: EdgeInsets.zero,
+                  constraints: kMinTouchTarget,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           if (categories.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: kHoverRowInset,
+                vertical: 20,
+              ),
               child: Text(
                 'No categories yet. Group related tags — like #mcdonalds and '
                 '#burger_king under "Eating out" — to roll them up in the '
@@ -1557,7 +1567,9 @@ class _CategoryManager extends ConsumerWidget {
             for (final category in categories)
               ListTile(
                 dense: true,
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: kHoverRowInset,
+                ),
                 leading: CircleAvatar(
                   radius: 8,
                   backgroundColor: paletteColor(category.colorValue, context),
@@ -1581,10 +1593,13 @@ class _CategoryManager extends ConsumerWidget {
                     showCategoryModal(context, ref, existing: category),
               ),
           const SizedBox(height: 12),
-          GlassButton(
-            onPressed: () => showCategoryModal(context, ref),
-            icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-            label: 'New category',
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+            child: GlassButton(
+              onPressed: () => showCategoryModal(context, ref),
+              icon: const Icon(PhosphorIconsRegular.plus, size: 16),
+              label: 'New category',
+            ),
           ),
         ],
       ),

@@ -52,6 +52,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart'
         monthGridDates;
 import 'package:flutter/services.dart';
 import 'dart:ui' show lerpDouble;
+import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
@@ -6681,7 +6682,15 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         side: BorderSide(color: accent, width: 3),
       ),
       elevation: 24,
-      titlePadding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
+      // The body is inset by [kHoverRowInset] except for its switch rows, so
+      // their hover fill can reach the dialog's padding while their labels
+      // line up with the title and fields.
+      titlePadding: const EdgeInsets.fromLTRB(
+        24 + kHoverRowInset,
+        16,
+        24 + kHoverRowInset,
+        4,
+      ),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       title: Text(
         widget.tracker != null
@@ -6694,155 +6703,176 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 8),
-              VoyagerTextField(
-                controller: _nameController,
-                focusNode: _nameFocusNode,
-                autofocus: true,
-                accentColor: accent,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  isDense: true,
-                  contentPadding: _kTrackerFieldPadding,
-                ),
-                onChanged: (_) {
-                  if (_nameError != null) setState(() => _nameError = null);
-                },
-                onSubmitted: (_) => _submit(),
-              ),
-              if (_nameError != null) ...[
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _nameError!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              // A counter's type is fixed both ways: one can only be created
-              // as a counter, and never converted to or from one.
-              VoyagerDropdownButtonFormField<TrackerType>(
-                initialValue: _type,
-                accentColor: accent,
-                decoration: const InputDecoration(labelText: 'Type'),
-                items: TrackerType.values
-                    .where(
-                      (type) =>
-                          widget.tracker == null ||
-                          (type == TrackerType.counter) ==
-                              (widget.tracker!.type == TrackerType.counter),
-                    )
-                    .map(
-                      (type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(_typeLabel(type)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    VoyagerTextField(
+                      controller: _nameController,
+                      focusNode: _nameFocusNode,
+                      autofocus: true,
+                      accentColor: accent,
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        isDense: true,
+                        contentPadding: _kTrackerFieldPadding,
                       ),
-                    )
-                    .toList(),
-                onChanged: widget.tracker?.type == TrackerType.counter
-                    ? null
-                    : (value) => setState(() => _type = value ?? _type),
-              ),
-              // Readings of the old type are hidden, not converted — see
-              // [trackerValuesProvider].
-              if (widget.tracker != null && _type != widget.tracker!.type) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Values logged under another type are hidden while this '
-                  'tracker is ${_typeLabel(_type)}, and come back if you '
-                  'switch the type back.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-              // Only when creating: afterwards the starting value is just the
-              // creation day's row in the counter's log.
-              if (_type == TrackerType.counter && widget.tracker == null) ...[
-                const SizedBox(height: 12),
-                VoyagerTextField(
-                  controller: _startingValueController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    signed: true,
-                  ),
-                  inputFormatters: [
-                    trackerNumberFormatter(signed: true, decimal: false),
-                  ],
-                  accentColor: accent,
-                  decoration: const InputDecoration(
-                    labelText: 'Starting value',
-                    isDense: true,
-                    contentPadding: _kTrackerFieldPadding,
-                  ),
-                  onSubmitted: (_) => _submit(),
-                ),
-              ],
-              // TrackingStyle only for integers
-              if (_type == TrackerType.integer) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Display style',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                SegmentedButton<TrackerStyle>(
-                  showSelectedIcon: false,
-                  style: SegmentedButton.styleFrom(
-                    selectedForegroundColor: onColorLabel(accent),
-                    selectedBackgroundColor: accent,
-                  ),
-                  segments: const [
-                    ButtonSegment(
-                      value: TrackerStyle.independent,
-                      icon: Icon(PhosphorIconsRegular.squaresFour, size: 16),
-                      label: Text('Heatmap'),
+                      onChanged: (_) {
+                        if (_nameError != null)
+                          setState(() => _nameError = null);
+                      },
+                      onSubmitted: (_) => _submit(),
                     ),
-                    ButtonSegment(
-                      value: TrackerStyle.consecutive,
-                      icon: Icon(PhosphorIconsRegular.chartLineUp, size: 16),
-                      label: Text('Sparkline'),
-                    ),
-                  ],
-                  selected: {_trackingStyle},
-                  onSelectionChanged: (set) {
-                    if (set.isNotEmpty) {
-                      setState(() => _trackingStyle = set.first);
-                    }
-                  },
-                ),
-              ],
-              const SizedBox(height: 12),
-              VoyagerDropdownButtonFormField<TrackerCadence>(
-                initialValue: _cadence,
-                accentColor: accent,
-                // A counter's changes are stored per day whatever this says;
-                // it only sets how many points the graph has.
-                decoration: InputDecoration(
-                  labelText: _type == TrackerType.counter
-                      ? 'Graph resolution'
-                      : 'Cadence',
-                ),
-                items: TrackerCadence.values
-                    .map(
-                      (cadence) => DropdownMenuItem(
-                        value: cadence,
-                        child: Text(cadence.name),
+                    if (_nameError != null) ...[
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _nameError!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                        ),
                       ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _cadence = value ?? _cadence),
+                    ],
+                    const SizedBox(height: 12),
+                    // A counter's type is fixed both ways: one can only be created
+                    // as a counter, and never converted to or from one.
+                    VoyagerDropdownButtonFormField<TrackerType>(
+                      initialValue: _type,
+                      accentColor: accent,
+                      decoration: const InputDecoration(labelText: 'Type'),
+                      items: TrackerType.values
+                          .where(
+                            (type) =>
+                                widget.tracker == null ||
+                                (type == TrackerType.counter) ==
+                                    (widget.tracker!.type ==
+                                        TrackerType.counter),
+                          )
+                          .map(
+                            (type) => DropdownMenuItem(
+                              value: type,
+                              child: Text(_typeLabel(type)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: widget.tracker?.type == TrackerType.counter
+                          ? null
+                          : (value) => setState(() => _type = value ?? _type),
+                    ),
+                    // Readings of the old type are hidden, not converted — see
+                    // [trackerValuesProvider].
+                    if (widget.tracker != null &&
+                        _type != widget.tracker!.type) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Values logged under another type are hidden while this '
+                        'tracker is ${_typeLabel(_type)}, and come back if you '
+                        'switch the type back.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    // Only when creating: afterwards the starting value is just the
+                    // creation day's row in the counter's log.
+                    if (_type == TrackerType.counter &&
+                        widget.tracker == null) ...[
+                      const SizedBox(height: 12),
+                      VoyagerTextField(
+                        controller: _startingValueController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                        ),
+                        inputFormatters: [
+                          trackerNumberFormatter(signed: true, decimal: false),
+                        ],
+                        accentColor: accent,
+                        decoration: const InputDecoration(
+                          labelText: 'Starting value',
+                          isDense: true,
+                          contentPadding: _kTrackerFieldPadding,
+                        ),
+                        onSubmitted: (_) => _submit(),
+                      ),
+                    ],
+                    // TrackingStyle only for integers
+                    if (_type == TrackerType.integer) ...[
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Display style',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SegmentedButton<TrackerStyle>(
+                        showSelectedIcon: false,
+                        style: SegmentedButton.styleFrom(
+                          selectedForegroundColor: onColorLabel(accent),
+                          selectedBackgroundColor: accent,
+                        ),
+                        segments: const [
+                          ButtonSegment(
+                            value: TrackerStyle.independent,
+                            icon: Icon(
+                              PhosphorIconsRegular.squaresFour,
+                              size: 16,
+                            ),
+                            label: Text('Heatmap'),
+                          ),
+                          ButtonSegment(
+                            value: TrackerStyle.consecutive,
+                            icon: Icon(
+                              PhosphorIconsRegular.chartLineUp,
+                              size: 16,
+                            ),
+                            label: Text('Sparkline'),
+                          ),
+                        ],
+                        selected: {_trackingStyle},
+                        onSelectionChanged: (set) {
+                          if (set.isNotEmpty) {
+                            setState(() => _trackingStyle = set.first);
+                          }
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    VoyagerDropdownButtonFormField<TrackerCadence>(
+                      initialValue: _cadence,
+                      accentColor: accent,
+                      // A counter's changes are stored per day whatever this says;
+                      // it only sets how many points the graph has.
+                      decoration: InputDecoration(
+                        labelText: _type == TrackerType.counter
+                            ? 'Graph resolution'
+                            : 'Cadence',
+                      ),
+                      items: TrackerCadence.values
+                          .map(
+                            (cadence) => DropdownMenuItem(
+                              value: cadence,
+                              child: Text(cadence.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => _cadence = value ?? _cadence),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
               SwitchListTile(
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: kHoverRowInset,
+                ),
                 title: const Text('Show on calendar'),
                 value: _showOnCalendar,
                 activeColor: accent,
@@ -6851,24 +6881,33 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               if (_type == TrackerType.integer) ...[
                 const SizedBox(height: _kTrackerOptionGap),
                 if (!_hasCap) ...[
-                  VoyagerTextField(
-                    controller: _defaultIntController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(kTrackerNumberMaxDigits),
-                    ],
-                    accentColor: accent,
-                    decoration: const InputDecoration(
-                      labelText: 'Default value',
-                      isDense: true,
-                      contentPadding: _kTrackerFieldPadding,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: kHoverRowInset,
+                    ),
+                    child: VoyagerTextField(
+                      controller: _defaultIntController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(
+                          kTrackerNumberMaxDigits,
+                        ),
+                      ],
+                      accentColor: accent,
+                      decoration: const InputDecoration(
+                        labelText: 'Default value',
+                        isDense: true,
+                        contentPadding: _kTrackerFieldPadding,
+                      ),
                     ),
                   ),
                   const SizedBox(height: _kTrackerOptionGap),
                 ],
                 SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
                   title: const Text('Use limit'),
                   value: _hasCap,
                   activeColor: accent,
@@ -6883,86 +6922,100 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 ),
                 if (_hasCap) ...[
                   const SizedBox(height: _kTrackerOptionGap),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: VoyagerTextField(
-                          controller: _defaultIntController,
-                          focusNode: _lowerFocusNode,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(
-                              kTrackerNumberMaxDigits,
-                            ),
-                          ],
-                          accentColor: accent,
-                          decoration: const InputDecoration(
-                            labelText: 'Lower limit',
-                            isDense: true,
-                            contentPadding: _kTrackerFieldPadding,
-                          ),
-                          onChanged: (_) {
-                            if (_capError != null) {
-                              setState(() => _capError = null);
-                            }
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          '-',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.copyWith(color: accent),
-                        ),
-                      ),
-                      Expanded(
-                        child: VoyagerTextField(
-                          controller: _capController,
-                          focusNode: _upperFocusNode,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(
-                              kTrackerNumberMaxDigits,
-                            ),
-                          ],
-                          accentColor: accent,
-                          decoration: const InputDecoration(
-                            labelText: 'Upper limit',
-                            isDense: true,
-                            contentPadding: _kTrackerFieldPadding,
-                          ),
-                          onChanged: (_) {
-                            if (_capError != null) {
-                              setState(() => _capError = null);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_capError != null) ...[
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16),
-                      child: Text(
-                        _capError!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontSize: 12,
-                        ),
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: kHoverRowInset,
                     ),
-                  ],
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: VoyagerTextField(
+                                controller: _defaultIntController,
+                                focusNode: _lowerFocusNode,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(
+                                    kTrackerNumberMaxDigits,
+                                  ),
+                                ],
+                                accentColor: accent,
+                                decoration: const InputDecoration(
+                                  labelText: 'Lower limit',
+                                  isDense: true,
+                                  contentPadding: _kTrackerFieldPadding,
+                                ),
+                                onChanged: (_) {
+                                  if (_capError != null) {
+                                    setState(() => _capError = null);
+                                  }
+                                },
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Text(
+                                '-',
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.titleLarge?.copyWith(color: accent),
+                              ),
+                            ),
+                            Expanded(
+                              child: VoyagerTextField(
+                                controller: _capController,
+                                focusNode: _upperFocusNode,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(
+                                    kTrackerNumberMaxDigits,
+                                  ),
+                                ],
+                                accentColor: accent,
+                                decoration: const InputDecoration(
+                                  labelText: 'Upper limit',
+                                  isDense: true,
+                                  contentPadding: _kTrackerFieldPadding,
+                                ),
+                                onChanged: (_) {
+                                  if (_capError != null) {
+                                    setState(() => _capError = null);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_capError != null) ...[
+                          const SizedBox(height: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Text(
+                              _capError!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ],
               if (_type == TrackerType.boolean) ...[
                 const SizedBox(height: _kTrackerOptionGap),
                 SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
                   title: const Text('Default checked'),
                   value: _defaultBool,
                   activeColor: accent,
@@ -6971,129 +7024,149 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               ],
               if (_type == TrackerType.enumType) ...[
                 const SizedBox(height: _kTrackerOptionGap),
-                if (_optionControllers.isNotEmpty) ...[
-                  // Mounted only once an option exists, into a dialog body
-                  // that may already be scrolled — see
-                  // [ScrollOffsetIsolate].
-                  ScrollOffsetIsolate(
-                    child: ReorderableListView(
-                      primary: false,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      buildDefaultDragHandles: false,
-                      onReorderItem: _reorderOptions,
-                      proxyDecorator: roundedDragProxy,
-                      children: [
-                        for (var i = 0; i < _optionControllers.length; i++)
-                          Padding(
-                            key: ValueKey(_optionControllers[i]),
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              children: [
-                                ReorderableDragStartListener(
-                                  index: i,
-                                  child: Icon(
-                                    Icons.drag_handle,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.5),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_optionControllers.isNotEmpty) ...[
+                        // Mounted only once an option exists, into a dialog body
+                        // that may already be scrolled — see
+                        // [ScrollOffsetIsolate].
+                        ScrollOffsetIsolate(
+                          child: ReorderableListView(
+                            primary: false,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            buildDefaultDragHandles: false,
+                            onReorderItem: _reorderOptions,
+                            proxyDecorator: roundedDragProxy,
+                            children: [
+                              for (
+                                var i = 0;
+                                i < _optionControllers.length;
+                                i++
+                              )
+                                Padding(
+                                  key: ValueKey(_optionControllers[i]),
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      ReorderableDragStartListener(
+                                        index: i,
+                                        child: Icon(
+                                          Icons.drag_handle,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: VoyagerTextField(
+                                          controller: _optionControllers[i],
+                                          focusNode: _optionFocusNodes[i],
+                                          accentColor: accent,
+                                          decoration: const InputDecoration(
+                                            isDense: true,
+                                            contentPadding:
+                                                _kTrackerFieldPadding,
+                                          ),
+                                          onChanged: (_) => setState(() {
+                                            _optionError = null;
+                                            if (!_enumOptions.contains(
+                                              _defaultEnumOption,
+                                            )) {
+                                              _defaultEnumOption = null;
+                                            }
+                                          }),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          PhosphorIconsRegular.trash,
+                                        ),
+                                        onPressed: () => _removeOption(i),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: VoyagerTextField(
-                                    controller: _optionControllers[i],
-                                    focusNode: _optionFocusNodes[i],
-                                    accentColor: accent,
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      contentPadding: _kTrackerFieldPadding,
-                                    ),
-                                    onChanged: (_) => setState(() {
-                                      _optionError = null;
-                                      if (!_enumOptions.contains(
-                                        _defaultEnumOption,
-                                      )) {
-                                        _defaultEnumOption = null;
-                                      }
-                                    }),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(PhosphorIconsRegular.trash),
-                                  onPressed: () => _removeOption(i),
-                                ),
-                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      VoyagerTextField(
+                        key: const ValueKey('new-option-field'),
+                        controller: _newOptionController,
+                        focusNode: _newOptionFocusNode,
+                        accentColor: accent,
+                        decoration: const InputDecoration(
+                          labelText: 'Add option',
+                          isDense: true,
+                          contentPadding: _kTrackerFieldPadding,
+                        ),
+                        onChanged: (_) {
+                          if (_optionError != null)
+                            setState(() => _optionError = null);
+                        },
+                        onSubmitted: (_) => _addOption(),
+                      ),
+                      if (_optionError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, top: 4),
+                          child: Text(
+                            _optionError!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12,
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                VoyagerTextField(
-                  key: const ValueKey('new-option-field'),
-                  controller: _newOptionController,
-                  focusNode: _newOptionFocusNode,
-                  accentColor: accent,
-                  decoration: const InputDecoration(
-                    labelText: 'Add option',
-                    isDense: true,
-                    contentPadding: _kTrackerFieldPadding,
-                  ),
-                  onChanged: (_) {
-                    if (_optionError != null)
-                      setState(() => _optionError = null);
-                  },
-                  onSubmitted: (_) => _addOption(),
-                ),
-                if (_optionError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 4),
-                    child: Text(
-                      _optionError!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                if (enumOptions.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  VoyagerDropdownButtonFormField<String>(
-                    initialValue: enumOptions.contains(_defaultEnumOption)
-                        ? _defaultEnumOption
-                        : null,
-                    accentColor: accent,
-                    decoration: const InputDecoration(
-                      labelText: 'Default option',
-                    ),
-                    items: enumOptions
-                        .map(
-                          (option) => DropdownMenuItem(
-                            value: option,
-                            child: Text(option),
+                        ),
+                      if (enumOptions.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        VoyagerDropdownButtonFormField<String>(
+                          initialValue: enumOptions.contains(_defaultEnumOption)
+                              ? _defaultEnumOption
+                              : null,
+                          accentColor: accent,
+                          decoration: const InputDecoration(
+                            labelText: 'Default option',
                           ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setState(() => _defaultEnumOption = value),
+                          items: enumOptions
+                              .map(
+                                (option) => DropdownMenuItem(
+                                  value: option,
+                                  child: Text(option),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setState(() => _defaultEnumOption = value),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ],
               const SizedBox(height: 12),
-              ColorPickerField(
-                label: 'Tracker color',
-                value: _colorValue,
-                maxHeight:
-                    paletteViewportHeight(
-                      18,
-                      visibleRows: 3,
-                      clipPartialNextRow: true,
-                    ) -
-                    4,
-                onChanged: (value) => setState(() => _colorValue = value),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: ColorPickerField(
+                  label: 'Tracker color',
+                  value: _colorValue,
+                  maxHeight:
+                      paletteViewportHeight(
+                        18,
+                        visibleRows: 3,
+                        clipPartialNextRow: true,
+                      ) -
+                      4,
+                  onChanged: (value) => setState(() => _colorValue = value),
+                ),
               ),
             ],
           ),
