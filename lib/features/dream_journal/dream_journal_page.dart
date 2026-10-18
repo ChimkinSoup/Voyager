@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -24,8 +25,10 @@ import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
@@ -42,10 +45,10 @@ import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/dream_models.dart';
+import 'package:voyager/domain/models/enums.dart' show AppThemeMode;
 import 'package:voyager/domain/models/journal_models.dart'
     show firstSentencePreview;
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/features/dream_journal/dream_branch_painter.dart';
 import 'package:voyager/features/dream_journal/dream_sticky_note.dart';
 
 /// Layout math for the 35/65 split pane, mirroring
@@ -79,14 +82,73 @@ class DreamSplitLayout {
   static const editorPadding = EdgeInsets.fromLTRB(28, 40, 28, 24);
 }
 
-class DreamJournalPage extends ConsumerStatefulWidget {
+/// The Dream Journal's night palette: the app's surfaces and accent pulled
+/// toward indigo, plus a faint wash over the shared paper background, so the
+/// page reads as its own place rather than a second Journal.
+abstract final class DreamNightTheme {
+  static const _darkTint = Color(0xFF2B2A5C);
+  static const _lightTint = Color(0xFFD9D4F2);
+  static const _accentTint = Color(0xFFB4A6F0);
+
+  static ThemeData forMode(AppThemeMode mode, Color accent) {
+    final palette = VoyagerPalette.of(mode);
+    final isDark = palette.isDark;
+    final tint = isDark ? _darkTint : _lightTint;
+    final amount = isDark ? 0.32 : 0.45;
+    Color night(Color c) => Color.lerp(c, tint, amount)!;
+    return VoyagerTheme.fromPalette(
+      VoyagerPalette(
+        brightness: palette.brightness,
+        scaffold: night(palette.scaffold),
+        appBar: night(palette.appBar),
+        card: night(palette.card),
+        field: night(palette.field),
+        onSurface: palette.onSurface,
+        accentLineTarget: palette.accentLineTarget,
+        accentLineAmount: palette.accentLineAmount,
+        dividerAlpha: palette.dividerAlpha,
+        outlineAlpha: palette.outlineAlpha,
+      ),
+      accent: Color.lerp(accent, _accentTint, 0.45)!,
+    );
+  }
+
+  static Color wash(Brightness brightness) => brightness == Brightness.dark
+      ? _darkTint.withValues(alpha: 0.22)
+      : _lightTint.withValues(alpha: 0.30);
+}
+
+class DreamJournalPage extends ConsumerWidget {
   const DreamJournalPage({super.key});
 
   @override
-  ConsumerState<DreamJournalPage> createState() => _DreamJournalPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Built from the same settings as the app theme rather than from
+    // Theme.of: the app's theme crossfade would otherwise rebuild this on
+    // every frame and snap between palettes as the lerped brightness flips.
+    // AnimatedTheme gives the page its own crossfade instead.
+    final accent = Color(
+      ref.watch(
+        settingsProvider.select((s) => s.value?.accentColor ?? 0xFF7C9EFF),
+      ),
+    );
+    // Applied above the state, not inside its build: the state's helpers read
+    // Theme.of(this.context), which would otherwise sit outside the override.
+    return AnimatedTheme(
+      data: DreamNightTheme.forMode(ref.watch(themeModeProvider), accent),
+      child: const _DreamJournalView(),
+    );
+  }
 }
 
-class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
+class _DreamJournalView extends ConsumerStatefulWidget {
+  const _DreamJournalView();
+
+  @override
+  ConsumerState<_DreamJournalView> createState() => _DreamJournalPageState();
+}
+
+class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
   static const _localSaveDebounce = Duration(milliseconds: 400);
 
   String? _selectedEntryId;
@@ -383,7 +445,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
           _listBodyPreview.value = updated.body;
           // `build` reads `_selectedEntry` only for its id and its entryDate,
           // neither of which a text edit touches. Rebuilding on every ~400ms
-          // autosave re-sorted every dream and repainted the branch overlay —
+          // autosave re-sorted every dream —
           // exactly what the preview notifiers above exist to avoid.
           final needsRebuild = _selectedEntry?.entryDate != updated.entryDate;
           _selectedEntry = updated;
@@ -1097,171 +1159,176 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _appliedSavedWidth = true;
     }
     final accent = Theme.of(context).colorScheme.primary;
-    final petalColor = Color(settings?.petalColor ?? 0xFFE6A4B4);
-    final minorPetalColors = (settings?.minorPetalColors ?? const <int>[])
-        .map(Color.new)
-        .toList();
 
     return Stack(
       children: [
         Positioned.fill(
-          child: DreamBranchOverlay(
-            color: petalColor,
-            minorColors: minorPetalColors,
+          child: IgnorePointer(
+            child: ColoredBox(
+              color: DreamNightTheme.wash(Theme.of(context).brightness),
+            ),
           ),
         ),
-        entriesAsync.when(
-          data: (entries) {
-            // Drop anything deleted here that the provider hasn't caught up
-            // with yet, and let go of ids it has — see [_deletedEntryStamps].
-            _deletedEntryStamps.removeWhere((id, stamp) {
-              final row = entries.cast<DreamEntry?>().firstWhere(
-                (entry) => entry!.id == id,
-                orElse: () => null,
-              );
-              // Gone (the delete landed), or a revision newer than the
-              // tombstone came back (restored on another device) — either way
-              // this page has nothing left to hide.
-              return row == null || row.updatedAt.isAfter(stamp);
-            });
-
-            // The unpromoted "New dream" is merged in here rather than being
-            // written to SQLite; once it has been promoted it stays merged
-            // until the provider hands the row back, so it doesn't flicker out
-            // between the write and the refresh.
-            final pending = _pendingEntry;
-            final pendingPersisted =
-                pending != null &&
-                entries.any((entry) => entry.id == pending.id);
-            if (pendingPersisted) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted || _pendingEntry?.id != pending.id) return;
-                setState(() {
-                  _pendingEntry = null;
-                  _pendingEntryOnDisk = false;
-                });
-              });
-            }
-
-            final sorted = sortDreamEntriesNewestFirst([
-              if (pending != null && !pendingPersisted) pending,
-              ...(_deletedEntryStamps.isEmpty
-                  ? entries
-                  : entries.where(
-                      (entry) => !_deletedEntryStamps.containsKey(entry.id),
-                    )),
-            ]);
-
-            _reconcileSelectedEntryFromProvider(entries);
-
-            if (_selectedEntryId == null && sorted.isNotEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && _selectedEntryId == null) {
-                  unawaited(_selectEntry(sorted.first));
-                }
-              });
-            }
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final totalWidth = constraints.maxWidth;
-                // Animating the list from its old width while the window
-                // shrinks leaves the editor whatever is left, far below
-                // [DreamSplitLayout.minEditorWidth] (BUG-064).
-                final resized =
-                    _splitTotalWidth != null && _splitTotalWidth != totalWidth;
-                _splitTotalWidth = totalWidth;
-                final storedListWidth =
-                    _splitWidth ??
-                    DreamSplitLayout.defaultListWidth(totalWidth);
-                // While dragging, storedListWidth is already soft-bounded
-                // (see onDragUpdate below) — re-clamping here would cancel
-                // the rubber-band out before it ever reaches the screen.
-                final listWidth = _splitDragging
-                    ? storedListWidth
-                    : DreamSplitLayout.clampListWidth(
-                        storedListWidth,
-                        totalWidth,
-                      );
-                // Side by side in the desktop window; one at a time on a
-                // phone, where the 35/65 split would leave the zen editor
-                // about 230dp wide.
-                final compact = context.isCompactWidth;
-                final showList = !compact || !_compactShowingEditor;
-                final showEditor = !compact || _compactShowingEditor;
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showList)
-                      AnimatedContainer(
-                        duration: _splitDragging || resized
-                            ? Duration.zero
-                            : const Duration(milliseconds: 260),
-                        curve: VoyagerMotion.reduced(context)
-                            ? Curves.easeOut
-                            : VoyagerSpring.moveCurve,
-                        width: compact ? totalWidth : listWidth,
-                        child: _buildEntryList(sorted, entriesWithImages),
-                      ),
-                    if (!compact)
-                      ResizablePaneDivider(
-                        onDragStart: () {
-                          _dragStartWidth =
-                              _splitWidth ??
-                              DreamSplitLayout.defaultListWidth(totalWidth);
-                          setState(() => _splitDragging = true);
-                        },
-                        onDragUpdate: (totalDelta) {
-                          final start =
-                              _dragStartWidth ??
-                              DreamSplitLayout.defaultListWidth(totalWidth);
-                          setState(() {
-                            // Tracks the pointer 1:1 and stops dead at the
-                            // bounds, so neither pane is ever dragged past
-                            // the width it stays readable at.
-                            _splitWidth = DreamSplitLayout.clampListWidth(
-                              start + totalDelta,
-                              totalWidth,
-                            );
-                          });
-                        },
-                        onDragEnd: () {
-                          // Hard-clamp back to the real bound now that the drag
-                          // has ended; the spring-curved AnimatedContainer
-                          // around the pane carries the visual snap-back from
-                          // wherever the rubber-band left it.
-                          final width = _splitWidth;
-                          final settled = width == null
-                              ? null
-                              : DreamSplitLayout.clampListWidth(
-                                  width,
-                                  totalWidth,
-                                );
-                          setState(() {
-                            _splitWidth = settled;
-                            _splitDragging = false;
-                          });
-                          unawaited(_persistSplitWidth(settled));
-                        },
-                        onDoubleTapReset: () {
-                          setState(() => _splitWidth = null);
-                          unawaited(_persistSplitWidth(null));
-                        },
-                      ),
-                    if (showEditor)
-                      Expanded(
-                        child: _buildEditorArea(
-                          accent: accent,
-                          compact: compact,
-                        ),
-                      ),
-                  ],
+        // The shell leaves this page full-bleed so the wash above reaches
+        // the rail's divider; the content takes back the usual gutter.
+        Padding(
+          padding: EdgeInsets.only(
+            left: context.isCompactWidth ? 0 : shellRailGutter,
+          ),
+          child: entriesAsync.when(
+            data: (entries) {
+              // Drop anything deleted here that the provider hasn't caught up
+              // with yet, and let go of ids it has — see [_deletedEntryStamps].
+              _deletedEntryStamps.removeWhere((id, stamp) {
+                final row = entries.cast<DreamEntry?>().firstWhere(
+                  (entry) => entry!.id == id,
+                  orElse: () => null,
                 );
-              },
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('$e')),
+                // Gone (the delete landed), or a revision newer than the
+                // tombstone came back (restored on another device) — either way
+                // this page has nothing left to hide.
+                return row == null || row.updatedAt.isAfter(stamp);
+              });
+
+              // The unpromoted "New dream" is merged in here rather than being
+              // written to SQLite; once it has been promoted it stays merged
+              // until the provider hands the row back, so it doesn't flicker out
+              // between the write and the refresh.
+              final pending = _pendingEntry;
+              final pendingPersisted =
+                  pending != null &&
+                  entries.any((entry) => entry.id == pending.id);
+              if (pendingPersisted) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || _pendingEntry?.id != pending.id) return;
+                  setState(() {
+                    _pendingEntry = null;
+                    _pendingEntryOnDisk = false;
+                  });
+                });
+              }
+
+              final sorted = sortDreamEntriesNewestFirst([
+                if (pending != null && !pendingPersisted) pending,
+                ...(_deletedEntryStamps.isEmpty
+                    ? entries
+                    : entries.where(
+                        (entry) => !_deletedEntryStamps.containsKey(entry.id),
+                      )),
+              ]);
+
+              _reconcileSelectedEntryFromProvider(entries);
+
+              if (_selectedEntryId == null && sorted.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _selectedEntryId == null) {
+                    unawaited(_selectEntry(sorted.first));
+                  }
+                });
+              }
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final totalWidth = constraints.maxWidth;
+                  // Animating the list from its old width while the window
+                  // shrinks leaves the editor whatever is left, far below
+                  // [DreamSplitLayout.minEditorWidth] (BUG-064).
+                  final resized =
+                      _splitTotalWidth != null &&
+                      _splitTotalWidth != totalWidth;
+                  _splitTotalWidth = totalWidth;
+                  final storedListWidth =
+                      _splitWidth ??
+                      DreamSplitLayout.defaultListWidth(totalWidth);
+                  // While dragging, storedListWidth is already soft-bounded
+                  // (see onDragUpdate below) — re-clamping here would cancel
+                  // the rubber-band out before it ever reaches the screen.
+                  final listWidth = _splitDragging
+                      ? storedListWidth
+                      : DreamSplitLayout.clampListWidth(
+                          storedListWidth,
+                          totalWidth,
+                        );
+                  // Side by side in the desktop window; one at a time on a
+                  // phone, where the 35/65 split would leave the zen editor
+                  // about 230dp wide.
+                  final compact = context.isCompactWidth;
+                  final showList = !compact || !_compactShowingEditor;
+                  final showEditor = !compact || _compactShowingEditor;
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (showList)
+                        AnimatedContainer(
+                          duration: _splitDragging || resized
+                              ? Duration.zero
+                              : const Duration(milliseconds: 260),
+                          curve: VoyagerMotion.reduced(context)
+                              ? Curves.easeOut
+                              : VoyagerSpring.moveCurve,
+                          width: compact ? totalWidth : listWidth,
+                          child: _buildEntryList(sorted, entriesWithImages),
+                        ),
+                      if (!compact)
+                        ResizablePaneDivider(
+                          onDragStart: () {
+                            _dragStartWidth =
+                                _splitWidth ??
+                                DreamSplitLayout.defaultListWidth(totalWidth);
+                            setState(() => _splitDragging = true);
+                          },
+                          onDragUpdate: (totalDelta) {
+                            final start =
+                                _dragStartWidth ??
+                                DreamSplitLayout.defaultListWidth(totalWidth);
+                            setState(() {
+                              // Tracks the pointer 1:1 and stops dead at the
+                              // bounds, so neither pane is ever dragged past
+                              // the width it stays readable at.
+                              _splitWidth = DreamSplitLayout.clampListWidth(
+                                start + totalDelta,
+                                totalWidth,
+                              );
+                            });
+                          },
+                          onDragEnd: () {
+                            // Hard-clamp back to the real bound now that the drag
+                            // has ended; the spring-curved AnimatedContainer
+                            // around the pane carries the visual snap-back from
+                            // wherever the rubber-band left it.
+                            final width = _splitWidth;
+                            final settled = width == null
+                                ? null
+                                : DreamSplitLayout.clampListWidth(
+                                    width,
+                                    totalWidth,
+                                  );
+                            setState(() {
+                              _splitWidth = settled;
+                              _splitDragging = false;
+                            });
+                            unawaited(_persistSplitWidth(settled));
+                          },
+                          onDoubleTapReset: () {
+                            setState(() => _splitWidth = null);
+                            unawaited(_persistSplitWidth(null));
+                          },
+                        ),
+                      if (showEditor)
+                        Expanded(
+                          child: _buildEditorArea(
+                            accent: accent,
+                            compact: compact,
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('$e')),
+          ),
         ),
       ],
     );
@@ -1555,6 +1622,17 @@ class _DreamEntryListTile extends StatelessWidget {
             ),
           Row(
             children: [
+              Padding(
+                padding: const EdgeInsets.only(right: VoyagerSpacing.xs),
+                child: CustomPaint(
+                  size: const Size.square(10),
+                  painter: _MoonPhasePainter(
+                    phase: _moonPhase(entry.entryDate),
+                    color: dateStyle?.color ?? theme.colorScheme.onSurface,
+                    litIsInk: theme.brightness == Brightness.dark,
+                  ),
+                ),
+              ),
               Expanded(
                 child: Text('$dateLabel · $timeLabel', style: dateStyle),
               ),
@@ -1588,8 +1666,18 @@ class _DreamEntryListTile extends StatelessWidget {
       ),
       child: ListTile(
         dense: true,
-        // Outlines the dream currently open in the reading pane.
-        shape: VoyagerListItemSurface.focusShape(context, focused: isSelected),
+        // Outlines the dream currently open in the reading pane, in the
+        // night accent rather than the neutral focus outline. The side
+        // stays one pixel wide when unselected, as in
+        // [VoyagerListItemSurface.focusShape], so rows don't shift.
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: isSelected
+                ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                : Colors.transparent,
+          ),
+        ),
         visualDensity: const VisualDensity(
           vertical: VoyagerSpacing.compactListVerticalDensity,
         ),
@@ -1626,6 +1714,93 @@ class _DreamEntryListTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Where [date] falls in the lunar cycle: 0 new, 0.5 full, back to 1.
+double _moonPhase(DateTime date) {
+  const synodicMonthDays = 29.530588853;
+  final knownNewMoon = DateTime.utc(2000, 1, 6, 18, 14);
+  final days = date.toUtc().difference(knownNewMoon).inMinutes / 1440;
+  return (days / synodicMonthDays) % 1;
+}
+
+/// The moon as it looked on a dream's night, waxing on the right and waning
+/// on the left.
+class _MoonPhasePainter extends CustomPainter {
+  _MoonPhasePainter({
+    required this.phase,
+    required this.color,
+    required this.litIsInk,
+  });
+
+  final double phase;
+  final Color color;
+
+  /// On a dark page the lit part is drawn in ink over a dim disc. On a light
+  /// page that would make a full moon a solid dot — the calendar sign for a
+  /// new moon — so there the dark part is inked inside an outline instead.
+  final bool litIsInk;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.shortestSide / 2;
+    final disc = Rect.fromCircle(center: Offset.zero, radius: r);
+    // The terminator is a half-ellipse whose width runs r → 0 → r across
+    // the half cycle; it bulges toward the lit side until the half moon.
+    final k = math.cos(2 * math.pi * phase);
+    final lit = Path()
+      ..moveTo(0, -r)
+      ..arcTo(disc, -math.pi / 2, math.pi, false)
+      ..arcTo(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: 2 * r * k.abs(),
+          height: 2 * r,
+        ),
+        math.pi / 2,
+        k > 0 ? -math.pi : math.pi,
+        false,
+      )
+      ..close();
+
+    // Drawn opaque inside a layer that applies [color]'s alpha once, so
+    // where the parts overlap the moon isn't darker than elsewhere.
+    final ink = color.withValues(alpha: 1);
+    canvas.saveLayer(
+      Offset.zero & size,
+      Paint()..color = Color.fromRGBO(0, 0, 0, color.a),
+    );
+    canvas.translate(size.width / 2, size.height / 2);
+    if (phase > 0.5) canvas.scale(-1, 1);
+    if (litIsInk) {
+      canvas.drawCircle(
+        Offset.zero,
+        r,
+        Paint()..color = ink.withValues(alpha: 0.25),
+      );
+      canvas.drawPath(lit, Paint()..color = ink);
+    } else {
+      canvas.drawPath(
+        Path.combine(PathOperation.difference, Path()..addOval(disc), lit),
+        Paint()..color = ink,
+      );
+      canvas.drawCircle(
+        Offset.zero,
+        r - 0.4,
+        Paint()
+          ..color = ink
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _MoonPhasePainter oldDelegate) =>
+      oldDelegate.phase != phase ||
+      oldDelegate.color != color ||
+      oldDelegate.litIsInk != litIsInk;
 }
 
 class _DreamBodyEditor extends ConsumerStatefulWidget {

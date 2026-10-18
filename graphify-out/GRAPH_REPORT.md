@@ -1,7 +1,7 @@
 # Graph Report - Voyager  (2026-10-17)
 
 ## Corpus Check
-- 879 files · ~370,710,157 words
+- 879 files · ~370,710,175 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `80387334`
+- Built from commit: `0b214eaa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2472,7 +2472,7 @@ Nodes (21): build, child, createState, _currentLocation, dense, dispose, _handle
 
 ### Community 436 - "app_tray.dart"
 Cohesion: 0.17
-Nodes (11): int? get, copyWith, description, fromJson, hashCode, id, JobExperienceSnippet, listFromJson (+3 more)
+Nodes (11): int get, copyWith, description, fromJson, hashCode, id, JobExperienceSnippet, listFromJson (+3 more)
 
 ### Community 437 - "Offset?"
 Cohesion: 0.05
@@ -2872,7 +2872,7 @@ Cohesion: 0.08
 Nodes (29): folderBackupServiceProvider, FolderBackupSource?, build, _changeDestination, _checkDestination, createState, _destination, dispose (+21 more)
 
 ## Knowledge Gaps
-- **19125 isolated node(s):** `kHoverRowInset`, `_kMenuCloseSettleDuration`, `items`, `decoration`, `onChanged` (+19120 more)
+- **19125 isolated node(s):** `_kMenuCloseSettleDuration`, `items`, `decoration`, `onChanged`, `isExpanded` (+19120 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **143 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2885,7 +2885,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **Why does `_Action` connect `folder_backup_list_dialog.dart` to `Other`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
-- **What connects `kHoverRowInset`, `_kMenuCloseSettleDuration`, `items` to the rest of the system?**
+- **What connects `_kMenuCloseSettleDuration`, `items`, `decoration` to the rest of the system?**
   _19177 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `app_database.dart` be split into smaller, more focused modules?**
   _Cohesion score 0.004347826086956522 - nodes in this community are weakly interconnected._

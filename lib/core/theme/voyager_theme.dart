@@ -208,6 +208,13 @@ class VoyagerTheme {
     Color accent = const Color(0xFF7C9EFF),
   }) => _build(VoyagerPalette.of(mode), accent);
 
+  /// For a page that re-tints the app's palette, like the Dream Journal's
+  /// night theme.
+  static ThemeData fromPalette(
+    VoyagerPalette palette, {
+    Color accent = const Color(0xFF7C9EFF),
+  }) => _build(palette, accent);
+
   static ThemeData _build(VoyagerPalette palette, Color accent) {
     final accentLine = Color.lerp(
       accent,

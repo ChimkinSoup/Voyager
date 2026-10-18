@@ -33,12 +33,17 @@ class ShellDestination {
     required this.icon,
     required this.label,
     required this.page,
+    this.fullBleed = false,
   });
 
   final String path;
   final IconData icon;
   final String label;
   final Widget page;
+
+  /// Runs right up to the rail's divider on the desktop shell instead of
+  /// being inset by [shellRailGutter].
+  final bool fullBleed;
 }
 
 const shellDestinations = <ShellDestination>[
@@ -53,6 +58,8 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.moonStars,
     label: 'Dreams',
     page: DreamJournalPage(),
+    // The night wash reaches the divider; the page insets its own content.
+    fullBleed: true,
   ),
   ShellDestination(
     path: '/todo',
@@ -89,6 +96,8 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.tree,
     label: 'Life',
     page: LifeTrackerPage(),
+    // The Life tree's sky runs right up to the rail's divider.
+    fullBleed: true,
   ),
   ShellDestination(
     path: '/leetcode',
