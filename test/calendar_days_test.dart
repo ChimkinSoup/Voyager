@@ -37,6 +37,32 @@ void main() {
     });
   });
 
+  group('journalDay', () {
+    test('an entry before the day start counts toward the day before', () {
+      expect(
+        journalDay(DateTime(2026, 10, 20, 3, 12), 5),
+        DateTime(2026, 10, 19),
+      );
+      expect(journalDay(DateTime(2026, 10, 20, 5), 5), DateTime(2026, 10, 20));
+    });
+
+    test('a midnight start is the plain local day', () {
+      expect(
+        journalDay(DateTime(2026, 10, 20, 0, 1), 0),
+        DateTime(2026, 10, 20),
+      );
+    });
+
+    test('reads a UTC moment in local time', () {
+      final local = DateTime(2026, 10, 20, 2);
+      expect(journalDay(local.toUtc(), 4), DateTime(2026, 10, 19));
+    });
+
+    test('rolls back across a month and a year', () {
+      expect(journalDay(DateTime(2027, 1, 1, 2), 4), DateTime(2026, 12, 31));
+    });
+  });
+
   group('calendarDaysBetween', () {
     test('counts whole days across a spring-forward', () {
       // `.difference(...).inDays` truncates to 13 here.

@@ -90,6 +90,25 @@ void main() {
     expect(PeriodicPromptService().longestJournalStreak(entries), 8);
   });
 
+  test('journal streak counts a pre-day-start entry toward the day before', () {
+    JournalEntry entry(String id, DateTime at) => JournalEntry(
+      id: id,
+      journalId: 'j',
+      title: '',
+      body: '',
+      entryDate: at,
+      createdAt: at,
+      updatedAt: at,
+    );
+    final entries = [
+      entry('a', DateTime(2026, 5, 1, 22)),
+      entry('b', DateTime(2026, 5, 3, 2)),
+    ];
+    final prompt = PeriodicPromptService();
+    expect(prompt.longestJournalStreak(entries), 1);
+    expect(prompt.longestJournalStreak(entries, dayStartHour: 4), 2);
+  });
+
   test('legacy snapshot operations do not synthesize duplicate char ops', () {
     final merger = CharacterSequenceCrdtMerger();
     final ops = [

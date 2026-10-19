@@ -42,6 +42,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -3272,13 +3273,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         ),
       ],
     );
-    final now = DateTime.now();
+    final dayStartHour =
+        ref.watch(settingsProvider.settled).valueOrNull?.dayStartHour ?? 0;
     return Stack(
       children: [
         content,
         Positioned.fill(
           child: OnThisDayOverlay(
-            today: DateTime(now.year, now.month, now.day),
+            today: journalDay(DateTime.now(), dayStartHour),
             journalId: _viewAllJournals ? null : entryListScope,
             ready: !entriesLoading,
             onOpen: (id) => unawaited(_openMemory(id)),

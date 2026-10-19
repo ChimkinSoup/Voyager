@@ -1,0 +1,1 @@
+final today = DateTime(2026, 10, 19); final matches = await c.read(onThisDayProvider((day: today, journalId: null)).future); debugPrint('DSOTD today=' + today.toString() + ' -> ' + matches.map((m) => m.entry.title + ' [' + m.label + ']').join(' | '));

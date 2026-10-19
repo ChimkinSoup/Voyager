@@ -171,11 +171,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             0,
             (sum, e) => sum + analytics.countWords(e.body),
           );
-          final streak = prompt.longestJournalStreak(entries);
           // Prepend built-in default trackers (e.g. Journal Entries) when the
           // per-view setting is on. These are virtual — see
           // [buildJournalEntriesTracker] — and each view has its own toggle.
           final settings = ref.watch(settingsProvider.settled).valueOrNull;
+          final dayStartHour = settings?.dayStartHour ?? 0;
+          final streak = prompt.longestJournalStreak(
+            entries,
+            dayStartHour: dayStartHour,
+          );
           final showDefaultsInGrid =
               settings?.showDefaultTrackersInGrid ?? true;
           final accent = Theme.of(context).colorScheme.primary.toARGB32();
@@ -191,12 +195,13 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           final today = DateTime.now();
           // The Dream Logged tracker's own days, so the chip and its
           // drill-down agree on what counts as a logged dream.
-          final todayDay = DateTime(today.year, today.month, today.day);
+          final todayDay = journalDay(today, dayStartHour);
           final dreamEntries = dreamEntriesAsync?.valueOrNull;
           final dreamLoggedToday =
               dreamEntries != null &&
               dreamLoggedTrackerValues(
                 dreamEntries,
+                dayStartHour: dayStartHour,
               ).any((v) => v.periodStart == todayDay);
           final showWorkoutStats = settings?.showWorkoutStatistics ?? false;
           final workoutDays = showWorkoutStats
@@ -248,7 +253,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                         trackers,
                         showDefaultsInGrid,
                         accent,
-                        DateUtils.dateOnly(today),
+                        journalDay(today, dayStartHour),
                       ),
                       analytics: analytics,
                     ),
@@ -1907,8 +1912,22 @@ class _HeatmapRow extends ConsumerWidget {
     return valuesAsync.when(
       data: (values) {
         // Build the last 31 period dates for this cadence: six label steps
-        // back from today, so the oldest square carries a label too.
-        final periods = _lastNPeriods(31);
+        // back from today, so the oldest square carries a label too. The
+        // trackers derived from entries file them by journal day, so their
+        // today is the journal day as well.
+        final derivedFromEntries = const {
+          kJournalEntriesTrackerId,
+          kStreakTrackerId,
+          kWordCountTrackerId,
+          kDreamLoggedTrackerId,
+        }.contains(tracker.id);
+        final periods = _lastNPeriods(
+          31,
+          dayStartHour: derivedFromEntries
+              ? ref.watch(settingsProvider.settled).valueOrNull?.dayStartHour ??
+                    0
+              : 0,
+        );
 
         // Compute rolling max over the exact window being displayed, so
         // normalisation doesn't miss values that fall outside a fixed
@@ -2166,9 +2185,8 @@ class _HeatmapRow extends ConsumerWidget {
   /// setting: these dates are matched against stored `periodStart`s, so
   /// following a per-device preference here would make every historical
   /// weekly value disappear the moment it was flipped.
-  List<DateTime> _lastNPeriods(int n) {
-    final today = DateTime.now();
-    final todayLocal = DateTime(today.year, today.month, today.day);
+  List<DateTime> _lastNPeriods(int n, {int dayStartHour = 0}) {
+    final todayLocal = journalDay(DateTime.now(), dayStartHour);
     final currentWeekStart = addCalendarDays(
       todayLocal,
       -(kTrackerStorageWeekStartsMonday

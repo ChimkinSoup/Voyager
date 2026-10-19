@@ -4267,6 +4267,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'petalWindFrequency': s.petalWindFrequency,
   'petalWindStrength': s.petalWindStrength,
   'weekStartsOnMonday': s.weekStartsOnMonday,
+  'dayStartHour': s.dayStartHour,
   'showQuotes': s.showQuotes,
   'customQuotesOnly': s.customQuotesOnly,
   'showDefaultTrackersInGrid': s.showDefaultTrackersInGrid,
@@ -4508,6 +4509,8 @@ AppSettings mergeSettingsFromRemote(
     petalWindFrequency: _remoteDouble(data, 'petalWindFrequency'),
     petalWindStrength: _remoteDouble(data, 'petalWindStrength'),
     weekStartsOnMonday: data['weekStartsOnMonday'] as bool?,
+    // Clamped to the settings dropdown's range, which asserts on any other.
+    dayStartHour: _remoteInt(data, 'dayStartHour')?.clamp(0, 6),
     showQuotes: data['showQuotes'] as bool?,
     customQuotesOnly: data['customQuotesOnly'] as bool?,
     showDefaultTrackersInGrid: data['showDefaultTrackersInGrid'] as bool?,

@@ -166,12 +166,11 @@ class PeriodicPromptService {
     }
   }
 
-  int longestJournalStreak(List<JournalEntry> entries) {
+  int longestJournalStreak(List<JournalEntry> entries, {int dayStartHour = 0}) {
     if (entries.isEmpty) return 0;
     final days =
         entries
-            .map((e) => e.entryDate.toLocal())
-            .map((d) => DateTime(d.year, d.month, d.day))
+            .map((e) => journalDay(e.entryDate, dayStartHour))
             .toSet()
             .toList()
           ..sort();

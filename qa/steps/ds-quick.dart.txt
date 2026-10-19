@@ -1,0 +1,14 @@
+final sn = c.read(settingsProvider.notifier);
+final jr = c.read(journalRepositoryProvider);
+final evening = DateTime(2026, 10, 19, 22).toUtc();
+final q = JournalEntry(id: 'ds-q1', journalId: 'ds-j', title: '', body: 'Quick entry started last evening', entryDate: evening, timestamp: evening, mood: 5, createdAt: evening, updatedAt: evening);
+await jr.upsertEntry(q); c.read(remoteSyncServiceProvider).pushJournalEntryNow(q);
+await c.read(quickJournalPointerStoreProvider).save('2026-10-19', 'ds-q1');
+Future<void> check(int hour) async {
+  await sn.saveSettings((await c.read(settingsProvider.future)).copyWith(dayStartHour: hour));
+  final found = await findQuickJournalEntry(c);
+  debugPrint('DSQUICK now=' + DateTime.now().toString() + ' hour=' + hour.toString() + ' found=' + (found?.id ?? 'none') + ' today=' + journalDay(DateTime.now(), hour).toString());
+}
+await check(4);
+await check(0);
+await check(4);

@@ -410,6 +410,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         trailing: const Icon(PhosphorIconsRegular.quotes),
                         onTap: () => showCustomQuotesDialog(context),
                       ),
+                      ListTile(
+                        title: const Text('Day starts at'),
+                        subtitle: const Text(
+                          'Journal and dream entries written before this count '
+                          'toward the previous day',
+                        ),
+                        trailing: SizedBox(
+                          width: 120,
+                          child: VoyagerDropdownButtonFormField<int>(
+                            // Keyed by the value so a change synced in from
+                            // another device replaces what the field shows.
+                            key: ValueKey(settings.dayStartHour),
+                            initialValue: settings.dayStartHour,
+                            isExpanded: true,
+                            items: [
+                              for (var hour = 0; hour <= 6; hour++)
+                                DropdownMenuItem(
+                                  value: hour,
+                                  child: Text(
+                                    DateFormat.j().format(
+                                      DateTime(2000, 1, 1, hour),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) =>
+                                _save(ref, settings.copyWith(dayStartHour: v)),
+                          ),
+                        ),
+                      ),
                       WeatherLocationTile(settings: settings),
                       const SizedBox(height: 16),
                       Text(

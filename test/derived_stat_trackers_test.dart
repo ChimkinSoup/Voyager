@@ -113,6 +113,22 @@ void main() {
       expect(byDay[DateTime(2026, 7, 1)], 1);
       expect(byDay[DateTime(2026, 7, 2)], 2);
     });
+
+    test('an entry before the day start keeps the previous day streak', () {
+      final entries = [
+        _entry('a', DateTime(2026, 7, 1, 21)),
+        // 3 AM on the 3rd: with a 5 AM start it is the 2nd's entry.
+        _entry('b', DateTime(2026, 7, 3, 3)),
+        _entry('c', DateTime(2026, 7, 3, 22)),
+      ];
+      final shifted = _byDay(streakTrackerValues(entries, dayStartHour: 5));
+      expect(shifted[DateTime(2026, 7, 2)], 2);
+      expect(shifted[DateTime(2026, 7, 3)], 3);
+
+      final midnight = _byDay(streakTrackerValues(entries));
+      expect(midnight[DateTime(2026, 7, 2)], 0);
+      expect(midnight[DateTime(2026, 7, 3)], 1);
+    });
   });
 
   group('wordCountTrackerValues', () {

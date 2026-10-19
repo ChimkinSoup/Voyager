@@ -4649,6 +4649,7 @@ class DriftSettingsRepository implements SettingsRepository {
       petalWindFrequency: row.petalWindFrequency,
       petalWindStrength: row.petalWindStrength,
       weekStartsOnMonday: row.weekStartsOnMonday,
+      dayStartHour: row.dayStartHour,
       showQuotes: row.showQuotes,
       customQuotesOnly: row.customQuotesOnly,
       showDefaultTrackersInGrid: row.showDefaultTrackersInGrid,
@@ -5011,6 +5012,7 @@ class DriftSettingsRepository implements SettingsRepository {
             petalWindFrequency: Value(settings.petalWindFrequency),
             petalWindStrength: Value(settings.petalWindStrength),
             weekStartsOnMonday: Value(settings.weekStartsOnMonday),
+            dayStartHour: Value(settings.dayStartHour),
             showQuotes: Value(settings.showQuotes),
             customQuotesOnly: Value(settings.customQuotesOnly),
             showDefaultTrackersInGrid: Value(

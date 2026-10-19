@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
@@ -23,7 +24,7 @@ class OnThisDayMatch {
   final Journal journal;
   final OnThisDayKind kind;
 
-  /// The entry's device-local calendar day (midnight).
+  /// The entry's [journalDay] (local midnight).
   final DateTime localDate;
 
   /// Zero for [OnThisDayKind.monthAgo].
@@ -51,12 +52,14 @@ class OnThisDayMatch {
 ///
 /// [journalId] narrows to one journal; null is the All journals view, which
 /// keeps only journals with [Journal.includeInAllView]. Pure: [today] is the
-/// only clock, read as a local calendar day.
+/// only clock, read as a local calendar day; each entry's day is its
+/// [journalDay] under [dayStartHour].
 List<OnThisDayMatch> matchOnThisDay(
   DateTime today,
   List<Journal> journals,
   List<JournalEntry> entries, {
   String? journalId,
+  int dayStartHour = 0,
 }) {
   final enabled = {
     for (final journal in journals)
@@ -80,8 +83,7 @@ List<OnThisDayMatch> matchOnThisDay(
     final journal = enabled[entry.journalId];
     if (journal == null || entry.isDeleted) continue;
     if (entry.title.trim().isEmpty && entry.body.trim().isEmpty) continue;
-    final local = entry.entryDate.toLocal();
-    final d = DateTime(local.year, local.month, local.day);
+    final d = journalDay(entry.entryDate, dayStartHour);
     if (!dayMatches(d)) continue;
 
     if (d.year < today.year && d.month == today.month) {
@@ -132,7 +134,7 @@ final onThisDayDismissedProvider = StateProvider<Set<String>>(
 
 typedef OnThisDayQuery = ({DateTime day, String? journalId});
 
-/// Matches for a local [OnThisDayQuery.day] (midnight) and scope.
+/// Matches for a [journalDay] [OnThisDayQuery.day] (midnight) and scope.
 final onThisDayProvider = FutureProvider.autoDispose
     .family<List<OnThisDayMatch>, OnThisDayQuery>((ref, query) async {
       final journals = await ref.watch(journalsProvider.future);
@@ -146,5 +148,8 @@ final onThisDayProvider = FutureProvider.autoDispose
         journals,
         entries,
         journalId: query.journalId,
+        dayStartHour: await ref.watch(
+          settingsProvider.selectAsync((s) => s.dayStartHour),
+        ),
       );
     });

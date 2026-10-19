@@ -782,6 +782,7 @@ class SettingsTable extends Table {
       real().withDefault(const Constant(16.88))();
   BoolColumn get weekStartsOnMonday =>
       boolean().withDefault(const Constant(true))();
+  IntColumn get dayStartHour => integer().withDefault(const Constant(0))();
   BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
   BoolColumn get customQuotesOnly =>
       boolean().withDefault(const Constant(false))();
@@ -2214,7 +2215,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 159;
+  int get schemaVersion => 160;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3952,6 +3953,12 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(photoSeriesAnglesTable);
         await migrator.createTable(photoCheckInsTable);
         await migrator.createTable(photoCheckInImagesTable);
+      }
+      if (from < 160) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.dayStartHour,
+        );
       }
     },
   );

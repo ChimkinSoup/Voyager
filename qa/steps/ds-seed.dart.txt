@@ -1,0 +1,21 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final dr = c.read(dreamRepositoryProvider);
+final j = Journal(id: 'ds-j', name: 'DS Journal', createdAt: now, updatedAt: now, onThisDayCadence: OnThisDayCadence.yearly);
+await jr.upsertJournal(j); r.pushJournal(j);
+JournalEntry je(String id, String title, DateTime local, int mood) => JournalEntry(id: id, journalId: 'ds-j', title: title, body: 'Body of ' + title, entryDate: local.toUtc(), timestamp: local.toUtc(), mood: mood, createdAt: now, updatedAt: now);
+final entries = [
+  je('ds-s1', 'Streak A1', DateTime(2026, 10, 12, 21), 2),
+  je('ds-s2', 'Streak A2 late', DateTime(2026, 10, 14, 2, 30), 8),
+  je('ds-s3', 'Streak A3', DateTime(2026, 10, 14, 22), 4),
+  je('ds-s4', 'Streak A4 late', DateTime(2026, 10, 16, 1, 15), 6),
+  je('ds-s5', 'Streak A5', DateTime(2026, 10, 16, 20), 6),
+  je('ds-o1', 'OTD late night', DateTime(2025, 10, 20, 2), 5),
+  je('ds-o2', 'OTD noon', DateTime(2025, 10, 19, 12), 5),
+  je('ds-o3', 'OTD early', DateTime(2025, 10, 19, 3), 5),
+];
+for (final x in entries) { await jr.upsertEntry(x); r.pushJournalEntryNow(x); }
+DreamEntry de(String id, String title, DateTime local) => DreamEntry(id: id, title: title, body: 'Dream body', entryDate: local.toUtc(), notes: '', tags: const [], createdAt: now, updatedAt: now, version: 1);
+for (final d in [de('ds-d1', 'DS dream late', DateTime(2026, 10, 18, 3)), de('ds-d2', 'DS dream today', DateTime(2026, 10, 19, 10))]) { await dr.upsertEntry(d); r.pushDreamEntryNow(d); }
+invalidateAllDataProvidersIn(c);

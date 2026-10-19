@@ -40,6 +40,7 @@ class AppSettings {
     this.petalWindFrequency = 0.12,
     this.petalWindStrength = 16.88,
     this.weekStartsOnMonday = true,
+    this.dayStartHour = 0,
     this.showQuotes = true,
     this.customQuotesOnly = false,
     this.showDefaultTrackersInGrid = true,
@@ -218,6 +219,12 @@ class AppSettings {
   final double petalWindStrength;
 
   final bool weekStartsOnMonday;
+
+  /// The hour (0–6) a journal or dream day starts at: an entry written
+  /// before it counts toward the previous day for streaks, On this day and
+  /// the analytics — see `journalDay`. Entries still show their real time.
+  final int dayStartHour;
+
   final bool showQuotes;
 
   /// Whether the quote pool is the user's own quotes alone, with the
@@ -584,6 +591,7 @@ class AppSettings {
     double? petalWindFrequency,
     double? petalWindStrength,
     bool? weekStartsOnMonday,
+    int? dayStartHour,
     bool? showQuotes,
     bool? customQuotesOnly,
     bool? showDefaultTrackersInGrid,
@@ -774,6 +782,7 @@ class AppSettings {
       petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
       petalWindStrength: petalWindStrength ?? this.petalWindStrength,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
+      dayStartHour: dayStartHour ?? this.dayStartHour,
       showQuotes: showQuotes ?? this.showQuotes,
       customQuotesOnly: customQuotesOnly ?? this.customQuotesOnly,
       showDefaultTrackersInGrid:

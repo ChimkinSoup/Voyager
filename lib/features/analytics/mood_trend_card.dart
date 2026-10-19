@@ -76,6 +76,8 @@ class _MoodTrendCardState extends ConsumerState<MoodTrendCard> {
         for (final j in journals)
           if (j.showMood) j.id,
       },
+      dayStartHour:
+          ref.watch(settingsProvider.settled).valueOrNull?.dayStartHour ?? 0,
     );
     if (days.isEmpty) return const SizedBox.shrink();
 

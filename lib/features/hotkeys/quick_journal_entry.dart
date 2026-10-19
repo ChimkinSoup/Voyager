@@ -8,6 +8,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -89,14 +90,17 @@ Future<JournalEntry>? _resolving;
 /// (one started after midnight and moved back to the day it is about).
 Future<JournalEntry?> findQuickJournalEntry(ProviderContainer container) async {
   final pointer = await container.read(quickJournalPointerStoreProvider).load();
-  final today = _localDayKey(DateTime.now());
+  final dayStartHour =
+      (await container.read(settingsRepositoryProvider).getSettings())
+          .dayStartHour;
+  final today = _localDayKey(journalDay(DateTime.now(), dayStartHour));
   if (pointer == null || pointer.day != today) return null;
   final existing = await container
       .read(journalRepositoryProvider)
       .getEntry(pointer.entryId);
   if (existing != null &&
       existing.deletedAt == null &&
-      _localDayKey(existing.entryDate.toLocal()) == today) {
+      _localDayKey(journalDay(existing.entryDate, dayStartHour)) == today) {
     return existing;
   }
   return null;
@@ -123,9 +127,9 @@ Future<JournalEntry> _resolve(ProviderContainer container, String? id) async {
 
   final store = container.read(quickJournalPointerStoreProvider);
   final repo = container.read(journalRepositoryProvider);
-  final today = _localDayKey(DateTime.now());
   final settingsRepo = container.read(settingsRepositoryProvider);
   final settings = await settingsRepo.getSettings();
+  final today = _localDayKey(journalDay(DateTime.now(), settings.dayStartHour));
   var journals = await repo.listJournals();
   if (journals.isEmpty) {
     final now = utcNow();

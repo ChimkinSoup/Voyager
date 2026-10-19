@@ -1,0 +1,3 @@
+final sn = c.read(settingsProvider.notifier);
+await sn.saveSettings((await c.read(settingsProvider.future)).copyWith(showDreamStatistics: true, dayStartHour: int.parse('HOUR')));
+c.read(routerProvider).go('/analytics');

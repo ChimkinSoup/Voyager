@@ -160,4 +160,14 @@ void main() {
     expect(identical(mergeSettingsFromRemote(_legacyCloud(), local), local),
         isTrue);
   });
+
+  test('a synced day start outside 0-6 is clamped into the dropdown range', () {
+    AppSettings merged(int hour) => mergeSettingsFromRemote({
+      'dayStartHour': hour,
+      'settingsUpdatedAt': DateTime.utc(2030).toIso8601String(),
+    }, const AppSettings());
+    expect(merged(4).dayStartHour, 4);
+    expect(merged(9).dayStartHour, 6);
+    expect(merged(-2).dayStartHour, 0);
+  });
 }

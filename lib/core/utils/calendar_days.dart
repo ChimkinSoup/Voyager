@@ -37,6 +37,20 @@ int calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
   to.day,
 ).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
 
+/// The day a journal or dream entry written at [moment] belongs to, at local
+/// midnight, when the user's day starts at [dayStartHour] (0–6) rather than
+/// midnight: a 3 AM entry with a 5 AM start counts toward the day before.
+///
+/// Field-based like [addCalendarDays], so a DST night can't shift it.
+DateTime journalDay(DateTime moment, int dayStartHour) {
+  final local = moment.toLocal();
+  return DateTime(
+    local.year,
+    local.month,
+    local.hour < dayStartHour ? local.day - 1 : local.day,
+  );
+}
+
 /// Local-midnight start of the week containing [date].
 DateTime calendarWeekStart(DateTime date, bool weekStartsMonday) {
   final weekday = date.weekday;

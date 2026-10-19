@@ -8414,6 +8414,18 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _dayStartHourMeta = const VerificationMeta(
+    'dayStartHour',
+  );
+  @override
+  late final GeneratedColumn<int> dayStartHour = GeneratedColumn<int>(
+    'day_start_hour',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _showQuotesMeta = const VerificationMeta(
     'showQuotes',
   );
@@ -10297,6 +10309,7 @@ class $SettingsTableTable extends SettingsTable
     petalWindFrequency,
     petalWindStrength,
     weekStartsOnMonday,
+    dayStartHour,
     showQuotes,
     customQuotesOnly,
     showDefaultTrackersInGrid,
@@ -10533,6 +10546,15 @@ class $SettingsTableTable extends SettingsTable
         weekStartsOnMonday.isAcceptableOrUnknown(
           data['week_starts_on_monday']!,
           _weekStartsOnMondayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('day_start_hour')) {
+      context.handle(
+        _dayStartHourMeta,
+        dayStartHour.isAcceptableOrUnknown(
+          data['day_start_hour']!,
+          _dayStartHourMeta,
         ),
       );
     }
@@ -11890,6 +11912,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}week_starts_on_monday'],
       )!,
+      dayStartHour: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}day_start_hour'],
+      )!,
       showQuotes: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}show_quotes'],
@@ -12503,6 +12529,7 @@ class SettingsTableData extends DataClass
   final double petalWindFrequency;
   final double petalWindStrength;
   final bool weekStartsOnMonday;
+  final int dayStartHour;
   final bool showQuotes;
   final bool customQuotesOnly;
   final bool showDefaultTrackersInGrid;
@@ -12785,6 +12812,7 @@ class SettingsTableData extends DataClass
     required this.petalWindFrequency,
     required this.petalWindStrength,
     required this.weekStartsOnMonday,
+    required this.dayStartHour,
     required this.showQuotes,
     required this.customQuotesOnly,
     required this.showDefaultTrackersInGrid,
@@ -12949,6 +12977,7 @@ class SettingsTableData extends DataClass
     map['petal_wind_frequency'] = Variable<double>(petalWindFrequency);
     map['petal_wind_strength'] = Variable<double>(petalWindStrength);
     map['week_starts_on_monday'] = Variable<bool>(weekStartsOnMonday);
+    map['day_start_hour'] = Variable<int>(dayStartHour);
     map['show_quotes'] = Variable<bool>(showQuotes);
     map['custom_quotes_only'] = Variable<bool>(customQuotesOnly);
     map['show_default_trackers_in_grid'] = Variable<bool>(
@@ -13324,6 +13353,7 @@ class SettingsTableData extends DataClass
       petalWindFrequency: Value(petalWindFrequency),
       petalWindStrength: Value(petalWindStrength),
       weekStartsOnMonday: Value(weekStartsOnMonday),
+      dayStartHour: Value(dayStartHour),
       showQuotes: Value(showQuotes),
       customQuotesOnly: Value(customQuotesOnly),
       showDefaultTrackersInGrid: Value(showDefaultTrackersInGrid),
@@ -13602,6 +13632,7 @@ class SettingsTableData extends DataClass
       ),
       petalWindStrength: serializer.fromJson<double>(json['petalWindStrength']),
       weekStartsOnMonday: serializer.fromJson<bool>(json['weekStartsOnMonday']),
+      dayStartHour: serializer.fromJson<int>(json['dayStartHour']),
       showQuotes: serializer.fromJson<bool>(json['showQuotes']),
       customQuotesOnly: serializer.fromJson<bool>(json['customQuotesOnly']),
       showDefaultTrackersInGrid: serializer.fromJson<bool>(
@@ -13968,6 +13999,7 @@ class SettingsTableData extends DataClass
       'petalWindFrequency': serializer.toJson<double>(petalWindFrequency),
       'petalWindStrength': serializer.toJson<double>(petalWindStrength),
       'weekStartsOnMonday': serializer.toJson<bool>(weekStartsOnMonday),
+      'dayStartHour': serializer.toJson<int>(dayStartHour),
       'showQuotes': serializer.toJson<bool>(showQuotes),
       'customQuotesOnly': serializer.toJson<bool>(customQuotesOnly),
       'showDefaultTrackersInGrid': serializer.toJson<bool>(
@@ -14254,6 +14286,7 @@ class SettingsTableData extends DataClass
     double? petalWindFrequency,
     double? petalWindStrength,
     bool? weekStartsOnMonday,
+    int? dayStartHour,
     bool? showQuotes,
     bool? customQuotesOnly,
     bool? showDefaultTrackersInGrid,
@@ -14415,6 +14448,7 @@ class SettingsTableData extends DataClass
     petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
     petalWindStrength: petalWindStrength ?? this.petalWindStrength,
     weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
+    dayStartHour: dayStartHour ?? this.dayStartHour,
     showQuotes: showQuotes ?? this.showQuotes,
     customQuotesOnly: customQuotesOnly ?? this.customQuotesOnly,
     showDefaultTrackersInGrid:
@@ -14726,6 +14760,9 @@ class SettingsTableData extends DataClass
       weekStartsOnMonday: data.weekStartsOnMonday.present
           ? data.weekStartsOnMonday.value
           : this.weekStartsOnMonday,
+      dayStartHour: data.dayStartHour.present
+          ? data.dayStartHour.value
+          : this.dayStartHour,
       showQuotes: data.showQuotes.present
           ? data.showQuotes.value
           : this.showQuotes,
@@ -15188,6 +15225,7 @@ class SettingsTableData extends DataClass
           ..write('petalWindFrequency: $petalWindFrequency, ')
           ..write('petalWindStrength: $petalWindStrength, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
+          ..write('dayStartHour: $dayStartHour, ')
           ..write('showQuotes: $showQuotes, ')
           ..write('customQuotesOnly: $customQuotesOnly, ')
           ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
@@ -15386,6 +15424,7 @@ class SettingsTableData extends DataClass
     petalWindFrequency,
     petalWindStrength,
     weekStartsOnMonday,
+    dayStartHour,
     showQuotes,
     customQuotesOnly,
     showDefaultTrackersInGrid,
@@ -15549,6 +15588,7 @@ class SettingsTableData extends DataClass
           other.petalWindFrequency == this.petalWindFrequency &&
           other.petalWindStrength == this.petalWindStrength &&
           other.weekStartsOnMonday == this.weekStartsOnMonday &&
+          other.dayStartHour == this.dayStartHour &&
           other.showQuotes == this.showQuotes &&
           other.customQuotesOnly == this.customQuotesOnly &&
           other.showDefaultTrackersInGrid == this.showDefaultTrackersInGrid &&
@@ -15736,6 +15776,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<double> petalWindFrequency;
   final Value<double> petalWindStrength;
   final Value<bool> weekStartsOnMonday;
+  final Value<int> dayStartHour;
   final Value<bool> showQuotes;
   final Value<bool> customQuotesOnly;
   final Value<bool> showDefaultTrackersInGrid;
@@ -15895,6 +15936,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.petalWindFrequency = const Value.absent(),
     this.petalWindStrength = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
+    this.dayStartHour = const Value.absent(),
     this.showQuotes = const Value.absent(),
     this.customQuotesOnly = const Value.absent(),
     this.showDefaultTrackersInGrid = const Value.absent(),
@@ -16055,6 +16097,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.petalWindFrequency = const Value.absent(),
     this.petalWindStrength = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
+    this.dayStartHour = const Value.absent(),
     this.showQuotes = const Value.absent(),
     this.customQuotesOnly = const Value.absent(),
     this.showDefaultTrackersInGrid = const Value.absent(),
@@ -16215,6 +16258,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<double>? petalWindFrequency,
     Expression<double>? petalWindStrength,
     Expression<bool>? weekStartsOnMonday,
+    Expression<int>? dayStartHour,
     Expression<bool>? showQuotes,
     Expression<bool>? customQuotesOnly,
     Expression<bool>? showDefaultTrackersInGrid,
@@ -16378,6 +16422,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (petalWindStrength != null) 'petal_wind_strength': petalWindStrength,
       if (weekStartsOnMonday != null)
         'week_starts_on_monday': weekStartsOnMonday,
+      if (dayStartHour != null) 'day_start_hour': dayStartHour,
       if (showQuotes != null) 'show_quotes': showQuotes,
       if (customQuotesOnly != null) 'custom_quotes_only': customQuotesOnly,
       if (showDefaultTrackersInGrid != null)
@@ -16648,6 +16693,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<double>? petalWindFrequency,
     Value<double>? petalWindStrength,
     Value<bool>? weekStartsOnMonday,
+    Value<int>? dayStartHour,
     Value<bool>? showQuotes,
     Value<bool>? customQuotesOnly,
     Value<bool>? showDefaultTrackersInGrid,
@@ -16808,6 +16854,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
       petalWindStrength: petalWindStrength ?? this.petalWindStrength,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
+      dayStartHour: dayStartHour ?? this.dayStartHour,
       showQuotes: showQuotes ?? this.showQuotes,
       customQuotesOnly: customQuotesOnly ?? this.customQuotesOnly,
       showDefaultTrackersInGrid:
@@ -17073,6 +17120,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (weekStartsOnMonday.present) {
       map['week_starts_on_monday'] = Variable<bool>(weekStartsOnMonday.value);
+    }
+    if (dayStartHour.present) {
+      map['day_start_hour'] = Variable<int>(dayStartHour.value);
     }
     if (showQuotes.present) {
       map['show_quotes'] = Variable<bool>(showQuotes.value);
@@ -17710,6 +17760,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('petalWindFrequency: $petalWindFrequency, ')
           ..write('petalWindStrength: $petalWindStrength, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
+          ..write('dayStartHour: $dayStartHour, ')
           ..write('showQuotes: $showQuotes, ')
           ..write('customQuotesOnly: $customQuotesOnly, ')
           ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
@@ -60829,6 +60880,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<double> petalWindFrequency,
       Value<double> petalWindStrength,
       Value<bool> weekStartsOnMonday,
+      Value<int> dayStartHour,
       Value<bool> showQuotes,
       Value<bool> customQuotesOnly,
       Value<bool> showDefaultTrackersInGrid,
@@ -60990,6 +61042,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<double> petalWindFrequency,
       Value<double> petalWindStrength,
       Value<bool> weekStartsOnMonday,
+      Value<int> dayStartHour,
       Value<bool> showQuotes,
       Value<bool> customQuotesOnly,
       Value<bool> showDefaultTrackersInGrid,
@@ -61196,6 +61249,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get weekStartsOnMonday => $composableBuilder(
     column: $table.weekStartsOnMonday,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dayStartHour => $composableBuilder(
+    column: $table.dayStartHour,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -62003,6 +62061,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<bool> get weekStartsOnMonday => $composableBuilder(
     column: $table.weekStartsOnMonday,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dayStartHour => $composableBuilder(
+    column: $table.dayStartHour,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -62817,6 +62880,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get dayStartHour => $composableBuilder(
+    column: $table.dayStartHour,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get showQuotes => $composableBuilder(
     column: $table.showQuotes,
     builder: (column) => column,
@@ -63610,6 +63678,7 @@ class $$SettingsTableTableTableManager
                 Value<double> petalWindFrequency = const Value.absent(),
                 Value<double> petalWindStrength = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
+                Value<int> dayStartHour = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
                 Value<bool> customQuotesOnly = const Value.absent(),
                 Value<bool> showDefaultTrackersInGrid = const Value.absent(),
@@ -63794,6 +63863,7 @@ class $$SettingsTableTableTableManager
                 petalWindFrequency: petalWindFrequency,
                 petalWindStrength: petalWindStrength,
                 weekStartsOnMonday: weekStartsOnMonday,
+                dayStartHour: dayStartHour,
                 showQuotes: showQuotes,
                 customQuotesOnly: customQuotesOnly,
                 showDefaultTrackersInGrid: showDefaultTrackersInGrid,
@@ -63961,6 +64031,7 @@ class $$SettingsTableTableTableManager
                 Value<double> petalWindFrequency = const Value.absent(),
                 Value<double> petalWindStrength = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
+                Value<int> dayStartHour = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
                 Value<bool> customQuotesOnly = const Value.absent(),
                 Value<bool> showDefaultTrackersInGrid = const Value.absent(),
@@ -64145,6 +64216,7 @@ class $$SettingsTableTableTableManager
                 petalWindFrequency: petalWindFrequency,
                 petalWindStrength: petalWindStrength,
                 weekStartsOnMonday: weekStartsOnMonday,
+                dayStartHour: dayStartHour,
                 showQuotes: showQuotes,
                 customQuotesOnly: customQuotesOnly,
                 showDefaultTrackersInGrid: showDefaultTrackersInGrid,

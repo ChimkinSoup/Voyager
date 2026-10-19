@@ -2288,22 +2288,34 @@ final trackerValuesProvider = FutureProvider.family((
   ref.keepAlive();
   // The built-in trackers are virtual: their values are derived from the
   // user's journal entries rather than stored in the tracker table.
+  Future<int> dayStartHour() =>
+      ref.watch(settingsProvider.selectAsync((s) => s.dayStartHour));
   if (trackerId == kJournalEntriesTrackerId) {
     final entries = await ref.watch(allJournalEntriesProvider.future);
-    return journalEntriesTrackerValues(entries);
+    return journalEntriesTrackerValues(
+      entries,
+      dayStartHour: await dayStartHour(),
+    );
   }
   if (trackerId == kStreakTrackerId) {
     final entries = await ref.watch(allJournalEntriesProvider.future);
-    return streakTrackerValues(entries);
+    return streakTrackerValues(entries, dayStartHour: await dayStartHour());
   }
   if (trackerId == kWordCountTrackerId) {
     final entries = await ref.watch(allJournalEntriesProvider.future);
     final analytics = ref.watch(analyticsServiceProvider);
-    return wordCountTrackerValues(entries, countWords: analytics.countWords);
+    return wordCountTrackerValues(
+      entries,
+      countWords: analytics.countWords,
+      dayStartHour: await dayStartHour(),
+    );
   }
   if (trackerId == kDreamLoggedTrackerId) {
     final entries = await ref.watch(allDreamEntriesProvider.future);
-    return dreamLoggedTrackerValues(entries);
+    return dreamLoggedTrackerValues(
+      entries,
+      dayStartHour: await dayStartHour(),
+    );
   }
   if (trackerId == kWorkedOutTrackerId) {
     return workedOutTrackerValues(await ref.watch(workoutDaysProvider.future));

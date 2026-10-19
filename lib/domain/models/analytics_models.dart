@@ -287,16 +287,18 @@ StatisticTracker buildDreamLoggedTracker({required int colorValue}) {
 }
 
 /// Derives the virtual "Dream Logged" tracker's values from [entries]: one
-/// boolean-`true` [TrackerValue] per local calendar day that has at least one
+/// boolean-`true` [TrackerValue] per [journalDay] that has at least one
 /// dream entry. Days with no entry get no value (rendered as empty).
-List<TrackerValue> dreamLoggedTrackerValues(List<DreamEntry> entries) {
+List<TrackerValue> dreamLoggedTrackerValues(
+  List<DreamEntry> entries, {
+  int dayStartHour = 0,
+}) {
   final days = <DateTime>{};
   for (final entry in entries) {
     // An abandoned "New dream" has neither, and must not mark the day
     // logged.
     if (entry.title.trim().isEmpty && entry.body.trim().isEmpty) continue;
-    final d = entry.entryDate.toLocal();
-    days.add(DateTime(d.year, d.month, d.day));
+    days.add(journalDay(entry.entryDate, dayStartHour));
   }
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   return [
@@ -524,14 +526,18 @@ List<TrackerValue> counterSeriesValues(
 }
 
 /// Derives the virtual "Journal Entries" tracker's values from [entries]:
-/// one boolean-`true` [TrackerValue] per local calendar day that has at least
+/// one boolean-`true` [TrackerValue] per [journalDay] that has at least
 /// one journal entry. Days with no entry get no value (rendered as empty).
-List<TrackerValue> journalEntriesTrackerValues(List<JournalEntry> entries) {
+List<TrackerValue> journalEntriesTrackerValues(
+  List<JournalEntry> entries, {
+  int dayStartHour = 0,
+}) {
   // Keyed by an int first: building a local DateTime is the costly part, so
   // it is done once per day rather than once per entry (BUG-281).
   final dayKeys = <int>{};
   for (final entry in entries) {
-    final d = entry.entryDate.toLocal();
+    final local = entry.entryDate.toLocal();
+    final d = local.hour < dayStartHour ? addCalendarDays(local, -1) : local;
     dayKeys.add(d.year * 10000 + d.month * 100 + d.day);
   }
   final days = [
@@ -553,24 +559,21 @@ List<TrackerValue> journalEntriesTrackerValues(List<JournalEntry> entries) {
   ];
 }
 
-/// The local calendar days spanned by [entries], oldest first, with no gaps —
+/// The [journalDay]s spanned by [entries], oldest first, with no gaps —
 /// every day from the first entry through the later of today and the last
 /// entry. Shared by the derived daily series below, which need a value on
 /// *every* day (not just the ones with entries) so the sparkline's
 /// interpolation can't smooth over a day the user wrote nothing.
-List<DateTime> _dailySpan(List<JournalEntry> entries) {
+List<DateTime> _dailySpan(List<JournalEntry> entries, int dayStartHour) {
   if (entries.isEmpty) return const [];
-  final firstDate = entries.first.entryDate.toLocal();
-  var first = DateTime(firstDate.year, firstDate.month, firstDate.day);
+  var first = journalDay(entries.first.entryDate, dayStartHour);
   var last = first;
   for (final entry in entries) {
-    final d = entry.entryDate.toLocal();
-    final day = DateTime(d.year, d.month, d.day);
+    final day = journalDay(entry.entryDate, dayStartHour);
     if (day.isBefore(first)) first = day;
     if (day.isAfter(last)) last = day;
   }
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  final today = journalDay(DateTime.now(), dayStartHour);
   if (today.isAfter(last)) last = today;
 
   final days = <DateTime>[];
@@ -589,16 +592,17 @@ List<DateTime> _dailySpan(List<JournalEntry> entries) {
 /// days ending on that day. A day with no entry scores 0, so the sparkline
 /// visibly drops to the baseline when a streak breaks instead of being
 /// interpolated straight across the gap.
-List<TrackerValue> streakTrackerValues(List<JournalEntry> entries) {
-  final journaled = <DateTime>{};
-  for (final entry in entries) {
-    final d = entry.entryDate.toLocal();
-    journaled.add(DateTime(d.year, d.month, d.day));
-  }
+List<TrackerValue> streakTrackerValues(
+  List<JournalEntry> entries, {
+  int dayStartHour = 0,
+}) {
+  final journaled = <DateTime>{
+    for (final entry in entries) journalDay(entry.entryDate, dayStartHour),
+  };
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   final values = <TrackerValue>[];
   var run = 0;
-  for (final day in _dailySpan(entries)) {
+  for (final day in _dailySpan(entries, dayStartHour)) {
     run = journaled.contains(day) ? run + 1 : 0;
     values.add(
       TrackerValue(
@@ -624,16 +628,16 @@ List<TrackerValue> streakTrackerValues(List<JournalEntry> entries) {
 List<TrackerValue> wordCountTrackerValues(
   List<JournalEntry> entries, {
   required int Function(String) countWords,
+  int dayStartHour = 0,
 }) {
   final wordsByDay = <DateTime, int>{};
   for (final entry in entries) {
-    final d = entry.entryDate.toLocal();
-    final day = DateTime(d.year, d.month, d.day);
+    final day = journalDay(entry.entryDate, dayStartHour);
     wordsByDay[day] = (wordsByDay[day] ?? 0) + countWords(entry.body);
   }
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   return [
-    for (final day in _dailySpan(entries))
+    for (final day in _dailySpan(entries, dayStartHour))
       TrackerValue(
         id: '$kWordCountTrackerId:${day.year}-${day.month}-${day.day}',
         trackerId: kWordCountTrackerId,
@@ -649,7 +653,7 @@ List<TrackerValue> wordCountTrackerValues(
 const int kMoodChartDays = 30;
 
 /// The mood chart's points: the average mood of each of the [kMoodChartDays]
-/// most recent local calendar days that have one, oldest first. Days without
+/// most recent [journalDay]s that have one, oldest first. Days without
 /// a mood are skipped rather than plotted, so the window can span more than
 /// [kMoodChartDays] calendar days.
 ///
@@ -658,14 +662,14 @@ const int kMoodChartDays = 30;
 List<({DateTime day, double mood})> recentMoodDays(
   List<JournalEntry> entries, {
   required Set<String> moodJournalIds,
+  int dayStartHour = 0,
 }) {
   final moodsByDay = <DateTime, List<int>>{};
   for (final entry in entries) {
     final mood = entry.mood;
     if (mood == null || !moodJournalIds.contains(entry.journalId)) continue;
-    final d = entry.entryDate.toLocal();
     moodsByDay
-        .putIfAbsent(DateTime(d.year, d.month, d.day), () => [])
+        .putIfAbsent(journalDay(entry.entryDate, dayStartHour), () => [])
         .add(mood);
   }
   final days = moodsByDay.keys.toList()..sort();

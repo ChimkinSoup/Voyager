@@ -261,6 +261,27 @@ void main() {
     expect(matches.map((m) => m.shortAgo), ['1mo', '1y', '3y']);
   });
 
+  test('an entry before the day start resurfaces on the day before', () {
+    final lateNight = _entry(
+      2025,
+      10,
+      20,
+      localTime: DateTime(2025, 10, 20, 3),
+    );
+    List<String> days(DateTime today, int dayStartHour) => [
+      for (final match in matchOnThisDay(
+        today,
+        [_journal('j')],
+        [lateNight],
+        dayStartHour: dayStartHour,
+      ))
+        '${match.localDate.year}-${match.localDate.month}-${match.localDate.day}',
+    ];
+    expect(days(DateTime(2026, 10, 19), 5), ['2025-10-19']);
+    expect(days(DateTime(2026, 10, 20), 5), isEmpty);
+    expect(days(DateTime(2026, 10, 20), 0), ['2025-10-20']);
+  });
+
   test('dismissal keys are per entry and dated', () {
     expect(
       onThisDayDismissalKey('abc', DateTime(2026, 9, 4)),
