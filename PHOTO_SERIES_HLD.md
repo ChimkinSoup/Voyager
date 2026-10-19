@@ -338,11 +338,11 @@ All of this is computed from plain fields, so it works while locked.
 
 ## 15. Implementation phases
 
-1. **Vault media core:**
+1. **Vault media core** — **done (2026-10-18)**:
    - `encryptBytes` / `decryptBytes`;
    - `VaultBlob` table and `VaultMediaService` (ingest → thumbnail → encrypt → local file → upload, and download → decrypt into memory);
    - Storage rules.
-2. **Series and check-ins:**
+2. **Series and check-ins** — **done (2026-10-19)**:
    - the remaining tables, sync, trash and backups;
    - the nav destination, series list and detail;
    - locked and unlocked states, and the session change to popover-close locking;

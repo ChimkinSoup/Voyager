@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/app/providers.dart';
@@ -20,7 +22,21 @@ bool photoSeriesPageVisible(GoRouter router) {
 /// (PHOTO_SERIES_HLD.md §6.4).
 final photoSeriesPageVisibleProvider = StateProvider<bool>((ref) => false);
 
-final photoSeriesServiceProvider = Provider<PhotoSeriesService>((ref) {
+/// Today's local date, recomputed at each local midnight so a page left open
+/// overnight moves its current period, its badges and its streaks with the
+/// clock.
+final photoSeriesTodayProvider = Provider.autoDispose<DateTime>((ref) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final timer = Timer(
+    DateTime(now.year, now.month, now.day + 1).difference(now),
+    ref.invalidateSelf,
+  );
+  ref.onDispose(timer.cancel);
+  return today;
+});
+
+final photoSeriesServiceProvider =Provider<PhotoSeriesService>((ref) {
   return PhotoSeriesService(
     repository: ref.watch(photoSeriesRepositoryProvider),
     media: ref.watch(vaultMediaServiceProvider.notifier),

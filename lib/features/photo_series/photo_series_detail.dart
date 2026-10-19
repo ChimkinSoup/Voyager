@@ -137,7 +137,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
       series: series,
       checkIns: snapshot.checkIns,
       images: snapshot.images,
-      now: DateTime.now(),
+      now: ref.watch(photoSeriesTodayProvider),
     );
     final groups = _groups(series, snapshot, angles);
     final theme = Theme.of(context);

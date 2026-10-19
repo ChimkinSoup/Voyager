@@ -4,6 +4,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,11 @@ Uint8List _jpeg() {
   return img.encodeJpg(image);
 }
 
+DateTime _today() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
 Future<ProviderContainer> _container(WidgetTester tester) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
@@ -64,6 +70,9 @@ Future<ProviderContainer> _container(WidgetTester tester) async {
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
       mediaStorageProvider.overrideWithValue(_NoStorage()),
+      // Fixed, so no midnight timer outlives the widget tree; the timer has
+      // its own test below.
+      photoSeriesTodayProvider.overrideWithValue(_today()),
       vaultMediaServiceProvider.overrideWith(
         (ref) => VaultMediaService(
           repository: ref.watch(photoSeriesRepositoryProvider),
@@ -279,6 +288,40 @@ void main() {
 
       await close(tester, container);
       expect(container.read(secureVaultSessionProvider), isNull);
+    });
+  });
+
+  // DateTime.now() can't be faked, so this pins the mechanism: one timer,
+  // due at the next local midnight, that rebuilds the provider — which arms
+  // the next one.
+  test("today's date is recomputed at local midnight", () {
+    fakeAsync((async) {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      // Taken first, so the provider's own reading is no earlier.
+      final now = DateTime.now();
+      container.listen(photoSeriesTodayProvider, (_, _) {});
+      expect(
+        container.read(photoSeriesTodayProvider),
+        DateTime(now.year, now.month, now.day),
+      );
+      final untilMidnight = DateTime(
+        now.year,
+        now.month,
+        now.day + 1,
+      ).difference(now);
+      expect(async.pendingTimers, hasLength(1));
+      expect(
+        async.pendingTimers.single.duration,
+        lessThanOrEqualTo(untilMidnight),
+      );
+      final first = async.pendingTimers.single;
+
+      async.elapse(untilMidnight + const Duration(seconds: 1));
+      container.read(photoSeriesTodayProvider);
+      // Rebuilt: the first timer fired, and the rebuild armed a new one.
+      expect(async.pendingTimers, hasLength(1));
+      expect(async.pendingTimers.single, isNot(same(first)));
     });
   });
 }

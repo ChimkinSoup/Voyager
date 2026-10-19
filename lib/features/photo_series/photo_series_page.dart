@@ -93,7 +93,7 @@ class _SeriesList extends ConsumerWidget {
         ref.watch(photoSeriesSnapshotProvider).valueOrNull ??
         PhotoSeriesSnapshot.empty;
     final theme = Theme.of(context);
-    final now = DateTime.now();
+    final now = ref.watch(photoSeriesTodayProvider);
     return Material(
       type: MaterialType.transparency,
       child: ListView(
