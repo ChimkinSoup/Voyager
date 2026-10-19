@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
 /// What the clipboard is holding, as far as the image rules care.
@@ -55,10 +56,9 @@ class MediaClipboard {
   /// megabytes on every Ctrl+V into a text field just to answer them would be
   /// work immediately thrown away.
   Future<({bool hasText, bool hasImage})> peek() async {
-    final clipboard = SystemClipboard.instance;
-    if (clipboard == null) return (hasText: false, hasImage: false);
+    final reader = await _reader();
+    if (reader == null) return (hasText: false, hasImage: false);
 
-    final reader = await clipboard.read();
     final text = await reader.readValue(Formats.plainText);
     return (
       hasText: text != null && text.isNotEmpty,
@@ -67,16 +67,39 @@ class MediaClipboard {
   }
 
   Future<MediaClipboardContents> read() async {
-    final clipboard = SystemClipboard.instance;
-    // Null on a platform with no clipboard support at all. Nothing to paste
-    // is not an error — the caller falls back to Flutter's text clipboard.
-    if (clipboard == null) return MediaClipboardContents.empty;
+    final reader = await _reader();
+    if (reader == null) return MediaClipboardContents.empty;
 
-    final reader = await clipboard.read();
     return MediaClipboardContents(
       text: await reader.readValue(Formats.plainText),
       imageBytes: await readImageFrom(reader),
     );
+  }
+
+  /// The system clipboard's reader, or null when there is nothing to read.
+  ///
+  /// Null on a platform with no clipboard support at all. Nothing to paste
+  /// is not an error — the caller falls back to Flutter's text clipboard.
+  ///
+  /// Also null when the clipboard cannot be opened: Windows lets one process
+  /// hold it at a time, so OpenClipboard fails (CLIPBRD_E_CANT_OPEN) while a
+  /// clipboard manager or a screenshot tool still writing has it open. That
+  /// clears within milliseconds, so retry briefly before giving up rather
+  /// than letting the paste throw.
+  static Future<ClipboardReader?> _reader() async {
+    final clipboard = SystemClipboard.instance;
+    if (clipboard == null) return null;
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await clipboard.read();
+      } on PlatformException catch (error) {
+        if (attempt == 3) {
+          debugPrint('[clipboard] could not open: ${error.message}');
+          return null;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
   }
 
   /// Pulls the first readable image out of any reader — a clipboard's or a

@@ -790,6 +790,26 @@ class OutboxSyncWorker {
           DriftPhotoSeriesRepository(_db).getBlob,
           vaultBlobToFirestore,
         );
+      case FirestoreCollections.photoSeries:
+        return byId(
+          DriftPhotoSeriesRepository(_db).getSeries,
+          photoSeriesToFirestore,
+        );
+      case FirestoreCollections.photoSeriesAngles:
+        return byId(
+          DriftPhotoSeriesRepository(_db).getAngle,
+          photoSeriesAngleToFirestore,
+        );
+      case FirestoreCollections.photoCheckIns:
+        return byId(
+          DriftPhotoSeriesRepository(_db).getCheckIn,
+          photoCheckInToFirestore,
+        );
+      case FirestoreCollections.photoCheckInImages:
+        return byId(
+          DriftPhotoSeriesRepository(_db).getImage,
+          photoCheckInImageToFirestore,
+        );
       case FirestoreCollections.pinnedNotes:
         return byId(
           DriftNotificationRepository(_db).getPinnedNote,

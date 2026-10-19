@@ -4,6 +4,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 /// Reads a note's server copy and writes what `decide` returns for it, in one
@@ -190,9 +191,12 @@ Future<int> retireSecureNotes(NotificationRepository repo) async {
   return deleted;
 }
 
-/// [retireSecureNotes] for Photo Series' encrypted images: tombstones every
-/// live blob sealed under a retired vault, whose files the purge then
-/// deletes. Returns how many it tombstoned.
+/// [retireSecureNotes] for Photo Series (PHOTO_SERIES_HLD.md §6.7):
+/// tombstones every live blob sealed under a retired vault, whose files the
+/// purge then deletes, and the images showing them. Check-in notes sealed
+/// under one are cleared, and a check-in left with no image goes too, so
+/// streaks count only what can still be seen. Returns how many rows it
+/// changed.
 Future<int> retireVaultBlobs(
   NotificationRepository notes,
   PhotoSeriesRepository photos,
@@ -202,13 +206,40 @@ Future<int> retireVaultBlobs(
   final retired = SecureVaultHeader.fromJson(json).retiredVaultIds.toSet();
   if (retired.isEmpty) return 0;
   final now = utcNow();
-  var deleted = 0;
-  for (final blob in await photos.listBlobs()) {
+  var changed = 0;
+  final retiredBlobs = <String>{};
+  for (final blob in await photos.listBlobs(includeDeleted: true)) {
     if (!retired.contains(blob.vaultId)) continue;
+    retiredBlobs.add(blob.id);
+    if (blob.deletedAt != null) continue;
     await photos.upsertBlob(blob.copyWith(deletedAt: now, bumpVersion: true));
-    deleted++;
+    changed++;
   }
-  return deleted;
+  final images = <PhotoCheckInImage>[];
+  final lost = <String>{};
+  final shown = <String>{};
+  for (final image in await photos.listImages()) {
+    if (retiredBlobs.contains(image.blobId)) {
+      images.add(image.copyWith(deletedAt: now, bumpVersion: true));
+      lost.add(image.checkInId);
+    } else {
+      shown.add(image.checkInId);
+    }
+  }
+  final checkIns = <PhotoCheckIn>[];
+  for (final checkIn in await photos.listCheckIns()) {
+    final emptied =
+        lost.contains(checkIn.id) && !shown.contains(checkIn.id);
+    if (emptied) {
+      checkIns.add(checkIn.copyWith(deletedAt: now, bumpVersion: true));
+    } else if (retired.contains(checkIn.vaultId)) {
+      checkIns.add(checkIn.copyWith(clearNote: true, bumpVersion: true));
+    }
+  }
+  if (images.isNotEmpty || checkIns.isNotEmpty) {
+    await photos.saveAll(checkIns: checkIns, images: images);
+  }
+  return changed + images.length + checkIns.length;
 }
 
 /// Applies the server's copy of note [id] — a pull's half of the conflict

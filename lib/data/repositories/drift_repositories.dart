@@ -8901,6 +8901,274 @@ class DriftPhotoSeriesRepository implements PhotoSeriesRepository {
   final _policy = const SoftDeletePolicy();
 
   @override
+  Stream<PhotoSeriesSnapshot> watchSnapshot() async* {
+    yield await loadSnapshot();
+    yield* _db
+        .tableUpdates(
+          TableUpdateQuery.onAllTables([
+            _db.photoSeriesTable,
+            _db.photoSeriesAnglesTable,
+            _db.photoCheckInsTable,
+            _db.photoCheckInImagesTable,
+          ]),
+        )
+        .asyncMap((_) => loadSnapshot());
+  }
+
+  @override
+  Future<PhotoSeriesSnapshot> loadSnapshot() async {
+    // One read transaction, so a write landing between the four selects
+    // can't show a check-in without its images.
+    return _db.transaction(
+      () async => PhotoSeriesSnapshot(
+        series: await listSeries(),
+        angles: await listAngles(),
+        checkIns: await listCheckIns(),
+        images: await listImages(),
+      ),
+    );
+  }
+
+  @override
+  Future<List<PhotoSeries>> listSeries({bool includeDeleted = false}) async {
+    final rows =
+        await (_db.select(_db.photoSeriesTable)
+              ..where(
+                (t) => includeDeleted
+                    ? const Constant(true)
+                    : t.deletedAt.isNull(),
+              )
+              ..orderBy([
+                (t) => OrderingTerm(expression: t.sortOrder),
+                (t) => OrderingTerm(expression: t.createdAt),
+              ]))
+            .get();
+    return rows.map(_mapPhotoSeries).toList();
+  }
+
+  @override
+  Future<PhotoSeries?> getSeries(String id) async {
+    final row = await (_db.select(
+      _db.photoSeriesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapPhotoSeries(row);
+  }
+
+  @override
+  Future<void> upsertSeries(
+    PhotoSeries series, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.photoSeriesTable)
+        .insertOnConflictUpdate(_seriesRow(series));
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.photoSeries, series);
+    }
+  }
+
+  @override
+  Future<List<PhotoSeriesAngle>> listAngles({
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.photoSeriesAnglesTable)
+              ..where(
+                (t) => includeDeleted
+                    ? const Constant(true)
+                    : t.deletedAt.isNull(),
+              )
+              ..orderBy([
+                (t) => OrderingTerm(expression: t.sortOrder),
+                (t) => OrderingTerm(expression: t.createdAt),
+              ]))
+            .get();
+    return rows.map(_mapPhotoAngle).toList();
+  }
+
+  @override
+  Future<PhotoSeriesAngle?> getAngle(String id) async {
+    final row = await (_db.select(
+      _db.photoSeriesAnglesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapPhotoAngle(row);
+  }
+
+  @override
+  Future<void> upsertAngle(
+    PhotoSeriesAngle angle, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.photoSeriesAnglesTable)
+        .insertOnConflictUpdate(_angleRow(angle));
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.photoSeriesAngles, angle);
+    }
+  }
+
+  @override
+  Future<List<PhotoCheckIn>> listCheckIns({bool includeDeleted = false}) async {
+    final rows =
+        await (_db.select(_db.photoCheckInsTable)
+              ..where(
+                (t) => includeDeleted
+                    ? const Constant(true)
+                    : t.deletedAt.isNull(),
+              )
+              ..orderBy([
+                (t) => OrderingTerm(expression: t.takenOn),
+                (t) => OrderingTerm(expression: t.createdAt),
+              ]))
+            .get();
+    return rows.map(_mapPhotoCheckIn).toList();
+  }
+
+  @override
+  Future<PhotoCheckIn?> getCheckIn(String id) async {
+    final row = await (_db.select(
+      _db.photoCheckInsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapPhotoCheckIn(row);
+  }
+
+  @override
+  Future<void> upsertCheckIn(
+    PhotoCheckIn checkIn, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.photoCheckInsTable)
+        .insertOnConflictUpdate(_checkInRow(checkIn));
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.photoCheckIns, checkIn);
+    }
+  }
+
+  @override
+  Future<List<PhotoCheckInImage>> listImages({
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.photoCheckInImagesTable)..where(
+              (t) =>
+                  includeDeleted ? const Constant(true) : t.deletedAt.isNull(),
+            ))
+            .get();
+    return rows.map(_mapPhotoImage).toList();
+  }
+
+  @override
+  Future<PhotoCheckInImage?> getImage(String id) async {
+    final row = await (_db.select(
+      _db.photoCheckInImagesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapPhotoImage(row);
+  }
+
+  @override
+  Future<void> upsertImage(
+    PhotoCheckInImage image, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.photoCheckInImagesTable)
+        .insertOnConflictUpdate(_imageRow(image));
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.photoCheckInImages, image);
+    }
+  }
+
+  @override
+  Future<void> saveAll({
+    List<PhotoSeries> series = const [],
+    List<PhotoSeriesAngle> angles = const [],
+    List<PhotoCheckIn> checkIns = const [],
+    List<PhotoCheckInImage> images = const [],
+  }) async {
+    await _db.batch((batch) {
+      batch.insertAllOnConflictUpdate(_db.photoSeriesTable, [
+        for (final row in series) _seriesRow(row),
+      ]);
+      batch.insertAllOnConflictUpdate(_db.photoSeriesAnglesTable, [
+        for (final row in angles) _angleRow(row),
+      ]);
+      batch.insertAllOnConflictUpdate(_db.photoCheckInsTable, [
+        for (final row in checkIns) _checkInRow(row),
+      ]);
+      batch.insertAllOnConflictUpdate(_db.photoCheckInImagesTable, [
+        for (final row in images) _imageRow(row),
+      ]);
+    });
+    // Containers first, so the server never holds an image whose check-in
+    // it hasn't heard of.
+    _syncedWrites?.notify(FirestoreCollections.photoSeries, series);
+    _syncedWrites?.notify(FirestoreCollections.photoSeriesAngles, angles);
+    _syncedWrites?.notify(FirestoreCollections.photoCheckIns, checkIns);
+    _syncedWrites?.notify(FirestoreCollections.photoCheckInImages, images);
+  }
+
+  @override
+  Future<void> purgeExpiredRecords(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+    await _db.transaction(() async {
+      await (_db.delete(_db.photoCheckInImagesTable)..where(
+            (t) =>
+                _expired(t.deletedAt, cutoff) &
+                _notOwedUpload(
+                  _db,
+                  FirestoreCollections.photoCheckInImages,
+                  t.id,
+                ),
+          ))
+          .go();
+      await (_db.delete(_db.photoCheckInsTable)..where(
+            (t) =>
+                _expired(t.deletedAt, cutoff) &
+                _notOwedUpload(_db, FirestoreCollections.photoCheckIns, t.id),
+          ))
+          .go();
+      await (_db.delete(_db.photoSeriesAnglesTable)..where(
+            (t) =>
+                _expired(t.deletedAt, cutoff) &
+                _notOwedUpload(
+                  _db,
+                  FirestoreCollections.photoSeriesAngles,
+                  t.id,
+                ),
+          ))
+          .go();
+      await (_db.delete(_db.photoSeriesTable)..where(
+            (t) =>
+                _expired(t.deletedAt, cutoff) &
+                _notOwedUpload(_db, FirestoreCollections.photoSeries, t.id),
+          ))
+          .go();
+    });
+  }
+
+  @override
+  Future<int> releaseBlobs(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+    final named = <String>{};
+    final claimed = <String>{};
+    for (final image in await listImages(includeDeleted: true)) {
+      named.add(image.blobId);
+      if (!isErasedAt(image.deletedAt)) claimed.add(image.blobId);
+    }
+    final released = [
+      for (final blob in await listBlobs())
+        if (!claimed.contains(blob.id) &&
+            (named.contains(blob.id) || blob.createdAt.isBefore(cutoff)))
+          blob.copyWith(deletedAt: cutoff, bumpVersion: true),
+    ];
+    for (final blob in released) {
+      await upsertBlob(blob);
+    }
+    return released.length;
+  }
+
+  @override
   Future<List<VaultBlob>> listBlobs({bool includeDeleted = false}) async {
     final rows =
         await (_db.select(_db.vaultBlobsTable)..where(
@@ -9081,3 +9349,129 @@ VaultBlob _mapBlob(VaultBlobsTableData row) => VaultBlob(
   version: row.version,
   deletedAt: row.deletedAt,
 );
+
+PhotoSeriesTableCompanion _seriesRow(PhotoSeries series) =>
+    PhotoSeriesTableCompanion(
+      id: Value(series.id),
+      name: Value(series.name),
+      cadence: Value(series.cadence.name),
+      reminderEnabled: Value(series.reminderEnabled),
+      reminderMinutes: Value(series.reminderMinutes),
+      reminderWeekday: Value(series.reminderWeekday),
+      reminderMonthDay: Value(series.reminderMonthDay),
+      reminderMonth: Value(series.reminderMonth),
+      playbackFps: Value(series.playbackFps),
+      sortOrder: Value(series.sortOrder),
+      createdAt: Value(series.createdAt),
+      updatedAt: Value(series.updatedAt),
+      version: Value(series.version),
+      deletedAt: Value(series.deletedAt),
+    );
+
+PhotoSeries _mapPhotoSeries(PhotoSeriesTableData row) => PhotoSeries(
+  id: row.id,
+  name: row.name,
+  cadence: _enumByName(
+    TrackerCadence.values,
+    row.cadence,
+    TrackerCadence.weekly,
+  ),
+  reminderEnabled: row.reminderEnabled,
+  reminderMinutes: row.reminderMinutes,
+  reminderWeekday: row.reminderWeekday,
+  reminderMonthDay: row.reminderMonthDay,
+  reminderMonth: row.reminderMonth,
+  playbackFps: row.playbackFps,
+  sortOrder: row.sortOrder,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
+PhotoSeriesAnglesTableCompanion _angleRow(PhotoSeriesAngle angle) =>
+    PhotoSeriesAnglesTableCompanion(
+      id: Value(angle.id),
+      seriesId: Value(angle.seriesId),
+      name: Value(angle.name),
+      sortOrder: Value(angle.sortOrder),
+      referenceImageId: Value(angle.referenceImageId),
+      frameAspect: Value(angle.frameAspect),
+      createdAt: Value(angle.createdAt),
+      updatedAt: Value(angle.updatedAt),
+      version: Value(angle.version),
+      deletedAt: Value(angle.deletedAt),
+    );
+
+PhotoSeriesAngle _mapPhotoAngle(PhotoSeriesAnglesTableData row) =>
+    PhotoSeriesAngle(
+      id: row.id,
+      seriesId: row.seriesId,
+      name: row.name,
+      sortOrder: row.sortOrder,
+      referenceImageId: row.referenceImageId,
+      frameAspect: row.frameAspect,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+    );
+
+PhotoCheckInsTableCompanion _checkInRow(PhotoCheckIn checkIn) =>
+    PhotoCheckInsTableCompanion(
+      id: Value(checkIn.id),
+      seriesId: Value(checkIn.seriesId),
+      takenOn: Value(photoStoredDate(checkIn.takenOn)),
+      noteCiphertext: Value(checkIn.noteCiphertext),
+      noteNonce: Value(checkIn.noteNonce),
+      vaultId: Value(checkIn.vaultId),
+      createdAt: Value(checkIn.createdAt),
+      updatedAt: Value(checkIn.updatedAt),
+      version: Value(checkIn.version),
+      deletedAt: Value(checkIn.deletedAt),
+    );
+
+PhotoCheckIn _mapPhotoCheckIn(PhotoCheckInsTableData row) => PhotoCheckIn(
+  id: row.id,
+  seriesId: row.seriesId,
+  takenOn: photoCalendarDate(row.takenOn),
+  noteCiphertext: row.noteCiphertext,
+  noteNonce: row.noteNonce,
+  vaultId: row.vaultId,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
+PhotoCheckInImagesTableCompanion _imageRow(PhotoCheckInImage image) =>
+    PhotoCheckInImagesTableCompanion(
+      id: Value(image.id),
+      checkInId: Value(image.checkInId),
+      angleId: Value(image.angleId),
+      blobId: Value(image.blobId),
+      alignScale: Value(image.alignScale),
+      alignRotation: Value(image.alignRotation),
+      alignDx: Value(image.alignDx),
+      alignDy: Value(image.alignDy),
+      createdAt: Value(image.createdAt),
+      updatedAt: Value(image.updatedAt),
+      version: Value(image.version),
+      deletedAt: Value(image.deletedAt),
+    );
+
+PhotoCheckInImage _mapPhotoImage(PhotoCheckInImagesTableData row) =>
+    PhotoCheckInImage(
+      id: row.id,
+      checkInId: row.checkInId,
+      angleId: row.angleId,
+      blobId: row.blobId,
+      alignScale: row.alignScale,
+      alignRotation: row.alignRotation,
+      alignDx: row.alignDx,
+      alignDy: row.alignDy,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+    );

@@ -17,7 +17,7 @@ Future<void> toggleSecureVault(BuildContext context, WidgetRef ref) async {
   if (!context.mounted) return;
   ref.invalidate(secureVaultHeaderProvider);
   if (header == null) {
-    await _showSetup(context, ref);
+    await showSecureVaultSetupDialog(context, ref);
   } else {
     await _showUnlock(context, ref);
   }
@@ -49,14 +49,15 @@ Future<void> showChangeVaultPasswordDialog(
   );
 }
 
-Future<void> _showSetup(BuildContext context, WidgetRef ref) {
+/// Asks for a new vault's password and opens the vault it makes.
+Future<void> showSecureVaultSetupDialog(BuildContext context, WidgetRef ref) {
   final service = ref.read(secureVaultServiceProvider);
   return _show(
     context,
     title: 'Create secure vault',
     message:
-        'Secure notes are encrypted with this password. If you forget it, '
-        'the notes are gone — there is no way to recover them.',
+        'Secure notes and photos are encrypted with this password. If you '
+        'forget it, they are gone — there is no way to recover them.',
     fields: const [_Field('Password'), _Field('Confirm password')],
     confirmLabel: 'Create',
     submit: (values) async {
@@ -74,7 +75,6 @@ Future<void> _showSetup(BuildContext context, WidgetRef ref) {
 }
 
 Future<void> _showUnlock(BuildContext context, WidgetRef ref) async {
-  final service = ref.read(secureVaultServiceProvider);
   final repository = ref.read(notificationRepositoryProvider);
   // Told here rather than when it happened: the vault is hidden, and anyone
   // could be looking at the screen when a reset arrives.
@@ -87,30 +87,37 @@ Future<void> _showUnlock(BuildContext context, WidgetRef ref) async {
     message: lost == 0 ? null : _lostNotesMessage(lost),
     fields: const [_Field('Password')],
     confirmLabel: 'Unlock',
-    submit: (values) async {
-      final key = await service.unlock(values[0]);
-      if (key == null) return 'Wrong password.';
-      final header = await service.localHeader();
-      ref
-          .read(secureVaultSessionProvider.notifier)
-          .unlock(key, header!.vaultId);
-      await repository.setLostSecureNoteCount(0);
-      return null;
-    },
+    submit: (values) => unlockSecureVault(ref, values[0]),
     secondaryLabel: 'Reset vault',
     onSecondary: () => reset = true,
   );
-  if (reset && context.mounted) await _showReset(context, ref);
+  if (reset && context.mounted) await showSecureVaultResetDialog(context, ref);
 }
 
-Future<void> _showReset(BuildContext context, WidgetRef ref) {
+/// Opens the vault with [password]. A message for the user when it can't —
+/// the wrong password — and null once it is open. Throws
+/// [SecureVaultException] as the service does.
+Future<String?> unlockSecureVault(WidgetRef ref, String password) async {
+  final service = ref.read(secureVaultServiceProvider);
+  final repository = ref.read(notificationRepositoryProvider);
+  final key = await service.unlock(password);
+  if (key == null) return 'Wrong password.';
+  final header = await service.localHeader();
+  ref.read(secureVaultSessionProvider.notifier).unlock(key, header!.vaultId);
+  await repository.setLostSecureNoteCount(0);
+  return null;
+}
+
+/// Starts a new, empty vault after confirming, deleting everything sealed
+/// under the old one.
+Future<void> showSecureVaultResetDialog(BuildContext context, WidgetRef ref) {
   final service = ref.read(secureVaultServiceProvider);
   return _show(
     context,
     title: 'Reset vault',
     message:
-        'This permanently deletes every secure note, on every device, and '
-        'starts a new vault. Type RESET to confirm.',
+        'This permanently deletes every secure note and photo, on every '
+        'device, and starts a new vault. Type RESET to confirm.',
     fields: const [
       _Field('Type RESET', obscure: false),
       _Field('New password'),

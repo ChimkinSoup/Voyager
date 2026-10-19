@@ -26,6 +26,7 @@ import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/soft_deletable.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -1105,6 +1106,205 @@ VaultBlob mergeVaultBlobFromRemote(
         remoteUpdated,
     updatedAt: remoteUpdated,
     version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+/// Whether a remote copy loses to [local] — the later-save-wins check every
+/// Photo Series row merges by.
+bool _photoLocalWins(Map<String, dynamic> data, SoftDeletable? local) =>
+    local != null &&
+    !remoteVersionWins(
+      remoteVersion: parseVersion(data),
+      localVersion: local.version,
+      remoteUpdated: parseFirestoreDate(data['updatedAt']) ?? utcNow(),
+      localUpdated: local.updatedAt,
+      remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+      localDeleted: local.deletedAt != null,
+    );
+
+Map<String, dynamic> photoSeriesToFirestore(PhotoSeries series) => {
+  'id': series.id,
+  'name': series.name,
+  'cadence': series.cadence.name,
+  'reminderEnabled': series.reminderEnabled,
+  'reminderMinutes': series.reminderMinutes,
+  'reminderWeekday': series.reminderWeekday,
+  'reminderMonthDay': series.reminderMonthDay,
+  'reminderMonth': series.reminderMonth,
+  'playbackFps': series.playbackFps,
+  'sortOrder': series.sortOrder,
+  'createdAt': _dateToFirestoreRequired(series.createdAt),
+  'updatedAt': _dateToFirestoreRequired(series.updatedAt),
+  'version': series.version,
+  'deletedAt': _dateToFirestore(series.deletedAt),
+};
+
+PhotoSeries mergePhotoSeriesFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  PhotoSeries? local,
+}) {
+  if (_photoLocalWins(data, local)) return local!;
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  int number(String key, int fallback) =>
+      (data[key] as num?)?.toInt() ?? fallback;
+  return PhotoSeries(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    cadence: _enumFromName(
+      TrackerCadence.values,
+      data['cadence'],
+      local?.cadence ?? TrackerCadence.weekly,
+    ),
+    reminderEnabled:
+        data['reminderEnabled'] as bool? ?? local?.reminderEnabled ?? true,
+    reminderMinutes: number(
+      'reminderMinutes',
+      local?.reminderMinutes ?? 9 * 60,
+    ),
+    reminderWeekday: number('reminderWeekday', local?.reminderWeekday ?? 1),
+    reminderMonthDay: number('reminderMonthDay', local?.reminderMonthDay ?? 1),
+    reminderMonth: number('reminderMonth', local?.reminderMonth ?? 1),
+    playbackFps: number('playbackFps', local?.playbackFps ?? 4),
+    sortOrder: number('sortOrder', local?.sortOrder ?? 0),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> photoSeriesAngleToFirestore(PhotoSeriesAngle angle) => {
+  'id': angle.id,
+  'seriesId': angle.seriesId,
+  'name': angle.name,
+  'sortOrder': angle.sortOrder,
+  'referenceImageId': angle.referenceImageId,
+  'frameAspect': angle.frameAspect,
+  'createdAt': _dateToFirestoreRequired(angle.createdAt),
+  'updatedAt': _dateToFirestoreRequired(angle.updatedAt),
+  'version': angle.version,
+  'deletedAt': _dateToFirestore(angle.deletedAt),
+};
+
+PhotoSeriesAngle mergePhotoSeriesAngleFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  PhotoSeriesAngle? local,
+}) {
+  if (_photoLocalWins(data, local)) return local!;
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return PhotoSeriesAngle(
+    id: id,
+    seriesId: data['seriesId'] as String? ?? local?.seriesId ?? '',
+    name: data['name'] as String? ?? local?.name ?? '',
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    // Presence, not nullness: a reference cleared elsewhere clears here.
+    referenceImageId: data.containsKey('referenceImageId')
+        ? data['referenceImageId'] as String?
+        : local?.referenceImageId,
+    frameAspect:
+        (data['frameAspect'] as num?)?.toDouble() ?? local?.frameAspect,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+/// [PhotoCheckIn.takenOn] goes as its UTC-midnight form, so every zone reads
+/// the same day back.
+Map<String, dynamic> photoCheckInToFirestore(PhotoCheckIn checkIn) => {
+  'id': checkIn.id,
+  'seriesId': checkIn.seriesId,
+  'takenOn': photoStoredDate(checkIn.takenOn).toIso8601String(),
+  'noteCiphertext': checkIn.noteCiphertext,
+  'noteNonce': checkIn.noteNonce,
+  'vaultId': checkIn.vaultId,
+  'createdAt': _dateToFirestoreRequired(checkIn.createdAt),
+  'updatedAt': _dateToFirestoreRequired(checkIn.updatedAt),
+  'version': checkIn.version,
+  'deletedAt': _dateToFirestore(checkIn.deletedAt),
+};
+
+PhotoCheckIn mergePhotoCheckInFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  PhotoCheckIn? local,
+}) {
+  if (_photoLocalWins(data, local)) return local!;
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final takenOn = parseFirestoreDate(data['takenOn']);
+  // The note's three fields go together: a note cleared elsewhere clears
+  // them all.
+  final hasNote = data.containsKey('noteCiphertext');
+  return PhotoCheckIn(
+    id: id,
+    seriesId: data['seriesId'] as String? ?? local?.seriesId ?? '',
+    takenOn: takenOn != null
+        ? photoCalendarDate(takenOn)
+        : local?.takenOn ?? photoCalendarDate(remoteUpdated),
+    noteCiphertext: hasNote
+        ? data['noteCiphertext'] as String?
+        : local?.noteCiphertext,
+    noteNonce: hasNote ? data['noteNonce'] as String? : local?.noteNonce,
+    vaultId: hasNote ? data['vaultId'] as String? : local?.vaultId,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> photoCheckInImageToFirestore(PhotoCheckInImage image) => {
+  'id': image.id,
+  'checkInId': image.checkInId,
+  'angleId': image.angleId,
+  'blobId': image.blobId,
+  'alignScale': image.alignScale,
+  'alignRotation': image.alignRotation,
+  'alignDx': image.alignDx,
+  'alignDy': image.alignDy,
+  'createdAt': _dateToFirestoreRequired(image.createdAt),
+  'updatedAt': _dateToFirestoreRequired(image.updatedAt),
+  'version': image.version,
+  'deletedAt': _dateToFirestore(image.deletedAt),
+};
+
+PhotoCheckInImage mergePhotoCheckInImageFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  PhotoCheckInImage? local,
+}) {
+  if (_photoLocalWins(data, local)) return local!;
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  double number(String key, double fallback) =>
+      (data[key] as num?)?.toDouble() ?? fallback;
+  return PhotoCheckInImage(
+    id: id,
+    checkInId: data['checkInId'] as String? ?? local?.checkInId ?? '',
+    angleId: data['angleId'] as String? ?? local?.angleId ?? '',
+    blobId: data['blobId'] as String? ?? local?.blobId ?? '',
+    alignScale: number('alignScale', local?.alignScale ?? 1),
+    alignRotation: number('alignRotation', local?.alignRotation ?? 0),
+    alignDx: number('alignDx', local?.alignDx ?? 0),
+    alignDy: number('alignDy', local?.alignDy ?? 0),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }

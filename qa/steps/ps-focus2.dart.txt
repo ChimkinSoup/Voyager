@@ -1,0 +1,1 @@
+final f = FocusManager.instance.primaryFocus; final names = <String>[]; f?.context?.visitAncestorElements((a) { names.add(a.widget.runtimeType.toString()); return names.length < 14; }); debugPrint('PS-F2 ' + f.toString() + ' up=' + names.join('>'));

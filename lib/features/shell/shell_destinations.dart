@@ -13,6 +13,7 @@ import 'package:voyager/features/journal/journal_page.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_page.dart';
 import 'package:voyager/features/life_tracker/life_tracker_page.dart';
+import 'package:voyager/features/photo_series/photo_series_page.dart';
 import 'package:voyager/features/rankings/rankings_page.dart';
 import 'package:voyager/features/search/search_page.dart';
 import 'package:voyager/features/settings/settings_page.dart';
@@ -133,6 +134,12 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.barbell,
     label: 'Workout',
     page: WorkoutPage(),
+  ),
+  ShellDestination(
+    path: '/photo-series',
+    icon: PhosphorIconsRegular.images,
+    label: 'Photos',
+    page: PhotoSeriesPage(),
   ),
   // A playground, so release builds leave it out altogether.
   if (!kReleaseMode)

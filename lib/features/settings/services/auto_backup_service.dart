@@ -613,7 +613,9 @@ class AutoBackupService extends ChangeNotifier {
               d.compareTo(todayKey) < 0,
         );
 
-    final autoDays = {for (final e in autos) backupDayKey(e.capturedAt.toLocal())};
+    final autoDays = {
+      for (final e in autos) backupDayKey(e.capturedAt.toLocal()),
+    };
     final lastTwo = opened.length < 2
         ? const <String>[]
         : opened.sublist(opened.length - 2);

@@ -1791,6 +1791,85 @@ class VaultBlobsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A recurring photo series — see [PhotoSeries].
+class PhotoSeriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+
+  /// By `name`, a [TrackerCadence].
+  TextColumn get cadence => text().withDefault(const Constant('weekly'))();
+  BoolColumn get reminderEnabled =>
+      boolean().withDefault(const Constant(true))();
+  IntColumn get reminderMinutes =>
+      integer().withDefault(const Constant(9 * 60))();
+  IntColumn get reminderWeekday => integer().withDefault(const Constant(1))();
+  IntColumn get reminderMonthDay => integer().withDefault(const Constant(1))();
+  IntColumn get reminderMonth => integer().withDefault(const Constant(1))();
+  IntColumn get playbackFps => integer().withDefault(const Constant(4))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One of a series' angles — see [PhotoSeriesAngle].
+class PhotoSeriesAnglesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get seriesId => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  TextColumn get referenceImageId => text().nullable()();
+  RealColumn get frameAspect => real().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One check-in of a series — see [PhotoCheckIn]. [takenOn] is UTC midnight
+/// of the calendar date.
+class PhotoCheckInsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get seriesId => text()();
+  DateTimeColumn get takenOn => dateTime()();
+  TextColumn get noteCiphertext => text().nullable()();
+  TextColumn get noteNonce => text().nullable()();
+  TextColumn get vaultId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A check-in's photo of one angle — see [PhotoCheckInImage].
+class PhotoCheckInImagesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get checkInId => text()();
+  TextColumn get angleId => text()();
+  TextColumn get blobId => text()();
+  RealColumn get alignScale => real().withDefault(const Constant(1))();
+  RealColumn get alignRotation => real().withDefault(const Constant(0))();
+  RealColumn get alignDx => real().withDefault(const Constant(0))();
+  RealColumn get alignDy => real().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// A Storage object a purge owes a delete, by its path under the user's
 /// prefix (`media/{hash}`, `vault_media/{id}`). Written with the purge that
 /// drops its row, and kept until the delete lands, so an offline or failed
@@ -2117,6 +2196,10 @@ class LeetCodeCheatEntriesTable extends Table {
     MediaReferencesTable,
     VaultBlobsTable,
     PendingRemoteDeletesTable,
+    PhotoSeriesTable,
+    PhotoSeriesAnglesTable,
+    PhotoCheckInsTable,
+    PhotoCheckInImagesTable,
     RankingCategoriesTable,
     RankingParentsTable,
     RankingChildrenTable,
@@ -2131,7 +2214,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 158;
+  int get schemaVersion => 159;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3863,6 +3946,12 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 158) {
         await migrator.createTable(pendingRemoteDeletesTable);
+      }
+      if (from < 159) {
+        await migrator.createTable(photoSeriesTable);
+        await migrator.createTable(photoSeriesAnglesTable);
+        await migrator.createTable(photoCheckInsTable);
+        await migrator.createTable(photoCheckInImagesTable);
       }
     },
   );

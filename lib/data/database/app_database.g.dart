@@ -47884,6 +47884,2773 @@ class PendingRemoteDeletesTableCompanion
   }
 }
 
+class $PhotoSeriesTableTable extends PhotoSeriesTable
+    with TableInfo<$PhotoSeriesTableTable, PhotoSeriesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PhotoSeriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cadenceMeta = const VerificationMeta(
+    'cadence',
+  );
+  @override
+  late final GeneratedColumn<String> cadence = GeneratedColumn<String>(
+    'cadence',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('weekly'),
+  );
+  static const VerificationMeta _reminderEnabledMeta = const VerificationMeta(
+    'reminderEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> reminderEnabled = GeneratedColumn<bool>(
+    'reminder_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("reminder_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _reminderMinutesMeta = const VerificationMeta(
+    'reminderMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> reminderMinutes = GeneratedColumn<int>(
+    'reminder_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(9 * 60),
+  );
+  static const VerificationMeta _reminderWeekdayMeta = const VerificationMeta(
+    'reminderWeekday',
+  );
+  @override
+  late final GeneratedColumn<int> reminderWeekday = GeneratedColumn<int>(
+    'reminder_weekday',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _reminderMonthDayMeta = const VerificationMeta(
+    'reminderMonthDay',
+  );
+  @override
+  late final GeneratedColumn<int> reminderMonthDay = GeneratedColumn<int>(
+    'reminder_month_day',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _reminderMonthMeta = const VerificationMeta(
+    'reminderMonth',
+  );
+  @override
+  late final GeneratedColumn<int> reminderMonth = GeneratedColumn<int>(
+    'reminder_month',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _playbackFpsMeta = const VerificationMeta(
+    'playbackFps',
+  );
+  @override
+  late final GeneratedColumn<int> playbackFps = GeneratedColumn<int>(
+    'playback_fps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(4),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    cadence,
+    reminderEnabled,
+    reminderMinutes,
+    reminderWeekday,
+    reminderMonthDay,
+    reminderMonth,
+    playbackFps,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'photo_series_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PhotoSeriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('cadence')) {
+      context.handle(
+        _cadenceMeta,
+        cadence.isAcceptableOrUnknown(data['cadence']!, _cadenceMeta),
+      );
+    }
+    if (data.containsKey('reminder_enabled')) {
+      context.handle(
+        _reminderEnabledMeta,
+        reminderEnabled.isAcceptableOrUnknown(
+          data['reminder_enabled']!,
+          _reminderEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reminder_minutes')) {
+      context.handle(
+        _reminderMinutesMeta,
+        reminderMinutes.isAcceptableOrUnknown(
+          data['reminder_minutes']!,
+          _reminderMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reminder_weekday')) {
+      context.handle(
+        _reminderWeekdayMeta,
+        reminderWeekday.isAcceptableOrUnknown(
+          data['reminder_weekday']!,
+          _reminderWeekdayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reminder_month_day')) {
+      context.handle(
+        _reminderMonthDayMeta,
+        reminderMonthDay.isAcceptableOrUnknown(
+          data['reminder_month_day']!,
+          _reminderMonthDayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reminder_month')) {
+      context.handle(
+        _reminderMonthMeta,
+        reminderMonth.isAcceptableOrUnknown(
+          data['reminder_month']!,
+          _reminderMonthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('playback_fps')) {
+      context.handle(
+        _playbackFpsMeta,
+        playbackFps.isAcceptableOrUnknown(
+          data['playback_fps']!,
+          _playbackFpsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PhotoSeriesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PhotoSeriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      cadence: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cadence'],
+      )!,
+      reminderEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reminder_enabled'],
+      )!,
+      reminderMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reminder_minutes'],
+      )!,
+      reminderWeekday: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reminder_weekday'],
+      )!,
+      reminderMonthDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reminder_month_day'],
+      )!,
+      reminderMonth: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reminder_month'],
+      )!,
+      playbackFps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}playback_fps'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $PhotoSeriesTableTable createAlias(String alias) {
+    return $PhotoSeriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class PhotoSeriesTableData extends DataClass
+    implements Insertable<PhotoSeriesTableData> {
+  final String id;
+  final String name;
+
+  /// By `name`, a [TrackerCadence].
+  final String cadence;
+  final bool reminderEnabled;
+  final int reminderMinutes;
+  final int reminderWeekday;
+  final int reminderMonthDay;
+  final int reminderMonth;
+  final int playbackFps;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const PhotoSeriesTableData({
+    required this.id,
+    required this.name,
+    required this.cadence,
+    required this.reminderEnabled,
+    required this.reminderMinutes,
+    required this.reminderWeekday,
+    required this.reminderMonthDay,
+    required this.reminderMonth,
+    required this.playbackFps,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['cadence'] = Variable<String>(cadence);
+    map['reminder_enabled'] = Variable<bool>(reminderEnabled);
+    map['reminder_minutes'] = Variable<int>(reminderMinutes);
+    map['reminder_weekday'] = Variable<int>(reminderWeekday);
+    map['reminder_month_day'] = Variable<int>(reminderMonthDay);
+    map['reminder_month'] = Variable<int>(reminderMonth);
+    map['playback_fps'] = Variable<int>(playbackFps);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  PhotoSeriesTableCompanion toCompanion(bool nullToAbsent) {
+    return PhotoSeriesTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      cadence: Value(cadence),
+      reminderEnabled: Value(reminderEnabled),
+      reminderMinutes: Value(reminderMinutes),
+      reminderWeekday: Value(reminderWeekday),
+      reminderMonthDay: Value(reminderMonthDay),
+      reminderMonth: Value(reminderMonth),
+      playbackFps: Value(playbackFps),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory PhotoSeriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PhotoSeriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      cadence: serializer.fromJson<String>(json['cadence']),
+      reminderEnabled: serializer.fromJson<bool>(json['reminderEnabled']),
+      reminderMinutes: serializer.fromJson<int>(json['reminderMinutes']),
+      reminderWeekday: serializer.fromJson<int>(json['reminderWeekday']),
+      reminderMonthDay: serializer.fromJson<int>(json['reminderMonthDay']),
+      reminderMonth: serializer.fromJson<int>(json['reminderMonth']),
+      playbackFps: serializer.fromJson<int>(json['playbackFps']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'cadence': serializer.toJson<String>(cadence),
+      'reminderEnabled': serializer.toJson<bool>(reminderEnabled),
+      'reminderMinutes': serializer.toJson<int>(reminderMinutes),
+      'reminderWeekday': serializer.toJson<int>(reminderWeekday),
+      'reminderMonthDay': serializer.toJson<int>(reminderMonthDay),
+      'reminderMonth': serializer.toJson<int>(reminderMonth),
+      'playbackFps': serializer.toJson<int>(playbackFps),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  PhotoSeriesTableData copyWith({
+    String? id,
+    String? name,
+    String? cadence,
+    bool? reminderEnabled,
+    int? reminderMinutes,
+    int? reminderWeekday,
+    int? reminderMonthDay,
+    int? reminderMonth,
+    int? playbackFps,
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => PhotoSeriesTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    cadence: cadence ?? this.cadence,
+    reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+    reminderMinutes: reminderMinutes ?? this.reminderMinutes,
+    reminderWeekday: reminderWeekday ?? this.reminderWeekday,
+    reminderMonthDay: reminderMonthDay ?? this.reminderMonthDay,
+    reminderMonth: reminderMonth ?? this.reminderMonth,
+    playbackFps: playbackFps ?? this.playbackFps,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  PhotoSeriesTableData copyWithCompanion(PhotoSeriesTableCompanion data) {
+    return PhotoSeriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      cadence: data.cadence.present ? data.cadence.value : this.cadence,
+      reminderEnabled: data.reminderEnabled.present
+          ? data.reminderEnabled.value
+          : this.reminderEnabled,
+      reminderMinutes: data.reminderMinutes.present
+          ? data.reminderMinutes.value
+          : this.reminderMinutes,
+      reminderWeekday: data.reminderWeekday.present
+          ? data.reminderWeekday.value
+          : this.reminderWeekday,
+      reminderMonthDay: data.reminderMonthDay.present
+          ? data.reminderMonthDay.value
+          : this.reminderMonthDay,
+      reminderMonth: data.reminderMonth.present
+          ? data.reminderMonth.value
+          : this.reminderMonth,
+      playbackFps: data.playbackFps.present
+          ? data.playbackFps.value
+          : this.playbackFps,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoSeriesTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('cadence: $cadence, ')
+          ..write('reminderEnabled: $reminderEnabled, ')
+          ..write('reminderMinutes: $reminderMinutes, ')
+          ..write('reminderWeekday: $reminderWeekday, ')
+          ..write('reminderMonthDay: $reminderMonthDay, ')
+          ..write('reminderMonth: $reminderMonth, ')
+          ..write('playbackFps: $playbackFps, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    cadence,
+    reminderEnabled,
+    reminderMinutes,
+    reminderWeekday,
+    reminderMonthDay,
+    reminderMonth,
+    playbackFps,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PhotoSeriesTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.cadence == this.cadence &&
+          other.reminderEnabled == this.reminderEnabled &&
+          other.reminderMinutes == this.reminderMinutes &&
+          other.reminderWeekday == this.reminderWeekday &&
+          other.reminderMonthDay == this.reminderMonthDay &&
+          other.reminderMonth == this.reminderMonth &&
+          other.playbackFps == this.playbackFps &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> cadence;
+  final Value<bool> reminderEnabled;
+  final Value<int> reminderMinutes;
+  final Value<int> reminderWeekday;
+  final Value<int> reminderMonthDay;
+  final Value<int> reminderMonth;
+  final Value<int> playbackFps;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const PhotoSeriesTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.cadence = const Value.absent(),
+    this.reminderEnabled = const Value.absent(),
+    this.reminderMinutes = const Value.absent(),
+    this.reminderWeekday = const Value.absent(),
+    this.reminderMonthDay = const Value.absent(),
+    this.reminderMonth = const Value.absent(),
+    this.playbackFps = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PhotoSeriesTableCompanion.insert({
+    required String id,
+    required String name,
+    this.cadence = const Value.absent(),
+    this.reminderEnabled = const Value.absent(),
+    this.reminderMinutes = const Value.absent(),
+    this.reminderWeekday = const Value.absent(),
+    this.reminderMonthDay = const Value.absent(),
+    this.reminderMonth = const Value.absent(),
+    this.playbackFps = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<PhotoSeriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? cadence,
+    Expression<bool>? reminderEnabled,
+    Expression<int>? reminderMinutes,
+    Expression<int>? reminderWeekday,
+    Expression<int>? reminderMonthDay,
+    Expression<int>? reminderMonth,
+    Expression<int>? playbackFps,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (cadence != null) 'cadence': cadence,
+      if (reminderEnabled != null) 'reminder_enabled': reminderEnabled,
+      if (reminderMinutes != null) 'reminder_minutes': reminderMinutes,
+      if (reminderWeekday != null) 'reminder_weekday': reminderWeekday,
+      if (reminderMonthDay != null) 'reminder_month_day': reminderMonthDay,
+      if (reminderMonth != null) 'reminder_month': reminderMonth,
+      if (playbackFps != null) 'playback_fps': playbackFps,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PhotoSeriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? cadence,
+    Value<bool>? reminderEnabled,
+    Value<int>? reminderMinutes,
+    Value<int>? reminderWeekday,
+    Value<int>? reminderMonthDay,
+    Value<int>? reminderMonth,
+    Value<int>? playbackFps,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return PhotoSeriesTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      cadence: cadence ?? this.cadence,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      reminderMinutes: reminderMinutes ?? this.reminderMinutes,
+      reminderWeekday: reminderWeekday ?? this.reminderWeekday,
+      reminderMonthDay: reminderMonthDay ?? this.reminderMonthDay,
+      reminderMonth: reminderMonth ?? this.reminderMonth,
+      playbackFps: playbackFps ?? this.playbackFps,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (cadence.present) {
+      map['cadence'] = Variable<String>(cadence.value);
+    }
+    if (reminderEnabled.present) {
+      map['reminder_enabled'] = Variable<bool>(reminderEnabled.value);
+    }
+    if (reminderMinutes.present) {
+      map['reminder_minutes'] = Variable<int>(reminderMinutes.value);
+    }
+    if (reminderWeekday.present) {
+      map['reminder_weekday'] = Variable<int>(reminderWeekday.value);
+    }
+    if (reminderMonthDay.present) {
+      map['reminder_month_day'] = Variable<int>(reminderMonthDay.value);
+    }
+    if (reminderMonth.present) {
+      map['reminder_month'] = Variable<int>(reminderMonth.value);
+    }
+    if (playbackFps.present) {
+      map['playback_fps'] = Variable<int>(playbackFps.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoSeriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('cadence: $cadence, ')
+          ..write('reminderEnabled: $reminderEnabled, ')
+          ..write('reminderMinutes: $reminderMinutes, ')
+          ..write('reminderWeekday: $reminderWeekday, ')
+          ..write('reminderMonthDay: $reminderMonthDay, ')
+          ..write('reminderMonth: $reminderMonth, ')
+          ..write('playbackFps: $playbackFps, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PhotoSeriesAnglesTableTable extends PhotoSeriesAnglesTable
+    with TableInfo<$PhotoSeriesAnglesTableTable, PhotoSeriesAnglesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PhotoSeriesAnglesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
+  );
+  @override
+  late final GeneratedColumn<String> seriesId = GeneratedColumn<String>(
+    'series_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _referenceImageIdMeta = const VerificationMeta(
+    'referenceImageId',
+  );
+  @override
+  late final GeneratedColumn<String> referenceImageId = GeneratedColumn<String>(
+    'reference_image_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _frameAspectMeta = const VerificationMeta(
+    'frameAspect',
+  );
+  @override
+  late final GeneratedColumn<double> frameAspect = GeneratedColumn<double>(
+    'frame_aspect',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    seriesId,
+    name,
+    sortOrder,
+    referenceImageId,
+    frameAspect,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'photo_series_angles_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PhotoSeriesAnglesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('series_id')) {
+      context.handle(
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_seriesIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('reference_image_id')) {
+      context.handle(
+        _referenceImageIdMeta,
+        referenceImageId.isAcceptableOrUnknown(
+          data['reference_image_id']!,
+          _referenceImageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('frame_aspect')) {
+      context.handle(
+        _frameAspectMeta,
+        frameAspect.isAcceptableOrUnknown(
+          data['frame_aspect']!,
+          _frameAspectMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PhotoSeriesAnglesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PhotoSeriesAnglesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      seriesId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}series_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      referenceImageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_image_id'],
+      ),
+      frameAspect: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}frame_aspect'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $PhotoSeriesAnglesTableTable createAlias(String alias) {
+    return $PhotoSeriesAnglesTableTable(attachedDatabase, alias);
+  }
+}
+
+class PhotoSeriesAnglesTableData extends DataClass
+    implements Insertable<PhotoSeriesAnglesTableData> {
+  final String id;
+  final String seriesId;
+  final String name;
+  final int sortOrder;
+  final String? referenceImageId;
+  final double? frameAspect;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const PhotoSeriesAnglesTableData({
+    required this.id,
+    required this.seriesId,
+    required this.name,
+    required this.sortOrder,
+    this.referenceImageId,
+    this.frameAspect,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['series_id'] = Variable<String>(seriesId);
+    map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || referenceImageId != null) {
+      map['reference_image_id'] = Variable<String>(referenceImageId);
+    }
+    if (!nullToAbsent || frameAspect != null) {
+      map['frame_aspect'] = Variable<double>(frameAspect);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  PhotoSeriesAnglesTableCompanion toCompanion(bool nullToAbsent) {
+    return PhotoSeriesAnglesTableCompanion(
+      id: Value(id),
+      seriesId: Value(seriesId),
+      name: Value(name),
+      sortOrder: Value(sortOrder),
+      referenceImageId: referenceImageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceImageId),
+      frameAspect: frameAspect == null && nullToAbsent
+          ? const Value.absent()
+          : Value(frameAspect),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory PhotoSeriesAnglesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PhotoSeriesAnglesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      seriesId: serializer.fromJson<String>(json['seriesId']),
+      name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      referenceImageId: serializer.fromJson<String?>(json['referenceImageId']),
+      frameAspect: serializer.fromJson<double?>(json['frameAspect']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'seriesId': serializer.toJson<String>(seriesId),
+      'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'referenceImageId': serializer.toJson<String?>(referenceImageId),
+      'frameAspect': serializer.toJson<double?>(frameAspect),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  PhotoSeriesAnglesTableData copyWith({
+    String? id,
+    String? seriesId,
+    String? name,
+    int? sortOrder,
+    Value<String?> referenceImageId = const Value.absent(),
+    Value<double?> frameAspect = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => PhotoSeriesAnglesTableData(
+    id: id ?? this.id,
+    seriesId: seriesId ?? this.seriesId,
+    name: name ?? this.name,
+    sortOrder: sortOrder ?? this.sortOrder,
+    referenceImageId: referenceImageId.present
+        ? referenceImageId.value
+        : this.referenceImageId,
+    frameAspect: frameAspect.present ? frameAspect.value : this.frameAspect,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  PhotoSeriesAnglesTableData copyWithCompanion(
+    PhotoSeriesAnglesTableCompanion data,
+  ) {
+    return PhotoSeriesAnglesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      referenceImageId: data.referenceImageId.present
+          ? data.referenceImageId.value
+          : this.referenceImageId,
+      frameAspect: data.frameAspect.present
+          ? data.frameAspect.value
+          : this.frameAspect,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoSeriesAnglesTableData(')
+          ..write('id: $id, ')
+          ..write('seriesId: $seriesId, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('referenceImageId: $referenceImageId, ')
+          ..write('frameAspect: $frameAspect, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    seriesId,
+    name,
+    sortOrder,
+    referenceImageId,
+    frameAspect,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PhotoSeriesAnglesTableData &&
+          other.id == this.id &&
+          other.seriesId == this.seriesId &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
+          other.referenceImageId == this.referenceImageId &&
+          other.frameAspect == this.frameAspect &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class PhotoSeriesAnglesTableCompanion
+    extends UpdateCompanion<PhotoSeriesAnglesTableData> {
+  final Value<String> id;
+  final Value<String> seriesId;
+  final Value<String> name;
+  final Value<int> sortOrder;
+  final Value<String?> referenceImageId;
+  final Value<double?> frameAspect;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const PhotoSeriesAnglesTableCompanion({
+    this.id = const Value.absent(),
+    this.seriesId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.referenceImageId = const Value.absent(),
+    this.frameAspect = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PhotoSeriesAnglesTableCompanion.insert({
+    required String id,
+    required String seriesId,
+    required String name,
+    this.sortOrder = const Value.absent(),
+    this.referenceImageId = const Value.absent(),
+    this.frameAspect = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       seriesId = Value(seriesId),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<PhotoSeriesAnglesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? seriesId,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+    Expression<String>? referenceImageId,
+    Expression<double>? frameAspect,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (seriesId != null) 'series_id': seriesId,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (referenceImageId != null) 'reference_image_id': referenceImageId,
+      if (frameAspect != null) 'frame_aspect': frameAspect,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PhotoSeriesAnglesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? seriesId,
+    Value<String>? name,
+    Value<int>? sortOrder,
+    Value<String?>? referenceImageId,
+    Value<double?>? frameAspect,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return PhotoSeriesAnglesTableCompanion(
+      id: id ?? this.id,
+      seriesId: seriesId ?? this.seriesId,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      referenceImageId: referenceImageId ?? this.referenceImageId,
+      frameAspect: frameAspect ?? this.frameAspect,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (seriesId.present) {
+      map['series_id'] = Variable<String>(seriesId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (referenceImageId.present) {
+      map['reference_image_id'] = Variable<String>(referenceImageId.value);
+    }
+    if (frameAspect.present) {
+      map['frame_aspect'] = Variable<double>(frameAspect.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoSeriesAnglesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('seriesId: $seriesId, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('referenceImageId: $referenceImageId, ')
+          ..write('frameAspect: $frameAspect, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PhotoCheckInsTableTable extends PhotoCheckInsTable
+    with TableInfo<$PhotoCheckInsTableTable, PhotoCheckInsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PhotoCheckInsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
+  );
+  @override
+  late final GeneratedColumn<String> seriesId = GeneratedColumn<String>(
+    'series_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _takenOnMeta = const VerificationMeta(
+    'takenOn',
+  );
+  @override
+  late final GeneratedColumn<DateTime> takenOn = GeneratedColumn<DateTime>(
+    'taken_on',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteCiphertextMeta = const VerificationMeta(
+    'noteCiphertext',
+  );
+  @override
+  late final GeneratedColumn<String> noteCiphertext = GeneratedColumn<String>(
+    'note_ciphertext',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteNonceMeta = const VerificationMeta(
+    'noteNonce',
+  );
+  @override
+  late final GeneratedColumn<String> noteNonce = GeneratedColumn<String>(
+    'note_nonce',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _vaultIdMeta = const VerificationMeta(
+    'vaultId',
+  );
+  @override
+  late final GeneratedColumn<String> vaultId = GeneratedColumn<String>(
+    'vault_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    seriesId,
+    takenOn,
+    noteCiphertext,
+    noteNonce,
+    vaultId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'photo_check_ins_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PhotoCheckInsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('series_id')) {
+      context.handle(
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_seriesIdMeta);
+    }
+    if (data.containsKey('taken_on')) {
+      context.handle(
+        _takenOnMeta,
+        takenOn.isAcceptableOrUnknown(data['taken_on']!, _takenOnMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_takenOnMeta);
+    }
+    if (data.containsKey('note_ciphertext')) {
+      context.handle(
+        _noteCiphertextMeta,
+        noteCiphertext.isAcceptableOrUnknown(
+          data['note_ciphertext']!,
+          _noteCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note_nonce')) {
+      context.handle(
+        _noteNonceMeta,
+        noteNonce.isAcceptableOrUnknown(data['note_nonce']!, _noteNonceMeta),
+      );
+    }
+    if (data.containsKey('vault_id')) {
+      context.handle(
+        _vaultIdMeta,
+        vaultId.isAcceptableOrUnknown(data['vault_id']!, _vaultIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PhotoCheckInsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PhotoCheckInsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      seriesId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}series_id'],
+      )!,
+      takenOn: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}taken_on'],
+      )!,
+      noteCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_ciphertext'],
+      ),
+      noteNonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_nonce'],
+      ),
+      vaultId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vault_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $PhotoCheckInsTableTable createAlias(String alias) {
+    return $PhotoCheckInsTableTable(attachedDatabase, alias);
+  }
+}
+
+class PhotoCheckInsTableData extends DataClass
+    implements Insertable<PhotoCheckInsTableData> {
+  final String id;
+  final String seriesId;
+  final DateTime takenOn;
+  final String? noteCiphertext;
+  final String? noteNonce;
+  final String? vaultId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const PhotoCheckInsTableData({
+    required this.id,
+    required this.seriesId,
+    required this.takenOn,
+    this.noteCiphertext,
+    this.noteNonce,
+    this.vaultId,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['series_id'] = Variable<String>(seriesId);
+    map['taken_on'] = Variable<DateTime>(takenOn);
+    if (!nullToAbsent || noteCiphertext != null) {
+      map['note_ciphertext'] = Variable<String>(noteCiphertext);
+    }
+    if (!nullToAbsent || noteNonce != null) {
+      map['note_nonce'] = Variable<String>(noteNonce);
+    }
+    if (!nullToAbsent || vaultId != null) {
+      map['vault_id'] = Variable<String>(vaultId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  PhotoCheckInsTableCompanion toCompanion(bool nullToAbsent) {
+    return PhotoCheckInsTableCompanion(
+      id: Value(id),
+      seriesId: Value(seriesId),
+      takenOn: Value(takenOn),
+      noteCiphertext: noteCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noteCiphertext),
+      noteNonce: noteNonce == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noteNonce),
+      vaultId: vaultId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vaultId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory PhotoCheckInsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PhotoCheckInsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      seriesId: serializer.fromJson<String>(json['seriesId']),
+      takenOn: serializer.fromJson<DateTime>(json['takenOn']),
+      noteCiphertext: serializer.fromJson<String?>(json['noteCiphertext']),
+      noteNonce: serializer.fromJson<String?>(json['noteNonce']),
+      vaultId: serializer.fromJson<String?>(json['vaultId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'seriesId': serializer.toJson<String>(seriesId),
+      'takenOn': serializer.toJson<DateTime>(takenOn),
+      'noteCiphertext': serializer.toJson<String?>(noteCiphertext),
+      'noteNonce': serializer.toJson<String?>(noteNonce),
+      'vaultId': serializer.toJson<String?>(vaultId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  PhotoCheckInsTableData copyWith({
+    String? id,
+    String? seriesId,
+    DateTime? takenOn,
+    Value<String?> noteCiphertext = const Value.absent(),
+    Value<String?> noteNonce = const Value.absent(),
+    Value<String?> vaultId = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => PhotoCheckInsTableData(
+    id: id ?? this.id,
+    seriesId: seriesId ?? this.seriesId,
+    takenOn: takenOn ?? this.takenOn,
+    noteCiphertext: noteCiphertext.present
+        ? noteCiphertext.value
+        : this.noteCiphertext,
+    noteNonce: noteNonce.present ? noteNonce.value : this.noteNonce,
+    vaultId: vaultId.present ? vaultId.value : this.vaultId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  PhotoCheckInsTableData copyWithCompanion(PhotoCheckInsTableCompanion data) {
+    return PhotoCheckInsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
+      takenOn: data.takenOn.present ? data.takenOn.value : this.takenOn,
+      noteCiphertext: data.noteCiphertext.present
+          ? data.noteCiphertext.value
+          : this.noteCiphertext,
+      noteNonce: data.noteNonce.present ? data.noteNonce.value : this.noteNonce,
+      vaultId: data.vaultId.present ? data.vaultId.value : this.vaultId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoCheckInsTableData(')
+          ..write('id: $id, ')
+          ..write('seriesId: $seriesId, ')
+          ..write('takenOn: $takenOn, ')
+          ..write('noteCiphertext: $noteCiphertext, ')
+          ..write('noteNonce: $noteNonce, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    seriesId,
+    takenOn,
+    noteCiphertext,
+    noteNonce,
+    vaultId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PhotoCheckInsTableData &&
+          other.id == this.id &&
+          other.seriesId == this.seriesId &&
+          other.takenOn == this.takenOn &&
+          other.noteCiphertext == this.noteCiphertext &&
+          other.noteNonce == this.noteNonce &&
+          other.vaultId == this.vaultId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class PhotoCheckInsTableCompanion
+    extends UpdateCompanion<PhotoCheckInsTableData> {
+  final Value<String> id;
+  final Value<String> seriesId;
+  final Value<DateTime> takenOn;
+  final Value<String?> noteCiphertext;
+  final Value<String?> noteNonce;
+  final Value<String?> vaultId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const PhotoCheckInsTableCompanion({
+    this.id = const Value.absent(),
+    this.seriesId = const Value.absent(),
+    this.takenOn = const Value.absent(),
+    this.noteCiphertext = const Value.absent(),
+    this.noteNonce = const Value.absent(),
+    this.vaultId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PhotoCheckInsTableCompanion.insert({
+    required String id,
+    required String seriesId,
+    required DateTime takenOn,
+    this.noteCiphertext = const Value.absent(),
+    this.noteNonce = const Value.absent(),
+    this.vaultId = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       seriesId = Value(seriesId),
+       takenOn = Value(takenOn),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<PhotoCheckInsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? seriesId,
+    Expression<DateTime>? takenOn,
+    Expression<String>? noteCiphertext,
+    Expression<String>? noteNonce,
+    Expression<String>? vaultId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (seriesId != null) 'series_id': seriesId,
+      if (takenOn != null) 'taken_on': takenOn,
+      if (noteCiphertext != null) 'note_ciphertext': noteCiphertext,
+      if (noteNonce != null) 'note_nonce': noteNonce,
+      if (vaultId != null) 'vault_id': vaultId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PhotoCheckInsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? seriesId,
+    Value<DateTime>? takenOn,
+    Value<String?>? noteCiphertext,
+    Value<String?>? noteNonce,
+    Value<String?>? vaultId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return PhotoCheckInsTableCompanion(
+      id: id ?? this.id,
+      seriesId: seriesId ?? this.seriesId,
+      takenOn: takenOn ?? this.takenOn,
+      noteCiphertext: noteCiphertext ?? this.noteCiphertext,
+      noteNonce: noteNonce ?? this.noteNonce,
+      vaultId: vaultId ?? this.vaultId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (seriesId.present) {
+      map['series_id'] = Variable<String>(seriesId.value);
+    }
+    if (takenOn.present) {
+      map['taken_on'] = Variable<DateTime>(takenOn.value);
+    }
+    if (noteCiphertext.present) {
+      map['note_ciphertext'] = Variable<String>(noteCiphertext.value);
+    }
+    if (noteNonce.present) {
+      map['note_nonce'] = Variable<String>(noteNonce.value);
+    }
+    if (vaultId.present) {
+      map['vault_id'] = Variable<String>(vaultId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoCheckInsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('seriesId: $seriesId, ')
+          ..write('takenOn: $takenOn, ')
+          ..write('noteCiphertext: $noteCiphertext, ')
+          ..write('noteNonce: $noteNonce, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PhotoCheckInImagesTableTable extends PhotoCheckInImagesTable
+    with TableInfo<$PhotoCheckInImagesTableTable, PhotoCheckInImagesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PhotoCheckInImagesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _checkInIdMeta = const VerificationMeta(
+    'checkInId',
+  );
+  @override
+  late final GeneratedColumn<String> checkInId = GeneratedColumn<String>(
+    'check_in_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _angleIdMeta = const VerificationMeta(
+    'angleId',
+  );
+  @override
+  late final GeneratedColumn<String> angleId = GeneratedColumn<String>(
+    'angle_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _blobIdMeta = const VerificationMeta('blobId');
+  @override
+  late final GeneratedColumn<String> blobId = GeneratedColumn<String>(
+    'blob_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _alignScaleMeta = const VerificationMeta(
+    'alignScale',
+  );
+  @override
+  late final GeneratedColumn<double> alignScale = GeneratedColumn<double>(
+    'align_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _alignRotationMeta = const VerificationMeta(
+    'alignRotation',
+  );
+  @override
+  late final GeneratedColumn<double> alignRotation = GeneratedColumn<double>(
+    'align_rotation',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _alignDxMeta = const VerificationMeta(
+    'alignDx',
+  );
+  @override
+  late final GeneratedColumn<double> alignDx = GeneratedColumn<double>(
+    'align_dx',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _alignDyMeta = const VerificationMeta(
+    'alignDy',
+  );
+  @override
+  late final GeneratedColumn<double> alignDy = GeneratedColumn<double>(
+    'align_dy',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    checkInId,
+    angleId,
+    blobId,
+    alignScale,
+    alignRotation,
+    alignDx,
+    alignDy,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'photo_check_in_images_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PhotoCheckInImagesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('check_in_id')) {
+      context.handle(
+        _checkInIdMeta,
+        checkInId.isAcceptableOrUnknown(data['check_in_id']!, _checkInIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_checkInIdMeta);
+    }
+    if (data.containsKey('angle_id')) {
+      context.handle(
+        _angleIdMeta,
+        angleId.isAcceptableOrUnknown(data['angle_id']!, _angleIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_angleIdMeta);
+    }
+    if (data.containsKey('blob_id')) {
+      context.handle(
+        _blobIdMeta,
+        blobId.isAcceptableOrUnknown(data['blob_id']!, _blobIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_blobIdMeta);
+    }
+    if (data.containsKey('align_scale')) {
+      context.handle(
+        _alignScaleMeta,
+        alignScale.isAcceptableOrUnknown(data['align_scale']!, _alignScaleMeta),
+      );
+    }
+    if (data.containsKey('align_rotation')) {
+      context.handle(
+        _alignRotationMeta,
+        alignRotation.isAcceptableOrUnknown(
+          data['align_rotation']!,
+          _alignRotationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('align_dx')) {
+      context.handle(
+        _alignDxMeta,
+        alignDx.isAcceptableOrUnknown(data['align_dx']!, _alignDxMeta),
+      );
+    }
+    if (data.containsKey('align_dy')) {
+      context.handle(
+        _alignDyMeta,
+        alignDy.isAcceptableOrUnknown(data['align_dy']!, _alignDyMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PhotoCheckInImagesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PhotoCheckInImagesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      checkInId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}check_in_id'],
+      )!,
+      angleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}angle_id'],
+      )!,
+      blobId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}blob_id'],
+      )!,
+      alignScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}align_scale'],
+      )!,
+      alignRotation: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}align_rotation'],
+      )!,
+      alignDx: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}align_dx'],
+      )!,
+      alignDy: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}align_dy'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $PhotoCheckInImagesTableTable createAlias(String alias) {
+    return $PhotoCheckInImagesTableTable(attachedDatabase, alias);
+  }
+}
+
+class PhotoCheckInImagesTableData extends DataClass
+    implements Insertable<PhotoCheckInImagesTableData> {
+  final String id;
+  final String checkInId;
+  final String angleId;
+  final String blobId;
+  final double alignScale;
+  final double alignRotation;
+  final double alignDx;
+  final double alignDy;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const PhotoCheckInImagesTableData({
+    required this.id,
+    required this.checkInId,
+    required this.angleId,
+    required this.blobId,
+    required this.alignScale,
+    required this.alignRotation,
+    required this.alignDx,
+    required this.alignDy,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['check_in_id'] = Variable<String>(checkInId);
+    map['angle_id'] = Variable<String>(angleId);
+    map['blob_id'] = Variable<String>(blobId);
+    map['align_scale'] = Variable<double>(alignScale);
+    map['align_rotation'] = Variable<double>(alignRotation);
+    map['align_dx'] = Variable<double>(alignDx);
+    map['align_dy'] = Variable<double>(alignDy);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  PhotoCheckInImagesTableCompanion toCompanion(bool nullToAbsent) {
+    return PhotoCheckInImagesTableCompanion(
+      id: Value(id),
+      checkInId: Value(checkInId),
+      angleId: Value(angleId),
+      blobId: Value(blobId),
+      alignScale: Value(alignScale),
+      alignRotation: Value(alignRotation),
+      alignDx: Value(alignDx),
+      alignDy: Value(alignDy),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory PhotoCheckInImagesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PhotoCheckInImagesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      checkInId: serializer.fromJson<String>(json['checkInId']),
+      angleId: serializer.fromJson<String>(json['angleId']),
+      blobId: serializer.fromJson<String>(json['blobId']),
+      alignScale: serializer.fromJson<double>(json['alignScale']),
+      alignRotation: serializer.fromJson<double>(json['alignRotation']),
+      alignDx: serializer.fromJson<double>(json['alignDx']),
+      alignDy: serializer.fromJson<double>(json['alignDy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'checkInId': serializer.toJson<String>(checkInId),
+      'angleId': serializer.toJson<String>(angleId),
+      'blobId': serializer.toJson<String>(blobId),
+      'alignScale': serializer.toJson<double>(alignScale),
+      'alignRotation': serializer.toJson<double>(alignRotation),
+      'alignDx': serializer.toJson<double>(alignDx),
+      'alignDy': serializer.toJson<double>(alignDy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  PhotoCheckInImagesTableData copyWith({
+    String? id,
+    String? checkInId,
+    String? angleId,
+    String? blobId,
+    double? alignScale,
+    double? alignRotation,
+    double? alignDx,
+    double? alignDy,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => PhotoCheckInImagesTableData(
+    id: id ?? this.id,
+    checkInId: checkInId ?? this.checkInId,
+    angleId: angleId ?? this.angleId,
+    blobId: blobId ?? this.blobId,
+    alignScale: alignScale ?? this.alignScale,
+    alignRotation: alignRotation ?? this.alignRotation,
+    alignDx: alignDx ?? this.alignDx,
+    alignDy: alignDy ?? this.alignDy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  PhotoCheckInImagesTableData copyWithCompanion(
+    PhotoCheckInImagesTableCompanion data,
+  ) {
+    return PhotoCheckInImagesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      checkInId: data.checkInId.present ? data.checkInId.value : this.checkInId,
+      angleId: data.angleId.present ? data.angleId.value : this.angleId,
+      blobId: data.blobId.present ? data.blobId.value : this.blobId,
+      alignScale: data.alignScale.present
+          ? data.alignScale.value
+          : this.alignScale,
+      alignRotation: data.alignRotation.present
+          ? data.alignRotation.value
+          : this.alignRotation,
+      alignDx: data.alignDx.present ? data.alignDx.value : this.alignDx,
+      alignDy: data.alignDy.present ? data.alignDy.value : this.alignDy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoCheckInImagesTableData(')
+          ..write('id: $id, ')
+          ..write('checkInId: $checkInId, ')
+          ..write('angleId: $angleId, ')
+          ..write('blobId: $blobId, ')
+          ..write('alignScale: $alignScale, ')
+          ..write('alignRotation: $alignRotation, ')
+          ..write('alignDx: $alignDx, ')
+          ..write('alignDy: $alignDy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    checkInId,
+    angleId,
+    blobId,
+    alignScale,
+    alignRotation,
+    alignDx,
+    alignDy,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PhotoCheckInImagesTableData &&
+          other.id == this.id &&
+          other.checkInId == this.checkInId &&
+          other.angleId == this.angleId &&
+          other.blobId == this.blobId &&
+          other.alignScale == this.alignScale &&
+          other.alignRotation == this.alignRotation &&
+          other.alignDx == this.alignDx &&
+          other.alignDy == this.alignDy &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class PhotoCheckInImagesTableCompanion
+    extends UpdateCompanion<PhotoCheckInImagesTableData> {
+  final Value<String> id;
+  final Value<String> checkInId;
+  final Value<String> angleId;
+  final Value<String> blobId;
+  final Value<double> alignScale;
+  final Value<double> alignRotation;
+  final Value<double> alignDx;
+  final Value<double> alignDy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const PhotoCheckInImagesTableCompanion({
+    this.id = const Value.absent(),
+    this.checkInId = const Value.absent(),
+    this.angleId = const Value.absent(),
+    this.blobId = const Value.absent(),
+    this.alignScale = const Value.absent(),
+    this.alignRotation = const Value.absent(),
+    this.alignDx = const Value.absent(),
+    this.alignDy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PhotoCheckInImagesTableCompanion.insert({
+    required String id,
+    required String checkInId,
+    required String angleId,
+    required String blobId,
+    this.alignScale = const Value.absent(),
+    this.alignRotation = const Value.absent(),
+    this.alignDx = const Value.absent(),
+    this.alignDy = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       checkInId = Value(checkInId),
+       angleId = Value(angleId),
+       blobId = Value(blobId),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<PhotoCheckInImagesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? checkInId,
+    Expression<String>? angleId,
+    Expression<String>? blobId,
+    Expression<double>? alignScale,
+    Expression<double>? alignRotation,
+    Expression<double>? alignDx,
+    Expression<double>? alignDy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (checkInId != null) 'check_in_id': checkInId,
+      if (angleId != null) 'angle_id': angleId,
+      if (blobId != null) 'blob_id': blobId,
+      if (alignScale != null) 'align_scale': alignScale,
+      if (alignRotation != null) 'align_rotation': alignRotation,
+      if (alignDx != null) 'align_dx': alignDx,
+      if (alignDy != null) 'align_dy': alignDy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PhotoCheckInImagesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? checkInId,
+    Value<String>? angleId,
+    Value<String>? blobId,
+    Value<double>? alignScale,
+    Value<double>? alignRotation,
+    Value<double>? alignDx,
+    Value<double>? alignDy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return PhotoCheckInImagesTableCompanion(
+      id: id ?? this.id,
+      checkInId: checkInId ?? this.checkInId,
+      angleId: angleId ?? this.angleId,
+      blobId: blobId ?? this.blobId,
+      alignScale: alignScale ?? this.alignScale,
+      alignRotation: alignRotation ?? this.alignRotation,
+      alignDx: alignDx ?? this.alignDx,
+      alignDy: alignDy ?? this.alignDy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (checkInId.present) {
+      map['check_in_id'] = Variable<String>(checkInId.value);
+    }
+    if (angleId.present) {
+      map['angle_id'] = Variable<String>(angleId.value);
+    }
+    if (blobId.present) {
+      map['blob_id'] = Variable<String>(blobId.value);
+    }
+    if (alignScale.present) {
+      map['align_scale'] = Variable<double>(alignScale.value);
+    }
+    if (alignRotation.present) {
+      map['align_rotation'] = Variable<double>(alignRotation.value);
+    }
+    if (alignDx.present) {
+      map['align_dx'] = Variable<double>(alignDx.value);
+    }
+    if (alignDy.present) {
+      map['align_dy'] = Variable<double>(alignDy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PhotoCheckInImagesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('checkInId: $checkInId, ')
+          ..write('angleId: $angleId, ')
+          ..write('blobId: $blobId, ')
+          ..write('alignScale: $alignScale, ')
+          ..write('alignRotation: $alignRotation, ')
+          ..write('alignDx: $alignDx, ')
+          ..write('alignDy: $alignDy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $RankingCategoriesTableTable extends RankingCategoriesTable
     with TableInfo<$RankingCategoriesTableTable, RankingCategoriesTableData> {
   @override
@@ -53869,6 +56636,15 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $PendingRemoteDeletesTableTable pendingRemoteDeletesTable =
       $PendingRemoteDeletesTableTable(this);
+  late final $PhotoSeriesTableTable photoSeriesTable = $PhotoSeriesTableTable(
+    this,
+  );
+  late final $PhotoSeriesAnglesTableTable photoSeriesAnglesTable =
+      $PhotoSeriesAnglesTableTable(this);
+  late final $PhotoCheckInsTableTable photoCheckInsTable =
+      $PhotoCheckInsTableTable(this);
+  late final $PhotoCheckInImagesTableTable photoCheckInImagesTable =
+      $PhotoCheckInImagesTableTable(this);
   late final $RankingCategoriesTableTable rankingCategoriesTable =
       $RankingCategoriesTableTable(this);
   late final $RankingParentsTableTable rankingParentsTable =
@@ -54012,6 +56788,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     mediaReferencesTable,
     vaultBlobsTable,
     pendingRemoteDeletesTable,
+    photoSeriesTable,
+    photoSeriesAnglesTable,
+    photoCheckInsTable,
+    photoCheckInImagesTable,
     rankingCategoriesTable,
     rankingParentsTable,
     rankingChildrenTable,
@@ -76797,6 +79577,1383 @@ typedef $$PendingRemoteDeletesTableTableProcessedTableManager =
       PendingRemoteDeletesTableData,
       PrefetchHooks Function()
     >;
+typedef $$PhotoSeriesTableTableCreateCompanionBuilder =
+    PhotoSeriesTableCompanion Function({
+      required String id,
+      required String name,
+      Value<String> cadence,
+      Value<bool> reminderEnabled,
+      Value<int> reminderMinutes,
+      Value<int> reminderWeekday,
+      Value<int> reminderMonthDay,
+      Value<int> reminderMonth,
+      Value<int> playbackFps,
+      Value<int> sortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$PhotoSeriesTableTableUpdateCompanionBuilder =
+    PhotoSeriesTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> cadence,
+      Value<bool> reminderEnabled,
+      Value<int> reminderMinutes,
+      Value<int> reminderWeekday,
+      Value<int> reminderMonthDay,
+      Value<int> reminderMonth,
+      Value<int> playbackFps,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$PhotoSeriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PhotoSeriesTableTable> {
+  $$PhotoSeriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cadence => $composableBuilder(
+    column: $table.cadence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get reminderEnabled => $composableBuilder(
+    column: $table.reminderEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reminderMinutes => $composableBuilder(
+    column: $table.reminderMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reminderWeekday => $composableBuilder(
+    column: $table.reminderWeekday,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reminderMonthDay => $composableBuilder(
+    column: $table.reminderMonthDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reminderMonth => $composableBuilder(
+    column: $table.reminderMonth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get playbackFps => $composableBuilder(
+    column: $table.playbackFps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PhotoSeriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PhotoSeriesTableTable> {
+  $$PhotoSeriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cadence => $composableBuilder(
+    column: $table.cadence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get reminderEnabled => $composableBuilder(
+    column: $table.reminderEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reminderMinutes => $composableBuilder(
+    column: $table.reminderMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reminderWeekday => $composableBuilder(
+    column: $table.reminderWeekday,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reminderMonthDay => $composableBuilder(
+    column: $table.reminderMonthDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reminderMonth => $composableBuilder(
+    column: $table.reminderMonth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get playbackFps => $composableBuilder(
+    column: $table.playbackFps,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PhotoSeriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PhotoSeriesTableTable> {
+  $$PhotoSeriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get cadence =>
+      $composableBuilder(column: $table.cadence, builder: (column) => column);
+
+  GeneratedColumn<bool> get reminderEnabled => $composableBuilder(
+    column: $table.reminderEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reminderMinutes => $composableBuilder(
+    column: $table.reminderMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reminderWeekday => $composableBuilder(
+    column: $table.reminderWeekday,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reminderMonthDay => $composableBuilder(
+    column: $table.reminderMonthDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reminderMonth => $composableBuilder(
+    column: $table.reminderMonth,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get playbackFps => $composableBuilder(
+    column: $table.playbackFps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$PhotoSeriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PhotoSeriesTableTable,
+          PhotoSeriesTableData,
+          $$PhotoSeriesTableTableFilterComposer,
+          $$PhotoSeriesTableTableOrderingComposer,
+          $$PhotoSeriesTableTableAnnotationComposer,
+          $$PhotoSeriesTableTableCreateCompanionBuilder,
+          $$PhotoSeriesTableTableUpdateCompanionBuilder,
+          (
+            PhotoSeriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PhotoSeriesTableTable,
+              PhotoSeriesTableData
+            >,
+          ),
+          PhotoSeriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$PhotoSeriesTableTableTableManager(
+    _$AppDatabase db,
+    $PhotoSeriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PhotoSeriesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PhotoSeriesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PhotoSeriesTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> cadence = const Value.absent(),
+                Value<bool> reminderEnabled = const Value.absent(),
+                Value<int> reminderMinutes = const Value.absent(),
+                Value<int> reminderWeekday = const Value.absent(),
+                Value<int> reminderMonthDay = const Value.absent(),
+                Value<int> reminderMonth = const Value.absent(),
+                Value<int> playbackFps = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoSeriesTableCompanion(
+                id: id,
+                name: name,
+                cadence: cadence,
+                reminderEnabled: reminderEnabled,
+                reminderMinutes: reminderMinutes,
+                reminderWeekday: reminderWeekday,
+                reminderMonthDay: reminderMonthDay,
+                reminderMonth: reminderMonth,
+                playbackFps: playbackFps,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String> cadence = const Value.absent(),
+                Value<bool> reminderEnabled = const Value.absent(),
+                Value<int> reminderMinutes = const Value.absent(),
+                Value<int> reminderWeekday = const Value.absent(),
+                Value<int> reminderMonthDay = const Value.absent(),
+                Value<int> reminderMonth = const Value.absent(),
+                Value<int> playbackFps = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoSeriesTableCompanion.insert(
+                id: id,
+                name: name,
+                cadence: cadence,
+                reminderEnabled: reminderEnabled,
+                reminderMinutes: reminderMinutes,
+                reminderWeekday: reminderWeekday,
+                reminderMonthDay: reminderMonthDay,
+                reminderMonth: reminderMonth,
+                playbackFps: playbackFps,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PhotoSeriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PhotoSeriesTableTable,
+      PhotoSeriesTableData,
+      $$PhotoSeriesTableTableFilterComposer,
+      $$PhotoSeriesTableTableOrderingComposer,
+      $$PhotoSeriesTableTableAnnotationComposer,
+      $$PhotoSeriesTableTableCreateCompanionBuilder,
+      $$PhotoSeriesTableTableUpdateCompanionBuilder,
+      (
+        PhotoSeriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PhotoSeriesTableTable,
+          PhotoSeriesTableData
+        >,
+      ),
+      PhotoSeriesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$PhotoSeriesAnglesTableTableCreateCompanionBuilder =
+    PhotoSeriesAnglesTableCompanion Function({
+      required String id,
+      required String seriesId,
+      required String name,
+      Value<int> sortOrder,
+      Value<String?> referenceImageId,
+      Value<double?> frameAspect,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$PhotoSeriesAnglesTableTableUpdateCompanionBuilder =
+    PhotoSeriesAnglesTableCompanion Function({
+      Value<String> id,
+      Value<String> seriesId,
+      Value<String> name,
+      Value<int> sortOrder,
+      Value<String?> referenceImageId,
+      Value<double?> frameAspect,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$PhotoSeriesAnglesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PhotoSeriesAnglesTableTable> {
+  $$PhotoSeriesAnglesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get seriesId => $composableBuilder(
+    column: $table.seriesId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceImageId => $composableBuilder(
+    column: $table.referenceImageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get frameAspect => $composableBuilder(
+    column: $table.frameAspect,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PhotoSeriesAnglesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PhotoSeriesAnglesTableTable> {
+  $$PhotoSeriesAnglesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get seriesId => $composableBuilder(
+    column: $table.seriesId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceImageId => $composableBuilder(
+    column: $table.referenceImageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get frameAspect => $composableBuilder(
+    column: $table.frameAspect,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PhotoSeriesAnglesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PhotoSeriesAnglesTableTable> {
+  $$PhotoSeriesAnglesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get referenceImageId => $composableBuilder(
+    column: $table.referenceImageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get frameAspect => $composableBuilder(
+    column: $table.frameAspect,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$PhotoSeriesAnglesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PhotoSeriesAnglesTableTable,
+          PhotoSeriesAnglesTableData,
+          $$PhotoSeriesAnglesTableTableFilterComposer,
+          $$PhotoSeriesAnglesTableTableOrderingComposer,
+          $$PhotoSeriesAnglesTableTableAnnotationComposer,
+          $$PhotoSeriesAnglesTableTableCreateCompanionBuilder,
+          $$PhotoSeriesAnglesTableTableUpdateCompanionBuilder,
+          (
+            PhotoSeriesAnglesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PhotoSeriesAnglesTableTable,
+              PhotoSeriesAnglesTableData
+            >,
+          ),
+          PhotoSeriesAnglesTableData,
+          PrefetchHooks Function()
+        > {
+  $$PhotoSeriesAnglesTableTableTableManager(
+    _$AppDatabase db,
+    $PhotoSeriesAnglesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PhotoSeriesAnglesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PhotoSeriesAnglesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PhotoSeriesAnglesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> seriesId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<String?> referenceImageId = const Value.absent(),
+                Value<double?> frameAspect = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoSeriesAnglesTableCompanion(
+                id: id,
+                seriesId: seriesId,
+                name: name,
+                sortOrder: sortOrder,
+                referenceImageId: referenceImageId,
+                frameAspect: frameAspect,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String seriesId,
+                required String name,
+                Value<int> sortOrder = const Value.absent(),
+                Value<String?> referenceImageId = const Value.absent(),
+                Value<double?> frameAspect = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoSeriesAnglesTableCompanion.insert(
+                id: id,
+                seriesId: seriesId,
+                name: name,
+                sortOrder: sortOrder,
+                referenceImageId: referenceImageId,
+                frameAspect: frameAspect,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PhotoSeriesAnglesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PhotoSeriesAnglesTableTable,
+      PhotoSeriesAnglesTableData,
+      $$PhotoSeriesAnglesTableTableFilterComposer,
+      $$PhotoSeriesAnglesTableTableOrderingComposer,
+      $$PhotoSeriesAnglesTableTableAnnotationComposer,
+      $$PhotoSeriesAnglesTableTableCreateCompanionBuilder,
+      $$PhotoSeriesAnglesTableTableUpdateCompanionBuilder,
+      (
+        PhotoSeriesAnglesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PhotoSeriesAnglesTableTable,
+          PhotoSeriesAnglesTableData
+        >,
+      ),
+      PhotoSeriesAnglesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$PhotoCheckInsTableTableCreateCompanionBuilder =
+    PhotoCheckInsTableCompanion Function({
+      required String id,
+      required String seriesId,
+      required DateTime takenOn,
+      Value<String?> noteCiphertext,
+      Value<String?> noteNonce,
+      Value<String?> vaultId,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$PhotoCheckInsTableTableUpdateCompanionBuilder =
+    PhotoCheckInsTableCompanion Function({
+      Value<String> id,
+      Value<String> seriesId,
+      Value<DateTime> takenOn,
+      Value<String?> noteCiphertext,
+      Value<String?> noteNonce,
+      Value<String?> vaultId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$PhotoCheckInsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PhotoCheckInsTableTable> {
+  $$PhotoCheckInsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get seriesId => $composableBuilder(
+    column: $table.seriesId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get takenOn => $composableBuilder(
+    column: $table.takenOn,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteCiphertext => $composableBuilder(
+    column: $table.noteCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteNonce => $composableBuilder(
+    column: $table.noteNonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PhotoCheckInsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PhotoCheckInsTableTable> {
+  $$PhotoCheckInsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get seriesId => $composableBuilder(
+    column: $table.seriesId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get takenOn => $composableBuilder(
+    column: $table.takenOn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteCiphertext => $composableBuilder(
+    column: $table.noteCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteNonce => $composableBuilder(
+    column: $table.noteNonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PhotoCheckInsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PhotoCheckInsTableTable> {
+  $$PhotoCheckInsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get takenOn =>
+      $composableBuilder(column: $table.takenOn, builder: (column) => column);
+
+  GeneratedColumn<String> get noteCiphertext => $composableBuilder(
+    column: $table.noteCiphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get noteNonce =>
+      $composableBuilder(column: $table.noteNonce, builder: (column) => column);
+
+  GeneratedColumn<String> get vaultId =>
+      $composableBuilder(column: $table.vaultId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$PhotoCheckInsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PhotoCheckInsTableTable,
+          PhotoCheckInsTableData,
+          $$PhotoCheckInsTableTableFilterComposer,
+          $$PhotoCheckInsTableTableOrderingComposer,
+          $$PhotoCheckInsTableTableAnnotationComposer,
+          $$PhotoCheckInsTableTableCreateCompanionBuilder,
+          $$PhotoCheckInsTableTableUpdateCompanionBuilder,
+          (
+            PhotoCheckInsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PhotoCheckInsTableTable,
+              PhotoCheckInsTableData
+            >,
+          ),
+          PhotoCheckInsTableData,
+          PrefetchHooks Function()
+        > {
+  $$PhotoCheckInsTableTableTableManager(
+    _$AppDatabase db,
+    $PhotoCheckInsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PhotoCheckInsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PhotoCheckInsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PhotoCheckInsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> seriesId = const Value.absent(),
+                Value<DateTime> takenOn = const Value.absent(),
+                Value<String?> noteCiphertext = const Value.absent(),
+                Value<String?> noteNonce = const Value.absent(),
+                Value<String?> vaultId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoCheckInsTableCompanion(
+                id: id,
+                seriesId: seriesId,
+                takenOn: takenOn,
+                noteCiphertext: noteCiphertext,
+                noteNonce: noteNonce,
+                vaultId: vaultId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String seriesId,
+                required DateTime takenOn,
+                Value<String?> noteCiphertext = const Value.absent(),
+                Value<String?> noteNonce = const Value.absent(),
+                Value<String?> vaultId = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoCheckInsTableCompanion.insert(
+                id: id,
+                seriesId: seriesId,
+                takenOn: takenOn,
+                noteCiphertext: noteCiphertext,
+                noteNonce: noteNonce,
+                vaultId: vaultId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PhotoCheckInsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PhotoCheckInsTableTable,
+      PhotoCheckInsTableData,
+      $$PhotoCheckInsTableTableFilterComposer,
+      $$PhotoCheckInsTableTableOrderingComposer,
+      $$PhotoCheckInsTableTableAnnotationComposer,
+      $$PhotoCheckInsTableTableCreateCompanionBuilder,
+      $$PhotoCheckInsTableTableUpdateCompanionBuilder,
+      (
+        PhotoCheckInsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PhotoCheckInsTableTable,
+          PhotoCheckInsTableData
+        >,
+      ),
+      PhotoCheckInsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$PhotoCheckInImagesTableTableCreateCompanionBuilder =
+    PhotoCheckInImagesTableCompanion Function({
+      required String id,
+      required String checkInId,
+      required String angleId,
+      required String blobId,
+      Value<double> alignScale,
+      Value<double> alignRotation,
+      Value<double> alignDx,
+      Value<double> alignDy,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$PhotoCheckInImagesTableTableUpdateCompanionBuilder =
+    PhotoCheckInImagesTableCompanion Function({
+      Value<String> id,
+      Value<String> checkInId,
+      Value<String> angleId,
+      Value<String> blobId,
+      Value<double> alignScale,
+      Value<double> alignRotation,
+      Value<double> alignDx,
+      Value<double> alignDy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$PhotoCheckInImagesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PhotoCheckInImagesTableTable> {
+  $$PhotoCheckInImagesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get checkInId => $composableBuilder(
+    column: $table.checkInId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get angleId => $composableBuilder(
+    column: $table.angleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get blobId => $composableBuilder(
+    column: $table.blobId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get alignScale => $composableBuilder(
+    column: $table.alignScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get alignRotation => $composableBuilder(
+    column: $table.alignRotation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get alignDx => $composableBuilder(
+    column: $table.alignDx,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get alignDy => $composableBuilder(
+    column: $table.alignDy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PhotoCheckInImagesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PhotoCheckInImagesTableTable> {
+  $$PhotoCheckInImagesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get checkInId => $composableBuilder(
+    column: $table.checkInId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get angleId => $composableBuilder(
+    column: $table.angleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get blobId => $composableBuilder(
+    column: $table.blobId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get alignScale => $composableBuilder(
+    column: $table.alignScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get alignRotation => $composableBuilder(
+    column: $table.alignRotation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get alignDx => $composableBuilder(
+    column: $table.alignDx,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get alignDy => $composableBuilder(
+    column: $table.alignDy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PhotoCheckInImagesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PhotoCheckInImagesTableTable> {
+  $$PhotoCheckInImagesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get checkInId =>
+      $composableBuilder(column: $table.checkInId, builder: (column) => column);
+
+  GeneratedColumn<String> get angleId =>
+      $composableBuilder(column: $table.angleId, builder: (column) => column);
+
+  GeneratedColumn<String> get blobId =>
+      $composableBuilder(column: $table.blobId, builder: (column) => column);
+
+  GeneratedColumn<double> get alignScale => $composableBuilder(
+    column: $table.alignScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get alignRotation => $composableBuilder(
+    column: $table.alignRotation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get alignDx =>
+      $composableBuilder(column: $table.alignDx, builder: (column) => column);
+
+  GeneratedColumn<double> get alignDy =>
+      $composableBuilder(column: $table.alignDy, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$PhotoCheckInImagesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PhotoCheckInImagesTableTable,
+          PhotoCheckInImagesTableData,
+          $$PhotoCheckInImagesTableTableFilterComposer,
+          $$PhotoCheckInImagesTableTableOrderingComposer,
+          $$PhotoCheckInImagesTableTableAnnotationComposer,
+          $$PhotoCheckInImagesTableTableCreateCompanionBuilder,
+          $$PhotoCheckInImagesTableTableUpdateCompanionBuilder,
+          (
+            PhotoCheckInImagesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PhotoCheckInImagesTableTable,
+              PhotoCheckInImagesTableData
+            >,
+          ),
+          PhotoCheckInImagesTableData,
+          PrefetchHooks Function()
+        > {
+  $$PhotoCheckInImagesTableTableTableManager(
+    _$AppDatabase db,
+    $PhotoCheckInImagesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PhotoCheckInImagesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PhotoCheckInImagesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PhotoCheckInImagesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> checkInId = const Value.absent(),
+                Value<String> angleId = const Value.absent(),
+                Value<String> blobId = const Value.absent(),
+                Value<double> alignScale = const Value.absent(),
+                Value<double> alignRotation = const Value.absent(),
+                Value<double> alignDx = const Value.absent(),
+                Value<double> alignDy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoCheckInImagesTableCompanion(
+                id: id,
+                checkInId: checkInId,
+                angleId: angleId,
+                blobId: blobId,
+                alignScale: alignScale,
+                alignRotation: alignRotation,
+                alignDx: alignDx,
+                alignDy: alignDy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String checkInId,
+                required String angleId,
+                required String blobId,
+                Value<double> alignScale = const Value.absent(),
+                Value<double> alignRotation = const Value.absent(),
+                Value<double> alignDx = const Value.absent(),
+                Value<double> alignDy = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PhotoCheckInImagesTableCompanion.insert(
+                id: id,
+                checkInId: checkInId,
+                angleId: angleId,
+                blobId: blobId,
+                alignScale: alignScale,
+                alignRotation: alignRotation,
+                alignDx: alignDx,
+                alignDy: alignDy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PhotoCheckInImagesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PhotoCheckInImagesTableTable,
+      PhotoCheckInImagesTableData,
+      $$PhotoCheckInImagesTableTableFilterComposer,
+      $$PhotoCheckInImagesTableTableOrderingComposer,
+      $$PhotoCheckInImagesTableTableAnnotationComposer,
+      $$PhotoCheckInImagesTableTableCreateCompanionBuilder,
+      $$PhotoCheckInImagesTableTableUpdateCompanionBuilder,
+      (
+        PhotoCheckInImagesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PhotoCheckInImagesTableTable,
+          PhotoCheckInImagesTableData
+        >,
+      ),
+      PhotoCheckInImagesTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$RankingCategoriesTableTableCreateCompanionBuilder =
     RankingCategoriesTableCompanion Function({
       required String id,
@@ -79841,6 +83998,20 @@ class $AppDatabaseManager {
       $$PendingRemoteDeletesTableTableTableManager(
         _db,
         _db.pendingRemoteDeletesTable,
+      );
+  $$PhotoSeriesTableTableTableManager get photoSeriesTable =>
+      $$PhotoSeriesTableTableTableManager(_db, _db.photoSeriesTable);
+  $$PhotoSeriesAnglesTableTableTableManager get photoSeriesAnglesTable =>
+      $$PhotoSeriesAnglesTableTableTableManager(
+        _db,
+        _db.photoSeriesAnglesTable,
+      );
+  $$PhotoCheckInsTableTableTableManager get photoCheckInsTable =>
+      $$PhotoCheckInsTableTableTableManager(_db, _db.photoCheckInsTable);
+  $$PhotoCheckInImagesTableTableTableManager get photoCheckInImagesTable =>
+      $$PhotoCheckInImagesTableTableTableManager(
+        _db,
+        _db.photoCheckInImagesTable,
       );
   $$RankingCategoriesTableTableTableManager get rankingCategoriesTable =>
       $$RankingCategoriesTableTableTableManager(

@@ -101,6 +101,13 @@ abstract final class FirestoreCollections {
   /// Photo Series' encrypted images: metadata only, the ciphertext is in
   /// Storage — see `VaultBlob`.
   static const vaultBlobs = 'vault_blobs';
+
+  /// Photo Series (PHOTO_SERIES_HLD.md §14). Plain metadata; a check-in's
+  /// note is ciphertext.
+  static const photoSeries = 'photo_series';
+  static const photoSeriesAngles = 'photo_series_angles';
+  static const photoCheckIns = 'photo_check_ins';
+  static const photoCheckInImages = 'photo_check_in_images';
   static const tagColors = 'tag_colors';
   static const customWords = 'custom_words';
 
@@ -192,6 +199,10 @@ abstract final class FirestoreCollections {
     mediaAssets,
     mediaReferences,
     vaultBlobs,
+    photoSeries,
+    photoSeriesAngles,
+    photoCheckIns,
+    photoCheckInImages,
     tagColors,
     customWords,
     flaggedWords,

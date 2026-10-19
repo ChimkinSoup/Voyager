@@ -2214,6 +2214,26 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.photoSeries:
+        return pullPhotoSeries(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.photoSeriesAngles:
+        return pullPhotoSeriesAngles(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.photoCheckIns:
+        return pullPhotoCheckIns(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.photoCheckInImages:
+        return pullPhotoCheckInImages(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -3043,6 +3063,95 @@ class RemoteSyncService {
         clearFailureReason: merged.failureReason == null,
       );
     }
+  }
+
+  Future<bool> pullPhotoSeries({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) => _pullCollection(
+    FirestoreCollections.photoSeries,
+    onlyFirestoreDocumentIds: documentIds,
+    documentData: documentData,
+    resolveCrdt: false,
+    apply: (id, data, {required fromCrdt}) async {
+      final local = await _photoSeriesRepository.getSeries(id);
+      await _photoSeriesRepository.upsertSeries(
+        mergePhotoSeriesFromRemote(data, id, local: local),
+        recordLocalActivity: false,
+      );
+    },
+  );
+
+  Future<bool> pullPhotoSeriesAngles({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) => _pullCollection(
+    FirestoreCollections.photoSeriesAngles,
+    onlyFirestoreDocumentIds: documentIds,
+    documentData: documentData,
+    resolveCrdt: false,
+    apply: (id, data, {required fromCrdt}) async {
+      final local = await _photoSeriesRepository.getAngle(id);
+      await _photoSeriesRepository.upsertAngle(
+        mergePhotoSeriesAngleFromRemote(data, id, local: local),
+        recordLocalActivity: false,
+      );
+    },
+  );
+
+  Future<bool> pullPhotoCheckIns({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final changed = await _pullCollection(
+      FirestoreCollections.photoCheckIns,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _photoSeriesRepository.getCheckIn(id);
+        await _photoSeriesRepository.upsertCheckIn(
+          mergePhotoCheckInFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+    // A note sealed under a vault reset elsewhere, as [pullVaultBlobs].
+    final retired = changed
+        ? await retireVaultBlobs(
+            _notificationRepository,
+            _photoSeriesRepository,
+          )
+        : 0;
+    return changed || retired > 0;
+  }
+
+  Future<bool> pullPhotoCheckInImages({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final changed = await _pullCollection(
+      FirestoreCollections.photoCheckInImages,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _photoSeriesRepository.getImage(id);
+        await _photoSeriesRepository.upsertImage(
+          mergePhotoCheckInImageFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+    // An image showing a blob already retired, as [pullVaultBlobs]: on a
+    // fresh pull the images land last, after the blobs' retire has run.
+    final retired = changed
+        ? await retireVaultBlobs(
+            _notificationRepository,
+            _photoSeriesRepository,
+          )
+        : 0;
+    return changed || retired > 0;
   }
 
   Future<bool> pullMediaReferences({
@@ -6597,6 +6706,18 @@ class RemoteSyncService {
       case FirestoreCollections.vaultBlobs:
         if (record is! VaultBlob) return null;
         return (id: record.id, payload: vaultBlobToFirestore(record));
+      case FirestoreCollections.photoSeries:
+        if (record is! PhotoSeries) return null;
+        return (id: record.id, payload: photoSeriesToFirestore(record));
+      case FirestoreCollections.photoSeriesAngles:
+        if (record is! PhotoSeriesAngle) return null;
+        return (id: record.id, payload: photoSeriesAngleToFirestore(record));
+      case FirestoreCollections.photoCheckIns:
+        if (record is! PhotoCheckIn) return null;
+        return (id: record.id, payload: photoCheckInToFirestore(record));
+      case FirestoreCollections.photoCheckInImages:
+        if (record is! PhotoCheckInImage) return null;
+        return (id: record.id, payload: photoCheckInImageToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -7600,8 +7721,17 @@ class RemoteSyncService {
       _inOrder([pullContributionRooms, pullAssetRoomEvents]),
       _inOrder([pullSavingsGoals, pullGoalAllocations]),
       pullPinnedNotes(),
-      // Blobs after the header too, whose retired vaults they go with.
-      _inOrder([pullSecureVaultHeader, pullSecureNotes, pullVaultBlobs]),
+      // Blobs and check-ins after the header too, whose retired vaults
+      // they go with; containers before what they hold.
+      _inOrder([
+        pullSecureVaultHeader,
+        pullSecureNotes,
+        pullVaultBlobs,
+        pullPhotoSeries,
+        pullPhotoSeriesAngles,
+        pullPhotoCheckIns,
+        pullPhotoCheckInImages,
+      ]),
       pullDismissedNotifications(),
       pullDeviceRegistrations(),
       _inOrder([
@@ -7948,6 +8078,10 @@ class LiveSyncController {
     FirestoreCollections.mediaAssets,
     FirestoreCollections.mediaReferences,
     FirestoreCollections.vaultBlobs,
+    FirestoreCollections.photoSeries,
+    FirestoreCollections.photoSeriesAngles,
+    FirestoreCollections.photoCheckIns,
+    FirestoreCollections.photoCheckInImages,
     FirestoreCollections.tagColors,
     FirestoreCollections.customWords,
     FirestoreCollections.flaggedWords,

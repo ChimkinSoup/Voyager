@@ -299,10 +299,17 @@ class VaultMediaService extends ChangeNotifier {
     await drainUploads();
   }
 
-  /// Permanently deletes blobs tombstoned 30 days ago: rows, files, and the
-  /// Storage objects this device can reach. Files no live row claims go too.
+  /// Permanently deletes the series rows and blobs tombstoned 30 days ago:
+  /// rows, files, and the Storage objects this device can reach. Blobs no
+  /// image can bring back any more go with them, and files no live row
+  /// claims.
   Future<void> purgeExpired(DateTime now) async {
+    await _repository.purgeExpiredRecords(now);
     final purged = await _repository.purgeExpiredDeleted(now);
+    // Tombstoned after the purge, so the next pass purges them once the
+    // tombstone has uploaded. Before it, the outbox row the upsert queues
+    // may not exist yet, and nothing would hold the row back.
+    await _repository.releaseBlobs(now);
     for (final blob in purged) {
       await _fileStore.delete(blob.id);
     }

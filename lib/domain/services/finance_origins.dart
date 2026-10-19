@@ -76,13 +76,14 @@ List<String> recentTransactionOrigins(
 List<String> filterTransactionOrigins(List<String> origins, String query) {
   final needle = query.trim().toLowerCase();
   if (needle.isEmpty) return origins;
-  final matches = [
-    for (final (i, origin) in origins.indexed)
-      if (origin.toLowerCase().indexOf(needle) case final at when at >= 0)
-        (at: at, recency: i, origin: origin),
-  ]..sort((a, b) {
-    final byAt = a.at.compareTo(b.at);
-    return byAt != 0 ? byAt : a.recency.compareTo(b.recency);
-  });
+  final matches =
+      [
+        for (final (i, origin) in origins.indexed)
+          if (origin.toLowerCase().indexOf(needle) case final at when at >= 0)
+            (at: at, recency: i, origin: origin),
+      ]..sort((a, b) {
+        final byAt = a.at.compareTo(b.at);
+        return byAt != 0 ? byAt : a.recency.compareTo(b.recency);
+      });
   return [for (final m in matches) m.origin];
 }

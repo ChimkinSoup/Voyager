@@ -189,9 +189,10 @@ class WorkoutActions {
     String planId,
     int dayIndex,
   ) async => [
-    for (final e in await _ref
-        .read(workoutRepositoryProvider)
-        .listPlanEntries(planId, includeDeleted: true))
+    for (final e
+        in await _ref
+            .read(workoutRepositoryProvider)
+            .listPlanEntries(planId, includeDeleted: true))
       if (e.dayIndex == dayIndex) e,
   ];
 

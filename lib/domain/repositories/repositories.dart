@@ -749,10 +749,62 @@ abstract class WorkoutRepository {
   Future<List<WorkoutSetLog>> getAllSetLogs({bool includeDeleted = true});
 }
 
-/// Photo Series (PHOTO_SERIES_HLD.md): the encrypted blobs, and in time the
-/// series, angles and check-ins that use them. The ciphertext files live in
-/// `VaultMediaFileStore`.
+/// Photo Series (PHOTO_SERIES_HLD.md): the series, their angles, check-ins
+/// and images, and the encrypted blobs those use. The ciphertext files live
+/// in `VaultMediaFileStore`.
 abstract class PhotoSeriesRepository {
+  /// Every live row, re-read whenever any of the four tables changes.
+  Stream<PhotoSeriesSnapshot> watchSnapshot();
+  Future<PhotoSeriesSnapshot> loadSnapshot();
+
+  Future<List<PhotoSeries>> listSeries({bool includeDeleted = false});
+  Future<PhotoSeries?> getSeries(String id);
+  Future<void> upsertSeries(
+    PhotoSeries series, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<PhotoSeriesAngle>> listAngles({bool includeDeleted = false});
+  Future<PhotoSeriesAngle?> getAngle(String id);
+  Future<void> upsertAngle(
+    PhotoSeriesAngle angle, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<PhotoCheckIn>> listCheckIns({bool includeDeleted = false});
+  Future<PhotoCheckIn?> getCheckIn(String id);
+  Future<void> upsertCheckIn(
+    PhotoCheckIn checkIn, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<PhotoCheckInImage>> listImages({bool includeDeleted = false});
+  Future<PhotoCheckInImage?> getImage(String id);
+  Future<void> upsertImage(
+    PhotoCheckInImage image, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Writes [series], [angles], [checkIns] and [images] in one transaction,
+  /// then hands each to sync — a cascade, or a check-in with its photos.
+  Future<void> saveAll({
+    List<PhotoSeries> series = const [],
+    List<PhotoSeriesAngle> angles = const [],
+    List<PhotoCheckIn> checkIns = const [],
+    List<PhotoCheckInImage> images = const [],
+  });
+
+  /// Permanently deletes series, angles, check-ins and images tombstoned more
+  /// than 30 days ago. The blobs they used are [releaseBlobs]'.
+  Future<void> purgeExpiredRecords(DateTime now);
+
+  /// Tombstones the live blobs no image can bring back: every image naming
+  /// them erased or purged. Unnamed blobs are let be until they are older
+  /// than the purge window — an image row may still be on its way. Their
+  /// stamp is the purge cutoff, since their owner's window has already
+  /// closed, so the next purge takes them. Returns how many.
+  Future<int> releaseBlobs(DateTime now);
+
   Future<List<VaultBlob>> listBlobs({bool includeDeleted = false});
   Future<VaultBlob?> getBlob(String id);
 

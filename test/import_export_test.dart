@@ -945,6 +945,49 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await DriftPhotoSeriesRepository(db).saveAll(
+    series: [
+      PhotoSeries(
+        id: 'photo-series-1',
+        name: 'Progress',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ],
+    angles: [
+      PhotoSeriesAngle(
+        id: 'photo-angle-1',
+        seriesId: 'photo-series-1',
+        name: 'Front',
+        frameAspect: 0.75,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ],
+    checkIns: [
+      PhotoCheckIn(
+        id: 'photo-check-in-1',
+        seriesId: 'photo-series-1',
+        takenOn: DateTime(2026, 10, 18),
+        noteCiphertext: 'c2VhbGVk',
+        noteNonce: 'bm9uY2U=',
+        vaultId: 'vault-1',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ],
+    images: [
+      PhotoCheckInImage(
+        id: 'photo-image-1',
+        checkInId: 'photo-check-in-1',
+        angleId: 'photo-angle-1',
+        blobId: 'vault-blob-1',
+        alignScale: 1.1,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ],
+  );
   await settingsRepo.setTagColor('food', 0xFF00FF00);
   await settingsRepo.addCustomWord('voyagerish');
   await settingsRepo.flagWord('neve', replacement: 'never');
@@ -1313,6 +1356,10 @@ void main() {
         'media_assets_table',
         'media_references_table',
         'vault_blobs_table',
+        'photo_series_table',
+        'photo_series_angles_table',
+        'photo_check_ins_table',
+        'photo_check_in_images_table',
         'tag_colors_table',
         'custom_words_table',
         'flagged_words_table',

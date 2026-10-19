@@ -7,6 +7,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/text/prose_markup.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 
 /// The page a deleted item came from — the trash's filter chips.
@@ -22,7 +23,8 @@ enum TrashFeature {
   finance('Finance'),
   analytics('Analytics'),
   workout('Workout'),
-  life('Life');
+  life('Life'),
+  photoSeries('Photos');
 
   const TrashFeature(this.label);
 
@@ -684,6 +686,66 @@ final _kinds = <TrashKind>[
     collection: FirestoreCollections.workoutSetLogs,
     feature: TrashFeature.workout,
     noun: 'set',
+    listed: false,
+  ),
+  // A series takes its angles and check-ins, and those their images, under
+  // one stamp. An angle removed on its own takes its images the same way.
+  const TrashKind(
+    collection: FirestoreCollections.photoSeries,
+    feature: TrashFeature.photoSeries,
+    noun: 'series',
+    containerLabel: 'Series',
+    wipe: ['name'],
+    children: [
+      TrashChild(FirestoreCollections.photoSeriesAngles, ['seriesId']),
+      TrashChild(
+        FirestoreCollections.photoCheckIns,
+        ['seriesId'],
+        counted: ('check-in', 'check-ins'),
+      ),
+    ],
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.photoSeriesAngles,
+    feature: TrashFeature.photoSeries,
+    noun: 'angle',
+    containerLabel: 'Angle',
+    wipe: ['name'],
+    children: [
+      TrashChild(
+        FirestoreCollections.photoCheckInImages,
+        ['angleId'],
+        counted: ('photo', 'photos'),
+      ),
+    ],
+    parents: [TrashParent(FirestoreCollections.photoSeries, 'seriesId')],
+  ),
+  // Titled by its date; the note is ciphertext, and stays so.
+  TrashKind(
+    collection: FirestoreCollections.photoCheckIns,
+    feature: TrashFeature.photoSeries,
+    noun: 'check-in',
+    containerLabel: 'Check-in',
+    title: (data) {
+      final date = parseFirestoreDate(data['takenOn']);
+      return date == null
+          ? null
+          : DateFormat.yMMMEd().format(photoCalendarDate(date));
+    },
+    wipe: const ['noteCiphertext', 'noteNonce'],
+    children: const [
+      TrashChild(
+        FirestoreCollections.photoCheckInImages,
+        ['checkInId'],
+        counted: ('photo', 'photos'),
+      ),
+    ],
+    parents: const [TrashParent(FirestoreCollections.photoSeries, 'seriesId')],
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.photoCheckInImages,
+    feature: TrashFeature.photoSeries,
+    noun: 'photo',
     listed: false,
   ),
   TrashKind(

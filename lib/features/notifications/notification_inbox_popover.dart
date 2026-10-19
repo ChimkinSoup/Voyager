@@ -46,6 +46,7 @@ import 'package:voyager/core/secure_vault/secure_clipboard.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 import 'package:voyager/features/notifications/secure_vault_dialogs.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/settings/folder_backup_list_dialog.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
@@ -162,6 +163,9 @@ class _NotificationInboxPopoverState
   /// rebuild with it.
   SecureVaultSessionNotifier? _session;
 
+  /// Whether Photos is on screen, read for [dispose] the same way.
+  StateController<bool>? _photosVisible;
+
   @override
   void initState() {
     super.initState();
@@ -174,8 +178,14 @@ class _NotificationInboxPopoverState
       HardwareKeyboard.instance.removeHandler(_onKey);
       // Closing the inbox locks the vault — just after, since a provider may
       // not change while the tree is being torn down. A session disposed by
-      // then has locked itself.
-      if (_session case final session?) scheduleMicrotask(session.lock);
+      // then has locked itself. Not while Photos is the page on screen,
+      // which shares the session: a glance at the inbox mustn't lock the
+      // photos being looked at (PHOTO_SERIES_HLD.md §6.4).
+      if (_session case final session?) {
+        if (!(_photosVisible?.state ?? false)) {
+          scheduleMicrotask(session.lock);
+        }
+      }
     }
     super.dispose();
   }
@@ -197,6 +207,7 @@ class _NotificationInboxPopoverState
         ref.watch(secureVaultSessionProvider.select((s) => s != null));
     if (!widget.prewarm) {
       _session = ref.read(secureVaultSessionProvider.notifier);
+      _photosVisible = ref.read(photoSeriesPageVisibleProvider.notifier);
     }
     return Material(
       type: MaterialType.transparency,

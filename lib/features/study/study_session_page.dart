@@ -229,8 +229,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     };
     final gradedElsewhere = {
       for (final card in byId.values)
-        if (card.dueAt.isAfter(now) &&
-            gradedHere[card.id] != card.reviewCount)
+        if (card.dueAt.isAfter(now) && gradedHere[card.id] != card.reviewCount)
           card.id,
     };
     final remaining = [

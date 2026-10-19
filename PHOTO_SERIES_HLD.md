@@ -6,7 +6,7 @@ Photos and notes are encrypted with the existing **Secure Vault** (`SECURE_NOTES
 
 Related: `lib/core/secure_vault/secure_vault.dart`, `lib/features/notifications/secure_vault_session.dart`, `lib/features/notifications/secure_vault_dialogs.dart`, `lib/core/media/media_service.dart`, `lib/domain/services/media_ingest.dart`, `lib/core/reminders/reminder_engine.dart`, `lib/domain/models/reminder_models.dart`, `lib/domain/models/notification_models.dart`, `lib/domain/services/periodic_prompt_service.dart`, `lib/features/shell/shell_destinations.dart`, `MEDIA.md`, `SCHEDULED_REMINDERS_HLD.md`, `UNIFIED_NOTIFICATIONS.md`.
 
-Status: **phase 1 implemented** (vault media core); phases 2–6 not started.
+Status: **phases 1–2 implemented** (vault media core; series and check-ins); phases 3–6 not started.
 
 ---
 

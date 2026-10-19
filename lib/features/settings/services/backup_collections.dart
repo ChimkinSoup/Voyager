@@ -1288,6 +1288,75 @@ List<BackupCollection> buildBackupCollections({
         return blob;
       },
     ),
+    // Photo Series, containers first. A check-in's note stays sealed.
+    BackupCollection(
+      name: FirestoreCollections.photoSeries,
+      read: () async => [
+        for (final series in await photoSeriesRepository.listSeries(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: series.id, data: photoSeriesToFirestore(series)),
+      ],
+      restore: (id, data) async {
+        final series = mergePhotoSeriesFromRemote(data, id);
+        await photoSeriesRepository.upsertSeries(
+          series,
+          recordLocalActivity: false,
+        );
+        return series;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.photoSeriesAngles,
+      read: () async => [
+        for (final angle in await photoSeriesRepository.listAngles(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: angle.id, data: photoSeriesAngleToFirestore(angle)),
+      ],
+      restore: (id, data) async {
+        final angle = mergePhotoSeriesAngleFromRemote(data, id);
+        await photoSeriesRepository.upsertAngle(
+          angle,
+          recordLocalActivity: false,
+        );
+        return angle;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.photoCheckIns,
+      read: () async => [
+        for (final checkIn in await photoSeriesRepository.listCheckIns(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: checkIn.id, data: photoCheckInToFirestore(checkIn)),
+      ],
+      restore: (id, data) async {
+        final checkIn = mergePhotoCheckInFromRemote(data, id);
+        await photoSeriesRepository.upsertCheckIn(
+          checkIn,
+          recordLocalActivity: false,
+        );
+        return checkIn;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.photoCheckInImages,
+      read: () async => [
+        for (final image in await photoSeriesRepository.listImages(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: image.id, data: photoCheckInImageToFirestore(image)),
+      ],
+      restore: (id, data) async {
+        final image = mergePhotoCheckInImageFromRemote(data, id);
+        await photoSeriesRepository.upsertImage(
+          image,
+          recordLocalActivity: false,
+        );
+        return image;
+      },
+    ),
     BackupCollection(
       name: FirestoreCollections.tagColors,
       // Keyed by the tag itself.

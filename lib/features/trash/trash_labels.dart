@@ -18,6 +18,7 @@ IconData trashFeatureIcon(TrashFeature feature) => switch (feature) {
   TrashFeature.analytics => PhosphorIconsRegular.chartLine,
   TrashFeature.workout => PhosphorIconsRegular.barbell,
   TrashFeature.life => PhosphorIconsRegular.tree,
+  TrashFeature.photoSeries => PhosphorIconsRegular.images,
 };
 
 /// `Journal "Work"`, `"Trip to Banff"`, or `Untitled entry`.
