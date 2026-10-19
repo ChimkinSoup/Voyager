@@ -83,7 +83,14 @@ final routerProvider = Provider<GoRouter>((ref) {
                   routes: [
                     GoRoute(
                       path: dest.path,
-                      builder: (_, _) => _RemountOnRestore(child: dest.page),
+                      // Opaque so a click on the page's bare background stops
+                      // here. Pages without a Scaffold let it through to the
+                      // route's modal barrier, which can't dismiss a page and
+                      // plays the system alert instead: the Windows ding.
+                      builder: (_, _) => Listener(
+                        behavior: HitTestBehavior.opaque,
+                        child: _RemountOnRestore(child: dest.page),
+                      ),
                     ),
                   ],
                 ),
