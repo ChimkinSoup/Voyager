@@ -322,6 +322,10 @@ class PhotoCheckInImage extends SoftDeletable {
   final double alignDy;
 
   PhotoCheckInImage copyWith({
+    double? alignScale,
+    double? alignRotation,
+    double? alignDx,
+    double? alignDy,
     DateTime? updatedAt,
     bool bumpVersion = false,
     DateTime? deletedAt,
@@ -332,10 +336,10 @@ class PhotoCheckInImage extends SoftDeletable {
       checkInId: checkInId,
       angleId: angleId,
       blobId: blobId,
-      alignScale: alignScale,
-      alignRotation: alignRotation,
-      alignDx: alignDx,
-      alignDy: alignDy,
+      alignScale: alignScale ?? this.alignScale,
+      alignRotation: alignRotation ?? this.alignRotation,
+      alignDx: alignDx ?? this.alignDx,
+      alignDy: alignDy ?? this.alignDy,
       createdAt: createdAt,
       updatedAt: updatedAt ?? utcNow(),
       version: bumpVersion ? version + 1 : version,

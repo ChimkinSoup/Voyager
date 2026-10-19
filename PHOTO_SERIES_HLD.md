@@ -6,7 +6,7 @@ Photos and notes are encrypted with the existing **Secure Vault** (`SECURE_NOTES
 
 Related: `lib/core/secure_vault/secure_vault.dart`, `lib/features/notifications/secure_vault_session.dart`, `lib/features/notifications/secure_vault_dialogs.dart`, `lib/core/media/media_service.dart`, `lib/domain/services/media_ingest.dart`, `lib/core/reminders/reminder_engine.dart`, `lib/domain/models/reminder_models.dart`, `lib/domain/models/notification_models.dart`, `lib/domain/services/periodic_prompt_service.dart`, `lib/features/shell/shell_destinations.dart`, `MEDIA.md`, `SCHEDULED_REMINDERS_HLD.md`, `UNIFIED_NOTIFICATIONS.md`.
 
-Status: **phases 1–4 implemented** (vault media core; series and check-ins; reminders; playback and compare); phases 5–6 not started.
+Status: **phases 1–5 implemented** (vault media core; series and check-ins; reminders; playback and compare; alignment tool); phase 6 not started.
 
 ---
 
@@ -360,8 +360,13 @@ All of this is computed from plain fields, so it works while locked.
    - Playback's frame window (30 ahead in the direction of play, 10 behind), decoded no larger than drawn; a frame that won't open is stepped past, and the thumbnail stands in for a full image not yet downloaded;
    - Compare's quick picks are relative to B ("~1 month ago" = nearest to a month before B);
    - elapsed time reads in days under 2 weeks, weeks under 26, months under 24, then years;
-   - Playback and Compare draw each photo with its transform: fitted inside the frame, then moved, rotated and zoomed about the frame's centre. The viewer doesn't yet; that comes with phase 5.
-5. **Alignment tool.**
+   - Playback and Compare draw each photo with its transform: fitted inside the frame, then moved, rotated and zoomed about the frame's centre. The viewer does too since phase 5.
+5. **Alignment tool** — **done (2026-10-19)**:
+   - opened from a tile's context menu ("Align", per angle when the series has several), as a dialog; saved on Done, dropped on Cancel or a lock;
+   - the reference is drawn with its own transform, so the photo lines up with the aligned series; aligning the reference itself shows nothing underneath;
+   - zoom is 20–800% and rotation ±45° (a sideways photo is turned at ingest); arrow keys nudge 1 px, Shift 10 px;
+   - "Use as reference" on a tile's context menu, disabled on the angle's current reference; replacing the reference photo makes the new photo the reference;
+   - the viewer draws photos aligned and clipped to the frame.
 6. **Android capture:** `camera`, permissions, the ghost overlay and `FLAG_SECURE`.
 
 Each phase can ship on its own. The ghost overlay is the most important capture feature, but it needs phases 1–2 (storage) and benefits from 5 (aligned ghost).

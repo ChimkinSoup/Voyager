@@ -219,7 +219,11 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
       }
       rethrow;
     }
-    if (mounted) Navigator.pop(context);
+    // A lock mid-save has already closed this; popping again would close
+    // the page under it.
+    if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -227,7 +231,10 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     // A lock takes the photos with it, and the dialog: nothing here could be
     // sealed any more.
     ref.listen(secureVaultSessionProvider, (_, session) {
-      if (session == null) Navigator.of(context).maybePop();
+      // Not once it's closing: that would close the page under it.
+      if (session == null && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        Navigator.of(context).maybePop();
+      }
     });
     final theme = Theme.of(context);
     final onReview = _step == _reviewStep;

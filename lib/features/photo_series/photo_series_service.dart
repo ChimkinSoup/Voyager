@@ -230,6 +230,7 @@ class PhotoSeriesService {
   }
 
   /// Gives [checkIn] [bytes] as its photo of [angleId], replacing any it had.
+  /// A replaced reference hands the role to the new photo.
   Future<void> setPhoto({
     required SecureVaultSession session,
     required PhotoCheckIn checkIn,
@@ -242,7 +243,12 @@ class PhotoSeriesService {
         if (image.checkInId == checkIn.id && image.angleId == angleId)
           image.copyWith(deletedAt: now, bumpVersion: true),
     ];
-    final (image, angle) = await _ingest(session, checkIn.id, angleId, bytes);
+    var (image, angle) = await _ingest(session, checkIn.id, angleId, bytes);
+    final current = angle ?? await _repository.getAngle(angleId);
+    if (current != null &&
+        replaced.any((old) => old.id == current.referenceImageId)) {
+      angle = current.copyWith(referenceImageId: image.id, bumpVersion: true);
+    }
     await _repository.saveAll(angles: [?angle], images: [...replaced, image]);
   }
 
@@ -268,6 +274,32 @@ class PhotoSeriesService {
               note: await _seal(session, trimmed),
               bumpVersion: true,
             ),
+    );
+  }
+
+  /// Gives the image [aligned] names its transform (PHOTO_SERIES_HLD.md
+  /// §10), onto the row as it stands now.
+  Future<void> setAlignment(PhotoCheckInImage aligned) async {
+    final image = await _repository.getImage(aligned.id);
+    if (image == null || image.deletedAt != null) return;
+    await _repository.upsertImage(
+      image.copyWith(
+        alignScale: aligned.alignScale,
+        alignRotation: aligned.alignRotation,
+        alignDx: aligned.alignDx,
+        alignDy: aligned.alignDy,
+        bumpVersion: true,
+      ),
+    );
+  }
+
+  /// Makes [image] the one its angle's alignment editor draws underneath.
+  /// Moves nothing: transforms and the frame stay as they are.
+  Future<void> setReference(PhotoCheckInImage image) async {
+    final angle = await _repository.getAngle(image.angleId);
+    if (angle == null || angle.referenceImageId == image.id) return;
+    await _repository.upsertAngle(
+      angle.copyWith(referenceImageId: image.id, bumpVersion: true),
     );
   }
 

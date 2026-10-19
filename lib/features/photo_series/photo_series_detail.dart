@@ -14,6 +14,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_align_editor.dart';
 import 'package:voyager/features/photo_series/photo_check_in_dialog.dart';
 import 'package:voyager/features/photo_series/photo_series_compare.dart';
 import 'package:voyager/features/photo_series/photo_series_dialogs.dart';
@@ -212,6 +213,12 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     final entries = [
       for (final group in groups.reversed) ...group.entries.reversed,
     ];
+    final referenceImageIds = {
+      for (final angle in angles)
+        if (photoReferenceFrame(angle, photoFramesOf(entries, angle.id))
+            case final reference?)
+          reference.image.id,
+    };
 
     return VaultActivity(
       child: Scaffold(
@@ -322,6 +329,9 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
                                   entry: entry,
                                   onOpen: () =>
                                       _openViewer(groups, entry, angles),
+                                  onAlign: (angle, image) =>
+                                      _align(entries, angle, image),
+                                  referenceImageIds: referenceImageIds,
                                   requireUnlocked: _requireUnlocked,
                                 ),
                             ],
@@ -333,6 +343,20 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
                 ],
               ),
       ),
+    );
+  }
+
+  void _align(
+    List<PhotoViewerEntry> entries,
+    PhotoSeriesAngle angle,
+    PhotoCheckInImage image,
+  ) {
+    if (!_requireUnlocked()) return;
+    showPhotoAlignEditor(
+      context,
+      angle: angle,
+      frames: photoFramesOf(entries, angle.id),
+      image: image,
     );
   }
 
@@ -549,6 +573,8 @@ class _CheckInTile extends ConsumerStatefulWidget {
     required this.angles,
     required this.entry,
     required this.onOpen,
+    required this.onAlign,
+    required this.referenceImageIds,
     required this.requireUnlocked,
   });
 
@@ -556,6 +582,10 @@ class _CheckInTile extends ConsumerStatefulWidget {
   final List<PhotoSeriesAngle> angles;
   final PhotoViewerEntry entry;
   final VoidCallback onOpen;
+  final void Function(PhotoSeriesAngle angle, PhotoCheckInImage image) onAlign;
+
+  /// Each angle's reference photo (§10).
+  final Set<String> referenceImageIds;
   final bool Function() requireUnlocked;
 
   @override
@@ -634,6 +664,40 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
 
   List<ContextMenuItem> _items() {
     final images = widget.entry.images;
+    final present = [
+      for (final angle in widget.angles)
+        if (images[angle.id] case final image?) (angle: angle, image: image),
+    ];
+
+    /// One item for a series of one angle, else one per angle this
+    /// check-in has a photo of.
+    ContextMenuItem perAngle(
+      String label,
+      IconData icon,
+      bool Function(PhotoCheckInImage image) enabled,
+      void Function(PhotoSeriesAngle angle, PhotoCheckInImage image) onTap,
+    ) => widget.angles.length == 1
+        ? ContextMenuItem(
+            label: label,
+            icon: icon,
+            enabled: enabled(present.single.image),
+            onTap: enabled(present.single.image)
+                ? () => onTap(present.single.angle, present.single.image)
+                : null,
+          )
+        : ContextMenuItem(
+            label: label,
+            icon: icon,
+            children: [
+              for (final (:angle, :image) in present)
+                ContextMenuItem(
+                  label: angle.name,
+                  enabled: enabled(image),
+                  onTap: enabled(image) ? () => onTap(angle, image) : null,
+                ),
+            ],
+          );
+
     return [
       ContextMenuItem(
         label: 'Edit date',
@@ -657,6 +721,21 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
               onTap: () => _setPhoto(angle),
             ),
         ],
+      ),
+      perAngle(
+        'Align',
+        PhosphorIconsRegular.frameCorners,
+        (_) => true,
+        widget.onAlign,
+      ),
+      perAngle(
+        'Use as reference',
+        PhosphorIconsRegular.pushPin,
+        (image) => !widget.referenceImageIds.contains(image.id),
+        (_, image) {
+          if (!widget.requireUnlocked()) return;
+          ref.read(photoSeriesServiceProvider).setReference(image);
+        },
       ),
       ContextMenuItem(
         label: 'Delete check-in',

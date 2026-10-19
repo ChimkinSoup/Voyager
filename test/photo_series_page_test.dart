@@ -2,10 +2,12 @@
 // with the inbox (PHOTO_SERIES_HLD.md §4.1, §6.4, §7.1).
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/rendering.dart';
@@ -17,6 +19,7 @@ import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/secure_vault/vault_media_service.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/services/vault_media_file_store.dart';
@@ -168,11 +171,14 @@ Future<void> _drain(WidgetTester tester) async {
   }
 }
 
+/// The series' detail; [pushed] over a home page, as the app has it, so a
+/// stray pop shows.
 Future<void> _pumpDetail(
   WidgetTester tester,
   ProviderContainer container,
-  String seriesId,
-) async {
+  String seriesId, {
+  bool pushed = false,
+}) async {
   tester.view.physicalSize = const Size(1200, 1000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -181,10 +187,22 @@ Future<void> _pumpDetail(
       container: container,
       child: MaterialApp(
         theme: VoyagerTheme.dark(),
-        home: PhotoSeriesDetail(seriesId: seriesId),
+        home: pushed
+            ? Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PhotoSeriesDetail(seriesId: seriesId),
+                    ),
+                  ),
+                  child: const Text('home'),
+                ),
+              )
+            : PhotoSeriesDetail(seriesId: seriesId),
       ),
     ),
   );
+  if (pushed) await tester.tap(find.text('home'));
   // The snapshot stream's first read.
   await tester.runAsync(
     () => container.read(photoSeriesSnapshotProvider.future),
@@ -478,6 +496,256 @@ void main() {
 
     container.read(secureVaultSessionProvider.notifier).lock();
     await tester.pump();
+  });
+
+  group('alignment', () {
+    /// The series' photos, oldest first.
+    Future<List<PhotoCheckInImage>> images(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      final repository = container.read(photoSeriesRepositoryProvider);
+      final takenOn = {
+        for (final checkIn in (await tester.runAsync(repository.listCheckIns))!)
+          checkIn.id: checkIn.takenOn,
+      };
+      return (await tester.runAsync(repository.listImages))!..sort(
+        (a, b) => takenOn[a.checkInId]!.compareTo(takenOn[b.checkInId]!),
+      );
+    }
+
+    /// Opens the context menu of the [index]th tile, newest first, and picks
+    /// [item].
+    Future<void> menu(WidgetTester tester, int index, String item) async {
+      await tester.tap(
+        find.byType(VaultPhoto).at(index),
+        buttons: kSecondaryButton,
+        warnIfMissed: false,
+      );
+      await _settle(tester);
+      await tester.tap(find.text(item));
+      await _drain(tester);
+    }
+
+    testWidgets('zooms about the cursor, nudges, and saves on Done', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+
+      await menu(tester, 0, 'Align');
+      expect(find.textContaining('Align Front'), findsOneWidget);
+      // The reference underneath, the photo being aligned over it.
+      final frames = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(AlignedPhotoFrame),
+      );
+      expect(frames, findsNWidgets(2));
+      final width = tester.getSize(frames.last).width;
+      final centre = tester.getCenter(frames.last);
+
+      // Twice the size, about a point 50 px right of the centre: the photo's
+      // centre ends up 50 px left of it.
+      final mouse = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        mouse.hover(centre + const Offset(50, 0)),
+      );
+      await tester.sendEventToBinding(
+        mouse.scroll(Offset(0, -400 * math.log(2))),
+      );
+      await tester.pump();
+      expect(find.textContaining('Zoom 200%'), findsOneWidget);
+      // Shift + → nudges 10 px.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(GlassButton, 'Done'));
+      await _drain(tester);
+      expect(find.textContaining('Align Front'), findsNothing);
+      final latest = (await images(tester, container)).last;
+      expect(latest.alignScale, closeTo(2, 1e-6));
+      expect(latest.alignDx, closeTo(-40 / width, 1e-6));
+      expect(latest.alignDy, closeTo(0, 1e-6));
+      expect(latest.alignRotation, 0);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('copies from the previous photo; any photo can be the '
+        'reference', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      final service = container.read(photoSeriesServiceProvider);
+      final first = (await images(tester, container)).first;
+      await tester.runAsync(
+        () => service.setAlignment(
+          first.copyWith(alignScale: 1.5, alignRotation: 0.1, alignDx: 0.2),
+        ),
+      );
+      await _pumpDetail(tester, container, series.id);
+
+      await menu(tester, 0, 'Align');
+      await tester.tap(find.text('Copy from previous'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(GlassButton, 'Done'));
+      await _drain(tester);
+      final latest = (await images(tester, container)).last;
+      expect(latest.alignScale, 1.5);
+      expect(latest.alignRotation, 0.1);
+      expect(latest.alignDx, 0.2);
+
+      // The first photo is the reference until another is picked.
+      Future<String?> reference() async => (await tester.runAsync(
+        container.read(photoSeriesRepositoryProvider).listAngles,
+      ))!.single.referenceImageId;
+      await menu(tester, 1, 'Use as reference');
+      expect(await reference(), isNull);
+      await tester.tapAt(Offset.zero);
+      await _settle(tester);
+      await menu(tester, 0, 'Use as reference');
+      expect(await reference(), latest.id);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('replacing the reference photo hands it the role', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      await _seed(tester, container);
+      final repository = container.read(photoSeriesRepositoryProvider);
+      final service = container.read(photoSeriesServiceProvider);
+      final latest = (await images(tester, container)).last;
+      await tester.runAsync(() async {
+        await service.setReference(latest);
+        await service.setPhoto(
+          session: container.read(secureVaultSessionProvider)!,
+          checkIn: (await repository.getCheckIn(latest.checkInId))!,
+          angleId: latest.angleId,
+          bytes: _jpeg(),
+        );
+      });
+      final replacement = (await images(tester, container)).last;
+      expect(replacement.id, isNot(latest.id));
+      final angle = (await tester.runAsync(repository.listAngles))!.single;
+      expect(angle.referenceImageId, replacement.id);
+    });
+
+    testWidgets('the viewer draws the photo aligned', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      final latest = (await images(tester, container)).last;
+      await tester.runAsync(
+        () => container
+            .read(photoSeriesServiceProvider)
+            .setAlignment(latest.copyWith(alignScale: 1.5)),
+      );
+      await _pumpDetail(tester, container, series.id);
+
+      await tester.tap(find.byType(VaultPhoto).first, warnIfMissed: false);
+      await _settle(tester);
+      await tester.tap(find.byType(VaultPhoto).first);
+      await _settle(tester);
+      expect(find.text('2 / 2'), findsOneWidget);
+      final frame = tester.widget<AlignedPhotoFrame>(
+        find.byType(AlignedPhotoFrame),
+      );
+      expect(frame.image.alignScale, 1.5);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('the arrow keys still nudge after a slider is dragged', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await menu(tester, 0, 'Align');
+
+      await tester.tap(find.byType(Slider).last);
+      await tester.pump();
+      final rotation = find.textContaining('°');
+      final before = tester.widget<Text>(rotation).data;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(tester.widget<Text>(rotation).data, before);
+
+      await tester.tap(find.widgetWithText(GlassButton, 'Done'));
+      await _drain(tester);
+      expect((await images(tester, container)).last.alignDx, greaterThan(0));
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    // Done's save closed the editor, then the lock closed it again — the
+    // series under it, while the editor was still fading out.
+    testWidgets('a lock while Done saves leaves the series open', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id, pushed: true);
+      await menu(tester, 0, 'Align');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(GlassButton, 'Done'));
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _drain(tester);
+      expect(find.textContaining('Align Front'), findsNothing);
+      expect(find.byType(PhotoSeriesDetail), findsOneWidget);
+    });
+
+    // The same double close as Done's, from the viewer.
+    testWidgets('a lock while the viewer closes leaves the series open', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id, pushed: true);
+      await tester.tap(find.byType(VaultPhoto).first, warnIfMissed: false);
+      await _settle(tester);
+      await tester.tap(find.byType(VaultPhoto).first);
+      await _settle(tester);
+      expect(find.text('2 / 2'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _drain(tester);
+      expect(find.text('2 / 2'), findsNothing);
+      expect(find.byType(PhotoSeriesDetail), findsOneWidget);
+    });
+
+    testWidgets('locking closes the editor unsaved', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await menu(tester, 0, 'Align');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+      expect(find.textContaining('Align Front'), findsNothing);
+      expect((await images(tester, container)).last.alignDx, 0);
+    });
   });
 
   group('closing the inbox', () {

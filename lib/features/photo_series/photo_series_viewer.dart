@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_frame.dart';
 import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
@@ -19,7 +20,8 @@ typedef PhotoViewerEntry = ({
 
 /// The full-screen viewer (PHOTO_SERIES_HLD.md §7.2): one check-in at a
 /// time, left and right to its neighbours, up and down through its angles,
-/// with the note underneath. Closes when the vault locks.
+/// with the note underneath, each photo aligned onto its angle's frame.
+/// Closes when the vault locks.
 Future<void> showPhotoSeriesViewer(
   BuildContext context, {
   required List<PhotoViewerEntry> entries,
@@ -138,7 +140,10 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
   @override
   Widget build(BuildContext context) {
     ref.listen(secureVaultSessionProvider, (_, session) {
-      if (session == null) Navigator.of(context).maybePop();
+      // Not once it's closing: that would close the page under it.
+      if (session == null && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        Navigator.of(context).maybePop();
+      }
     });
     final session = ref.watch(secureVaultSessionProvider);
     final entry = widget.entries[_index];
@@ -177,8 +182,8 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                         },
                         itemBuilder: (context, index) {
                           final pageEntry = widget.entries[index];
-                          final image =
-                              pageEntry.images[_angleFor(pageEntry).id]!;
+                          final pageAngle = _angleFor(pageEntry);
+                          final image = pageEntry.images[pageAngle.id]!;
                           return GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => Navigator.of(context).maybePop(),
@@ -197,17 +202,23 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                                   // Taps on the photo itself don't close.
                                   child: GestureDetector(
                                     onTap: () {},
-                                    child: VaultPhoto(
-                                      key: ValueKey(image.blobId),
-                                      blobId: image.blobId,
-                                      thumb: false,
-                                      fit: BoxFit.contain,
-                                      // The thumbnail while the full image
-                                      // decodes or downloads.
-                                      placeholder: VaultPhoto(
+                                    child: AlignedPhotoFrame(
+                                      aspect:
+                                          pageAngle.frameAspect ??
+                                          kDefaultPhotoFrameAspect,
+                                      image: image,
+                                      child: VaultPhoto(
+                                        key: ValueKey(image.blobId),
                                         blobId: image.blobId,
-                                        thumb: true,
+                                        thumb: false,
                                         fit: BoxFit.contain,
+                                        // The thumbnail while the full image
+                                        // decodes or downloads.
+                                        placeholder: VaultPhoto(
+                                          blobId: image.blobId,
+                                          thumb: true,
+                                          fit: BoxFit.contain,
+                                        ),
                                       ),
                                     ),
                                   ),
