@@ -25,6 +25,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -166,6 +167,7 @@ List<BackupCollection> collectionsFor(AppDatabase db) => buildBackupCollections(
   reminderRepository: DriftReminderRepository(db),
   bucketListRepository: DriftBucketListRepository(db),
   mediaRepository: DriftMediaRepository(db),
+  photoSeriesRepository: DriftPhotoSeriesRepository(db),
   settingsRepository: DriftSettingsRepository(db),
 );
 
@@ -931,6 +933,18 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await DriftPhotoSeriesRepository(db).upsertBlob(
+    VaultBlob(
+      id: 'vault-blob-1',
+      vaultId: 'vault-1',
+      width: 2048,
+      height: 1536,
+      byteSize: 900000,
+      thumbByteSize: 30000,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await settingsRepo.setTagColor('food', 0xFF00FF00);
   await settingsRepo.addCustomWord('voyagerish');
   await settingsRepo.flagWord('neve', replacement: 'never');
@@ -1298,6 +1312,7 @@ void main() {
         'ranking_counts_table',
         'media_assets_table',
         'media_references_table',
+        'vault_blobs_table',
         'tag_colors_table',
         'custom_words_table',
         'flagged_words_table',
@@ -1309,6 +1324,8 @@ void main() {
         // relationship with the server, not anything the user wrote.
         'pending_uploads_table',
         'sync_conflicts_table',
+        // Storage deletes this device owes its own account.
+        'pending_remote_deletes_table',
         // How far this device's pulls have got. A restore pushes what it
         // restores, so the marks never need to travel with the data.
         'sync_watermarks_table',
@@ -1738,6 +1755,7 @@ void main() {
           reminderRepository: DriftReminderRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
+          photoSeriesRepository: DriftPhotoSeriesRepository(db),
           settingsRepository: DriftSettingsRepository(db),
         ),
         settingsRepository: DriftSettingsRepository(db),
@@ -2010,6 +2028,7 @@ void main() {
           reminderRepository: DriftReminderRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
+          photoSeriesRepository: DriftPhotoSeriesRepository(db),
           settingsRepository: DriftSettingsRepository(db),
           syncEngine: syncEngine,
           uploadDebounceDelay: Duration.zero,
@@ -2096,6 +2115,7 @@ void main() {
           reminderRepository: DriftReminderRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
+          photoSeriesRepository: DriftPhotoSeriesRepository(db),
           settingsRepository: DriftSettingsRepository(db),
           syncEngine: syncEngine,
           uploadDebounceDelay: Duration.zero,

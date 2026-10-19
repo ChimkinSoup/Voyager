@@ -22,6 +22,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -1019,6 +1020,85 @@ MediaAsset mergeMediaAssetFromRemote(
         : local?.downloadState ?? MediaDownloadState.missing,
     failureReason: unpark ? null : local?.failureReason,
     unreferencedAt: parseFirestoreDate(data['unreferencedAt']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+/// A [VaultBlob]'s metadata. Transfer state stays off the wire, with
+/// `inCloud` the one exception, on the terms [mediaAssetToFirestore] gives.
+Map<String, dynamic> vaultBlobToFirestore(VaultBlob blob) => {
+  'id': blob.id,
+  if (blob.hasLocalBytes)
+    'inCloud': blob.uploadState == MediaUploadState.uploaded,
+  'vaultId': blob.vaultId,
+  'width': blob.width,
+  'height': blob.height,
+  'byteSize': blob.byteSize,
+  'thumbByteSize': blob.thumbByteSize,
+  'createdAt': _dateToFirestoreRequired(blob.createdAt),
+  'updatedAt': _dateToFirestoreRequired(blob.updatedAt),
+  'version': blob.version,
+  'deletedAt': _dateToFirestore(blob.deletedAt),
+};
+
+/// [mergeMediaAssetFromRemote] for a [VaultBlob]: a newly learned blob has
+/// neither file here, and a parked download is unparked once the files reach
+/// Storage.
+VaultBlob mergeVaultBlobFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  VaultBlob? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  final inCloud = data['inCloud'] as bool?;
+  final cloudState = inCloud == null || (local?.hasLocalBytes ?? false)
+      ? null
+      : (inCloud ? MediaUploadState.uploaded : MediaUploadState.localOnly);
+  MediaDownloadState? unparked(MediaDownloadState? state) =>
+      cloudState != null && state == MediaDownloadState.failed
+      ? MediaDownloadState.missing
+      : state;
+  final unpark =
+      unparked(local?.downloadState) != local?.downloadState ||
+      unparked(local?.thumbDownloadState) != local?.thumbDownloadState;
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
+      )) {
+    if (cloudState == null) return local;
+    return local.copyWith(
+      uploadState: cloudState,
+      downloadState: unparked(local.downloadState),
+      thumbDownloadState: unparked(local.thumbDownloadState),
+      clearFailureReason: unpark,
+      updatedAt: local.updatedAt,
+    );
+  }
+  return VaultBlob(
+    id: id,
+    vaultId: data['vaultId'] as String? ?? local?.vaultId ?? '',
+    width: (data['width'] as num?)?.toInt() ?? local?.width ?? 0,
+    height: (data['height'] as num?)?.toInt() ?? local?.height ?? 0,
+    byteSize: (data['byteSize'] as num?)?.toInt() ?? local?.byteSize ?? 0,
+    thumbByteSize:
+        (data['thumbByteSize'] as num?)?.toInt() ?? local?.thumbByteSize ?? 0,
+    uploadState: cloudState ?? local?.uploadState ?? MediaUploadState.uploaded,
+    downloadState: unparked(local?.downloadState) ?? MediaDownloadState.missing,
+    thumbDownloadState:
+        unparked(local?.thumbDownloadState) ?? MediaDownloadState.missing,
+    failureReason: unpark ? null : local?.failureReason,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

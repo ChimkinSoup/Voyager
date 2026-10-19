@@ -32,6 +32,7 @@ class LocalAccountStore {
   /// history is cleared by the app, which holds it in memory too.
   static const _accountEntries = [
     'media',
+    'vault_media',
     'session_checkpoints',
     'quick_journal_entry.json',
     'todo_subtask_drafts.json',
@@ -75,8 +76,8 @@ class LocalAccountStore {
   }
 
   /// Uploads the current owner has queued and not delivered, which a wipe
-  /// would lose: outbox rows, queued or parked, and images whose bytes have
-  /// not reached Storage.
+  /// would lose: outbox rows, queued or parked, and images and vault photos
+  /// whose bytes have not reached Storage.
   Future<int> unsyncedChanges() async {
     final outbox = _db.pendingUploadsTable.documentId.count();
     final queued = await (_db.selectOnly(
@@ -102,7 +103,26 @@ class LocalAccountStore {
               ))
             .map((row) => row.read(media)!)
             .getSingle();
-    return queued + images;
+    // Photo Series' sealed images, on the same terms.
+    final blob = _db.vaultBlobsTable.id.count();
+    final blobs =
+        await (_db.selectOnly(_db.vaultBlobsTable)
+              ..addColumns([blob])
+              ..where(
+                _db.vaultBlobsTable.deletedAt.isNull() &
+                    _db.vaultBlobsTable.downloadState.equals(
+                      MediaDownloadState.present.name,
+                    ) &
+                    _db.vaultBlobsTable.uploadState.isIn([
+                      MediaUploadState.localOnly.name,
+                      MediaUploadState.pending.name,
+                      MediaUploadState.uploading.name,
+                      MediaUploadState.failed.name,
+                    ]),
+              ))
+            .map((row) => row.read(blob)!)
+            .getSingle();
+    return queued + images + blobs;
   }
 
   /// Empties every account table and the account files, and records [uid] as
@@ -151,9 +171,7 @@ class LocalAccountStore {
               dreamSplitWidth: Value(settings?.dreamSplitWidth),
               workoutLibraryWidth: Value(settings?.workoutLibraryWidth),
               rankingsDeviceLatitude: Value(settings?.rankingsDeviceLatitude),
-              rankingsDeviceLongitude: Value(
-                settings?.rankingsDeviceLongitude,
-              ),
+              rankingsDeviceLongitude: Value(settings?.rankingsDeviceLongitude),
               devUseDirectOpenWeather: _kept(settings?.devUseDirectOpenWeather),
               devOpenWeatherApiKey: Value(settings?.devOpenWeatherApiKey),
               devShowSyncLocalSaves: _kept(settings?.devShowSyncLocalSaves),

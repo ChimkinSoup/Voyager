@@ -97,6 +97,10 @@ abstract final class FirestoreCollections {
   static const rankings = 'rankings';
   static const mediaAssets = 'media_assets';
   static const mediaReferences = 'media_references';
+
+  /// Photo Series' encrypted images: metadata only, the ciphertext is in
+  /// Storage — see `VaultBlob`.
+  static const vaultBlobs = 'vault_blobs';
   static const tagColors = 'tag_colors';
   static const customWords = 'custom_words';
 
@@ -187,6 +191,7 @@ abstract final class FirestoreCollections {
     rankingCounts,
     mediaAssets,
     mediaReferences,
+    vaultBlobs,
     tagColors,
     customWords,
     flaggedWords,

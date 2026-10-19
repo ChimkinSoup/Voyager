@@ -60,6 +60,7 @@ import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
 import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 class RemoteSyncService {
@@ -80,6 +81,7 @@ class RemoteSyncService {
     required ReminderRepository reminderRepository,
     required BucketListRepository bucketListRepository,
     required MediaRepository mediaRepository,
+    required PhotoSeriesRepository photoSeriesRepository,
     required SettingsRepository settingsRepository,
     required SyncEngine syncEngine,
     SyncConflictRepository? syncConflictRepository,
@@ -107,6 +109,7 @@ class RemoteSyncService {
        _reminderRepository = reminderRepository,
        _bucketListRepository = bucketListRepository,
        _mediaRepository = mediaRepository,
+       _photoSeriesRepository = photoSeriesRepository,
        _settingsRepository = settingsRepository,
        _syncEngine = syncEngine,
        _syncConflictRepository = syncConflictRepository,
@@ -135,6 +138,7 @@ class RemoteSyncService {
   final ReminderRepository _reminderRepository;
   final BucketListRepository _bucketListRepository;
   final MediaRepository _mediaRepository;
+  final PhotoSeriesRepository _photoSeriesRepository;
   final SettingsRepository _settingsRepository;
   final SyncEngine _syncEngine;
   final SyncConflictRepository? _syncConflictRepository;
@@ -2205,6 +2209,11 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.vaultBlobs:
+        return pullVaultBlobs(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -2992,6 +3001,48 @@ class RemoteSyncService {
         }
       },
     );
+  }
+
+  Future<bool> pullVaultBlobs({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final changed = await _pullCollection(
+      FirestoreCollections.vaultBlobs,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) => _applyVaultBlob(id, data),
+    );
+    // As [pullSecureNotes]: a device that missed a reset may have uploaded
+    // into the old vault. Only rows just pulled can be new to retire; a
+    // header change retires through [pullSecureVaultHeader].
+    final retired = changed
+        ? await retireVaultBlobs(
+            _notificationRepository,
+            _photoSeriesRepository,
+          )
+        : 0;
+    return changed || retired > 0;
+  }
+
+  Future<void> _applyVaultBlob(String id, Map<String, dynamic> data) async {
+    final local = await _photoSeriesRepository.getBlob(id);
+    final merged = mergeVaultBlobFromRemote(data, id, local: local);
+    await _photoSeriesRepository.upsertBlob(merged, recordLocalActivity: false);
+    // Transfer state is set on insert only — see [pullMediaAssets].
+    if (local != null &&
+        (merged.uploadState != local.uploadState ||
+            merged.downloadState != local.downloadState ||
+            merged.thumbDownloadState != local.thumbDownloadState)) {
+      await _photoSeriesRepository.updateBlobTransferState(
+        id,
+        uploadState: merged.uploadState,
+        downloadState: merged.downloadState,
+        thumbDownloadState: merged.thumbDownloadState,
+        clearFailureReason: merged.failureReason == null,
+      );
+    }
   }
 
   Future<bool> pullMediaReferences({
@@ -6353,6 +6404,11 @@ class RemoteSyncService {
     String collection,
     List<Object> records,
   ) async {
+    if (collection == FirestoreCollections.vaultBlobs) {
+      await pushRecords(collection, records);
+      await _refreshRestoredVaultBlobs(records);
+      return;
+    }
     if (!FirestoreCollections.crdtBacked.contains(collection)) {
       await pushRecords(collection, records);
       return;
@@ -6402,6 +6458,31 @@ class RemoteSyncService {
     }
     await Future.wait(saves);
     if (plain.isNotEmpty) await pushRecords(collection, plain);
+  }
+
+  /// Takes the server's word on whether restored blobs new to this device
+  /// have their files in Storage, which the backup cannot give (see
+  /// `buildBackupCollections`). Read straight from the server: a pull would
+  /// skip these documents as the echo of the upload just made.
+  Future<void> _refreshRestoredVaultBlobs(List<Object> records) async {
+    for (final record in records) {
+      if (record is! VaultBlob || !record.isOnlyElsewhere) continue;
+      try {
+        final data = await _syncRepository.getDocument(
+          FirestoreCollections.vaultBlobs,
+          _firestoreDocumentId(FirestoreCollections.vaultBlobs, record.id),
+        );
+        if (data != null) await _applyVaultBlob(record.id, data);
+      } catch (error, stackTrace) {
+        // The restore stands; the blob waits for a sync that says, as
+        // before.
+        ErrorLogger.instance.record(
+          error,
+          stackTrace,
+          context: 'sync: cloud state of restored vault blob ${record.id}',
+        );
+      }
+    }
   }
 
   /// The Firestore id and payload for one record, or null if [collection]
@@ -6513,6 +6594,9 @@ class RemoteSyncService {
       case FirestoreCollections.mediaReferences:
         if (record is! MediaReference) return null;
         return (id: record.id, payload: mediaReferenceToFirestore(record));
+      case FirestoreCollections.vaultBlobs:
+        if (record is! VaultBlob) return null;
+        return (id: record.id, payload: vaultBlobToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -7082,7 +7166,16 @@ class RemoteSyncService {
       FirestoreCollections.secureVaultHeaderId,
     );
     if (remote == null) return false;
-    return adoptSecureVaultHeader(_notificationRepository, remote);
+    final adopted = await adoptSecureVaultHeader(
+      _notificationRepository,
+      remote,
+    );
+    // Photo Series' images go with the notes of a vault reset elsewhere.
+    final retired = await retireVaultBlobs(
+      _notificationRepository,
+      _photoSeriesRepository,
+    );
+    return adopted || retired > 0;
   }
 
   Future<bool> pullDismissedNotifications({
@@ -7507,7 +7600,8 @@ class RemoteSyncService {
       _inOrder([pullContributionRooms, pullAssetRoomEvents]),
       _inOrder([pullSavingsGoals, pullGoalAllocations]),
       pullPinnedNotes(),
-      _inOrder([pullSecureVaultHeader, pullSecureNotes]),
+      // Blobs after the header too, whose retired vaults they go with.
+      _inOrder([pullSecureVaultHeader, pullSecureNotes, pullVaultBlobs]),
       pullDismissedNotifications(),
       pullDeviceRegistrations(),
       _inOrder([
@@ -7853,6 +7947,7 @@ class LiveSyncController {
     FirestoreCollections.rankingCounts,
     FirestoreCollections.mediaAssets,
     FirestoreCollections.mediaReferences,
+    FirestoreCollections.vaultBlobs,
     FirestoreCollections.tagColors,
     FirestoreCollections.customWords,
     FirestoreCollections.flaggedWords,

@@ -37,6 +37,9 @@ class FakeMediaStorage implements MediaStorage {
   /// When true the failures are permanent rather than transient.
   bool failPermanently = false;
 
+  /// When true every delete throws, as one made offline does.
+  bool failDeletes = false;
+
   @override
   String? get currentUid => uid;
 
@@ -69,6 +72,7 @@ class FakeMediaStorage implements MediaStorage {
 
   @override
   Future<void> delete(String path) async {
+    if (failDeletes) throw StateError('transient network failure');
     deletes.add(path);
     objects.remove(path);
   }
@@ -569,6 +573,30 @@ void main() {
 
       expect(storage.deletes, contains(path));
       expect(storage.objects, isNot(contains(path)));
+    });
+
+    test('a delete that fails is owed until a later drain lands it', () async {
+      final asset = await attach();
+      await worker.drainUploads();
+      final path = asset.remotePath('user-1');
+      final references = await repository.listReferencesForAsset(asset.id);
+      await service.removeReference(references.single.id);
+
+      storage.failDeletes = true;
+      await service.purgeExpired(
+        DateTime.now().toUtc().add(const Duration(days: 31)),
+        storage: storage,
+      );
+      expect(await repository.getAsset(asset.id), isNull);
+      expect(storage.objects, contains(path));
+      expect(await repository.listPendingRemoteDeletes(), [
+        'media/${asset.contentHash}',
+      ]);
+
+      storage.failDeletes = false;
+      await service.drainRemoteDeletes(storage);
+      expect(storage.objects, isNot(contains(path)));
+      expect(await repository.listPendingRemoteDeletes(), isEmpty);
     });
 
     test('keeps a blob another row still claims by hash', () async {

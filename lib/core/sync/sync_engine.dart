@@ -423,6 +423,7 @@ class BackgroundSyncOrchestrator {
     required BucketListRepository bucketListRepository,
     required SettingsRepository settingsRepository,
     MediaPurge? mediaPurge,
+    MediaPurge? vaultMediaPurge,
   }) : _journalRepository = journalRepository,
        _dreamRepository = dreamRepository,
        _todoRepository = todoRepository,
@@ -438,7 +439,8 @@ class BackgroundSyncOrchestrator {
        _reminderRepository = reminderRepository,
        _bucketListRepository = bucketListRepository,
        _settingsRepository = settingsRepository,
-       _mediaPurge = mediaPurge;
+       _mediaPurge = mediaPurge,
+       _vaultMediaPurge = vaultMediaPurge;
 
   final JournalRepository _journalRepository;
   final DreamRepository _dreamRepository;
@@ -461,6 +463,9 @@ class BackgroundSyncOrchestrator {
   /// deletes in three places, and `MediaService` is what knows the order.
   /// Null in tests that build no media stack.
   final MediaPurge? _mediaPurge;
+
+  /// The same for Photo Series' encrypted images — see `VaultMediaService`.
+  final MediaPurge? _vaultMediaPurge;
 
   Future<void> purgeExpiredDeleted({DateTime? now}) async {
     final cutoff = now ?? DateTime.now().toUtc();
@@ -493,6 +498,7 @@ class BackgroundSyncOrchestrator {
       // a journal page and its pictures expire together rather than leaving
       // orphaned blobs behind.
       if (_mediaPurge != null) _mediaPurge(cutoff),
+      if (_vaultMediaPurge != null) _vaultMediaPurge(cutoff),
     ]);
   }
 }

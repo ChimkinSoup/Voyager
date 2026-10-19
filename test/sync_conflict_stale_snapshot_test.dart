@@ -191,6 +191,7 @@ void main() {
         reminderRepository: DriftReminderRepository(db),
         bucketListRepository: DriftBucketListRepository(db),
         mediaRepository: DriftMediaRepository(db),
+        photoSeriesRepository: DriftPhotoSeriesRepository(db),
         settingsRepository: DriftSettingsRepository(db),
         syncConflictRepository: DriftSyncConflictRepository(db),
         syncEngine: engine,

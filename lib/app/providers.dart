@@ -25,6 +25,7 @@ import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/reminders/reminder_os_notifier.dart';
 import 'package:voyager/core/secure_vault/secure_vault.dart';
 import 'package:voyager/core/secure_vault/secure_vault_service.dart';
+import 'package:voyager/core/secure_vault/vault_media_service.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
@@ -66,6 +67,7 @@ import 'package:voyager/data/remote/leetcode_api_client.dart';
 import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/media_file_store.dart';
+import 'package:voyager/data/services/vault_media_file_store.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -352,6 +354,25 @@ final mediaDiskLowProvider = FutureProvider<bool>((ref) {
   return ref.watch(mediaFileStoreProvider).isDiskLow();
 });
 
+final photoSeriesRepositoryProvider = Provider<PhotoSeriesRepository>((ref) {
+  return DriftPhotoSeriesRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
+});
+
+/// The Secure Vault's images and their transfers — see [VaultMediaService].
+final vaultMediaServiceProvider = ChangeNotifierProvider<VaultMediaService>((
+  ref,
+) {
+  return VaultMediaService(
+    repository: ref.watch(photoSeriesRepositoryProvider),
+    fileStore: VaultMediaFileStore(),
+    storage: ref.watch(mediaStorageProvider),
+    readSettings: () => ref.read(settingsRepositoryProvider).getSettings(),
+  );
+});
+
 final syncConflictRepositoryProvider = Provider<SyncConflictRepository>((ref) {
   return DriftSyncConflictRepository(ref.watch(databaseProvider));
 });
@@ -375,6 +396,7 @@ final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
     jobRepository: ref.watch(jobRepositoryProvider),
     rankingRepository: ref.watch(rankingRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
+    photoSeriesRepository: ref.watch(photoSeriesRepositoryProvider),
   );
 });
 
@@ -433,9 +455,17 @@ final dataImportServiceProvider = Provider<DataImportService>((ref) {
     // Read lazily: the restore uploads only after its transaction commits, and
     // building the sync service before then would be work done for nothing on
     // an import that turns out to change nothing.
-    pushRecords: (collection, records) => ref
-        .read(remoteSyncServiceProvider)
-        .pushRestoredRecords(collection, records),
+    pushRecords: (collection, records) async {
+      await ref
+          .read(remoteSyncServiceProvider)
+          .pushRestoredRecords(collection, records);
+      // Restored photos the server says are in Storage, fetched as a pull's
+      // would be.
+      if (collection == FirestoreCollections.vaultBlobs) {
+        ref.read(vaultMediaServiceProvider).notifyChanged();
+        unawaited(ref.read(vaultMediaServiceProvider).drainDownloads());
+      }
+    },
     pushSettings: (settings) =>
         ref.read(remoteSyncServiceProvider).pushSettings(settings),
     mediaRepository: ref.watch(mediaRepositoryProvider),
@@ -689,6 +719,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     reminderRepository: ref.watch(reminderRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
+    photoSeriesRepository: ref.watch(photoSeriesRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     syncEngine: ref.watch(syncEngineProvider),
     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
@@ -777,6 +808,10 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
           // only those the startup pull brought (BUG-263). Settings checked
           // inside.
           unawaited(ref.read(mediaTransferWorkerProvider).prefetchMissing());
+        // Thumbnails are fetched as soon as they are learned of.
+        case FirestoreCollections.vaultBlobs:
+          ref.read(vaultMediaServiceProvider).notifyChanged();
+          unawaited(ref.read(vaultMediaServiceProvider).drainDownloads());
         // The image switches sync, so turning uploads (or prefetch) on on
         // another device has to start what the switch starts there: this
         // device may hold images kept local while uploads were off (BUG-262).
@@ -784,6 +819,10 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
         case FirestoreCollections.settings:
           unawaited(ref.read(mediaServiceProvider).queueLocalOnlyUploads());
           unawaited(ref.read(mediaTransferWorkerProvider).prefetchMissing());
+          unawaited(
+            ref.read(vaultMediaServiceProvider).queueLocalOnlyUploads(),
+          );
+          unawaited(ref.read(vaultMediaServiceProvider).drainDownloads());
       }
     },
   );
@@ -935,6 +974,8 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     mediaPurge: (now) => ref
         .read(mediaServiceProvider)
         .purgeExpired(now, storage: ref.read(mediaStorageProvider)),
+    vaultMediaPurge: (now) =>
+        ref.read(vaultMediaServiceProvider).purgeExpired(now),
   );
 });
 
@@ -2365,6 +2406,7 @@ final secureVaultHeaderProvider = FutureProvider<SecureVaultHeader?>((ref) {
 final secureVaultServiceProvider = Provider<SecureVaultService>((ref) {
   return SecureVaultService(
     repository: ref.watch(notificationRepositoryProvider),
+    photoSeries: ref.watch(photoSeriesRepositoryProvider),
     sync: ref.watch(syncRepositoryProvider),
   );
 });

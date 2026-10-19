@@ -151,6 +151,7 @@ List<BackupCollection> buildBackupCollections({
   required JobRepository jobRepository,
   required RankingRepository rankingRepository,
   required MediaRepository mediaRepository,
+  required PhotoSeriesRepository photoSeriesRepository,
 }) {
   // The live calendars in the backup being restored, so a restored calendar's
   // overlay list keeps only ids that point at one of them.
@@ -1256,6 +1257,35 @@ List<BackupCollection> buildBackupCollections({
           recordLocalActivity: false,
         );
         return reference;
+      },
+    ),
+    // Metadata only: the ciphertext stays in Storage and on disk.
+    BackupCollection(
+      name: FirestoreCollections.vaultBlobs,
+      read: () async => [
+        for (final blob in await photoSeriesRepository.listBlobs(
+          includeDeleted: true,
+        ))
+          BackupRecord(
+            id: blob.id,
+            data: vaultBlobToFirestore(blob)..remove('inCloud'),
+          ),
+      ],
+      restore: (id, data) async {
+        final local = await photoSeriesRepository.getBlob(id);
+        // Nothing here says whether the files are in this account's Storage,
+        // so a blob new to this device waits, not fetched, until the server
+        // says — `RemoteSyncService.pushRestoredRecords` asks it.
+        final blob = mergeVaultBlobFromRemote(
+          local == null ? {...data, 'inCloud': false} : data,
+          id,
+          local: local,
+        );
+        await photoSeriesRepository.upsertBlob(
+          blob,
+          recordLocalActivity: false,
+        );
+        return blob;
       },
     ),
     BackupCollection(

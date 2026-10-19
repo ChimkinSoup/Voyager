@@ -46833,6 +46833,1057 @@ class MediaReferencesTableCompanion
   }
 }
 
+class $VaultBlobsTableTable extends VaultBlobsTable
+    with TableInfo<$VaultBlobsTableTable, VaultBlobsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VaultBlobsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _vaultIdMeta = const VerificationMeta(
+    'vaultId',
+  );
+  @override
+  late final GeneratedColumn<String> vaultId = GeneratedColumn<String>(
+    'vault_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<int> width = GeneratedColumn<int>(
+    'width',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _heightMeta = const VerificationMeta('height');
+  @override
+  late final GeneratedColumn<int> height = GeneratedColumn<int>(
+    'height',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _byteSizeMeta = const VerificationMeta(
+    'byteSize',
+  );
+  @override
+  late final GeneratedColumn<int> byteSize = GeneratedColumn<int>(
+    'byte_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _thumbByteSizeMeta = const VerificationMeta(
+    'thumbByteSize',
+  );
+  @override
+  late final GeneratedColumn<int> thumbByteSize = GeneratedColumn<int>(
+    'thumb_byte_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _uploadStateMeta = const VerificationMeta(
+    'uploadState',
+  );
+  @override
+  late final GeneratedColumn<String> uploadState = GeneratedColumn<String>(
+    'upload_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('localOnly'),
+  );
+  static const VerificationMeta _downloadStateMeta = const VerificationMeta(
+    'downloadState',
+  );
+  @override
+  late final GeneratedColumn<String> downloadState = GeneratedColumn<String>(
+    'download_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('present'),
+  );
+  static const VerificationMeta _thumbDownloadStateMeta =
+      const VerificationMeta('thumbDownloadState');
+  @override
+  late final GeneratedColumn<String> thumbDownloadState =
+      GeneratedColumn<String>(
+        'thumb_download_state',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('present'),
+      );
+  static const VerificationMeta _failureReasonMeta = const VerificationMeta(
+    'failureReason',
+  );
+  @override
+  late final GeneratedColumn<String> failureReason = GeneratedColumn<String>(
+    'failure_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    vaultId,
+    width,
+    height,
+    byteSize,
+    thumbByteSize,
+    uploadState,
+    downloadState,
+    thumbDownloadState,
+    failureReason,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'vault_blobs_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VaultBlobsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('vault_id')) {
+      context.handle(
+        _vaultIdMeta,
+        vaultId.isAcceptableOrUnknown(data['vault_id']!, _vaultIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_vaultIdMeta);
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+        _widthMeta,
+        width.isAcceptableOrUnknown(data['width']!, _widthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_widthMeta);
+    }
+    if (data.containsKey('height')) {
+      context.handle(
+        _heightMeta,
+        height.isAcceptableOrUnknown(data['height']!, _heightMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_heightMeta);
+    }
+    if (data.containsKey('byte_size')) {
+      context.handle(
+        _byteSizeMeta,
+        byteSize.isAcceptableOrUnknown(data['byte_size']!, _byteSizeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_byteSizeMeta);
+    }
+    if (data.containsKey('thumb_byte_size')) {
+      context.handle(
+        _thumbByteSizeMeta,
+        thumbByteSize.isAcceptableOrUnknown(
+          data['thumb_byte_size']!,
+          _thumbByteSizeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_thumbByteSizeMeta);
+    }
+    if (data.containsKey('upload_state')) {
+      context.handle(
+        _uploadStateMeta,
+        uploadState.isAcceptableOrUnknown(
+          data['upload_state']!,
+          _uploadStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('download_state')) {
+      context.handle(
+        _downloadStateMeta,
+        downloadState.isAcceptableOrUnknown(
+          data['download_state']!,
+          _downloadStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('thumb_download_state')) {
+      context.handle(
+        _thumbDownloadStateMeta,
+        thumbDownloadState.isAcceptableOrUnknown(
+          data['thumb_download_state']!,
+          _thumbDownloadStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('failure_reason')) {
+      context.handle(
+        _failureReasonMeta,
+        failureReason.isAcceptableOrUnknown(
+          data['failure_reason']!,
+          _failureReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VaultBlobsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VaultBlobsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      vaultId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vault_id'],
+      )!,
+      width: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}width'],
+      )!,
+      height: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}height'],
+      )!,
+      byteSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}byte_size'],
+      )!,
+      thumbByteSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}thumb_byte_size'],
+      )!,
+      uploadState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}upload_state'],
+      )!,
+      downloadState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}download_state'],
+      )!,
+      thumbDownloadState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thumb_download_state'],
+      )!,
+      failureReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failure_reason'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $VaultBlobsTableTable createAlias(String alias) {
+    return $VaultBlobsTableTable(attachedDatabase, alias);
+  }
+}
+
+class VaultBlobsTableData extends DataClass
+    implements Insertable<VaultBlobsTableData> {
+  final String id;
+  final String vaultId;
+  final int width;
+  final int height;
+  final int byteSize;
+  final int thumbByteSize;
+
+  /// By `name`, as on [MediaAssetsTable].
+  final String uploadState;
+  final String downloadState;
+  final String thumbDownloadState;
+  final String? failureReason;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const VaultBlobsTableData({
+    required this.id,
+    required this.vaultId,
+    required this.width,
+    required this.height,
+    required this.byteSize,
+    required this.thumbByteSize,
+    required this.uploadState,
+    required this.downloadState,
+    required this.thumbDownloadState,
+    this.failureReason,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['vault_id'] = Variable<String>(vaultId);
+    map['width'] = Variable<int>(width);
+    map['height'] = Variable<int>(height);
+    map['byte_size'] = Variable<int>(byteSize);
+    map['thumb_byte_size'] = Variable<int>(thumbByteSize);
+    map['upload_state'] = Variable<String>(uploadState);
+    map['download_state'] = Variable<String>(downloadState);
+    map['thumb_download_state'] = Variable<String>(thumbDownloadState);
+    if (!nullToAbsent || failureReason != null) {
+      map['failure_reason'] = Variable<String>(failureReason);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  VaultBlobsTableCompanion toCompanion(bool nullToAbsent) {
+    return VaultBlobsTableCompanion(
+      id: Value(id),
+      vaultId: Value(vaultId),
+      width: Value(width),
+      height: Value(height),
+      byteSize: Value(byteSize),
+      thumbByteSize: Value(thumbByteSize),
+      uploadState: Value(uploadState),
+      downloadState: Value(downloadState),
+      thumbDownloadState: Value(thumbDownloadState),
+      failureReason: failureReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureReason),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory VaultBlobsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VaultBlobsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      vaultId: serializer.fromJson<String>(json['vaultId']),
+      width: serializer.fromJson<int>(json['width']),
+      height: serializer.fromJson<int>(json['height']),
+      byteSize: serializer.fromJson<int>(json['byteSize']),
+      thumbByteSize: serializer.fromJson<int>(json['thumbByteSize']),
+      uploadState: serializer.fromJson<String>(json['uploadState']),
+      downloadState: serializer.fromJson<String>(json['downloadState']),
+      thumbDownloadState: serializer.fromJson<String>(
+        json['thumbDownloadState'],
+      ),
+      failureReason: serializer.fromJson<String?>(json['failureReason']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'vaultId': serializer.toJson<String>(vaultId),
+      'width': serializer.toJson<int>(width),
+      'height': serializer.toJson<int>(height),
+      'byteSize': serializer.toJson<int>(byteSize),
+      'thumbByteSize': serializer.toJson<int>(thumbByteSize),
+      'uploadState': serializer.toJson<String>(uploadState),
+      'downloadState': serializer.toJson<String>(downloadState),
+      'thumbDownloadState': serializer.toJson<String>(thumbDownloadState),
+      'failureReason': serializer.toJson<String?>(failureReason),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  VaultBlobsTableData copyWith({
+    String? id,
+    String? vaultId,
+    int? width,
+    int? height,
+    int? byteSize,
+    int? thumbByteSize,
+    String? uploadState,
+    String? downloadState,
+    String? thumbDownloadState,
+    Value<String?> failureReason = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => VaultBlobsTableData(
+    id: id ?? this.id,
+    vaultId: vaultId ?? this.vaultId,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    byteSize: byteSize ?? this.byteSize,
+    thumbByteSize: thumbByteSize ?? this.thumbByteSize,
+    uploadState: uploadState ?? this.uploadState,
+    downloadState: downloadState ?? this.downloadState,
+    thumbDownloadState: thumbDownloadState ?? this.thumbDownloadState,
+    failureReason: failureReason.present
+        ? failureReason.value
+        : this.failureReason,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  VaultBlobsTableData copyWithCompanion(VaultBlobsTableCompanion data) {
+    return VaultBlobsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      vaultId: data.vaultId.present ? data.vaultId.value : this.vaultId,
+      width: data.width.present ? data.width.value : this.width,
+      height: data.height.present ? data.height.value : this.height,
+      byteSize: data.byteSize.present ? data.byteSize.value : this.byteSize,
+      thumbByteSize: data.thumbByteSize.present
+          ? data.thumbByteSize.value
+          : this.thumbByteSize,
+      uploadState: data.uploadState.present
+          ? data.uploadState.value
+          : this.uploadState,
+      downloadState: data.downloadState.present
+          ? data.downloadState.value
+          : this.downloadState,
+      thumbDownloadState: data.thumbDownloadState.present
+          ? data.thumbDownloadState.value
+          : this.thumbDownloadState,
+      failureReason: data.failureReason.present
+          ? data.failureReason.value
+          : this.failureReason,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VaultBlobsTableData(')
+          ..write('id: $id, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('byteSize: $byteSize, ')
+          ..write('thumbByteSize: $thumbByteSize, ')
+          ..write('uploadState: $uploadState, ')
+          ..write('downloadState: $downloadState, ')
+          ..write('thumbDownloadState: $thumbDownloadState, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    vaultId,
+    width,
+    height,
+    byteSize,
+    thumbByteSize,
+    uploadState,
+    downloadState,
+    thumbDownloadState,
+    failureReason,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VaultBlobsTableData &&
+          other.id == this.id &&
+          other.vaultId == this.vaultId &&
+          other.width == this.width &&
+          other.height == this.height &&
+          other.byteSize == this.byteSize &&
+          other.thumbByteSize == this.thumbByteSize &&
+          other.uploadState == this.uploadState &&
+          other.downloadState == this.downloadState &&
+          other.thumbDownloadState == this.thumbDownloadState &&
+          other.failureReason == this.failureReason &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class VaultBlobsTableCompanion extends UpdateCompanion<VaultBlobsTableData> {
+  final Value<String> id;
+  final Value<String> vaultId;
+  final Value<int> width;
+  final Value<int> height;
+  final Value<int> byteSize;
+  final Value<int> thumbByteSize;
+  final Value<String> uploadState;
+  final Value<String> downloadState;
+  final Value<String> thumbDownloadState;
+  final Value<String?> failureReason;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const VaultBlobsTableCompanion({
+    this.id = const Value.absent(),
+    this.vaultId = const Value.absent(),
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.byteSize = const Value.absent(),
+    this.thumbByteSize = const Value.absent(),
+    this.uploadState = const Value.absent(),
+    this.downloadState = const Value.absent(),
+    this.thumbDownloadState = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VaultBlobsTableCompanion.insert({
+    required String id,
+    required String vaultId,
+    required int width,
+    required int height,
+    required int byteSize,
+    required int thumbByteSize,
+    this.uploadState = const Value.absent(),
+    this.downloadState = const Value.absent(),
+    this.thumbDownloadState = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       vaultId = Value(vaultId),
+       width = Value(width),
+       height = Value(height),
+       byteSize = Value(byteSize),
+       thumbByteSize = Value(thumbByteSize),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<VaultBlobsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? vaultId,
+    Expression<int>? width,
+    Expression<int>? height,
+    Expression<int>? byteSize,
+    Expression<int>? thumbByteSize,
+    Expression<String>? uploadState,
+    Expression<String>? downloadState,
+    Expression<String>? thumbDownloadState,
+    Expression<String>? failureReason,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (vaultId != null) 'vault_id': vaultId,
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+      if (byteSize != null) 'byte_size': byteSize,
+      if (thumbByteSize != null) 'thumb_byte_size': thumbByteSize,
+      if (uploadState != null) 'upload_state': uploadState,
+      if (downloadState != null) 'download_state': downloadState,
+      if (thumbDownloadState != null)
+        'thumb_download_state': thumbDownloadState,
+      if (failureReason != null) 'failure_reason': failureReason,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VaultBlobsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? vaultId,
+    Value<int>? width,
+    Value<int>? height,
+    Value<int>? byteSize,
+    Value<int>? thumbByteSize,
+    Value<String>? uploadState,
+    Value<String>? downloadState,
+    Value<String>? thumbDownloadState,
+    Value<String?>? failureReason,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return VaultBlobsTableCompanion(
+      id: id ?? this.id,
+      vaultId: vaultId ?? this.vaultId,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      byteSize: byteSize ?? this.byteSize,
+      thumbByteSize: thumbByteSize ?? this.thumbByteSize,
+      uploadState: uploadState ?? this.uploadState,
+      downloadState: downloadState ?? this.downloadState,
+      thumbDownloadState: thumbDownloadState ?? this.thumbDownloadState,
+      failureReason: failureReason ?? this.failureReason,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (vaultId.present) {
+      map['vault_id'] = Variable<String>(vaultId.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<int>(width.value);
+    }
+    if (height.present) {
+      map['height'] = Variable<int>(height.value);
+    }
+    if (byteSize.present) {
+      map['byte_size'] = Variable<int>(byteSize.value);
+    }
+    if (thumbByteSize.present) {
+      map['thumb_byte_size'] = Variable<int>(thumbByteSize.value);
+    }
+    if (uploadState.present) {
+      map['upload_state'] = Variable<String>(uploadState.value);
+    }
+    if (downloadState.present) {
+      map['download_state'] = Variable<String>(downloadState.value);
+    }
+    if (thumbDownloadState.present) {
+      map['thumb_download_state'] = Variable<String>(thumbDownloadState.value);
+    }
+    if (failureReason.present) {
+      map['failure_reason'] = Variable<String>(failureReason.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VaultBlobsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('vaultId: $vaultId, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('byteSize: $byteSize, ')
+          ..write('thumbByteSize: $thumbByteSize, ')
+          ..write('uploadState: $uploadState, ')
+          ..write('downloadState: $downloadState, ')
+          ..write('thumbDownloadState: $thumbDownloadState, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PendingRemoteDeletesTableTable extends PendingRemoteDeletesTable
+    with
+        TableInfo<
+          $PendingRemoteDeletesTableTable,
+          PendingRemoteDeletesTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingRemoteDeletesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  @override
+  late final GeneratedColumn<String> path = GeneratedColumn<String>(
+    'path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [path, addedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_remote_deletes_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingRemoteDeletesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('path')) {
+      context.handle(
+        _pathMeta,
+        path.isAcceptableOrUnknown(data['path']!, _pathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pathMeta);
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {path};
+  @override
+  PendingRemoteDeletesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingRemoteDeletesTableData(
+      path: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}path'],
+      )!,
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingRemoteDeletesTableTable createAlias(String alias) {
+    return $PendingRemoteDeletesTableTable(attachedDatabase, alias);
+  }
+}
+
+class PendingRemoteDeletesTableData extends DataClass
+    implements Insertable<PendingRemoteDeletesTableData> {
+  final String path;
+  final DateTime addedAt;
+  const PendingRemoteDeletesTableData({
+    required this.path,
+    required this.addedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['path'] = Variable<String>(path);
+    map['added_at'] = Variable<DateTime>(addedAt);
+    return map;
+  }
+
+  PendingRemoteDeletesTableCompanion toCompanion(bool nullToAbsent) {
+    return PendingRemoteDeletesTableCompanion(
+      path: Value(path),
+      addedAt: Value(addedAt),
+    );
+  }
+
+  factory PendingRemoteDeletesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingRemoteDeletesTableData(
+      path: serializer.fromJson<String>(json['path']),
+      addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'path': serializer.toJson<String>(path),
+      'addedAt': serializer.toJson<DateTime>(addedAt),
+    };
+  }
+
+  PendingRemoteDeletesTableData copyWith({String? path, DateTime? addedAt}) =>
+      PendingRemoteDeletesTableData(
+        path: path ?? this.path,
+        addedAt: addedAt ?? this.addedAt,
+      );
+  PendingRemoteDeletesTableData copyWithCompanion(
+    PendingRemoteDeletesTableCompanion data,
+  ) {
+    return PendingRemoteDeletesTableData(
+      path: data.path.present ? data.path.value : this.path,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingRemoteDeletesTableData(')
+          ..write('path: $path, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(path, addedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingRemoteDeletesTableData &&
+          other.path == this.path &&
+          other.addedAt == this.addedAt);
+}
+
+class PendingRemoteDeletesTableCompanion
+    extends UpdateCompanion<PendingRemoteDeletesTableData> {
+  final Value<String> path;
+  final Value<DateTime> addedAt;
+  final Value<int> rowid;
+  const PendingRemoteDeletesTableCompanion({
+    this.path = const Value.absent(),
+    this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingRemoteDeletesTableCompanion.insert({
+    required String path,
+    this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : path = Value(path);
+  static Insertable<PendingRemoteDeletesTableData> custom({
+    Expression<String>? path,
+    Expression<DateTime>? addedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (path != null) 'path': path,
+      if (addedAt != null) 'added_at': addedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingRemoteDeletesTableCompanion copyWith({
+    Value<String>? path,
+    Value<DateTime>? addedAt,
+    Value<int>? rowid,
+  }) {
+    return PendingRemoteDeletesTableCompanion(
+      path: path ?? this.path,
+      addedAt: addedAt ?? this.addedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (path.present) {
+      map['path'] = Variable<String>(path.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingRemoteDeletesTableCompanion(')
+          ..write('path: $path, ')
+          ..write('addedAt: $addedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $RankingCategoriesTableTable extends RankingCategoriesTable
     with TableInfo<$RankingCategoriesTableTable, RankingCategoriesTableData> {
   @override
@@ -52813,6 +53864,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $MediaReferencesTableTable mediaReferencesTable =
       $MediaReferencesTableTable(this);
+  late final $VaultBlobsTableTable vaultBlobsTable = $VaultBlobsTableTable(
+    this,
+  );
+  late final $PendingRemoteDeletesTableTable pendingRemoteDeletesTable =
+      $PendingRemoteDeletesTableTable(this);
   late final $RankingCategoriesTableTable rankingCategoriesTable =
       $RankingCategoriesTableTable(this);
   late final $RankingParentsTableTable rankingParentsTable =
@@ -52954,6 +54010,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     jobSeasonsTable,
     mediaAssetsTable,
     mediaReferencesTable,
+    vaultBlobsTable,
+    pendingRemoteDeletesTable,
     rankingCategoriesTable,
     rankingParentsTable,
     rankingChildrenTable,
@@ -75186,6 +76244,559 @@ typedef $$MediaReferencesTableTableProcessedTableManager =
       MediaReferencesTableData,
       PrefetchHooks Function()
     >;
+typedef $$VaultBlobsTableTableCreateCompanionBuilder =
+    VaultBlobsTableCompanion Function({
+      required String id,
+      required String vaultId,
+      required int width,
+      required int height,
+      required int byteSize,
+      required int thumbByteSize,
+      Value<String> uploadState,
+      Value<String> downloadState,
+      Value<String> thumbDownloadState,
+      Value<String?> failureReason,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$VaultBlobsTableTableUpdateCompanionBuilder =
+    VaultBlobsTableCompanion Function({
+      Value<String> id,
+      Value<String> vaultId,
+      Value<int> width,
+      Value<int> height,
+      Value<int> byteSize,
+      Value<int> thumbByteSize,
+      Value<String> uploadState,
+      Value<String> downloadState,
+      Value<String> thumbDownloadState,
+      Value<String?> failureReason,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$VaultBlobsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $VaultBlobsTableTable> {
+  $$VaultBlobsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get height => $composableBuilder(
+    column: $table.height,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get byteSize => $composableBuilder(
+    column: $table.byteSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get thumbByteSize => $composableBuilder(
+    column: $table.thumbByteSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uploadState => $composableBuilder(
+    column: $table.uploadState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get downloadState => $composableBuilder(
+    column: $table.downloadState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get thumbDownloadState => $composableBuilder(
+    column: $table.thumbDownloadState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$VaultBlobsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $VaultBlobsTableTable> {
+  $$VaultBlobsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vaultId => $composableBuilder(
+    column: $table.vaultId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get height => $composableBuilder(
+    column: $table.height,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get byteSize => $composableBuilder(
+    column: $table.byteSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get thumbByteSize => $composableBuilder(
+    column: $table.thumbByteSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get uploadState => $composableBuilder(
+    column: $table.uploadState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get downloadState => $composableBuilder(
+    column: $table.downloadState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get thumbDownloadState => $composableBuilder(
+    column: $table.thumbDownloadState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$VaultBlobsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VaultBlobsTableTable> {
+  $$VaultBlobsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get vaultId =>
+      $composableBuilder(column: $table.vaultId, builder: (column) => column);
+
+  GeneratedColumn<int> get width =>
+      $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<int> get height =>
+      $composableBuilder(column: $table.height, builder: (column) => column);
+
+  GeneratedColumn<int> get byteSize =>
+      $composableBuilder(column: $table.byteSize, builder: (column) => column);
+
+  GeneratedColumn<int> get thumbByteSize => $composableBuilder(
+    column: $table.thumbByteSize,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get uploadState => $composableBuilder(
+    column: $table.uploadState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get downloadState => $composableBuilder(
+    column: $table.downloadState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get thumbDownloadState => $composableBuilder(
+    column: $table.thumbDownloadState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$VaultBlobsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VaultBlobsTableTable,
+          VaultBlobsTableData,
+          $$VaultBlobsTableTableFilterComposer,
+          $$VaultBlobsTableTableOrderingComposer,
+          $$VaultBlobsTableTableAnnotationComposer,
+          $$VaultBlobsTableTableCreateCompanionBuilder,
+          $$VaultBlobsTableTableUpdateCompanionBuilder,
+          (
+            VaultBlobsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $VaultBlobsTableTable,
+              VaultBlobsTableData
+            >,
+          ),
+          VaultBlobsTableData,
+          PrefetchHooks Function()
+        > {
+  $$VaultBlobsTableTableTableManager(
+    _$AppDatabase db,
+    $VaultBlobsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VaultBlobsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VaultBlobsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VaultBlobsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> vaultId = const Value.absent(),
+                Value<int> width = const Value.absent(),
+                Value<int> height = const Value.absent(),
+                Value<int> byteSize = const Value.absent(),
+                Value<int> thumbByteSize = const Value.absent(),
+                Value<String> uploadState = const Value.absent(),
+                Value<String> downloadState = const Value.absent(),
+                Value<String> thumbDownloadState = const Value.absent(),
+                Value<String?> failureReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VaultBlobsTableCompanion(
+                id: id,
+                vaultId: vaultId,
+                width: width,
+                height: height,
+                byteSize: byteSize,
+                thumbByteSize: thumbByteSize,
+                uploadState: uploadState,
+                downloadState: downloadState,
+                thumbDownloadState: thumbDownloadState,
+                failureReason: failureReason,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String vaultId,
+                required int width,
+                required int height,
+                required int byteSize,
+                required int thumbByteSize,
+                Value<String> uploadState = const Value.absent(),
+                Value<String> downloadState = const Value.absent(),
+                Value<String> thumbDownloadState = const Value.absent(),
+                Value<String?> failureReason = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VaultBlobsTableCompanion.insert(
+                id: id,
+                vaultId: vaultId,
+                width: width,
+                height: height,
+                byteSize: byteSize,
+                thumbByteSize: thumbByteSize,
+                uploadState: uploadState,
+                downloadState: downloadState,
+                thumbDownloadState: thumbDownloadState,
+                failureReason: failureReason,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$VaultBlobsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VaultBlobsTableTable,
+      VaultBlobsTableData,
+      $$VaultBlobsTableTableFilterComposer,
+      $$VaultBlobsTableTableOrderingComposer,
+      $$VaultBlobsTableTableAnnotationComposer,
+      $$VaultBlobsTableTableCreateCompanionBuilder,
+      $$VaultBlobsTableTableUpdateCompanionBuilder,
+      (
+        VaultBlobsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $VaultBlobsTableTable,
+          VaultBlobsTableData
+        >,
+      ),
+      VaultBlobsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$PendingRemoteDeletesTableTableCreateCompanionBuilder =
+    PendingRemoteDeletesTableCompanion Function({
+      required String path,
+      Value<DateTime> addedAt,
+      Value<int> rowid,
+    });
+typedef $$PendingRemoteDeletesTableTableUpdateCompanionBuilder =
+    PendingRemoteDeletesTableCompanion Function({
+      Value<String> path,
+      Value<DateTime> addedAt,
+      Value<int> rowid,
+    });
+
+class $$PendingRemoteDeletesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingRemoteDeletesTableTable> {
+  $$PendingRemoteDeletesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingRemoteDeletesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingRemoteDeletesTableTable> {
+  $$PendingRemoteDeletesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingRemoteDeletesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingRemoteDeletesTableTable> {
+  $$PendingRemoteDeletesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get path =>
+      $composableBuilder(column: $table.path, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+}
+
+class $$PendingRemoteDeletesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingRemoteDeletesTableTable,
+          PendingRemoteDeletesTableData,
+          $$PendingRemoteDeletesTableTableFilterComposer,
+          $$PendingRemoteDeletesTableTableOrderingComposer,
+          $$PendingRemoteDeletesTableTableAnnotationComposer,
+          $$PendingRemoteDeletesTableTableCreateCompanionBuilder,
+          $$PendingRemoteDeletesTableTableUpdateCompanionBuilder,
+          (
+            PendingRemoteDeletesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingRemoteDeletesTableTable,
+              PendingRemoteDeletesTableData
+            >,
+          ),
+          PendingRemoteDeletesTableData,
+          PrefetchHooks Function()
+        > {
+  $$PendingRemoteDeletesTableTableTableManager(
+    _$AppDatabase db,
+    $PendingRemoteDeletesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingRemoteDeletesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PendingRemoteDeletesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingRemoteDeletesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> path = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingRemoteDeletesTableCompanion(
+                path: path,
+                addedAt: addedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String path,
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingRemoteDeletesTableCompanion.insert(
+                path: path,
+                addedAt: addedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingRemoteDeletesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingRemoteDeletesTableTable,
+      PendingRemoteDeletesTableData,
+      $$PendingRemoteDeletesTableTableFilterComposer,
+      $$PendingRemoteDeletesTableTableOrderingComposer,
+      $$PendingRemoteDeletesTableTableAnnotationComposer,
+      $$PendingRemoteDeletesTableTableCreateCompanionBuilder,
+      $$PendingRemoteDeletesTableTableUpdateCompanionBuilder,
+      (
+        PendingRemoteDeletesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PendingRemoteDeletesTableTable,
+          PendingRemoteDeletesTableData
+        >,
+      ),
+      PendingRemoteDeletesTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$RankingCategoriesTableTableCreateCompanionBuilder =
     RankingCategoriesTableCompanion Function({
       required String id,
@@ -78224,6 +79835,13 @@ class $AppDatabaseManager {
       $$MediaAssetsTableTableTableManager(_db, _db.mediaAssetsTable);
   $$MediaReferencesTableTableTableManager get mediaReferencesTable =>
       $$MediaReferencesTableTableTableManager(_db, _db.mediaReferencesTable);
+  $$VaultBlobsTableTableTableManager get vaultBlobsTable =>
+      $$VaultBlobsTableTableTableManager(_db, _db.vaultBlobsTable);
+  $$PendingRemoteDeletesTableTableTableManager get pendingRemoteDeletesTable =>
+      $$PendingRemoteDeletesTableTableTableManager(
+        _db,
+        _db.pendingRemoteDeletesTable,
+      );
   $$RankingCategoriesTableTableTableManager get rankingCategoriesTable =>
       $$RankingCategoriesTableTableTableManager(
         _db,

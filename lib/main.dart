@@ -260,7 +260,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
 
   Future<void> _resumeMediaAfterReconnect() async {
     try {
-      await ref.read(mediaTransferWorkerProvider).resumeAfterReconnect();
+      // Side by side: one failing doesn't hold back the others.
+      await Future.wait([
+        ref.read(mediaTransferWorkerProvider).resumeAfterReconnect(),
+        ref
+            .read(mediaServiceProvider)
+            .drainRemoteDeletes(ref.read(mediaStorageProvider)),
+        ref.read(vaultMediaServiceProvider).drain(),
+      ]);
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -478,6 +485,9 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           unawaited(
             ref.read(mediaTransferWorkerProvider).requeueFailedDownloads(),
           );
+          // Photo Series' images: parked transfers get the same retry, and
+          // thumbnails learned of in the pull are fetched. Settings inside.
+          unawaited(ref.read(vaultMediaServiceProvider).requeueFailed());
           // After the pull, so the references it brought in count.
           unawaited(ref.read(mediaServiceProvider).reconcileRefcounts());
           // Contribution rows written the old way round, here or on another

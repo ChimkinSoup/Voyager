@@ -146,7 +146,7 @@ class MediaService extends ChangeNotifier {
     final sniffed = validateIngestInput(bytes);
 
     final request = sniffed == SniffedImageFormat.heic
-        ? await _decodeHeic(bytes)
+        ? await decodeHeic(bytes)
         : MediaIngestRequest.encoded(bytes);
 
     // Decode, downscale and re-encode are CPU-bound and easily a second on a
@@ -757,13 +757,15 @@ class MediaService extends ChangeNotifier {
     final live = await _repository.listAssets(includeDeleted: true);
     final claimed = {for (final asset in live) asset.contentHash};
     for (final asset in purged) {
+      // Local only: the purge owed the Storage delete, drained below.
       await _deleteBlob(
         asset,
         claimed: claimed,
-        storage: storage,
+        storage: null,
         action: 'purge',
       );
     }
+    if (storage != null) await drainRemoteDeletes(storage);
 
     // Blobs on disk that no live row claims — see
     // [MediaFileStore.orphanedFiles].
@@ -776,6 +778,34 @@ class MediaService extends ChangeNotifier {
       }
     }
     if (purged.isNotEmpty || orphans.isNotEmpty) notifyListeners();
+  }
+
+  /// Sends the Storage deletes purges owe, keeping any that fail for the next
+  /// launch or reconnect. A blob a live row has claimed since is let be.
+  Future<void> drainRemoteDeletes(MediaStorage storage) async {
+    final uid = storage.currentUid;
+    if (uid == null) return;
+    final pending = await _repository.listPendingRemoteDeletes();
+    if (pending.isEmpty) return;
+    final claimed = {
+      for (final asset in await _repository.listAssets(includeDeleted: true))
+        'media/${asset.contentHash}',
+    };
+    for (final path in pending) {
+      if (!claimed.contains(path)) {
+        try {
+          await storage.delete('users/$uid/$path');
+        } catch (error, stackTrace) {
+          ErrorLogger.instance.record(
+            error,
+            stackTrace,
+            context: 'media: remote purge of $path',
+          );
+          continue;
+        }
+      }
+      await _repository.removePendingRemoteDelete(path);
+    }
   }
 
   /// Re-derives every live asset's retention clock from its references.
@@ -849,7 +879,7 @@ class MediaService extends ChangeNotifier {
   /// the OS decoder, while Windows can only do it when the user has installed
   /// the HEIF extension — hence the explicit refusal rather than a confusing
   /// "could not be read".
-  Future<MediaIngestRequest> _decodeHeic(Uint8List bytes) async {
+  static Future<MediaIngestRequest> decodeHeic(Uint8List bytes) async {
     ui.Image? image;
     try {
       final codec = await ui.instantiateImageCodec(bytes);

@@ -27,13 +27,16 @@ class SecureVaultException implements Exception {
 class SecureVaultService {
   SecureVaultService({
     required NotificationRepository repository,
+    required PhotoSeriesRepository photoSeries,
     required SyncRepository sync,
     DateTime Function() now = utcNow,
   }) : _repository = repository,
+       _photoSeries = photoSeries,
        _sync = sync,
        _now = now;
 
   final NotificationRepository _repository;
+  final PhotoSeriesRepository _photoSeries;
   final SyncRepository _sync;
   final DateTime Function() _now;
 
@@ -113,8 +116,9 @@ class SecureVaultService {
     return true;
   }
 
-  /// Starts a new, empty vault under [password], deleting every Secure Note.
-  /// The old vault's notes can't be read with the new key in any case.
+  /// Starts a new, empty vault under [password], deleting every Secure Note
+  /// and every Photo Series image. The old vault's can't be read with the new
+  /// key in any case.
   Future<SecretKey> reset(String password) async {
     _requireSignedIn();
     final header = await localHeader();
@@ -129,6 +133,7 @@ class SecureVaultService {
     for (final note in await _repository.listSecureNotes()) {
       await _repository.deleteSecureNote(note.id);
     }
+    await retireVaultBlobs(_repository, _photoSeries);
     return made.key;
   }
 

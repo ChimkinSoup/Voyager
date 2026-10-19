@@ -85,6 +85,7 @@ RemoteSyncService _buildService(
     reminderRepository: DriftReminderRepository(db),
     bucketListRepository: DriftBucketListRepository(db),
     mediaRepository: DriftMediaRepository(db),
+    photoSeriesRepository: DriftPhotoSeriesRepository(db),
     settingsRepository: DriftSettingsRepository(db),
     syncEngine: engine,
     deviceId: 'device-a',

@@ -49,6 +49,7 @@ class _Device {
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: settings,
       syncEngine: SyncEngine(
         syncRepository: syncRepo,

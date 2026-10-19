@@ -785,6 +785,11 @@ class OutboxSyncWorker {
           DriftMediaRepository(_db).getReference,
           mediaReferenceToFirestore,
         );
+      case FirestoreCollections.vaultBlobs:
+        return byId(
+          DriftPhotoSeriesRepository(_db).getBlob,
+          vaultBlobToFirestore,
+        );
       case FirestoreCollections.pinnedNotes:
         return byId(
           DriftNotificationRepository(_db).getPinnedNote,

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/secure_vault/secure_vault.dart';
@@ -95,5 +97,55 @@ void main() {
       SecureVault.decrypt(v.key, 'vault-2', box),
       throwsA(isA<SecureVaultTamperedException>()),
     );
+  });
+
+  group('bytes', () {
+    final photo = Uint8List.fromList(List.generate(5000, (i) => i % 251));
+
+    test('survive the round trip', () async {
+      final v = await vault();
+      final sealed = await SecureVault.encryptBytes(v.key, 'vault-1', photo);
+      // nonce ‖ ciphertext ‖ tag
+      expect(sealed.length, 12 + photo.length + 16);
+      expect(await SecureVault.decryptBytes(v.key, 'vault-1', sealed), photo);
+    });
+
+    test('a flipped byte is refused', () async {
+      final v = await vault();
+      final sealed = await SecureVault.encryptBytes(v.key, 'vault-1', photo);
+      for (final at in [0, 100, sealed.length - 1]) {
+        final tampered = Uint8List.fromList(sealed)..[at] ^= 1;
+        await expectLater(
+          SecureVault.decryptBytes(v.key, 'vault-1', tampered),
+          throwsA(isA<SecureVaultTamperedException>()),
+        );
+      }
+      await expectLater(
+        SecureVault.decryptBytes(v.key, 'vault-1', sealed.sublist(0, 20)),
+        throwsA(isA<SecureVaultTamperedException>()),
+      );
+    });
+
+    test('each seal takes a fresh nonce', () async {
+      final v = await vault();
+      final one = await SecureVault.encryptBytes(v.key, 'vault-1', photo);
+      final two = await SecureVault.encryptBytes(v.key, 'vault-1', photo);
+      expect(one.sublist(0, 12), isNot(two.sublist(0, 12)));
+      expect(one, isNot(two));
+    });
+
+    test('a blob sealed under another vault is refused', () async {
+      final v = await vault();
+      final sealed = await SecureVault.encryptBytes(v.key, 'vault-1', photo);
+      await expectLater(
+        SecureVault.decryptBytes(v.key, 'vault-2', sealed),
+        throwsA(isA<SecureVaultTamperedException>()),
+      );
+      final other = await SecureVault.create('x', vaultId: 'vault-1', now: now);
+      await expectLater(
+        SecureVault.decryptBytes(other.key, 'vault-1', sealed),
+        throwsA(isA<SecureVaultTamperedException>()),
+      );
+    });
   });
 }

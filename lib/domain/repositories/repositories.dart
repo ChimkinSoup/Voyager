@@ -10,6 +10,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -748,6 +749,43 @@ abstract class WorkoutRepository {
   Future<List<WorkoutSetLog>> getAllSetLogs({bool includeDeleted = true});
 }
 
+/// Photo Series (PHOTO_SERIES_HLD.md): the encrypted blobs, and in time the
+/// series, angles and check-ins that use them. The ciphertext files live in
+/// `VaultMediaFileStore`.
+abstract class PhotoSeriesRepository {
+  Future<List<VaultBlob>> listBlobs({bool includeDeleted = false});
+  Future<VaultBlob?> getBlob(String id);
+
+  /// Transfer state is written on insert only, as on
+  /// [MediaRepository.upsertAsset].
+  Future<void> upsertBlob(VaultBlob blob, {bool recordLocalActivity = true});
+  Future<void> updateBlobTransferState(
+    String id, {
+    MediaUploadState? uploadState,
+    MediaDownloadState? downloadState,
+    MediaDownloadState? thumbDownloadState,
+    String? failureReason,
+    bool clearFailureReason = false,
+  });
+  Future<List<VaultBlob>> listBlobsByUploadState(Set<MediaUploadState> states);
+
+  /// Live blobs whose full image or thumbnail is in one of [states].
+  Future<List<VaultBlob>> listBlobsByDownloadState(
+    Set<MediaDownloadState> states, {
+    required bool thumb,
+  });
+
+  /// Permanently deletes blobs tombstoned more than 30 days ago, returning
+  /// them so their files can go too. Owes the Storage deletes of those that
+  /// were uploaded, in the same step — see [listPendingRemoteDeletes].
+  Future<List<VaultBlob>> purgeExpiredDeleted(DateTime now);
+
+  /// The Storage deletes a purge owes and hasn't landed, by path under the
+  /// user's prefix (`vault_media/{id}`, `vault_media/{id}.thumb`).
+  Future<List<String>> listPendingRemoteDeletes();
+  Future<void> removePendingRemoteDelete(String path);
+}
+
 /// Metadata half of the media module: asset rows and the references that
 /// point at them. The bytes themselves live in `MediaFileStore`, and nothing
 /// here touches them.
@@ -841,7 +879,14 @@ abstract class MediaRepository {
   /// Permanently removes assets and references whose retention window has
   /// closed, and returns the assets removed so their bytes can be deleted
   /// too. [now] is the moment the 30-day cutoff is measured back from.
+  /// Owes the Storage deletes of those that were uploaded, in the same step
+  /// — see [listPendingRemoteDeletes].
   Future<List<MediaAsset>> purgeExpiredDeleted(DateTime now);
+
+  /// The Storage deletes a purge owes and hasn't landed, by path under the
+  /// user's prefix (`media/{hash}`).
+  Future<List<String>> listPendingRemoteDeletes();
+  Future<void> removePendingRemoteDelete(String path);
 
   Future<List<MediaAsset>> getAllAssets({bool includeDeleted = true});
   Future<List<MediaReference>> getAllReferences({bool includeDeleted = true});

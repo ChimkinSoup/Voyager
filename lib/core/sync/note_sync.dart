@@ -190,6 +190,27 @@ Future<int> retireSecureNotes(NotificationRepository repo) async {
   return deleted;
 }
 
+/// [retireSecureNotes] for Photo Series' encrypted images: tombstones every
+/// live blob sealed under a retired vault, whose files the purge then
+/// deletes. Returns how many it tombstoned.
+Future<int> retireVaultBlobs(
+  NotificationRepository notes,
+  PhotoSeriesRepository photos,
+) async {
+  final json = await notes.getSecureVaultHeader();
+  if (json == null) return 0;
+  final retired = SecureVaultHeader.fromJson(json).retiredVaultIds.toSet();
+  if (retired.isEmpty) return 0;
+  final now = utcNow();
+  var deleted = 0;
+  for (final blob in await photos.listBlobs()) {
+    if (!retired.contains(blob.vaultId)) continue;
+    await photos.upsertBlob(blob.copyWith(deletedAt: now, bumpVersion: true));
+    deleted++;
+  }
+  return deleted;
+}
+
 /// Applies the server's copy of note [id] — a pull's half of the conflict
 /// check (see [resolveNoteSync]).
 Future<void> applyRemoteNote<T extends SyncedNote>(

@@ -59,6 +59,7 @@ void main() {
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: engineA,
       uploadDebounceDelay: Duration.zero,
@@ -80,6 +81,7 @@ void main() {
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
@@ -359,6 +361,7 @@ void main() {
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: debouncedEngine,
       uploadDebounceDelay: const Duration(milliseconds: 80),

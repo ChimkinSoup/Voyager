@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
@@ -224,6 +225,55 @@ abstract final class SecureVault {
       throw const SecureVaultTamperedException();
     }
   }
+
+  /// [bytes] sealed as one self-contained blob: `nonce (12 B) ‖ ciphertext ‖
+  /// GCM tag`, under the same authenticated data as a note. Runs off the UI
+  /// isolate: a 2048 px photo takes several frames on a phone.
+  static Future<Uint8List> encryptBytes(
+    SecretKey key,
+    String vaultId,
+    Uint8List bytes,
+  ) async {
+    final keyBytes = await key.extractBytes();
+    return Isolate.run(() async {
+      final aes = AesGcm.with256bits();
+      final box = await aes.encrypt(
+        bytes,
+        secretKey: SecretKey(keyBytes),
+        nonce: aes.newNonce(),
+        aad: utf8.encode(vaultId),
+      );
+      return box.concatenation();
+    });
+  }
+
+  /// Opens a blob [encryptBytes] sealed. Throws
+  /// [SecureVaultTamperedException] for one that fails authentication.
+  static Future<Uint8List> decryptBytes(
+    SecretKey key,
+    String vaultId,
+    Uint8List sealed,
+  ) async {
+    final keyBytes = await key.extractBytes();
+    final opened = await Isolate.run(() async {
+      final aes = AesGcm.with256bits();
+      if (sealed.length < _nonceLength + 16) return null;
+      try {
+        final bytes = await aes.decrypt(
+          _split(sealed.sublist(_nonceLength), sealed.sublist(0, _nonceLength)),
+          secretKey: SecretKey(keyBytes),
+          aad: utf8.encode(vaultId),
+        );
+        return Uint8List.fromList(bytes);
+      } on SecretBoxAuthenticationError {
+        return null;
+      }
+    });
+    if (opened == null) throw const SecureVaultTamperedException();
+    return opened;
+  }
+
+  static const _nonceLength = 12;
 
   /// Always wraps under [SecureVaultKdf.current], never a header's own KDF
   /// params: a synced or restored header is untrusted, so weakened params in

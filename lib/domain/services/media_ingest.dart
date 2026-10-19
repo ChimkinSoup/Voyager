@@ -184,7 +184,14 @@ SniffedImageFormat validateIngestInput(Uint8List bytes) {
 /// keep it. WebP is never *produced* (the `image` package decodes it but
 /// cannot encode it), which is why a WebP input comes back out as one of the
 /// other two.
-MediaIngestResult ingestImageIsolate(MediaIngestRequest request) {
+MediaIngestResult ingestImageIsolate(MediaIngestRequest request) =>
+    ingestImageWithPixels(request).result;
+
+/// [ingestImageIsolate], with the downscaled pixels the result was encoded
+/// from, for a caller that derives more from them without decoding again.
+({MediaIngestResult result, img.Image pixels}) ingestImageWithPixels(
+  MediaIngestRequest request,
+) {
   final decoded = _decode(request);
 
   final longestEdge = decoded.width > decoded.height
@@ -213,12 +220,15 @@ MediaIngestResult ingestImageIsolate(MediaIngestRequest request) {
     bytes = img.encodeJpg(resized, quality: ingestJpegQuality);
   }
 
-  return MediaIngestResult(
-    bytes: bytes,
-    contentHash: sha256.convert(bytes).toString(),
-    format: format,
-    width: resized.width,
-    height: resized.height,
+  return (
+    result: MediaIngestResult(
+      bytes: bytes,
+      contentHash: sha256.convert(bytes).toString(),
+      format: format,
+      width: resized.width,
+      height: resized.height,
+    ),
+    pixels: resized,
   );
 }
 

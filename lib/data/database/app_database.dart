@@ -1764,6 +1764,45 @@ class MediaAssetsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One encrypted image and its thumbnail — see [VaultBlob]. Its files are
+/// named by [id], so no path is stored.
+class VaultBlobsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get vaultId => text()();
+  IntColumn get width => integer()();
+  IntColumn get height => integer()();
+  IntColumn get byteSize => integer()();
+  IntColumn get thumbByteSize => integer()();
+
+  /// By `name`, as on [MediaAssetsTable].
+  TextColumn get uploadState =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get downloadState =>
+      text().withDefault(const Constant('present'))();
+  TextColumn get thumbDownloadState =>
+      text().withDefault(const Constant('present'))();
+  TextColumn get failureReason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A Storage object a purge owes a delete, by its path under the user's
+/// prefix (`media/{hash}`, `vault_media/{id}`). Written with the purge that
+/// drops its row, and kept until the delete lands, so an offline or failed
+/// one is retried rather than left in Storage for good.
+class PendingRemoteDeletesTable extends Table {
+  TextColumn get path => text()();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {path};
+}
+
 /// One row per placement of an asset on a parent document — see
 /// [MediaReference].
 ///
@@ -2076,6 +2115,8 @@ class LeetCodeCheatEntriesTable extends Table {
     JobSeasonsTable,
     MediaAssetsTable,
     MediaReferencesTable,
+    VaultBlobsTable,
+    PendingRemoteDeletesTable,
     RankingCategoriesTable,
     RankingParentsTable,
     RankingChildrenTable,
@@ -2090,7 +2131,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 156;
+  int get schemaVersion => 158;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3816,6 +3857,12 @@ class AppDatabase extends _$AppDatabase {
           todoTasksTable.dueHasTime,
         );
         await _backfillTodoDueHasTime();
+      }
+      if (from < 157) {
+        await migrator.createTable(vaultBlobsTable);
+      }
+      if (from < 158) {
+        await migrator.createTable(pendingRemoteDeletesTable);
       }
     },
   );

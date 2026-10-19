@@ -27,6 +27,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -46,6 +47,32 @@ import 'package:voyager/domain/services/ordered_list_edit.dart';
 Expression<bool> _expired(Expression<DateTime> deletedAt, DateTime cutoff) =>
     deletedAt.isSmallerOrEqualValue(cutoff) &
     deletedAt.isBiggerThanValue(kErasedAt);
+
+/// Records Storage deletes a purge owes — see `PendingRemoteDeletesTable`.
+Future<void> _owePendingRemoteDeletes(AppDatabase db, List<String> paths) =>
+    db.batch((batch) {
+      batch.insertAll(db.pendingRemoteDeletesTable, [
+        for (final path in paths)
+          PendingRemoteDeletesTableCompanion.insert(path: path),
+      ], mode: InsertMode.insertOrIgnore);
+    });
+
+Future<List<String>> _listPendingRemoteDeletes(
+  AppDatabase db,
+  String prefix,
+) async {
+  final rows =
+      await (db.select(db.pendingRemoteDeletesTable)
+            ..where((t) => t.path.like('$prefix%'))
+            ..orderBy([(t) => OrderingTerm(expression: t.addedAt)]))
+          .get();
+  return [for (final row in rows) row.path];
+}
+
+Future<void> _removePendingRemoteDelete(AppDatabase db, String path) =>
+    (db.delete(
+      db.pendingRemoteDeletesTable,
+    )..where((t) => t.path.equals(path))).go();
 
 /// Keeps a tombstone this device still owes the server out of the purge.
 ///
@@ -4487,9 +4514,26 @@ class DriftMediaRepository implements MediaRepository {
     if (expired.isEmpty) return const [];
 
     final ids = [for (final row in expired) row.id];
-    await (_db.delete(_db.mediaAssetsTable)..where((t) => t.id.isIn(ids))).go();
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.mediaAssetsTable,
+      )..where((t) => t.id.isIn(ids))).go();
+      await _owePendingRemoteDeletes(_db, [
+        for (final row in expired)
+          if (row.uploadState == MediaUploadState.uploaded.name)
+            'media/${row.contentHash}',
+      ]);
+    });
     return expired.map(_mapAsset).toList();
   }
+
+  @override
+  Future<List<String>> listPendingRemoteDeletes() =>
+      _listPendingRemoteDeletes(_db, 'media/');
+
+  @override
+  Future<void> removePendingRemoteDelete(String path) =>
+      _removePendingRemoteDelete(_db, path);
 
   @override
   Future<List<MediaAsset>> getAllAssets({bool includeDeleted = true}) {
@@ -8847,3 +8891,193 @@ class DriftRankingRepository implements RankingRepository {
     deletedAt: row.deletedAt,
   );
 }
+
+class DriftPhotoSeriesRepository implements PhotoSeriesRepository {
+  DriftPhotoSeriesRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
+
+  final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<VaultBlob>> listBlobs({bool includeDeleted = false}) async {
+    final rows =
+        await (_db.select(_db.vaultBlobsTable)..where(
+              (t) =>
+                  includeDeleted ? const Constant(true) : t.deletedAt.isNull(),
+            ))
+            .get();
+    return rows.map(_mapBlob).toList();
+  }
+
+  @override
+  Future<VaultBlob?> getBlob(String id) async {
+    final row = await (_db.select(
+      _db.vaultBlobsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapBlob(row);
+  }
+
+  @override
+  Future<void> upsertBlob(
+    VaultBlob blob, {
+    bool recordLocalActivity = true,
+  }) async {
+    final row = VaultBlobsTableCompanion(
+      id: Value(blob.id),
+      vaultId: Value(blob.vaultId),
+      width: Value(blob.width),
+      height: Value(blob.height),
+      byteSize: Value(blob.byteSize),
+      thumbByteSize: Value(blob.thumbByteSize),
+      createdAt: Value(blob.createdAt),
+      updatedAt: Value(blob.updatedAt),
+      version: Value(blob.version),
+      deletedAt: Value(blob.deletedAt),
+    );
+    // Transfer state on insert only, for the reason [DriftMediaRepository]
+    // gives.
+    await _db
+        .into(_db.vaultBlobsTable)
+        .insert(
+          row.copyWith(
+            uploadState: Value(blob.uploadState.name),
+            downloadState: Value(blob.downloadState.name),
+            thumbDownloadState: Value(blob.thumbDownloadState.name),
+            failureReason: Value(blob.failureReason),
+          ),
+          onConflict: DoUpdate((_) => row),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.vaultBlobs,
+        await getBlob(blob.id) ?? blob,
+      );
+    }
+  }
+
+  @override
+  Future<void> updateBlobTransferState(
+    String id, {
+    MediaUploadState? uploadState,
+    MediaDownloadState? downloadState,
+    MediaDownloadState? thumbDownloadState,
+    String? failureReason,
+    bool clearFailureReason = false,
+  }) async {
+    await (_db.update(
+      _db.vaultBlobsTable,
+    )..where((t) => t.id.equals(id))).write(
+      VaultBlobsTableCompanion(
+        uploadState: uploadState == null
+            ? const Value.absent()
+            : Value(uploadState.name),
+        downloadState: downloadState == null
+            ? const Value.absent()
+            : Value(downloadState.name),
+        thumbDownloadState: thumbDownloadState == null
+            ? const Value.absent()
+            : Value(thumbDownloadState.name),
+        failureReason: clearFailureReason
+            ? const Value(null)
+            : (failureReason == null
+                  ? const Value.absent()
+                  : Value(failureReason)),
+      ),
+    );
+  }
+
+  @override
+  Future<List<VaultBlob>> listBlobsByUploadState(
+    Set<MediaUploadState> states,
+  ) async {
+    if (states.isEmpty) return const [];
+    final names = [for (final state in states) state.name];
+    final rows = await (_db.select(
+      _db.vaultBlobsTable,
+    )..where((t) => t.uploadState.isIn(names) & t.deletedAt.isNull())).get();
+    return rows.map(_mapBlob).toList();
+  }
+
+  @override
+  Future<List<VaultBlob>> listBlobsByDownloadState(
+    Set<MediaDownloadState> states, {
+    required bool thumb,
+  }) async {
+    if (states.isEmpty) return const [];
+    final names = [for (final state in states) state.name];
+    final rows =
+        await (_db.select(_db.vaultBlobsTable)..where(
+              (t) =>
+                  (thumb ? t.thumbDownloadState : t.downloadState).isIn(names) &
+                  t.deletedAt.isNull(),
+            ))
+            .get();
+    return rows.map(_mapBlob).toList();
+  }
+
+  @override
+  Future<List<VaultBlob>> purgeExpiredDeleted(DateTime now) async {
+    final expired =
+        await (_db.select(_db.vaultBlobsTable)..where(
+              (t) =>
+                  _expired(t.deletedAt, _policy.purgeCutoff(now)) &
+                  _notOwedUpload(_db, FirestoreCollections.vaultBlobs, t.id),
+            ))
+            .get();
+    if (expired.isEmpty) return const [];
+    final ids = [for (final row in expired) row.id];
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.vaultBlobsTable,
+      )..where((t) => t.id.isIn(ids))).go();
+      await _owePendingRemoteDeletes(_db, [
+        for (final row in expired)
+          // Any upload begun may have left the thumbnail, which goes first.
+          if (row.uploadState != MediaUploadState.localOnly.name) ...[
+            'vault_media/${row.id}',
+            'vault_media/${row.id}.thumb',
+          ],
+      ]);
+    });
+    return expired.map(_mapBlob).toList();
+  }
+
+  @override
+  Future<List<String>> listPendingRemoteDeletes() =>
+      _listPendingRemoteDeletes(_db, 'vault_media/');
+
+  @override
+  Future<void> removePendingRemoteDelete(String path) =>
+      _removePendingRemoteDelete(_db, path);
+}
+
+VaultBlob _mapBlob(VaultBlobsTableData row) => VaultBlob(
+  id: row.id,
+  vaultId: row.vaultId,
+  width: row.width,
+  height: row.height,
+  byteSize: row.byteSize,
+  thumbByteSize: row.thumbByteSize,
+  uploadState: _enumByName(
+    MediaUploadState.values,
+    row.uploadState,
+    MediaUploadState.localOnly,
+  ),
+  downloadState: _enumByName(
+    MediaDownloadState.values,
+    row.downloadState,
+    MediaDownloadState.missing,
+  ),
+  thumbDownloadState: _enumByName(
+    MediaDownloadState.values,
+    row.thumbDownloadState,
+    MediaDownloadState.missing,
+  ),
+  failureReason: row.failureReason,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);

@@ -63,6 +63,7 @@ RemoteSyncService _service(AppDatabase db, InMemorySyncRepository server) =>
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: SyncEngine(
         syncRepository: server,

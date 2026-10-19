@@ -47,6 +47,7 @@ class _Device {
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: SyncEngine(
         syncRepository: server,
@@ -316,8 +317,16 @@ void main() {
     late SecureVaultService vaultB;
 
     setUp(() {
-      vaultA = SecureVaultService(repository: a.notes, sync: server);
-      vaultB = SecureVaultService(repository: b.notes, sync: server);
+      vaultA = SecureVaultService(
+        repository: a.notes,
+        photoSeries: DriftPhotoSeriesRepository(a.db),
+        sync: server,
+      );
+      vaultB = SecureVaultService(
+        repository: b.notes,
+        photoSeries: DriftPhotoSeriesRepository(b.db),
+        sync: server,
+      );
     });
 
     Future<SecureNote> seal(

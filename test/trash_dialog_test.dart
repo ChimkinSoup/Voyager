@@ -31,6 +31,7 @@ List<BackupCollection> _collectionsFor(AppDatabase db) =>
       reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
+      photoSeriesRepository: DriftPhotoSeriesRepository(db),
       settingsRepository: DriftSettingsRepository(db),
     );
 
