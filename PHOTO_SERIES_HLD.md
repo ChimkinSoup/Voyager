@@ -6,7 +6,7 @@ Photos and notes are encrypted with the existing **Secure Vault** (`SECURE_NOTES
 
 Related: `lib/core/secure_vault/secure_vault.dart`, `lib/features/notifications/secure_vault_session.dart`, `lib/features/notifications/secure_vault_dialogs.dart`, `lib/core/media/media_service.dart`, `lib/domain/services/media_ingest.dart`, `lib/core/reminders/reminder_engine.dart`, `lib/domain/models/reminder_models.dart`, `lib/domain/models/notification_models.dart`, `lib/domain/services/periodic_prompt_service.dart`, `lib/features/shell/shell_destinations.dart`, `MEDIA.md`, `SCHEDULED_REMINDERS_HLD.md`, `UNIFIED_NOTIFICATIONS.md`.
 
-Status: **phases 1–3 implemented** (vault media core; series and check-ins; reminders); phases 4–6 not started.
+Status: **phases 1–4 implemented** (vault media core; series and check-ins; reminders; playback and compare); phases 5–6 not started.
 
 ---
 
@@ -355,7 +355,12 @@ All of this is computed from plain fields, so it works while locked.
    - the reminder settings in the series dialog (on/off, time, and the weekday, day or month and day);
    - an occurrence never predates the series, so one made after today's reminder time waits for the next;
    - the OS notification opens the series. Going straight into capture waits for phase 6.
-4. **Playback and Compare.**
+4. **Playback and Compare** — **done (2026-10-19)**:
+   - Grid | Playback | Compare on the series detail; locking drops back to the grid;
+   - Playback's frame window (30 ahead in the direction of play, 10 behind), decoded no larger than drawn; a frame that won't open is stepped past, and the thumbnail stands in for a full image not yet downloaded;
+   - Compare's quick picks are relative to B ("~1 month ago" = nearest to a month before B);
+   - elapsed time reads in days under 2 weeks, weeks under 26, months under 24, then years;
+   - Playback and Compare draw each photo with its transform: fitted inside the frame, then moved, rotated and zoomed about the frame's centre. The viewer doesn't yet; that comes with phase 5.
 5. **Alignment tool.**
 6. **Android capture:** `camera`, permissions, the ghost overlay and `FLAG_SECURE`.
 

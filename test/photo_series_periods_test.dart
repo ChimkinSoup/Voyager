@@ -181,4 +181,21 @@ void main() {
 
     expect(stats(s, DateTime(2026, 10, 18, 12)).currentDone, isFalse);
   });
+
+  test('elapsed time reads in days, weeks, months, then years', () {
+    final from = DateTime(2026, 1, 31);
+    expect(photoElapsedLabel(from, from), '0 days');
+    expect(photoElapsedLabel(from, DateTime(2026, 2, 1)), '1 day');
+    expect(photoElapsedLabel(from, DateTime(2026, 2, 13)), '13 days');
+    expect(photoElapsedLabel(from, DateTime(2026, 2, 14)), '2 weeks');
+    expect(photoElapsedLabel(from, DateTime(2026, 5, 9)), '14 weeks');
+    expect(photoElapsedLabel(from, DateTime(2026, 7, 30)), '25 weeks');
+    // Not a whole seventh month until the 31st comes round again.
+    expect(photoElapsedLabel(from, DateTime(2026, 8, 30)), '6 months');
+    expect(photoElapsedLabel(from, DateTime(2026, 8, 31)), '7 months');
+    expect(photoElapsedLabel(from, DateTime(2027, 1, 31)), '12 months');
+    expect(photoElapsedLabel(from, DateTime(2028, 2, 1)), '2 years');
+    // Either order.
+    expect(photoElapsedLabel(DateTime(2026, 5, 9), from), '14 weeks');
+  });
 }

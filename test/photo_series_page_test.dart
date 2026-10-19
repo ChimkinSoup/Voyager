@@ -3,15 +3,17 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
+import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/secure_vault/vault_media_service.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -25,6 +27,7 @@ import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_series_detail.dart';
+import 'package:voyager/features/photo_series/photo_frame.dart';
 import 'package:voyager/features/photo_series/photo_series_page.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
@@ -112,11 +115,13 @@ Future<void> _unlock(WidgetTester tester, ProviderContainer container) async {
   await _settle(tester);
 }
 
-/// A weekly series with one check-in a week ago and one this week.
+/// A weekly series with one check-in a week ago and one this week, or one
+/// for each of [daysAgo].
 Future<PhotoSeries> _seed(
   WidgetTester tester,
-  ProviderContainer container,
-) async {
+  ProviderContainer container, {
+  List<int> daysAgo = const [7, 0],
+}) async {
   late PhotoSeries series;
   await tester.runAsync(() async {
     final service = container.read(photoSeriesServiceProvider);
@@ -131,7 +136,9 @@ Future<PhotoSeries> _seed(
             .single;
     final session = container.read(secureVaultSessionProvider)!;
     final today = DateTime.now();
-    for (final day in [today.subtract(const Duration(days: 7)), today]) {
+    for (final day in [
+      for (final n in daysAgo) today.subtract(Duration(days: n)),
+    ]) {
       await service.createCheckIn(
         session: session,
         series: series,
@@ -146,6 +153,18 @@ Future<PhotoSeries> _seed(
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 6; i++) {
     await tester.pump(const Duration(milliseconds: 80));
+  }
+}
+
+/// Lets real I/O — reads, decryption, decoding — finish, pumping between.
+Future<void> _drain(WidgetTester tester) async {
+  // Each step of a chain started in the fake zone needs a turn of both.
+  for (var i = 0; i < 40; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    // Fake time too, for the database's own timers.
+    await tester.pump(const Duration(milliseconds: 50));
   }
 }
 
@@ -247,6 +266,218 @@ void main() {
     for (final image in images!) {
       image!.dispose();
     }
+  });
+
+  group('playback', () {
+    /// The image Playback is drawing, null while none is.
+    ui.Image? drawn(WidgetTester tester) {
+      final raw = find.descendant(
+        of: find.byType(AlignedPhotoFrame),
+        matching: find.byType(RawImage),
+      );
+      return raw.evaluate().isEmpty ? null : tester.widget<RawImage>(raw).image;
+    }
+
+    testWidgets('decodes frames at the size drawn and steps through them', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+      expect(find.textContaining('1 / 2'), findsOneWidget);
+      final first = drawn(tester);
+      expect(first, isNotNull);
+      // The 30 × 40 photo is never decoded larger than it is.
+      expect(first!.width, 30);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await _drain(tester);
+      expect(find.textContaining('2 / 2'), findsOneWidget);
+      expect(drawn(tester), isNotNull);
+
+      // Ends the idle-lock timer the taps armed.
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('once stops at the last frame; the speed is remembered', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+
+      await tester.tap(find.text('Once'));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      // 4 fps by default: a frame every 250 ms.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.textContaining('2 / 2'), findsOneWidget);
+      expect(find.byTooltip('Play (Space)'), findsOneWidget);
+
+      tester.widget<Slider>(find.byType(Slider)).onChangeEnd!(12);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      final saved = await tester.runAsync(
+        () => container.read(photoSeriesRepositoryProvider).listSeries(),
+      );
+      expect(saved!.single.playbackFps, 12);
+
+      // Ends the idle-lock timer the taps armed.
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    // The window used to look only backwards from the last frame, so a loop
+    // of more than 11 waited for ever on a first frame nothing loaded.
+    testWidgets('a loop of many frames wraps from the last to the first', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(
+        tester,
+        container,
+        daysAgo: [for (var w = 12; w >= 0; w--) w * 7],
+      );
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+      for (var i = 0; i < 12; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      }
+      await _drain(tester);
+      expect(find.textContaining('13 / 13'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.textContaining('1 / 13'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('the frame on screen going away moves the playhead back', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await _drain(tester);
+      expect(find.textContaining('2 / 2'), findsOneWidget);
+
+      final latest = (await tester.runAsync(
+        () => container.read(photoSeriesRepositoryProvider).listCheckIns(),
+      ))!.reduce((a, b) => a.takenOn.isAfter(b.takenOn) ? a : b);
+      await tester.runAsync(
+        () => container.read(photoSeriesServiceProvider).deleteCheckIn(latest),
+      );
+      await _drain(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('1 / 1'), findsOneWidget);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('needs the vault, and locking drops back to the grid', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+      expect(find.byType(AlignedPhotoFrame), findsOneWidget);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+      expect(find.byType(AlignedPhotoFrame), findsNothing);
+      expect(find.text('Unlock to see photos'), findsOneWidget);
+
+      await tester.tap(find.text('Compare'));
+      await _settle(tester);
+      expect(find.text('Side by side'), findsNothing);
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.focusNode.hasFocus, isTrue);
+    });
+  });
+
+  testWidgets('compare: first vs latest, then a quick pick and each mode', (
+    tester,
+  ) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container);
+    await _pumpDetail(tester, container, series.id);
+
+    await tester.tap(find.text('Compare'));
+    await _drain(tester);
+    final date = DateFormat.yMMMd();
+    final today = _today();
+    final weekAgo = today.subtract(const Duration(days: 7));
+    expect(find.text('A · ${date.format(weekAgo)}'), findsWidgets);
+    expect(find.text('B · ${date.format(today)}'), findsWidgets);
+    expect(find.text('7 days'), findsOneWidget);
+    expect(find.byType(AlignedPhotoFrame), findsNWidgets(2));
+
+    await tester.tap(find.text('~1 month ago'));
+    await _settle(tester);
+    // The nearest there is.
+    expect(find.text('A · ${date.format(weekAgo)}'), findsWidgets);
+
+    await tester.tap(find.text('Slider'));
+    await _drain(tester);
+    expect(find.byType(AlignedPhotoFrame), findsNWidgets(2));
+    expect(find.byType(ClipRect), findsWidgets);
+
+    await tester.tap(find.text('Overlay'));
+    await _drain(tester);
+    expect(find.byType(Opacity), findsWidgets);
+    expect(find.byType(AlignedPhotoFrame), findsNWidgets(2));
+
+    // Ends the idle-lock timer the taps armed.
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await tester.pump();
+  });
+
+  // Nearest to a month before B was B itself, so A and B were one photo.
+  testWidgets('compare: a quick pick never lands on B', (tester) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container, daysAgo: [150, 0]);
+    await _pumpDetail(tester, container, series.id);
+    await tester.tap(find.text('Compare'));
+    await _drain(tester);
+    final date = DateFormat.yMMMd();
+    final old = _today().subtract(const Duration(days: 150));
+
+    await tester.tap(find.text('Previous'));
+    await _settle(tester);
+    await tester.tap(find.text('~1 month ago'));
+    await _settle(tester);
+    expect(find.text('A · ${date.format(old)}'), findsWidgets);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await tester.pump();
   });
 
   group('closing the inbox', () {

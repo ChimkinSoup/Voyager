@@ -55,6 +55,24 @@ DateTime nextPhotoPeriod(DateTime start, TrackerCadence cadence) =>
       TrackerCadence.yearly => DateTime(start.year + 1),
     };
 
+/// How far [to] is from [from], in the coarsest unit that still reads well:
+/// "3 days", "14 weeks", "5 months", "2 years" (PHOTO_SERIES_HLD.md §11).
+String photoElapsedLabel(DateTime from, DateTime to) {
+  String plural(int n, String unit) => '$n $unit${n == 1 ? '' : 's'}';
+  final days = calendarDaysBetween(from, to).abs();
+  if (days < 14) return plural(days, 'day');
+  // Weeks for half a year: progress reads naturally in them.
+  if (days < 182) return plural(days ~/ 7, 'week');
+  final (early, late) = from.isBefore(to) ? (from, to) : (to, from);
+  final months =
+      (late.year - early.year) * 12 +
+      late.month -
+      early.month -
+      (late.day < early.day ? 1 : 0);
+  if (months < 24) return plural(months, 'month');
+  return plural(months ~/ 12, 'year');
+}
+
 /// [series]' stats at [now], from its live [checkIns] and the live [images]
 /// of those. Rows of other series are ignored.
 PhotoSeriesStats photoSeriesStats({

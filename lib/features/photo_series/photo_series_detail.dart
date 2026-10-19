@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -14,8 +15,10 @@ import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_check_in_dialog.dart';
+import 'package:voyager/features/photo_series/photo_series_compare.dart';
 import 'package:voyager/features/photo_series/photo_series_dialogs.dart';
 import 'package:voyager/features/photo_series/photo_series_page.dart';
+import 'package:voyager/features/photo_series/photo_series_playback.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/photo_series_viewer.dart';
@@ -31,9 +34,11 @@ String photoPeriodLabel(DateTime start, TrackerCadence cadence) =>
       TrackerCadence.yearly => DateFormat.y().format(start),
     };
 
+enum _PhotoSeriesView { grid, playback, compare }
+
 /// One series (PHOTO_SERIES_HLD.md §4): its stats, its period strip and its
-/// check-ins as a grid, with the unlock card above while the vault is
-/// locked.
+/// check-ins as a grid, played back or compared, with the unlock card above
+/// the grid while the vault is locked.
 class PhotoSeriesDetail extends ConsumerStatefulWidget {
   const PhotoSeriesDetail({super.key, required this.seriesId});
 
@@ -48,6 +53,9 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
 
   /// Each period's group in the grid, for the strip to scroll to.
   final _periodKeys = <DateTime, GlobalKey>{};
+
+  /// Playback and Compare need the vault; locking drops back to the grid.
+  var _view = _PhotoSeriesView.grid;
 
   @override
   void dispose() {
@@ -105,6 +113,13 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
   }
 
   void _scrollToPeriod(DateTime period) {
+    if (_view != _PhotoSeriesView.grid) {
+      setState(() => _view = _PhotoSeriesView.grid);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToPeriod(period);
+      });
+      return;
+    }
     final target = _periodKeys[period]?.currentContext;
     if (target == null) return;
     Scrollable.ensureVisible(
@@ -130,6 +145,9 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
         ),
       );
     }
+    ref.listen(secureVaultSessionProvider, (_, session) {
+      if (session == null) setState(() => _view = _PhotoSeriesView.grid);
+    });
     final unlocked = ref.watch(
       secureVaultSessionProvider.select((s) => s != null),
     );
@@ -145,6 +163,55 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     );
     final groups = _groups(series, snapshot, angles);
     final theme = Theme.of(context);
+    final view = unlocked ? _view : _PhotoSeriesView.grid;
+    final header = [
+      _StatsRow(series: series, stats: stats),
+      const SizedBox(height: 14),
+      PhotoPeriodStrip(
+        stats: stats,
+        cadence: series.cadence,
+        onTap: _scrollToPeriod,
+      ),
+      const SizedBox(height: 16),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: SegmentedButton<_PhotoSeriesView>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: _PhotoSeriesView.grid,
+              icon: Icon(PhosphorIconsRegular.squaresFour, size: 16),
+              label: Text('Grid'),
+            ),
+            ButtonSegment(
+              value: _PhotoSeriesView.playback,
+              icon: Icon(PhosphorIconsRegular.playCircle, size: 16),
+              label: Text('Playback'),
+            ),
+            ButtonSegment(
+              value: _PhotoSeriesView.compare,
+              icon: Icon(PhosphorIconsRegular.columns, size: 16),
+              label: Text('Compare'),
+            ),
+          ],
+          selected: {view},
+          // Not disabled while locked: picking Playback or Compare points
+          // at the unlock card instead.
+          onSelectionChanged: (selected) {
+            final picked = selected.single;
+            if (picked != _PhotoSeriesView.grid && !_requireUnlocked()) {
+              return;
+            }
+            setState(() => _view = picked);
+          },
+        ),
+      ),
+      const SizedBox(height: 16),
+    ];
+    // Oldest first, as Playback and Compare walk them.
+    final entries = [
+      for (final group in groups.reversed) ...group.entries.reversed,
+    ];
 
     return VaultActivity(
       child: Scaffold(
@@ -180,68 +247,91 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
             const SizedBox(width: 8),
           ],
         ),
-        body: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
-              sliver: SliverList.list(
-                children: [
-                  _StatsRow(series: series, stats: stats),
-                  const SizedBox(height: 14),
-                  PhotoPeriodStrip(
-                    stats: stats,
-                    cadence: series.cadence,
-                    onTap: _scrollToPeriod,
-                  ),
-                  const SizedBox(height: 16),
-                  if (!unlocked) ...[
-                    PhotoVaultUnlockCard(focusNode: _unlockFocus),
-                    const SizedBox(height: 16),
-                  ],
-                  if (groups.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Center(
-                        child: Text(
-                          'No check-ins yet.',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            for (final group in groups)
-              SliverPadding(
-                key: _periodKeys.putIfAbsent(group.period, GlobalKey.new),
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-                sliver: SliverList.list(
-                  children: [
-                    Text(
-                      photoPeriodLabel(group.period, series.cadence),
-                      style: theme.textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
+        body: view != _PhotoSeriesView.grid
+            // Fills the page; on one too short for the header and the
+            // controls, it scrolls rather than squeezing them.
+            ? LayoutBuilder(
+                builder: (context, box) => SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+                  child: SizedBox(
+                    height: math.max(box.maxHeight - 20, 640),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final entry in group.entries)
-                          _CheckInTile(
-                            series: series,
-                            angles: angles,
-                            entry: entry,
-                            onOpen: () => _openViewer(groups, entry, angles),
-                            requireUnlocked: _requireUnlocked,
+                        ...header,
+                        Expanded(
+                          child: view == _PhotoSeriesView.playback
+                              ? PhotoSeriesPlayback(
+                                  series: series,
+                                  angles: angles,
+                                  entries: entries,
+                                )
+                              : PhotoSeriesCompare(
+                                  angles: angles,
+                                  entries: entries,
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                    sliver: SliverList.list(
+                      children: [
+                        ...header,
+                        if (!unlocked) ...[
+                          PhotoVaultUnlockCard(focusNode: _unlockFocus),
+                          const SizedBox(height: 16),
+                        ],
+                        if (groups.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
+                            child: Center(
+                              child: Text(
+                                'No check-ins yet.',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
                           ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  for (final group in groups)
+                    SliverPadding(
+                      key: _periodKeys.putIfAbsent(group.period, GlobalKey.new),
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+                      sliver: SliverList.list(
+                        children: [
+                          Text(
+                            photoPeriodLabel(group.period, series.cadence),
+                            style: theme.textTheme.labelLarge,
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final entry in group.entries)
+                                _CheckInTile(
+                                  series: series,
+                                  angles: angles,
+                                  entry: entry,
+                                  onOpen: () =>
+                                      _openViewer(groups, entry, angles),
+                                  requireUnlocked: _requireUnlocked,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                ],
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          ],
-        ),
       ),
     );
   }
