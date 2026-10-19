@@ -71,9 +71,13 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     );
     if (form == null) return;
     final service = ref.read(photoSeriesServiceProvider);
-    if (form.name != series.name || form.cadence != series.cadence) {
+    if (form.name != series.name ||
+        form.cadence != series.cadence ||
+        form.reminder != series.reminder) {
       await service.updateSeries(
-        series.copyWith(name: form.name, cadence: form.cadence),
+        series
+            .copyWith(name: form.name, cadence: form.cadence)
+            .withReminder(form.reminder),
       );
     }
     await service.saveAngles(series, form.angles);
@@ -634,45 +638,48 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
                           ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        DateFormat.yMMMd().format(_checkIn.takenOn),
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                    if (_checkIn.hasNote)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Icon(
-                          PhosphorIconsRegular.note,
-                          size: 12,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
+                // Inset from the hover fill, which reaches the tile's edges.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          DateFormat.yMMMd().format(_checkIn.takenOn),
+                          style: theme.textTheme.bodySmall,
                         ),
                       ),
-                    // Which angles this check-in has.
-                    for (final angle in widget.angles)
-                      Tooltip(
-                        message: angle.name,
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.only(left: 3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: images.containsKey(angle.id)
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.2,
-                                  ),
+                      if (_checkIn.hasNote)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Icon(
+                            PhosphorIconsRegular.note,
+                            size: 12,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                      // Which angles this check-in has.
+                      for (final angle in widget.angles)
+                        Tooltip(
+                          message: angle.name,
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(left: 3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: images.containsKey(angle.id)
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.2,
+                                    ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),

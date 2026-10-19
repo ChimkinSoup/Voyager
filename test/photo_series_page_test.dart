@@ -1,13 +1,16 @@
 // The Photos page while locked and unlocked, and the vault session it shares
 // with the inbox (PHOTO_SERIES_HLD.md §4.1, §6.4, §7.1).
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/secure_vault/vault_media_service.dart';
@@ -22,8 +25,11 @@ import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_series_detail.dart';
+import 'package:voyager/features/photo_series/photo_series_page.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
+import 'package:voyager/routing/app_router.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 
@@ -323,5 +329,176 @@ void main() {
       expect(async.pendingTimers, hasLength(1));
       expect(async.pendingTimers.single, isNot(same(first)));
     });
+  });
+
+  // Both pages are transparent over the shell, and the platform's zoom
+  // transition never fades the page it leaves: the list sat under the
+  // detail, faint and enlarged, until the push ended and dropped it at once.
+  testWidgets(
+    'opening a series fades the list out before it is dropped',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final router = GoRouter(
+        initialLocation: kPhotoSeriesPath,
+        routes: [
+          GoRoute(
+            path: kPhotoSeriesPath,
+            builder: (_, _) => const PhotoSeriesPage(),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+          weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+          photoSeriesTodayProvider.overrideWithValue(_today()),
+          routerProvider.overrideWithValue(router),
+        ],
+      );
+      addTearDown(container.dispose);
+      final stamp = DateTime.now().toUtc();
+      await tester.runAsync(
+        () => container
+            .read(photoSeriesRepositoryProvider)
+            .saveAll(
+              series: [
+                PhotoSeries(
+                  id: 's',
+                  name: 'Progress',
+                  createdAt: stamp,
+                  updatedAt: stamp,
+                ),
+              ],
+            ),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            theme: VoyagerTheme.dark(),
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.runAsync(
+        () => container.read(photoSeriesSnapshotProvider.future),
+      );
+      await _settle(tester);
+
+      /// How opaque the list is drawn: every fade above it, multiplied.
+      double listOpacity() {
+        var opacity = 1.0;
+        RenderObject? node = tester.renderObject(find.text('New series'));
+        while (node != null) {
+          if (node is RenderAnimatedOpacity) opacity *= node.opacity.value;
+          if (node is RenderOpacity) opacity *= node.opacity;
+          node = node.parent;
+        }
+        return opacity;
+      }
+
+      expect(listOpacity(), 1);
+      await tester.tap(find.text('Progress'));
+      final samples = <double>[];
+      for (var i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        if (find.text('New series').evaluate().isEmpty) break;
+        samples.add(listOpacity());
+      }
+
+      expect(find.byType(PhotoSeriesDetail), findsOneWidget);
+      expect(find.text('New series'), findsNothing);
+      // It fades all the way out while still on screen, and never comes back.
+      expect(samples.last, lessThan(0.01));
+      for (var i = 1; i < samples.length; i++) {
+        expect(samples[i], lessThanOrEqualTo(samples[i - 1]));
+      }
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  // A reveal for the series already open used to pop to the list and zoom a
+  // fresh detail in over it.
+  testWidgets('a reveal for the open series goes back to its detail', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final router = GoRouter(
+      initialLocation: kPhotoSeriesPath,
+      routes: [
+        GoRoute(
+          path: kPhotoSeriesPath,
+          builder: (_, _) => const PhotoSeriesPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+        photoSeriesTodayProvider.overrideWithValue(_today()),
+        routerProvider.overrideWithValue(router),
+      ],
+    );
+    addTearDown(container.dispose);
+    final stamp = DateTime.now().toUtc();
+    await tester.runAsync(
+      () => container
+          .read(photoSeriesRepositoryProvider)
+          .saveAll(
+            series: [
+              PhotoSeries(
+                id: 's',
+                name: 'Progress',
+                createdAt: stamp,
+                updatedAt: stamp,
+              ),
+            ],
+          ),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          theme: VoyagerTheme.dark(),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => container.read(photoSeriesSnapshotProvider.future),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.text('Progress'));
+    await _settle(tester);
+    final detail = tester.element(find.byType(PhotoSeriesDetail));
+    unawaited(
+      Navigator.of(
+        detail,
+      ).push(MaterialPageRoute<void>(builder: (_) => const Text('viewer'))),
+    );
+    await _settle(tester);
+
+    container.read(revealPhotoSeriesRequestProvider.notifier).state = 's';
+    await _settle(tester);
+    // The viewer's exit runs longer than one settle.
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('viewer'), findsNothing);
+    expect(find.text('New series'), findsNothing);
+    expect(tester.element(find.byType(PhotoSeriesDetail)), same(detail));
   });
 }

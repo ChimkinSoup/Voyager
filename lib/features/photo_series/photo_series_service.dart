@@ -13,6 +13,34 @@ import 'package:voyager/features/notifications/secure_vault_session.dart';
 /// The name a new series' one angle starts with (PHOTO_SERIES_HLD.md §18).
 const kDefaultPhotoAngleName = 'Photo';
 
+/// A series' reminder fields (PHOTO_SERIES_HLD.md §5.1), as the series dialog
+/// edits them.
+typedef PhotoReminderSettings = ({
+  bool enabled,
+  int minutes,
+  int weekday,
+  int monthDay,
+  int month,
+});
+
+extension PhotoSeriesReminder on PhotoSeries {
+  PhotoReminderSettings get reminder => (
+    enabled: reminderEnabled,
+    minutes: reminderMinutes,
+    weekday: reminderWeekday,
+    monthDay: reminderMonthDay,
+    month: reminderMonth,
+  );
+
+  PhotoSeries withReminder(PhotoReminderSettings reminder) => copyWith(
+    reminderEnabled: reminder.enabled,
+    reminderMinutes: reminder.minutes,
+    reminderWeekday: reminder.weekday,
+    reminderMonthDay: reminder.monthDay,
+    reminderMonth: reminder.month,
+  );
+}
+
 /// Thrown for a change the series can't take, with a message for the user.
 class PhotoSeriesException implements Exception {
   const PhotoSeriesException(this.message);
@@ -33,15 +61,17 @@ class PhotoSeriesService {
   final VaultMediaService _media;
 
   /// A new series with [angleNames] as its angles, in that order — one
-  /// named [kDefaultPhotoAngleName] when none are given.
+  /// named [kDefaultPhotoAngleName] when none are given — reminding as
+  /// [reminder] says, or by the defaults without one.
   Future<PhotoSeries> createSeries({
     required String name,
     required TrackerCadence cadence,
     required int sortOrder,
     List<String> angleNames = const [],
+    PhotoReminderSettings? reminder,
   }) async {
     final now = utcNow();
-    final series = PhotoSeries(
+    var series = PhotoSeries(
       id: newId(),
       name: name.trim(),
       cadence: cadence,
@@ -50,6 +80,7 @@ class PhotoSeriesService {
       createdAt: now,
       updatedAt: now,
     );
+    if (reminder != null) series = series.withReminder(reminder);
     await _repository.saveAll(
       series: [series],
       angles: [

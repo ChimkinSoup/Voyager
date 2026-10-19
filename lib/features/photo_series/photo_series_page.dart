@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/motion_prefs.dart';
 import 'package:voyager/core/secure_vault/secure_vault_service.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -16,6 +17,7 @@ import 'package:voyager/features/photo_series/photo_series_dialogs.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/routing/app_router.dart';
 
 /// The Photos page (PHOTO_SERIES_HLD.md §4): every series as a card, and a
@@ -38,6 +40,24 @@ class _PhotoSeriesPageState extends ConsumerState<PhotoSeriesPage> {
     super.initState();
     _router.routerDelegate.addListener(_onLocation);
     _onLocation();
+    // A request made before the page first mounted.
+    Future.microtask(_takeRevealRequest);
+  }
+
+  /// Opens the series an inbox row, sticky or OS notification asked for, over
+  /// whatever this page had pushed — or back to its detail, when that series
+  /// is already open.
+  void _takeRevealRequest() {
+    if (!mounted) return;
+    final id = ref.read(revealPhotoSeriesRequestProvider);
+    if (id == null) return;
+    ref.read(revealPhotoSeriesRequestProvider.notifier).state = null;
+    var open = false;
+    Navigator.of(context).popUntil((route) {
+      open = route is _PhotoSeriesDetailRoute && route.seriesId == id;
+      return open || route.isFirst;
+    });
+    if (!open) openPhotoSeries(context, id);
   }
 
   @override
@@ -66,6 +86,9 @@ class _PhotoSeriesPageState extends ConsumerState<PhotoSeriesPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(revealPhotoSeriesRequestProvider, (_, id) {
+      if (id != null) Future.microtask(_takeRevealRequest);
+    });
     return const VaultActivity(child: _SeriesList());
   }
 }
@@ -83,6 +106,7 @@ class _SeriesList extends ConsumerWidget {
           cadence: form.cadence,
           sortOrder: count,
           angleNames: [for (final angle in form.angles) angle.name],
+          reminder: form.reminder,
         );
     if (context.mounted) openPhotoSeries(context, series.id);
   }
@@ -144,11 +168,65 @@ class _SeriesList extends ConsumerWidget {
 
 /// Opens [seriesId]'s detail over the list, in the page's branch.
 void openPhotoSeries(BuildContext context, String seriesId) {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => PhotoSeriesDetail(seriesId: seriesId),
-    ),
-  );
+  Navigator.of(context).push(_PhotoSeriesDetailRoute(seriesId));
+}
+
+/// Zooms the detail in while the list zooms past it and fades out.
+///
+/// Both pages are transparent over the shell's background, so the list has to
+/// fade itself. The platform's zoom transition never fades the page it leaves
+/// — it counts on the page arriving to cover it — so the list stayed on
+/// screen under the detail until the push ended and it vanished at once.
+class _PhotoSeriesDetailRoute extends PageRouteBuilder<void> {
+  _PhotoSeriesDetailRoute(this.seriesId)
+    : super(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (_, _, _) => PhotoSeriesDetail(seriesId: seriesId),
+        transitionsBuilder: (context, animation, _, child) => _zoom(
+          context,
+          animation,
+          child,
+          fade: const Interval(0.25, 1, curve: Curves.easeOut),
+          scale: Tween(begin: 0.94, end: 1),
+        ),
+      );
+
+  final String seriesId;
+
+  /// What the list does while the detail comes and goes.
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      (context, _, secondaryAnimation, _, child) => _zoom(
+        context,
+        ReverseAnimation(secondaryAnimation),
+        child,
+        // Gone before the detail is more than faintly there, so the two never
+        // sit on top of each other half-faded.
+        fade: const Interval(0.6, 1, curve: Curves.easeIn),
+        scale: Tween(begin: 1.06, end: 1),
+      );
+
+  /// [child] fading in and scaling to full size as [animation] completes.
+  static Widget _zoom(
+    BuildContext context,
+    Animation<double> animation,
+    Widget? child, {
+    required Curve fade,
+    required Tween<double> scale,
+  }) {
+    final faded = FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: fade),
+      child: child,
+    );
+    if (VoyagerMotion.reduced(context)) return faded;
+    return ScaleTransition(
+      scale: scale.animate(
+        CurvedAnimation(parent: animation, curve: Curves.fastOutSlowIn),
+      ),
+      child: faded,
+    );
+  }
 }
 
 /// The newest check-in's first photo, by the series' angle order.
@@ -440,6 +518,7 @@ class _PhotoVaultUnlockCardState extends ConsumerState<PhotoVaultUnlockCard> {
                       decoration: const InputDecoration(
                         labelText: 'Password',
                         isDense: true,
+                        contentPadding: EdgeInsets.fromLTRB(8, 16, 8, 8),
                       ),
                       onSubmitted: (_) => _unlock(),
                     ),

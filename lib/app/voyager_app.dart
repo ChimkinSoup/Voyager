@@ -31,6 +31,7 @@ import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/core/widgets/single_line_vertical_caret.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
@@ -39,6 +40,7 @@ import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
+import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
@@ -153,6 +155,14 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       ref.read(revealFolderBackupsRequestProvider.notifier).state = true;
       ref.read(routerProvider).go('/settings');
       return;
+    }
+    // A series' alert opens the series (PHOTO_SERIES_HLD.md §13.1); its
+    // sticky is still brought forward behind it.
+    final photoPrefix = reminderSourceKey(ReminderSourceKind.photoSeries, '');
+    if (sourceKey.startsWith(photoPrefix)) {
+      ref.read(revealPhotoSeriesRequestProvider.notifier).state = sourceKey
+          .substring(photoPrefix.length);
+      ref.read(routerProvider).go(kPhotoSeriesPath);
     }
     ref.read(reminderEngineProvider).focus(sourceKey);
   }

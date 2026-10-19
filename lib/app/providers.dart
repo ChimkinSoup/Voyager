@@ -82,12 +82,14 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
@@ -2541,6 +2543,9 @@ final notificationFeedProvider = FutureProvider<List<NotificationFeedItem>>((
     leetCodeProblems: hiddenPages.contains('/leetcode')
         ? const []
         : await ref.watch(leetcodeProblemsProvider.future),
+    photoSeries: hiddenPages.contains(kPhotoSeriesPath)
+        ? PhotoSeriesSnapshot.empty
+        : await ref.watch(photoSeriesSnapshotProvider.future),
     now: DateTime.now(),
   );
 });

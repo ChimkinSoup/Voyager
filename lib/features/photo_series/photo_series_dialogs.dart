@@ -1,10 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
+import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
+import 'package:voyager/domain/services/reminder_schedule.dart';
 import 'package:voyager/features/photo_series/photo_series_service.dart';
 
 /// What the series dialog was left with.
@@ -12,6 +21,7 @@ typedef PhotoSeriesForm = ({
   String name,
   TrackerCadence cadence,
   List<({String? id, String name})> angles,
+  PhotoReminderSettings reminder,
 });
 
 /// "Daily", "Weekly"…
@@ -22,7 +32,7 @@ String photoCadenceLabel(TrackerCadence cadence) => switch (cadence) {
   TrackerCadence.yearly => 'Yearly',
 };
 
-/// Asks for a series' name, cadence and angles: a new series with no
+/// Asks for a series' name, cadence, reminder and angles: a new series with no
 /// [series], or [series] with its [angles] to edit. Null when cancelled.
 Future<PhotoSeriesForm?> showPhotoSeriesDialog(
   BuildContext context, {
@@ -59,6 +69,11 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
   late final _angles = widget.angles.isEmpty
       ? [_AngleDraft(null, kDefaultPhotoAngleName)]
       : [for (final angle in widget.angles) _AngleDraft(angle.id, angle.name)];
+  late var _remind = widget.series?.reminderEnabled ?? true;
+  late var _minutes = widget.series?.reminderMinutes ?? 9 * 60;
+  late var _weekday = widget.series?.reminderWeekday ?? DateTime.monday;
+  late var _monthDay = widget.series?.reminderMonthDay ?? 1;
+  late var _month = widget.series?.reminderMonth ?? DateTime.now().month;
   String? _error;
 
   @override
@@ -83,7 +98,112 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
         for (final angle in _angles)
           (id: angle.id, name: angle.controller.text.trim()),
       ],
+      reminder: (
+        enabled: _remind,
+        minutes: _minutes,
+        weekday: _weekday,
+        monthDay: _monthDay,
+        month: _month,
+      ),
     ));
+  }
+
+  Future<void> _pickTime(BuildContext buttonContext) async {
+    final picked = await showContextualPopover<DateTime>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 240,
+      height: 300,
+      builder: (_) => TimeSelectorPopover(
+        initialTime: atLocalMinutes(DateTime.now(), _minutes),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _minutes = picked.hour * 60 + picked.minute);
+  }
+
+  /// The day the reminder falls on: a weekday, or a day of the month (and
+  /// for a yearly series, a month). A daily series has none.
+  Widget? _reminderDay(ThemeData theme) {
+    switch (_cadence) {
+      case TrackerCadence.daily:
+        return null;
+      case TrackerCadence.weekly:
+        return Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (var day = DateTime.monday; day <= DateTime.sunday; day++)
+              SelectorPill(
+                dense: true,
+                // 2024-01-01 was a Monday.
+                label: DateFormat.E().format(DateTime(2024, 1, day)),
+                isActive: _weekday == day,
+                fillWhenActive: true,
+                onTap: () => setState(() => _weekday = day),
+              ),
+          ],
+        );
+      case TrackerCadence.monthly:
+      case TrackerCadence.yearly:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (_cadence == TrackerCadence.yearly) ...[
+                  Expanded(
+                    key: const ValueKey('month'),
+                    child: VoyagerDropdownButtonFormField<int>(
+                      initialValue: _month,
+                      decoration: const InputDecoration(
+                        labelText: 'Month',
+                        isDense: true,
+                      ),
+                      items: [
+                        for (var month = 1; month <= 12; month++)
+                          DropdownMenuItem(
+                            value: month,
+                            child: Text(
+                              DateFormat.MMMM().format(DateTime(2024, month)),
+                            ),
+                          ),
+                      ],
+                      onChanged: (month) =>
+                          setState(() => _month = month ?? _month),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  key: const ValueKey('day'),
+                  child: VoyagerDropdownButtonFormField<int>(
+                    initialValue: _monthDay,
+                    decoration: const InputDecoration(
+                      labelText: 'Day',
+                      isDense: true,
+                    ),
+                    items: [
+                      for (var day = 1; day <= 31; day++)
+                        DropdownMenuItem(value: day, child: Text('$day')),
+                    ],
+                    onChanged: (day) =>
+                        setState(() => _monthDay = day ?? _monthDay),
+                  ),
+                ),
+              ],
+            ),
+            if (_monthDay > 28)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'In a shorter month, its last day.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+          ],
+        );
+    }
   }
 
   void _move(int index, int by) {
@@ -136,6 +256,40 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
                 onSelectionChanged: (picked) =>
                     setState(() => _cadence = picked.single),
               ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Remind me',
+                      style: theme.textTheme.labelMedium,
+                    ),
+                  ),
+                  Switch(
+                    value: _remind,
+                    onChanged: (remind) => setState(() => _remind = remind),
+                  ),
+                ],
+              ),
+              if (_remind) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Builder(
+                    builder: (buttonContext) => SelectorPill(
+                      icon: PhosphorIconsRegular.clock,
+                      label: formatTime12Hour(
+                        atLocalMinutes(DateTime.now(), _minutes),
+                      ),
+                      onTap: () => unawaited(_pickTime(buttonContext)),
+                    ),
+                  ),
+                ),
+                if (_reminderDay(theme) case final day?) ...[
+                  const SizedBox(height: 10),
+                  day,
+                ],
+              ],
               const SizedBox(height: 16),
               Text('Angles', style: theme.textTheme.labelMedium),
               const SizedBox(height: 6),

@@ -160,15 +160,17 @@ T reminderEnumByName<T extends Enum>(
   T fallback,
 ) => values.asNameMap()[name] ?? fallback;
 
-enum ReminderSourceKind { scheduledRule, todo, calendarEvent }
+enum ReminderSourceKind { scheduledRule, todo, calendarEvent, photoSeries }
 
 /// The id every reminder source goes by in [ReminderDeliveryState] and
-/// [EntityReminder]: `rule:{id}`, `todo:{id}` or `calendarEvent:{id}`.
+/// [EntityReminder]: `rule:{id}`, `todo:{id}`, `calendarEvent:{id}` or
+/// `photoSeries:{id}`.
 String reminderSourceKey(ReminderSourceKind kind, String sourceId) =>
     switch (kind) {
       ReminderSourceKind.scheduledRule => 'rule:$sourceId',
       ReminderSourceKind.todo => 'todo:$sourceId',
       ReminderSourceKind.calendarEvent => 'calendarEvent:$sourceId',
+      ReminderSourceKind.photoSeries => 'photoSeries:$sourceId',
     };
 
 /// The bell on a todo or calendar event (§4.5).

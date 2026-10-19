@@ -291,6 +291,7 @@ class _VaultDialogState extends State<_VaultDialog> {
                   decoration: InputDecoration(
                     labelText: widget.fields[i].label,
                     isDense: true,
+                    contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
                   ),
                   onSubmitted: i == widget.fields.length - 1
                       ? (_) => _submit()

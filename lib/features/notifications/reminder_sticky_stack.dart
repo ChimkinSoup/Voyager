@@ -10,6 +10,7 @@ import 'package:voyager/core/reminders/reminder_labels.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
+import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:voyager/routing/popup_route_observer.dart';
@@ -235,6 +236,9 @@ class _StickyReminderCardState extends ConsumerState<_StickyReminderCard>
         day: day == null ? null : DateTime(day.year, day.month, day.day),
       );
       router.go('/calendar');
+    } else if (view.sourceKind == ReminderSourceKind.photoSeries) {
+      ref.read(revealPhotoSeriesRequestProvider.notifier).state = view.sourceId;
+      router.go(kPhotoSeriesPath);
     }
   }
 
@@ -251,6 +255,7 @@ class _StickyReminderCardState extends ConsumerState<_StickyReminderCard>
       ReminderSourceKind.scheduledRule => PhosphorIconsRegular.bellRinging,
       ReminderSourceKind.todo => PhosphorIconsRegular.checkSquare,
       ReminderSourceKind.calendarEvent => PhosphorIconsRegular.calendarDot,
+      ReminderSourceKind.photoSeries => PhosphorIconsRegular.camera,
     };
     final meta = [
       if (view.subtitle case final subtitle? when subtitle.isNotEmpty) subtitle,

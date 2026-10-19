@@ -1,16 +1,20 @@
 import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/photo_series/photo_series_periods.dart';
+import 'package:voyager/domain/photo_series/photo_series_reminders.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 
 /// How urgently a notification feed item should be surfaced. Drives both the
 /// nav-rail bell's dot color/animation and the feed's sort order.
 enum NotificationUrgency { semi, important }
 
-enum NotificationItemType { task, event, bill, review }
+enum NotificationItemType { task, event, bill, review, photoSeries }
 
 /// Which spaced-repetition queue a [NotificationItemType.review] row counts.
 enum ReviewSource { study, leetcode }
@@ -30,6 +34,7 @@ class NotificationFeedItem {
     this.bill,
     this.reviewSource,
     this.reviewCount = 0,
+    this.photoSeries,
     this.occurrenceDate,
   });
 
@@ -45,6 +50,9 @@ class NotificationFeedItem {
   /// Set on a review row: which queue it counts, and how much of it is due.
   final ReviewSource? reviewSource;
   final int reviewCount;
+
+  /// Set on a photo series row, whose [occurrenceDate] is the period's start.
+  final PhotoSeries? photoSeries;
 
   /// For something that happens more than once — an occurrence of a repeating
   /// event, a month's instance of a bill — the local date-only day this row
@@ -280,6 +288,21 @@ NotificationUrgency? evaluateBillUrgency(Subscription bill, DateTime now) {
   return null;
 }
 
+/// A photo series' urgency for the period starting at [period]: important on
+/// the period's last day, except for a daily series, whose every day is its
+/// last (PHOTO_SERIES_HLD.md §13.2).
+NotificationUrgency photoSeriesUrgency(
+  TrackerCadence cadence,
+  DateTime period,
+  DateTime now,
+) {
+  if (cadence == TrackerCadence.daily) return NotificationUrgency.semi;
+  final lastDay = addCalendarDays(nextPhotoPeriod(period, cadence), -1);
+  return calendarDaysBetween(now, lastDay) <= 0
+      ? NotificationUrgency.important
+      : NotificationUrgency.semi;
+}
+
 /// Folds tasks/events/bills into a single feed sorted by soonest-due,
 /// mixing item types together rather than grouping by category.
 ///
@@ -287,12 +310,17 @@ NotificationUrgency? evaluateBillUrgency(Subscription bill, DateTime now) {
 /// one per card, dated today so they sort among today's items. Hiding one
 /// lasts the day: the key carries today's date, so tomorrow's backlog comes
 /// back as a new row.
+///
+/// A photo series adds a row while its current period isn't done and its
+/// reminder has fired this period — the same occurrence its sticky shows.
+/// Hiding one lasts the period, or until it turns important.
 List<NotificationFeedItem> buildNotificationFeed({
   required List<TodoTask> tasks,
   required List<CalendarEvent> events,
   required List<Subscription> bills,
   List<StudyCard> studyCards = const [],
   List<LeetCodeProblem> leetCodeProblems = const [],
+  PhotoSeriesSnapshot photoSeries = PhotoSeriesSnapshot.empty,
   required DateTime now,
 }) {
   final items = <NotificationFeedItem>[];
@@ -375,6 +403,27 @@ List<NotificationFeedItem> buildNotificationFeed({
     ReviewSource.leetcode,
     leetCodeProblems.where((p) => p.isDue(now: nowUtc)).length,
   );
+
+  for (final series in photoSeries.series) {
+    if (series.deletedAt != null || !series.reminderEnabled) continue;
+    final period = photoPeriodStart(now, series.cadence);
+    final occurrence = latestPhotoSeriesOccurrence(
+      series,
+      now,
+      currentDone: photoPeriodDone(photoSeries, series, period),
+    );
+    if (occurrence == null) continue;
+    items.add(
+      NotificationFeedItem(
+        id: 'photoSeries:${series.id}',
+        type: NotificationItemType.photoSeries,
+        urgency: photoSeriesUrgency(series.cadence, period, now),
+        dueAt: occurrence.fireAt,
+        photoSeries: series,
+        occurrenceDate: period,
+      ),
+    );
+  }
 
   items.sort((a, b) => a.dueAt.compareTo(b.dueAt));
   return items;

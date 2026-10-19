@@ -40,6 +40,11 @@ final revealAutoBackupRequestProvider = StateProvider<bool>((ref) => false);
 /// backup rows and by a click on a folder backup's OS notification.
 final revealFolderBackupsRequestProvider = StateProvider<bool>((ref) => false);
 
+/// A one-shot request to open a photo series' detail, by id — set by its inbox
+/// row, its sticky and a click on its OS notification. The Photos page takes
+/// it when it mounts as well as when it changes, and sets it back to null.
+final revealPhotoSeriesRequestProvider = StateProvider<String?>((ref) => null);
+
 /// The same for Settings' weather location tile, set by the forecast sheet
 /// when no location is set.
 final revealWeatherLocationRequestProvider = StateProvider<bool>(

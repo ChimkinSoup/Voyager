@@ -37,6 +37,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
@@ -281,6 +282,7 @@ String _feedTitle(NotificationFeedItem item) => switch (item.type) {
   NotificationItemType.event => item.event!.title,
   NotificationItemType.bill => item.bill!.name,
   NotificationItemType.review => _reviewPage(item.reviewSource!).label,
+  NotificationItemType.photoSeries => item.photoSeries!.name,
 };
 
 /// The page a review row stands for: its name, rail icon and route.
@@ -2136,6 +2138,14 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     router.go(_reviewPage(widget.item.reviewSource!).path);
   }
 
+  void _openPhotoSeries() {
+    final router = GoRouter.of(context);
+    ref.read(revealPhotoSeriesRequestProvider.notifier).state =
+        widget.item.photoSeries!.id;
+    Navigator.of(context).pop();
+    router.go(kPhotoSeriesPath);
+  }
+
   List<ContextMenuItem> _menuItems() {
     switch (widget.item.type) {
       case NotificationItemType.task:
@@ -2198,6 +2208,14 @@ class _FeedRowState extends ConsumerState<_FeedRow>
             onTap: _openReviewPage,
           ),
         ];
+      case NotificationItemType.photoSeries:
+        return [
+          ContextMenuItem(
+            label: 'Open series',
+            icon: PhosphorIconsRegular.arrowSquareOut,
+            onTap: _openPhotoSeries,
+          ),
+        ];
     }
   }
 
@@ -2233,6 +2251,7 @@ class _FeedRowState extends ConsumerState<_FeedRow>
                 NotificationItemType.event => _revealEvent,
                 NotificationItemType.review => _openReviewPage,
                 NotificationItemType.bill => () => unawaited(_logBillPayment()),
+                NotificationItemType.photoSeries => _openPhotoSeries,
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -2323,6 +2342,11 @@ class _FeedRowState extends ConsumerState<_FeedRow>
         size: 18,
         color: theme.colorScheme.primary,
       ),
+      NotificationItemType.photoSeries => Icon(
+        PhosphorIconsRegular.camera,
+        size: 18,
+        color: theme.colorScheme.primary,
+      ),
     };
     return SizedBox(
       width: _kFeedLeadingSlot,
@@ -2343,7 +2367,10 @@ class _FeedItemText extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = _feedTitle(item);
-    final isOverdue = _isOverdueItem(item.dueAt);
+    // A series' row is never overdue: it goes when the period does.
+    final isOverdue =
+        item.type != NotificationItemType.photoSeries &&
+        _isOverdueItem(item.dueAt);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -2388,8 +2415,23 @@ class _FeedItemText extends StatelessWidget {
           ReviewSource.study => '$count card${count == 1 ? '' : 's'} due',
           ReviewSource.leetcode => '$count problem${count == 1 ? '' : 's'} due',
         };
+      case NotificationItemType.photoSeries:
+        final end = nextPhotoPeriod(
+          item.occurrenceDate!,
+          item.photoSeries!.cadence,
+        );
+        return 'Due · ${_timeLeftLabel(end)}';
     }
   }
+}
+
+/// "3d left" / "5h left" / "20m left" until [end].
+String _timeLeftLabel(DateTime end) {
+  final now = DateTime.now();
+  final left = end.difference(now);
+  if (left >= const Duration(days: 1)) return '${left.inDays}d left';
+  if (left >= const Duration(hours: 1)) return '${left.inHours}h left';
+  return '${math.max(1, left.inMinutes)}m left';
 }
 
 /// "Today" / "Tomorrow" / "in N days" / "N days overdue", relative to now.
@@ -2761,6 +2803,10 @@ class _HiddenRow extends StatelessWidget {
       ),
       NotificationItemType.review => (
         _reviewPage(item.reviewSource!).icon,
+        theme.colorScheme.primary,
+      ),
+      NotificationItemType.photoSeries => (
+        PhosphorIconsRegular.camera,
         theme.colorScheme.primary,
       ),
     };

@@ -8,14 +8,19 @@ import 'package:voyager/core/reminders/reminder_labels.dart';
 import 'package:voyager/core/reminders/reminder_os_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/photo_series/photo_series_periods.dart';
+import 'package:voyager/domain/photo_series/photo_series_reminders.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/reminder_schedule.dart';
+import 'package:voyager/features/photo_series/photo_series_providers.dart';
 
 enum ReminderSnooze { tenMinutes, tomorrow }
 
-/// One reminder source — a scheduled rule or a bell — as it stands right now.
+/// One reminder source — a scheduled rule, a bell or a photo series — as it
+/// stands right now.
 class ReminderSourceView {
   const ReminderSourceView({
     required this.sourceKey,
@@ -87,6 +92,10 @@ class ReminderEngine extends ChangeNotifier {
   Map<String, TodoTask>? _tasks;
   Map<String, CalendarEvent>? _events;
 
+  /// Not waited for, unlike the inputs above: until it loads there are no
+  /// series, so nothing about one can be misjudged.
+  PhotoSeriesSnapshot _photos = PhotoSeriesSnapshot.empty;
+
   /// Set when this device's registration was removed in Settings. Null until
   /// the registration has been read: evaluated before then, a removed device
   /// took itself for a target and raised the OS alert at launch (BUG-253).
@@ -139,6 +148,7 @@ class ReminderEngine extends ChangeNotifier {
     List<ReminderDeliveryState>? states,
     List<TodoTask>? tasks,
     List<CalendarEvent>? events,
+    PhotoSeriesSnapshot? photos,
     bool? removed,
   }) {
     if (rules != null) _rules = rules;
@@ -146,6 +156,7 @@ class ReminderEngine extends ChangeNotifier {
     if (states != null) _states = {for (final s in states) s.id: s};
     if (tasks != null) _tasks = {for (final t in tasks) t.id: t};
     if (events != null) _events = {for (final e in events) e.id: e};
+    if (photos != null) _photos = photos;
     if (removed != null) _removed = removed;
     _evaluate();
   }
@@ -243,8 +254,35 @@ class ReminderEngine extends ChangeNotifier {
             evaluation: evaluation,
           );
         case ReminderSourceKind.scheduledRule:
+        case ReminderSourceKind.photoSeries:
           continue;
       }
+    }
+
+    // A series is its own source, on every device (PHOTO_SERIES_HLD.md §13.1).
+    for (final series in _photos.series) {
+      if (series.deletedAt != null || !series.reminderEnabled) continue;
+      final key = reminderSourceKey(ReminderSourceKind.photoSeries, series.id);
+      final period = photoPeriodStart(now, series.cadence);
+      final done = photoPeriodDone(_photos, series, period);
+      views[key] = ReminderSourceView(
+        sourceKey: key,
+        sourceKind: ReminderSourceKind.photoSeries,
+        sourceId: series.id,
+        title: series.name,
+        subtitle: 'Check-in due',
+        targetsThisDevice: !removed,
+        evaluation: evaluateReminder(
+          latest: latestPhotoSeriesOccurrence(series, now, currentDone: done),
+          nextAfter: (after) => nextPhotoSeriesFire(
+            series,
+            after,
+            donePeriod: done ? period : null,
+          ),
+          state: states[key],
+          now: now,
+        ),
+      );
     }
 
     _views = views;
@@ -306,6 +344,7 @@ class ReminderEngine extends ChangeNotifier {
           ReminderSourceKind.scheduledRule => 'Reminders',
           ReminderSourceKind.todo => 'To-Do',
           ReminderSourceKind.calendarEvent => 'Calendar',
+          ReminderSourceKind.photoSeries => 'Photos',
         },
         detail: view.subtitle,
         // `_shown` is per run; a reminder still due after a restart is the
@@ -585,6 +624,9 @@ final reminderEngineProvider = ChangeNotifierProvider<ReminderEngine>((ref) {
   }, fireImmediately: true);
   ref.listen(calendarEventsProvider(null), (_, next) {
     engine.updateInputs(events: next.valueOrNull);
+  }, fireImmediately: true);
+  ref.listen(photoSeriesSnapshotProvider, (_, next) {
+    engine.updateInputs(photos: next.valueOrNull);
   }, fireImmediately: true);
   ref.listen(thisDeviceRegistrationProvider, (_, next) {
     // Still loading is not "not removed".

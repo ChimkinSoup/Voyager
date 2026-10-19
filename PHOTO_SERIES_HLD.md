@@ -6,7 +6,7 @@ Photos and notes are encrypted with the existing **Secure Vault** (`SECURE_NOTES
 
 Related: `lib/core/secure_vault/secure_vault.dart`, `lib/features/notifications/secure_vault_session.dart`, `lib/features/notifications/secure_vault_dialogs.dart`, `lib/core/media/media_service.dart`, `lib/domain/services/media_ingest.dart`, `lib/core/reminders/reminder_engine.dart`, `lib/domain/models/reminder_models.dart`, `lib/domain/models/notification_models.dart`, `lib/domain/services/periodic_prompt_service.dart`, `lib/features/shell/shell_destinations.dart`, `MEDIA.md`, `SCHEDULED_REMINDERS_HLD.md`, `UNIFIED_NOTIFICATIONS.md`.
 
-Status: **phases 1–2 implemented** (vault media core; series and check-ins); phases 3–6 not started.
+Status: **phases 1–3 implemented** (vault media core; series and check-ins; reminders); phases 4–6 not started.
 
 ---
 
@@ -299,6 +299,7 @@ All of this is computed from plain fields, so it works while locked.
   - yearly: `reminderMonth` / `reminderMonthDay`.
 - **Auto-acknowledge:** once the current period is done (§8), the occurrence is treated as acknowledged. A check-in made before the reminder time cancels that period's OS alert.
 - **Existing rules unchanged:** snooze (10 min, tomorrow), coalescing, cross-device acknowledge and the sticky toast all work as `SCHEDULED_REMINDERS_HLD.md` describes. Every registered device is targeted.
+- **Hidden page:** hiding `/photo-series` doesn't silence the sticky or OS alert, as with todo and calendar bells; turning the series' reminder off does. Only the inbox row is suppressed (§13.2).
 - **Text:** "{series name} — check-in due". Tapping it opens the series detail. On Android, if the vault is unlocked, it goes straight into the capture stepper.
 - The series name appears on the lock screen. This follows from keeping names plain (§3).
 
@@ -349,7 +350,11 @@ All of this is computed from plain fields, so it works while locked.
    - Windows import check-ins;
    - the grid with blur, and the viewer;
    - periods, streaks, missed marks and the period strip.
-3. **Reminders:** `ReminderSourceKind.photoSeries`, the inbox feed row and auto-acknowledge.
+3. **Reminders** — **done (2026-10-19)**:
+   - `ReminderSourceKind.photoSeries`, the inbox feed row and auto-acknowledge;
+   - the reminder settings in the series dialog (on/off, time, and the weekday, day or month and day);
+   - an occurrence never predates the series, so one made after today's reminder time waits for the next;
+   - the OS notification opens the series. Going straight into capture waits for phase 6.
 4. **Playback and Compare.**
 5. **Alignment tool.**
 6. **Android capture:** `camera`, permissions, the ghost overlay and `FLAG_SECURE`.
