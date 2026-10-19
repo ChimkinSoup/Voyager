@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/secure_vault/secure_vault.dart';
+import 'package:voyager/core/secure_vault/secure_window.dart';
 import 'package:voyager/core/vim/vim_session.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 
@@ -74,12 +75,21 @@ class SecureVaultSessionNotifier extends StateNotifier<SecureVaultSession?> {
 /// sign-out included: the sync repository is rebuilt for each one. Also locks
 /// when the vault's header is replaced by a reset, from this device or
 /// another.
+///
+/// While unlocked, Android's window is kept out of screenshots and the
+/// recent-apps thumbnail (PHOTO_SERIES_HLD.md §6.8): whatever is on screen
+/// may be a photo or a note.
 final secureVaultSessionProvider =
     StateNotifierProvider<SecureVaultSessionNotifier, SecureVaultSession?>((
       ref,
     ) {
       ref.watch(syncRepositoryProvider);
       final notifier = SecureVaultSessionNotifier();
+      // Its own lock on disposal clears it too.
+      notifier.addListener(
+        (session) => unawaited(SecureWindow.set(session != null)),
+        fireImmediately: false,
+      );
       ref.listen(secureVaultHeaderProvider, (_, next) {
         if (next.isLoading) return;
         notifier.lockUnlessVault(next.valueOrNull?.vaultId);

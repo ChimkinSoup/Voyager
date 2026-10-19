@@ -40,6 +40,9 @@ import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
+import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_capture_screen.dart';
+import 'package:voyager/features/photo_series/photo_check_in_dialog.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/routing/app_router.dart';
@@ -156,15 +159,36 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       ref.read(routerProvider).go('/settings');
       return;
     }
-    // A series' alert opens the series (PHOTO_SERIES_HLD.md §13.1); its
-    // sticky is still brought forward behind it.
+    // A series' alert opens the series (PHOTO_SERIES_HLD.md §13.1) — on
+    // Android, at the camera when the vault is open; its sticky is still
+    // brought forward behind it.
     final photoPrefix = reminderSourceKey(ReminderSourceKind.photoSeries, '');
     if (sourceKey.startsWith(photoPrefix)) {
-      ref.read(revealPhotoSeriesRequestProvider.notifier).state = sourceKey
-          .substring(photoPrefix.length);
-      ref.read(routerProvider).go(kPhotoSeriesPath);
+      unawaited(_revealPhotoSeries(sourceKey.substring(photoPrefix.length)));
     }
     ref.read(reminderEngineProvider).focus(sourceKey);
+  }
+
+  Future<void> _revealPhotoSeries(String seriesId) async {
+    // A check-in of another series still open would end up under this one's.
+    final context = ref
+        .read(routerProvider)
+        .routerDelegate
+        .navigatorKey
+        .currentContext;
+    if (photoCaptureSupported &&
+        context != null &&
+        !await closeOtherPhotoCheckIn(context, seriesId)) {
+      return;
+    }
+    if (!mounted) return;
+    ref.read(revealPhotoSeriesRequestProvider.notifier).state = seriesId;
+    // Only with the vault open: the detail would drop it anyway, and one
+    // left unanswered could start a check-in nobody asked for later.
+    if (photoCaptureSupported && ref.read(secureVaultSessionProvider) != null) {
+      ref.read(photoSeriesCheckInRequestProvider.notifier).state = seriesId;
+    }
+    ref.read(routerProvider).go(kPhotoSeriesPath);
   }
 
   @override

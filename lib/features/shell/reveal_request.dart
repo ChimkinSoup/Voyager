@@ -45,6 +45,13 @@ final revealFolderBackupsRequestProvider = StateProvider<bool>((ref) => false);
 /// it when it mounts as well as when it changes, and sets it back to null.
 final revealPhotoSeriesRequestProvider = StateProvider<String?>((ref) => null);
 
+/// A one-shot request, by series id, to start a check-in once that series'
+/// detail is open — set beside [revealPhotoSeriesRequestProvider] by a tap on
+/// its OS notification on Android, where the check-in opens the camera
+/// (PHOTO_SERIES_HLD.md §13.1). The detail takes it, and drops it while the
+/// vault is locked.
+final photoSeriesCheckInRequestProvider = StateProvider<String?>((ref) => null);
+
 /// The same for Settings' weather location tile, set by the forecast sheet
 /// when no location is set.
 final revealWeatherLocationRequestProvider = StateProvider<bool>(

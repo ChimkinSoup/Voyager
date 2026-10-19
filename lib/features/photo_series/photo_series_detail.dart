@@ -25,6 +25,7 @@ import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/photo_series_viewer.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 
 /// "Week of Oct 13, 2026", "October 2026"…
 String photoPeriodLabel(DateTime start, TrackerCadence cadence) =>
@@ -57,6 +58,16 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
 
   /// Playback and Compare need the vault; locking drops back to the grid.
   var _view = _PhotoSeriesView.grid;
+
+  /// Starts the check-in a notification tap asked for (§13.1) — unless the
+  /// vault is locked, when the detail is as far as it goes.
+  void _takeCheckInRequest(PhotoSeries series, List<PhotoSeriesAngle> angles) {
+    if (!mounted || ref.read(photoSeriesCheckInRequestProvider) != series.id) {
+      return;
+    }
+    ref.read(photoSeriesCheckInRequestProvider.notifier).state = null;
+    if (ref.read(secureVaultSessionProvider) != null) _checkIn(series, angles);
+  }
 
   @override
   void dispose() {
@@ -110,6 +121,8 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     List<PhotoSeriesAngle> angles,
   ) async {
     if (!_requireUnlocked()) return;
+    // Nothing while one is open: a notification tap mid-check-in asks for
+    // another.
     await showPhotoCheckInDialog(context, series: series, angles: angles);
   }
 
@@ -156,6 +169,11 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
       for (final angle in snapshot.angles)
         if (angle.seriesId == series.id) angle,
     ];
+    // Watched, not listened to: one made before the detail opened — the tap
+    // that opened it — waits here for the series to load.
+    if (ref.watch(photoSeriesCheckInRequestProvider) == series.id) {
+      Future.microtask(() => _takeCheckInRequest(series, angles));
+    }
     final stats = photoSeriesStats(
       series: series,
       checkIns: snapshot.checkIns,

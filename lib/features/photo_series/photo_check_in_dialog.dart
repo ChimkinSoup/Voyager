@@ -9,12 +9,14 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/services/media_ingest.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_capture_screen.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
@@ -22,21 +24,120 @@ import 'package:voyager/features/photo_series/vault_image_cache.dart';
 
 /// Opens the check-in stepper (PHOTO_SERIES_HLD.md §7.3): one step per angle
 /// of [angles], each taking a file, a paste or a drop, then a review with the
-/// date and note. With [checkIn] and a single angle, it gives that check-in
-/// the angle's photo instead — added, or replacing the one it had.
+/// date and note. On Android the steps are the camera's, and the dialog opens
+/// at the review with what it took. With [checkIn] and a single angle, it
+/// gives that check-in the angle's photo instead — added, or replacing the
+/// one it had.
 ///
-/// Needs an unlocked vault, and closes if it locks.
+/// Needs an unlocked vault, and closes if it locks. One at a time, app-wide:
+/// does nothing while another is open.
 Future<void> showPhotoCheckInDialog(
   BuildContext context, {
   required PhotoSeries series,
   required List<PhotoSeriesAngle> angles,
   PhotoCheckIn? checkIn,
 }) {
+  if (_openCheckIn != null) return Future.value();
+  final navigator = Navigator.of(context, rootNavigator: true);
+  // The route it all opens over, for [closeOtherPhotoCheckIn] to pop back
+  // to: a predicate that holds at once pops nothing.
+  late Route<dynamic> below;
+  navigator.popUntil((route) {
+    below = route;
+    return true;
+  });
+  final done = _showCheckIn(
+    context,
+    series: series,
+    angles: angles,
+    checkIn: checkIn,
+  );
+  _open = (seriesId: series.id, navigator: navigator, below: below, done: done);
+  return done.whenComplete(() {
+    // Not a newer one's, opened once this one's navigator had gone.
+    if (identical(_open?.done, done)) _open = null;
+  });
+}
+
+typedef _OpenCheckIn = ({
+  String seriesId,
+  NavigatorState navigator,
+  Route<dynamic> below,
+  Future<void> done,
+});
+
+/// The check-in open, at its camera or its dialog — both on the root
+/// navigator, so they outlive the detail that opened them.
+_OpenCheckIn? _open;
+
+/// The open check-in's save while it runs: a check-in mid-save can't be
+/// discarded any more.
+Future<void>? _openSave;
+
+/// [_open], unless its navigator has gone — torn down with the app, by a hot
+/// restart or at the end of a test — taking the check-in with it.
+_OpenCheckIn? get _openCheckIn =>
+    (_open?.navigator.mounted ?? false) ? _open : null;
+
+/// Before a notification tap starts a check-in of [seriesId]: asks whether to
+/// discard one open for another series, and closes it if so. False when the
+/// user keeps it; true when there is none, or it is [seriesId]'s own.
+Future<bool> closeOtherPhotoCheckIn(
+  BuildContext context,
+  String seriesId,
+) async {
+  final open = _openCheckIn;
+  if (open == null || open.seriesId == seriesId) return true;
+  final discard = await showConfirmDialog(
+    context,
+    title: 'Discard check-in?',
+    message:
+        'A check-in of another series is open. Its photos and note are not '
+        'kept.',
+    cancelLabel: 'Keep',
+    confirmLabel: 'Discard',
+  );
+  // A lock closes the check-in and this prompt with it: nothing to keep.
+  final locked =
+      context.mounted &&
+      ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(secureVaultSessionProvider) ==
+          null;
+  if (!discard && !locked) return false;
+  // Closed meanwhile, saved or locked.
+  if (_openCheckIn != open) return true;
+  if (_openSave case final save?) {
+    // Saved anyway, or failed: then it's closed like any other.
+    await save.catchError((_) {});
+    if (_openCheckIn != open) return true;
+  }
+  open.navigator.popUntil((route) => route == open.below || route.isFirst);
+  await open.done;
+  return true;
+}
+
+Future<void> _showCheckIn(
+  BuildContext context, {
+  required PhotoSeries series,
+  required List<PhotoSeriesAngle> angles,
+  PhotoCheckIn? checkIn,
+}) async {
   assert(checkIn == null || angles.length == 1);
+  Map<String, Uint8List>? captured;
+  if (photoCaptureSupported && checkIn == null) {
+    captured = await showPhotoCaptureScreen(context, angles: angles);
+    if (captured == null || !context.mounted) return;
+  }
   return showVoyagerDialog<void>(
     context: context,
-    builder: (context) =>
-        _CheckInDialog(series: series, angles: angles, checkIn: checkIn),
+    builder: (context) => _CheckInDialog(
+      series: series,
+      angles: angles,
+      checkIn: checkIn,
+      captured: captured,
+    ),
   );
 }
 
@@ -56,11 +157,16 @@ class _CheckInDialog extends ConsumerStatefulWidget {
     required this.series,
     required this.angles,
     required this.checkIn,
+    required this.captured,
   });
 
   final PhotoSeries series;
   final List<PhotoSeriesAngle> angles;
   final PhotoCheckIn? checkIn;
+
+  /// The camera's photos by angle id, taken today; the dialog starts at the
+  /// review with them.
+  final Map<String, Uint8List>? captured;
 
   @override
   ConsumerState<_CheckInDialog> createState() => _CheckInDialogState();
@@ -78,6 +184,26 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
 
   int get _reviewStep => widget.angles.length;
   bool get _replacing => widget.checkIn != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.captured case final captured?) {
+      for (final MapEntry(:key, :value) in captured.entries) {
+        // Checked as a file, paste or drop is: one refused shows as skipped,
+        // with why, rather than failing the save.
+        try {
+          validateIngestInput(value);
+        } on MediaIngestException catch (error) {
+          _error = error.message;
+          continue;
+        }
+        _picked[key] = _Picked(value, null);
+      }
+      // Every one refused: at the first step, to take another.
+      _step = _picked.isEmpty ? 0 : _reviewStep;
+    }
+  }
 
   @override
   void dispose() {
@@ -130,6 +256,12 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     if (mounted) _take(bytes, modified: modified);
   }
 
+  Future<void> _capture(PhotoSeriesAngle angle) async {
+    final taken = await showPhotoCaptureScreen(context, angles: [angle]);
+    final bytes = taken?[angle.id];
+    if (bytes != null && mounted) _take(bytes);
+  }
+
   Future<void> _paste() async {
     final contents = await const MediaClipboard().read();
     final bytes = contents.imageBytes;
@@ -153,6 +285,25 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     }
   }
 
+  /// On Android the photos are the camera's, which can't be picked again.
+  bool get _asksToDiscard => photoCaptureSupported && _picked.isNotEmpty;
+
+  /// Cancel and the back gesture: asks first when there are photos to lose.
+  Future<void> _cancel() async {
+    // Too late to discard: the save goes through either way.
+    if (_saving) return;
+    if (_asksToDiscard &&
+        !await showConfirmDialog(
+          context,
+          title: 'Discard photos?',
+          message: 'The photos taken so far are not kept.',
+          confirmLabel: 'Discard',
+        )) {
+      return;
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -164,6 +315,31 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     if (picked != null && mounted) setState(() => _date = picked);
   }
 
+  Future<void> _store(
+    SecureVaultSession session,
+    PhotoSeriesService service,
+  ) async {
+    if (widget.checkIn case final checkIn?) {
+      final angle = widget.angles.single;
+      await service.setPhoto(
+        session: session,
+        checkIn: checkIn,
+        angleId: angle.id,
+        bytes: _picked[angle.id]!.bytes,
+      );
+    } else {
+      await service.createCheckIn(
+        session: session,
+        series: widget.series,
+        takenOn: _takenOn,
+        photos: {
+          for (final entry in _picked.entries) entry.key: entry.value.bytes,
+        },
+        note: _note.text,
+      );
+    }
+  }
+
   Future<void> _save() async {
     final session = ref.read(secureVaultSessionProvider);
     if (session == null || _saving) return;
@@ -172,26 +348,10 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
       _error = null;
     });
     final service = ref.read(photoSeriesServiceProvider);
+    final save = _store(session, service);
+    _openSave = save;
     try {
-      if (widget.checkIn case final checkIn?) {
-        final angle = widget.angles.single;
-        await service.setPhoto(
-          session: session,
-          checkIn: checkIn,
-          angleId: angle.id,
-          bytes: _picked[angle.id]!.bytes,
-        );
-      } else {
-        await service.createCheckIn(
-          session: session,
-          series: widget.series,
-          takenOn: _takenOn,
-          photos: {
-            for (final entry in _picked.entries) entry.key: entry.value.bytes,
-          },
-          note: _note.text,
-        );
-      }
+      await save;
     } on MediaIngestException catch (error) {
       if (mounted) {
         setState(() {
@@ -218,6 +378,8 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         });
       }
       rethrow;
+    } finally {
+      _openSave = null;
     }
     // A lock mid-save has already closed this; popping again would close
     // the page under it.
@@ -231,10 +393,13 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     // A lock takes the photos with it, and the dialog: nothing here could be
     // sealed any more.
     ref.listen(secureVaultSessionProvider, (_, session) {
+      final route = ModalRoute.of(context);
       // Not once it's closing: that would close the page under it.
-      if (session == null && (ModalRoute.of(context)?.isCurrent ?? false)) {
-        Navigator.of(context).maybePop();
-      }
+      if (session != null || route == null || !route.isActive) return;
+      // With the camera or the date picker, when one is up.
+      Navigator.of(context)
+        ..popUntil((r) => r == route)
+        ..pop();
     });
     final theme = Theme.of(context);
     final onReview = _step == _reviewStep;
@@ -245,39 +410,47 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         ? 'Check in'
         : '${angle!.name} · ${_step + 1} of ${widget.angles.length}';
     return VaultActivity(
-      child: CallbackShortcuts(
-        bindings: {
-          if (!onReview) ...{
-            const SingleActivator(LogicalKeyboardKey.keyV, control: true):
-                _paste,
-            const SingleActivator(LogicalKeyboardKey.keyV, meta: true): _paste,
-          },
+      // A lock's pop goes through regardless.
+      child: PopScope(
+        canPop: !_asksToDiscard && !_saving,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _cancel();
         },
-        child: Focus(
-          autofocus: true,
-          child: AlertDialog(
-            title: Text(title),
-            content: SizedBox(
-              width: 440,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (angle != null) _intake(context, angle) else _review(),
-                  if (_error case final error?)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        error,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
+        child: CallbackShortcuts(
+          bindings: {
+            if (!onReview) ...{
+              const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                  _paste,
+              const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+                  _paste,
+            },
+          },
+          child: Focus(
+            autofocus: true,
+            child: AlertDialog(
+              title: Text(title),
+              content: SizedBox(
+                width: 440,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (angle != null) _intake(context, angle) else _review(),
+                    if (_error case final error?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          error,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
+              actions: _actions(onReview: onReview, angle: angle),
             ),
-            actions: _actions(onReview: onReview, angle: angle),
           ),
         ),
       ),
@@ -289,7 +462,7 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     required PhotoSeriesAngle? angle,
   }) {
     final cancel = GlassButton(
-      onPressed: _saving ? null : () => Navigator.pop(context),
+      onPressed: _saving ? null : _cancel,
       label: 'Cancel',
       dense: true,
     );
@@ -384,22 +557,30 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         else
           area,
         const SizedBox(height: 10),
-        Row(
+        // Onto a second line when they don't fit: with Camera, they don't.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
+            if (photoCaptureSupported)
+              GlassButton(
+                onPressed: () => _capture(angle),
+                icon: const Icon(PhosphorIconsRegular.camera, size: 13),
+                label: 'Camera',
+                dense: true,
+              ),
             GlassButton(
               onPressed: _chooseFile,
               icon: const Icon(PhosphorIconsRegular.folderOpen, size: 13),
               label: picked == null ? 'Choose file…' : 'Choose another…',
               dense: true,
             ),
-            const SizedBox(width: 8),
             GlassButton(
               onPressed: _paste,
               icon: const Icon(PhosphorIconsRegular.clipboard, size: 13),
               label: 'Paste',
               dense: true,
             ),
-            const Spacer(),
             if (picked != null)
               GlassButton(
                 onPressed: () => setState(() => _picked.remove(angle.id)),

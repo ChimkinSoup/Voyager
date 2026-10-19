@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:fake_async/fake_async.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/secure_vault/secure_window.dart';
 import 'package:voyager/core/secure_vault/vault_media_service.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -29,6 +31,8 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_capture_screen.dart';
+import 'package:voyager/features/photo_series/photo_check_in_dialog.dart';
 import 'package:voyager/features/photo_series/photo_series_detail.dart';
 import 'package:voyager/features/photo_series/photo_frame.dart';
 import 'package:voyager/features/photo_series/photo_series_page.dart';
@@ -69,7 +73,10 @@ DateTime _today() {
   return DateTime(now.year, now.month, now.day);
 }
 
-Future<ProviderContainer> _container(WidgetTester tester) async {
+Future<ProviderContainer> _container(
+  WidgetTester tester, {
+  List<Override> overrides = const [],
+}) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
   final dir = (await tester.runAsync(
@@ -94,6 +101,7 @@ Future<ProviderContainer> _container(WidgetTester tester) async {
               const AppSettings().copyWith(mediaRemoteUploadsEnabled: false),
         ),
       ),
+      ...overrides,
     ],
   );
   addTearDown(container.dispose);
@@ -1000,4 +1008,258 @@ void main() {
     expect(find.text('New series'), findsNothing);
     expect(tester.element(find.byType(PhotoSeriesDetail)), same(detail));
   });
+
+  // On Android the camera opens over the dialog, from its Camera button.
+  testWidgets('a lock closes the check-in dialog under another screen', (
+    tester,
+  ) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container);
+    await _pumpDetail(tester, container, series.id, pushed: true);
+    await tester.tap(find.text('Check in'));
+    await _settle(tester);
+    expect(find.text('Front · 1 of 1'), findsOneWidget);
+    unawaited(
+      Navigator.of(
+        tester.element(find.text('Front · 1 of 1')),
+        rootNavigator: true,
+      ).push(MaterialPageRoute<void>(builder: (_) => const Text('camera'))),
+    );
+    await _settle(tester);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await _settle(tester);
+    // The camera closes itself; here, a stand-in that doesn't.
+    expect(find.text('camera'), findsOneWidget);
+    Navigator.of(tester.element(find.text('camera'))).pop();
+    await _settle(tester);
+
+    expect(find.text('Front · 1 of 1'), findsNothing);
+    expect(find.byType(PhotoSeriesDetail), findsOneWidget);
+  });
+
+  group('a notification tap', () {
+    testWidgets('with the vault open, starts a check-in of its series', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      container.read(photoSeriesCheckInRequestProvider.notifier).state =
+          series.id;
+
+      await _pumpDetail(tester, container, series.id);
+
+      expect(find.text('Front · 1 of 1'), findsOneWidget);
+      expect(container.read(photoSeriesCheckInRequestProvider), isNull);
+    });
+
+    testWidgets('while locked, opens only the detail', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      container.read(secureVaultSessionProvider.notifier).lock();
+      container.read(photoSeriesCheckInRequestProvider.notifier).state =
+          series.id;
+
+      await _pumpDetail(tester, container, series.id);
+
+      expect(find.text('Front · 1 of 1'), findsNothing);
+      expect(find.text('Unlock to see photos'), findsOneWidget);
+      // Dropped, so a later unlock doesn't start one out of nowhere.
+      expect(container.read(photoSeriesCheckInRequestProvider), isNull);
+      await _unlock(tester, container);
+      expect(find.text('Front · 1 of 1'), findsNothing);
+    });
+
+    testWidgets('for the open series, starts its check-in there', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      expect(find.text('Front · 1 of 1'), findsNothing);
+
+      container.read(photoSeriesCheckInRequestProvider.notifier).state =
+          series.id;
+      await _settle(tester);
+
+      expect(find.text('Front · 1 of 1'), findsOneWidget);
+    });
+
+    // A check-in open under another series' would stay there, still open.
+    for (final discard in [true, false]) {
+      testWidgets('for another series mid-check-in, asks first: '
+          '${discard ? 'Discard closes it' : 'Keep leaves it'}', (
+        tester,
+      ) async {
+        final container = await _container(tester);
+        await _unlock(tester, container);
+        final series = await _seed(tester, container);
+        await _pumpDetail(tester, container, series.id);
+        await tester.tap(find.text('Check in'));
+        await _settle(tester);
+        expect(find.text('Front · 1 of 1'), findsOneWidget);
+
+        final closed = closeOtherPhotoCheckIn(
+          tester.element(find.byType(PhotoSeriesDetail)),
+          'another-series',
+        );
+        await _settle(tester);
+        await tester.tap(find.text(discard ? 'Discard' : 'Keep'));
+        await _settle(tester);
+
+        expect(await closed, discard);
+        expect(
+          find.text('Front · 1 of 1'),
+          discard ? findsNothing : findsOneWidget,
+        );
+        expect(find.byType(PhotoSeriesDetail), findsOneWidget);
+        // Stops its idle timer, which the taps started.
+        container.read(secureVaultSessionProvider.notifier).lock();
+        await _settle(tester);
+      });
+    }
+
+    testWidgets("for the series mid-check-in, doesn't ask", (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+
+      final closed = closeOtherPhotoCheckIn(
+        tester.element(find.byType(PhotoSeriesDetail)),
+        series.id,
+      );
+      await _settle(tester);
+
+      expect(await closed, isTrue);
+      expect(find.text('Discard check-in?'), findsNothing);
+      expect(find.text('Front · 1 of 1'), findsOneWidget);
+      // Stops its idle timer, which the taps started.
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+  });
+
+  // FLAG_SECURE (§6.8): set while the vault is open, on any page.
+  testWidgets('the window is secure while the vault is open', (tester) async {
+    final calls = <bool>[];
+    SecureWindow.useAndroid = true;
+    addTearDown(() => SecureWindow.useAndroid = false);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('voyager/secure_window'),
+      (call) async {
+        if (call.method == 'set') calls.add(call.arguments as bool);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('voyager/secure_window'),
+        null,
+      ),
+    );
+    final container = await _container(tester);
+    expect(calls, isEmpty);
+
+    await _unlock(tester, container);
+    expect(calls.last, isTrue);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await _settle(tester);
+    expect(calls.last, isFalse);
+  });
+
+  // On Android the dialog's photos are the camera's, which can't be picked
+  // again. Replacing a photo skips the camera, which tests don't have.
+  testWidgets('with a photo on Android, closing the check-in asks first', (
+    tester,
+  ) async {
+    photoCaptureSupported = true;
+    addTearDown(() => photoCaptureSupported = false);
+    final file = File(
+      '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+    )..writeAsBytesSync(_jpeg());
+    addTearDown(() => file.parent.deleteSync(recursive: true));
+    FilePicker.platform = _FakeFilePicker(file.path);
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container);
+    await _pumpDetail(tester, container, series.id);
+    await tester.tap(
+      find.byType(VaultPhoto).first,
+      buttons: kSecondaryButton,
+      warnIfMissed: false,
+    );
+    await _settle(tester);
+    // A submenu opens on hover.
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: tester.getCenter(find.text('Photo')));
+    await _settle(tester);
+    await tester.tap(find.text('Replace Front'));
+    await _settle(tester);
+    expect(find.text('Front photo'), findsOneWidget);
+    await tester.tap(find.text('Choose file…'));
+    await _drain(tester);
+    expect(find.text('Choose another…'), findsOneWidget);
+
+    // Cancel, then the back gesture: each asks, and Cancel keeps the photo.
+    await tester.tap(find.text('Cancel'));
+    await _settle(tester);
+    expect(find.text('Discard photos?'), findsOneWidget);
+    await tester.tap(find.text('Cancel').last);
+    await _settle(tester);
+    expect(find.text('Discard photos?'), findsNothing);
+    expect(find.text('Front photo'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await _settle(tester);
+    expect(find.text('Discard photos?'), findsOneWidget);
+    await tester.tap(find.text('Cancel').last);
+    await _settle(tester);
+    expect(find.text('Front photo'), findsOneWidget);
+
+    // The scrim asks too; Discard closes it.
+    await tester.tapAt(const Offset(5, 5));
+    await _settle(tester);
+    expect(find.text('Discard photos?'), findsOneWidget);
+    await tester.tap(find.text('Discard'));
+    await _settle(tester);
+    expect(find.text('Front photo'), findsNothing);
+    expect(find.text('Discard photos?'), findsNothing);
+    // Stops its idle timer, which the taps started.
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await _settle(tester);
+  });
+}
+
+/// Picks [path], whatever is asked for.
+class _FakeFilePicker extends FilePicker {
+  _FakeFilePicker(this.path);
+
+  final String path;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = true,
+    int compressionQuality = 30,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async => FilePickerResult([
+    PlatformFile(name: 'a.jpg', size: File(path).lengthSync(), path: path),
+  ]);
 }

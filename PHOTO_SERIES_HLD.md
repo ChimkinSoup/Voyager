@@ -6,7 +6,7 @@ Photos and notes are encrypted with the existing **Secure Vault** (`SECURE_NOTES
 
 Related: `lib/core/secure_vault/secure_vault.dart`, `lib/features/notifications/secure_vault_session.dart`, `lib/features/notifications/secure_vault_dialogs.dart`, `lib/core/media/media_service.dart`, `lib/domain/services/media_ingest.dart`, `lib/core/reminders/reminder_engine.dart`, `lib/domain/models/reminder_models.dart`, `lib/domain/models/notification_models.dart`, `lib/domain/services/periodic_prompt_service.dart`, `lib/features/shell/shell_destinations.dart`, `MEDIA.md`, `SCHEDULED_REMINDERS_HLD.md`, `UNIFIED_NOTIFICATIONS.md`.
 
-Status: **phases 1–5 implemented** (vault media core; series and check-ins; reminders; playback and compare; alignment tool); phase 6 not started.
+Status: **phases 1–6 implemented** (vault media core; series and check-ins; reminders; playback and compare; alignment tool; Android capture). Phase 6's manual device QA pass (§16) is still to do.
 
 ---
 
@@ -167,7 +167,7 @@ Each file is `nonce (12 B) ‖ ciphertext ‖ GCM tag`, so a blob stands alone w
 5. **Lock** additionally clears the decrypted-image cache, the per-thumbnail reveal state (§7.1) and any open viewer, playback, compare or alignment session.
 6. **Password change:** re-wraps the key only, so photos are untouched (unchanged from Secure Notes).
 7. **Vault reset:** deletes every `VaultBlob` and every encrypted check-in note sealed under the retired vault, the same rule as Secure Notes. Their `PhotoCheckInImage` rows go too. A check-in left with no images is deleted, so streaks and missed marks recompute honestly.
-8. **Android `FLAG_SECURE`.** Set it while any decrypted photo is on screen (grid with a reveal, viewer, playback, compare, alignment, capture). This keeps photos out of screenshots and out of the recent-apps thumbnail.
+8. **Android `FLAG_SECURE`.** Set it while the vault is unlocked, which covers every screen a decrypted photo can be on (grid with a reveal, viewer, playback, compare, alignment, capture). This keeps photos out of screenshots and out of the recent-apps thumbnail.
 
 ---
 
@@ -367,7 +367,14 @@ All of this is computed from plain fields, so it works while locked.
    - zoom is 20–800% and rotation ±45° (a sideways photo is turned at ingest); arrow keys nudge 1 px, Shift 10 px;
    - "Use as reference" on a tile's context menu, disabled on the angle's current reference; replacing the reference photo makes the new photo the reference;
    - the viewer draws photos aligned and clipped to the frame.
-6. **Android capture:** `camera`, permissions, the ghost overlay and `FLAG_SECURE`.
+6. **Android capture** — **built (2026-10-19), device QA pending**:
+   - `camera` (CameraX on Android); the camera permission in the manifest, and the plugin's microphone permission removed from it, since nothing records;
+   - on Android, **Check in** opens a full-screen capture route, an angle at a time (**Skip**, then **Retake** or **Use photo**), and the dialog opens at its review with what was taken. Each angle step of the dialog also has a **Camera** button, which is how one angle is retaken from the review, and how a check-in's photo is added or replaced from its context menu;
+   - the ghost: the angle's latest photo, or its reference with the **Latest | Reference** toggle, which shows only when the two differ. It is drawn with its transform in the angle's frame, laid out around the preview the way a new photo is fitted into it, and mirrored with the front camera. An angle's first photo gets the thirds grid;
+   - each capture's temp file is deleted before its bytes are used;
+   - a denied permission shows an explanation and **Open settings**; coming back retries;
+   - `FLAG_SECURE` is set whenever the vault is unlocked, on any page, which is broader than "while a photo is on screen". One listener on the vault session covers every photo surface, the camera and check-in included, with no gap before the first frame. The cost is that screenshots elsewhere in the app are blocked too while the vault is open;
+   - the OS notification, tapped on Android with the vault open, opens the series' check-in, so the camera.
 
 Each phase can ship on its own. The ghost overlay is the most important capture feature, but it needs phases 1–2 (storage) and benefits from 5 (aligned ghost).
 
@@ -385,7 +392,7 @@ Each phase can ship on its own. The ghost overlay is the most important capture 
 
 ## 17. Risks
 
-- **Android verification.** The Android SDK is installed (`android/local.properties`), so phase 6 can be built here. Camera, ghost and `FLAG_SECURE` still need a real device for the manual QA pass.
+- **Android verification.** The Android SDK is installed (`android/local.properties`), so phase 6 can be built here. Camera, ghost and `FLAG_SECURE` still need a real device for the manual QA pass. Watch for two things there: whether CameraX saves front-camera photos mirrored (the HLD wants them unmirrored), and whether the still's aspect matches the preview's at `ResolutionPreset.veryHigh` (the ghost assumes it does).
 - **Memory in playback.** Long daily series could mean hundreds of frames. The viewport-size decode and sliding window (§11) are required, not optional.
 - **Vault password friction.** Every check-in on the phone needs an unlocked vault. If unlocking every time becomes a nuisance, the fix is a separate, longer idle timeout for the Photos page. Not done in v1.
 - **Storage cost.** Photos are at most ~1 MB each after ingest. A daily three-angle series grows by about 1 GB a year.
@@ -399,5 +406,5 @@ Each phase can ship on its own. The ghost overlay is the most important capture 
 5. Playback defaults to **4 fps**.
 6. Reveals last until you leave the page or the vault locks.
 7. Closing the inbox doesn't lock the vault while Photos is the visible page.
-8. Android `FLAG_SECURE` while any photo is shown, set through a method channel in `MainActivity` (no package).
+8. Android `FLAG_SECURE` while the vault is unlocked, set through a method channel in `MainActivity` (no package).
 9. A **self-timer** (3 / 10 s) on the capture screen is *not* in v1, though it would help when shooting yourself with the rear camera.

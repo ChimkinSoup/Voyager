@@ -81,7 +81,11 @@ class _PhotoSeriesPageState extends ConsumerState<PhotoSeriesPage> {
     _visibleFlag.state = visible;
     if (visible == _visible) return;
     _visible = visible;
-    if (!visible) ref.read(photoRevealedCheckInsProvider.notifier).state = {};
+    if (!visible) {
+      ref.read(photoRevealedCheckInsProvider.notifier).state = {};
+      // One the detail never took: not to start a check-in on a later visit.
+      ref.read(photoSeriesCheckInRequestProvider.notifier).state = null;
+    }
   }
 
   @override

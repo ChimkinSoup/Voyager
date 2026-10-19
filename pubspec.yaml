@@ -64,6 +64,7 @@ dependencies:
   vector_tile_renderer: ^6.1.0
   geolocator: ^14.0.2
   cryptography: ^2.9.0
+  camera: ^0.12.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -168,6 +169,13 @@ dev_dependencies:
 # press only zooms in, and it takes a second to open the cluster. The local
 # copy stays at the camera's zoom (lib/src/marker_cluster_layer.dart, marked
 # VOYAGER PATCH). Re-apply it if upgrading past 8.2.2.
+#
+# irondash_engine_context and super_native_extensions (under super_clipboard
+# and super_drag_and_drop) build their Rust side on Android through
+# cargokit, whose Gradle script ran commands with Project.exec, which Gradle 9
+# removed: the Android build failed. The local copies use the task's
+# injected ExecOperations (cargokit/gradle/plugin.gradle, marked VOYAGER
+# PATCH). Re-apply it if upgrading past 0.5.5 and 0.9.1.
 dependency_overrides:
   # Patched: a transaction's server read no longer blocks the platform thread
   # on Windows — see `VOYAGER PATCH` in windows/cloud_firestore_plugin.cpp.
@@ -185,6 +193,10 @@ dependency_overrides:
     path: third_party/vector_tile_renderer-6.1.0
   vector_map_tiles:
     path: third_party/vector_map_tiles-9.0.0-beta.9
+  irondash_engine_context:
+    path: third_party/irondash_engine_context-0.5.5
+  super_native_extensions:
+    path: third_party/super_native_extensions-0.9.1
 
 flutter:
   uses-material-design: true
