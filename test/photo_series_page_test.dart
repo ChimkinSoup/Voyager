@@ -28,12 +28,15 @@ import 'package:voyager/data/services/vault_media_file_store.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
+import 'package:voyager/domain/services/media_ingest.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_capture_screen.dart';
 import 'package:voyager/features/photo_series/photo_check_in_dialog.dart';
 import 'package:voyager/features/photo_series/photo_series_detail.dart';
+import 'package:voyager/features/photo_series/photo_series_dialogs.dart';
 import 'package:voyager/features/photo_series/photo_frame.dart';
 import 'package:voyager/features/photo_series/photo_series_page.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
@@ -132,13 +135,14 @@ Future<PhotoSeries> _seed(
   WidgetTester tester,
   ProviderContainer container, {
   List<int> daysAgo = const [7, 0],
+  TrackerCadence cadence = TrackerCadence.weekly,
 }) async {
   late PhotoSeries series;
   await tester.runAsync(() async {
     final service = container.read(photoSeriesServiceProvider);
     series = await service.createSeries(
       name: 'Progress',
-      cadence: TrackerCadence.weekly,
+      cadence: cadence,
       sortOrder: 0,
       angleNames: ['Front'],
     );
@@ -1212,15 +1216,15 @@ void main() {
     // Cancel, then the back gesture: each asks, and Cancel keeps the photo.
     await tester.tap(find.text('Cancel'));
     await _settle(tester);
-    expect(find.text('Discard photos?'), findsOneWidget);
+    expect(find.text('Discard photo?'), findsOneWidget);
     await tester.tap(find.text('Cancel').last);
     await _settle(tester);
-    expect(find.text('Discard photos?'), findsNothing);
+    expect(find.text('Discard photo?'), findsNothing);
     expect(find.text('Front photo'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await _settle(tester);
-    expect(find.text('Discard photos?'), findsOneWidget);
+    expect(find.text('Discard photo?'), findsOneWidget);
     await tester.tap(find.text('Cancel').last);
     await _settle(tester);
     expect(find.text('Front photo'), findsOneWidget);
@@ -1228,14 +1232,347 @@ void main() {
     // The scrim asks too; Discard closes it.
     await tester.tapAt(const Offset(5, 5));
     await _settle(tester);
-    expect(find.text('Discard photos?'), findsOneWidget);
+    expect(find.text('Discard photo?'), findsOneWidget);
     await tester.tap(find.text('Discard'));
     await _settle(tester);
     expect(find.text('Front photo'), findsNothing);
-    expect(find.text('Discard photos?'), findsNothing);
+    expect(find.text('Discard photo?'), findsNothing);
     // Stops its idle timer, which the taps started.
     container.read(secureVaultSessionProvider.notifier).lock();
     await _settle(tester);
+  });
+  group('Phase 28A', () {
+    testWidgets('BUG-284: a rejected Create keeps the caret in Name', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: VoyagerTheme.dark(),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showPhotoSeriesDialog(context),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await _settle(tester);
+      // Name is the first field.
+      bool nameFocused() => tester
+          .widget<EditableText>(find.byType(EditableText).first)
+          .focusNode
+          .hasFocus;
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await _settle(tester);
+      expect(find.text('Give the series a name.'), findsOneWidget);
+      expect(nameFocused(), isTrue);
+
+      await tester.tap(find.text('Create'));
+      await _settle(tester);
+      expect(nameFocused(), isTrue);
+    });
+
+    testWidgets('BUG-285: a wrong password keeps the caret in the field', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+
+      final password = find.widgetWithText(TextField, 'Password');
+      await tester.tap(password);
+      await tester.enterText(password, 'wrong');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      for (var i = 0; i < 20; i++) {
+        if (find.text('Wrong password.').evaluate().isNotEmpty) break;
+        await _drain(tester);
+      }
+      expect(find.text('Wrong password.'), findsOneWidget);
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.controller.text, isEmpty);
+      expect(field.focusNode.hasFocus, isTrue);
+    });
+
+    group('BUG-286: closing a check-in with work in it asks first', () {
+      Future<ProviderContainer> open(WidgetTester tester) async {
+        final container = await _container(tester);
+        await _unlock(tester, container);
+        final series = await _seed(tester, container);
+        await _pumpDetail(tester, container, series.id);
+        await tester.tap(find.text('Check in'));
+        await _settle(tester);
+        expect(find.text('Front · 1 of 1'), findsOneWidget);
+        return container;
+      }
+
+      testWidgets('a photo picked: Esc asks, Cancel keeps it', (tester) async {
+        final file = File(
+          '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+        )..writeAsBytesSync(_jpeg());
+        addTearDown(() => file.parent.deleteSync(recursive: true));
+        FilePicker.platform = _FakeFilePicker(file.path);
+        final container = await open(tester);
+        await tester.tap(find.text('Choose file…'));
+        await _drain(tester);
+        expect(find.text('Choose another…'), findsOneWidget);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+        expect(find.text('Discard check-in?'), findsOneWidget);
+        await tester.tap(find.text('Cancel').last);
+        await _settle(tester);
+        expect(find.text('Choose another…'), findsOneWidget);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+        await tester.tap(find.text('Discard'));
+        await _settle(tester);
+        expect(find.text('Front · 1 of 1'), findsNothing);
+        container.read(secureVaultSessionProvider.notifier).lock();
+        await _settle(tester);
+      });
+
+      testWidgets('only a note typed: Esc from the note asks', (tester) async {
+        final container = await open(tester);
+        await tester.tap(find.text('Skip'));
+        await _settle(tester);
+        // The review's one field.
+        await tester.enterText(find.byType(EditableText), 'typed note');
+        await _settle(tester);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+        expect(find.text('Discard check-in?'), findsOneWidget);
+        await tester.tap(find.text('Cancel').last);
+        await _settle(tester);
+        expect(find.text('typed note'), findsOneWidget);
+        container.read(secureVaultSessionProvider.notifier).lock();
+        await _settle(tester);
+      });
+
+      testWidgets('nothing picked or typed: Esc closes at once', (
+        tester,
+      ) async {
+        final container = await open(tester);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+        expect(find.text('Discard check-in?'), findsNothing);
+        expect(find.text('Front · 1 of 1'), findsNothing);
+        container.read(secureVaultSessionProvider.notifier).lock();
+        await _settle(tester);
+      });
+    });
+
+    testWidgets('BUG-288/290: the grid groups a weekly series by month, and a '
+        'far done mark scrolls to its check-in', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final weeks = [for (var i = 0; i < 80; i++) i * 7];
+      final series = await _seed(tester, container, daysAgo: weeks);
+      await _pumpDetail(tester, container, series.id);
+
+      // A month's check-ins share a row, under the month's label.
+      final now = DateTime.now();
+      expect(
+        find.text(DateFormat.yMMMM().format(DateTime(now.year, now.month))),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Week of'), findsNothing);
+      final tops = [
+        for (final element in find.byType(VaultPhoto).evaluate())
+          tester.getTopLeft(find.byWidget(element.widget)).dy,
+      ];
+      expect(tops.toSet().length, lessThan(tops.length));
+
+      final oldest = now.subtract(Duration(days: weeks.last));
+      final oldestDay = DateTime(oldest.year, oldest.month, oldest.day);
+      final oldestDate = find.text(DateFormat.yMMMd().format(oldestDay));
+      expect(oldestDate.hitTestable(), findsNothing);
+      final week = DateFormat.yMMMd().format(
+        photoPeriodStart(oldestDay, TrackerCadence.weekly),
+      );
+      final mark = find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is Tooltip && w.message == 'Week of $week · done',
+        ),
+        matching: find.byType(InkWell),
+      );
+      tester.widget<InkWell>(mark).onTap!();
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 80));
+      }
+      expect(oldestDate.hitTestable(), findsOneWidget);
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('a yearly series is one grid group, its tiles sharing a row', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(
+        tester,
+        container,
+        daysAgo: const [0, 365, 730],
+        cadence: TrackerCadence.yearly,
+      );
+      await _pumpDetail(tester, container, series.id);
+
+      final tops = [
+        for (final element in find.byType(VaultPhoto).evaluate())
+          tester.getTopLeft(find.byWidget(element.widget)).dy,
+      ];
+      expect(tops, hasLength(3));
+      expect(tops.toSet(), hasLength(1));
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('BUG-289: a photo that fails to decode saves nothing', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: const []);
+      final repository = container.read(photoSeriesRepositoryProvider);
+      final service = container.read(photoSeriesServiceProvider);
+      final session = container.read(secureVaultSessionProvider)!;
+      final big = img.Image(width: 400, height: 300);
+      for (final pixel in big) {
+        pixel
+          ..r = (pixel.x * 7) % 256
+          ..g = (pixel.y * 5) % 256;
+      }
+      final whole = img.encodeJpg(big);
+      // The first 40% of a valid JPEG, as `p08-truncated.jpg`.
+      final truncated = Uint8List.sublistView(
+        whole,
+        0,
+        (whole.length * 0.4).round(),
+      );
+      await tester.runAsync(() async {
+        await service.saveAngles(series, [
+          for (final angle in await repository.listAngles())
+            (id: angle.id, name: angle.name),
+          (id: null, name: 'Back'),
+        ]);
+        final angles = await repository.listAngles();
+        final front = angles.firstWhere((a) => a.name == 'Front');
+        final back = angles.firstWhere((a) => a.name == 'Back');
+        await expectLater(
+          service.createCheckIn(
+            session: session,
+            series: series,
+            takenOn: DateTime.now(),
+            // The good one first, as in the report.
+            photos: {back.id: _jpeg(), front.id: truncated},
+          ),
+          throwsA(
+            isA<MediaIngestException>().having(
+              (e) => e.message,
+              'message',
+              'That image could not be read.',
+            ),
+          ),
+        );
+        expect(await repository.listBlobs(includeDeleted: true), isEmpty);
+        expect(await repository.listImages(includeDeleted: true), isEmpty);
+      });
+    });
+
+    testWidgets('BUG-291: with ten angles, the tile date and Skipped stay on '
+        'one line', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      late PhotoSeries series;
+      await tester.runAsync(() async {
+        final service = container.read(photoSeriesServiceProvider);
+        series = await service.createSeries(
+          name: 'Ten',
+          cadence: TrackerCadence.weekly,
+          sortOrder: 0,
+          angleNames: [for (var i = 1; i <= 10; i++) 'Angle $i'],
+        );
+        final angles = await container
+            .read(photoSeriesRepositoryProvider)
+            .listAngles();
+        await service.createCheckIn(
+          session: container.read(secureVaultSessionProvider)!,
+          series: series,
+          takenOn: DateTime.now(),
+          photos: {angles.first.id: _jpeg()},
+        );
+      });
+      await _pumpDetail(tester, container, series.id);
+      double lines(Finder text) {
+        final paragraph = tester.renderObject<RenderParagraph>(text);
+        return paragraph.size.height /
+            paragraph.getFullHeightForCaret(const TextPosition(offset: 0));
+      }
+
+      expect(
+        // The tile's, after the stats row's first – latest.
+        lines(find.text(DateFormat.yMMMd().format(_today())).last),
+        lessThan(1.5),
+      );
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      for (var i = 0; i < 10; i++) {
+        await tester.tap(find.text('Skip'));
+        await _settle(tester);
+      }
+      final skipped = find.text('Skipped');
+      expect(skipped, findsNWidgets(10));
+      for (final element in skipped.evaluate()) {
+        expect(lines(find.byWidget(element.widget)), lessThan(1.5));
+      }
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('BUG-292: in Light the Due and Done badges clear 4.5:1', (
+      tester,
+    ) async {
+      double contrast(Color a, Color b) {
+        final (x, y) = (a.computeLuminance(), b.computeLuminance());
+        return (math.max(x, y) + 0.05) / (math.min(x, y) + 0.05);
+      }
+
+      final theme = VoyagerTheme.light();
+      for (final done in [true, false]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(body: PhotoPeriodBadge(done: done)),
+          ),
+        );
+        final text = tester.widget<Text>(find.text(done ? 'Done' : 'Due'));
+        final box = tester.widget<Container>(
+          find.ancestor(
+            of: find.byWidget(text),
+            matching: find.byType(Container),
+          ),
+        );
+        final fill = (box.decoration! as BoxDecoration).color!;
+        expect(
+          contrast(
+            text.style!.color!,
+            Color.alphaBlend(fill, theme.scaffoldBackgroundColor),
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+      }
+    });
   });
 }
 

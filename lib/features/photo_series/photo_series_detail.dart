@@ -36,6 +36,28 @@ String photoPeriodLabel(DateTime start, TrackerCadence cadence) =>
       TrackerCadence.yearly => DateFormat.y().format(start),
     };
 
+/// The grid's group [day] falls in: its month, or its year for a monthly
+/// series. A group per period held one check-in, so the grid read as one
+/// tile per row (§7.1) — and a year holds one of a yearly series, so it is
+/// all one group.
+DateTime _gridGroupStart(DateTime day, TrackerCadence cadence) =>
+    switch (cadence) {
+      TrackerCadence.daily ||
+      TrackerCadence.weekly => DateTime(day.year, day.month),
+      TrackerCadence.monthly => DateTime(day.year),
+      TrackerCadence.yearly => DateTime(0),
+    };
+
+/// "October 2026", or "2026": a [_gridGroupStart]'s label. None for a
+/// yearly series' one group: each tile's date says its year.
+String? _gridGroupLabel(DateTime start, TrackerCadence cadence) =>
+    switch (cadence) {
+      TrackerCadence.daily ||
+      TrackerCadence.weekly => DateFormat.yMMMM().format(start),
+      TrackerCadence.monthly => DateFormat.y().format(start),
+      TrackerCadence.yearly => null,
+    };
+
 enum _PhotoSeriesView { grid, playback, compare }
 
 /// One series (PHOTO_SERIES_HLD.md §4): its stats, its period strip and its
@@ -53,11 +75,17 @@ class PhotoSeriesDetail extends ConsumerStatefulWidget {
 class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
   final _unlockFocus = FocusNode();
 
-  /// Each period's group in the grid, for the strip to scroll to.
-  final _periodKeys = <DateTime, GlobalKey>{};
+  /// Each group in the grid, and each check-in's tile, for the strip to
+  /// scroll to.
+  final _groupKeys = <DateTime, GlobalKey>{};
+  final _tileKeys = <String, GlobalKey>{};
 
   /// Playback and Compare need the vault; locking drops back to the grid.
   var _view = _PhotoSeriesView.grid;
+
+  /// The strip's latest tap: an older one's scroll stops where a newer
+  /// one starts, rather than pulling the grid back to its own period.
+  var _scrollTurn = 0;
 
   /// Starts the check-in a notification tap asked for (§13.1) — unless the
   /// vault is locked, when the detail is as far as it goes.
@@ -126,21 +154,59 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     await showPhotoCheckInDialog(context, series: series, angles: angles);
   }
 
-  void _scrollToPeriod(DateTime period) {
+  /// Scrolls the grid to [period]'s newest check-in in [groups].
+  Future<void> _scrollToPeriod(
+    List<_GridGroup> groups,
+    TrackerCadence cadence,
+    DateTime period,
+  ) async {
     if (_view != _PhotoSeriesView.grid) {
       setState(() => _view = _PhotoSeriesView.grid);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToPeriod(period);
+        if (mounted) _scrollToPeriod(groups, cadence, period);
       });
       return;
     }
-    final target = _periodKeys[period]?.currentContext;
-    if (target == null) return;
-    Scrollable.ensureVisible(
-      target,
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOut,
-    );
+    final found = [
+      for (final group in groups)
+        for (final entry in group.entries)
+          if (photoPeriodStart(entry.checkIn.takenOn, cadence) == period)
+            (group: group, entry: entry),
+    ].firstOrNull;
+    if (found == null) return;
+    final (:group, :entry) = found;
+    final turn = ++_scrollTurn;
+    final groupKey = _groupKeys[group.start];
+    if (groupKey?.currentContext case final target?) {
+      await Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+      );
+    }
+    // A group far down the grid hasn't been laid out yet, so where it sits
+    // is an estimate until the scroll gets near it: again until it holds.
+    for (var i = 0; i < 20; i++) {
+      if (turn != _scrollTurn) return;
+      final target = groupKey?.currentContext;
+      if (target == null || !target.mounted) return;
+      final position = Scrollable.of(target).position;
+      final before = position.pixels;
+      await Scrollable.ensureVisible(target);
+      await WidgetsBinding.instance.endOfFrame;
+      if (position.pixels == before) break;
+    }
+    // Down to the tile, when the group is taller than the page.
+    if (turn != _scrollTurn) return;
+    final tile = _tileKeys[entry.checkIn.id]?.currentContext;
+    if (tile != null && tile.mounted) {
+      await Scrollable.ensureVisible(
+        tile,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    }
   }
 
   @override
@@ -189,7 +255,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
       PhotoPeriodStrip(
         stats: stats,
         cadence: series.cadence,
-        onTap: _scrollToPeriod,
+        onTap: (period) => _scrollToPeriod(groups, series.cadence, period),
       ),
       const SizedBox(height: 16),
       Align(
@@ -327,21 +393,25 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
                   ),
                   for (final group in groups)
                     SliverPadding(
-                      key: _periodKeys.putIfAbsent(group.period, GlobalKey.new),
+                      key: _groupKeys.putIfAbsent(group.start, GlobalKey.new),
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
                       sliver: SliverList.list(
                         children: [
-                          Text(
-                            photoPeriodLabel(group.period, series.cadence),
-                            style: theme.textTheme.labelLarge,
-                          ),
-                          const SizedBox(height: 8),
+                          if (_gridGroupLabel(group.start, series.cadence)
+                              case final label?) ...[
+                            Text(label, style: theme.textTheme.labelLarge),
+                            const SizedBox(height: 8),
+                          ],
                           Wrap(
                             spacing: 10,
                             runSpacing: 10,
                             children: [
                               for (final entry in group.entries)
                                 _CheckInTile(
+                                  key: _tileKeys.putIfAbsent(
+                                    entry.checkIn.id,
+                                    GlobalKey.new,
+                                  ),
                                   series: series,
                                   angles: angles,
                                   entry: entry,
@@ -379,7 +449,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
   }
 
   void _openViewer(
-    List<_PeriodGroup> groups,
+    List<_GridGroup> groups,
     PhotoViewerEntry entry,
     List<PhotoSeriesAngle> angles,
   ) {
@@ -396,15 +466,17 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
   }
 }
 
-class _PeriodGroup {
-  _PeriodGroup(this.period);
+class _GridGroup {
+  _GridGroup(this.start);
 
-  final DateTime period;
+  /// Its month, or year, or none: [_gridGroupStart].
+  final DateTime start;
   final entries = <PhotoViewerEntry>[];
 }
 
-/// [series]' check-ins with a photo, newest first, grouped by period.
-List<_PeriodGroup> _groups(
+/// [series]' check-ins with a photo, newest first, grouped by
+/// [_gridGroupStart].
+List<_GridGroup> _groups(
   PhotoSeries series,
   PhotoSeriesSnapshot snapshot,
   List<PhotoSeriesAngle> angles,
@@ -425,11 +497,11 @@ List<_PeriodGroup> _groups(
         final byDate = b.takenOn.compareTo(a.takenOn);
         return byDate != 0 ? byDate : b.createdAt.compareTo(a.createdAt);
       });
-  final groups = <_PeriodGroup>[];
+  final groups = <_GridGroup>[];
   for (final checkIn in checkIns) {
-    final period = photoPeriodStart(checkIn.takenOn, series.cadence);
-    if (groups.isEmpty || groups.last.period != period) {
-      groups.add(_PeriodGroup(period));
+    final start = _gridGroupStart(checkIn.takenOn, series.cadence);
+    if (groups.isEmpty || groups.last.start != start) {
+      groups.add(_GridGroup(start));
     }
     groups.last.entries.add((
       checkIn: checkIn,
@@ -592,6 +664,7 @@ class _PeriodMark extends StatelessWidget {
 
 class _CheckInTile extends ConsumerStatefulWidget {
   const _CheckInTile({
+    super.key,
     required this.series,
     required this.angles,
     required this.entry,
@@ -833,43 +906,54 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
                 // Inset from the hover fill, which reaches the tile's edges.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-                  child: Row(
+                  // The dots below the date when they don't fit beside it,
+                  // as with many angles.
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    runSpacing: 3,
                     children: [
-                      Expanded(
-                        child: Text(
-                          DateFormat.yMMMd().format(_checkIn.takenOn),
-                          style: theme.textTheme.bodySmall,
-                        ),
+                      Text(
+                        DateFormat.yMMMd().format(_checkIn.takenOn),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
                       ),
-                      if (_checkIn.hasNote)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
-                            PhosphorIconsRegular.note,
-                            size: 12,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        runSpacing: 3,
+                        children: [
+                          if (_checkIn.hasNote)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(
+                                PhosphorIconsRegular.note,
+                                size: 12,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      // Which angles this check-in has.
-                      for (final angle in widget.angles)
-                        Tooltip(
-                          message: angle.name,
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            margin: const EdgeInsets.only(left: 3),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: images.containsKey(angle.id)
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.2,
-                                    ),
+                          // Which angles this check-in has.
+                          for (final angle in widget.angles)
+                            Tooltip(
+                              message: angle.name,
+                              child: Container(
+                                width: 6,
+                                height: 6,
+                                margin: const EdgeInsets.only(left: 3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: images.containsKey(angle.id)
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

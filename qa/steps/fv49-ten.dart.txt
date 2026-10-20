@@ -1,0 +1,1 @@
+final svc = c.read(photoSeriesServiceProvider); await svc.createSeries(name: 'P28 Ten angles', cadence: TrackerCadence.weekly, sortOrder: 9, angleNames: ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']);

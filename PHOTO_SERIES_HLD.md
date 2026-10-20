@@ -175,7 +175,7 @@ Each file is `nonce (12 B) ‖ ciphertext ‖ GCM tag`, so a blob stands alone w
 
 ### 7.1 Grid
 
-- Newest first, grouped by period. Each tile is one check-in, showing the first angle that has a photo, with dots for which angles are present, plus the date.
+- Newest first, grouped by month for a daily or weekly series and by year for a monthly one, so a group's tiles fill the row (a group per period held one check-in, BUG-290). A yearly series is one group with no heading: a year holds one check-in, and each tile's date already says which. Each tile is one check-in, showing the first angle that has a photo, with dots for which angles are present, plus the date.
 - **Blur:** thumbnails render through an `ImageFilter.blur` until clicked.
   - The **first click** reveals that tile.
   - A **second click** opens the viewer.

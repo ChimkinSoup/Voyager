@@ -65,6 +65,7 @@ class _PhotoSeriesDialog extends StatefulWidget {
 
 class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
   late final _name = TextEditingController(text: widget.series?.name ?? '');
+  final _nameFocus = FocusNode();
   late var _cadence = widget.series?.cadence ?? TrackerCadence.weekly;
   late final _angles = widget.angles.isEmpty
       ? [_AngleDraft(null, kDefaultPhotoAngleName)]
@@ -79,6 +80,7 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _nameFocus.dispose();
     for (final angle in _angles) {
       angle.controller.dispose();
     }
@@ -89,6 +91,8 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
     final name = _name.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'Give the series a name.');
+      // The field's own submit (or the click on Create) took focus away.
+      _nameFocus.requestFocus();
       return;
     }
     Navigator.pop<PhotoSeriesForm>(context, (
@@ -233,6 +237,7 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
             children: [
               VoyagerTextField(
                 controller: _name,
+                focusNode: _nameFocus,
                 autofocus: !editing,
                 decoration: const InputDecoration(
                   labelText: 'Name',

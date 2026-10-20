@@ -1,0 +1,1 @@
+void w(Element x) { if (x is StatefulElement && x.state is ScrollableState) { final p = (x.state as ScrollableState).position; if (p.axis == Axis.horizontal) { p.jumpTo(p.maxScrollExtent); debugPrint('FV49STRIP ' + p.maxScrollExtent.toString()); } } x.visitChildren(w); } WidgetsBinding.instance.rootElement!.visitChildren(w);

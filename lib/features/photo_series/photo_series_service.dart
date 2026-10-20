@@ -214,11 +214,20 @@ class PhotoSeriesService {
         updatedAt: now,
       );
     }
+    // Every photo sealed before any is stored: one that can't be read
+    // would otherwise strand the others' blobs. Sealed side by side: each
+    // decodes in its own isolate.
+    final sealed = await Future.wait([
+      for (final MapEntry(key: angleId, value: bytes) in photos.entries)
+        _media
+            .seal(bytes, key: session.key, vaultId: session.vaultId)
+            .then((image) => (angleId, image)),
+    ]);
     final images = <PhotoCheckInImage>[];
     final angles = <PhotoSeriesAngle>[];
-    for (final MapEntry(key: angleId, value: bytes) in photos.entries) {
-      final (image, angle) = await _ingest(session, checkIn.id, angleId, bytes);
-      images.add(image);
+    for (final (angleId, image) in sealed) {
+      final (row, angle) = await _store(checkIn.id, angleId, image);
+      images.add(row);
       if (angle != null) angles.add(angle);
     }
     await _repository.saveAll(
@@ -381,12 +390,18 @@ class PhotoSeriesService {
     String checkInId,
     String angleId,
     Uint8List bytes,
+  ) async => _store(
+    checkInId,
+    angleId,
+    await _media.seal(bytes, key: session.key, vaultId: session.vaultId),
+  );
+
+  Future<(PhotoCheckInImage, PhotoSeriesAngle?)> _store(
+    String checkInId,
+    String angleId,
+    SealedVaultImage sealed,
   ) async {
-    final blob = await _media.ingest(
-      bytes,
-      key: session.key,
-      vaultId: session.vaultId,
-    );
+    final blob = await _media.store(sealed);
     final now = utcNow();
     final image = PhotoCheckInImage(
       id: newId(),

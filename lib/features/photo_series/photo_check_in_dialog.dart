@@ -188,6 +188,12 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
   @override
   void initState() {
     super.initState();
+    // The pop guard follows the note: one typed is asked about too.
+    var noted = false;
+    _note.addListener(() {
+      final now = _note.text.trim().isNotEmpty;
+      if (now != noted) setState(() => noted = now);
+    });
     if (widget.captured case final captured?) {
       for (final MapEntry(:key, :value) in captured.entries) {
         // Checked as a file, paste or drop is: one refused shows as skipped,
@@ -285,18 +291,22 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     }
   }
 
-  /// On Android the photos are the camera's, which can't be picked again.
-  bool get _asksToDiscard => photoCaptureSupported && _picked.isNotEmpty;
+  /// Photos picked can't always be picked again — the camera's, or a paste
+  /// once the clipboard has moved on — and a note typed is gone for good.
+  bool get _asksToDiscard => _picked.isNotEmpty || _note.text.trim().isNotEmpty;
 
-  /// Cancel and the back gesture: asks first when there are photos to lose.
+  /// Cancel, Esc and the back gesture: asks first when there is something
+  /// to lose.
   Future<void> _cancel() async {
     // Too late to discard: the save goes through either way.
     if (_saving) return;
     if (_asksToDiscard &&
         !await showConfirmDialog(
           context,
-          title: 'Discard photos?',
-          message: 'The photos taken so far are not kept.',
+          title: _replacing ? 'Discard photo?' : 'Discard check-in?',
+          message: _replacing
+              ? 'The photo picked is not kept.'
+              : 'Its photos and note are not kept.',
           confirmLabel: 'Discard',
         )) {
       return;
@@ -633,6 +643,8 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
                                 null => Center(
                                   child: Text(
                                     'Skipped',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: theme.textTheme.bodySmall,
                                   ),
                                 ),

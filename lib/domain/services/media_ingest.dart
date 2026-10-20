@@ -242,7 +242,13 @@ img.Image _decode(MediaIngestRequest request) {
       numChannels: 4,
     );
   }
-  final decoded = img.decodeImage(request.bytes!);
+  img.Image? decoded;
+  try {
+    decoded = img.decodeImage(request.bytes!);
+  } catch (_) {
+    // A truncated file can make the decoder throw (a RangeError past its
+    // end) rather than return null.
+  }
   if (decoded == null) {
     throw const MediaIngestException('That image could not be read.');
   }

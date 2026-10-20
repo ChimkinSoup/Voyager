@@ -86,19 +86,33 @@ class VaultMediaService extends ChangeNotifier {
     Uint8List bytes, {
     required SecretKey key,
     required String vaultId,
+  }) async => store(await seal(bytes, key: key, vaultId: vaultId));
+
+  /// [ingest]'s first half, which writes nothing: everything that can refuse
+  /// an image. Several photos saved together are sealed before any is
+  /// [store]d, so a bad one leaves nothing behind.
+  Future<SealedVaultImage> seal(
+    Uint8List bytes, {
+    required SecretKey key,
+    required String vaultId,
   }) async {
     final sniffed = validateIngestInput(bytes);
     final request = sniffed == SniffedImageFormat.heic
         ? await MediaService.decodeHeic(bytes)
         : MediaIngestRequest.encoded(bytes);
     final plain = await Isolate.run(() => _ingestWithThumb(request));
-    final sealed = await SecureVault.encryptBytes(key, vaultId, plain.bytes);
-    final sealedThumb = await SecureVault.encryptBytes(
-      key,
-      vaultId,
-      plain.thumb,
+    return (
+      vaultId: vaultId,
+      sealed: await SecureVault.encryptBytes(key, vaultId, plain.bytes),
+      sealedThumb: await SecureVault.encryptBytes(key, vaultId, plain.thumb),
+      width: plain.width,
+      height: plain.height,
     );
+  }
 
+  /// [ingest]'s second half: writes [image]'s files and its row.
+  Future<VaultBlob> store(SealedVaultImage image) async {
+    final (:vaultId, :sealed, :sealedThumb, :width, :height) = image;
     final id = newId();
     _ingested.add(id);
     await _fileStore.write(id, sealed, thumb: false);
@@ -108,8 +122,8 @@ class VaultMediaService extends ChangeNotifier {
     final blob = VaultBlob(
       id: id,
       vaultId: vaultId,
-      width: plain.width,
-      height: plain.height,
+      width: width,
+      height: height,
       byteSize: sealed.length,
       thumbByteSize: sealedThumb.length,
       uploadState: uploads
@@ -482,6 +496,15 @@ class VaultMediaService extends ChangeNotifier {
 }
 
 const _directions = ['up', 'thumb', 'full'];
+
+/// An image [VaultMediaService.seal]ed, not yet stored.
+typedef SealedVaultImage = ({
+  String vaultId,
+  Uint8List sealed,
+  Uint8List sealedThumb,
+  int width,
+  int height,
+});
 
 /// [ingestImageIsolate], plus the thumbnail from the same decoded pixels.
 ({Uint8List bytes, Uint8List thumb, int width, int height}) _ingestWithThumb(

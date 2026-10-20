@@ -359,17 +359,24 @@ class PhotoPeriodBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = done ? scheme.primary : scheme.tertiary;
+    final theme = Theme.of(context);
+    final color = done ? theme.colorScheme.primary : theme.colorScheme.tertiary;
+    final fill = color.withValues(alpha: 0.14);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
+        color: fill,
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       child: Text(
         done ? 'Done' : 'Due',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: themedLabelInk(
+            theme,
+            color,
+            background: Color.alphaBlend(fill, theme.scaffoldBackgroundColor),
+          ),
+        ),
       ),
     );
   }
@@ -466,6 +473,8 @@ class _PhotoVaultUnlockCardState extends ConsumerState<PhotoVaultUnlockCard> {
       _busy = false;
       _error = error;
     });
+    // For the retry: the field's own submit took focus away.
+    if (error != null) widget.focusNode?.requestFocus();
   }
 
   @override

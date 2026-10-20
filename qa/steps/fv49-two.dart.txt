@@ -1,0 +1,2 @@
+final svc = c.read(photoSeriesServiceProvider);
+await svc.createSeries(name: 'FV49 Two angles', cadence: TrackerCadence.weekly, sortOrder: 1, angleNames: ['Front', 'Back']);

@@ -1536,6 +1536,21 @@ Keep this table and each phase's **Status** line in sync.
 - **Third pass (2026-10-15, qa-092):** BUG-281's remaining cost: one full entry read per arrival instead of three, ids-only read for the id set, tracker values per day, and (debug builds) no trash or recent-list build from invalidating unread providers. Test: `live_sync_narrow_reload_test.dart`. Profile build, 240 at 1/s into 687 entries: row re-reads 3.6 ms per arrival (was 6.65), tracker values 2.3 ms (was 4.9), UI p90 0.52 ms, no frame over 16.7 ms. Full suite 4,943 passed, 16 skipped. Both instances ended `SIGNED-OUT`.
 - **Not covered:** BUG-281's one remaining full read per arrival still grows with the account (smaller, not removed).
 
+### FV-49 — BUG-284 … BUG-286, BUG-288 … BUG-292 (Photos fix pass; BUG-287 and BUG-293 skipped)
+- **Change (2026-10-20, uncommitted, on `91d6cf7`):** BUG-284: the series dialog refocuses Name after a rejected submit. BUG-285: the unlock card refocuses the password field after a refused unlock. BUG-286: the check-in dialog asks before discarding picked photos or a typed note on every platform. BUG-288: the strip's jump repeats until the scroll holds, then reveals the tile. BUG-289: a decoder that throws maps to "That image could not be read."; `createCheckIn` seals every photo before storing any (`VaultMediaService.seal` / `store`). BUG-290: the grid groups by month (daily, weekly) or year (monthly, yearly); HLD §7.1 changed. BUG-291: "Skipped" one line; the tile's dots wrap below the date. BUG-292: badge text through `themedLabelInk`.
+- **Tests:** `photo_series_page_test.dart` "Phase 28A" group (9; 8 fail without the changes). Full suite 5,183 passed, 16 skipped, 0 failed.
+- **Flows (new account qa-104 on `qa`, vault password `fv49vault`, seeded with `p28-seed.dart.txt`):**
+  - [x] BUG-284: empty Enter and empty Create keep the caret in Name; the name typed next goes in.
+  - [x] BUG-285: a wrong password keeps the caret in the cleared field; the retry unlocks with no click.
+  - [x] BUG-286: Esc with a photo, Esc from inside the note (with and without a photo), Cancel → Discard; empty check-in closes at once; nothing saved.
+  - [x] BUG-288: monthly Oct 2023 / Nov 2023 / Jan 2025 / Jul 2026 and the daily series' oldest mark all bring their tile on screen.
+  - [x] BUG-289: truncated JPEG → "That image could not be read.", nothing written; a good photo then saves.
+  - [x] BUG-290: daily and weekly grids by month, 8 tiles a row; monthly by year.
+  - [x] BUG-291: 10 angles: "Ski…" one line; tile date one line, dots below.
+  - [x] BUG-292: Light badges 5.33:1 (list), 4.92:1 (detail).
+- **Result (2026-10-20):** 8 of 8 pass. No exceptions or overflows in the run log; the profile's `voyager_errors.log` holds only its start line. Outbox 0 at the end; profile `qa` ended `SIGNED-OUT`.
+- **Not covered:** BUG-286's scrim click (widget test only); BUG-289's kill during the store step; the strip's own scrolling (bg input can't scroll it, so the daily strip was moved by eval).
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.
