@@ -1,0 +1,4 @@
+final repo = c.read(photoSeriesRepositoryProvider);
+final blob = (await repo.listBlobs()).firstWhere((b) => b.hasLocalBytes);
+await repo.updateBlobTransferState(blob.id, uploadState: MediaUploadState.failed, failureReason: '@TAG@');
+debugPrint('FV51PARK ' + blob.id);

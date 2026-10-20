@@ -22,6 +22,7 @@ import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/sync/note_sync.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
+import 'package:voyager/core/sync/photo_series_settle.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
@@ -3068,41 +3069,62 @@ class RemoteSyncService {
   Future<bool> pullPhotoSeries({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
-  }) => _pullCollection(
-    FirestoreCollections.photoSeries,
-    onlyFirestoreDocumentIds: documentIds,
-    documentData: documentData,
-    resolveCrdt: false,
-    apply: (id, data, {required fromCrdt}) async {
-      final local = await _photoSeriesRepository.getSeries(id);
-      await _photoSeriesRepository.upsertSeries(
-        mergePhotoSeriesFromRemote(data, id, local: local),
-        recordLocalActivity: false,
-      );
-    },
-  );
+  }) async {
+    final pulled = <String>{};
+    final changed = await _pullCollection(
+      FirestoreCollections.photoSeries,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _photoSeriesRepository.getSeries(id);
+        await _photoSeriesRepository.upsertSeries(
+          mergePhotoSeriesFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+        pulled.add(id);
+      },
+    );
+    // A series removed elsewhere takes an angle put back here before its
+    // removal was heard of.
+    if (changed) {
+      await settlePhotoSeries(_photoSeriesRepository, seriesIds: pulled);
+    }
+    return changed;
+  }
 
   Future<bool> pullPhotoSeriesAngles({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
-  }) => _pullCollection(
-    FirestoreCollections.photoSeriesAngles,
-    onlyFirestoreDocumentIds: documentIds,
-    documentData: documentData,
-    resolveCrdt: false,
-    apply: (id, data, {required fromCrdt}) async {
-      final local = await _photoSeriesRepository.getAngle(id);
-      await _photoSeriesRepository.upsertAngle(
-        mergePhotoSeriesAngleFromRemote(data, id, local: local),
-        recordLocalActivity: false,
-      );
-    },
-  );
+  }) async {
+    final pulled = <String>{};
+    final changed = await _pullCollection(
+      FirestoreCollections.photoSeriesAngles,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _photoSeriesRepository.getAngle(id);
+        await _photoSeriesRepository.upsertAngle(
+          mergePhotoSeriesAngleFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+        pulled.add(id);
+      },
+    );
+    // Two devices' removals can leave a series with no angle, or a photo
+    // saved elsewhere on an angle removed here (BUG-307, BUG-308).
+    if (changed) {
+      await settlePhotoSeries(_photoSeriesRepository, angleIds: pulled);
+    }
+    return changed;
+  }
 
   Future<bool> pullPhotoCheckIns({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
   }) async {
+    final pulled = <String>{};
     final changed = await _pullCollection(
       FirestoreCollections.photoCheckIns,
       onlyFirestoreDocumentIds: documentIds,
@@ -3114,8 +3136,15 @@ class RemoteSyncService {
           mergePhotoCheckInFromRemote(data, id, local: local),
           recordLocalActivity: false,
         );
+        pulled.add(id);
       },
     );
+    // An edit from elsewhere can revive a check-in deleted here with its
+    // photos (BUG-311), and a delete take photos put back here before it
+    // was heard of.
+    if (changed) {
+      await settlePhotoSeries(_photoSeriesRepository, checkInIds: pulled);
+    }
     // A note sealed under a vault reset elsewhere, as [pullVaultBlobs].
     final retired = changed
         ? await retireVaultBlobs(
@@ -3130,6 +3159,8 @@ class RemoteSyncService {
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
   }) async {
+    final checkInIds = <String>{};
+    final newImageIds = <String>{};
     final changed = await _pullCollection(
       FirestoreCollections.photoCheckInImages,
       onlyFirestoreDocumentIds: documentIds,
@@ -3137,12 +3168,24 @@ class RemoteSyncService {
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _photoSeriesRepository.getImage(id);
+        final image = mergePhotoCheckInImageFromRemote(data, id, local: local);
         await _photoSeriesRepository.upsertImage(
-          mergePhotoCheckInImageFromRemote(data, id, local: local),
+          image,
           recordLocalActivity: false,
         );
+        checkInIds.add(image.checkInId);
+        if (local == null) newImageIds.add(id);
       },
     );
+    // Photos two devices saved at once, each sound on its own (BUG-306,
+    // BUG-307, BUG-311).
+    if (changed) {
+      await settlePhotoSeries(
+        _photoSeriesRepository,
+        imageCheckInIds: documentIds == null ? null : checkInIds,
+        newImageIds: newImageIds,
+      );
+    }
     // An image showing a blob already retired, as [pullVaultBlobs]: on a
     // fresh pull the images land last, after the blobs' retire has run.
     final retired = changed

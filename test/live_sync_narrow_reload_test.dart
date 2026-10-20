@@ -13,6 +13,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 import 'support/counting_journal_repository.dart';
@@ -85,6 +86,50 @@ void main() {
       expect(todoReloads, 0);
     },
   );
+
+  // BUG-312: Photo Series' pages read a stream of the database, so its rows
+  // arriving reloaded the rest of the app for nothing, twice per check-in.
+  test('a remote photo check-in reloads no data provider of another '
+      'page', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final server = InMemorySyncRepository();
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(server),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      ],
+    );
+    addTearDown(container.dispose);
+    var todoReloads = 0;
+    container.listen(todoListsProvider, (_, _) => todoReloads++);
+    await container.read(todoListsProvider.future);
+    todoReloads = 0;
+    container.read(liveSyncProvider).start();
+
+    final now = DateTime.utc(2026, 10, 20);
+    await server.upsertDocument(
+      FirestoreCollections.photoCheckIns,
+      'check-in-1',
+      photoCheckInToFirestore(
+        PhotoCheckIn(
+          id: 'check-in-1',
+          seriesId: 'series-1',
+          takenOn: now,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
+    expect(
+      await DriftPhotoSeriesRepository(db).getCheckIn('check-in-1'),
+      isNotNull,
+    );
+    expect(todoReloads, 0);
+  });
 
   test('a remote journal entry reads the entries table once, not once per '
       'provider', () async {

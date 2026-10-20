@@ -78,13 +78,16 @@ Future<void> _showUnlock(BuildContext context, WidgetRef ref) async {
   final repository = ref.read(notificationRepositoryProvider);
   // Told here rather than when it happened: the vault is hidden, and anyone
   // could be looking at the screen when a reset arrives.
-  final lost = await repository.lostSecureNoteCount();
+  final lost = (
+    notes: await repository.lostSecureNoteCount(),
+    photos: await repository.lostVaultPhotoCount(),
+  );
   if (!context.mounted) return;
   var reset = false;
   await _show(
     context,
     title: 'Unlock',
-    message: lost == 0 ? null : _lostNotesMessage(lost),
+    message: secureVaultLostMessage(lost),
     fields: const [_Field('Password')],
     confirmLabel: 'Unlock',
     submit: (values) => unlockSecureVault(ref, values[0]),
@@ -103,8 +106,11 @@ Future<String?> unlockSecureVault(WidgetRef ref, String password) async {
   final key = await service.unlock(password);
   if (key == null) return 'Wrong password.';
   final header = await service.localHeader();
-  ref.read(secureVaultSessionProvider.notifier).unlock(key, header!.vaultId);
+  // Before the unlock: it can take away the widget [ref] belongs to.
   await repository.setLostSecureNoteCount(0);
+  await repository.setLostVaultPhotoCount(0);
+  ref.invalidate(secureVaultLostProvider);
+  ref.read(secureVaultSessionProvider.notifier).unlock(key, header!.vaultId);
   return null;
 }
 
@@ -130,7 +136,10 @@ Future<void> showSecureVaultResetDialog(BuildContext context, WidgetRef ref) {
       final error = _checkNewPassword(values[1], values[2]);
       if (error != null) return error;
       final key = await service.reset(values[1]);
-      await ref.read(notificationRepositoryProvider).setLostSecureNoteCount(0);
+      final repository = ref.read(notificationRepositoryProvider);
+      await repository.setLostSecureNoteCount(0);
+      await repository.setLostVaultPhotoCount(0);
+      ref.invalidate(secureVaultLostProvider);
       final header = await service.localHeader();
       ref
           .read(secureVaultSessionProvider.notifier)
@@ -142,10 +151,31 @@ Future<void> showSecureVaultResetDialog(BuildContext context, WidgetRef ref) {
   );
 }
 
-String _lostNotesMessage(int count) =>
-    'The vault was reset on another device, so '
-    '${count == 1 ? '1 note' : '$count notes'} made on this device '
-    "${count == 1 ? "wasn't" : "weren't"} kept.";
+/// The notes and photos made on this device that a reset elsewhere left
+/// behind, not yet told to the user. Read again with each header.
+final secureVaultLostProvider = FutureProvider<({int notes, int photos})>((
+  ref,
+) async {
+  ref.watch(secureVaultHeaderProvider);
+  final repository = ref.watch(notificationRepositoryProvider);
+  return (
+    notes: await repository.lostSecureNoteCount(),
+    photos: await repository.lostVaultPhotoCount(),
+  );
+});
+
+/// What the unlock prompts say of [lost]; null when nothing was.
+String? secureVaultLostMessage(({int notes, int photos}) lost) {
+  final (:notes, :photos) = lost;
+  final parts = [
+    if (notes > 0) notes == 1 ? '1 note' : '$notes notes',
+    if (photos > 0) photos == 1 ? '1 photo' : '$photos photos',
+  ];
+  if (parts.isEmpty) return null;
+  return 'The vault was reset on another device, so ${parts.join(' and ')} '
+      'made on this device ${notes + photos == 1 ? "wasn't" : "weren't"} '
+      'kept.';
+}
 
 String? _checkNewPassword(String password, String confirmation) {
   if (password.length < SecureVaultService.minPasswordLength) {

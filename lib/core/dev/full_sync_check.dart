@@ -10,6 +10,8 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 
@@ -65,17 +67,35 @@ class FullSyncCheckReport {
 /// directly: a record the cloud lacks, or holds at a lower version, is a gap.
 ///
 /// Records only the cloud holds are not gaps: the next pull brings them down.
+///
+/// An image's or a vault photo's row can be in the cloud while its files never
+/// reached Storage, so with [media] and [photoSeries] each live one whose
+/// files only this device holds is a gap too, as sign-out's "Discard unsynced
+/// changes?" counts it (BUG-313).
 class FullSyncCheck {
   FullSyncCheck({
     required List<BackupCollection> collections,
     required SyncRepository syncRepository,
+    MediaRepository? media,
+    PhotoSeriesRepository? photoSeries,
   }) : _collections = collections,
-       _syncRepository = syncRepository;
+       _syncRepository = syncRepository,
+       _media = media,
+       _photoSeries = photoSeries;
 
   final List<BackupCollection> _collections;
   final SyncRepository _syncRepository;
+  final MediaRepository? _media;
+  final PhotoSeriesRepository? _photoSeries;
 
   static const _pendingWritesTimeout = Duration(seconds: 30);
+
+  static const _unsent = {
+    MediaUploadState.localOnly,
+    MediaUploadState.pending,
+    MediaUploadState.uploading,
+    MediaUploadState.failed,
+  };
 
   Future<FullSyncCheckReport> run() async {
     final checkedAt = utcNow();
@@ -104,6 +124,38 @@ class FullSyncCheck {
     ]);
     for (final collectionGaps in checked) {
       gaps.addAll(collectionGaps);
+    }
+    // A record already a gap for its row is counted once.
+    final reported = {for (final gap in gaps) (gap.collection, gap.id)};
+    for (final asset
+        in await _media?.listAssetsByUploadState(_unsent) ??
+            const <MediaAsset>[]) {
+      if (!asset.hasLocalBytes ||
+          reported.contains((FirestoreCollections.mediaAssets, asset.id))) {
+        continue;
+      }
+      gaps.add(
+        SyncGap(
+          collection: FirestoreCollections.mediaAssets,
+          id: asset.id,
+          reason: 'file not in Storage (${asset.uploadState.name})',
+        ),
+      );
+    }
+    for (final blob
+        in await _photoSeries?.listBlobsByUploadState(_unsent) ??
+            const <VaultBlob>[]) {
+      if (!blob.hasLocalBytes ||
+          reported.contains((FirestoreCollections.vaultBlobs, blob.id))) {
+        continue;
+      }
+      gaps.add(
+        SyncGap(
+          collection: FirestoreCollections.vaultBlobs,
+          id: blob.id,
+          reason: 'files not in Storage (${blob.uploadState.name})',
+        ),
+      );
     }
 
     return FullSyncCheckReport(

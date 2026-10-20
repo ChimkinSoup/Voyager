@@ -400,6 +400,10 @@ abstract class NotificationRepository {
   Future<int> lostSecureNoteCount();
   Future<void> setLostSecureNoteCount(int count);
 
+  /// [lostSecureNoteCount] for Photo Series' photos (BUG-310).
+  Future<int> lostVaultPhotoCount();
+  Future<void> setLostVaultPhotoCount(int count);
+
   /// Dismissal keys currently recorded (see [NotificationFeedItem.dismissalKey]).
   Future<Set<String>> listDismissals();
 
@@ -783,6 +787,12 @@ abstract class PhotoSeriesRepository {
   });
 
   Future<List<PhotoCheckInImage>> listImages({bool includeDeleted = false});
+
+  /// The images of the check-ins [checkInIds] names, deleted ones too.
+  Future<List<PhotoCheckInImage>> listImagesOf(Set<String> checkInIds);
+
+  /// The images on the angles [angleIds] names, deleted ones too.
+  Future<List<PhotoCheckInImage>> listImagesOn(Set<String> angleIds);
   Future<PhotoCheckInImage?> getImage(String id);
   Future<void> upsertImage(
     PhotoCheckInImage image, {

@@ -26828,6 +26828,18 @@ class $SecureVaultHeaderTableTable extends SecureVaultHeaderTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _lostPhotoCountMeta = const VerificationMeta(
+    'lostPhotoCount',
+  );
+  @override
+  late final GeneratedColumn<int> lostPhotoCount = GeneratedColumn<int>(
+    'lost_photo_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -26835,6 +26847,7 @@ class $SecureVaultHeaderTableTable extends SecureVaultHeaderTable
     headerVersion,
     headerJson,
     lostNoteCount,
+    lostPhotoCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -26887,6 +26900,15 @@ class $SecureVaultHeaderTableTable extends SecureVaultHeaderTable
         ),
       );
     }
+    if (data.containsKey('lost_photo_count')) {
+      context.handle(
+        _lostPhotoCountMeta,
+        lostPhotoCount.isAcceptableOrUnknown(
+          data['lost_photo_count']!,
+          _lostPhotoCountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -26919,6 +26941,10 @@ class $SecureVaultHeaderTableTable extends SecureVaultHeaderTable
         DriftSqlType.int,
         data['${effectivePrefix}lost_note_count'],
       )!,
+      lostPhotoCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lost_photo_count'],
+      )!,
     );
   }
 
@@ -26940,12 +26966,18 @@ class SecureVaultHeaderTableData extends DataClass
   /// Notes made on this device that a reset elsewhere left behind, not yet
   /// told to the user. This device's alone; never synced.
   final int lostNoteCount;
+
+  /// Vault photos made on this device that a reset elsewhere retired before
+  /// they reached Storage, not yet told to the user (BUG-310). This device's
+  /// alone; never synced.
+  final int lostPhotoCount;
   const SecureVaultHeaderTableData({
     required this.id,
     required this.vaultId,
     required this.headerVersion,
     required this.headerJson,
     required this.lostNoteCount,
+    required this.lostPhotoCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -26955,6 +26987,7 @@ class SecureVaultHeaderTableData extends DataClass
     map['header_version'] = Variable<int>(headerVersion);
     map['header_json'] = Variable<String>(headerJson);
     map['lost_note_count'] = Variable<int>(lostNoteCount);
+    map['lost_photo_count'] = Variable<int>(lostPhotoCount);
     return map;
   }
 
@@ -26965,6 +26998,7 @@ class SecureVaultHeaderTableData extends DataClass
       headerVersion: Value(headerVersion),
       headerJson: Value(headerJson),
       lostNoteCount: Value(lostNoteCount),
+      lostPhotoCount: Value(lostPhotoCount),
     );
   }
 
@@ -26979,6 +27013,7 @@ class SecureVaultHeaderTableData extends DataClass
       headerVersion: serializer.fromJson<int>(json['headerVersion']),
       headerJson: serializer.fromJson<String>(json['headerJson']),
       lostNoteCount: serializer.fromJson<int>(json['lostNoteCount']),
+      lostPhotoCount: serializer.fromJson<int>(json['lostPhotoCount']),
     );
   }
   @override
@@ -26990,6 +27025,7 @@ class SecureVaultHeaderTableData extends DataClass
       'headerVersion': serializer.toJson<int>(headerVersion),
       'headerJson': serializer.toJson<String>(headerJson),
       'lostNoteCount': serializer.toJson<int>(lostNoteCount),
+      'lostPhotoCount': serializer.toJson<int>(lostPhotoCount),
     };
   }
 
@@ -26999,12 +27035,14 @@ class SecureVaultHeaderTableData extends DataClass
     int? headerVersion,
     String? headerJson,
     int? lostNoteCount,
+    int? lostPhotoCount,
   }) => SecureVaultHeaderTableData(
     id: id ?? this.id,
     vaultId: vaultId ?? this.vaultId,
     headerVersion: headerVersion ?? this.headerVersion,
     headerJson: headerJson ?? this.headerJson,
     lostNoteCount: lostNoteCount ?? this.lostNoteCount,
+    lostPhotoCount: lostPhotoCount ?? this.lostPhotoCount,
   );
   SecureVaultHeaderTableData copyWithCompanion(
     SecureVaultHeaderTableCompanion data,
@@ -27021,6 +27059,9 @@ class SecureVaultHeaderTableData extends DataClass
       lostNoteCount: data.lostNoteCount.present
           ? data.lostNoteCount.value
           : this.lostNoteCount,
+      lostPhotoCount: data.lostPhotoCount.present
+          ? data.lostPhotoCount.value
+          : this.lostPhotoCount,
     );
   }
 
@@ -27031,14 +27072,21 @@ class SecureVaultHeaderTableData extends DataClass
           ..write('vaultId: $vaultId, ')
           ..write('headerVersion: $headerVersion, ')
           ..write('headerJson: $headerJson, ')
-          ..write('lostNoteCount: $lostNoteCount')
+          ..write('lostNoteCount: $lostNoteCount, ')
+          ..write('lostPhotoCount: $lostPhotoCount')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, vaultId, headerVersion, headerJson, lostNoteCount);
+  int get hashCode => Object.hash(
+    id,
+    vaultId,
+    headerVersion,
+    headerJson,
+    lostNoteCount,
+    lostPhotoCount,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -27047,7 +27095,8 @@ class SecureVaultHeaderTableData extends DataClass
           other.vaultId == this.vaultId &&
           other.headerVersion == this.headerVersion &&
           other.headerJson == this.headerJson &&
-          other.lostNoteCount == this.lostNoteCount);
+          other.lostNoteCount == this.lostNoteCount &&
+          other.lostPhotoCount == this.lostPhotoCount);
 }
 
 class SecureVaultHeaderTableCompanion
@@ -27057,12 +27106,14 @@ class SecureVaultHeaderTableCompanion
   final Value<int> headerVersion;
   final Value<String> headerJson;
   final Value<int> lostNoteCount;
+  final Value<int> lostPhotoCount;
   const SecureVaultHeaderTableCompanion({
     this.id = const Value.absent(),
     this.vaultId = const Value.absent(),
     this.headerVersion = const Value.absent(),
     this.headerJson = const Value.absent(),
     this.lostNoteCount = const Value.absent(),
+    this.lostPhotoCount = const Value.absent(),
   });
   SecureVaultHeaderTableCompanion.insert({
     this.id = const Value.absent(),
@@ -27070,6 +27121,7 @@ class SecureVaultHeaderTableCompanion
     required int headerVersion,
     required String headerJson,
     this.lostNoteCount = const Value.absent(),
+    this.lostPhotoCount = const Value.absent(),
   }) : vaultId = Value(vaultId),
        headerVersion = Value(headerVersion),
        headerJson = Value(headerJson);
@@ -27079,6 +27131,7 @@ class SecureVaultHeaderTableCompanion
     Expression<int>? headerVersion,
     Expression<String>? headerJson,
     Expression<int>? lostNoteCount,
+    Expression<int>? lostPhotoCount,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -27086,6 +27139,7 @@ class SecureVaultHeaderTableCompanion
       if (headerVersion != null) 'header_version': headerVersion,
       if (headerJson != null) 'header_json': headerJson,
       if (lostNoteCount != null) 'lost_note_count': lostNoteCount,
+      if (lostPhotoCount != null) 'lost_photo_count': lostPhotoCount,
     });
   }
 
@@ -27095,6 +27149,7 @@ class SecureVaultHeaderTableCompanion
     Value<int>? headerVersion,
     Value<String>? headerJson,
     Value<int>? lostNoteCount,
+    Value<int>? lostPhotoCount,
   }) {
     return SecureVaultHeaderTableCompanion(
       id: id ?? this.id,
@@ -27102,6 +27157,7 @@ class SecureVaultHeaderTableCompanion
       headerVersion: headerVersion ?? this.headerVersion,
       headerJson: headerJson ?? this.headerJson,
       lostNoteCount: lostNoteCount ?? this.lostNoteCount,
+      lostPhotoCount: lostPhotoCount ?? this.lostPhotoCount,
     );
   }
 
@@ -27123,6 +27179,9 @@ class SecureVaultHeaderTableCompanion
     if (lostNoteCount.present) {
       map['lost_note_count'] = Variable<int>(lostNoteCount.value);
     }
+    if (lostPhotoCount.present) {
+      map['lost_photo_count'] = Variable<int>(lostPhotoCount.value);
+    }
     return map;
   }
 
@@ -27133,7 +27192,8 @@ class SecureVaultHeaderTableCompanion
           ..write('vaultId: $vaultId, ')
           ..write('headerVersion: $headerVersion, ')
           ..write('headerJson: $headerJson, ')
-          ..write('lostNoteCount: $lostNoteCount')
+          ..write('lostNoteCount: $lostNoteCount, ')
+          ..write('lostPhotoCount: $lostPhotoCount')
           ..write(')'))
         .toString();
   }
@@ -68890,6 +68950,7 @@ typedef $$SecureVaultHeaderTableTableCreateCompanionBuilder =
       required int headerVersion,
       required String headerJson,
       Value<int> lostNoteCount,
+      Value<int> lostPhotoCount,
     });
 typedef $$SecureVaultHeaderTableTableUpdateCompanionBuilder =
     SecureVaultHeaderTableCompanion Function({
@@ -68898,6 +68959,7 @@ typedef $$SecureVaultHeaderTableTableUpdateCompanionBuilder =
       Value<int> headerVersion,
       Value<String> headerJson,
       Value<int> lostNoteCount,
+      Value<int> lostPhotoCount,
     });
 
 class $$SecureVaultHeaderTableTableFilterComposer
@@ -68931,6 +68993,11 @@ class $$SecureVaultHeaderTableTableFilterComposer
 
   ColumnFilters<int> get lostNoteCount => $composableBuilder(
     column: $table.lostNoteCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lostPhotoCount => $composableBuilder(
+    column: $table.lostPhotoCount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -68968,6 +69035,11 @@ class $$SecureVaultHeaderTableTableOrderingComposer
     column: $table.lostNoteCount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get lostPhotoCount => $composableBuilder(
+    column: $table.lostPhotoCount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SecureVaultHeaderTableTableAnnotationComposer
@@ -68997,6 +69069,11 @@ class $$SecureVaultHeaderTableTableAnnotationComposer
 
   GeneratedColumn<int> get lostNoteCount => $composableBuilder(
     column: $table.lostNoteCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lostPhotoCount => $composableBuilder(
+    column: $table.lostPhotoCount,
     builder: (column) => column,
   );
 }
@@ -69052,12 +69129,14 @@ class $$SecureVaultHeaderTableTableTableManager
                 Value<int> headerVersion = const Value.absent(),
                 Value<String> headerJson = const Value.absent(),
                 Value<int> lostNoteCount = const Value.absent(),
+                Value<int> lostPhotoCount = const Value.absent(),
               }) => SecureVaultHeaderTableCompanion(
                 id: id,
                 vaultId: vaultId,
                 headerVersion: headerVersion,
                 headerJson: headerJson,
                 lostNoteCount: lostNoteCount,
+                lostPhotoCount: lostPhotoCount,
               ),
           createCompanionCallback:
               ({
@@ -69066,12 +69145,14 @@ class $$SecureVaultHeaderTableTableTableManager
                 required int headerVersion,
                 required String headerJson,
                 Value<int> lostNoteCount = const Value.absent(),
+                Value<int> lostPhotoCount = const Value.absent(),
               }) => SecureVaultHeaderTableCompanion.insert(
                 id: id,
                 vaultId: vaultId,
                 headerVersion: headerVersion,
                 headerJson: headerJson,
                 lostNoteCount: lostNoteCount,
+                lostPhotoCount: lostPhotoCount,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

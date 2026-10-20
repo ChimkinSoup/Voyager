@@ -2012,7 +2012,10 @@ void invalidateAllDataProviders(Ref ref) {
 /// entries from another device (one a second) over a CPU core and a third of
 /// the frame rate, growing with the account (BUG-281). A journal pull writes
 /// entries, revives their journal (BUG-278), and can quarantine a conflict or
-/// tombstone a row the trash lists. Other collections still reload everything.
+/// tombstone a row the trash lists. Photo Series' pages read a stream of the
+/// database, which needs no reload, so its collections reload only the trash,
+/// conflicts and the vault header a reset's retire may have counted under
+/// (BUG-312). Other collections still reload everything.
 ///
 /// Through the container: in a debug build `ref.invalidate` first builds a
 /// provider no one has read, so each change read the whole trash (every
@@ -2027,6 +2030,14 @@ void invalidateProvidersForRemoteChange(Ref ref, String collection) {
       container.invalidate(journalsProvider);
       container.invalidate(syncConflictsProvider);
       container.invalidate(trashItemsProvider);
+    case FirestoreCollections.vaultBlobs ||
+        FirestoreCollections.photoSeries ||
+        FirestoreCollections.photoSeriesAngles ||
+        FirestoreCollections.photoCheckIns ||
+        FirestoreCollections.photoCheckInImages:
+      container.invalidate(syncConflictsProvider);
+      container.invalidate(trashItemsProvider);
+      container.invalidate(secureVaultHeaderProvider);
     default:
       invalidateAllDataProviders(ref);
   }
@@ -2962,6 +2973,8 @@ final fullSyncCheckProvider = Provider<FullSyncCheck>((ref) {
   return FullSyncCheck(
     collections: ref.watch(backupCollectionsProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
+    media: ref.watch(mediaRepositoryProvider),
+    photoSeries: ref.watch(photoSeriesRepositoryProvider),
   );
 });
 

@@ -33,6 +33,7 @@ import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/domain/services/media_ingest.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
+import 'package:voyager/features/notifications/secure_vault_dialogs.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_capture_screen.dart';
 import 'package:voyager/features/photo_series/photo_check_in_dialog.dart';
@@ -1806,6 +1807,183 @@ void main() {
 
       container.read(secureVaultSessionProvider.notifier).lock();
       await tester.pump();
+    });
+  });
+
+  group('MD-18', () {
+    testWidgets('BUG-305: the open viewer takes a new check-in and a '
+        'replaced photo', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: [7]);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.byType(VaultPhoto).first, warnIfMissed: false);
+      await _settle(tester);
+      await tester.tap(find.byType(VaultPhoto).first);
+      await _settle(tester);
+      expect(find.text('1 / 1'), findsOneWidget);
+
+      // As a pull writes them: straight to the database.
+      final repository = container.read(photoSeriesRepositoryProvider);
+      final service = container.read(photoSeriesServiceProvider);
+      final session = container.read(secureVaultSessionProvider)!;
+      late PhotoCheckInImage replacement;
+      await tester.runAsync(() async {
+        final angle = (await repository.listAngles()).single;
+        final checkIn = (await repository.listCheckIns()).single;
+        await service.createCheckIn(
+          session: session,
+          series: series,
+          takenOn: DateTime.now(),
+          photos: {angle.id: _jpeg()},
+        );
+        await service.setPhoto(
+          session: session,
+          checkIn: checkIn,
+          angleId: angle.id,
+          bytes: _jpeg(),
+        );
+        replacement = (await repository.listImages()).firstWhere(
+          (image) => image.checkInId == checkIn.id,
+        );
+      });
+      await _drain(tester);
+
+      expect(find.text('1 / 2'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is VaultPhoto && !w.thumb && w.blobId == replacement.blobId,
+        ),
+        findsOneWidget,
+      );
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('BUG-307: an angle removed elsewhere leaves the open '
+        'check-in, with its photo', (tester) async {
+      final file = File(
+        '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+      )..writeAsBytesSync(_jpeg());
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+      FilePicker.platform = _FakeFilePicker(file.path);
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final repository = container.read(photoSeriesRepositoryProvider);
+      late PhotoSeries series;
+      await tester.runAsync(() async {
+        series = await container
+            .read(photoSeriesServiceProvider)
+            .createSeries(
+              name: 'Progress',
+              cadence: TrackerCadence.weekly,
+              sortOrder: 0,
+              angleNames: ['Front', 'Side'],
+            );
+      });
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await tester.tap(find.text('Choose file…'));
+      await _drain(tester);
+      await tester.tap(find.text('Next'));
+      await _settle(tester);
+      expect(find.text('Side · 2 of 2'), findsOneWidget);
+
+      // As a pull writes it: straight to the database.
+      await tester.runAsync(() async {
+        final front = (await repository.listAngles()).firstWhere(
+          (a) => a.name == 'Front',
+        );
+        final now = DateTime.now().toUtc();
+        await repository.upsertAngle(
+          front.copyWith(deletedAt: now, updatedAt: now),
+        );
+      });
+      await _drain(tester);
+
+      expect(find.text('Side · 1 of 1'), findsOneWidget);
+      expect(find.text('Front was removed on another device.'), findsOneWidget);
+      // Front's photo went with it: nothing left to save.
+      expect(find.text('Skip'), findsOneWidget);
+      await tester.tap(find.text('Skip'));
+      await _settle(tester);
+      expect(
+        tester
+            .widget<GlassButton>(find.widgetWithText(GlassButton, 'Save'))
+            .onPressed,
+        isNull,
+      );
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('BUG-307: the series deleted elsewhere empties the open '
+        'check-in, and says so', (tester) async {
+      final file = File(
+        '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+      )..writeAsBytesSync(_jpeg());
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+      FilePicker.platform = _FakeFilePicker(file.path);
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: []);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await tester.tap(find.text('Choose file…'));
+      await _drain(tester);
+
+      await tester.runAsync(
+        () => container.read(photoSeriesServiceProvider).deleteSeries(series),
+      );
+      await _drain(tester);
+
+      expect(
+        find.text('This series was deleted on another device.'),
+        findsOneWidget,
+      );
+      expect(find.text('Choose another…'), findsNothing);
+      expect(
+        tester
+            .widget<GlassButton>(find.widgetWithText(GlassButton, 'Save'))
+            .onPressed,
+        isNull,
+      );
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('BUG-310: the unlock card tells of photos a reset elsewhere '
+        "dropped, and unlocking there clears it", (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: [7]);
+      final notes = container.read(notificationRepositoryProvider);
+      await tester.runAsync(() => notes.setLostVaultPhotoCount(2));
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+      await tester.runAsync(
+        () => container.read(secureVaultLostProvider.future),
+      );
+      await _settle(tester);
+
+      const told =
+          "The vault was reset on another device, so 2 photos made on this "
+          "device weren't kept.";
+      expect(find.text(told), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), _password);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await _drain(tester);
+      expect(await tester.runAsync(notes.lostVaultPhotoCount), 0);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _drain(tester);
+      expect(find.text(told), findsNothing);
     });
   });
 }

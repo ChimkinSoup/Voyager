@@ -18,6 +18,8 @@ import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 
 List<BackupCollection> _collectionsFor(AppDatabase db) =>
@@ -143,14 +145,17 @@ void main() {
     expect(report.gaps.single.reason, 'local v3, cloud v2');
   });
 
-  test('cloud-only records and never-uploaded tombstones are not gaps', () async {
-    await upload(tracker('cloud-only'));
-    await trackers.upsertTracker(tracker('gone', deletedAt: now));
+  test(
+    'cloud-only records and never-uploaded tombstones are not gaps',
+    () async {
+      await upload(tracker('cloud-only'));
+      await trackers.upsertTracker(tracker('gone', deletedAt: now));
 
-    final report = await check.run();
+      final report = await check.run();
 
-    expect(report.safeToWipe, isTrue);
-  });
+      expect(report.safeToWipe, isTrue);
+    },
+  );
 
   test('untouched seeds are not gaps, edited ones are', () async {
     final jobs = DriftJobRepository(db);
@@ -238,6 +243,94 @@ void main() {
 
     expect(report.unreadable.keys, [FirestoreCollections.trackers]);
     expect(report.safeToWipe, isFalse);
+  });
+
+  // BUG-313: the blob's row reached the cloud, its files never did.
+  test('a vault photo whose files never reached Storage is a gap', () async {
+    final photos = DriftPhotoSeriesRepository(db);
+    final withPhotos = FullSyncCheck(
+      collections: collections,
+      syncRepository: server,
+      photoSeries: photos,
+    );
+    VaultBlob blob(String id, MediaUploadState state) => VaultBlob(
+      id: id,
+      createdAt: now,
+      updatedAt: now,
+      vaultId: 'v1',
+      width: 4,
+      height: 3,
+      byteSize: 10,
+      thumbByteSize: 5,
+      uploadState: state,
+    );
+    for (final b in [
+      blob('parked', MediaUploadState.failed),
+      blob('sent', MediaUploadState.uploaded),
+    ]) {
+      await photos.upsertBlob(b);
+      await server.upsertDocument(
+        FirestoreCollections.vaultBlobs,
+        b.id,
+        vaultBlobToFirestore(b),
+      );
+    }
+
+    final report = await withPhotos.run();
+
+    expect(report.safeToWipe, isFalse);
+    expect(report.gaps.single.collection, FirestoreCollections.vaultBlobs);
+    expect(report.gaps.single.id, 'parked');
+    expect(report.gaps.single.reason, 'files not in Storage (failed)');
+  });
+
+  test('an image whose file never reached Storage is a gap', () async {
+    final media = DriftMediaRepository(db);
+    final withMedia = FullSyncCheck(
+      collections: collections,
+      syncRepository: server,
+      media: media,
+    );
+    MediaAsset asset(
+      String id,
+      MediaUploadState state, {
+      MediaDownloadState download = MediaDownloadState.present,
+    }) => MediaAsset(
+      id: id,
+      createdAt: now,
+      updatedAt: now,
+      contentHash: 'hash-$id',
+      byteSize: 10,
+      mimeType: 'image/png',
+      width: 4,
+      height: 3,
+      uploadState: state,
+      downloadState: download,
+    );
+    for (final a in [
+      asset('parked', MediaUploadState.failed),
+      asset('sent', MediaUploadState.uploaded),
+      // Another device's, which that device has yet to send.
+      asset(
+        'elsewhere',
+        MediaUploadState.localOnly,
+        download: MediaDownloadState.missing,
+      ),
+    ]) {
+      await media.upsertAsset(a);
+      await server.upsertDocument(
+        FirestoreCollections.mediaAssets,
+        a.id,
+        mediaAssetToFirestore(a),
+      );
+    }
+
+    final report = await withMedia.run();
+
+    expect(report.safeToWipe, isFalse);
+    expect(report.gaps.single.collection, FirestoreCollections.mediaAssets);
+    expect(report.gaps.single.id, 'parked');
+    expect(report.gaps.single.reason, 'file not in Storage (failed)');
   });
 
   test('every synced collection is checked', () async {

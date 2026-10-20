@@ -331,6 +331,15 @@ All of this is computed from plain fields, so it works while locked.
   - Deleting a series cascades to its angles, check-ins and images with one `deletedAt`, and restores together.
   - Deleting a check-in shows the undo toast.
   - The 30-day purge deletes blobs locally and in Storage.
+- **Two devices at once:** the merge decides each row on its own, so two saves that are each sound can break a rule together. After a pull, `settlePhotoSeries` (`lib/core/sync/photo_series_settle.dart`) puts the rows right. Every device gets the same result from the same rows, so they agree without coordinating:
+  - A live series left with no live angle (each device removed a different one) gets back the angle removed last, with the photos removed with it (BUG-308).
+  - A live angle under a deleted series is deleted under the series' `deletedAt`. This covers an angle added while another device deleted the series, and one brought back by the rule above before the series' delete arrived.
+  - A live photo on a removed angle (saved into it while another device removed it) is deleted under the angle's `deletedAt`, so restoring the angle brings it back (BUG-307).
+  - Two live photos of one check-in's angle (both devices replaced it) keep the newer (BUG-306).
+  - A live check-in left with no live photo (deleted on one device, edited on another) gets back the photos deleted last, so it stays whole, as the later save had it (BUG-311).
+  - A live photo under a deleted check-in is deleted under the check-in's `deletedAt`. This covers one brought back by the rule above before the check-in's delete arrived.
+
+  Each collection has its own live listener, so a delete's or a restore's rows can land in any order. A live pull therefore settles only what it brought: the series, angles or check-ins it pulled, or the check-ins of the photos it pulled. A full pull's photo pass, which runs last, settles everything. The two "under a deleted parent" rules run only in the parent's own pull (`pullPhotoSeries`, `pullPhotoCheckIns`), never from a child's pull or the full pass. A trash restore can bring a child back before its parent, and deleting it again then would undo the restore. For the same reason, in a live pull a photo on a removed angle is deleted only when the photo is new to this device or its angle was just pulled. A delete can still flicker for a moment: one device briefly brings a row back and pushes that, then deletes it again once the parent's delete lands.
 - **Backups:** add every table plus the ciphertext blobs to `buildBackupCollections`, as ciphertext only, like Secure Notes. Exporting decrypted photos is part of the later export work.
 - **Account switch / sign-out:** the new tables and the vault media folder are covered by the existing per-account teardown. Check this alongside the Secure Notes tables.
 - **Search / On This Day:** they read only journal entries and dreams today, so leaving photo series out needs no code. A test pins this (§16).

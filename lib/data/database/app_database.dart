@@ -590,6 +590,11 @@ class SecureVaultHeaderTable extends Table {
   /// told to the user. This device's alone; never synced.
   IntColumn get lostNoteCount => integer().withDefault(const Constant(0))();
 
+  /// Vault photos made on this device that a reset elsewhere retired before
+  /// they reached Storage, not yet told to the user (BUG-310). This device's
+  /// alone; never synced.
+  IntColumn get lostPhotoCount => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -2215,7 +2220,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 160;
+  int get schemaVersion => 161;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3958,6 +3963,14 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.dayStartHour,
+        );
+      }
+      if (from < 161) {
+        await _addColumnIfNotExists(
+          migrator,
+          'secure_vault_header_table',
+          secureVaultHeaderTable,
+          secureVaultHeaderTable.lostPhotoCount,
         );
       }
     },

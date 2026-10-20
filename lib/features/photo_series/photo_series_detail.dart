@@ -415,8 +415,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
                                   series: series,
                                   angles: angles,
                                   entry: entry,
-                                  onOpen: () =>
-                                      _openViewer(groups, entry, angles),
+                                  onOpen: () => _openViewer(series, entry),
                                   onAlign: (angle, image) =>
                                       _align(entries, angle, image),
                                   referenceImageIds: referenceImageIds,
@@ -448,20 +447,28 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     );
   }
 
-  void _openViewer(
-    List<_GridGroup> groups,
-    PhotoViewerEntry entry,
-    List<PhotoSeriesAngle> angles,
-  ) {
-    // Oldest first, so right is later.
-    final entries = [
-      for (final group in groups.reversed) ...group.entries.reversed,
-    ];
+  void _openViewer(PhotoSeries series, PhotoViewerEntry entry) {
     showPhotoSeriesViewer(
       context,
-      entries: entries,
-      angles: angles,
-      initialIndex: entries.indexWhere((e) => e.checkIn.id == entry.checkIn.id),
+      initialCheckInId: entry.checkIn.id,
+      contents: (snapshot) {
+        final current = snapshot.series
+            .where((s) => s.id == series.id)
+            .firstOrNull;
+        if (current == null) return (entries: const [], angles: const []);
+        final angles = [
+          for (final angle in snapshot.angles)
+            if (angle.seriesId == current.id) angle,
+        ];
+        // Oldest first, so right is later.
+        return (
+          entries: [
+            for (final group in _groups(current, snapshot, angles).reversed)
+              ...group.entries.reversed,
+          ],
+          angles: angles,
+        );
+      },
     );
   }
 }

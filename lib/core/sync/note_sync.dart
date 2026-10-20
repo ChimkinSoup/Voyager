@@ -4,6 +4,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -201,6 +202,11 @@ Future<int> retireSecureNotes(NotificationRepository repo) async {
 /// again, so the trash mustn't offer them back (BUG-296). Ones an earlier
 /// pass or a delete only tombstoned are erased as well. Returns how many rows
 /// it changed.
+///
+/// A photo whose files only this device held was made here without the reset
+/// in view, and is lost: counted, as [retireSecureNotes] counts notes, for
+/// the next unlock to tell the user (BUG-310). Parked under
+/// [kRetiredVaultBlobReason], so it is counted once and never sent.
 Future<int> retireVaultBlobs(
   NotificationRepository notes,
   PhotoSeriesRepository photos,
@@ -212,9 +218,20 @@ Future<int> retireVaultBlobs(
   final now = utcNow();
   var changed = 0;
   final retiredBlobs = <String>{};
+  var lostPhotos = 0;
   for (final blob in await photos.listBlobs(includeDeleted: true)) {
     if (!retired.contains(blob.vaultId)) continue;
     retiredBlobs.add(blob.id);
+    if (blob.hasLocalBytes &&
+        blob.uploadState != MediaUploadState.uploaded &&
+        blob.failureReason != kRetiredVaultBlobReason) {
+      await photos.updateBlobTransferState(
+        blob.id,
+        uploadState: MediaUploadState.failed,
+        failureReason: kRetiredVaultBlobReason,
+      );
+      lostPhotos++;
+    }
     if (blob.deletedAt != null) continue;
     await photos.upsertBlob(blob.copyWith(deletedAt: now, bumpVersion: true));
     changed++;
@@ -264,8 +281,17 @@ Future<int> retireVaultBlobs(
   if (images.isNotEmpty || checkIns.isNotEmpty) {
     await photos.saveAll(checkIns: checkIns, images: images);
   }
+  if (lostPhotos > 0) {
+    await notes.setLostVaultPhotoCount(
+      await notes.lostVaultPhotoCount() + lostPhotos,
+    );
+  }
   return changed + images.length + checkIns.length;
 }
+
+/// Why a vault photo [retireVaultBlobs] found unsent will never be sent.
+const kRetiredVaultBlobReason =
+    'Sealed under a vault reset on another device.';
 
 /// Applies the server's copy of note [id] — a pull's half of the conflict
 /// check (see [resolveNoteSync]).

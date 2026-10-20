@@ -1,0 +1,5 @@
+final repo = c.read(photoSeriesRepositoryProvider);
+final blob = (await repo.listBlobs()).firstWhere((b) => b.id == "b0de5d04-35fa-4420-a5af-420ced97b10c");
+await repo.updateBlobTransferState(blob.id, uploadState: MediaUploadState.pending, clearFailureReason: true);
+debugPrint('FV51UNPARK ' + blob.id);
+await c.read(vaultMediaServiceProvider).drainUploads();

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -176,13 +177,17 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
   final _picked = <String, _Picked>{};
   final _note = TextEditingController();
 
+  /// [_CheckInDialog.angles] still live: one removed on another device while
+  /// this is open leaves, with its photo, rather than saving into nothing.
+  late var _angles = widget.angles;
+
   /// The step on screen: an angle's index, or [_reviewStep].
   var _step = 0;
   DateTime? _date;
   String? _error;
   bool _saving = false;
 
-  int get _reviewStep => widget.angles.length;
+  int get _reviewStep => _angles.length;
   bool get _replacing => widget.checkIn != null;
 
   @override
@@ -224,12 +229,47 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     if (_date case final date?) return date;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    for (final angle in widget.angles) {
+    for (final angle in _angles) {
       if (_picked[angle.id]?.takenOn case final takenOn?) {
         return takenOn.isAfter(today) ? today : takenOn;
       }
     }
     return today;
+  }
+
+  /// Drops the angles [snapshot] no longer holds — all of them with the
+  /// series — staying on the step that was on screen, or the one now in its
+  /// place, and says which went.
+  void _follow(PhotoSeriesSnapshot? snapshot) {
+    if (snapshot == null) return;
+    final seriesLive = snapshot.series.any((s) => s.id == widget.series.id);
+    final live = seriesLive
+        ? {for (final angle in snapshot.angles) angle.id}
+        : const <String>{};
+    final gone = [
+      for (final angle in _angles)
+        if (!live.contains(angle.id)) angle,
+    ];
+    if (gone.isEmpty) return;
+    final shown = _step < _angles.length ? _angles[_step].id : null;
+    _angles = [
+      for (final angle in _angles)
+        if (live.contains(angle.id)) angle,
+    ];
+    for (final angle in gone) {
+      _picked.remove(angle.id);
+    }
+    final index = _angles.indexWhere((angle) => angle.id == shown);
+    _step = shown == null
+        ? _reviewStep
+        : index >= 0
+        ? index
+        : math.min(_step, _reviewStep);
+    final names = gone.map((angle) => angle.name).join(', ');
+    _error = seriesLive
+        ? '$names ${gone.length == 1 ? 'was' : 'were'} removed on another '
+              'device.'
+        : 'This series was deleted on another device.';
   }
 
   void _take(Uint8List bytes, {DateTime? modified}) {
@@ -245,7 +285,7 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         : DateTime(modified.year, modified.month, modified.day);
     setState(() {
       _error = null;
-      _picked[widget.angles[_step].id] = _Picked(bytes, exif ?? fallback);
+      _picked[_angles[_step].id] = _Picked(bytes, exif ?? fallback);
     });
   }
 
@@ -411,14 +451,15 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         ..popUntil((r) => r == route)
         ..pop();
     });
+    _follow(ref.watch(photoSeriesSnapshotProvider).valueOrNull);
     final theme = Theme.of(context);
     final onReview = _step == _reviewStep;
-    final angle = onReview ? null : widget.angles[_step];
+    final angle = onReview ? null : _angles[_step];
     final title = _replacing
         ? '${widget.angles.single.name} photo'
         : onReview
         ? 'Check in'
-        : '${angle!.name} · ${_step + 1} of ${widget.angles.length}';
+        : '${angle!.name} · ${_step + 1} of ${_angles.length}';
     return VaultActivity(
       // A lock's pop goes through regardless.
       child: PopScope(
@@ -445,7 +486,11 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (angle != null) _intake(context, angle) else _review(),
+                    // None left: only why.
+                    if (angle != null)
+                      _intake(context, angle)
+                    else if (_angles.isNotEmpty)
+                      _review(),
                     if (_error case final error?)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -613,7 +658,7 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
           height: 110,
           child: Row(
             children: [
-              for (final (i, angle) in widget.angles.indexed)
+              for (final (i, angle) in _angles.indexed)
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: 6),

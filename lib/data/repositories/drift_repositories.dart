@@ -2522,6 +2522,19 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
+  Future<int> lostVaultPhotoCount() async {
+    final row = await _db.select(_db.secureVaultHeaderTable).getSingleOrNull();
+    return row?.lostPhotoCount ?? 0;
+  }
+
+  @override
+  Future<void> setLostVaultPhotoCount(int count) async {
+    await _db
+        .update(_db.secureVaultHeaderTable)
+        .write(SecureVaultHeaderTableCompanion(lostPhotoCount: Value(count)));
+  }
+
+  @override
   Future<Set<String>> listDismissals() async {
     final rows = await _db.select(_db.dismissedNotificationsTable).get();
     return rows.where((r) => r.deletedAt == null).map((r) => r.id).toSet();
@@ -8985,9 +8998,13 @@ class DriftPhotoSeriesRepository implements PhotoSeriesRepository {
                     ? const Constant(true)
                     : t.deletedAt.isNull(),
               )
+              // Two devices reordering at once can leave angles tied on
+              // their place; the id settles a tie the same way on every
+              // device (BUG-309).
               ..orderBy([
                 (t) => OrderingTerm(expression: t.sortOrder),
                 (t) => OrderingTerm(expression: t.createdAt),
+                (t) => OrderingTerm(expression: t.id),
               ]))
             .get();
     return rows.map(_mapPhotoAngle).toList();
@@ -9062,6 +9079,24 @@ class DriftPhotoSeriesRepository implements PhotoSeriesRepository {
                   includeDeleted ? const Constant(true) : t.deletedAt.isNull(),
             ))
             .get();
+    return rows.map(_mapPhotoImage).toList();
+  }
+
+  @override
+  Future<List<PhotoCheckInImage>> listImagesOf(Set<String> checkInIds) async {
+    if (checkInIds.isEmpty) return const [];
+    final rows = await (_db.select(
+      _db.photoCheckInImagesTable,
+    )..where((t) => t.checkInId.isIn(checkInIds))).get();
+    return rows.map(_mapPhotoImage).toList();
+  }
+
+  @override
+  Future<List<PhotoCheckInImage>> listImagesOn(Set<String> angleIds) async {
+    if (angleIds.isEmpty) return const [];
+    final rows = await (_db.select(
+      _db.photoCheckInImagesTable,
+    )..where((t) => t.angleId.isIn(angleIds))).get();
     return rows.map(_mapPhotoImage).toList();
   }
 

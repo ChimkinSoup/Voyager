@@ -1,0 +1,7 @@
+_CheckInDialogState? st;
+void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _CheckInDialogState) { st = x.state as _CheckInDialogState; } else { x.visitChildren(w); } }
+WidgetsBinding.instance.rootElement!.visitChildren(w);
+if (st == null) { debugPrint('FV52 @W@ no check-in dialog'); return; }
+if ('@TAG@' != 'show') { st!._take(File('C:/Users/Juno/AppData/Local/Temp/claude/C--Users-Juno-Code-Voyager/c1065135-6fe9-4204-968e-eb7e4c2b4da9/scratchpad/fv52-@TAG@.jpg').readAsBytesSync()); }
+await Future<void>.delayed(const Duration(milliseconds: 300));
+debugPrint('FV52 @W@ angles=' + st!._angles.map((a) => a.name).join(',') + ' step=' + st!._step.toString() + ' picked=' + st!._picked.length.toString() + ' error=' + (st!._error ?? 'null'));

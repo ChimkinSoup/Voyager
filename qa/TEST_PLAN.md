@@ -1536,6 +1536,30 @@ Keep this table and each phase's **Status** line in sync.
 - **Third pass (2026-10-15, qa-092):** BUG-281's remaining cost: one full entry read per arrival instead of three, ids-only read for the id set, tracker values per day, and (debug builds) no trash or recent-list build from invalidating unread providers. Test: `live_sync_narrow_reload_test.dart`. Profile build, 240 at 1/s into 687 entries: row re-reads 3.6 ms per arrival (was 6.65), tracker values 2.3 ms (was 4.9), UI p90 0.52 ms, no frame over 16.7 ms. Full suite 4,943 passed, 16 skipped. Both instances ended `SIGNED-OUT`.
 - **Not covered:** BUG-281's one remaining full read per arrival still grows with the account (smaller, not removed).
 
+### FV-52 — BUG-307 follow-up (the open check-in dialog follows the live angles)
+- **Change (2026-10-20, uncommitted, on `0ba6eef`):** `photo_check_in_dialog.dart` watches the snapshot; an angle removed on another device leaves the stepper with any photo picked for it ("<angle> was removed on another device."); with the series deleted, "This series was deleted on another device.", nothing else, Save off.
+- **Tests:** `photo_series_page_test.dart` "BUG-307: an angle removed elsewhere …" and "BUG-307: the series deleted elsewhere …". The first fails without the change.
+- **Flows (new account qa-108 on `qa` = A and `qb` = B, vault `fv52vault`, series made with `md18-ops` `mk`; photos given to the open dialog by `fv52-take.dart.txt`, library `features/photo_series/photo_check_in_dialog.dart`, which calls the dialog's `_take` as a file, paste or drop does; tag `show` only prints its state):**
+  - [x] B on S (F picked), A removed F → B "S · 1 of 1", "F was removed on another device.", F's photo gone; S picked and saved → one check-in, one live image on S, on both.
+  - [x] B mid-check-in, A deleted the series → only the message, Save off; Cancel closed it without asking. First run said "S was removed …"; reworded, rebuilt, rerun: "This series was deleted on another device."
+  - [x] End: `DBDIFF SAME` (70 tables), no exceptions, both `SIGNED-OUT`.
+
+### FV-51 — BUG-305 … BUG-313 (Photos fix pass, MD-18)
+- **Change (2026-10-20, uncommitted, on `0ba6eef`):** BUG-305: the viewer follows the snapshot. BUG-306/307/308/311: `settlePhotoSeries` after Photos pulls (one live image per check-in angle, none on a removed angle, a series keeps an angle, a live check-in keeps its photos); `createCheckIn` drops removed angles. BUG-309: tied angles list by id. BUG-310: photos a reset elsewhere retired unsent are counted (`lost_photo_count`, schema v161) and told on both unlock prompts. BUG-312: Photos arrivals reload only conflicts, trash and the vault header. BUG-313: the full check flags vault blobs whose files never reached Storage.
+- **Tests:** `photo_series_sync_test.dart` "MD-18: two devices at once" (6) and "BUG-310 …", `photo_series_page_test.dart` "MD-18" (2), `full_sync_check_test.dart` (1), `live_sync_narrow_reload_test.dart` (1). Each fails without its change except the BUG-311 delete-later case (unchanged behaviour), the BUG-310 widget test and BUG-313's (new parameter). Full suite 5,205 passed, 16 skipped, 0 failed.
+- **Flows (new account qa-107 on `qa` = A and `qb` = B, vault `fv51vault`, after the reset `fv51reset`; seeded with `md18-seed.dart.txt` and `md18-ops` `mk` / `ci`):**
+  - [x] BUG-305: B's open viewer took A's replacement and a new check-in ("28 / 29").
+  - [x] BUG-306: concurrent replace (121 ms) → one live Front image, the newer, on both.
+  - [x] BUG-307: B offline checked in onto A's removed angle → that image tombstoned on both.
+  - [x] BUG-308: concurrent removals of a two-angle series → both angles live with their photos on both (neither removal stuck; see the bug note).
+  - [x] BUG-309: concurrent reorders tied Side / Back on 0; both devices list Side, Back, Front.
+  - [x] BUG-310: B's offline check-in lost to A's reset → "… 2 photos made on this device weren't kept." on B's card; cleared on unlock (after the disposed-ref fix, no error).
+  - [x] BUG-311: B offline delete, A's later note edit → check-in and both photos live on both.
+  - [~] BUG-312: 100 arrivals at ~2.2 s: B 42–51 fps, ~1 core (was 15–22 fps, ~2 cores). Partly fixed.
+  - [x] BUG-313: a parked vault blob → `safe=false gaps={vault_blobs: 1}`.
+- **Result (2026-10-20):** 8 of 9 pass, BUG-312 improved but not to 60 fps. One exception found and fixed in the pass (BUG-310's card unlock used a disposed `ref`). End: outboxes 0 / 0, `DBDIFF SAME` (70 tables), full check safe on both; both profiles ended `SIGNED-OUT`.
+- **Not covered:** BUG-307's dialog still offering the removed angle (the save drops it); BUG-308 with B saving later (both removals stick, the last removed comes back: unit test only); a profile-mode measurement of BUG-312.
+
 ### FV-50 — BUG-294 … BUG-304 (Photos fix pass, Phase 28B)
 - **Change (2026-10-20, uncommitted, on `80012e5`):** BUG-294: the vault Storage rule drops its content-type check (deployed). BUG-295: backups carry the vault files (`vault_media/`); an import writes them and queues the new ones for upload. BUG-296: a vault reset erases the check-ins and images it empties. BUG-297: undoing an import takes back a vault header it created, here and on the server. BUG-298: Overlay slider named, value shown. BUG-299: Playback stopped on a broken frame shows it as such under its own date. BUG-300: the upload switch and launch queue `localOnly` vault photos; the download switches drain vault downloads. BUG-301: unavailable vault photos say why. BUG-302: Playback's ticker made in `initState`. BUG-303: alignment stage shrinks to fit; Compare stacks only when larger. BUG-304: a scrubber drag drops the hover caption.
 - **Tests:** `photo_series_page_test.dart` "Phase 28B" group (6), `photo_series_sync_test.dart` "BUG-296 …", `vault_media_test.dart` "backups" group (2). The six widget tests and BUG-296's fail without the changes; the two backup tests use the new parameters. Full suite 5,193 passed, 16 skipped, 0 failed.

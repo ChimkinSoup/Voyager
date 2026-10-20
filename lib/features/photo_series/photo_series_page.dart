@@ -238,9 +238,11 @@ PhotoCheckInImage? photoSeriesCover(
   PhotoSeries series,
   PhotoSeriesSnapshot snapshot,
 ) {
+  // Their place in the snapshot, which also settles angles tied on
+  // [PhotoSeriesAngle.sortOrder].
   final angleOrder = {
-    for (final angle in snapshot.angles)
-      if (angle.seriesId == series.id) angle.id: angle.sortOrder,
+    for (final (i, angle) in snapshot.angles.indexed)
+      if (angle.seriesId == series.id) angle.id: i,
   };
   final checkIns = [
     for (final checkIn in snapshot.checkIns)
@@ -487,6 +489,10 @@ class _PhotoVaultUnlockCardState extends ConsumerState<PhotoVaultUnlockCard> {
     final theme = Theme.of(context);
     final header = ref.watch(secureVaultHeaderProvider);
     final hasVault = header.valueOrNull != null;
+    final lost = switch (ref.watch(secureVaultLostProvider).valueOrNull) {
+      final counts? => secureVaultLostMessage(counts),
+      null => null,
+    };
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -507,6 +513,11 @@ class _PhotoVaultUnlockCardState extends ConsumerState<PhotoVaultUnlockCard> {
                 ),
               ],
             ),
+            // A reset elsewhere is told here too: unlocking here clears it.
+            if (hasVault && lost != null) ...[
+              const SizedBox(height: 8),
+              Text(lost, style: theme.textTheme.bodySmall),
+            ],
             const SizedBox(height: 12),
             if (!hasVault)
               GlassButton(

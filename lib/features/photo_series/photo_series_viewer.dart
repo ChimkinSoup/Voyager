@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +10,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_frame.dart';
+import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
@@ -18,28 +21,32 @@ typedef PhotoViewerEntry = ({
   Map<String, PhotoCheckInImage> images,
 });
 
+/// What the viewer shows of a snapshot: the check-ins it pages through,
+/// oldest first, and the series' angles.
+typedef PhotoViewerContents = ({
+  List<PhotoViewerEntry> entries,
+  List<PhotoSeriesAngle> angles,
+});
+
 /// The full-screen viewer (PHOTO_SERIES_HLD.md §7.2): one check-in at a
 /// time, left and right to its neighbours, up and down through its angles,
 /// with the note underneath, each photo aligned onto its angle's frame.
-/// Closes when the vault locks.
+/// Opens on [initialCheckInId]. Reads [contents] from each snapshot, so a
+/// check-in or photo arriving from another device shows while it is open
+/// (BUG-305). Closes when the vault locks, or nothing is left to show.
 Future<void> showPhotoSeriesViewer(
   BuildContext context, {
-  required List<PhotoViewerEntry> entries,
-  required List<PhotoSeriesAngle> angles,
-  required int initialIndex,
+  required PhotoViewerContents Function(PhotoSeriesSnapshot snapshot) contents,
+  required String initialCheckInId,
 }) {
-  if (entries.isEmpty) return Future.value();
   return Navigator.of(context, rootNavigator: true).push(
     PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.black87,
       barrierDismissible: true,
       barrierLabel: 'Close photo',
-      pageBuilder: (_, _, _) => _PhotoViewer(
-        entries: entries,
-        angles: angles,
-        initialIndex: initialIndex,
-      ),
+      pageBuilder: (_, _, _) =>
+          _PhotoViewer(contents: contents, initialCheckInId: initialCheckInId),
       transitionsBuilder: (_, animation, _, child) =>
           FadeTransition(opacity: animation, child: child),
       transitionDuration: const Duration(milliseconds: 160),
@@ -48,25 +55,34 @@ Future<void> showPhotoSeriesViewer(
 }
 
 class _PhotoViewer extends ConsumerStatefulWidget {
-  const _PhotoViewer({
-    required this.entries,
-    required this.angles,
-    required this.initialIndex,
-  });
+  const _PhotoViewer({required this.contents, required this.initialCheckInId});
 
-  final List<PhotoViewerEntry> entries;
-  final List<PhotoSeriesAngle> angles;
-  final int initialIndex;
+  final PhotoViewerContents Function(PhotoSeriesSnapshot snapshot) contents;
+  final String initialCheckInId;
 
   @override
   ConsumerState<_PhotoViewer> createState() => _PhotoViewerState();
 }
 
 class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
-  late final _pages = PageController(
-    initialPage: widget.initialIndex.clamp(0, widget.entries.length - 1),
+  /// The snapshot [_contents] was read from.
+  late PhotoSeriesSnapshot? _snapshot = ref
+      .read(photoSeriesSnapshotProvider)
+      .valueOrNull;
+  late PhotoViewerContents _contents = switch (_snapshot) {
+    final snapshot? => widget.contents(snapshot),
+    null => (entries: const [], angles: const []),
+  };
+  late int _index = math.max(
+    0,
+    _contents.entries.indexWhere(
+      (e) => e.checkIn.id == widget.initialCheckInId,
+    ),
   );
-  late int _index = widget.initialIndex.clamp(0, widget.entries.length - 1);
+  late final _pages = PageController(initialPage: _index);
+
+  /// The check-in being looked at, kept as the list around it changes.
+  late String _checkInId = widget.initialCheckInId;
 
   /// The angle being looked at, kept across check-ins where it can be.
   String? _angleId;
@@ -75,6 +91,27 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
 
   /// Notes opened so far, by check-in id.
   final _notes = <String, Future<String?>>{};
+
+  List<PhotoViewerEntry> get _entries => _contents.entries;
+
+  /// Takes [snapshot]'s contents, staying on the same check-in — or, when
+  /// it is gone, on the one now in its place.
+  void _follow(PhotoSeriesSnapshot? snapshot) {
+    if (snapshot == null || identical(snapshot, _snapshot)) return;
+    _snapshot = snapshot;
+    _contents = widget.contents(snapshot);
+    if (_entries.isEmpty) return;
+    var index = _entries.indexWhere((e) => e.checkIn.id == _checkInId);
+    if (index < 0) index = math.min(_index, _entries.length - 1);
+    _checkInId = _entries[index].checkIn.id;
+    if (index == _index) return;
+    _index = index;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _pages.hasClients && _pages.page?.round() != _index) {
+        _pages.jumpToPage(_index);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -87,7 +124,7 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
 
   /// The angles [entry] has a photo of, in the series' order.
   List<PhotoSeriesAngle> _anglesOf(PhotoViewerEntry entry) => [
-    for (final angle in widget.angles)
+    for (final angle in _contents.angles)
       if (entry.images.containsKey(angle.id)) angle,
   ];
 
@@ -119,7 +156,7 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
 
   void _page(int by) {
     final target = _index + by;
-    if (target < 0 || target >= widget.entries.length) return;
+    if (target < 0 || target >= _entries.length) return;
     _pages.animateToPage(
       target,
       duration: const Duration(milliseconds: 180),
@@ -128,7 +165,7 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
   }
 
   void _angle(int by) {
-    final entry = widget.entries[_index];
+    final entry = _entries[_index];
     final shown = _anglesOf(entry);
     final at = shown.indexOf(_angleFor(entry));
     final target = at + by;
@@ -146,7 +183,16 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
       }
     });
     final session = ref.watch(secureVaultSessionProvider);
-    final entry = widget.entries[_index];
+    _follow(ref.watch(photoSeriesSnapshotProvider).valueOrNull);
+    if (_entries.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+          Navigator.of(context).maybePop();
+        }
+      });
+      return const SizedBox.shrink();
+    }
+    final entry = _entries[_index];
     final angle = _angleFor(entry);
     final shownAngles = _anglesOf(entry);
     return VaultActivity(
@@ -170,7 +216,7 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                     children: [
                       PageView.builder(
                         controller: _pages,
-                        itemCount: widget.entries.length,
+                        itemCount: _entries.length,
                         // A zoomed photo keeps the drag to walk around it.
                         physics: _zoomed
                             ? const NeverScrollableScrollPhysics()
@@ -178,10 +224,13 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                         scrollBehavior: const _AnyDeviceDrag(),
                         onPageChanged: (index) {
                           _unzoom();
-                          setState(() => _index = index);
+                          setState(() {
+                            _index = index;
+                            _checkInId = _entries[index].checkIn.id;
+                          });
                         },
                         itemBuilder: (context, index) {
-                          final pageEntry = widget.entries[index];
+                          final pageEntry = _entries[index];
                           final pageAngle = _angleFor(pageEntry);
                           final image = pageEntry.images[pageAngle.id]!;
                           return GestureDetector(
@@ -243,7 +292,7 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              '${_index + 1} / ${widget.entries.length}',
+                              '${_index + 1} / ${_entries.length}',
                               style: const TextStyle(color: Colors.white60),
                             ),
                             const Spacer(),
@@ -263,7 +312,7 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                           tooltip: 'Previous check-in',
                           onPressed: () => _page(-1),
                         ),
-                      if (_index < widget.entries.length - 1)
+                      if (_index < _entries.length - 1)
                         _Chevron(
                           alignment: Alignment.centerRight,
                           icon: PhosphorIconsRegular.caretRight,

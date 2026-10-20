@@ -197,6 +197,16 @@ class PhotoSeriesService {
     required Map<String, Uint8List> photos,
     String note = '',
   }) async {
+    // An angle removed on another device while the dialog was open takes no
+    // photo: it would be live on an angle nothing shows (BUG-307).
+    final live = {
+      for (final angle in await _repository.listAngles())
+        if (angle.seriesId == series.id) angle.id,
+    };
+    photos = {
+      for (final MapEntry(key: angleId, value: bytes) in photos.entries)
+        if (live.contains(angleId)) angleId: bytes,
+    };
     if (photos.isEmpty) {
       throw const PhotoSeriesException('Add at least one photo.');
     }
