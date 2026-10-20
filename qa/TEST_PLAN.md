@@ -104,6 +104,8 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | 26 | Sync, offline, persistence & Dev page | Done |
 | FV | Fix verification: app changes made during the audit | Done |
 | 27 | Final Review | Done |
+| 28A | Photos A: vault, series, check-ins, grid, viewer & periods | Not Started |
+| 28B | Photos B: playback, compare, alignment, reminders, trash & backups | Not Started |
 
 Keep this table and each phase's **Status** line in sync.
 
@@ -1543,3 +1545,163 @@ Keep this table and each phase's **Status** line in sync.
   - [x] Write the summary at the top of BUGS.md: counts by severity, counts by phase (a severity × phase table), and a list of all Blockers (2026-10-05, plus fixed/open counts, caveats and the FV `flutter test` failures.)
   - [x] Final PROGRESS.md update; final SESSION END (2026-10-05: phase log, test data and handoff updated. The app was never launched this session; end state verified: `SIGNED-OUT`, nothing running, local data absent.)
 - **Skipped/blocked:** —
+
+---
+
+## Phase 28A — Photos A: vault, series, check-ins, grid, viewer & periods
+- **Status:** Not Started
+- **Why this phase exists:** the Photos page (Photo Series, commits `9347c2c` … `d4d1c9e`, 2026-10-18/19) shipped after Phases 1–27 and the multi-device run, so the audit never covered it. Its two-device side is MD-18 in `qa/MULTI_DEVICE_SYNC_TEST_PLAN.md`.
+- **Scope:** the `/photo-series` destination ("Photos"); the vault states on the page (no vault, locked, unlocked, Lock, Reset vault) and the session it shares with Secure Notes; the series list; New / Edit series dialog (name, cadence, angles, and the reminder fields, whose *effect* is P28B); series detail header, stats and period strip; the Windows check-in dialog (file picker, paste, drag-and-drop, Skip / Back / Next, review, date, note); the grid (blur, reveal, context menu); the viewer; periods, streaks and missed marks; encryption at rest (nothing plain on disk). **Deferred:** Playback, Compare, Align, reminders, Trash, backups, media switches → P28B; two devices → MD-18. **Out of scope:** Android capture (camera, ghost, `FLAG_SECURE`) is HLD §16's manual device pass, MANUAL-ONLY (PROGRESS.md §6, no phone). On Windows, only check that no **Camera** button shows.
+- **HLD docs:** PHOTO_SERIES_HLD.md (§3–§8, §14, §18), SECURE_NOTES_HLD.md (vault, session, reset), MEDIA.md (intake rules), UNIFIED_NOTIFICATIONS.md (inbox popover lock)
+- **Prerequisites:**
+  - A fresh account (`-SignUp`; next free number in PROGRESS.md §2). Record its **vault password** in the account table the moment it's set, as for a changed account password.
+  - Note the build: `photo_series_detail.dart` had an uncommitted change on 2026-10-19 (period-strip tooltips forced visible). Record `git status --short lib/` as usual.
+  - Fixtures in `qa/data/p28/`, made with a scratch PIL script (`qa/steps/p28-fixtures.py`):
+    - a portrait 3000×4000 JPEG **with** EXIF `DateTimeOriginal` (e.g. 2025-03-14);
+    - a landscape 4000×3000 JPEG with no EXIF and a set file modified date (`(Get-Item <file>).LastWriteTime = …`);
+    - a square PNG with alpha, a WebP, and a HEIC if one can be made (else note it);
+    - an EXIF-rotated (orientation 6) JPEG;
+    - an 8000×8000 JPEG, a file over 20 MB (MEDIA.md: "Image is too large (N MB). The limit is 20 MB."), a truncated JPEG, a `.txt` renamed `.jpg`, and a 1×1 PNG.
+
+    Paint a big distinct number on each, so screenshots show which photo is where.
+  - Paste uses the PNG-format DataObject (PROGRESS.md §5 "Image clipboard"). Drag-and-drop uses `qa/harness/dragdrop.ps1`. Drive the file picker by typing a full path + Enter into the common dialog (PROGRESS.md §1). If Juno's clipboard held text, put it back afterwards.
+  - Bulk history for the streak, strip and grid-scale checks: seed it through the app's own service over the VM service (`evalc.ps1`, `qa/steps/p28-seed.dart.txt`) with the vault unlocked, so ingest and encryption are real. For example: a daily series with ~400 check-ins over 14 months with gaps, a weekly one over 2 years, a monthly one over 3 years. Say in the results which data was seeded by eval.
+- **Flows:**
+  - **Vault states on the page**
+    - [ ] No vault yet: the page reads "Set up a vault to store photos" with **Set up vault…**, which opens the existing setup dialog. After setup the page is unlocked without a second prompt, and the `secure_vault` header row is present (SQL).
+    - [ ] Locked (after a restart, or **Lock**): the unlock card shows Password, **Unlock** and **Reset vault**. A wrong password shows an error and doesn't unlock; Enter in the field submits; the right one unlocks. Everything plain still renders while locked: list cards, stats, strip, and the grid layout with dates and per-angle presence dots. Thumbnails are **neutral placeholders** (HLD §4.1).
+    - [ ] While locked, **Check in**, Playback, Compare and Align are disabled. Pressing them focuses the unlock card's password field.
+    - [ ] Shared session: unlocking on Photos unlocks Secure Notes in the inbox too, and the reverse. Locking on either surface locks both.
+    - [ ] 5-minute idle lock: pointer and key activity on Photos keeps it open past 5 minutes; 5 idle minutes lock it. The lock clears revealed tiles and closes an open viewer. It also closes an open check-in dialog: record what happens to the photos already picked.
+    - [ ] Inbox popover: open and close it **while Photos is the visible page**, and the vault stays unlocked. Do the same from another page, and the vault locks (HLD §6.4, the changed behaviour).
+    - [ ] Change the vault password (Secure Notes' flow): every photo and note still opens with the new password, and the old one is refused.
+    - [ ] **Reset vault** with photos present (QA account, after `guard.ps1`). Every `vault_blobs` row and file goes, every sealed note goes, and so does every `photo_check_in_images` row. Check-ins left with no image are deleted. Record exactly what remains, and check that stats, streaks and missed marks recompute (HLD §6.7). The new vault works for new check-ins.
+  - **Series list and dialog**
+    - [ ] Empty state, then the "New series" card. The **New photo series** dialog:
+      - Name: empty or whitespace → "Give the series a name.";
+      - Every: Daily / Weekly / Monthly / Yearly;
+      - Remind me on by default at 09:00. Weekly defaults to Monday; monthly to day 1, with "In a shorter month, its last day."; yearly to the current month and day 1;
+      - one angle, "Photo".
+
+      **Create**: the card shows the name, cadence, 0 check-ins, streak, **Due** and no cover.
+    - [ ] Angles: **Add angle** up to 4, rename, **Move up** / **Move down**, **Remove angle** (disabled or refused on the last one; the dialog says "A removed angle's photos go to the trash with it."). A blank angle name is saved as "Angle N". `photo_series_angles.sort_order` follows the dialog (SQL).
+    - [ ] **Edit series** (overflow ⋯ → Edit series):
+      - rename;
+      - change the cadence on a series with history: periods, stats and strip recompute;
+      - remove an angle that has photos: its images are soft-deleted with it (SQL), and the grid dots update.
+    - [ ] **Delete series** (⋯): confirm → toast with Undo → Undo restores the series, angles, check-ins and images (one shared `deleted_at`, then cleared). A detail page left open on a deleted series says "This series was deleted."
+    - [ ] List card after check-ins: count, current streak, **Done** for the current period, and a **blurred** cover from the latest check-in's first angle. With several series, the order stays the same across a restart (`sort_order`).
+    - [ ] Hidden page: hiding Photos in Settings → Pages removes it from the rail and the Ctrl+Tab cycle. Unhiding puts it back at its position.
+  - **Check-in dialog (Windows)**
+    - [ ] **Check in** opens a stepper over the angles in `sort_order`:
+      - drop zone "Drop a photo here, paste one, or choose a file";
+      - **Choose file…** (→ "Choose another…" once picked), **Paste** / Ctrl+V, **Clear**;
+      - footer **Back** and **Skip** (→ **Next** once a photo is picked);
+      - a review screen with thumbnails ("Skipped" for skipped angles), **Date**, **Note (optional)** ("Encrypted with your vault") and **Save** ("Saving…").
+    - [ ] Each intake route works for each angle: picker, paste, and drag-and-drop onto the drop zone. Paste with no image on the clipboard → "There is no image on the clipboard."
+    - [ ] Date default: the EXIF fixture gets its `DateTimeOriginal`; a file with no EXIF gets its modified date; a paste gets today. With two angles from different sources, record which default wins. The date stays editable.
+    - [ ] Skip every angle: Save is refused (an "Add at least one photo."-style message). Esc / Cancel after picking photos → "Discard photos?" confirm (**Discard**, or back to the dialog). With nothing picked, it closes at once.
+    - [ ] The saved check-in in SQL:
+      - `photo_check_ins` row with `vault_id` set; `note_ciphertext` / `note_nonce` non-null only with a note;
+      - one `photo_check_in_images` row per photo;
+      - one `vault_blobs` row each, width/height ≤ 2048 on the long edge, and files `vault_media/{id}` and `{id}.thumb`.
+
+      A HEIC lands as JPEG; the EXIF-rotated photo shows upright.
+    - [ ] Add / replace a photo on an existing check-in (context menu → Photo → "Add {angle}" / "Replace {angle}"). Replacing soft-deletes the old image row; at most one live image per (check-in, angle) (SQL).
+    - [ ] "Discard check-in?" ("A check-in of another series is open …", **Keep** / **Discard**): find the route that triggers it (a check-in dialog open, then another series' check-in requested, e.g. from P28B's inbox row) and check both buttons.
+  - **Grid and viewer**
+    - [ ] Newest first, grouped by period (labels like "Week of …"). A tile shows the first angle with a photo, presence dots per angle and the date. An empty series shows "No check-ins yet."
+    - [ ] Blur: the first click reveals that tile only, the second opens the viewer. Reveals survive scrolling and Grid ↔ Playback, and reset on leaving the page or locking.
+    - [ ] Context menu (right-click):
+      - **Edit date** moves the tile to its new period and updates streaks;
+      - **Add note** / **Edit note** with a 1-line and a 5,000-char note: the ciphertext changes in SQL, never plain;
+      - the **Photo** submenu; **Align** and **Use as reference** (P28B);
+      - **Delete check-in** → toast "Deleted check-in from …" with Undo.
+    - [ ] Viewer: ← / → move between check-ins, ↑ / ↓ between angles (record whether missing angles are skipped or shown), the note underneath, zoom/pan as in the lightbox, **Previous check-in** / **Next check-in** / **Close** buttons, Esc closes. At the ends the arrows stop (no wrap, no crash).
+  - **Periods, streaks, strip** (seeded history plus hand-made check-ins)
+    - [ ] Each cadence: the header stats (check-ins, photos, current streak, best streak, missed, first and latest dates) match a hand count from SQL. Weeks start on Monday regardless of Settings → week start (HLD §8); log a mismatch either way.
+    - [ ] The current period shows due, never missed. A running, not-yet-done period doesn't break the streak; doing it extends the streak at once.
+    - [ ] Backdating a check-in into a missed period turns that mark done and repairs the streak. One dated before the series' creation extends the strip backwards. Two check-ins in one period count once.
+    - [ ] A monthly series on the 31st and a yearly one on Feb 29: reminder clamping (HLD §5.1) and which period each check-in belongs to.
+    - [ ] Strip: filled = done, hollow with the error tint = missed, accent ring = current. Tooltips read "{period} · done / missed / due". Clicking a done mark scrolls the grid to that check-in; other marks do nothing. ~400 daily marks scroll horizontally with the current mark in view.
+    - [ ] Midnight rollover with the page open (commit `b13e5c8`): the current period moves on without a restart. Use the fake clock (the `TZ` trick in memory/PROGRESS.md) for a daily series, and a weekly one across Sunday → Monday.
+  - **Encryption at rest and exclusions**
+    - [ ] After every import route, the profile's data dir and `%TEMP%` hold **no** decodable JPEG/PNG/WebP from the session (scan files written since the session started for `FF D8 FF`, `89 50 4E 47` and `RIFF…WEBP` headers). The plain `media` folder and `media_assets_table` gain nothing from Photos, and no `vault_media` file starts with image magic.
+    - [ ] Search for a check-in note's text and for a series name: nothing from Photos (HLD §14). On This Day shows nothing from Photos on a backdated check-in's anniversary.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every create / edit / delete is in SQLite (`photo_series`, `photo_series_angles`, `photo_check_ins`, `photo_check_in_images`, `vault_blobs`), and the outbox drains to 0. After a restart the vault is locked; unlocking shows the same photos. Cold re-login on the wiped device: rows come back, thumbnails download eagerly, full images follow the prefetch setting, and everything decrypts with the vault password.
+  - D3 visual: list and detail at maximized, 1440×1040 and 2000×1100. Long series and angle names (300 chars, CJK / Arabic / emoji); 10 angles (dots and stepper); a landscape and a portrait photo in one series (tile crop, viewer letterbox). Blur strength: nothing recognisable before the first click. Light spot-check of the list, detail, unlock card and check-in dialog. Watch for `RenderFlex overflowed` in the run log.
+  - D4 keyboard: Tab order and Enter/Esc through the series dialog, unlock card and check-in stepper; Ctrl+V on an angle step. Find a way to reach Grid / Playback / Compare and the tiles without the mouse (record it if there's none). Vim ON in the Name, angle name, Note and Password fields: typing works, Esc → Normal, and a second Esc behaves as in other dialogs. The viewer's arrows don't fire while a field has focus.
+  - D5 failures:
+    - >20 MB, 8000 px (downscaled), the truncated JPEG and the renamed `.txt`: a clear error and nothing half-saved (no orphan `vault_blobs` row or file); the 1×1 PNG;
+    - double-click **Save**: one check-in;
+    - `stop.ps1` mid-save, then relaunch: no orphan blob, no check-in without images;
+    - Force offline check-in: saved locally with `upload_state` pending, uploaded after reconnect;
+    - 30 fast reveal clicks; 50 series in the list;
+    - the ~400-check-in grid scrolled end to end: worst frame, and the process working set before and after.
+- **Test data:** —
+- **Skipped/blocked:** Android capture, ghost, camera permission and `FLAG_SECURE` (MANUAL-ONLY, device pass).
+
+## Phase 28B — Photos B: playback, compare, alignment, reminders, trash & backups
+- **Status:** Not Started
+- **Scope:** the Playback and Compare views; the alignment editor and "Use as reference"; series reminders (OS notification, sticky, inbox row, auto-acknowledge); Trash for the Photos kinds; the 30-day purge of vault blobs; export / import of the Photos tables and ciphertext blobs; the image remote-I/O switches as they apply to vault blobs; sign-out / account-switch teardown. **Deferred:** two devices → MD-18. **Out of scope:** Android, and clicking OS toasts (both MANUAL-ONLY).
+- **HLD docs:** PHOTO_SERIES_HLD.md (§10–§14), SCHEDULED_REMINDERS_HLD.md, UNIFIED_NOTIFICATIONS.md, TRASH_HLD.md, SOFT_DELETE_TOAST.md, AUTO_BACKUP_HLD.md, IMPORT_EXPORT.md, MEDIA.md
+- **Prerequisites:** P28A's account and seeded series (reuse them and say so). Include a series with 3 angles where some check-ins miss an angle; photos of different aspect ratios in one angle; and one check-in whose full image isn't local (downloads off, or its file removed with the app stopped) to see the thumbnail stand-in.
+- **Flows:**
+  - **Playback**
+    - [ ] The Grid | Playback | Compare switch. Locking from Playback drops back to Grid.
+    - [ ] Angle picker. Frames are that angle's check-ins in date order, with check-ins lacking the angle skipped. A series or angle with none shows "No photos to play yet."
+    - [ ] Play / Pause (button and Space), previous / next frame (buttons and ← / →), and a scrubber with a tick per check-in that shows the hovered date and can be dragged.
+    - [ ] Speed 1–30 fps: the rate is what it says (time 30 frames at 4 and at 30 fps). The speed is saved in `photo_series.playback_fps` and reopens at it after a restart. Note how many writes one slider drag makes (outbox rows).
+    - [ ] **Once** stops on the last frame, **Loop** wraps, **Ping-pong** reverses at both ends. Try each with 1 frame and with 2.
+    - [ ] Date stamp toggle (Show / Hide date stamp), and the elapsed label "+N days / weeks / months / years" at its boundaries (13 vs 14 days, 25 vs 26 weeks, 23 vs 24 months).
+    - [ ] Frames are drawn with their alignment transform and clipped to the angle's frame aspect, so the series reads as one steady shot.
+    - [ ] A frame that won't decrypt or decode (corrupt one blob file with the app stopped) is stepped past, with no crash. A full image that isn't downloaded plays its thumbnail.
+    - [ ] Memory and pacing: the ~400-frame daily series at 30 fps on Loop for 2 minutes. The process working set stays flat (sliding window, HLD §11); no frame is skipped while one is still decoding (playback waits instead); note the worst frame time.
+  - **Compare**
+    - [ ] Defaults: A = first, B = latest. With no photos: "No photos to compare yet." With one check-in, A = B.
+    - [ ] Quick picks for A: **First**, **Previous**, **~1 month ago**, **~1 year ago**, all relative to B (move B and re-check). "~" means the nearest check-in to that date (check against SQL on a series with gaps).
+    - [ ] The angle picker is shared by both sides. Record what's shown when one side's check-in lacks that angle.
+    - [ ] **Side by side**, stacked at narrow widths (1440×1040 and a narrower `place`). **Slider**: drag the divider; ← / → and Shift+← / → move it. **Overlay**: the "B N%" slider at 0 / 50 / 100.
+    - [ ] Labels "A · {date}" / "B · {date}", the elapsed time between them, and notes under the images. Both sides are drawn aligned.
+  - **Alignment**
+    - [ ] Context menu → **Align** ("Align {angle}", one per angle when there are several) opens the editor: the reference underneath with its own transform, the photo on top at 50% (**Opacity** slider), the **Rotation** slider (±45°) and the hint line.
+    - [ ] Editor controls:
+      - drag moves; the wheel zooms around the cursor, clamped to 20–800%;
+      - ← / → / ↑ / ↓ nudge 1 px, with Shift 10 px;
+      - **Copy from previous** takes the previous photo's transform; **Reset** returns to identity;
+      - **Cancel** (and Esc) drops the changes;
+      - **Done** saves `align_scale`, `align_rotation`, `align_dx`, `align_dy` (SQL), and the viewer, Playback and Compare draw it.
+    - [ ] Aligning the reference itself shows nothing underneath.
+    - [ ] **Use as reference** is disabled on the current reference. Picking another photo sets `reference_image_id` and moves nothing: transforms and `frame_aspect` are unchanged in SQL. Replacing the reference photo makes the new photo the reference.
+    - [ ] `frame_aspect` is set from the angle's first photo and never changes. Check with a portrait first, then a landscape added and aligned, then the first photo deleted.
+    - [ ] The vault locking while the editor is open closes it without saving.
+  - **Reminders and inbox** (use the fake clock via `TZ` where waiting is impractical; PROGRESS.md quirks)
+    - [ ] Fire time per cadence: daily at the time; weekly on the weekday; monthly on the day, clamped in a short month; yearly on the month and day. The OS notification "{series name} — check-in due" and the sticky toast appear at that time (`reminder_delivery_logs`).
+    - [ ] A series created after today's reminder time doesn't fire today; it waits for the next occurrence.
+    - [ ] The inbox row (camera icon, name, "due · {time left in period}") appears only once the reminder time has passed and the period isn't done. Clicking it opens the series detail. Dismissing it uses the usual dismissal, and it stays dismissed.
+    - [ ] Urgency: daily stays semi; weekly / monthly / yearly rise to important on the period's last day.
+    - [ ] Checking in before the reminder time means that period's alert never fires. Checking in after it fired clears the sticky and the inbox row (auto-acknowledge). Then delete that check-in: record whether the period's reminder comes back.
+    - [ ] Snooze 10 min and Tomorrow on the sticky behave as for other reminders.
+    - [ ] Reminder off for one series: no alert, no inbox row. Photos page hidden: no inbox row, but the sticky and OS alert still fire (HLD §13.1–13.2).
+    - [ ] Editing the reminder time, weekday or cadence while a reminder is pending re-schedules it, with no stale fire at the old time.
+  - **Trash, purge, backups, teardown**
+    - [ ] Settings → Data → Trash lists the Photos kinds under "Photos": a series (with "N photos"-style counts), a removed angle with its photos, a check-in with its photos, and a lone photo (a replaced image). Restore each and compare fields with SQL. Restoring a check-in or angle whose series is in the Trash is blocked with "Restore … first" (as P24).
+    - [ ] Delete forever and Empty trash: the rows are erased, the `vault_media` files are deleted locally, and the Storage objects (`users/{uid}/vault_media/{id}` and `.thumb`) are gone once the outbox drains.
+    - [ ] 30-day purge: backdate a soft-deleted check-in's `deleted_at` by 31 days (app stopped; P24's method). At launch its blobs go, locally and in Storage. A 29-day one stays.
+    - [ ] Export: the ZIP carries all five tables plus the ciphertext blobs, with no plaintext image in it (scan the members for image magic), valid checksums, and counts = SQL. Import onto a fresh account, unlock with the source account's vault password, and every photo and note opens. A re-import says "already up to date"; Undo from "Before restore" removes them.
+    - [ ] Settings → Image storage: record whether vault blobs are listed or counted, and whether "Delete all" touches them. Neither MEDIA.md nor the HLD says, so state what it does.
+    - [ ] Media switches:
+      - uploads off: new blobs stay local (no Storage object); uploads on again: they upload;
+      - downloads off on a cold re-login: placeholders, not spinners;
+      - prefetch off: thumbnails are still fetched eagerly, full images only when opened.
+    - [ ] Sign out, then sign into another QA account: no Photos rows, no `vault_media` files from the first account, and its vault isn't offered (HLD §14 "Account switch"). Signing back in brings everything back.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: transforms, `playback_fps`, reference changes, deletes and restores are in SQL; the outbox drains to 0; restart; cold re-login leaves transforms and references identical (scratch `snap.py` over the five tables).
+  - D3 visual: Playback / Compare / Align at maximized, 1440×1040, 2000×1100, and a narrow width for Compare's stacking; portrait and landscape mixes; the inbox row and the sticky at min size; Light spot-check of all three views and the editor.
+  - D4 keyboard: Space / ← / → in Playback, the arrows in Compare's slider and the editor, Esc in the editor. None of them fire while a field has focus (Vim ON and OFF). Tab reaches the pickers, segmented buttons and sliders.
+  - D5 failures: a corrupt blob in Playback and Compare; 30 fps on a 400-frame series; 20 rapid play/pause; the vault locking mid-playback, mid-compare and mid-align; Force offline while a thumbnail downloads; a series deleted while its Playback is open.
+- **Test data:** —
+- **Skipped/blocked:** clicking the OS notification, and Android's capture straight from the notification (both MANUAL-ONLY).

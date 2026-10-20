@@ -137,7 +137,7 @@ Every `voy.ps1` run starts in `mode bg`: input is posted straight to Voyager's w
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 085.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 100.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|

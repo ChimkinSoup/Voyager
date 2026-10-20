@@ -7,7 +7,7 @@ This plan covers what that newly makes testable:
 - the cases the audit skipped or simulated (§2 maps each one to a test here);
 - the sync code the audit never drove from two sides (§3).
 
-The audit's rules still apply (`TEST_PLAN.md` "RULES"): no app code changes, `voyager-qa-*` accounts only, `guard.ps1` before anything destructive, log bugs in `qa/BUGS.md` as found (**next ID: BUG-249**; next free account: **qa-071**), and finish with SESSION END on **both** instances.
+The audit's rules still apply (`TEST_PLAN.md` "RULES"): no app code changes, `voyager-qa-*` accounts only, `guard.ps1` before anything destructive, log bugs in `qa/BUGS.md` as found (**next ID: BUG-284**; next free account: **qa-100**), and finish with SESSION END on **both** instances.
 
 ---
 
@@ -33,6 +33,7 @@ The audit's rules still apply (`TEST_PLAN.md` "RULES"): no app code changes, `vo
 | Dev tools & conflict UI | MD-15 | Done (2026-10-14, qa-081; BUG-276 Major, BUG-277 Minor) |
 | Seeds & built-in records | MD-16 | Done (2026-10-14, qa-082 + qa-083; BUG-278 Minor; BUG-241 pattern on seeds) |
 | Soak & load | MD-17 | Done (2026-10-14, qa-084; BUG-279 Major, BUG-280 Minor, BUG-281 Minor) |
+| Photo Series and vault media | MD-18 | Not Started (added 2026-10-19; the page postdates MD-0 … MD-17) |
 
 ---
 
@@ -111,6 +112,7 @@ Every item the audit skipped, simulated or left at "unit tests only" for want of
 | BUG-045, BUG-204, BUG-217, BUG-012, BUG-228, BUG-010/043, BUG-059, BUG-011 | Found as "new device" bugs via wipe + cold re-login; never with a second device live beside the first | MD-1, MD-16 |
 | P26 Skipped | Purge soft-deleted items, Delete all journal entries / calendar events, Reset all journals (destructive dev tools, never run) | MD-15.2 (QA account only) |
 | ADR 002 amendments | `permanentlyDeleteFromRemote` is one-way, so other devices keep their rows; tombstone repair after pull; `catchUpIfAway` | MD-5.8, MD-5.6, MD-10.5 |
+| Not in the audit (shipped 2026-10-18/19) | Photo Series: five new collections, ciphertext blobs in Storage, a shared vault, a new reminder source | MD-18 (single-device side: TEST_PLAN.md P28A/P28B) |
 | DATA_INTEGRITY_AUDIT_REPORT §6 | "Two-device rig" findings only proved in one-screen unit tests (P0-1, P0-2, P0-4, P2-8, P1-1) | MD-3.5, MD-3.6, MD-3.7, MD-4.3 |
 
 ---
@@ -408,6 +410,74 @@ SCHEDULED_REMINDERS_HLD §3 is the spec: ack and snooze on any device apply ever
 - *Skipped/blocked (2026-10-14): offline is Dev → Force offline by eval (§1.4). 17.1's "every page" goes through each page's repositories / app actions (MD-2's specs) plus real typing for journal entries only; Settings, Search and Devices weren't driven (MD-4 / MD-2.5 / MD-8.1 cover them), media not at all (MD-11). Two typed entries on B (rounds 47 and 59) split their title into the body ("mdsoak eh " / "qbsoak body…"): the step clicked the body without waiting after the title (harness; the script now waits 400 ms); both rows converged. The receiver's on-screen check of typed entries was valid only when it happened to be on Journal (17 of 50); the end-of-run check covers the rest. `md02-text.tsv` doesn't compile in its library (`CustomQuote`), so quotes ran through `md02-text2.tsv` (letter-only run names: the dictionary refuses digits); `tt-edit`'s own SQL never matches, on the writer either (as in MD-2), and A and B agree part by part. 17.3's numbers are from a debug build. Five-dimension sweep: n/a beyond D1/D2/D5 (no new UI; Dark + Scatter only).*
 - *Section result (2026-10-14 11:16–13:05, build `58d4948` + Juno's uncommitted parked-launch change (`lib/core/platform/desktop_window.dart`, `windows/runner/*`); qa-084 (new); A `5181465d-…` logs `run-qa-20261014-111603.*` and `run-qa-20261014-124517.*` (relaunched for BUG-279's restart check), B `7591542d-…` log `run-qb-20261014-111648.*`): 4 of 4 run. Passed: an hour of alternating two-way writes on every kind, all online writes on the other device within 1.7 s (2.6 s on screen), offline windows caught up in 2–5 s, no per-change refetch in Firestore. Found: **BUG-279** (Major: a cheat-sheet item saved twice or more offline loses all but the first save on other devices, for good), **BUG-280** (Minor: entries typed offline get a later local stamp afterwards), **BUG-281** (Minor: each remote change reloads every data provider; a steady trickle costs 1.3–2.2 cores and ~20 fps on a debug build). End: outboxes 0/0, `dbdiff.py` only the bug rows, full check flags BUG-279 on B and BUG-232 on both, O6 clean, error logs only APP START.*
 
+### MD-18 Photo Series and vault media
+
+The Photos page (PHOTO_SERIES_HLD.md, commits `9347c2c` … `d4d1c9e`, 2026-10-18/19) came after MD-0 … MD-17. It adds five synced collections (`photo_series`, `photo_series_angles`, `photo_check_ins`, `photo_check_in_images`, `vault_blobs`), ciphertext files in Storage at `users/{uid}/vault_media/{id}` and `{id}.thumb`, a `VaultMediaService` queue beside `MediaService`'s, and a reminder source. Its single-device side is TEST_PLAN.md Phase 28A/28B; run those first if they're done, since their bugs explain failures here.
+
+Before:
+- A fresh account (`-SignUp` on A; next free number in PROGRESS.md §2). A sets up the vault; record its password. B unlocks with the same password.
+- Oracle gaps to close first, in `qa/` only:
+  - `dbdiff.py` (O1) and `fs_snapshot.sh` (O2) must include the five tables / collections and the `secure_vault` header. If O4's full check doesn't cover them, that is a finding.
+  - A Storage check per blob id: the object and its `.thumb` exist, and neither starts with image magic. Extend `qa/steps/md11-state.py` or add `md18-state.py`.
+  - A plaintext scan of both profiles' data dirs and `%TEMP%` for JPEG/PNG/WebP headers written since the session started.
+- Seed through the app's service by `evalc` with the vault unlocked (real ingest and encryption) where the UI path isn't the point: a 3-angle weekly series with ~30 check-ins and a daily one with ~200. Hand-made check-ins through A's dialog for the rest. The fixtures from P28A are in `qa/data/p28/`.
+
+- [ ] **18.1 Series and angles A → B.** Create a series on A (3 angles, a non-default cadence and reminder), then rename it, reorder angles and add one. B's list and detail show each change without a restart (O5), with the same stats and strip, while B is **locked** and again after unlocking.
+- [ ] **18.2 Check-in A → B, locked receiver.** With B locked, A checks in 3 angles with a note. B gets the rows, a new tile with the date and presence dots, placeholders, and updated stats and strip with no restart. B fetches the **thumbnails eagerly** (`thumb_download_state`) even while locked; full images follow B's prefetch setting. Unlock B: the tile decrypts, and the viewer opens the full image and the note.
+- [ ] **18.3 Check-in into an open surface.** B has the series' Grid, the viewer on the latest check-in, Playback and Compare open in turn while A checks in or replaces a photo. Record which surfaces update in place and which need a reselect (BUG-260's class for media).
+- [ ] **18.4 Ciphertext in the cloud.** For 18.2's check-in:
+  - Firestore `photo_check_ins` holds only `noteCiphertext` / `noteNonce`, never the note text;
+  - `vault_blobs` holds metadata only;
+  - both Storage objects are ciphertext;
+  - neither device has plaintext on disk (the scan).
+- [ ] **18.5 Edits both ways.** Edit date, edit note, add a photo to a missing angle, and replace a photo, from A and from B. Periods, streaks, missed marks and the strip end identical on both. A replaced photo's old image row is tombstoned on both, and its blob is unreferenced; record what happens to its Storage object.
+- [ ] **18.6 Concurrent edits, later save wins.** Release the writes together (`together.ps1`):
+  - both edit the same check-in's note → one note on both, no fork (HLD §14);
+  - both change its date to different days → one date on both;
+  - both replace the same angle's photo → one live image per (check-in, angle) on both (SQL), with no orphan blob still marked live.
+
+  Record the winner each time, and that A and B agree (O1).
+- [ ] **18.7 Alignment.** A aligns a photo; B's viewer, Playback and Compare draw the new transform. Then both align the same photo at once: later save wins, and A and B agree. "Use as reference" on B moves `reference_image_id` on A, and transforms and `frame_aspect` stay unchanged on both.
+- [ ] **18.8 Angle structure across devices.**
+  - A removes an angle that has photos while B is checking in to that angle (dialog open on it). Record what B saves, and where it shows.
+  - Each device removes a *different* angle of a 2-angle series at the same time: does the series end with **zero live angles** (the last-angle rule is only a UI check)? Record what the page, check-in dialog and Playback do then.
+  - Concurrent reorders converge (MD-6's pattern).
+- [ ] **18.9 Deletes, Trash, purge.**
+  - A deletes a check-in → gone on B → Undo on A → back on B.
+  - A deletes a series → the cascade (angles, check-ins, images) is tombstoned on B with one stamp. B restores it from Trash → back on A, photos decrypt.
+  - Delete forever on B: rows erased on both, and both Storage objects gone; record A's local files.
+  - Simulated 31-day purge on A (§1.4 aging): A's blobs and Storage objects go; B keeps its local files until its own purge and doesn't re-upload them (MD-11.9's BUG-265 pattern).
+- [ ] **18.10 Vault password change across devices.** A changes the password while B is unlocked. Record whether B stays unlocked; after B locks, the new password opens every photo and note, and the old one is refused.
+- [ ] **18.11 Vault reset across devices.** A resets the vault while B is unlocked with a check-in dialog open, and again while B is **offline** with a check-in saved under the old vault (Secure Notes' qa-096 / qa-097 runs are the model). On reconnect, record what happens to B's old-vault check-in: lost, kept, or noticed. On both devices: every old-vault blob, sealed note and image row is gone, image-less check-ins are deleted, and stats and streaks recompute and agree. No ciphertext under the retired vault is left in Storage.
+- [ ] **18.12 Sessions stay per device.** Unlocking A doesn't unlock B; locking B (button, idle 5 min, inbox close on another page) doesn't lock A. The vault header syncs; the unlocked key doesn't.
+- [ ] **18.13 Offline.**
+  - A Force offline checks in 2 photos: ingest and encryption work offline, and on reconnect the blobs upload and B downloads them. Use real focus or the simulated resume (BUG-264).
+  - Both offline check in to the **same period** with different photos, then reconnect: two check-ins in the period on both, the period counted once, and the streak identical.
+  - B offline deletes a check-in that A edits: converges, and record which wins.
+- [ ] **18.14 Media switches** (synced settings, MD-11.2–11.4):
+  - uploads off on A: A's new blob stays local, and B shows the not-available state, not a spinner or a useless Retry (BUG-261's class); uploads back on from B: A's local blobs get uploaded (BUG-262's class);
+  - downloads off on B: placeholders, and on again they download;
+  - prefetch off: B still fetches thumbnails, full images only when opened.
+- [ ] **18.15 Reminders on two devices** (MD-8's methods):
+  - a series reminder fires on both;
+  - a check-in on A after the fire clears B's sticky and inbox row (auto-acknowledge across devices);
+  - a check-in on A **before** the fire time stops B's alert for that period;
+  - snooze on one device, acknowledge on the other (BUG-254's pattern);
+  - reminder turned off on B → no fire on A;
+  - Photos hidden (synced `hiddenNavPages`) → no inbox row on either, the alert still fires.
+- [ ] **18.16 Second device joins, large series.** B is reset and signs in cold on an account with the ~200-check-in daily series while A keeps checking in:
+  - B's pull time;
+  - B's thumbnails all fetched without opening the page;
+  - nothing re-stamped or re-uploaded by B (O2, the BUG-044 check);
+  - B ends equal to A (O1), and every photo decrypts after unlocking.
+- [ ] **18.17 Backup and restore across devices.** A exports, then imports the export onto the same account after deleting a series. B receives the restored series, angles, check-ins, images and blobs live (MD-13's pattern), and they decrypt on B. Undo of that restore on A removes them on B.
+- [ ] **18.18 Account switch on B.** B signs out and into another QA account: no Photos rows or `vault_media` files from the first account are left on B, and nothing from the first account is uploaded under the second (BUG-005's class). Back on the first account, everything returns and decrypts.
+- [ ] **18.19 `playbackFps` churn.** The speed is a synced field on the series. A drags the speed slider while B plays the same series: count A's uploads per drag, and record whether B's playback speed changes under it. Also check that just playing writes nothing.
+- [ ] **18.20 Receiver cost.** B on the daily series' Grid, revealed tiles in view, while A adds 100 check-ins by eval, one every 2 s. B's frame pacing, CPU, `perf_stall.log` and thumbnail decrypts per arrival (MD-17.3's method, BUG-281). All 100 arrive, and B's grid stays usable.
+
+- *Skipped/blocked:* Android capture and Android ↔ desktop (§4).
+- *Section result:* —
+
 ---
 
 ## 4. Out of scope (state in the results)
@@ -420,7 +490,7 @@ SCHEDULED_REMINDERS_HLD §3 is the spec: ack and snooze on any device apply ever
 
 ## 5. Running it
 
-- **Order:** MD-0 → MD-1 (fresh account) → MD-2 → MD-3 → MD-4 → MD-5 → MD-6 → MD-7 → MD-8 → MD-9 → MD-10 (needs the large qa-026 account, or a re-seeded one) → MD-11 → MD-12 → MD-13 → MD-14 → MD-15 → MD-16 (fresh accounts) → MD-17. MD-2 and MD-3 are the core and the most likely to find bugs; if time is short, do those first.
+- **Order:** MD-0 → MD-1 (fresh account) → MD-2 → MD-3 → MD-4 → MD-5 → MD-6 → MD-7 → MD-8 → MD-9 → MD-10 (needs the large qa-026 account, or a re-seeded one) → MD-11 → MD-12 → MD-13 → MD-14 → MD-15 → MD-16 (fresh accounts) → MD-17 → MD-18 (fresh account; after TEST_PLAN.md P28A/P28B if possible). MD-2 and MD-3 are the core and the most likely to find bugs; if time is short, do those first.
 - **Per session:** bring-up (§1.2), the tests, then `session_end.ps1 -Profile qa` **and** `session_end.ps1 -Profile qb`. Both must print `SIGNED-OUT`. Note: B's session end waits for its own outbox and checks with its own sync gate.
 - **Recording:** tick boxes here with the date, account and evidence (shot names `qa/shots/md<NN>-…`, step files `qa/steps/md<NN>-…`). Bugs go in `qa/BUGS.md` from BUG-229 with phase tag `[MD-n]`. Add the accounts to `qa/PROGRESS.md` §2, and a phase-log line per session.
 - **Harness to add (in `qa/` only):** `dbdiff.py` (O1), `wait_row.py` (O7), an extended collection list for `fs_snapshot.sh` (O2), and a way to start two `voy.ps1` runs together for the concurrency cases (e.g. two background PowerShell jobs released by one timestamp).

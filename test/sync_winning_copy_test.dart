@@ -229,6 +229,42 @@ void main() {
     });
   });
 
+  test('a task ticked here goes back up over an earlier un-ticked copy that '
+      'landed last', () async {
+    final saved = DateTime.utc(2026, 10, 12, 16, 45);
+    TodoTask task({required bool completed, required DateTime at}) => TodoTask(
+      id: 't',
+      listId: 'list',
+      title: 'Pay rent',
+      sortOrder: 0,
+      completed: completed,
+      createdAt: _created,
+      updatedAt: at,
+      version: 2,
+    );
+    final todos = DriftTodoRepository(db);
+    await todos.upsertTask(
+      task(completed: true, at: saved.add(const Duration(seconds: 3))),
+    );
+    // The other device saved its copy 3 s earlier, offline, and reconnected
+    // last, so its copy is the cloud's.
+    await remote.upsertDocument(
+      FirestoreCollections.todoTasks,
+      't',
+      todoTaskToFirestore(task(completed: false, at: saved)),
+    );
+
+    await service.pullTodoTasks(documentIds: {'t'});
+    await _settle();
+
+    expect((await todos.getTask('t'))!.completed, isTrue);
+    expect(
+      (await remote.getDocument(FirestoreCollections.todoTasks, 't'))?[
+          'completed'],
+      isTrue,
+    );
+  });
+
   // BUG-256: an edit made offline once, after another device edited the same
   // record ten times. The version used to decide first, so the device that
   // saved more often won over the one that saved last.

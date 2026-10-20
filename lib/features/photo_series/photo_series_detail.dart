@@ -499,43 +499,48 @@ class PhotoPeriodStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: 22,
-      // Reversed, so the current period is in view however many there are.
-      child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          reverse: true,
-          // At least as wide as the strip, so a few marks start at the left.
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minWidth: constraints.maxWidth),
-            child: Row(
-              children: [
-                for (final (i, period) in stats.periods.indexed)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Tooltip(
-                      message:
-                          '${photoPeriodLabel(period, cadence)} · '
-                          '${switch (stats.states[i]) {
-                            PhotoPeriodState.done => 'done',
-                            PhotoPeriodState.missed => 'missed',
-                            PhotoPeriodState.due => 'due',
-                          }}',
-                      child: InkWell(
-                        onTap: stats.states[i] == PhotoPeriodState.done
-                            ? () => onTap(period)
-                            : null,
-                        customBorder: const CircleBorder(),
-                        child: _PeriodMark(
-                          state: stats.states[i],
-                          current: i == stats.periods.length - 1,
-                          scheme: scheme,
+    // The app turns tooltips off everywhere, but a mark is named only by its
+    // tooltip: nothing else says which period it is or how it went.
+    return TooltipVisibility(
+      visible: true,
+      child: SizedBox(
+        height: 22,
+        // Reversed, so the current period is in view however many there are.
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: true,
+            // At least as wide as the strip, so a few marks start at the left.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Row(
+                children: [
+                  for (final (i, period) in stats.periods.indexed)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Tooltip(
+                        message:
+                            '${photoPeriodLabel(period, cadence)} · '
+                            '${switch (stats.states[i]) {
+                              PhotoPeriodState.done => 'done',
+                              PhotoPeriodState.missed => 'missed',
+                              PhotoPeriodState.due => 'due',
+                            }}',
+                        child: InkWell(
+                          onTap: stats.states[i] == PhotoPeriodState.done
+                              ? () => onTap(period)
+                              : null,
+                          customBorder: const CircleBorder(),
+                          child: _PeriodMark(
+                            state: stats.states[i],
+                            current: i == stats.periods.length - 1,
+                            scheme: scheme,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -45,6 +45,7 @@ import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/sync/sync_watermark_store.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
@@ -2281,15 +2282,49 @@ final goalAllocationsProvider = FutureProvider<List<GoalAllocation>>((ref) {
   return ref.watch(financeRepositoryProvider).listGoalAllocations();
 });
 
+/// Bumped each minute by the app root's timer (main.dart), so [todayProvider]
+/// reads the clock again. The timer lives on a widget, not in a provider, so
+/// it ends with the widget tree.
+final minuteTickProvider = StateProvider<int>((ref) => 0);
+
+/// Today's [journalDay] for a day starting at the given hour; 0 is the plain
+/// calendar day. Shell pages stay mounted, so a page left open overnight
+/// watches this to move to the new day. Re-read on each [minuteTickProvider]
+/// rather than timed to the boundary, so a sleep or clock change catches up;
+/// watchers hear of it only when the day changes.
+final todayProvider = Provider.autoDispose.family<DateTime, int>((
+  ref,
+  dayStartHour,
+) {
+  ref.watch(minuteTickProvider);
+  return journalDay(DateTime.now(), dayStartHour);
+});
+
+/// [todayProvider] under the user's "Day starts at".
+final journalTodayProvider = Provider.autoDispose<DateTime>(
+  (ref) => ref.watch(
+    todayProvider(
+      ref.watch(settingsProvider.settled).valueOrNull?.dayStartHour ?? 0,
+    ),
+  ),
+);
+
 final trackerValuesProvider = FutureProvider.family((
   ref,
   String trackerId,
 ) async {
   ref.keepAlive();
   // The built-in trackers are virtual: their values are derived from the
-  // user's journal entries rather than stored in the tracker table.
-  Future<int> dayStartHour() =>
-      ref.watch(settingsProvider.selectAsync((s) => s.dayStartHour));
+  // user's journal entries rather than stored in the tracker table. They run
+  // through today, so they're recomputed when the day turns over.
+  Future<int> dayStartHour() async {
+    final hour = await ref.watch(
+      settingsProvider.selectAsync((s) => s.dayStartHour),
+    );
+    ref.watch(todayProvider(hour));
+    return hour;
+  }
+
   if (trackerId == kJournalEntriesTrackerId) {
     final entries = await ref.watch(allJournalEntriesProvider.future);
     return journalEntriesTrackerValues(

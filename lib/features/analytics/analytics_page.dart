@@ -192,10 +192,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           final dreamEntriesAsync = showDreamStats
               ? ref.watch(allDreamEntriesProvider.settled)
               : null;
-          final today = DateTime.now();
+          // Watched so the page moves to the new day when left open.
+          final today = ref.watch(todayProvider(0));
           // The Dream Logged tracker's own days, so the chip and its
           // drill-down agree on what counts as a logged dream.
-          final todayDay = journalDay(today, dayStartHour);
+          final todayDay = ref.watch(journalTodayProvider);
           final dreamEntries = dreamEntriesAsync?.valueOrNull;
           final dreamLoggedToday =
               dreamEntries != null &&
@@ -207,11 +208,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           final workoutDays = showWorkoutStats
               ? ref.watch(workoutDaysProvider.settled).valueOrNull
               : null;
-          final workedOutToday =
-              workoutDays?.contains(
-                DateTime(today.year, today.month, today.day),
-              ) ??
-              false;
+          final workedOutToday = workoutDays?.contains(today) ?? false;
           return KeepAliveScrollView(
             storageKey: ShellPageStorageKeys.analyticsList,
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),

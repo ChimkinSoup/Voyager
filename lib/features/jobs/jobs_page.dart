@@ -40,11 +40,6 @@ class _JobsPageState extends ConsumerState<JobsPage>
   final _searchController = TextEditingController();
   final _columnMeasurer = JobColumnMeasurer();
 
-  /// Rebuilds the page as the day turns over. Shell branches stay mounted, so
-  /// a page left open overnight would otherwise keep yesterday as the
-  /// sparkline's last day until something else rebuilt it.
-  Timer? _midnightTimer;
-
   @override
   void initState() {
     super.initState();
@@ -57,22 +52,10 @@ class _JobsPageState extends ConsumerState<JobsPage>
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    _scheduleMidnightRebuild();
-  }
-
-  void _scheduleMidnightRebuild() {
-    final now = DateTime.now();
-    final midnight = DateTime(now.year, now.month, now.day + 1);
-    _midnightTimer = Timer(midnight.difference(now), () {
-      if (!mounted) return;
-      setState(() {});
-      _scheduleMidnightRebuild();
-    });
   }
 
   @override
   void dispose() {
-    _midnightTimer?.cancel();
     _panelController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -192,7 +175,8 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   dailyCounts: [
                     for (final day in jobDailyCounts(
                       inScope,
-                      now: DateTime.now(),
+                      // Watched so a page left open moves to the new day.
+                      now: ref.watch(todayProvider(0)),
                     ))
                       day.count,
                   ],

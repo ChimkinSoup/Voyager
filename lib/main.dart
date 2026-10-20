@@ -143,6 +143,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   late final HotkeyService _hotkeys;
   Timer? _postAuthWarmupTimer;
   Timer? _weatherRefreshTimer;
+  Timer? _minuteTickTimer;
   var _postAuthWarmupStarted = false;
 
   /// Whether [_bootstrap] has read the dev flags from settings. A sign-in
@@ -175,6 +176,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     WidgetsBinding.instance.addObserver(this);
     if (desktopWindowChromeActive) windowManager.addListener(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    _minuteTickTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => ref.read(minuteTickProvider.notifier).state++,
+    );
   }
 
   /// Coming back to the window is a cheap moment to empty the outbox.
@@ -668,6 +673,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     if (desktopWindowChromeActive) windowManager.removeListener(this);
     _postAuthWarmupTimer?.cancel();
     _weatherRefreshTimer?.cancel();
+    _minuteTickTimer?.cancel();
     _hotkeys.dispose();
     super.dispose();
   }
