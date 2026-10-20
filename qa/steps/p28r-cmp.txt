@@ -1,0 +1,13 @@
+# Compare slider: real drags on the image, clamp, real click
+activate
+wait 300
+drag 1535 1150 1250 1150 150 3000
+wait 1200
+shot p28r-cmp-a
+drag 1250 1150 2300 1150 150 400
+wait 800
+shot p28r-cmp-b
+click 1400 900
+wait 800
+shot p28r-cmp-c
+move 2500 1000

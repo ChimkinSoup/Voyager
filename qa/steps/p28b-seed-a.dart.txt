@@ -1,0 +1,23 @@
+final session = c.read(secureVaultSessionProvider);
+if (session == null) { throw StateError('vault locked'); }
+final svc = c.read(photoSeriesServiceProvider);
+ui.Paragraph para(String t, double size, double w) { final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: size, textAlign: ui.TextAlign.center)); pb.pushStyle(ui.TextStyle(color: Color(0xFFFFFFFF), fontSize: size)); pb.addText(t); final p = pb.build(); p.layout(ui.ParagraphConstraints(width: w)); return p; }
+Future<dynamic> mk(int w, int h, String t, double cx, double cy, int col) async { final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..color = Color(col)); final gp = Paint()..color = Color(0x66FFFFFF)..strokeWidth = 3; for (var k = 1; k < 4; k++) { cv.drawLine(Offset(w * k / 4, 0), Offset(w * k / 4, h.toDouble()), gp); cv.drawLine(Offset(0, h * k / 4), Offset(w.toDouble(), h * k / 4), gp); } cv.drawCircle(Offset(w * cx, h * cy), w * 0.08, Paint()..color = Color(0xFFFFEE00)); final p = para(t, h * 0.07, w.toDouble()); cv.drawParagraph(p, Offset(0, h * 0.06)); final im = await r.endRecording().toImage(w, h); final bd = await im.toByteData(format: ui.ImageByteFormat.png); return bd!.buffer.asUint8List(); }
+Future<Map<String, String>> anglesOf(String sid) async { await Future.delayed(Duration(milliseconds: 800)); final snap = await c.read(photoSeriesSnapshotProvider.future); return {for (final a in snap.angles.where((a) => a.seriesId == sid && a.deletedAt == null)) a.name: a.id}; }
+final sa = await svc.createSeries(name: 'P28B Angles', cadence: TrackerCadence.weekly, sortOrder: 0, angleNames: ['Front', 'Side', 'Back']);
+final aa = await anglesOf(sa.id);
+for (var i = 0; i < 12; i++) { final d = DateTime(2026, 7, 27 + 7 * i); final ds = d.month.toString() + '/' + d.day.toString(); final jx = 0.5 + 0.06 * (((i * 37) % 7) - 3) / 3; final jy = 0.5 + 0.06 * (((i * 53) % 5) - 2) / 2; final ph = <String, dynamic>{}; if (i != 10) { final fw = i == 3 ? 800 : (i == 6 ? 700 : 600); final fh = i == 3 ? 600 : (i == 6 ? 700 : 800); ph[aa['Front']!] = await mk(fw, fh, 'FRONT ' + i.toString() + ' ' + ds, jx, jy, 0xFF2A4A7A + i * 0x000A0000); } if (i != 2 && i != 5 && i != 8) { ph[aa['Side']!] = await mk(600, 800, 'SIDE ' + i.toString() + ' ' + ds, jx, jy, 0xFF2A7A4A); } if (i == 0 || i == 4 || i == 9 || i == 10 || i == 11) { ph[aa['Back']!] = await mk(600, 800, 'BACK ' + i.toString() + ' ' + ds, jx, jy, 0xFF7A2A4A); } await svc.createCheckIn(session: session, series: sa, takenOn: d, photos: ph.cast(), note: i == 0 ? 'First note: start of the series' : (i == 11 ? 'Latest note: twelve weeks in' : (i == 7 ? 'A note in the middle' : ''))); }
+debugPrint('P28BSEED angles done');
+final se = await svc.createSeries(name: 'P28B Elapsed', cadence: TrackerCadence.daily, sortOrder: 0);
+final ae = (await anglesOf(se.id)).values.first;
+final eDates = [DateTime(2024, 1, 1), DateTime(2024, 1, 14), DateTime(2024, 1, 15), DateTime(2024, 1, 1 + 181), DateTime(2024, 1, 1 + 182), DateTime(2025, 12, 1), DateTime(2025, 12, 31), DateTime(2026, 1, 1)];
+for (var i = 0; i < eDates.length; i++) { final d = eDates[i]; await svc.createCheckIn(session: session, series: se, takenOn: d, photos: <String, dynamic>{ae: await mk(600, 800, 'E' + i.toString() + ' ' + d.year.toString() + '-' + d.month.toString() + '-' + d.day.toString(), 0.5, 0.5, 0xFF555555)}.cast()); }
+debugPrint('P28BSEED elapsed done');
+final s1 = await svc.createSeries(name: 'P28B One', cadence: TrackerCadence.weekly, sortOrder: 0);
+final a1 = (await anglesOf(s1.id)).values.first;
+await svc.createCheckIn(session: session, series: s1, takenOn: DateTime(2026, 10, 5), photos: <String, dynamic>{a1: await mk(600, 800, 'ONE 10/5', 0.5, 0.5, 0xFF7A5A2A)}.cast());
+final s2 = await svc.createSeries(name: 'P28B Two', cadence: TrackerCadence.weekly, sortOrder: 0);
+final a2 = (await anglesOf(s2.id)).values.first;
+await svc.createCheckIn(session: session, series: s2, takenOn: DateTime(2026, 10, 5), photos: <String, dynamic>{a2: await mk(600, 800, 'TWO-A 10/5', 0.4, 0.5, 0xFF2A6A7A)}.cast());
+await svc.createCheckIn(session: session, series: s2, takenOn: DateTime(2026, 10, 12), photos: <String, dynamic>{a2: await mk(600, 800, 'TWO-B 10/12', 0.6, 0.5, 0xFF6A2A7A)}.cast());
+debugPrint('P28BSEED small done');

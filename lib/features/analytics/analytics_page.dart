@@ -246,12 +246,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                       gridTrackers,
                       // The day too: the rows reckon "today" as they build,
                       // so a grid kept past midnight still ends on yesterday.
-                      builtFrom: (
-                        trackers,
-                        showDefaultsInGrid,
-                        accent,
-                        journalDay(today, dayStartHour),
-                      ),
+                      builtFrom: (trackers, showDefaultsInGrid, accent, today),
                       analytics: analytics,
                     ),
                 ],

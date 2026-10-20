@@ -1,0 +1,14 @@
+final session = c.read(secureVaultSessionProvider);
+if (session == null) { throw StateError('vault locked'); }
+final svc = c.read(photoSeriesServiceProvider);
+ui.Paragraph para(String t, double size, double w) { final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: size, textAlign: ui.TextAlign.center)); pb.pushStyle(ui.TextStyle(color: Color(0xFFFFFFFF), fontSize: size)); pb.addText(t); final p = pb.build(); p.layout(ui.ParagraphConstraints(width: w)); return p; }
+Future<dynamic> mk(int w, int h, String t, int col) async { final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..color = Color(col)); cv.drawCircle(Offset(w * 0.5, h * 0.6), w * 0.08, Paint()..color = Color(0xFFFFEE00)); final p = para(t, h * 0.07, w.toDouble()); cv.drawParagraph(p, Offset(0, h * 0.06)); final im = await r.endRecording().toImage(w, h); final bd = await im.toByteData(format: ui.ImageByteFormat.png); return bd!.buffer.asUint8List(); }
+Future<Map<String, String>> anglesOf(String sid) async { final snap = await c.read(photoSeriesSnapshotProvider.future); return {for (final a in snap.angles.where((a) => a.seriesId == sid && a.deletedAt == null)) a.name: a.id}; }
+final snap0 = await c.read(photoSeriesSnapshotProvider.future); final sw = snap0.series.firstWhere((s) => s.name == 'MD18 Weekly' && s.deletedAt == null);
+final aw = await anglesOf(sw.id);
+for (var i = 0; i < 30; i++) { final d = DateTime(2026, 3, 23 + 7 * i); if (i == 7 || i == 19) continue; final ds = d.month.toString() + '/' + d.day.toString(); final ph = <String, dynamic>{}; ph[aw['Front']!] = await mk(600, 800, 'W FRONT ' + ds, 0xFF2A4A7A); if (i % 4 != 1) { ph[aw['Side']!] = await mk(600, 800, 'W SIDE ' + ds, 0xFF2A7A4A); } if (i % 3 == 0) { ph[aw['Back']!] = await mk(600, 800, 'W BACK ' + ds, 0xFF7A2A4A); } await svc.createCheckIn(session: session, series: sw, takenOn: d, photos: ph.cast(), note: i % 5 == 0 ? 'weekly note ' + i.toString() : ''); }
+debugPrint('MD18SEED weekly done');
+final sd = snap0.series.firstWhere((s) => s.name == 'MD18 Daily' && s.deletedAt == null);
+final ad = (await anglesOf(sd.id)).values.first;
+for (var i = 0; i < 215; i++) { final d = DateTime(2026, 3, 20).add(Duration(days: i)); if (i % 13 == 5) continue; await svc.createCheckIn(session: session, series: sd, takenOn: d, photos: <String, dynamic>{ad: await mk(450, 600, 'DAY ' + d.month.toString() + '/' + d.day.toString(), 0xFF333366 + (i % 7) * 0x00110000)}.cast()); if (i % 50 == 0) debugPrint('MD18SEED daily ' + i.toString()); }
+debugPrint('MD18SEED daily done');

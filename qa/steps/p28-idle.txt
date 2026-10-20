@@ -1,0 +1,19 @@
+click 389 675
+wait 500
+click 389 675
+wait 1500
+shot p28-60-idle-viewer
+move 1400 900
+wait 80000
+move 1420 910
+wait 80000
+move 1400 900
+wait 80000
+move 1420 910
+wait 80000
+move 1400 900
+wait 80000
+shot p28-61-idle-active-6m
+status
+wait 330000
+shot p28-62-idle-locked

@@ -1,0 +1,4 @@
+final svc = c.read(photoSeriesServiceProvider);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+await svc.deleteSeries(snap.series.firstWhere((s) => s.name == 'P28B Elapsed'));
+debugPrint('P28BDELEL');

@@ -6,6 +6,12 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 
 ### Counts by severity
 
+**Phase 28A (2026-10-19, Photos) added BUG-284 … BUG-293, all open and not yet in the table below:** 1 Major (BUG-286), 7 Minor (BUG-284, 285, 287, 288, 289, 290, 293), 2 Cosmetic (BUG-291, 292).
+
+**Phase 28B (2026-10-19/20, Photos) added BUG-294 … BUG-304, all open and not yet in the table below:** 3 Major (BUG-294, 295, 300), 6 Minor (BUG-296, 297, 299, 301, 302, 303), 2 Cosmetic (BUG-298, 304; BUG-304 from the real-input pass on 2026-10-20).
+
+**MD-18 (2026-10-20, Photos on two devices) added BUG-305 … BUG-313, all open and not yet in the table below:** 9 Minor (BUG-305 … BUG-313).
+
 Updated 2026-10-10 after the closing re-check (TEST_PLAN.md FV-41, qa-064), which ran every fix that had been checked only by unit tests in the app, and again 2026-10-15 for BUG-229 … BUG-283 (FV-42 … FV-48). **Every entry is fixed, closed without a code change, or skipped; none is open. BUG-283's fix hasn't been checked in the app yet.**
 
 | Severity | Logged | Fixed + verified in the app | Fixed, not verifiable in the app | Fixed, not yet checked in the app | Closed, no code change | Skipped | Open |
@@ -3158,4 +3164,250 @@ Entry format:
 - **Not fixed (2), late keystrokes:** characters A uploads after `waitForPendingWrites` returns but before the re-seed reads the log land in the log without A's new session knowing about them, still anchored to purged operations. The window is about one round-trip.
 - Notes (2026-10-15, status): the fix noted above as uncommitted is in commit `a3f36f9`.
 
-<!-- Last ID: BUG-283. -->
+### BUG-284 [P28A] The New / Edit photo series dialog drops keyboard focus from Name after a rejected Enter or Create, so the next keys go nowhere
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`, `lib/` clean), Dark + Scatter
+- Steps to reproduce: Photos → New series. With Name empty (or only spaces), press Enter in Name, or click Create. Then type a name.
+- Expected: "Give the series a name." and the caret stays in Name, so the name can be typed straight away (and Enter then creates).
+- Actual: the error shows, but `primaryFocus` is the dialog's focus scope (`vm.ps1 field` → NOFIELD); typed letters go nowhere until Name is clicked again (`qa/shots/p28-04-ws.png`, `p28-05-ws2.png`).
+- Notes: the same app-wide pattern as BUG-050 / BUG-161 / BUG-185 (name dialogs elsewhere), in the new Photos dialog. `_submit` only sets the error; nothing requests focus back.
+
+### BUG-285 [P28A] After a wrong vault password on the Photos unlock card, the password field loses focus, so a retry needs a click first
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: lock the vault on a series detail. Click Password, type a wrong password, press Enter. When "Wrong password." shows, type the right password and press Enter.
+- Expected: the field is cleared and keeps the caret, so the retry types into it.
+- Actual: the field is cleared but loses focus (`field` → NOFIELD, `primaryFocus` = the page's focus scope); the retyped password and Enter go nowhere. A click on the field is needed (`qa/shots/p28-52-wrongpw.png`).
+- Notes: the vault stays locked either way (correct). Likely the busy state rebuilding the card while it waits for the key derivation. Pressing Check in while locked does focus the field (works).
+
+### BUG-286 [P28A] On Windows, Esc or Cancel in the check-in dialog throws away every photo picked and the note typed, with no confirm (the "Discard photos?" prompt is Android-only)
+- Severity: Major
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter, Vim off
+- Steps to reproduce: a series with four angles, vault unlocked. Check in → paste a photo on Front, Back and Side (Next after each), Skip Angle 4. On the review, click Note (optional) and type "typed note that will vanish". Press Esc (focus still in the note).
+- Expected: TEST_PLAN 28A: "Esc / Cancel after picking photos → 'Discard photos?' confirm (**Discard**, or back to the dialog)". At least the typed note and picks shouldn't vanish on one key from inside a text field.
+- Actual: the dialog closes at once; nothing is saved (`photo_check_ins_table` unchanged) and there's no way back to the picks or the note (`qa/shots/p28-67-review-note.png` → `p28-68-after-esc.png`). The same with one photo picked on the first step (`p28-66-esc-picked.png`) and with Cancel.
+- Notes: by design in the code: `_asksToDiscard` is `photoCaptureSupported && _picked.isNotEmpty`, with the comment "On Android the photos are the camera's, which can't be picked again". On Windows a paste may not be re-creatable either (the clipboard has moved on), and the note is lost on every platform. Same family as BUG-084 / BUG-144 / BUG-186 (Esc discards typed work silently). Scatter on.
+
+### BUG-287 [P28A] The series card's "blurred" cover on the Photos list is recognisable: large shapes in the photo read straight through the blur
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), maximized 2880×1800, Dark + Scatter
+- Steps to reproduce: a series whose latest check-in's first photo is fixture `qa/data/p28/p12.jpg` (a red card with a large white "12"). Unlock the vault and open the Photos list.
+- Expected: the cover is blurred so nothing in it is recognisable (HLD §3/§4 "blurred"; TEST_PLAN 28A D3: "Blur strength: nothing recognisable before the first click").
+- Actual: the "12" is plainly readable on the "Progress" card (`qa/shots/p28-70-list.png`). The same photo in the series grid (a 150-logical-px tile) is unreadable under the same filter.
+- Notes: both use `ImageFilter.blur(sigmaX: 18, sigmaY: 18)` in logical pixels, but the list card's cover is up to ~310 logical px wide (`columns = maxWidth / 260`), and the thumbnail is scaled up into it, so the same sigma blurs proportionally far less. With a real photo the silhouette, skin tones and pose would show, on a page that has no reveal step for the cover. Scales with window width (fewer, wider columns at smaller sizes). Scatter on.
+
+### BUG-288 [P28A] Clicking a "done" mark on the period strip scrolls the grid to the wrong period when that period is far down the grid
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), maximized, Dark + Scatter
+- Steps to reproduce: a monthly series with check-ins every month from Oct 2023 to Sep 2026 (seeded, `qa/steps/p28-seed.dart.txt`, "P28 Monthly seed"). Open it, at the top of the page click the strip mark whose tooltip is "October 2023 · done" (or "November 2023 · done", "January 2025 · done"). Script: `qa/steps/p28-striptap.ps1`.
+- Expected: the grid scrolls to that period's group ("October 2023"), HLD §4 / TEST_PLAN 28A "Clicking a done mark scrolls the grid to that check-in".
+- Actual: the grid scrolls, but to the wrong place: Oct 2023 and Nov 2023 land on "October 2025" / "Nov 15, 2025", Jan 2025 on "November / December 2025" (`find` lists only those period labels afterwards; `qa/shots/p28-74-strip-done.png`). A mark near the top ("July 2026 · done") lands correctly. The strip scrolls away with the page, so a second click can't refine it.
+- Notes: `_scrollToPeriod` calls `Scrollable.ensureVisible` on the period's `SliverPadding`; slivers past the cache extent haven't been laid out, so the offset it reveals is an estimate. With a daily series (431 periods) most of the strip is unreachable this way. Scatter on.
+
+### BUG-289 [P28A] A truncated JPEG is accepted as a check-in photo, then fails the save with "Could not save the check-in." and leaves the check-in's other photos behind as orphan vault blobs (rows, files and uploads)
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: Photos → a series with angles Front / Back / Side / Angle 4 → Check in. Skip Front; on Back choose `qa/data/p28/p14.jpg`; Back to Front and choose `qa/data/p28/p08-truncated.jpg` (the first 40% of a valid JPEG). Skip the rest, Save.
+- Expected: the broken file is refused when picked, as the >20 MB file and the renamed `.txt` are ("That image could not be read." exists in `media_ingest.dart`), or the save fails cleanly with nothing half-saved (TEST_PLAN 28A D5: "a clear error and nothing half-saved (no orphan `vault_blobs` row or file)").
+- Actual: the pick is accepted (the step shows "No preview" and Next). Save shows "Could not save the check-in." (`qa/shots/p28-87-save-trunc.png`); the profile's `voyager_errors.log` gets `uncaught: RangeError (length): Invalid value: Not in inclusive range 0..35375: 35376` from `JpegScan.decode` via `_ingestWithThumb`. No check-in is made, but Back's photo, ingested first, stays: `vault_blobs_table` row `cf1db4ef…` (1200×1600, `upload_state` pending, so it goes to Storage too) with its two files in `vault_media`, referenced by no image row.
+- Notes: two causes: `validateIngestInput` only sniffs the header, and `_decode` maps only a null result to `MediaIngestException`, not the decoder's RangeError, so the dialog falls to its generic catch. Separately, `createCheckIn` ingests each photo (row + files) before writing the check-in, so any failure after the first photo strands the earlier blobs; nothing seems to clean up a live blob with no image (the orphan-file sweep keeps files that have a row). Scatter on.
+- Notes (same session, D5 kill mid-save): the same orphan comes from `stop.ps1` during a Save of three photos (8000 px, portrait, landscape; killed 2.2 s after the click, `qa/steps/p28-killsave.ps1 -KillMs 2200`): no check-in, but blob `e8b324fe…` (2048×2048, the first photo) stays with both files. Killed at 1.2 s nothing was written, at 4 s the save had completed; no check-in without images in any run. After a relaunch both orphans (`cf1db4ef`, `e8b324fe`) are still there, now `upload_state` uploaded, so they also sit in Storage under `users/<uid>/vault_media/`.
+
+### BUG-290 [P28A] A daily series' grid puts every check-in in its own full-width row, so a year of check-ins is ~380 rows of one small tile
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), maximized 2880×1800, Dark + Scatter
+- Steps to reproduce: open "P28 Daily seed" (384 check-ins, Aug 2025 – Oct 2026, seeded by `qa/steps/p28-seed.dart.txt`) and scroll the grid.
+- Expected: the grid shows many check-ins per screen (HLD §7.1 "Grid of every check-in"; weekly and monthly series fit a period per row because a period usually holds one check-in, so the grid looks like a list there too, but a daily series is where most rows pile up).
+- Actual: each day is its own period group, with a "Thu, Jun 18, 2026" label and one 150-logical-px tile at the left of a ~2,700 px wide row; about 3 check-ins per maximized screen (`qa/shots/p28-122-daily-bottom.png`). Reaching the first check-in took ~200 wheel events of 40 notches. The rest of the width is empty.
+- Notes: grouping by period is what the HLD asks; with one check-in per period it degenerates into a single column. Performance was fine (≈60 fps, worst build 6 ms while scrolling; debug). The strip's jump-to-period would be the way around the length, but it misses far periods (BUG-288). Scatter on.
+
+### BUG-291 [P28A] With many angles, the check-in review breaks "Skipped" mid-word and the grid tile's date wraps beside the presence dots
+- Severity: Cosmetic
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), maximized, Dark + Scatter
+- Steps to reproduce: a series with 10 angles ("P28 Ten angles", `qa/steps/p28-seed-many.dart.txt`). Check in with photos on angles 1, 3 and 10, skipping the rest; look at the review, then Save and look at the tile.
+- Expected: labels fit or ellipsize; the tile's date stays on one line.
+- Actual: the review row squeezes 10 slots into the 440-px dialog and each skipped slot reads "Skipp" / "ed" on two lines; on the 150-px tile the 10 dots push "Oct 19, 2026" onto two lines ("Oct 19," / "2026") (`qa/shots/p28-132-ten-review.png`, `p28-133-ten-grid.png`). No overflow error in the log.
+- Notes: no cap on angles in the dialog (TEST_PLAN expected "up to 4"; the HLD sets none). From about 6 angles up. Scatter on.
+
+### BUG-292 [P28A] Light theme: the Photos "Due" / "Done" badges are hard to read (about 1.8:1 and 2.2:1)
+- Severity: Cosmetic
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), Light theme spot-check, maximized
+- Steps to reproduce: Settings → Appearance → Light. Open Photos (series cards) and a series detail (badge after the stats).
+- Expected: badge text readable against its pill (WCAG AA 4.5:1 for 22-px-high small text).
+- Actual: "Done" is accent-tinted text rgb(124,158,255) on rgb(234,238,247): 2.2:1; "Due" roughly rgb(157,182,253) on the same: about 1.8:1 (measured from `qa/shots/p28-150-light-list.png`). Dark theme reads fine.
+- Notes: `PhotoPeriodBadge` uses `scheme.primary` / `scheme.tertiary` for the text over the same colour at 14% alpha. Same family as the light-theme contrast reports BUG-042 / BUG-114 / BUG-216.
+
+### BUG-293 [P28A] A check-in's actions (edit date, note, add / replace a photo, align, use as reference, delete) are mouse-only
+- Severity: Minor
+- Found: 2026-10-19, Phase 28A, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: on a series detail, Tab to a check-in tile (Tab order reaches the tiles after Grid / Playback / Compare; `qa/steps/p28-tabwalk.ps1`). Enter reveals it, a second Enter opens the viewer. Try Shift+F10 (or the Menu key) on the focused tile.
+- Expected: the tile's context menu opens from the keyboard (TEST_PLAN 28A D4: "reach and operate everything without the mouse").
+- Actual: nothing opens; the menu is reachable only by right-click (or a long-press on Android). Every per-check-in action lives only there, so a keyboard user can't change a date, add or edit a note, add or replace an angle's photo, align or delete a check-in.
+- Notes: `ContextMenuRegion` (`lib/core/widgets/context_menu.dart`) handles only Esc. The rest of the page is keyboard-reachable: Check in, Lock, More, the strip's done marks, Grid / Playback / Compare and each tile in order. A strip mark scrolled out of view (x = −864) takes focus without scrolling into view. Scatter on.
+
+### BUG-294 [P28B] About 1 photo in 150 never reaches the cloud: Storage refuses vault ciphertext whose random first bytes look like a known file type
+- Severity: Major
+- Found: 2026-10-19, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: seed many check-ins (`qa/steps/p28b-seed-b.dart.txt`: 400 photos of 900×1200 through `PhotoSeriesService.createCheckIn`, vault unlocked) and let the uploads drain. Read `vault_blobs_table.upload_state`.
+- Expected: every blob uploads (`users/{uid}/vault_media/{id}` and `{id}.thumb`), so the photo reaches the other devices and the cloud copy (PHOTO_SERIES_HLD.md §14).
+- Actual: 3 of 434 blobs parked as `failed` with "User is not authorized to perform the desired action." (`[vault media] parking …:up` in the run log): `4d42e036…`, `843a9159…`, `bb03ed85…` ("P28B Daily 400", Nov 15 2025, Sep 13 and Sep 18 2026). For two of them the `.thumb` object is in Storage and the full image is not. After a relaunch, `requeueFailed` retries them and Storage refuses them again at once, every launch. Nothing on the Photos page shows that these photos exist on this device only.
+- Notes: cause confirmed outside the app (`qa/steps/p28b-upprobe.py`, `p28b-sniff.py`, QA account's own Firebase ID token, same REST upload with `Content-Type: application/octet-stream`). Firebase Storage sniffs the bytes and stores a detected content type in place of the declared one, so the vault rule `request.resource.contentType == 'application/octet-stream'` (`storage.rules`, deployed ruleset identical) fails. Random 50 KB bodies with these prefixes: `FFF1`, `FFF8`, `FFF9` (AAC/MPEG audio), `71C7` (cpio), `504B0304` (ZIP), `FFD8FF` (JPEG), `89504E47` (PNG) → 403; `00`, `BC72`, `FFFB`, `25504446` → 200 `application/octet-stream`. The refused files start `FFF9…` (843a9159 full), `71C7…` (bb03ed85 full) and `FFF8…` (4d42e036 thumb); the same bytes are refused under any object name, and other blobs upload under the refused names. Each file starts with its 12-byte random nonce, so the chance per file is fixed by the sniffer, about 3 in 870 files here. `FirebaseMediaStorage._classify` treats `unauthorized` as permanent, which is right for a real rule failure; here it is permanent too, because the bytes never change. Scatter on.
+- Notes (account switch, 2026-10-20): signing out of qa-100 and up as qa-101 showed "Discard unsynced changes? This device holds 3 change(s) from the account signed in before, which haven't reached its cloud copy yet" with an empty outbox: these three photos. They can never upload, so the only ways on are to keep the old account signed in or lose them (Discard was taken; the three photos are gone from qa-100's data).
+- Notes (MD-18, 2026-10-20, qa-102): seen again on two devices: 2 of ~270 blobs of an eval re-seed parked with "User is not authorized to perform the desired action." (`f3b8bb3a…`, `a718256b…`). The other device holds them as `localOnly` / `missing` and shows an empty frame (BUG-301). Dev's full check still reports safe to wipe with them parked: BUG-313.
+
+### BUG-295 [P28B] Export Backup leaves out every photo: the ZIP holds the Photos rows but no ciphertext, so a backup imported on another account (or after the Storage objects are gone) has blank photos for good
+- Severity: Major
+- Found: 2026-10-20, Phase 28B, qa-100 → qa-101 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: on qa-100 (436 live photos), Settings → Data → Export Backup (`qa/exports/p28b/p28b-export.zip`). Sign out, sign up a fresh account (qa-101), Import Backup with that ZIP, Restore. Photos → unlock with the source account's vault password → open "P28B Angles", Grid and Compare.
+- Expected: the backup is self-contained for photos: PHOTO_SERIES_HLD.md §14 "add every table plus the ciphertext blobs to `buildBackupCollections`, as ciphertext only", MEDIA.md "Full app data export includes image binaries". After the import every photo and note opens (TEST_PLAN 28B).
+- Actual: the ZIP is 229 KB: all five Photos tables (66 series, 83 angles, 941 check-ins, 1,017 images, 1,019 blobs, equal to SQL, 70 valid checksums, `mediaFiles: 0`) and no `vault_media` member at all; the 436 live blobs are about 24 MB of ciphertext on disk. On qa-101 the import takes ~5 minutes, the vault unlocks and notes open ("First note: start of the series"), but all 439 live blobs are `localOnly` / `missing` / `missing` with 0 files, and every tile, Playback frame and Compare side is an empty grey box with no "unavailable" mark (`qa/shots/im8.png`, `im9.png`). Nothing can fetch them: the objects are under the source account's `users/{uid}/vault_media/`.
+- Notes: deliberate in code: `backup_collections.dart` "Metadata only: the ciphertext stays in Storage and on disk", and `RemoteSyncService._refreshRestoredVaultBlobs` asks the server per blob, one by one (1,019 sequential reads, most of the import's 5 minutes), whether its files are in Storage; on a new account they never are. The same backup restored on the source account works only while that account's Storage still holds the objects (a vault reset or the 30-day purge removes them; BUG-294's local-only photos are never there). Scatter on.
+
+### BUG-296 [P28B] The Trash offers to restore the check-ins a vault reset deleted; a restore brings back a check-in whose photo can't open, and the next launch deletes it again
+- Severity: Minor
+- Found: 2026-10-19, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: an account whose vault was reset with photos in it (qa-100: Phase 28A's reset tombstoned 515 check-ins, 524 images and 580 blobs). Settings → Data → Trash: Restore "Check-in "Fri, Nov 28, 2025"" (P28 Daily seed). Relaunch.
+- Expected: PHOTO_SERIES_HLD.md §6.7: a reset deletes the retired vault's blobs and images, and a check-in left without images is deleted "so streaks and missed marks recompute honestly". Those check-ins can't come back with a photo, so the Trash shouldn't offer them (or should say why not).
+- Actual: the Trash lists all 515 as "Check-in "…" · Photos · 1 photo · deleted today · 30 days left" with Restore, mixed in with real deletions. Restore makes the check-in and its image live again (`5931f59f…`, image `60d2d4e3…`), but the image's blob `e26d3199…` stays tombstoned and belongs to the retired vault `250ccd8e…`, so the series counts a check-in whose photo can't open. At the next launch the app deletes the check-in and image again under a new stamp (version 3, 00:02:25) and the row is back in the Trash.
+- Notes: Empty trash then counted 520 items, almost all of them these. Scatter on.
+
+### BUG-297 [P28B] Undoing an import ("Before restore" snapshot) keeps the imported vault, so the account is left with a vault and password it never had
+- Severity: Minor
+- Found: 2026-10-20, Phase 28B, qa-101 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: fresh account with no vault (qa-101). Import qa-100's backup (`qa/exports/p28b/p28b-export.zip`). Settings → Data → automatic backups → the "Before restore · 00:09 · 2 records" snapshot → Restore….
+- Expected: everything the import brought is undone, including the vault header (the snapshot was taken with no vault).
+- Actual: series, check-ins and blobs are tombstoned (0 live; Photos shows only "New series"), but `secure_vault_header_table` still holds qa-100's vault `f8da4fe0…`, and the import had already written it to qa-101's cloud (`users/<uid>/secure_vault/header`). The account now has a vault whose password is the other account's.
+- Notes: the header is a single row without a tombstone, so a snapshot without it has nothing to restore. The same likely applies to Secure Notes, which share the vault. Scatter on.
+
+### BUG-298 [P28B] Compare's Overlay slider has no label or value, and at 0% looks like a lone dot
+- Severity: Cosmetic
+- Found: 2026-10-19, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), maximized, Dark + Scatter
+- Steps to reproduce: a series with photos → Compare → Overlay. Move the slider to 0%, 50%, 100%.
+- Expected: the slider says what it does and where it is ("B 50%"; the code passes `label: 'B N%'`), like Playback's "4 fps" readout next to its slider and the alignment editor's "Opacity … 50%".
+- Actual: nothing names the slider and no value shows (`qa/shots/ov0.png`); the `label` never appears because the slider isn't discrete (no `divisions`), so Flutter shows no value indicator. The inactive track is nearly invisible against the page, so at 0% only the thumb is left (`ov1.png`). The blend itself is right: 0% shows A, 100% shows B.
+- Notes: the near-invisible inactive track is the app's slider theme (Playback's fps slider and the journal mood slider look the same); here it combines with the missing label. Scatter on.
+
+### BUG-299 [P28B] Paused on a photo that won't open, Playback shows the previous photo under the previous date stamp, with nothing saying this frame is broken
+- Severity: Minor
+- Found: 2026-10-19, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), maximized, Dark + Scatter
+- Steps to reproduce: with Voyager stopped, flip 20 bytes of a check-in's blob and its `.thumb` (`qa/steps/p28b-blobfx.py corrupt …`; here "P28B Angles", Front, Aug 24). Relaunch, unlock, Playback, step with → onto Aug 24.
+- Expected: the frame is skipped while playing (it is: 30 fps across a corrupt frame of the 400-frame series ran without a stall) and, when stopped on it, marked as unavailable (the code has an `imageBroken` icon for this case).
+- Actual: stopped on it, the frame area keeps showing the Aug 17 photo with the stamp "Aug 17, 2026 +3 weeks", while the scrubber line reads "Aug 24, 2026 · 5 / 11" (`qa/shots/cr4.png`). A user can't tell the Aug 24 photo is damaged; it looks like a duplicate of the week before. Compare shows the same blob as an empty grey frame.
+- Notes: `_PhotoSeriesPlaybackState` holds the last decoded frame (`_held`) whenever the playhead's own frame isn't decoded, including when it never will be (`_failed`); the broken icon is reached only when nothing was ever held. Scatter on.
+
+### BUG-300 [P28B] Turning "Upload images to the cloud" back on never uploads the photos taken while it was off (and turning downloads back on fetches no thumbnails until the next launch)
+- Severity: Major
+- Found: 2026-10-20, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: Settings → Data → turn "Upload images to the cloud" off. Check in a photo on any series (here "P28B Two", through `PhotoSeriesService.createCheckIn`, `qa/steps/p28b-upck.dart.txt`). Turn the switch back on (once through the settings provider, once with the real switch). Wait; relaunch.
+- Expected: the photo uploads once uploads are on again, as the switch promises for images ("Turning uploads on is the moment everything attached while they were off can finally leave", `settings_page.dart`) and as HLD §14 says vault media "respects its remote-I/O settings" like `MediaService`.
+- Actual: the blob (`84c32212…`) is `localOnly` with no Storage object while uploads are off (correct), and stays `localOnly` with no Storage object after the switch is back on, 15 s later, and after a relaunch. Its check-in syncs, so other devices and a cold re-login get a check-in whose photo never arrives: after a cold re-login "P28B Two" counted 3 check-ins with the third photo gone for good (empty tile).
+- Notes: `VaultMediaService.queueLocalOnlyUploads` runs only from the remote-settings listener (`providers.dart`, a switch flipped on another device); the Settings switch and the launch path (`main.dart`) call only `MediaService.queueLocalOnlyUploads`. The download side has the same gap with a milder effect: after downloads were turned back on, no thumbnail downloaded in 60 s (438 blobs `missing`); the next launch fetched them eagerly. Scatter on.
+- Notes (MD-18.14, 2026-10-20, qa-102): the two-device path confirms the code note: uploads turned off on A, a check-in on A (`localOnly`), uploads turned back on **from B** → A uploaded the blob within 30 s and B downloaded it. The downloads half reproduced across devices: downloads off on B, a check-in on A, downloads back on (from B) fetched nothing in 30 s; rendering the tile fetched only its thumbnail, and the full image stayed `missing` with prefetch on until the viewer opened it.
+
+### BUG-301 [P28B] A photo that isn't on this device shows as an empty frame with no reason given (downloads off, never uploaded, not in this account)
+- Severity: Minor
+- Found: 2026-10-20, Phase 28B, qa-100 / qa-101 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: turn "Download images from the cloud" off, then sign in on a cold device (`reset.ps1 -Force`, `launch.ps1`, `login.ps1`). Unlock, open a series: list cover, grid tile, viewer, Compare. (Same picture for BUG-295's imported photos and BUG-300's never-uploaded one.)
+- Expected: the switch's own description: "Off shows "Download disabled" wherever an image is not already on this device, instead of a spinner that never finishes"; for a photo that can't be fetched at all, some sign that it's unavailable.
+- Actual: no spinner (good), but no label either: list covers and grid tiles are blank cards (the first tile even loses its reveal eye), the viewer is an empty grey frame, Compare an empty box; Playback alone shows a broken-image icon (`qa/shots/dn0.png` … `dn3.png`). A downloads-off photo, a damaged one, one that was never uploaded and one that exists in another account all look the same.
+- Notes: `VaultPhoto` has no counterpart to the media widgets' "Download disabled" state. Scatter on.
+
+### BUG-302 [P28B] Leaving Playback on a series with no photos throws "Looking up a deactivated widget's ancestor is unsafe"
+- Severity: Minor
+- Found: 2026-10-19, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), Dark + Scatter
+- Steps to reproduce: unlock, open a series with no check-ins (e.g. "P28B R daily"), pick Playback ("No photos to play yet."), then pick Grid (or Compare, or go back).
+- Expected: nothing in the log.
+- Actual: the run log gets `EXCEPTION CAUGHT BY WIDGETS LIBRARY … Looking up a deactivated widget's ancestor is unsafe` from `_PhotoSeriesPlaybackState.dispose` (`photo_series_playback.dart:99`) → `_ticker` → `createTicker` → `TickerMode.getValuesNotifier`. Seen once by chance in the 23:18 run (`qa/logs/run-qa-20261019-231843.log`) and reproduced at 00:55. Nothing visible happens.
+- Notes: `_ticker` is `late final … = createTicker(_tick)`; with no frames, `build` returns "No photos to play yet." before ever reading it, so `dispose` is the first read and creates the ticker on an unmounting element. Debug assertion; in release the ticker is created and disposed for nothing. Scatter on.
+- Notes (00:58): in one run (`qa/logs/run-qa-20261020-005208.log`) this exception was followed later by 69 more (an Overlay assertion, "infinite size", "Multiple widgets used the same GlobalKey", `_debugRelayoutBoundaryAlreadyMarkedNeedsLayout`) and a red error box filling the open inbox popover after a window resize to 720×520 (`qa/shots/sz0.png`); the inbox's quick-reminder field had just been typed into with Vim on and off. Not reproduced by this exception plus the same resize in a fresh run, so the link is unproven.
+- Notes (MD-18, 2026-10-20, qa-102): also left Playback of a series whose angles were all removed (BUG-308; 02:27:31 in profile qb's `voyager_errors.log`). Five minutes later the vault's idle-lock timer threw `'_lifecycleState != _ElementLifecycle.defunct': is not true` from `SecureVaultSessionNotifier.lock` → `ConsumerStatefulElement.watch` (02:32:34): the widget whose dispose threw stayed subscribed to the vault session.
+
+### BUG-303 [P28B] Below about 900 logical px of height the alignment editor overflows (26–74 px) and its buttons cover the Rotation slider; Compare's photos shrink to thumbnails
+- Severity: Minor
+- Found: 2026-10-20, Phase 28B, qa-100 (profile `qa`, debug build `9a697d9`), window 1440×1040 physical (720×520 logical; set by `windowManager.setSize` over the VM service), Dark + Scatter
+- Steps to reproduce: at 720×520, "P28B Angles" → right-click a tile → Align → an angle. Once on the angle's reference (Front, Oct 12: no Opacity row), once on another photo (Side, Oct 5).
+- Expected: the dialog fits or scrolls (TEST_PLAN 28B D3: "Playback / Compare / Align at … 1440×1040"; no `RenderFlex overflowed`).
+- Actual: "BOTTOM OVERFLOWED BY 26 PIXELS" over the Rotation row on the reference, "BY 74 PIXELS" over the Opacity row on the other photo (`qa/shots/m8.png`, `m12.png`); Copy from previous / Reset / Cancel / Done are drawn over the Rotation slider and the hint line. The stage keeps its `min(460, 50% of height)` (260 logical) whatever room is left. In the same window Compare's controls wrap to four rows and the stacked side-by-side photos are about 48×64 logical each (`m4.png`). Playback at this size scrolls and works (`m2.png`).
+- Notes: 2000×1100 physical (1000×550 logical) overflows too, "BY 59 PIXELS" with the Opacity row (`qa/shots/w9.png`); only maximized (1440×900 logical) fits, where the editor was used for the rest of the phase. Compare and Playback lay out at 2000×1100 (`w2.png`). Scatter on.
+
+### BUG-304 [P28B] While the Playback scrubber is dragged, the caption above it shows the date where the drag started, not the frame being shown
+- Severity: Cosmetic
+- Found: 2026-10-20, Phase 28B real-input pass, qa-100 (profile `qa`, debug build `9a697d9`), maximized, Dark + Scatter
+- Steps to reproduce: "P28B Angles" → Playback (Front, 11 frames, on frame 1). Press the scrubber's thumb and drag it right with a real mouse to about frame 7; hold before releasing (`qa/steps/p28r-scrub-live.txt`, frames grabbed over the VM service mid-drag).
+- Expected: the caption follows the playhead, like the photo and its date stamp do ("Sep 7, 2026 · 7 / 11").
+- Actual: while the button is down the photo and stamp follow live (Aug 24, then Sep 7), but the caption stays "Jul 27, 2026 · 1 / 11" in the hover colour, with the hover dot left at the press point (`qa/shots/p28r-live-0.png`, `-1.png`). It catches up only on release (`p28r-live-2.png`). Hovering without pressing names the right frame.
+- Notes: `_ScrubberState` sets `_hover` only in `MouseRegion.onHover` (`photo_series_playback.dart:514`), which doesn't fire while a button is held, so the last hover position wins over `widget.index` for the whole drag. Scatter on.
+
+### BUG-305 [MD-18] The photo viewer keeps the check-ins and photos it opened with: a check-in or replacement photo from another device doesn't show until the viewer is closed and reopened
+- Severity: Minor
+- Found: 2026-10-20, MD-18.3, qa-102 (profiles `qa` + `qb`, debug build `9a697d9`), maximized, Dark + Scatter
+- Steps to reproduce: on B, open "MD18 Weekly", reveal the newest tile and open the viewer (Oct 19, "29 / 29"). On A, replace that check-in's Front photo (`bash qa/steps/md18-op.sh qa rep_W_20261019_F`). Also: B's viewer open on mdprog's only check-in ("1 / 1") while A adds a second check-in to that series.
+- Expected: like the grid, Playback and Compare (which all update in place), the viewer shows the new photo and the new count.
+- Actual: the grid behind the viewer shows "qa REP F 20261019" within 4 s, but the viewer keeps the replaced photo, also after switching to Side and back (`qa/shots/md18-qb-183-view0.png`, `-view1.png`, `-view2.png`); the mdprog viewer kept "1 / 1" with the second check-in already in the grid. Closing and reopening the viewer shows the current state.
+- Notes: same class as BUG-260 (media in an open editor). The viewer shows a photo whose row is already tombstoned on this device.
+
+### BUG-306 [MD-18] Two devices replacing the same angle's photo of one check-in at the same time leave two live photos for that angle, and the series counts both
+- Severity: Minor
+- Found: 2026-10-20, MD-18.6, qa-102, build `9a697d9`
+- Steps to reproduce: both devices unlocked; release one `setPhoto` per device on the same check-in and angle (`bash qa/steps/md18-op.sh both rep_W_20260914_F`: A and B saved 70 ms apart).
+- Expected: one live image per (check-in, angle) on both devices (PHOTO_SERIES_HLD §14, later save wins), with the other device's new blob unreferenced.
+- Actual: each device tombstoned the old Front image and added its own, so the Sep 14 check-in has two live Front images (`50b94697…` from A, `3bd703f1…` from B) on both devices and in the cloud; both blobs are live and uploaded. The header counts both ("66 photos" for 32 check-ins whose live photos number 65); Playback shows one frame for the check-in (`qa/shots/md18-qb-186-pb.png`). A later replace of that angle tombstones both, so it heals only if the user happens to replace it again.
+- Notes: `PhotoSeriesService.setPhoto` tombstones the images it can see and inserts a new row with a new id; two devices racing can't see each other's insert, and nothing on pull enforces one live image per (check-in, angle). Same root pattern as BUG-241's offline/concurrent edits, but here the two rows don't even conflict (different ids).
+
+### BUG-307 [MD-18] A check-in saved into an angle that another device removed meanwhile keeps a live photo on the removed angle: invisible, but counted in the series' photos and uploaded
+- Severity: Minor
+- Found: 2026-10-20, MD-18.8, qa-102, build `9a697d9`
+- Steps to reproduce: on B open mdprog's check-in dialog (front picked, back skipped) and stop on "side · 3 of 4". On A remove the "side" angle (`bash qa/steps/md18-op.sh qa rmangle_P_s`). On B pick a photo for side and Save.
+- Expected: the dialog notices the angle is gone (drops the step or refuses that photo), or the save leaves no live photo on a removed angle.
+- Actual: the dialog still shows "side · 3 of 4" and the review lists side; Save writes a live image on the tombstoned angle on both devices, and its blob is uploaded (`ec75050b…`). It shows nowhere (the tile has dots for the 3 live angles), but the header says "5 photos" where the live angles hold 4 (`qa/shots/md18-qb-188-after.png`), and the Trash later lists the series with "5 photos".
+- Notes: the dialog's angles are read once when it opens; `createCheckIn` doesn't check that each angle is still live.
+
+### BUG-308 [MD-18] Two devices each removing a different angle of a two-angle series at the same time leave it with no angles: the page then can't take a check-in, Playback is blank, and the old check-ins still count
+- Severity: Minor
+- Found: 2026-10-20, MD-18.8, qa-102, build `9a697d9`
+- Steps to reproduce: "MD18 Two" (weekly, angles L and R, check-ins Oct 12 (L) and Oct 19 (L+R)). Release A removing L and B removing R together (`bash qa/steps/md18-op.sh both wrm_T_L_R`, 18 ms apart).
+- Expected: the series keeps at least one angle (the dialog refuses removing the last one, HLD §18), or the page handles a series with none.
+- Actual: both angles tombstoned on both devices. The page reads "No check-ins yet" and "0 check-ins · 0 photos", yet shows "Oct 12, 2026 – Oct 19, 2026" and 1 missed week from the two image-less check-ins that stay live; Playback is an empty area with no "No photos to play yet."; Check in opens straight on the review with no photos and Save disabled (`qa/shots/md18-qb-188b-page.png`, `-pb.png`, `-ci.png`). Edit series is the only way out.
+- Notes: the last-angle rule is only a check in the dialog; `saveAngles` accepts a list that keeps other angles, and the merge of two such saves removes both.
+
+### BUG-309 [MD-18] Two devices reordering a series' angles at the same time can give two angles the same place, and the devices then show the angles in different orders for good
+- Severity: Minor
+- Found: 2026-10-20, MD-18.8, qa-102, build `9a697d9`
+- Steps to reproduce: "MD18 Weekly" angles Front, Side, Back. Release A reversing them and B swapping the first two (`bash qa/steps/md18-op.sh both wreorder_W`, 1 ms apart).
+- Expected: one order on both devices (MD-6's pattern).
+- Actual: per-angle later-save-wins gives Side 0, Back 0, Front 2 on both devices; A shows Side, Back, Front and B shows Back, Side, Front (angle chips, presence dots, check-in stepper), and Playback opens on a different angle on each (`qa/shots/md18-qa-188c.png`, `md18-qb-188c.png`). Nothing repairs the tie.
+- Notes: same class as BUG-250 (workout planner cards); each angle's `sort_order` merges on its own.
+
+### BUG-310 [MD-18] A check-in saved on a device that was offline while another device reset the vault is thrown away on reconnect without a word, although Secure Notes tells the user in the same case
+- Severity: Minor
+- Found: 2026-10-20, MD-18.11, qa-102, build `9a697d9`
+- Steps to reproduce: both devices on vault v3. Put B Force offline (`md11-resumed.dart.txt`, then `md-offline-on.dart.txt`) and check in with two photos and a note on B (`bash qa/steps/md18-op.sh qb ci_W_20261005_FS_offnote` with `PW=md18reset1`). Reset the vault on A (`md18-reset.dart.txt`, tag = new password). After ≥ 75 s reconnect B (`md-offline-off.dart.txt`, `md11-resumed.dart.txt`, `md18-drain.dart.txt`).
+- Expected: the check-in is lost (its ciphertext is under the retired vault), but the user is told, as Secure Notes does since qa-097 ("The vault was reset on another device, so N notes made on this device weren't kept.").
+- Actual: B adopts header v4 and locks; its check-in row reaches A and is tombstoned on both under the reset's stamp, its blobs never upload (Storage 404, B's rows `pending` + deleted). `lost_note_count` stays 0 and nothing says anything: the page shows the unlock card and "0 check-ins" (`qa/shots/md18-qb-1811-b.png`).
+- Notes: the hold-back that counts lost secure notes doesn't count photo check-ins.
+
+### BUG-311 [MD-18] A check-in deleted on one device while another edits it comes back without its photos: it is live again but shows nowhere, counts as missed, and its photos can't be restored from the Trash
+- Severity: Minor
+- Found: 2026-10-20, MD-18.13, qa-102, build `9a697d9`
+- Steps to reproduce: B Force offline deletes the "MD18 Daily" Oct 1 check-in (`md18-op.sh qb del_D_20261001`); A, online and later, edits its note (`md18-op.sh qa note_D_20261001_aedit`); B reconnects.
+- Expected: one outcome for the check-in and its photo together: either deleted (in the Trash with its photo) or kept with its photo.
+- Actual: both devices end with the check-in live (A's edit, the later of two version-1 saves) and its only image tombstoned (B's delete). The grid hides it (Oct 2 is followed by Sep 30, `qa/shots/md18-qb-1813-daily3.png`), the strip marks Oct 1 missed, and the Trash doesn't list it, because the check-in isn't deleted. The photo is unreachable until the purge erases it.
+- Notes: `deleteCheckIn` tombstones the check-in and its images in one batch, but the merge decides each row on its own; an edit of the check-in revives only that row.
+
+### BUG-312 [MD-18] A steady stream of check-ins from another device drops the receiving device to 15–22 fps and ~2 cores while it has a series open
+- Severity: Minor
+- Found: 2026-10-20, MD-18.20, qa-102, debug build `9a697d9`
+- Steps to reproduce: B on "MD18 Daily" (300 check-ins) with two tiles revealed; frame probe `qa/steps/md17-frames.dart.txt`, CPU `qa/steps/md17-cpu.ps1 -Profile qb`. A adds 100 check-ins by eval, one every ~2.2 s (`qa/steps/md18-load.dart.txt`).
+- Expected: an arrival every two seconds costs little (MD-17.3's journal load at 1/s held 39–51 fps after BUG-281's fix).
+- Actual: B went from 57 fps / 0 slow frames / ~15 % of a core to 15–22 fps (falling as the series grew), ~60 frames over 16.7 ms per 10 s, build p90 34–47 ms (worst 127 ms), 163–214 % of a core for the whole 3.6 minutes; back to 60 fps and 10–17 % within 10 s of the end. `perf_stall.log`: 109 STALL reports; each arrival reloads `photo_check_ins`, `photo_check_in_images` and `vault_blobs` twice. All 100 arrived, the grid stayed usable (scroll and reveal mid-load). Thumbnail decrypts per arrival weren't counted (no counter in the app).
+- Notes: BUG-281's class for Photos: every change rebuilds the whole series snapshot and the detail page around it. Debug-build numbers.
+
+### BUG-313 [MD-18] The Dev full check says it is safe to wipe while a vault photo's ciphertext never reached Storage
+- Severity: Minor
+- Found: 2026-10-20, MD-18 (O4), qa-102, build `9a697d9`
+- Steps to reproduce: have a vault blob parked by BUG-294 (`a718256b…`: `upload_state failed`, "User is not authorized…", 2 of ~270 in the 02:47 re-seed). Run Dev → "Check every collection against the cloud" (`qa/steps/md18-full.dart.txt`, library `features/dev/dev_sync_compare_tile.dart`).
+- Expected: the check flags the photo as unsynced, as sign-out's "Discard unsynced changes?" does (P28B: "3 change(s)").
+- Actual: `safeToWipe` true, no gaps, on A, which holds the only copy (`vault_media/a718256b…`; Storage 404). The check compares Firestore documents only, and the `vault_blobs` document exists. `reset.ps1`'s gate trusts this report, and "Check, then quit (before a wipe)" is the step that is meant to prove nothing would be lost.
+- Notes: B shows the photo as an empty frame (BUG-301) and the other parked blob's series was later deleted; every other photo decrypted on a cold device (338 of 339). At the session's end `session_end.ps1` (guard-confirmed, outbox 0) wiped profile `qa`, and with it the only copy of `a718256b…`: the photo is gone from the account for good.
+
+<!-- Last ID: BUG-313. -->

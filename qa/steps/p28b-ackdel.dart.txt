@@ -1,0 +1,6 @@
+final svc = c.read(photoSeriesServiceProvider);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final s = snap.series.firstWhere((s) => s.name == 'P28B R ack');
+final ci = snap.checkIns.firstWhere((x) => x.seriesId == s.id && x.deletedAt == null);
+await svc.deleteCheckIn(ci);
+debugPrint('P28BACKDEL ' + DateTime.now().toString());

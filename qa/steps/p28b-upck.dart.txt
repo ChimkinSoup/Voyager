@@ -1,0 +1,8 @@
+final svc = c.read(photoSeriesServiceProvider); final session = c.read(secureVaultSessionProvider)!;
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final early = snap.series.firstWhere((s) => s.name == 'P28B Two'); final ae = snap.angles.firstWhere((a) => a.seriesId == early.id).id;
+final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, 300, 400), Paint()..color = Color(0xFF446688)); final im = await r.endRecording().toImage(300, 400); final bd = await im.toByteData(format: ui.ImageByteFormat.png);
+await svc.createCheckIn(session: session, series: early, takenOn: DateTime.now(), photos: <String, dynamic>{ae: bd!.buffer.asUint8List()}.cast());
+
+
+debugPrint('P28BUP done ' + DateTime.now().toString());

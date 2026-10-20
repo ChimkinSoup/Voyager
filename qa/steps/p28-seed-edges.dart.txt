@@ -1,0 +1,9 @@
+final session = c.read(secureVaultSessionProvider);
+if (session == null) { throw StateError('vault locked'); }
+final svc = c.read(photoSeriesServiceProvider);
+final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, 240, 320), Paint()..color = Color(0xFF884422)); final im = await r.endRecording().toImage(240, 320); final bd = await im.toByteData(format: ui.ImageByteFormat.png); final bytes = bd!.buffer.asUint8List();
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final m = snap.series.firstWhere((s) => s.name == 'P28 Monthly 31'); final y = snap.series.firstWhere((s) => s.name == 'P28 Yearly Feb29');
+final am = snap.angles.firstWhere((a) => a.seriesId == m.id).id; final ay = snap.angles.firstWhere((a) => a.seriesId == y.id).id;
+for (final d in [DateTime(2026, 1, 31), DateTime(2026, 2, 28), DateTime(2026, 3, 31)]) { await svc.createCheckIn(session: session, series: m, takenOn: d, photos: {am: bytes}); }
+for (final d in [DateTime(2024, 2, 29), DateTime(2025, 3, 1)]) { await svc.createCheckIn(session: session, series: y, takenOn: d, photos: {ay: bytes}); }

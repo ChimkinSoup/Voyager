@@ -1,0 +1,16 @@
+# Alignment editor (Side, Oct 5): real pan drag, then opacity/rotation slider drags, Done
+activate
+wait 300
+# pan the photo left ~89 px so its dot sits on the reference dot; hold at the end for a mid-drag grab
+drag 1440 900 1351 900 300 2500
+wait 800
+shot p28r-al-pan
+# opacity 50% -> about 90%
+drag 1459 1267 1740 1267 150 300
+wait 600
+shot p28r-al-op
+# rotation 0 -> a little right, then back toward 0
+drag 1459 1364 1520 1364 150 300
+wait 600
+shot p28r-al-rot
+move 2400 1000

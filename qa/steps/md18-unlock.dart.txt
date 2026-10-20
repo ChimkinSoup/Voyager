@@ -1,0 +1,6 @@
+final vs = c.read(secureVaultServiceProvider);
+final hdr = await vs.localHeader();
+final key = await vs.unlock('@TAG@'.split('-').first);
+if (key == null) { throw StateError('wrong password'); }
+c.read(secureVaultSessionProvider.notifier).unlock(key, hdr!.vaultId);
+debugPrint('MD18UNLOCK ' + hdr.vaultId);

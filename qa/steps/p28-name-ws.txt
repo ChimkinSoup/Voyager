@@ -1,0 +1,14 @@
+click 1440 538
+wait 200
+key enter
+wait 300
+field
+click 1440 538
+wait 200
+type    x
+key backspace
+field
+key enter
+wait 400
+field
+shot p28-05-ws2

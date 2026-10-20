@@ -1,0 +1,11 @@
+final session = c.read(secureVaultSessionProvider);
+if (session == null) { throw StateError('vault locked'); }
+final svc = c.read(photoSeriesServiceProvider);
+ui.Paragraph para(String t, double size, double w) { final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: size, textAlign: ui.TextAlign.center)); pb.pushStyle(ui.TextStyle(color: Color(0xFFFFFFFF), fontSize: size)); pb.addText(t); final p = pb.build(); p.layout(ui.ParagraphConstraints(width: w)); return p; }
+Future<dynamic> mk(int w, int h, String t, double cx, double cy, int col) async { final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..color = Color(col)); final gp = Paint()..color = Color(0x66FFFFFF)..strokeWidth = 3; for (var k = 1; k < 4; k++) { cv.drawLine(Offset(w * k / 4, 0), Offset(w * k / 4, h.toDouble()), gp); cv.drawLine(Offset(0, h * k / 4), Offset(w.toDouble(), h * k / 4), gp); } cv.drawCircle(Offset(w * cx, h * cy), w * 0.08, Paint()..color = Color(0xFFFFEE00)); final p = para(t, h * 0.07, w.toDouble()); cv.drawParagraph(p, Offset(0, h * 0.06)); final im = await r.endRecording().toImage(w, h); final bd = await im.toByteData(format: ui.ImageByteFormat.png); return bd!.buffer.asUint8List(); }
+final sd = await svc.createSeries(name: 'P28B Daily 400', cadence: TrackerCadence.daily, sortOrder: 0);
+await Future.delayed(Duration(milliseconds: 800)); final snap = await c.read(photoSeriesSnapshotProvider.future);
+final ad = snap.angles.firstWhere((a) => a.seriesId == sd.id).id;
+var n = 0; var day = 0;
+while (n < 400) { day++; if (day % 13 == 0) { continue; } final d = DateTime(2025, 8, 1 + day); final cx = 0.5 + 0.3 * math.sin(n / 20); await svc.createCheckIn(session: session, series: sd, takenOn: d, photos: <String, dynamic>{ad: await mk(900, 1200, 'D' + n.toString() + ' ' + d.year.toString() + '-' + d.month.toString() + '-' + d.day.toString(), cx, 0.55, 0xFF203040 + (n % 16) * 0x00080808)}.cast()); n++; if (n % 50 == 0) { debugPrint('P28BSEED daily ' + n.toString()); } }
+debugPrint('P28BSEED daily done ' + day.toString());

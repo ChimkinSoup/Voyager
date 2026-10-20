@@ -1,0 +1,250 @@
+click 248 56
+wait 1500
+tap P28 Daily seed
+wait 2500
+click 532 538
+type p28vault2
+key enter
+wait 4000
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wheel 1500 1000 -5
+wait 120
+wait 2000
+shot p28-122-daily-bottom

@@ -1,0 +1,3 @@
+final r = await c.read(fullSyncCheckProvider).run();
+debugPrint('MD18FULL @W@ safe=' + r.safeToWipe.toString() + ' gaps=' + r.gapsByCollection.map((k, v) => MapEntry(k, v.length)).toString() + ' unreadable=' + r.unreadable.keys.toList().toString());
+MARK;

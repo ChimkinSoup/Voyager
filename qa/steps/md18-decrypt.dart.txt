@@ -1,0 +1,9 @@
+final session = c.read(secureVaultSessionProvider);
+if (session == null) { throw StateError('vault locked'); }
+final media = c.read(vaultMediaServiceProvider.notifier);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final blobIds = {for (final im in snap.images) if (im.deletedAt == null) im.blobId};
+var ok = 0; var bad = 0; final badIds = <String>[];
+for (final bid in blobIds) { final blob = await c.read(photoSeriesRepositoryProvider).getBlob(bid); if (blob == null) { bad++; badIds.add('norow:' + bid.substring(0, 8)); continue; } final t = await media.open(blob, session.key, thumb: true); final f = await media.open(blob, session.key, thumb: false); if (t != null && f != null) { ok++; } else { bad++; badIds.add(bid.substring(0, 8) + (t == null ? 'T' : '') + (f == null ? 'F' : '')); } }
+debugPrint('MD18DEC @W@ ok=' + ok.toString() + ' bad=' + bad.toString() + ' ' + badIds.join(','));
+MARK;

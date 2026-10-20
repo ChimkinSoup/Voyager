@@ -1,0 +1,5 @@
+_PhotoSeriesPlaybackState? st; void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _PhotoSeriesPlaybackState) { st = x.state as _PhotoSeriesPlaybackState; } else { x.visitChildren(w); } } WidgetsBinding.instance.rootElement!.visitChildren(w);
+final s = st!; final sw = Stopwatch()..start(); var last = s._index; final log = <String>['start:' + last.toString() + ' fps:' + s._fps.toString() + ' n:' + s._frames.length.toString() + ' loop:' + s._loop.toString()];
+var n = 0; var frames = 0; var t0 = -1;
+void cb(Duration ts) { frames++; if (t0 < 0) { t0 = ts.inMilliseconds; } if (s.mounted && s._index != last) { log.add((ts.inMilliseconds - t0).toString() + ':' + s._index.toString()); last = s._index; n++; } if (n < 40 && sw.elapsedMilliseconds < 30000 && s.mounted) { SchedulerBinding.instance.addPostFrameCallback(cb); SchedulerBinding.instance.scheduleFrame(); } else { debugPrint('P28BPB frames:' + frames.toString() + ' ms:' + sw.elapsedMilliseconds.toString() + ' ' + log.join(' ')); } }
+SchedulerBinding.instance.addPostFrameCallback(cb); SchedulerBinding.instance.scheduleFrame();

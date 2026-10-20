@@ -1,0 +1,3 @@
+final n = c.read(settingsProvider.notifier); final s = c.read(settingsProvider).value!;
+await n.saveSettings(s.copyWith(hiddenNavPages: '@TAG@' == 'hide' ? ['/dev', '/photo-series'] : ['/dev']));
+MARK;

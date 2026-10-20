@@ -537,7 +537,10 @@ List<TrackerValue> journalEntriesTrackerValues(
   final dayKeys = <int>{};
   for (final entry in entries) {
     final local = entry.entryDate.toLocal();
-    final d = local.hour < dayStartHour ? addCalendarDays(local, -1) : local;
+    // UTC: the key only needs the fields, without a local zone lookup.
+    final d = local.hour < dayStartHour
+        ? DateTime.utc(local.year, local.month, local.day - 1)
+        : local;
     dayKeys.add(d.year * 10000 + d.month * 100 + d.day);
   }
   final days = [

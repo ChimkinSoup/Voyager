@@ -27,6 +27,7 @@ IGNORE_TABLES = {
     'sync_watermarks_table',
     'sync_conflicts_table',
     'sync_conflicts',
+    'pending_remote_deletes_table',  # MD-18: purge deletes this device owes Storage
 }
 IGNORE_TABLE_PATTERNS = [re.compile(p) for p in (r'^sqlite_', r'^drift_', r'^android_')]
 
@@ -35,6 +36,8 @@ IGNORE_COLS = {
     'upload_state', 'download_state', 'local_path', 'upload_attempts',
     'download_attempts', 'last_upload_error', 'last_download_error',
     'field_updated_at_json',  # re-serialised on launch (PROGRESS P19A)
+    'thumb_download_state', 'failure_reason',  # MD-18: vault_blobs transfer state
+    'lost_note_count',  # MD-18: secure_vault_header_table, never synced
 }
 
 # Stamps a version-0 built-in (default calendar, workout plans, seeds) gets

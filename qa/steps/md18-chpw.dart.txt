@@ -1,0 +1,4 @@
+final pw = '@TAG@'.split('-');
+final ok = await c.read(secureVaultServiceProvider).changePassword(pw[0], pw[1]);
+debugPrint('MD18CHPW ' + ok.toString());
+MARK;

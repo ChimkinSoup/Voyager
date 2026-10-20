@@ -1,0 +1,7 @@
+# Scrubber: hold at the end of a drag so frames can be grabbed while still pressed
+activate
+wait 300
+status
+drag 256 1632 1792 1632 150 5000
+status
+move 1500 600

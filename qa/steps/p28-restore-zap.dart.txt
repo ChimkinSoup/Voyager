@@ -1,0 +1,4 @@
+final trash = c.read(trashServiceProvider);
+final item = (await trash.list()).firstWhere((i) => i.id == '8d55ccce-2abf-4a17-bd73-9ac2ec2168f8');
+await trash.restore(item);
+invalidateAllDataProvidersIn(c);

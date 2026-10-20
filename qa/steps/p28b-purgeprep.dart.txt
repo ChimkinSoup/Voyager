@@ -1,0 +1,4 @@
+final svc = c.read(photoSeriesServiceProvider);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final s = snap.series.firstWhere((s) => s.name == 'P28B Daily 400');
+for (final d in [DateTime(2025, 8, 3), DateTime(2025, 8, 4)]) { final ci = snap.checkIns.firstWhere((x) => x.seriesId == s.id && x.deletedAt == null && x.takenOn.year == d.year && x.takenOn.month == d.month && x.takenOn.day == d.day); await svc.deleteCheckIn(ci); debugPrint('P28BPURGE ' + ci.id); }

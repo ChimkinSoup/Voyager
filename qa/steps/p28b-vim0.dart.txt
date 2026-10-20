@@ -1,0 +1,1 @@
+final n = c.read(settingsProvider.notifier); final s = c.read(settingsProvider).value!; await n.saveSettings(s.copyWith(vimModeEnabled: false)); debugPrint('P28VIM off');

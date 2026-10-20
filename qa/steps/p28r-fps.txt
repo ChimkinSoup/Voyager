@@ -1,0 +1,8 @@
+# fps slider: real drag 4 fps -> right end, held at the end
+activate
+wait 300
+drag 1200 1719 1300 1719 150 1500
+wait 1500
+drag 1300 1719 1420 1719 150 4000
+wait 1500
+move 1500 600

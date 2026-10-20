@@ -1,0 +1,4 @@
+final svc = c.read(photoSeriesServiceProvider);
+final now = DateTime.now();
+await svc.createSeries(name: 'P28B R hidden', cadence: TrackerCadence.daily, sortOrder: 0, reminder: (enabled: true, minutes: 23 * 60 + 47, weekday: now.weekday, monthDay: now.day, month: now.month));
+debugPrint('P28BREMH ' + now.toString());

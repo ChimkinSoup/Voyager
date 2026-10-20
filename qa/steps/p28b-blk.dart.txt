@@ -1,0 +1,7 @@
+final svc = c.read(photoSeriesServiceProvider);
+var snap = await c.read(photoSeriesSnapshotProvider.future);
+final s = snap.series.firstWhere((s) => s.name == 'P28B One');
+await svc.deleteCheckIn(snap.checkIns.firstWhere((x) => x.seriesId == s.id && x.deletedAt == null));
+await Future.delayed(Duration(milliseconds: 500));
+await svc.deleteSeries(s);
+debugPrint('P28BBLK ' + DateTime.now().toString());

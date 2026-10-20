@@ -1,0 +1,2 @@
+final s = (await c.read(photoSeriesSnapshotProvider.future)).series.firstWhere((x) => x.name.startsWith('Zap'));
+await c.read(photoSeriesServiceProvider).deleteSeries(s);

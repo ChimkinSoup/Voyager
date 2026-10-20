@@ -1,0 +1,6 @@
+final svc = c.read(photoSeriesServiceProvider);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final s = snap.series.firstWhere((s) => s.name == 'P28B Angles');
+final keep = [for (final a in snap.angles) if (a.seriesId == s.id && a.deletedAt == null && a.name != 'Back') a]..sort((x, y) => x.sortOrder.compareTo(y.sortOrder));
+await svc.saveAngles(s, [for (final a in keep) (id: a.id, name: a.name)]);
+debugPrint('P28BRMANGLE ' + DateTime.now().toString());

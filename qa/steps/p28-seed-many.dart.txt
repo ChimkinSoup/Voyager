@@ -1,0 +1,6 @@
+final svc = c.read(photoSeriesServiceProvider);
+for (var i = 0; i < 41; i++) { await svc.createSeries(name: 'P28 bulk ' + i.toString().padLeft(2, '0'), cadence: TrackerCadence.values[i % 4], sortOrder: 10 + i); }
+await svc.createSeries(name: 'L' + List.filled(298, 'x').join() + 'Z', cadence: TrackerCadence.weekly, sortOrder: 60, angleNames: ['A' + List.filled(150, 'n').join(), 'Side']);
+final intl = String.fromCharCodes([0x6771, 0x4EAC, 0x30C6, 0x30B9, 0x30C8, 0x20, 0x645, 0x631, 0x62D, 0x628, 0x627, 0x20]) + String.fromCharCodes([0x1F600, 0x1F680, 0x20]) + 'caf' + String.fromCharCode(0xE9);
+await svc.createSeries(name: intl, cadence: TrackerCadence.daily, sortOrder: 61, angleNames: [intl, 'Back']);
+await svc.createSeries(name: 'P28 Ten angles', cadence: TrackerCadence.weekly, sortOrder: 62, angleNames: ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']);

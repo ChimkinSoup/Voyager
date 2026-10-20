@@ -410,6 +410,54 @@ void main() {
     await _settle(tester);
     expect((await repo.getEntry(elsewhere.id))!.body, 'abc\nx');
   });
+
+  testWidgets('an image pasted into the quick-journal floater leaves the body '
+      'of the entry it opened on alone', (tester) async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+        quickJournalPointerStoreProvider.overrideWithValue(
+          _MemoryPointerStore(),
+        ),
+        mediaServiceProvider.overrideWith((ref) => service),
+        mediaFileStoreProvider.overrideWithValue(fileStore),
+      ],
+    );
+    addTearDown(container.dispose);
+    final repo = DriftJournalRepository(db);
+    final entry = (await tester.runAsync(
+      () => resolveQuickJournalEntry(container),
+    ))!;
+    await tester.runAsync(() => repo.upsertEntry(entry.copyWith(body: 'abc')));
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: JournalFloater())),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await _settle(tester);
+    expect(quickJournalNotepadEntryId.value, entry.id);
+
+    final paste = tester.widget<MediaPasteScope>(find.byType(MediaPasteScope));
+    expect(await tester.runAsync(paste.onBeforeAttach!), entry.id);
+    await _settle(tester);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'abc',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    await _settle(tester);
+    expect((await repo.getEntry(entry.id))!.body, 'abc');
+  });
 }
 
 class _MemoryPointerStore implements QuickJournalPointerStore {

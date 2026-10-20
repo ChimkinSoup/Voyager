@@ -1,0 +1,402 @@
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wheel 1500 1000 -40
+wait 100
+wait 2000
+shot p28-123-daily-end

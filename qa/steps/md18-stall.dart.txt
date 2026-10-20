@@ -1,0 +1,2 @@
+PerfStallLogger.instance.setEnabled(true);
+MARK;

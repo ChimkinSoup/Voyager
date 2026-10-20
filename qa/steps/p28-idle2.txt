@@ -1,0 +1,35 @@
+click 532 538
+type p28vault1
+key enter
+wait 3000
+find Lock
+click 2200 1500
+wait 60000
+click 2200 1500
+find Lock
+wait 60000
+click 2200 1500
+find Lock
+wait 60000
+click 2200 1500
+find Lock
+wait 60000
+click 2200 1500
+find Lock
+wait 60000
+click 2200 1500
+find Lock
+wait 60000
+click 2200 1500
+find Lock
+wait 60000
+find Lock
+find Unlock to see photos
+tap Check in
+wait 1500
+key ctrl+v
+wait 1500
+shot p28-63-dlg-before-idle
+wait 320000
+shot p28-64-dlg-after-idle
+find

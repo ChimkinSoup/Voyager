@@ -1,0 +1,6 @@
+final kv = 'down_0'.split('_'); final on = kv[1] == '1';
+final n = c.read(settingsProvider.notifier); final s = c.read(settingsProvider).value!;
+if (kv[0] == 'up') await n.saveSettings(s.copyWith(mediaRemoteUploadsEnabled: on));
+if (kv[0] == 'down') await n.saveSettings(s.copyWith(mediaRemoteDownloadsEnabled: on));
+if (kv[0] == 'pre') await n.saveSettings(s.copyWith(mediaBackgroundPrefetchEnabled: on));
+debugPrint('P28SET down_0');

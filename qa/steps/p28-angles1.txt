@@ -1,0 +1,12 @@
+click 1343 521
+wait 300
+shot p28-10a
+click 1319 864
+key ctrl+a
+type Front
+click 1319 969
+type Side
+click 1319 1073
+type Back
+wait 200
+shot p28-10b

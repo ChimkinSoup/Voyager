@@ -1,0 +1,36 @@
+final session = c.read(secureVaultSessionProvider);
+final svc = c.read(photoSeriesServiceProvider);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final parts = '@TAG@'.split('_');
+final op = parts[0];
+final sname = parts[1] == 'W' ? 'MD18 Weekly' : (parts[1] == 'D' ? 'MD18 Daily' : (parts[1] == 'P' ? 'mdprog' : (parts[1] == 'T' ? 'MD18 Two' : parts[1])));
+if (op == 'mkrem') { final now = DateTime.now(); final ns = await svc.createSeries(name: parts[1].replaceAll('-', ' '), cadence: TrackerCadence.daily, sortOrder: 9, reminder: (enabled: parts[3] == '1', minutes: now.hour * 60 + now.minute + int.parse(parts[2]), weekday: now.weekday, monthDay: now.day, month: now.month)); debugPrint('MD18MKREM ' + ns.name + ' ' + ns.id + ' at ' + (now.hour * 60 + now.minute + int.parse(parts[2])).toString()); return; }
+if (op == 'mk') { final ns = await svc.createSeries(name: sname, cadence: TrackerCadence.weekly, sortOrder: 9, angleNames: parts[2].split('')); debugPrint('MD18MK ' + ns.id); return; }
+final series = snap.series.firstWhere((s) => s.name == sname && s.deletedAt == null);
+final angles = snap.angles.where((a) => a.seriesId == series.id && a.deletedAt == null).toList()..sort((x, y) => x.sortOrder.compareTo(y.sortOrder));
+String angleOf(String l) => angles.firstWhere((a) => a.name.toLowerCase().startsWith(l.toLowerCase())).id;
+DateTime day(String s) => DateTime(int.parse(s.substring(0, 4)), int.parse(s.substring(4, 6)), int.parse(s.substring(6, 8)));
+ui.Paragraph para(String t, double size, double w) { final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: size, textAlign: ui.TextAlign.center)); pb.pushStyle(ui.TextStyle(color: Color(0xFFFFFFFF), fontSize: size)); pb.addText(t); final p = pb.build(); p.layout(ui.ParagraphConstraints(width: w)); return p; }
+Future<dynamic> mk(String t, int col) async { final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, 600, 800), Paint()..color = Color(col)); final p = para(t, 64, 600); cv.drawParagraph(p, Offset(0, 300)); final im = await r.endRecording().toImage(600, 800); final bd = await im.toByteData(format: ui.ImageByteFormat.png); return bd!.buffer.asUint8List(); }
+PhotoCheckIn checkInOn(String d) => snap.checkIns.firstWhere((x) => x.seriesId == series.id && x.deletedAt == null && x.takenOn.year == day(d).year && x.takenOn.month == day(d).month && x.takenOn.day == day(d).day);
+final col = '@W@' == 'qa' ? 0xFF8A3030 : 0xFF30308A;
+if (op == 'ci') { final ph = <String, dynamic>{}; for (final l in parts[3].split('')) { ph[angleOf(l)] = await mk('@W@ ' + l + ' ' + parts[2], col); } await svc.createCheckIn(session: session!, series: series, takenOn: day(parts[2]), photos: ph.cast(), note: parts.length > 4 ? parts[4] : ''); }
+if (op == 'rep') { await svc.setPhoto(session: session!, checkIn: checkInOn(parts[2]), angleId: angleOf(parts[3]), bytes: await mk('@W@ REP ' + parts[3] + ' ' + parts[2] + (parts.length > 4 ? ' ' + parts[4] : ''), col)); }
+if (op == 'date') { await svc.setDate(checkInOn(parts[2]), day(parts[3])); }
+if (op == 'note') { await svc.setNote(session!, checkInOn(parts[2]), parts[3]); }
+if (op == 'del') { final st = await svc.deleteCheckIn(checkInOn(parts[2])); debugPrint('MD18DEL ' + st.toIso8601String()); }
+if (op == 'wnote') { await svc.setNote(session!, checkInOn(parts[2]), '@W@' + 'note' + (parts.length > 3 ? parts[3] : '')); }
+if (op == 'wdate') { await svc.setDate(checkInOn(parts[2]), day('@W@' == 'qa' ? parts[3] : parts[4])); }
+if (op == 'shownote') { debugPrint('MD18NOTE @W@ ' + parts[2] + ' ' + ((await PhotoSeriesService.openNote(session!, checkInOn(parts[2]))) ?? 'null')); }
+PhotoCheckInImage imageOf(String d, String l) => snap.images.firstWhere((im) => im.checkInId == checkInOn(d).id && im.angleId == angleOf(l) && im.deletedAt == null);
+if (op == 'align') { await svc.setAlignment(imageOf(parts[2], parts[3]).copyWith(alignScale: double.parse(parts[4]), alignRotation: double.parse(parts[5]), alignDx: double.parse(parts[6]), alignDy: double.parse(parts[7]))); }
+if (op == 'walign') { final k = '@W@' == 'qa' ? 0.2 : -0.2; await svc.setAlignment(imageOf(parts[2], parts[3]).copyWith(alignScale: 1.0 + k.abs(), alignRotation: k, alignDx: k, alignDy: k)); }
+if (op == 'ref') { await svc.setReference(imageOf(parts[2], parts[3])); }
+if (op == 'rmangle') { await svc.saveAngles(series, [for (final a in angles) if (a.id != angleOf(parts[2])) (id: a.id, name: a.name)]); }
+if (op == 'revangles') { await svc.saveAngles(series, [for (final a in angles.reversed) (id: a.id, name: a.name)]); }
+if (op == 'swapfirst') { final l = [for (final a in angles) (id: a.id, name: a.name)]; final t = l[0]; l[0] = l[1]; l[1] = t; await svc.saveAngles(series, l); }
+if (op == 'wrm') { final keep = angleOf('@W@' == 'qa' ? parts[2] : parts[3]); await svc.saveAngles(series, [for (final a in angles) if (a.id != keep) (id: a.id, name: a.name)]); }
+if (op == 'wreorder') { if ('@W@' == 'qa') { await svc.saveAngles(series, [for (final a in angles.reversed) (id: a.id, name: a.name)]); } else { final l = [for (final a in angles) (id: a.id, name: a.name)]; final t = l[0]; l[0] = l[1]; l[1] = t; await svc.saveAngles(series, l); } }
+if (op == 'remoff') { await svc.updateSeries(series.withReminder((enabled: false, minutes: series.reminderMinutes, weekday: series.reminderWeekday, monthDay: series.reminderMonthDay, month: series.reminderMonth))); }
+if (op == 'delseries') { await svc.deleteSeries(series); }
+MARK;

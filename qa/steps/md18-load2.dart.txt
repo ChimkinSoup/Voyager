@@ -1,0 +1,9 @@
+final session = c.read(secureVaultSessionProvider);
+if (session == null) { throw StateError('vault locked'); }
+final svc = c.read(photoSeriesServiceProvider);
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+final sd = snap.series.firstWhere((s) => s.name == 'MD18 Daily' && s.deletedAt == null);
+final ad = snap.angles.firstWhere((a) => a.seriesId == sd.id && a.deletedAt == null).id;
+ui.Paragraph para(String t) { final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 42, textAlign: ui.TextAlign.center)); pb.pushStyle(ui.TextStyle(color: Color(0xFFFFFFFF), fontSize: 42)); pb.addText(t); final p = pb.build(); p.layout(ui.ParagraphConstraints(width: 450)); return p; }
+for (var i = 0; i < 40; i++) { final d = DateTime(2025, 12, 9).subtract(Duration(days: i)); final r = ui.PictureRecorder(); final cv = Canvas(r); cv.drawRect(Rect.fromLTWH(0, 0, 450, 600), Paint()..color = Color(0xFF446644 + (i % 9) * 0x00000011)); cv.drawParagraph(para('COLD ' + i.toString()), Offset(0, 250)); final im = await r.endRecording().toImage(450, 600); final bd = await im.toByteData(format: ui.ImageByteFormat.png); await svc.createCheckIn(session: session, series: sd, takenOn: d, photos: <String, dynamic>{ad: bd!.buffer.asUint8List()}.cast()); debugPrint('MD18COLD ' + i.toString() + ' ' + DateTime.now().toIso8601String().substring(11, 23)); await Future.delayed(Duration(seconds: 3)); }
+MARK;

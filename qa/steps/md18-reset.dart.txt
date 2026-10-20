@@ -1,0 +1,6 @@
+final vs = c.read(secureVaultServiceProvider);
+final key = await vs.reset('@TAG@');
+final hdr = await vs.localHeader();
+c.read(secureVaultSessionProvider.notifier).unlock(key, hdr!.vaultId);
+debugPrint('MD18RESET ' + hdr.vaultId + ' v' + hdr.headerVersion.toString());
+MARK;

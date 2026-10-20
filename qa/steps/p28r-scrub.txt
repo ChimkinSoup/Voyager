@@ -1,0 +1,24 @@
+# P28B real input: Playback scrubber drag + hover (P28B Angles, Front, 11 frames)
+unpark
+activate
+wait 600
+shot p28r-scrub-0
+# slow drag thumb (frame 1) -> about frame 6, hold at the end
+drag 256 1632 1536 1632 150 400
+wait 600
+shot p28r-scrub-1
+# hover over the track without pressing (about frame 9, then frame 3)
+move 2304 1632
+wait 900
+shot p28r-scrub-h1
+move 768 1632
+wait 900
+shot p28r-scrub-h2
+# drag past the right end, then past the left end (clamp)
+drag 1536 1632 2870 1632 100 300
+wait 500
+shot p28r-scrub-2
+drag 2815 1632 200 1632 100 300
+wait 500
+shot p28r-scrub-3
+move 1500 600

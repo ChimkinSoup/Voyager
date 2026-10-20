@@ -1,0 +1,13 @@
+final svc = c.read(photoSeriesServiceProvider);
+final now = DateTime.now(); final base = now.hour * 60 + now.minute;
+Future<PhotoSeries> mk(String name, TrackerCadence cad, bool en, int add) => svc.createSeries(name: name, cadence: cad, sortOrder: 0, reminder: (enabled: en, minutes: base + add, weekday: now.weekday, monthDay: now.day, month: now.month));
+await mk('P28B R daily', TrackerCadence.daily, true, 4);
+await mk('P28B R weekly', TrackerCadence.weekly, true, 5);
+await mk('P28B R monthly', TrackerCadence.monthly, true, 6);
+await mk('P28B R yearly', TrackerCadence.yearly, true, 7);
+await mk('P28B R off', TrackerCadence.daily, false, 4);
+await mk('P28B R late', TrackerCadence.daily, true, -5);
+await mk('P28B R early', TrackerCadence.daily, true, 6);
+await mk('P28B R ack', TrackerCadence.daily, true, 4);
+await mk('P28B R edit', TrackerCadence.daily, true, 5);
+debugPrint('P28BREM base ' + base.toString() + ' at ' + now.toString());

@@ -165,7 +165,10 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   /// For the image targets: the entry an image attaches to, created first
   /// if need be. Throws when it could not be, so no image is left ownerless.
   Future<String> _entryIdForImage() async {
-    await _ensureEntry();
+    // Only while unbound: on the entry the notepad opened on, [_ensureEntry]
+    // takes that entry for one started elsewhere and appends the body to
+    // itself.
+    if (_entry == null) await _ensureEntry();
     final entry = _entry;
     if (entry == null) throw StateError('The quick entry could not be created');
     return entry.id;
