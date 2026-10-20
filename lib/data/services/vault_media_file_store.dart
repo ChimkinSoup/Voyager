@@ -41,6 +41,12 @@ class VaultMediaFileStore {
     return await file.exists() ? file.readAsBytes() : null;
   }
 
+  /// [id]'s file, when it is here.
+  Future<File?> find(String id, {required bool thumb}) async {
+    final file = await _file(id, thumb: thumb);
+    return await file.exists() ? file : null;
+  }
+
   Future<void> write(String id, Uint8List sealed, {required bool thumb}) async {
     await (await _file(id, thumb: thumb)).writeAsBytes(sealed, flush: true);
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -792,6 +793,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           // they were off can finally leave — without this those images
                           // would stay stranded on one device forever.
                           if (!v) return;
+                          // Photos too (BUG-300).
+                          unawaited(
+                            ref
+                                .read(vaultMediaServiceProvider)
+                                .queueLocalOnlyUploads(),
+                          );
                           final queued = await ref
                               .read(mediaServiceProvider)
                               .queueLocalOnlyUploads();
@@ -817,9 +824,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                             ref,
                             settings.copyWith(mediaRemoteDownloadsEnabled: v),
                           );
-                          // What was learned while it was off (BUG-263).
-                          // Prefetch checked inside.
+                          // What was learned while it was off (BUG-263),
+                          // photos' thumbnails included (BUG-300). Prefetch
+                          // checked inside.
                           if (v) {
+                            unawaited(
+                              ref
+                                  .read(vaultMediaServiceProvider)
+                                  .drainDownloads(),
+                            );
                             await ref
                                 .read(mediaTransferWorkerProvider)
                                 .prefetchMissing();
@@ -846,6 +859,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                   ),
                                 );
                                 if (v) {
+                                  unawaited(
+                                    ref
+                                        .read(vaultMediaServiceProvider)
+                                        .drainDownloads(),
+                                  );
                                   await ref
                                       .read(mediaTransferWorkerProvider)
                                       .prefetchMissing();

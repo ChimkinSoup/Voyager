@@ -856,7 +856,33 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
         .where((angle) => images.containsKey(angle.id))
         .first;
     final photo = unlocked
-        ? VaultPhoto(blobId: images[shown.id]!.blobId, thumb: true)
+        ? VaultPhoto(
+            blobId: images[shown.id]!.blobId,
+            thumb: true,
+            // Why a photo is missing isn't blurred with it.
+            framePhoto: revealed
+                ? null
+                : (photo) => Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRect(
+                        child: ImageFiltered(
+                          imageFilter: ui.ImageFilter.blur(
+                            sigmaX: 18,
+                            sigmaY: 18,
+                          ),
+                          child: photo,
+                        ),
+                      ),
+                      Center(
+                        child: Icon(
+                          PhosphorIconsRegular.eye,
+                          color: Colors.white.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+          )
         : const _LockedPlaceholder();
     return ContextMenuRegion(
       key: _menu,
@@ -878,29 +904,7 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
                     aspectRatio: 3 / 4,
                     // Locked, the placeholder shows as it is: there's
                     // nothing under it to hide.
-                    child: revealed || !unlocked
-                        ? photo
-                        : Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ClipRect(
-                                child: ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(
-                                    sigmaX: 18,
-                                    sigmaY: 18,
-                                  ),
-                                  child: photo,
-                                ),
-                              ),
-                              if (unlocked)
-                                Center(
-                                  child: Icon(
-                                    PhosphorIconsRegular.eye,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                            ],
-                          ),
+                    child: photo,
                   ),
                 ),
                 // Inset from the hover fill, which reaches the tile's edges.

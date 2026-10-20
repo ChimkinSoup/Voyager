@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:voyager/core/secure_vault/secure_vault.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -42,6 +43,8 @@ class BackupCollection {
     this.stampForImport,
     this.prepare,
     this.afterRestore,
+    this.unrestore,
+    this.createdId,
   });
 
   /// The Firestore collection name, which is also the name of this
@@ -76,6 +79,19 @@ class BackupCollection {
   /// Returns any further models it wrote, so they upload with the rest.
   /// Skipped when nothing in the collection was restored.
   final Future<List<Object>> Function()? afterRestore;
+
+  /// Takes back a record a restore created, for a collection whose records
+  /// have no tombstone to undo it with. Runs inside the restore's
+  /// transaction, after every collection's records are written. Returns what
+  /// it removed, for the server's copy to go too; null when it stays.
+  /// [undone] is what the same undo tombstones, per collection.
+  final Future<Object?> Function(String id, Map<String, List<String>> undone)?
+  unrestore;
+
+  /// What a restore records for a record it created, and so what
+  /// [unrestore] is later handed, when the record's id alone can't tell it
+  /// from one that has replaced it since. Its id otherwise.
+  final String Function(BackupRecord record)? createdId;
 }
 
 /// Fields that say *when* a record was written rather than *what* it holds.
@@ -920,6 +936,56 @@ List<BackupCollection> buildBackupCollections({
         // What is in place now, which is what may go up.
         return (await notificationRepository.getSecureVaultHeader())!;
       },
+      // The vault, not the header's fixed id: a reset since replaces the
+      // header, and undoing the import mustn't take that one.
+      createdId: (record) => record.data['vaultId'] as String,
+      // A header an import brought to an account with none, taken back with
+      // the rest of the import (BUG-297) — unless something is still sealed
+      // under it, the trash included, which would then never open again.
+      // The import's own records, which the undo has just put in the trash,
+      // don't count: taking them back is what it's for.
+      unrestore: (vaultId, undone) async {
+        final header = await notificationRepository.getSecureVaultHeader();
+        if (header == null || header['vaultId'] != vaultId) return null;
+        bool keeps(String collection, String id, DateTime? deletedAt) =>
+            !isErasedAt(deletedAt) &&
+            (deletedAt == null || !(undone[collection]?.contains(id) ?? false));
+        final inUse =
+            (await photoSeriesRepository.listBlobs(includeDeleted: true)).any(
+              (blob) =>
+                  blob.vaultId == vaultId &&
+                  keeps(
+                    FirestoreCollections.vaultBlobs,
+                    blob.id,
+                    blob.deletedAt,
+                  ),
+            ) ||
+            (await photoSeriesRepository.listCheckIns(
+              includeDeleted: true,
+            )).any(
+              (checkIn) =>
+                  checkIn.vaultId == vaultId &&
+                  keeps(
+                    FirestoreCollections.photoCheckIns,
+                    checkIn.id,
+                    checkIn.deletedAt,
+                  ),
+            ) ||
+            (await notificationRepository.listSecureNotes(
+              includeDeleted: true,
+            )).any(
+              (note) =>
+                  note.vaultId == vaultId &&
+                  keeps(
+                    FirestoreCollections.secureNotes,
+                    note.id,
+                    note.deletedAt,
+                  ),
+            );
+        if (inUse) return null;
+        await notificationRepository.deleteSecureVaultHeader();
+        return header;
+      },
     ),
     BackupCollection(
       name: FirestoreCollections.deviceRegistrations,
@@ -1259,7 +1325,8 @@ List<BackupCollection> buildBackupCollections({
         return reference;
       },
     ),
-    // Metadata only: the ciphertext stays in Storage and on disk.
+    // The rows; the ciphertext this device holds goes beside them under
+    // `vault_media/` (see `DataExportService`).
     BackupCollection(
       name: FirestoreCollections.vaultBlobs,
       read: () async => [

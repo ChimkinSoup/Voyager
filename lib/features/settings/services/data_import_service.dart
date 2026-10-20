@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:voyager/core/constants/app_seeds.dart';
+import 'package:voyager/core/secure_vault/vault_media_service.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -13,6 +14,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/services/media_file_store.dart';
 import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
@@ -110,15 +112,19 @@ class DataImportService {
     required SettingsRepository settingsRepository,
     required BackupRecordUploader pushRecords,
     required BackupSettingsUploader pushSettings,
+    BackupRecordUploader? dropRecords,
     MediaRepository? mediaRepository,
     MediaFileStore? mediaFileStore,
+    VaultMediaService? vaultMedia,
   }) : _db = db,
        _collections = collections,
        _settingsRepository = settingsRepository,
        _pushRecords = pushRecords,
        _pushSettings = pushSettings,
+       _dropRecords = dropRecords,
        _mediaRepository = mediaRepository,
-       _mediaFileStore = mediaFileStore;
+       _mediaFileStore = mediaFileStore,
+       _vaultMedia = vaultMedia;
 
   final AppDatabase _db;
   final List<BackupCollection> _collections;
@@ -126,11 +132,19 @@ class DataImportService {
   final BackupRecordUploader _pushRecords;
   final BackupSettingsUploader _pushSettings;
 
+  /// Removes from the server what a [BackupCollection.unrestore] took back —
+  /// `RemoteSyncService.dropRestoredRecords` in the app.
+  final BackupRecordUploader? _dropRecords;
+
   /// Null in tests that restore only the JSON half. Without them an archive's
   /// image bytes are ignored and the restored assets stay `missing`, which is
   /// recoverable (they download) rather than wrong.
   final MediaRepository? _mediaRepository;
   final MediaFileStore? _mediaFileStore;
+
+  /// Null in tests that restore only the JSON half: an archive's vault files
+  /// are then ignored, as image bytes are without the two above.
+  final VaultMediaService? _vaultMedia;
 
   /// [deleteCreated] lists, per collection, records an earlier restore
   /// created (its [BackupImportSummary.created]). Restoring the snapshot taken
@@ -148,6 +162,8 @@ class DataImportService {
         parsed['collections'] as Map<String, List<Map<String, dynamic>>>;
     final backupSettings = parsed['settings'] as Map<String, dynamic>?;
     final backupBlobs = parsed['media'] as Map<String, Uint8List>? ?? const {};
+    final backupVaultFiles =
+        parsed['vaultMedia'] as Map<String, Uint8List>? ?? const {};
 
     final restored = <String, List<Object>>{};
     // What a collection's `afterRestore` wrote on top of its restored records.
@@ -155,6 +171,7 @@ class DataImportService {
     // asked for these.
     final followUps = <String, List<Object>>{};
     final created = <String, List<String>>{};
+    final unrestored = <String, List<Object>>{};
     var skipped = 0;
     var leftErased = 0;
     AppSettings? restoredSettings;
@@ -204,9 +221,11 @@ class DataImportService {
           );
           (restored[collection.name] ??= []).add(model);
           if (localData == null &&
-              _isLive(record.data) &&
+              (_isLive(record.data) || collection.unrestore != null) &&
               !isAppSeed(collection.name, record.id)) {
-            (created[collection.name] ??= []).add(record.id);
+            (created[collection.name] ??= []).add(
+              collection.createdId?.call(record) ?? record.id,
+            );
           }
         }
         final backupIds = {for (final record in records) record.id};
@@ -232,6 +251,24 @@ class DataImportService {
         if (restored.containsKey(collection.name)) {
           final extra = await collection.afterRestore?.call() ?? const [];
           if (extra.isNotEmpty) followUps[collection.name] = extra;
+        }
+      }
+
+      // After every collection, so what it checks against is already undone.
+      for (final collection in _collections) {
+        final unrestore = collection.unrestore;
+        if (unrestore == null) continue;
+        final backupIds = {
+          for (final json in backupCollections[collection.name] ?? const [])
+            if (BackupRecord.fromJson(json) case final record)
+              collection.createdId?.call(record) ?? record.id,
+        };
+        for (final id in deleteCreated[collection.name] ?? const <String>[]) {
+          if (backupIds.contains(id)) continue;
+          final removed = await unrestore(id, deleteCreated);
+          if (removed != null) {
+            (unrestored[collection.name] ??= []).add(removed);
+          }
         }
       }
 
@@ -311,6 +348,11 @@ class DataImportService {
     } catch (error) {
       warnings.add('Some images could not be saved to this device: $error');
     }
+    try {
+      await _restoreVaultFiles(backupVaultFiles, restored);
+    } catch (error) {
+      warnings.add('Some photos could not be saved to this device: $error');
+    }
 
     // Uploads run after the transaction commits — they are network calls, and
     // holding a write transaction open across them would block every other
@@ -327,6 +369,9 @@ class DataImportService {
     }
     final settings = restoredSettings;
     if (settings != null) await _pushSettings(settings);
+    for (final entry in unrestored.entries) {
+      await _dropRecords?.call(entry.key, entry.value);
+    }
 
     return BackupImportSummary(
       restoredByCollection: {
@@ -409,6 +454,37 @@ class DataImportService {
     return written;
   }
 
+  /// Writes an archive's vault files for the live blobs they belong to, and
+  /// marks them here (BUG-295). A blob new to this device was restored
+  /// `localOnly` (see `buildBackupCollections`), so
+  /// `VaultMediaService.queueLocalOnlyUploads` sends it to this account's
+  /// Storage. The blobs in [restored] are re-read, so their upload says
+  /// where the files now are.
+  Future<void> _restoreVaultFiles(
+    Map<String, Uint8List> files,
+    Map<String, List<Object>> restored,
+  ) async {
+    final media = _vaultMedia;
+    if (media == null || files.isEmpty) return;
+    final updated = <String>{};
+    for (final blob in await media.repository.listBlobs()) {
+      for (final thumb in [false, true]) {
+        final sealed = files[backupVaultMediaName(blob.id, thumb: thumb)];
+        if (sealed == null) continue;
+        if (await media.restoreSealed(blob, sealed, thumb: thumb)) {
+          updated.add(blob.id);
+        }
+      }
+    }
+    final blobs = restored[FirestoreCollections.vaultBlobs];
+    if (blobs == null) return;
+    for (var i = 0; i < blobs.length; i++) {
+      final blob = blobs[i] as VaultBlob;
+      if (!updated.contains(blob.id)) continue;
+      blobs[i] = await media.repository.getBlob(blob.id) ?? blob;
+    }
+  }
+
   /// The backup payload with a version high enough for the restore to stick.
   ///
   /// One past both the local row and the backup's own version: the local part
@@ -454,7 +530,7 @@ class DataImportService {
 ///
 /// Returns
 /// `{'collections': {name: [record json]}, 'settings': payload?, 'media':
-/// {member name: bytes}}`.
+/// {member name: bytes}, 'vaultMedia': {member name: bytes}}`.
 Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   final Archive archive;
   try {
@@ -506,10 +582,14 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   }
 
   final media = <String, Uint8List>{};
+  final vaultMedia = <String, Uint8List>{};
   for (final file in archive.files) {
     if (!file.isFile) continue;
-    if (!file.name.startsWith(backupMediaDirectory)) continue;
-    media[file.name] = Uint8List.fromList(file.content as List<int>);
+    if (file.name.startsWith(backupMediaDirectory)) {
+      media[file.name] = Uint8List.fromList(file.content as List<int>);
+    } else if (file.name.startsWith(backupVaultMediaDirectory)) {
+      vaultMedia[file.name] = Uint8List.fromList(file.content as List<int>);
+    }
   }
 
   final collections = <String, List<Map<String, dynamic>>>{};
@@ -532,6 +612,7 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
     'collections': collections,
     'settings': settings is Map ? Map<String, dynamic>.from(settings) : null,
     'media': media,
+    'vaultMedia': vaultMedia,
     'manifest': Map<String, dynamic>.from(manifest),
   };
 }

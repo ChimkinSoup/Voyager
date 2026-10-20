@@ -271,6 +271,7 @@ class PhotoCheckIn extends SoftDeletable {
     ({String ciphertext, String nonce, String vaultId})? note,
     bool clearNote = false,
     DateTime? updatedAt,
+    int? version,
     bool bumpVersion = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
@@ -284,7 +285,7 @@ class PhotoCheckIn extends SoftDeletable {
       vaultId: clearNote ? null : (note?.vaultId ?? vaultId),
       createdAt: createdAt,
       updatedAt: updatedAt ?? utcNow(),
-      version: bumpVersion ? version + 1 : version,
+      version: bumpVersion ? this.version + 1 : (version ?? this.version),
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }
@@ -327,6 +328,7 @@ class PhotoCheckInImage extends SoftDeletable {
     double? alignDx,
     double? alignDy,
     DateTime? updatedAt,
+    int? version,
     bool bumpVersion = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
@@ -342,7 +344,7 @@ class PhotoCheckInImage extends SoftDeletable {
       alignDy: alignDy ?? this.alignDy,
       createdAt: createdAt,
       updatedAt: updatedAt ?? utcNow(),
-      version: bumpVersion ? version + 1 : version,
+      version: bumpVersion ? this.version + 1 : (version ?? this.version),
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }

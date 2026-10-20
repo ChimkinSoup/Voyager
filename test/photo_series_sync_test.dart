@@ -353,6 +353,49 @@ void main() {
     },
   );
 
+  // The trash offered them back, with a photo that could never open.
+  test('BUG-296: a reset erases the check-ins it empties, and those a delete '
+      'left in the trash', () async {
+    final (series, angles) = await newSeries();
+    final emptied = await a.service.createCheckIn(
+      session: session,
+      series: series,
+      takenOn: DateTime(2026, 10, 11),
+      photos: {angles.first.id: _jpeg(30, 40)},
+    );
+    final deleted = await a.service.createCheckIn(
+      session: session,
+      series: series,
+      takenOn: DateTime(2026, 10, 12),
+      photos: {angles.first.id: _jpeg(30, 40)},
+    );
+    await a.service.deleteCheckIn(deleted);
+    final header = (await SecureVault.create(
+      'new',
+      vaultId: 'vault-2',
+      now: DateTime.utc(2026, 10, 18),
+      headerVersion: 2,
+      retiredVaultIds: [session.vaultId],
+    )).header;
+    await a.notes.saveSecureVaultHeader(
+      header.toJson(),
+      vaultId: header.vaultId,
+      headerVersion: header.headerVersion,
+    );
+
+    expect(await retireVaultBlobs(a.notes, a.photos), greaterThan(0));
+    for (final checkIn in [emptied, deleted]) {
+      expect(
+        isErasedAt((await a.photos.getCheckIn(checkIn.id))!.deletedAt),
+        isTrue,
+      );
+    }
+    for (final image in await a.photos.listImages(includeDeleted: true)) {
+      expect(isErasedAt(image.deletedAt), isTrue);
+    }
+    expect(await retireVaultBlobs(a.notes, a.photos), 0);
+  });
+
   group('releasing blobs', () {
     final now = DateTime.utc(2026, 10, 18);
 

@@ -1,0 +1,2 @@
+await c.read(photoSeriesServiceProvider).createSeries(name: 'FV50 Empty', cadence: TrackerCadence.weekly, sortOrder: 0);
+debugPrint('FV50EMPTY');

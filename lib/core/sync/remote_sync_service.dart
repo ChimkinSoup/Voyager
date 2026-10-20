@@ -6173,6 +6173,33 @@ class RemoteSyncService {
     }
   }
 
+  /// Removes from the server what undoing a restore took back here (see
+  /// `BackupCollection.unrestore`): a vault header the restore put on an
+  /// account that had none, if the server's is still that vault.
+  Future<void> dropRestoredRecords(
+    String collection,
+    List<Object> records,
+  ) async {
+    if (collection != FirestoreCollections.secureVault) return;
+    for (final header in records.whereType<Map<String, dynamic>>()) {
+      try {
+        final remote = await _syncRepository.getDocument(
+          FirestoreCollections.secureVault,
+          FirestoreCollections.secureVaultHeaderId,
+        );
+        if (remote == null || remote['vaultId'] != header['vaultId']) continue;
+        await _syncRepository.deleteDocument(
+          FirestoreCollections.secureVault,
+          FirestoreCollections.secureVaultHeaderId,
+        );
+      } catch (error) {
+        // Not queued, as [_pushRestoredVaultHeader]: the next pull brings the
+        // header back, and the vault with it.
+        debugPrint('[sync] restored vault header not removed: $error');
+      }
+    }
+  }
+
   late final _pinnedNoteStore = pinnedNoteSyncStore(_notificationRepository);
   late final _secureNoteStore = secureNoteSyncStore(
     _notificationRepository,

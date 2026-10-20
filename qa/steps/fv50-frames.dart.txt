@@ -1,0 +1,2 @@
+void w(Element x) { if (x.widget is AlignedPhotoFrame) { final b = x.renderObject as RenderBox; debugPrint('FV50FRAME ' + b.size.toString() + ' at ' + b.localToGlobal(Offset.zero).toString()); } x.visitChildren(w); }
+WidgetsBinding.instance.rootElement!.visitChildren(w);

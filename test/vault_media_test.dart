@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:voyager/core/secure_vault/secure_vault.dart';
 import 'package:voyager/core/secure_vault/vault_media_service.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/local_account_store.dart';
@@ -14,6 +15,8 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/vault_media_file_store.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
+import 'package:voyager/features/settings/services/data_export_service.dart';
+import 'package:voyager/features/settings/services/data_import_service.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -521,6 +524,163 @@ void main() {
     // The blob row's own outbox entry, and its files.
     final queued = await a.db.select(a.db.pendingUploadsTable).get();
     expect(await store.unsyncedChanges(), queued.length + 1);
+  });
+
+  group('backups', () {
+    Future<File> export(_Device device, String name) async {
+      final contents = await DataExportService(
+        db: device.db,
+        collections: _collections(device.db),
+        settingsRepository: DriftSettingsRepository(device.db),
+        vaultMedia: device.service,
+      ).buildArchiveContents();
+      return File('${temp.path}/$name.zip')
+        ..writeAsBytesSync(generateBackupZipIsolate(contents));
+    }
+
+    DataImportService importer(
+      _Device device, {
+      Map<String, List<Object>>? pushed,
+      Map<String, List<Object>>? dropped,
+    }) => DataImportService(
+      db: device.db,
+      collections: _collections(device.db),
+      settingsRepository: DriftSettingsRepository(device.db),
+      pushRecords: (collection, records) async =>
+          pushed?.putIfAbsent(collection, () => []).addAll(records),
+      pushSettings: (_) async {},
+      dropRecords: (collection, records) async =>
+          dropped?.putIfAbsent(collection, () => []).addAll(records),
+      vaultMedia: device.service,
+    );
+
+    // The ZIP held the rows only, so on another account every photo was
+    // an empty frame for good.
+    test('BUG-295: a backup carries the photos, and a restore on another '
+        'account sends them to its Storage', () async {
+      settings = settings.copyWith(mediaRemoteUploadsEnabled: false);
+      final blob = await a.service.ingest(
+        jpegOf(100, 100),
+        key: key,
+        vaultId: 'vault-1',
+      );
+      final pushed = <String, List<Object>>{};
+      await importer(b, pushed: pushed).importFromZip(await export(a, 'a'));
+
+      final restored = (await b.repository.getBlob(blob.id))!;
+      expect(restored.hasLocalBytes, isTrue);
+      expect(restored.hasLocalThumb, isTrue);
+      expect(restored.uploadState, MediaUploadState.localOnly);
+      expect(await b.service.open(restored, key, thumb: false), isNotNull);
+      // Published as here, so the restore doesn't ask the server about it.
+      final published =
+          pushed[FirestoreCollections.vaultBlobs]!.single as VaultBlob;
+      expect(published.hasLocalBytes, isTrue);
+
+      settings = settings.copyWith(mediaRemoteUploadsEnabled: true);
+      await b.service.queueLocalOnlyUploads();
+      expect(storage.objects.keys, {
+        'users/user-1/vault_media/${blob.id}',
+        'users/user-1/vault_media/${blob.id}.thumb',
+      });
+    });
+
+    // The account was left with a vault, and a password, it never had.
+    test('BUG-297: undoing an import takes back the vault it brought, unless '
+        'a photo is sealed under it since', () async {
+      final notes = DriftNotificationRepository(a.db);
+      final header = (await SecureVault.create(
+        'correct horse',
+        vaultId: 'vault-1',
+        now: DateTime.utc(2026, 10, 18),
+      )).header;
+      await notes.saveSecureVaultHeader(
+        header.toJson(),
+        vaultId: header.vaultId,
+        headerVersion: header.headerVersion,
+      );
+      await a.service.ingest(jpegOf(100, 100), key: key, vaultId: 'vault-1');
+      final backup = await export(a, 'a');
+      final before = await export(b, 'b-before');
+      final bNotes = DriftNotificationRepository(b.db);
+
+      final summary = await importer(b).importFromZip(backup);
+      expect(await bNotes.getSecureVaultHeader(), isNotNull);
+
+      // A photo taken under the imported vault since keeps it.
+      final kept = await b.service.ingest(
+        jpegOf(100, 100),
+        key: key,
+        vaultId: 'vault-1',
+      );
+      final dropped = <String, List<Object>>{};
+      await importer(
+        b,
+        dropped: dropped,
+      ).importFromZip(before, deleteCreated: summary.created);
+      expect(await bNotes.getSecureVaultHeader(), isNotNull);
+      expect(dropped, isEmpty);
+
+      // In the trash it keeps it too: restored, it must still open.
+      await b.service.softDelete(kept.id, DateTime.now().toUtc());
+      await importer(
+        b,
+        dropped: dropped,
+      ).importFromZip(before, deleteCreated: summary.created);
+      expect(await bNotes.getSecureVaultHeader(), isNotNull);
+      expect(dropped, isEmpty);
+
+      // Deleted forever, nothing needs it.
+      await b.repository.upsertBlob(
+        (await b.repository.getBlob(kept.id))!.copyWith(deletedAt: kErasedAt),
+      );
+      await importer(
+        b,
+        dropped: dropped,
+      ).importFromZip(before, deleteCreated: summary.created);
+      expect(await bNotes.getSecureVaultHeader(), isNull);
+      expect(
+        (dropped[FirestoreCollections.secureVault]!.single as Map)['vaultId'],
+        'vault-1',
+      );
+    });
+
+    test('BUG-297: undoing an import leaves a vault reset since', () async {
+      final notes = DriftNotificationRepository(a.db);
+      final header = (await SecureVault.create(
+        'correct horse',
+        vaultId: 'vault-1',
+        now: DateTime.utc(2026, 10, 18),
+      )).header;
+      await notes.saveSecureVaultHeader(
+        header.toJson(),
+        vaultId: header.vaultId,
+        headerVersion: header.headerVersion,
+      );
+      final backup = await export(a, 'a');
+      final before = await export(b, 'b-before');
+      final bNotes = DriftNotificationRepository(b.db);
+      final summary = await importer(b).importFromZip(backup);
+
+      // Reset since, with nothing sealed under the new vault yet.
+      final reset = (await SecureVault.create(
+        'battery staple',
+        vaultId: 'vault-2',
+        now: DateTime.utc(2026, 10, 19),
+      )).header;
+      await bNotes.saveSecureVaultHeader(
+        reset.toJson(),
+        vaultId: reset.vaultId,
+        headerVersion: reset.headerVersion,
+      );
+      final dropped = <String, List<Object>>{};
+      await importer(
+        b,
+        dropped: dropped,
+      ).importFromZip(before, deleteCreated: summary.created);
+      expect((await bNotes.getSecureVaultHeader())!['vaultId'], 'vault-2');
+      expect(dropped, isEmpty);
+    });
   });
 }
 

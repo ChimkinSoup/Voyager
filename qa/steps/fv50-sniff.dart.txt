@@ -1,0 +1,6 @@
+final st = c.read(mediaStorageProvider); final uid = st.currentUid!;
+for (final p in [[0xFF, 0xF9], [0x71, 0xC7], [0xFF, 0xF8], [0x50, 0x4B, 0x03, 0x04], [0xFF, 0xD8, 0xFF], [0x89, 0x50, 0x4E, 0x47]]) {
+final b = Uint8List(50000); for (var i = 0; i < b.length; i++) { b[i] = (i * 31 + 7) % 251; } for (var i = 0; i < p.length; i++) { b[i] = p[i]; }
+final path = 'users/' + uid + '/vault_media/fv50-sniff-' + p[0].toRadixString(16) + p[1].toRadixString(16);
+try { await st.upload(path, b, 'application/octet-stream'); debugPrint('FV50SNIFF ok ' + path); await st.delete(path); } catch (err) { debugPrint('FV50SNIFF fail ' + path + ' ' + err.toString()); }
+}

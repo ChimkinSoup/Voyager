@@ -447,6 +447,7 @@ final dataExportServiceProvider = Provider<DataExportService>((ref) {
     settingsRepository: ref.watch(settingsRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     mediaFileStore: ref.watch(mediaFileStoreProvider),
+    vaultMedia: ref.watch(vaultMediaServiceProvider.notifier),
   );
 });
 
@@ -463,16 +464,21 @@ final dataImportServiceProvider = Provider<DataImportService>((ref) {
           .read(remoteSyncServiceProvider)
           .pushRestoredRecords(collection, records);
       // Restored photos the server says are in Storage, fetched as a pull's
-      // would be.
+      // would be; and those the backup carried, sent to this account's.
       if (collection == FirestoreCollections.vaultBlobs) {
         ref.read(vaultMediaServiceProvider).notifyChanged();
         unawaited(ref.read(vaultMediaServiceProvider).drainDownloads());
+        unawaited(ref.read(vaultMediaServiceProvider).queueLocalOnlyUploads());
       }
     },
     pushSettings: (settings) =>
         ref.read(remoteSyncServiceProvider).pushSettings(settings),
+    dropRecords: (collection, records) => ref
+        .read(remoteSyncServiceProvider)
+        .dropRestoredRecords(collection, records),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     mediaFileStore: ref.watch(mediaFileStoreProvider),
+    vaultMedia: ref.watch(vaultMediaServiceProvider.notifier),
   );
 });
 

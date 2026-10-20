@@ -1,0 +1,2 @@
+final f = await c.read(dataExportServiceProvider).exportDataToZip(File('C:/Users/Juno/Code/Voyager/qa/exports/fv50/fv50-export.zip'));
+debugPrint('FV50EXPORT ' + f.lengthSync().toString());

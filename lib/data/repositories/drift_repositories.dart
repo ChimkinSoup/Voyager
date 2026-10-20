@@ -2504,6 +2504,11 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
+  Future<void> deleteSecureVaultHeader() async {
+    await _db.delete(_db.secureVaultHeaderTable).go();
+  }
+
+  @override
   Future<int> lostSecureNoteCount() async {
     final row = await _db.select(_db.secureVaultHeaderTable).getSingleOrNull();
     return row?.lostNoteCount ?? 0;

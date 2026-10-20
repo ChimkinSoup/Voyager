@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:voyager/core/constants/build_info.dart';
+import 'package:voyager/core/secure_vault/vault_media_service.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -25,6 +26,15 @@ const backupManifestFileName = 'manifest.json';
 /// cache uses, so a restore is a straight copy.
 const backupMediaDirectory = 'media/';
 
+/// Prefix for the Photos vault's files: `vault_media/<blob id>` and
+/// `vault_media/<blob id>.thumb`, sealed exactly as they are on disk and in
+/// Storage (PHOTO_SERIES_HLD.md §14). Bytes, as under [backupMediaDirectory].
+const backupVaultMediaDirectory = 'vault_media/';
+
+/// The archive member holding [blobId]'s file, or its thumbnail's.
+String backupVaultMediaName(String blobId, {required bool thumb}) =>
+    '$backupVaultMediaDirectory$blobId${thumb ? '.thumb' : ''}';
+
 /// Archive layout version. Bumped when the shape of the files inside the zip
 /// changes; [DataImportService] refuses anything it does not recognise rather
 /// than half-restoring an archive it cannot read.
@@ -37,11 +47,13 @@ class DataExportService {
     required SettingsRepository settingsRepository,
     MediaRepository? mediaRepository,
     MediaFileStore? mediaFileStore,
+    VaultMediaService? vaultMedia,
   }) : _db = db,
        _collections = collections,
        _settingsRepository = settingsRepository,
        _mediaRepository = mediaRepository,
-       _mediaFileStore = mediaFileStore;
+       _mediaFileStore = mediaFileStore,
+       _vaultMedia = vaultMedia;
 
   final AppDatabase _db;
   final List<BackupCollection> _collections;
@@ -53,6 +65,10 @@ class DataExportService {
   /// structure and the blobs come back from Storage if they are there.
   final MediaRepository? _mediaRepository;
   final MediaFileStore? _mediaFileStore;
+
+  /// Null in tests that don't care about photos; the archive then carries
+  /// the Photos rows without their files.
+  final VaultMediaService? _vaultMedia;
 
   /// Writes the whole backup archive to [destination], which the caller has
   /// already picked. Written straight to its final home rather than staged in
@@ -98,6 +114,8 @@ class DataExportService {
     // rewritten, so reading them later cannot disagree with the rows above.
     final blobs = await _readMediaBlobs();
     files.addAll(blobs);
+    final vaultFiles = await _readVaultFiles();
+    files.addAll(vaultFiles);
 
     files[backupManifestFileName] = {
       'formatVersion': backupFormatVersion,
@@ -105,6 +123,7 @@ class DataExportService {
       'build': buildLabel,
       'collections': counts,
       'mediaFiles': blobs.length,
+      'vaultMediaFiles': vaultFiles.length,
     };
     return files;
   }
@@ -135,6 +154,27 @@ class DataExportService {
     }
     return blobs;
   }
+
+  /// Every live vault photo's two files, keyed by archive member name, so a
+  /// backup restores its photos on an account whose Storage never held them
+  /// (BUG-295). As with images, only what is on this device: a file not
+  /// here is left out, and its photo restores without it.
+  ///
+  /// Paths, not bytes: [generateBackupZipIsolate] reads each one itself, so
+  /// a large library isn't held here and again in the isolate's copy.
+  Future<Map<String, Object>> _readVaultFiles() async {
+    final media = _vaultMedia;
+    if (media == null) return const {};
+    final files = <String, Object>{};
+    for (final blob in await media.repository.listBlobs()) {
+      for (final thumb in [false, true]) {
+        final path = await media.sealedPath(blob, thumb: thumb);
+        if (path == null) continue;
+        files[backupVaultMediaName(blob.id, thumb: thumb)] = path;
+      }
+    }
+    return files;
+  }
 }
 
 /// Background isolate entry point — must be top-level.
@@ -148,11 +188,20 @@ List<int> generateBackupZipIsolate(Map<String, Object> files) {
   final checksums = <String, String>{};
   for (final entry in files.entries) {
     if (entry.key == backupManifestFileName) continue;
-    // Members under `media/` are already bytes. Everything else is a
-    // structure to serialise — see [backupMediaDirectory].
-    final bytes = entry.key.startsWith(backupMediaDirectory)
-        ? entry.value as List<int>
-        : utf8.encode(jsonEncode(entry.value));
+    // Members under `media/` are already bytes, and those under
+    // `vault_media/` paths to read them from. Everything else is a structure
+    // to serialise — see [backupMediaDirectory].
+    final List<int> bytes;
+    if (entry.key.startsWith(backupVaultMediaDirectory)) {
+      final file = File(entry.value as String);
+      // Purged since it was listed: left out, as a file never here is.
+      if (!file.existsSync()) continue;
+      bytes = file.readAsBytesSync();
+    } else {
+      bytes = entry.key.startsWith(backupMediaDirectory)
+          ? entry.value as List<int>
+          : utf8.encode(jsonEncode(entry.value));
+    }
     checksums[entry.key] = sha256.convert(bytes).toString();
     archive.addFile(ArchiveFile(entry.key, bytes.length, bytes));
   }

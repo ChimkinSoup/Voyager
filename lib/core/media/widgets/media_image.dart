@@ -355,7 +355,7 @@ class _MediaImagePlaceholder extends StatelessWidget {
         child: CircularProgressIndicator(strokeWidth: 2, color: muted),
       );
     } else if (failed) {
-      body = _PlaceholderMessage(
+      body = MediaPlaceholderMessage(
         icon: PhosphorIconsRegular.arrowClockwise,
         label: 'Retry',
         color: theme.colorScheme.error,
@@ -364,7 +364,7 @@ class _MediaImagePlaceholder extends StatelessWidget {
     } else if (asset.isOnlyElsewhere) {
       // Kept off the cloud by the device that has it: nothing to retry until
       // it uploads, which brings the picture here by itself (BUG-261).
-      body = _PlaceholderMessage(
+      body = MediaPlaceholderMessage(
         icon: PhosphorIconsRegular.devices,
         label: 'On another device',
         color: muted,
@@ -372,7 +372,7 @@ class _MediaImagePlaceholder extends StatelessWidget {
     } else {
       // Reached when the bytes are absent and downloads are off — the design's
       // named empty state, rather than a spinner that could never resolve.
-      body = _PlaceholderMessage(
+      body = MediaPlaceholderMessage(
         icon: PhosphorIconsRegular.cloudSlash,
         label: 'Download disabled',
         color: muted,
@@ -390,8 +390,11 @@ class _MediaImagePlaceholder extends StatelessWidget {
   }
 }
 
-class _PlaceholderMessage extends StatelessWidget {
-  const _PlaceholderMessage({
+/// An icon and a short label saying why an image isn't showing; the icon
+/// alone, the label its tooltip, where there's no room for both.
+class MediaPlaceholderMessage extends StatelessWidget {
+  const MediaPlaceholderMessage({
+    super.key,
     required this.icon,
     required this.label,
     required this.color,

@@ -1,0 +1,10 @@
+final gb = GestureBinding.instance; const k = PointerDeviceKind.mouse;
+gb.handlePointerEvent(PointerAddedEvent(pointer: 0, device: 91, kind: k, position: Offset(120, 816)));
+gb.handlePointerEvent(PointerHoverEvent(device: 91, kind: k, position: Offset(128, 816)));
+await Future.delayed(Duration(milliseconds: 300));
+gb.handlePointerEvent(PointerDownEvent(pointer: 991, device: 91, kind: k, buttons: kPrimaryButton, position: Offset(128, 816)));
+for (var i = 1; i <= 16; i++) { await Future.delayed(Duration(milliseconds: 40)); gb.handlePointerEvent(PointerMoveEvent(pointer: 991, device: 91, kind: k, buttons: kPrimaryButton, position: Offset(128 + 48.0 * i, 816), delta: Offset(48, 0))); }
+debugPrint('FV50SCRUB held');
+await Future.delayed(Duration(seconds: 6));
+gb.handlePointerEvent(PointerUpEvent(pointer: 991, device: 91, kind: k, position: Offset(896, 816)));
+debugPrint('FV50SCRUB up');

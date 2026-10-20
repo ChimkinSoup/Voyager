@@ -15,6 +15,7 @@ import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_frame.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/photo_series_viewer.dart';
+import 'package:voyager/features/photo_series/vault_image_cache.dart';
 
 /// One check-in's photo of the angle on screen, as Playback and Compare walk
 /// them.
@@ -63,7 +64,9 @@ class PhotoSeriesPlayback extends ConsumerStatefulWidget {
 
 class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
     with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_tick);
+  // Made in initState rather than on first use: a series with no photos
+  // never reads it before dispose, which can't make one (BUG-302).
+  late final Ticker _ticker;
   late int _fps = widget.series.playbackFps.clamp(1, 30);
   PhotoLoopMode _loop = PhotoLoopMode.loop;
   bool _dateStamp = true;
@@ -93,6 +96,12 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
   String _framesIds = '';
   Object? _framesSource;
   String? _framesAngle;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_tick);
+  }
 
   @override
   void dispose() {
@@ -298,7 +307,12 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
                   if (current != null && !identical(current, _heldFrom)) {
                     _hold(_index, current);
                   }
-                  final shown = _shown;
+                  // Stopped on a frame that won't open, it says so rather than
+                  // hold the one before under that one's date (BUG-299).
+                  final broken =
+                      !playing && current == null && window.isSettled(_index);
+                  final shown = broken ? null : _shown;
+                  final stamped = broken ? _index : shown;
                   return Center(
                     child: AspectRatio(
                       aspectRatio: aspect,
@@ -321,17 +335,22 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
                               ),
                             )
                           else if (window.isSettled(_index))
-                            const Center(
-                              child: Icon(PhosphorIconsRegular.imageBroken),
+                            // Says why: not downloaded, never uploaded, or
+                            // damaged (BUG-301).
+                            VaultPhoto(
+                              key: ValueKey(frames[_index].image.blobId),
+                              blobId: frames[_index].image.blobId,
+                              thumb: true,
+                              fit: BoxFit.contain,
                             )
                           else
                             const Center(child: CircularProgressIndicator()),
-                          if (_dateStamp && shown != null)
+                          if (_dateStamp && stamped != null)
                             Positioned(
                               left: 10,
                               bottom: 10,
                               child: _Stamp(
-                                date: frames[shown].checkIn.takenOn,
+                                date: frames[stamped].checkIn.takenOn,
                                 first: frames.first.checkIn.takenOn,
                               ),
                             ),
@@ -518,7 +537,12 @@ class _ScrubberState extends State<_Scrubber> {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) => seek(details.localPosition),
-                onHorizontalDragStart: (details) => seek(details.localPosition),
+                // Hover doesn't fire while the button is held, so the caption
+                // follows the playhead for the drag (BUG-304).
+                onHorizontalDragStart: (details) {
+                  setState(() => _hover = null);
+                  seek(details.localPosition);
+                },
                 onHorizontalDragUpdate: (details) =>
                     seek(details.localPosition),
                 child: SizedBox(

@@ -1,0 +1,2 @@
+﻿final snap = await c.read(photoSeriesSnapshotProvider.future);
+await c.read(photoSeriesServiceProvider).deleteSeries(snap.series.firstWhere((s) => s.name == 'FV50 Empty'));

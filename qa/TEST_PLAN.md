@@ -1536,6 +1536,24 @@ Keep this table and each phase's **Status** line in sync.
 - **Third pass (2026-10-15, qa-092):** BUG-281's remaining cost: one full entry read per arrival instead of three, ids-only read for the id set, tracker values per day, and (debug builds) no trash or recent-list build from invalidating unread providers. Test: `live_sync_narrow_reload_test.dart`. Profile build, 240 at 1/s into 687 entries: row re-reads 3.6 ms per arrival (was 6.65), tracker values 2.3 ms (was 4.9), UI p90 0.52 ms, no frame over 16.7 ms. Full suite 4,943 passed, 16 skipped. Both instances ended `SIGNED-OUT`.
 - **Not covered:** BUG-281's one remaining full read per arrival still grows with the account (smaller, not removed).
 
+### FV-50 — BUG-294 … BUG-304 (Photos fix pass, Phase 28B)
+- **Change (2026-10-20, uncommitted, on `80012e5`):** BUG-294: the vault Storage rule drops its content-type check (deployed). BUG-295: backups carry the vault files (`vault_media/`); an import writes them and queues the new ones for upload. BUG-296: a vault reset erases the check-ins and images it empties. BUG-297: undoing an import takes back a vault header it created, here and on the server. BUG-298: Overlay slider named, value shown. BUG-299: Playback stopped on a broken frame shows it as such under its own date. BUG-300: the upload switch and launch queue `localOnly` vault photos; the download switches drain vault downloads. BUG-301: unavailable vault photos say why. BUG-302: Playback's ticker made in `initState`. BUG-303: alignment stage shrinks to fit; Compare stacks only when larger. BUG-304: a scrubber drag drops the hover caption.
+- **Tests:** `photo_series_page_test.dart` "Phase 28B" group (6), `photo_series_sync_test.dart` "BUG-296 …", `vault_media_test.dart` "backups" group (2). The six widget tests and BUG-296's fail without the changes; the two backup tests use the new parameters. Full suite 5,193 passed, 16 skipped, 0 failed.
+- **Flows (new accounts qa-105 and qa-106 on `qa`, vault password `fv50vault`, seeded with `p28b-seed-a/b.dart.txt`):**
+  - [x] BUG-294: refused prefixes upload (REST probe and the app's own upload); 436 / 436 seeded blobs `uploaded`.
+  - [x] BUG-295: export 28.7 MB with 874 vault files; imported on qa-106, all 437 here, photos open, then uploaded to qa-106's Storage.
+  - [x] BUG-296: after a reset the Trash lists only the real deletion; 424 check-ins erased; same after a relaunch.
+  - [x] BUG-297: "Before restore" undo removes the local and server header; Photos back to no vault.
+  - [x] BUG-298: "B over A … 50%", and 0% at the left end.
+  - [x] BUG-299: corrupted Aug 24: "Can't be opened" under "Aug 24, 2026".
+  - [x] BUG-300: real upload switch → `uploaded` in 3 s; real download switch → missing photos back in 5 s.
+  - [x] BUG-301: "Download disabled" on cover, tiles, viewer and Compare.
+  - [x] BUG-302: empty Playback → Grid, no exception.
+  - [x] BUG-303: 720×520: Align with Opacity fits; Compare side by side 169×225.
+  - [x] BUG-304: held drag (injected mouse events): caption "Sep 7, 2026 · 7 / 11".
+- **Result (2026-10-20):** 11 of 11 pass. No exceptions or overflows in the run logs. Outbox 0 at the end; profile `qa` ended `SIGNED-OUT`.
+- **Not covered:** BUG-297 with a second device that already pulled the imported header (it keeps its copy); BUG-304 with a real mouse (injected pointer events instead, same Flutter path); BUG-301's "Retry" state (a parked download).
+
 ### FV-49 — BUG-284 … BUG-286, BUG-288 … BUG-292 (Photos fix pass; BUG-287 and BUG-293 skipped)
 - **Change (2026-10-20, uncommitted, on `91d6cf7`):** BUG-284: the series dialog refocuses Name after a rejected submit. BUG-285: the unlock card refocuses the password field after a refused unlock. BUG-286: the check-in dialog asks before discarding picked photos or a typed note on every platform. BUG-288: the strip's jump repeats until the scroll holds, then reveals the tile. BUG-289: a decoder that throws maps to "That image could not be read."; `createCheckIn` seals every photo before storing any (`VaultMediaService.seal` / `store`). BUG-290: the grid groups by month (daily, weekly) or year (monthly, yearly); HLD §7.1 changed. BUG-291: "Skipped" one line; the tile's dots wrap below the date. BUG-292: badge text through `themedLabelInk`.
 - **Tests:** `photo_series_page_test.dart` "Phase 28A" group (9; 8 fail without the changes). Full suite 5,183 passed, 16 skipped, 0 failed.

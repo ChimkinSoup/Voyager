@@ -493,6 +493,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           // Photo Series' images: parked transfers get the same retry, and
           // thumbnails learned of in the pull are fetched. Settings inside.
           unawaited(ref.read(vaultMediaServiceProvider).requeueFailed());
+          // And photos kept local while uploads were off (BUG-300).
+          unawaited(
+            ref.read(vaultMediaServiceProvider).queueLocalOnlyUploads(),
+          );
           // After the pull, so the references it brought in count.
           unawaited(ref.read(mediaServiceProvider).reconcileRefcounts());
           // Contribution rows written the old way round, here or on another

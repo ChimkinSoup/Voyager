@@ -1,0 +1,6 @@
+final vs = c.read(secureVaultServiceProvider);
+final key = await vs.create('fv50vault');
+final hdr = await vs.localHeader();
+c.read(secureVaultSessionProvider.notifier).unlock(key, hdr!.vaultId);
+c.invalidate(secureVaultHeaderProvider);
+debugPrint('FV50CREATE ' + hdr.vaultId);

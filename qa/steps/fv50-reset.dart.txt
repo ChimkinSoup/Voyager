@@ -1,0 +1,7 @@
+final snap = await c.read(photoSeriesSnapshotProvider.future);
+await c.read(photoSeriesServiceProvider).deleteSeries(snap.series.firstWhere((s) => s.name == 'FV50 Empty'));
+final vs = c.read(secureVaultServiceProvider);
+final key = await vs.reset('fv50reset');
+final hdr = await vs.localHeader();
+c.read(secureVaultSessionProvider.notifier).unlock(key, hdr!.vaultId);
+debugPrint('FV50RESET ' + hdr.vaultId + ' v' + hdr.headerVersion.toString());

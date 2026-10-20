@@ -171,6 +171,57 @@ class VaultMediaService extends ChangeNotifier {
     }
   }
 
+  /// Where [blob]'s file, or its thumbnail's with [thumb], is stored sealed on
+  /// this device; null when it isn't here. A backup copies it from there.
+  Future<String?> sealedPath(VaultBlob blob, {required bool thumb}) async =>
+      (await _fileStore.find(blob.id, thumb: thumb))?.path;
+
+  /// Puts a file a backup carried in place for [blob], unless it is already
+  /// here or isn't the size [blob] says. Whether it was written.
+  Future<bool> restoreSealed(
+    VaultBlob blob,
+    Uint8List sealed, {
+    required bool thumb,
+  }) async {
+    if (thumb ? blob.hasLocalThumb : blob.hasLocalBytes) return false;
+    if (sealed.length != (thumb ? blob.thumbByteSize : blob.byteSize)) {
+      return false;
+    }
+    await _fileStore.write(blob.id, sealed, thumb: thumb);
+    await _repository.updateBlobTransferState(
+      blob.id,
+      downloadState: thumb ? null : MediaDownloadState.present,
+      thumbDownloadState: thumb ? MediaDownloadState.present : null,
+      clearFailureReason: true,
+    );
+    return true;
+  }
+
+  /// Why [blobId]'s file, or its thumbnail's with [thumb], can't be shown
+  /// under [vaultId], once opening it gave nothing. Null while it may yet
+  /// arrive.
+  Future<VaultPhotoProblem?> problemWith(
+    String blobId, {
+    required bool thumb,
+    required String vaultId,
+  }) async {
+    final blob = await _repository.getBlob(blobId);
+    if (blob == null || blob.deletedAt != null || blob.vaultId != vaultId) {
+      return VaultPhotoProblem.unreadable;
+    }
+    return switch (thumb ? blob.thumbDownloadState : blob.downloadState) {
+      // Here, and still it wouldn't open.
+      MediaDownloadState.present => VaultPhotoProblem.unreadable,
+      MediaDownloadState.failed => VaultPhotoProblem.failed,
+      // Not here, and not in Storage either: the two go up together.
+      _ when blob.uploadState == MediaUploadState.localOnly =>
+        VaultPhotoProblem.elsewhere,
+      _ when !(await _readSettings()).mediaRemoteDownloadsEnabled =>
+        VaultPhotoProblem.downloadsOff,
+      _ => null,
+    };
+  }
+
   /// Tombstones a blob at [at] — the stamp its owner's delete used, so a
   /// restore can bring the two back together. Its files go at the purge.
   Future<void> softDelete(String id, DateTime at) async {
@@ -496,6 +547,21 @@ class VaultMediaService extends ChangeNotifier {
 }
 
 const _directions = ['up', 'thumb', 'full'];
+
+/// See [VaultMediaService.problemWith].
+enum VaultPhotoProblem {
+  /// Not on this device, and downloads are off.
+  downloadsOff,
+
+  /// Only on a device that hasn't put it in Storage.
+  elsewhere,
+
+  /// The download gave up; [VaultMediaService.retry] tries again.
+  failed,
+
+  /// Damaged, from another vault, or gone.
+  unreadable,
+}
 
 /// An image [VaultMediaService.seal]ed, not yet stored.
 typedef SealedVaultImage = ({

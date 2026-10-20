@@ -305,18 +305,23 @@ class _SeriesCard extends ConsumerWidget {
                         ),
                       ),
                     )
-                  // Always blurred here; a photo is revealed in its grid.
-                  : ClipRect(
-                      child: ImageFiltered(
-                        imageFilter: ui.ImageFilter.blur(
-                          sigmaX: 18,
-                          sigmaY: 18,
+                  // Always blurred here; a photo is revealed in its grid. Why
+                  // one is missing isn't (BUG-301).
+                  : unlocked
+                  ? VaultPhoto(
+                      blobId: cover.blobId,
+                      thumb: true,
+                      framePhoto: (photo) => ClipRect(
+                        child: ImageFiltered(
+                          imageFilter: ui.ImageFilter.blur(
+                            sigmaX: 18,
+                            sigmaY: 18,
+                          ),
+                          child: photo,
                         ),
-                        child: unlocked
-                            ? VaultPhoto(blobId: cover.blobId, thumb: true)
-                            : const SizedBox.expand(),
                       ),
-                    ),
+                    )
+                  : const SizedBox.expand(),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),

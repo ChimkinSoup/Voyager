@@ -391,6 +391,10 @@ abstract class NotificationRepository {
     required int headerVersion,
   });
 
+  /// Removes the local copy of the vault header, leaving no vault. Local
+  /// only, as [saveSecureVaultHeader].
+  Future<void> deleteSecureVaultHeader();
+
   /// How many notes made on this device a vault reset elsewhere left behind,
   /// still to be told to the user. Kept beside the local header, never synced.
   Future<int> lostSecureNoteCount();

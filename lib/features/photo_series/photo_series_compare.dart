@@ -162,7 +162,11 @@ class _PhotoSeriesCompareState extends ConsumerState<PhotoSeriesCompare> {
             const SizedBox(width: 12, height: 12),
             Expanded(child: Center(child: photo(b))),
           ];
-          return box.maxWidth < 600
+          // Whichever way round draws the photos larger: stacked only pays
+          // when the room is tall (BUG-303).
+          double width(double w, double h) => math.min(w, h * aspect);
+          return width(box.maxWidth, (box.maxHeight - 12) / 2) >
+                  width((box.maxWidth - 12) / 2, box.maxHeight)
               ? Column(children: pair)
               : Row(children: pair);
         },
@@ -295,14 +299,30 @@ class _PhotoSeriesCompareState extends ConsumerState<PhotoSeriesCompare> {
                   onSelectionChanged: (selected) =>
                       setState(() => _mode = selected.single),
                 ),
+                // Named and read out, as Playback's fps (BUG-298).
                 if (_mode == PhotoCompareMode.overlay)
-                  SizedBox(
-                    width: 180,
-                    child: Slider(
-                      value: _opacity,
-                      label: 'B ${(_opacity * 100).round()}%',
-                      onChanged: (value) => setState(() => _opacity = value),
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('B over A', style: theme.textTheme.bodySmall),
+                      SizedBox(
+                        width: 180,
+                        child: Slider(
+                          value: _opacity,
+                          semanticFormatterCallback: (value) =>
+                              'B ${(value * 100).round()}%',
+                          onChanged: (value) =>
+                              setState(() => _opacity = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 36,
+                        child: Text(
+                          '${(_opacity * 100).round()}%',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
                   ),
                 if (shownAngles.length > 1)
                   for (final shown in shownAngles)

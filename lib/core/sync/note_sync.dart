@@ -1,4 +1,5 @@
 import 'package:voyager/core/secure_vault/secure_vault.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
@@ -193,10 +194,13 @@ Future<int> retireSecureNotes(NotificationRepository repo) async {
 
 /// [retireSecureNotes] for Photo Series (PHOTO_SERIES_HLD.md §6.7):
 /// tombstones every live blob sealed under a retired vault, whose files the
-/// purge then deletes, and the images showing them. Check-in notes sealed
-/// under one are cleared, and a check-in left with no image goes too, so
-/// streaks count only what can still be seen. Returns how many rows it
-/// changed.
+/// purge then deletes, and erases the images showing them. Check-in notes
+/// sealed under one are cleared, and a check-in left with no image is erased
+/// too, so streaks count only what can still be seen. Erased, as the trash's
+/// "Delete forever" does, rather than tombstoned: nothing can open them
+/// again, so the trash mustn't offer them back (BUG-296). Ones an earlier
+/// pass or a delete only tombstoned are erased as well. Returns how many rows
+/// it changed.
 Future<int> retireVaultBlobs(
   NotificationRepository notes,
   PhotoSeriesRepository photos,
@@ -217,22 +221,43 @@ Future<int> retireVaultBlobs(
   }
   final images = <PhotoCheckInImage>[];
   final lost = <String>{};
-  final shown = <String>{};
-  for (final image in await photos.listImages()) {
+  // When each check-in's surviving images were deleted, null for live ones:
+  // only those deleted with the check-in come back with it from the trash.
+  final shown = <String, List<DateTime?>>{};
+  for (final image in await photos.listImages(includeDeleted: true)) {
+    if (isErasedAt(image.deletedAt)) continue;
     if (retiredBlobs.contains(image.blobId)) {
-      images.add(image.copyWith(deletedAt: now, bumpVersion: true));
+      images.add(
+        image.copyWith(
+          deletedAt: kErasedAt,
+          version: image.version + kEraseVersionStep,
+        ),
+      );
       lost.add(image.checkInId);
     } else {
-      shown.add(image.checkInId);
+      (shown[image.checkInId] ??= []).add(image.deletedAt);
     }
   }
   final checkIns = <PhotoCheckIn>[];
-  for (final checkIn in await photos.listCheckIns()) {
+  for (final checkIn in await photos.listCheckIns(includeDeleted: true)) {
+    if (isErasedAt(checkIn.deletedAt)) continue;
+    final deletedAt = checkIn.deletedAt;
     final emptied =
-        lost.contains(checkIn.id) && !shown.contains(checkIn.id);
+        lost.contains(checkIn.id) &&
+        !(shown[checkIn.id] ?? const []).any(
+          (at) => deletedAt == null
+              ? at == null
+              : at?.isAtSameMomentAs(deletedAt) ?? false,
+        );
     if (emptied) {
-      checkIns.add(checkIn.copyWith(deletedAt: now, bumpVersion: true));
-    } else if (retired.contains(checkIn.vaultId)) {
+      checkIns.add(
+        checkIn.copyWith(
+          clearNote: true,
+          deletedAt: kErasedAt,
+          version: checkIn.version + kEraseVersionStep,
+        ),
+      );
+    } else if (checkIn.deletedAt == null && retired.contains(checkIn.vaultId)) {
       checkIns.add(checkIn.copyWith(clearNote: true, bumpVersion: true));
     }
   }

@@ -26,6 +26,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/services/vault_media_file_store.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/photo_series/photo_series_periods.dart';
@@ -76,16 +77,21 @@ DateTime _today() {
   return DateTime(now.year, now.month, now.day);
 }
 
+/// [files] is where the vault's files go, for a test that reaches into it.
 Future<ProviderContainer> _container(
   WidgetTester tester, {
   List<Override> overrides = const [],
+  Directory? files,
+  AppSettings? settings,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
-  final dir = (await tester.runAsync(
-    () => Directory.systemTemp.createTemp('voyager_photo_page'),
-  ))!;
-  addTearDown(() => dir.delete(recursive: true));
+  final dir =
+      files ??
+      (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('voyager_photo_page'),
+      ))!;
+  if (files == null) addTearDown(() => dir.delete(recursive: true));
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
@@ -101,6 +107,7 @@ Future<ProviderContainer> _container(
           fileStore: VaultMediaFileStore(root: dir),
           storage: _NoStorage(),
           readSettings: () async =>
+              settings ??
               const AppSettings().copyWith(mediaRemoteUploadsEnabled: false),
         ),
       ),
@@ -1572,6 +1579,233 @@ void main() {
           greaterThanOrEqualTo(4.5),
         );
       }
+    });
+  });
+
+  group('Phase 28B', () {
+    /// Seals [image]'s blob under another vault, as far as its row says, so
+    /// it never opens again.
+    Future<void> damage(
+      WidgetTester tester,
+      ProviderContainer container,
+      PhotoCheckInImage image,
+    ) async {
+      final repository = container.read(photoSeriesRepositoryProvider);
+      await tester.runAsync(() async {
+        final blob = (await repository.getBlob(image.blobId))!;
+        await repository.upsertBlob(
+          VaultBlob(
+            id: blob.id,
+            vaultId: 'another-vault',
+            width: blob.width,
+            height: blob.height,
+            byteSize: blob.byteSize,
+            thumbByteSize: blob.thumbByteSize,
+            createdAt: blob.createdAt,
+            updatedAt: blob.updatedAt,
+          ),
+        );
+      });
+    }
+
+    testWidgets('BUG-298: the Overlay slider is named and reads out its '
+        'value', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Compare'));
+      await _drain(tester);
+      await tester.tap(find.text('Overlay'));
+      await _settle(tester);
+
+      expect(find.text('B over A'), findsOneWidget);
+      expect(find.text('50%'), findsOneWidget);
+      tester.widget<Slider>(find.byType(Slider)).onChanged!(0);
+      await tester.pump();
+      expect(find.text('0%'), findsOneWidget);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets("BUG-299: stopped on a photo that won't open, Playback says "
+        'so under its own date', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      final repository = container.read(photoSeriesRepositoryProvider);
+      final checkIns = (await tester.runAsync(repository.listCheckIns))!;
+      final latest = checkIns.reduce(
+        (a, b) => a.takenOn.isAfter(b.takenOn) ? a : b,
+      );
+      final images = (await tester.runAsync(repository.listImages))!;
+      await damage(
+        tester,
+        container,
+        images.singleWhere((image) => image.checkInId == latest.id),
+      );
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await _drain(tester);
+
+      expect(find.textContaining('2 / 2'), findsOneWidget);
+      expect(find.text("Can't be opened"), findsOneWidget);
+      final date = DateFormat.yMMMd().format(_today());
+      expect(find.textContaining('$date  +'), findsOneWidget);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets("BUG-301: a photo that isn't here says why", (tester) async {
+      final files = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('voyager_photo_page'),
+      ))!;
+      addTearDown(() => files.delete(recursive: true));
+      final container = await _container(
+        tester,
+        files: files,
+        settings: const AppSettings().copyWith(
+          mediaRemoteUploadsEnabled: false,
+          mediaRemoteDownloadsEnabled: false,
+        ),
+      );
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: [0]);
+      final repository = container.read(photoSeriesRepositoryProvider);
+      final blobId = (await tester.runAsync(
+        repository.listImages,
+      ))!.single.blobId;
+      // Another device's, in Storage, and not fetched here.
+      await tester.runAsync(() async {
+        await for (final file in files.list()) {
+          await file.delete();
+        }
+        await repository.updateBlobTransferState(
+          blobId,
+          uploadState: MediaUploadState.uploaded,
+          downloadState: MediaDownloadState.missing,
+          thumbDownloadState: MediaDownloadState.missing,
+        );
+      });
+      await _pumpDetail(tester, container, series.id);
+      await _drain(tester);
+      expect(find.text('Download disabled'), findsOneWidget);
+      // Not under the blur, which would make it unreadable.
+      expect(
+        find.ancestor(
+          of: find.text('Download disabled'),
+          matching: find.byType(ImageFiltered),
+        ),
+        findsNothing,
+      );
+
+      // Never uploaded by the device that has it.
+      await tester.runAsync(
+        () => repository.updateBlobTransferState(
+          blobId,
+          uploadState: MediaUploadState.localOnly,
+        ),
+      );
+      container.read(vaultMediaServiceProvider).notifyChanged();
+      await _drain(tester);
+      expect(find.text('On another device'), findsOneWidget);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('BUG-302: leaving Playback of a series with no photos throws '
+        'nothing', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: []);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _settle(tester);
+      expect(find.text('No photos to play yet.'), findsOneWidget);
+
+      await tester.tap(find.text('Grid'));
+      await _settle(tester);
+      expect(tester.takeException(), isNull);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('BUG-303: in a short window the alignment editor fits, and '
+        "Compare's photos sit side by side", (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      await _pumpDetail(tester, container, series.id);
+      tester.view.physicalSize = const Size(720, 520);
+      await _settle(tester);
+
+      // The newer photo, so the editor has a reference and an Opacity row.
+      await tester.tap(
+        find.byType(VaultPhoto).first,
+        buttons: kSecondaryButton,
+        warnIfMissed: false,
+      );
+      await _settle(tester);
+      await tester.tap(find.text('Align'));
+      await _drain(tester);
+      expect(find.text('Opacity'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final rotation = tester.getRect(find.text('Rotation'));
+      final done = tester.getRect(find.widgetWithText(GlassButton, 'Done'));
+      expect(done.top, greaterThan(rotation.bottom));
+      await tester.tap(find.widgetWithText(GlassButton, 'Cancel'));
+      await _settle(tester);
+
+      await tester.tap(find.text('Compare'));
+      await _drain(tester);
+      final frames = find.byType(AlignedPhotoFrame);
+      expect(
+        tester.getCenter(frames.first).dy,
+        tester.getCenter(frames.last).dy,
+      );
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
+    });
+
+    testWidgets('BUG-304: dragging the scrubber, the caption follows the '
+        'playhead', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: [14, 7, 0]);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Playback'));
+      await _drain(tester);
+
+      final caption = find.textContaining('1 / 3');
+      final scrubber = tester.getRect(
+        find.ancestor(of: caption, matching: find.byType(Column)).first,
+      );
+      final y = scrubber.bottom - 14;
+      final start = Offset(scrubber.left + 9, y);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: start - const Offset(1, 0));
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(start);
+      await tester.pump();
+      await mouse.down(start);
+      for (var i = 1; i <= 4; i++) {
+        await mouse.moveTo(start + Offset((scrubber.width - 18) * i / 4, 0));
+        await tester.pump();
+      }
+      await _drain(tester);
+      expect(find.textContaining('3 / 3'), findsOneWidget);
+      await mouse.up();
+      await tester.pump();
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await tester.pump();
     });
   });
 }

@@ -23,15 +23,17 @@ service firebase.storage {
 
     // Photo Series' encrypted images: users/{userId}/vault_media/{id} and
     // {id}.thumb, ciphertext only — see VaultBlob. Same size ceiling as
-    // media; the bytes are opaque, so the one content type allowed is the
-    // opaque one.
+    // media. No content-type check: the app declares
+    // application/octet-stream, but Storage sniffs the bytes and records
+    // what it detects instead, and random ciphertext sometimes starts like
+    // a JPEG, ZIP or audio frame — those uploads were refused for good
+    // (BUG-294).
     match /users/{userId}/vault_media/{name} {
       allow read: if request.auth != null && request.auth.uid == userId;
 
       allow write: if request.auth != null
         && request.auth.uid == userId
-        && request.resource.size < 21 * 1024 * 1024
-        && request.resource.contentType == 'application/octet-stream';
+        && request.resource.size < 21 * 1024 * 1024;
 
       allow delete: if request.auth != null && request.auth.uid == userId;
     }

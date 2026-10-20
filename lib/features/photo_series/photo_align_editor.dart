@@ -259,75 +259,84 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    height: stageHeight,
-                    child: LayoutBuilder(
-                      builder: (context, box) {
-                        final stage = box.biggest;
-                        _frame = stage.width / stage.height > aspect
-                            ? Size(stage.height * aspect, stage.height)
-                            : Size(stage.width, stage.width / aspect);
-                        return Listener(
-                          onPointerSignal: (event) {
-                            if (event is PointerScrollEvent) {
-                              _transform(
-                                zoom: math.exp(-event.scrollDelta.dy / 400),
-                                focal: _fromCentre(event.localPosition, stage),
-                              );
-                            }
-                          },
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onScaleStart: (_) {
-                              _gestureScale = 1;
-                              _gestureRotation = 0;
+                  // Shrinks to what the dialog has left, so a short window
+                  // keeps the sliders and buttons clear of it (BUG-303).
+                  Flexible(
+                    child: SizedBox(
+                      height: stageHeight,
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          final stage = box.biggest;
+                          _frame = stage.width / stage.height > aspect
+                              ? Size(stage.height * aspect, stage.height)
+                              : Size(stage.width, stage.width / aspect);
+                          return Listener(
+                            onPointerSignal: (event) {
+                              if (event is PointerScrollEvent) {
+                                _transform(
+                                  zoom: math.exp(-event.scrollDelta.dy / 400),
+                                  focal: _fromCentre(
+                                    event.localPosition,
+                                    stage,
+                                  ),
+                                );
+                              }
                             },
-                            onScaleUpdate: (details) {
-                              _transform(
-                                delta: details.focalPointDelta,
-                                zoom: details.scale / _gestureScale,
-                                turn: details.rotation - _gestureRotation,
-                                focal: _fromCentre(
-                                  details.localFocalPoint,
-                                  stage,
-                                ),
-                              );
-                              _gestureScale = details.scale;
-                              _gestureRotation = details.rotation;
-                            },
-                            child: Center(
-                              child: SizedBox.fromSize(
-                                size: _frame,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ColoredBox(
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.06),
-                                    ),
-                                    if (reference != null)
-                                      _photo(reference, aspect),
-                                    Opacity(
-                                      opacity: reference == null ? 1 : _opacity,
-                                      child: _photo(_draft, aspect),
-                                    ),
-                                    IgnorePointer(
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: theme.colorScheme.primary
-                                                .withValues(alpha: 0.6),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onScaleStart: (_) {
+                                _gestureScale = 1;
+                                _gestureRotation = 0;
+                              },
+                              onScaleUpdate: (details) {
+                                _transform(
+                                  delta: details.focalPointDelta,
+                                  zoom: details.scale / _gestureScale,
+                                  turn: details.rotation - _gestureRotation,
+                                  focal: _fromCentre(
+                                    details.localFocalPoint,
+                                    stage,
+                                  ),
+                                );
+                                _gestureScale = details.scale;
+                                _gestureRotation = details.rotation;
+                              },
+                              child: Center(
+                                child: SizedBox.fromSize(
+                                  size: _frame,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ColoredBox(
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.06),
+                                      ),
+                                      if (reference != null)
+                                        _photo(reference, aspect),
+                                      Opacity(
+                                        opacity: reference == null
+                                            ? 1
+                                            : _opacity,
+                                        child: _photo(_draft, aspect),
+                                      ),
+                                      IgnorePointer(
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: theme.colorScheme.primary
+                                                  .withValues(alpha: 0.6),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
