@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
@@ -21,7 +22,7 @@ const defaultEntityManageMenuEntries = [
   VoyagerMenuCatalogEntry.changeColor,
 ];
 
-/// Default entries and order for journal/list manage menus (⋮ popup).
+/// Default entries and order for journal/list manage menus (⋯ menu).
 const entityManageMenuEntries = [
   VoyagerMenuCatalogEntry.rename,
   VoyagerMenuCatalogEntry.changeColor,
@@ -155,3 +156,19 @@ List<PopupMenuEntry<VoyagerMenuCatalogEntry>> buildCatalogMenu(
       ),
   ]);
 }
+
+/// [entries] as context-menu items, for an action menu such as a manage
+/// sheet's ⋯; a value picker, like the weather, stays a popup. Delete is
+/// drawn destructive.
+List<ContextMenuItem> catalogContextMenuItems(
+  Iterable<VoyagerMenuCatalogEntry> entries,
+  ValueChanged<VoyagerMenuCatalogEntry> onSelected,
+) => [
+  for (final entry in entries)
+    ContextMenuItem(
+      label: entry.label,
+      icon: entry.icon,
+      isDestructive: entry == VoyagerMenuCatalogEntry.delete,
+      onTap: () => onSelected(entry),
+    ),
+];

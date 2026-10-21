@@ -1812,6 +1812,9 @@ class PhotoSeriesTable extends Table {
   IntColumn get reminderMonthDay => integer().withDefault(const Constant(1))();
   IntColumn get reminderMonth => integer().withDefault(const Constant(1))();
   IntColumn get playbackFps => integer().withDefault(const Constant(4))();
+
+  /// By `name`, a [PhotoHideStyle].
+  TextColumn get hideStyle => text().withDefault(const Constant('blur'))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -2220,7 +2223,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 161;
+  int get schemaVersion => 162;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3971,6 +3974,14 @@ class AppDatabase extends _$AppDatabase {
           'secure_vault_header_table',
           secureVaultHeaderTable,
           secureVaultHeaderTable.lostPhotoCount,
+        );
+      }
+      if (from < 162) {
+        await _addColumnIfNotExists(
+          migrator,
+          'photo_series_table',
+          photoSeriesTable,
+          photoSeriesTable.hideStyle,
         );
       }
     },

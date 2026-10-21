@@ -109,6 +109,9 @@ DateTime photoCalendarDate(DateTime stored) {
 DateTime photoStoredDate(DateTime date) =>
     DateTime.utc(date.year, date.month, date.day);
 
+/// How a series' grid hides a photo until it's clicked (§7.1).
+enum PhotoHideStyle { blur, blank }
+
 /// A recurring photo series (PHOTO_SERIES_HLD.md §5.1). Everything here is
 /// plain, so the series list, its stats and its reminders work while the
 /// vault is locked.
@@ -127,6 +130,7 @@ class PhotoSeries extends SoftDeletable {
     this.reminderMonthDay = 1,
     this.reminderMonth = 1,
     this.playbackFps = 4,
+    this.hideStyle = PhotoHideStyle.blur,
     this.sortOrder = 0,
   });
 
@@ -148,6 +152,7 @@ class PhotoSeries extends SoftDeletable {
 
   /// The playback speed last used.
   final int playbackFps;
+  final PhotoHideStyle hideStyle;
   final int sortOrder;
 
   PhotoSeries copyWith({
@@ -159,6 +164,7 @@ class PhotoSeries extends SoftDeletable {
     int? reminderMonthDay,
     int? reminderMonth,
     int? playbackFps,
+    PhotoHideStyle? hideStyle,
     int? sortOrder,
     DateTime? updatedAt,
     bool bumpVersion = false,
@@ -175,6 +181,7 @@ class PhotoSeries extends SoftDeletable {
       reminderMonthDay: reminderMonthDay ?? this.reminderMonthDay,
       reminderMonth: reminderMonth ?? this.reminderMonth,
       playbackFps: playbackFps ?? this.playbackFps,
+      hideStyle: hideStyle ?? this.hideStyle,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt,
       updatedAt: updatedAt ?? utcNow(),

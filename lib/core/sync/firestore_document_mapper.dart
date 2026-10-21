@@ -1133,6 +1133,7 @@ Map<String, dynamic> photoSeriesToFirestore(PhotoSeries series) => {
   'reminderMonthDay': series.reminderMonthDay,
   'reminderMonth': series.reminderMonth,
   'playbackFps': series.playbackFps,
+  'hideStyle': series.hideStyle.name,
   'sortOrder': series.sortOrder,
   'createdAt': _dateToFirestoreRequired(series.createdAt),
   'updatedAt': _dateToFirestoreRequired(series.updatedAt),
@@ -1167,6 +1168,11 @@ PhotoSeries mergePhotoSeriesFromRemote(
     reminderMonthDay: number('reminderMonthDay', local?.reminderMonthDay ?? 1),
     reminderMonth: number('reminderMonth', local?.reminderMonth ?? 1),
     playbackFps: number('playbackFps', local?.playbackFps ?? 4),
+    hideStyle: _enumFromName(
+      PhotoHideStyle.values,
+      data['hideStyle'],
+      local?.hideStyle ?? PhotoHideStyle.blur,
+    ),
     sortOrder: number('sortOrder', local?.sortOrder ?? 0),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??

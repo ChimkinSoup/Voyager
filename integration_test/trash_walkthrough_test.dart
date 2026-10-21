@@ -25,6 +25,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/features/settings/settings_page.dart';
 import 'package:voyager/features/shell/app_shell.dart';
@@ -262,10 +263,7 @@ Future<void> _deleteFromManageSheet(WidgetTester tester, String name) async {
   );
   await _pumpUntil(tester, row, 'the journal in Manage journals');
   await tester.tap(
-    find.descendant(
-      of: row,
-      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
-    ),
+    find.descendant(of: row, matching: find.byType(ContextMenuButton)),
   );
   await _pump(tester);
   await tester.tap(find.text('Delete').last);

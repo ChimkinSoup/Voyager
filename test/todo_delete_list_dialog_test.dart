@@ -7,6 +7,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
@@ -61,10 +62,7 @@ void main() {
       matching: find.byType(ListTile),
     );
     await tester.tap(
-      find.descendant(
-        of: row,
-        matching: find.byWidgetPredicate((w) => w is PopupMenuButton),
-      ),
+      find.descendant(of: row, matching: find.byType(ContextMenuButton)),
     );
     await _frames(tester);
     await tester.tap(find.text('Delete').last);
@@ -129,10 +127,7 @@ void main() {
       matching: find.byType(ListTile),
     );
     await tester.tap(
-      find.descendant(
-        of: row,
-        matching: find.byWidgetPredicate((w) => w is PopupMenuButton),
-      ),
+      find.descendant(of: row, matching: find.byType(ContextMenuButton)),
     );
     await _frames(tester);
     await tester.tap(find.text('Delete').last);

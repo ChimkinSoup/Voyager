@@ -48106,6 +48106,18 @@ class $PhotoSeriesTableTable extends PhotoSeriesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(4),
   );
+  static const VerificationMeta _hideStyleMeta = const VerificationMeta(
+    'hideStyle',
+  );
+  @override
+  late final GeneratedColumn<String> hideStyle = GeneratedColumn<String>(
+    'hide_style',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('blur'),
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -48174,6 +48186,7 @@ class $PhotoSeriesTableTable extends PhotoSeriesTable
     reminderMonthDay,
     reminderMonth,
     playbackFps,
+    hideStyle,
     sortOrder,
     createdAt,
     updatedAt,
@@ -48265,6 +48278,12 @@ class $PhotoSeriesTableTable extends PhotoSeriesTable
         ),
       );
     }
+    if (data.containsKey('hide_style')) {
+      context.handle(
+        _hideStyleMeta,
+        hideStyle.isAcceptableOrUnknown(data['hide_style']!, _hideStyleMeta),
+      );
+    }
     if (data.containsKey('sort_order')) {
       context.handle(
         _sortOrderMeta,
@@ -48344,6 +48363,10 @@ class $PhotoSeriesTableTable extends PhotoSeriesTable
         DriftSqlType.int,
         data['${effectivePrefix}playback_fps'],
       )!,
+      hideStyle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}hide_style'],
+      )!,
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -48386,6 +48409,9 @@ class PhotoSeriesTableData extends DataClass
   final int reminderMonthDay;
   final int reminderMonth;
   final int playbackFps;
+
+  /// By `name`, a [PhotoHideStyle].
+  final String hideStyle;
   final int sortOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -48401,6 +48427,7 @@ class PhotoSeriesTableData extends DataClass
     required this.reminderMonthDay,
     required this.reminderMonth,
     required this.playbackFps,
+    required this.hideStyle,
     required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
@@ -48419,6 +48446,7 @@ class PhotoSeriesTableData extends DataClass
     map['reminder_month_day'] = Variable<int>(reminderMonthDay);
     map['reminder_month'] = Variable<int>(reminderMonth);
     map['playback_fps'] = Variable<int>(playbackFps);
+    map['hide_style'] = Variable<String>(hideStyle);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -48440,6 +48468,7 @@ class PhotoSeriesTableData extends DataClass
       reminderMonthDay: Value(reminderMonthDay),
       reminderMonth: Value(reminderMonth),
       playbackFps: Value(playbackFps),
+      hideStyle: Value(hideStyle),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -48465,6 +48494,7 @@ class PhotoSeriesTableData extends DataClass
       reminderMonthDay: serializer.fromJson<int>(json['reminderMonthDay']),
       reminderMonth: serializer.fromJson<int>(json['reminderMonth']),
       playbackFps: serializer.fromJson<int>(json['playbackFps']),
+      hideStyle: serializer.fromJson<String>(json['hideStyle']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -48485,6 +48515,7 @@ class PhotoSeriesTableData extends DataClass
       'reminderMonthDay': serializer.toJson<int>(reminderMonthDay),
       'reminderMonth': serializer.toJson<int>(reminderMonth),
       'playbackFps': serializer.toJson<int>(playbackFps),
+      'hideStyle': serializer.toJson<String>(hideStyle),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -48503,6 +48534,7 @@ class PhotoSeriesTableData extends DataClass
     int? reminderMonthDay,
     int? reminderMonth,
     int? playbackFps,
+    String? hideStyle,
     int? sortOrder,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -48518,6 +48550,7 @@ class PhotoSeriesTableData extends DataClass
     reminderMonthDay: reminderMonthDay ?? this.reminderMonthDay,
     reminderMonth: reminderMonth ?? this.reminderMonth,
     playbackFps: playbackFps ?? this.playbackFps,
+    hideStyle: hideStyle ?? this.hideStyle,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -48547,6 +48580,7 @@ class PhotoSeriesTableData extends DataClass
       playbackFps: data.playbackFps.present
           ? data.playbackFps.value
           : this.playbackFps,
+      hideStyle: data.hideStyle.present ? data.hideStyle.value : this.hideStyle,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -48567,6 +48601,7 @@ class PhotoSeriesTableData extends DataClass
           ..write('reminderMonthDay: $reminderMonthDay, ')
           ..write('reminderMonth: $reminderMonth, ')
           ..write('playbackFps: $playbackFps, ')
+          ..write('hideStyle: $hideStyle, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -48587,6 +48622,7 @@ class PhotoSeriesTableData extends DataClass
     reminderMonthDay,
     reminderMonth,
     playbackFps,
+    hideStyle,
     sortOrder,
     createdAt,
     updatedAt,
@@ -48606,6 +48642,7 @@ class PhotoSeriesTableData extends DataClass
           other.reminderMonthDay == this.reminderMonthDay &&
           other.reminderMonth == this.reminderMonth &&
           other.playbackFps == this.playbackFps &&
+          other.hideStyle == this.hideStyle &&
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -48623,6 +48660,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
   final Value<int> reminderMonthDay;
   final Value<int> reminderMonth;
   final Value<int> playbackFps;
+  final Value<String> hideStyle;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -48639,6 +48677,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
     this.reminderMonthDay = const Value.absent(),
     this.reminderMonth = const Value.absent(),
     this.playbackFps = const Value.absent(),
+    this.hideStyle = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -48656,6 +48695,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
     this.reminderMonthDay = const Value.absent(),
     this.reminderMonth = const Value.absent(),
     this.playbackFps = const Value.absent(),
+    this.hideStyle = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -48676,6 +48716,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
     Expression<int>? reminderMonthDay,
     Expression<int>? reminderMonth,
     Expression<int>? playbackFps,
+    Expression<String>? hideStyle,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -48693,6 +48734,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
       if (reminderMonthDay != null) 'reminder_month_day': reminderMonthDay,
       if (reminderMonth != null) 'reminder_month': reminderMonth,
       if (playbackFps != null) 'playback_fps': playbackFps,
+      if (hideStyle != null) 'hide_style': hideStyle,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -48712,6 +48754,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
     Value<int>? reminderMonthDay,
     Value<int>? reminderMonth,
     Value<int>? playbackFps,
+    Value<String>? hideStyle,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -48729,6 +48772,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
       reminderMonthDay: reminderMonthDay ?? this.reminderMonthDay,
       reminderMonth: reminderMonth ?? this.reminderMonth,
       playbackFps: playbackFps ?? this.playbackFps,
+      hideStyle: hideStyle ?? this.hideStyle,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -48768,6 +48812,9 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
     if (playbackFps.present) {
       map['playback_fps'] = Variable<int>(playbackFps.value);
     }
+    if (hideStyle.present) {
+      map['hide_style'] = Variable<String>(hideStyle.value);
+    }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
@@ -48801,6 +48848,7 @@ class PhotoSeriesTableCompanion extends UpdateCompanion<PhotoSeriesTableData> {
           ..write('reminderMonthDay: $reminderMonthDay, ')
           ..write('reminderMonth: $reminderMonth, ')
           ..write('playbackFps: $playbackFps, ')
+          ..write('hideStyle: $hideStyle, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -79741,6 +79789,7 @@ typedef $$PhotoSeriesTableTableCreateCompanionBuilder =
       Value<int> reminderMonthDay,
       Value<int> reminderMonth,
       Value<int> playbackFps,
+      Value<String> hideStyle,
       Value<int> sortOrder,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -79759,6 +79808,7 @@ typedef $$PhotoSeriesTableTableUpdateCompanionBuilder =
       Value<int> reminderMonthDay,
       Value<int> reminderMonth,
       Value<int> playbackFps,
+      Value<String> hideStyle,
       Value<int> sortOrder,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -79818,6 +79868,11 @@ class $$PhotoSeriesTableTableFilterComposer
 
   ColumnFilters<int> get playbackFps => $composableBuilder(
     column: $table.playbackFps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hideStyle => $composableBuilder(
+    column: $table.hideStyle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -79901,6 +79956,11 @@ class $$PhotoSeriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get hideStyle => $composableBuilder(
+    column: $table.hideStyle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -79975,6 +80035,9 @@ class $$PhotoSeriesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get hideStyle =>
+      $composableBuilder(column: $table.hideStyle, builder: (column) => column);
+
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
@@ -80037,6 +80100,7 @@ class $$PhotoSeriesTableTableTableManager
                 Value<int> reminderMonthDay = const Value.absent(),
                 Value<int> reminderMonth = const Value.absent(),
                 Value<int> playbackFps = const Value.absent(),
+                Value<String> hideStyle = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -80053,6 +80117,7 @@ class $$PhotoSeriesTableTableTableManager
                 reminderMonthDay: reminderMonthDay,
                 reminderMonth: reminderMonth,
                 playbackFps: playbackFps,
+                hideStyle: hideStyle,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -80071,6 +80136,7 @@ class $$PhotoSeriesTableTableTableManager
                 Value<int> reminderMonthDay = const Value.absent(),
                 Value<int> reminderMonth = const Value.absent(),
                 Value<int> playbackFps = const Value.absent(),
+                Value<String> hideStyle = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -80087,6 +80153,7 @@ class $$PhotoSeriesTableTableTableManager
                 reminderMonthDay: reminderMonthDay,
                 reminderMonth: reminderMonth,
                 playbackFps: playbackFps,
+                hideStyle: hideStyle,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

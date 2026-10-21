@@ -14,6 +14,7 @@ import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_frame.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
+import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/photo_series_viewer.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
 
@@ -96,6 +97,9 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
   String _framesIds = '';
   Object? _framesSource;
   String? _framesAngle;
+
+  /// Notes opened so far, by check-in id.
+  final _notes = <String, Future<String?>>{};
 
   @override
   void initState() {
@@ -222,6 +226,11 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
     _focus();
   }
 
+  void _restart() {
+    _seek(0);
+    _play();
+  }
+
   void _setAngle(String angleId) {
     _pause();
     setState(() {
@@ -244,6 +253,8 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
     final session = ref.watch(secureVaultSessionProvider);
     // A download landing may bring a frame that wasn't here.
     ref.listen(vaultMediaServiceProvider, (_, _) => _window?.retry());
+    // Decrypted notes go with the session they were opened under.
+    ref.listen(secureVaultSessionProvider, (_, _) => _notes.clear());
     final shownAngles = photoAnglesWithFrames(widget.angles, widget.entries);
     if (session == null || shownAngles.isEmpty) {
       return const Center(child: Text('No photos to play yet.'));
@@ -345,6 +356,35 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
                             )
                           else
                             const Center(child: CircularProgressIndicator()),
+                          // Only while stopped: played, each frame's note
+                          // would flash past as it changed.
+                          if (!playing && frames[_index].checkIn.hasNote)
+                            Positioned(
+                              left: 10,
+                              right: 10,
+                              top: 10,
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: FutureBuilder<String?>(
+                                  // Not the last frame's note while this
+                                  // one's opens.
+                                  key: ValueKey(frames[_index].checkIn.id),
+                                  future: _notes.putIfAbsent(
+                                    frames[_index].checkIn.id,
+                                    () => PhotoSeriesService.openNote(
+                                      session,
+                                      frames[_index].checkIn,
+                                    ),
+                                  ),
+                                  builder: (context, snapshot) =>
+                                      switch (snapshot.data) {
+                                        final note? when note.isNotEmpty =>
+                                          _Note(text: note),
+                                        _ => const SizedBox.shrink(),
+                                      },
+                                ),
+                              ),
+                            ),
                           if (_dateStamp && stamped != null)
                             Positioned(
                               left: 10,
@@ -376,6 +416,17 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      tooltip: 'Play from the start',
+                      icon: const Icon(
+                        PhosphorIconsRegular.arrowCounterClockwise,
+                      ),
+                      // Held on while playing, through each wrap past 0.
+                      onPressed:
+                          frames.length > 1 && (_index > 0 || _ticker.isActive)
+                          ? _restart
+                          : null,
+                    ),
                     IconButton(
                       tooltip: 'Previous frame (←)',
                       icon: const Icon(PhosphorIconsRegular.skipBack),
@@ -478,6 +529,30 @@ class _Stamp extends StatelessWidget {
         '${DateFormat.yMMMd().format(date)}  '
         '+${photoElapsedLabel(first, date)}',
         style: const TextStyle(color: Colors.white, fontSize: 12),
+      ),
+    ),
+  );
+}
+
+/// The stopped frame's note, over the top of the photo.
+class _Note extends StatelessWidget {
+  const _Note({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Text(
+        text,
+        maxLines: 6,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white, fontSize: 13),
       ),
     ),
   );

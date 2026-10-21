@@ -111,6 +111,7 @@ class _SeriesList extends ConsumerWidget {
           sortOrder: count,
           angleNames: [for (final angle in form.angles) angle.name],
           reminder: form.reminder,
+          hideStyle: form.hideStyle,
         );
     if (context.mounted) openPhotoSeries(context, series.id);
   }
@@ -307,21 +308,29 @@ class _SeriesCard extends ConsumerWidget {
                         ),
                       ),
                     )
-                  // Always blurred here; a photo is revealed in its grid. Why
-                  // one is missing isn't (BUG-301).
+                  // Always hidden here, as the series hides its photos; one
+                  // is revealed in its grid. Why one is missing isn't
+                  // (BUG-301).
                   : unlocked
                   ? VaultPhoto(
                       blobId: cover.blobId,
                       thumb: true,
-                      framePhoto: (photo) => ClipRect(
-                        child: ImageFiltered(
-                          imageFilter: ui.ImageFilter.blur(
-                            sigmaX: 18,
-                            sigmaY: 18,
+                      framePhoto: (photo) => switch (series.hideStyle) {
+                        PhotoHideStyle.blur => ClipRect(
+                          child: ImageFiltered(
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: 18,
+                              sigmaY: 18,
+                            ),
+                            child: photo,
                           ),
-                          child: photo,
                         ),
-                      ),
+                        PhotoHideStyle.blank => ColoredBox(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.12,
+                          ),
+                        ),
+                      },
                     )
                   : const SizedBox.expand(),
             ),

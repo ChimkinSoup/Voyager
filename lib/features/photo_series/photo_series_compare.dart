@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/calendar_days.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/photo_series/photo_series_periods.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
@@ -108,7 +110,9 @@ class _PhotoSeriesCompareState extends ConsumerState<PhotoSeriesCompare> {
     final b = _side(frames, _bId, frames.last);
     final aspect = angle.frameAspect ?? kDefaultPhotoFrameAspect;
     final theme = Theme.of(context);
-    final date = DateFormat.yMMMd();
+    final caption = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    );
 
     Widget photo(PhotoFrameEntry side) => AlignedPhotoFrame(
       aspect: aspect,
@@ -246,111 +250,164 @@ class _PhotoSeriesCompareState extends ConsumerState<PhotoSeriesCompare> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // How to look: the mode (and its opacity), then which angle.
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              spacing: 16,
               runSpacing: 8,
               children: [
-                _CheckInPicker(
-                  label: 'A',
-                  frames: frames,
-                  selected: a,
-                  onSelected: (id) => setState(() => _aId = id),
-                ),
-                for (final (label, target) in quickPicks)
-                  ActionChip(
-                    label: Text(label),
-                    onPressed: target == null
-                        ? null
-                        : () => setState(() => _aId = target.checkIn.id),
-                  ),
-                const SizedBox(width: 8),
-                _CheckInPicker(
-                  label: 'B',
-                  frames: frames,
-                  selected: b,
-                  onSelected: (id) => setState(() => _bId = id),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                SegmentedButton<PhotoCompareMode>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(
-                      value: PhotoCompareMode.sideBySide,
-                      label: Text('Side by side'),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    SegmentedButton<PhotoCompareMode>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: PhotoCompareMode.sideBySide,
+                          label: Text('Side by side'),
+                        ),
+                        ButtonSegment(
+                          value: PhotoCompareMode.slider,
+                          label: Text('Slider'),
+                        ),
+                        ButtonSegment(
+                          value: PhotoCompareMode.overlay,
+                          label: Text('Overlay'),
+                        ),
+                      ],
+                      selected: {_mode},
+                      onSelectionChanged: (selected) =>
+                          setState(() => _mode = selected.single),
                     ),
-                    ButtonSegment(
-                      value: PhotoCompareMode.slider,
-                      label: Text('Slider'),
-                    ),
-                    ButtonSegment(
-                      value: PhotoCompareMode.overlay,
-                      label: Text('Overlay'),
+                    // Named and read out, as Playback's fps (BUG-298). Its
+                    // room kept in every mode, so the slider, taller than
+                    // the mode buttons, doesn't push the rows below down
+                    // when Overlay brings it.
+                    Visibility(
+                      visible: _mode == PhotoCompareMode.overlay,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('B over A', style: theme.textTheme.bodySmall),
+                          SizedBox(
+                            width: 180,
+                            child: Slider(
+                              value: _opacity,
+                              semanticFormatterCallback: (value) =>
+                                  'B ${(value * 100).round()}%',
+                              onChanged: (value) =>
+                                  setState(() => _opacity = value),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 36,
+                            child: Text(
+                              '${(_opacity * 100).round()}%',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                  selected: {_mode},
-                  onSelectionChanged: (selected) =>
-                      setState(() => _mode = selected.single),
                 ),
-                // Named and read out, as Playback's fps (BUG-298).
-                if (_mode == PhotoCompareMode.overlay)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                if (shownAngles.length > 1)
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 6,
                     children: [
-                      Text('B over A', style: theme.textTheme.bodySmall),
-                      SizedBox(
-                        width: 180,
-                        child: Slider(
-                          value: _opacity,
-                          semanticFormatterCallback: (value) =>
-                              'B ${(value * 100).round()}%',
-                          onChanged: (value) =>
-                              setState(() => _opacity = value),
+                      Text('Angle', style: caption),
+                      for (final shown in shownAngles)
+                        ChoiceChip(
+                          label: Text(shown.name),
+                          selected: shown.id == angle.id,
+                          onSelected: (_) =>
+                              setState(() => _angleId = shown.id),
                         ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: VoyagerColors.of(context).hairline),
+            const SizedBox(height: 12),
+            // What to look at: A on the left with its shortcuts under it,
+            // B on the right, the time between them in the middle.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _CheckInPicker(
+                        label: 'A',
+                        frames: frames,
+                        selected: a,
+                        onSelected: (id) => setState(() => _aId = id),
                       ),
-                      SizedBox(
-                        width: 36,
-                        child: Text(
-                          '${(_opacity * 100).round()}%',
-                          style: theme.textTheme.bodySmall,
-                        ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 2),
+                            child: Text('Set A to', style: caption),
+                          ),
+                          for (final (label, target) in quickPicks)
+                            GlassButton(
+                              onPressed: target == null
+                                  ? null
+                                  : () => setState(
+                                      () => _aId = target.checkIn.id,
+                                    ),
+                              label: label,
+                              dense: true,
+                            ),
+                        ],
                       ),
                     ],
                   ),
-                if (shownAngles.length > 1)
-                  for (final shown in shownAngles)
-                    ChoiceChip(
-                      label: Text(shown.name),
-                      selected: shown.id == angle.id,
-                      onSelected: (_) => setState(() => _angleId = shown.id),
-                    ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'A · ${date.format(a.checkIn.takenOn)}',
-                    style: theme.textTheme.labelLarge,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        PhosphorIconsRegular.arrowsLeftRight,
+                        size: 14,
+                        color: caption?.color,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        photoElapsedLabel(a.checkIn.takenOn, b.checkIn.takenOn),
+                        style: caption,
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  photoElapsedLabel(a.checkIn.takenOn, b.checkIn.takenOn),
-                  style: theme.textTheme.bodySmall,
-                ),
                 Expanded(
-                  child: Text(
-                    'B · ${date.format(b.checkIn.takenOn)}',
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.labelLarge,
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: _CheckInPicker(
+                      label: 'B',
+                      frames: frames,
+                      selected: b,
+                      onSelected: (id) => setState(() => _bId = id),
+                    ),
                   ),
                 ),
               ],
@@ -403,39 +460,97 @@ class _CheckInPicker extends StatelessWidget {
   final PhotoFrameEntry selected;
   final ValueChanged<String> onSelected;
 
+  /// Opens as a Voyager menu, whose rows round off at its corners, rather
+  /// than Material's, whose hover ran past them.
+  Future<void> _open(BuildContext context) async {
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final rect =
+        button.localToGlobal(Offset.zero, ancestor: overlay) & button.size;
+    final date = DateFormat.yMMMd();
+    final picked = await showVoyagerMenu<String>(
+      context: context,
+      // Hung from the picker's outer edge, so A's opens rightward and B's
+      // leftward, both inside the page.
+      position: rect.center.dx < overlay.size.width / 2
+          ? RelativeRect.fromLTRB(rect.left, rect.bottom + 4, 0, 0)
+          : RelativeRect.fromLTRB(
+              0,
+              rect.bottom + 4,
+              overlay.size.width - rect.right,
+              0,
+            ),
+      constraints: BoxConstraints(
+        minWidth: rect.width,
+        maxWidth: math.max(rect.width, 200),
+      ),
+      items: voyagerSelectMenuEntries<String>(
+        context: context,
+        items: [
+          for (final frame in frames.reversed)
+            (
+              value: frame.checkIn.id,
+              label: date.format(frame.checkIn.takenOn),
+            ),
+        ],
+        selected: selected.checkIn.id,
+      ),
+    );
+    if (picked != null) onSelected(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final date = DateFormat.yMMMd();
-    return PopupMenuButton<String>(
-      tooltip: 'Check-in $label',
-      onSelected: onSelected,
-      itemBuilder: (_) => [
-        for (final frame in frames.reversed)
-          CheckedPopupMenuItem(
-            value: frame.checkIn.id,
-            checked: frame.checkIn.id == selected.checkIn.id,
-            child: Text(date.format(frame.checkIn.takenOn)),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
-          ),
-          borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$label · ${date.format(selected.checkIn.takenOn)}',
-              style: theme.textTheme.bodyMedium,
+    final radius = BorderRadius.circular(VoyagerTheme.fieldRadius);
+    return Semantics(
+      button: true,
+      label: 'Check-in $label',
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: () => _open(context),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
+              ),
+              borderRadius: radius,
             ),
-            const SizedBox(width: 4),
-            const Icon(PhosphorIconsRegular.caretDown, size: 14),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: label,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' · ${date.format(selected.checkIn.takenOn)}',
+                        ),
+                      ],
+                    ),
+                    style: theme.textTheme.labelLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(PhosphorIconsRegular.caretDown, size: 14),
+              ],
+            ),
+          ),
         ),
       ),
     );

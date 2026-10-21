@@ -22,6 +22,7 @@ typedef PhotoSeriesForm = ({
   TrackerCadence cadence,
   List<({String? id, String name})> angles,
   PhotoReminderSettings reminder,
+  PhotoHideStyle hideStyle,
 });
 
 /// "Daily", "Weekly"…
@@ -32,7 +33,8 @@ String photoCadenceLabel(TrackerCadence cadence) => switch (cadence) {
   TrackerCadence.yearly => 'Yearly',
 };
 
-/// Asks for a series' name, cadence, reminder and angles: a new series with no
+/// Asks for a series' name, cadence, reminder, how its photos hide and its
+/// angles: a new series with no
 /// [series], or [series] with its [angles] to edit. Null when cancelled.
 Future<PhotoSeriesForm?> showPhotoSeriesDialog(
   BuildContext context, {
@@ -75,6 +77,7 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
   late var _weekday = widget.series?.reminderWeekday ?? DateTime.monday;
   late var _monthDay = widget.series?.reminderMonthDay ?? 1;
   late var _month = widget.series?.reminderMonth ?? DateTime.now().month;
+  late var _hideStyle = widget.series?.hideStyle ?? PhotoHideStyle.blur;
   String? _error;
 
   @override
@@ -109,6 +112,7 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
         monthDay: _monthDay,
         month: _month,
       ),
+      hideStyle: _hideStyle,
     ));
   }
 
@@ -295,6 +299,26 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
                   day,
                 ],
               ],
+              const SizedBox(height: 16),
+              // Either way, a click shows the photo (§7.1).
+              Text('Hide photos as', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 6),
+              SegmentedButton<PhotoHideStyle>(
+                segments: const [
+                  ButtonSegment(
+                    value: PhotoHideStyle.blur,
+                    label: Text('Blurred'),
+                  ),
+                  ButtonSegment(
+                    value: PhotoHideStyle.blank,
+                    label: Text('Blank'),
+                  ),
+                ],
+                selected: {_hideStyle},
+                showSelectedIcon: false,
+                onSelectionChanged: (picked) =>
+                    setState(() => _hideStyle = picked.single),
+              ),
               const SizedBox(height: 16),
               Text('Angles', style: theme.textTheme.labelMedium),
               const SizedBox(height: 6),

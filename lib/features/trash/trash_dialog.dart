@@ -257,7 +257,7 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
             ),
             const SizedBox(width: 8),
           ],
-          _RowMenu(
+          ContextMenuButton(
             enabled: !_busy,
             items: [
               // Disabled too, not just the button: right-click still opens
@@ -279,44 +279,6 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// A row's "⋯" button, opening the app's glass menu under itself.
-class _RowMenu extends StatefulWidget {
-  const _RowMenu({required this.enabled, required this.items});
-
-  final bool enabled;
-  final List<ContextMenuItem> items;
-
-  @override
-  State<_RowMenu> createState() => _RowMenuState();
-}
-
-class _RowMenuState extends State<_RowMenu> {
-  final _menuKey = GlobalKey<ContextMenuRegionState>();
-
-  void _open() {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    _menuKey.currentState?.openMenuAt(
-      box.localToGlobal(box.size.bottomLeft(Offset.zero)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ContextMenuRegion(
-      key: _menuKey,
-      items: widget.items,
-      child: GlassButton(
-        dense: true,
-        enabled: widget.enabled,
-        tooltip: 'More',
-        onPressed: _open,
-        icon: const Icon(PhosphorIconsRegular.dotsThree, size: 18),
       ),
     );
   }

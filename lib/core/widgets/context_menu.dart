@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 
 // ---------------------------------------------------------------------------
@@ -122,14 +123,20 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
 
   /// Opens this region's menu anchored to [globalPosition], exactly as a
   /// right-click at that point would.
-  void openMenuAt(Offset globalPosition) => _openMenu(globalPosition);
+  void openMenuAt(Offset globalPosition) =>
+      _openMenu(Rect.fromPoints(globalPosition, globalPosition));
 
-  void _openMenu(Offset globalPosition) {
+  /// Opens this region's menu under [globalRect], a button's, from its left
+  /// edge; where that runs off the screen, ending at its right edge instead,
+  /// or above it.
+  void openMenuUnder(Rect globalRect) => _openMenu(globalRect);
+
+  void _openMenu(Rect anchor) {
     _closeMenu();
     final items = widget.items ?? widget.itemsBuilder!();
     final entry = OverlayEntry(
       builder: (ctx) => _ContextMenuOverlay(
-        anchor: globalPosition,
+        anchor: anchor,
         items: items,
         dismissDistance: widget.dismissDistance,
         onDismiss: _closeMenu,
@@ -161,9 +168,53 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onSecondaryTapUp: (details) => _openMenu(details.globalPosition),
+      onSecondaryTapUp: (details) => openMenuAt(details.globalPosition),
       behavior: HitTestBehavior.translucent,
       child: widget.child,
+    );
+  }
+}
+
+/// A "⋯" button opening this menu of [items] under itself, for a row whose
+/// actions have nothing else to right-click on.
+class ContextMenuButton extends StatefulWidget {
+  const ContextMenuButton({
+    super.key,
+    required this.items,
+    this.enabled = true,
+  });
+
+  final List<ContextMenuItem> items;
+  final bool enabled;
+
+  @override
+  State<ContextMenuButton> createState() => _ContextMenuButtonState();
+}
+
+class _ContextMenuButtonState extends State<ContextMenuButton> {
+  final _menuKey = GlobalKey<ContextMenuRegionState>();
+
+  void _open() {
+    final menu = _menuKey.currentState;
+    // A second click on the button closes its menu.
+    if (menu?._menuEntry != null) return menu!._closeMenu();
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    menu?.openMenuUnder(box.localToGlobal(Offset.zero) & box.size);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ContextMenuRegion(
+      key: _menuKey,
+      items: widget.items,
+      child: GlassButton(
+        dense: true,
+        enabled: widget.enabled,
+        tooltip: 'More',
+        onPressed: _open,
+        icon: const Icon(PhosphorIconsRegular.dotsThree, size: 18),
+      ),
     );
   }
 }
@@ -193,7 +244,8 @@ class _ContextMenuOverlay extends StatefulWidget {
     required this.capturedThemes,
   });
 
-  final Offset anchor;
+  /// What the menu hangs from: a point, for a right-click, or a button.
+  final Rect anchor;
   final List<ContextMenuItem> items;
   final double dismissDistance;
 
@@ -235,9 +287,11 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   void initState() {
     super.initState();
     _openContextMenus++;
-    // Esc through the keyboard itself rather than a focus node: the page under
-    // the menu keeps focus, so a listener that waited for it never heard Esc.
-    HardwareKeyboard.instance.addHandler(_handleKey);
+    // Ahead of the focus tree rather than in it: the page under the menu keeps
+    // focus — a field its caret and selection — yet the menu's keys stop here,
+    // so nothing on the page, a dialog's or a viewer's own Esc, acts on them
+    // too.
+    FocusManager.instance.addEarlyKeyEventHandler(_handleKey);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -261,18 +315,95 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   @override
   void dispose() {
     _openContextMenus--;
-    HardwareKeyboard.instance.removeHandler(_handleKey);
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleKey);
     _controller.dispose();
     super.dispose();
   }
 
-  bool _handleKey(KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.escape) {
-      return false;
+  static final _menuKeys = {
+    LogicalKeyboardKey.escape,
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.numpadEnter,
+    LogicalKeyboardKey.space,
+  };
+
+  static bool _selectable(ContextMenuItem item) =>
+      item.enabled && (item.onTap != null || item.hasChildren);
+
+  /// The next selectable index in [items] after [from] going [step], wrapping;
+  /// from null, the first one going down or the last going up.
+  static int? _step(List<ContextMenuItem> items, int? from, int step) {
+    for (var n = 1; n <= items.length; n++) {
+      final i =
+          ((from ?? (step > 0 ? -1 : items.length)) + step * n) % items.length;
+      if (_selectable(items[i])) return i;
     }
-    _dismiss();
-    return true;
+    return null;
+  }
+
+  /// Arrows move through the menu, Right or Enter opens a submenu, Left backs
+  /// out of it, Enter or Space picks, Esc closes. Ups and repeats of those
+  /// keys stop here too, so the page hears none of them.
+  KeyEventResult _handleKey(KeyEvent event) {
+    final key = event.logicalKey;
+    if (!_menuKeys.contains(key)) return KeyEventResult.ignored;
+    final arrow =
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+    if (event is KeyUpEvent || (event is KeyRepeatEvent && !arrow)) {
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      _dismiss();
+      return KeyEventResult.handled;
+    }
+    final parent = _openSubmenuIndex;
+    final inSubmenu = parent != null && _hoveredSubIndex != null;
+    final items = inSubmenu ? widget.items[parent].children! : widget.items;
+    final current = inSubmenu ? _hoveredSubIndex : _hoveredIndex;
+    final item = current == null ? null : items[current];
+    if (arrow) {
+      final next = _step(
+        items,
+        current,
+        key == LogicalKeyboardKey.arrowDown ? 1 : -1,
+      );
+      setState(() {
+        if (inSubmenu) {
+          _hoveredSubIndex = next;
+        } else {
+          _hoveredIndex = next;
+          _openSubmenuIndex = null;
+          _submenuAnchor = null;
+        }
+      });
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      if (inSubmenu) {
+        setState(() {
+          _hoveredIndex = parent;
+          _hoveredSubIndex = null;
+          _openSubmenuIndex = null;
+          _submenuAnchor = null;
+        });
+      }
+    } else if (item != null && _selectable(item)) {
+      if (item.hasChildren) {
+        if (!inSubmenu) {
+          setState(() {
+            _openSubmenuIndex = current;
+            _submenuAnchor = _rectForKey(_keyFor(current!));
+            _hoveredSubIndex = _step(item.children!, null, 1);
+          });
+        }
+      } else if (key != LogicalKeyboardKey.arrowRight) {
+        _handleItemTap(item);
+      }
+    }
+    return KeyEventResult.handled;
   }
 
   /// Dismiss the menu SYNCHRONOUSLY — removes the overlay entry immediately
@@ -322,7 +453,10 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
 
   void _handlePointerDown(PointerDownEvent event) {
     if (_isInsideKey(_menuKey, event.position) ||
-        _isInsideKey(_submenuKey, event.position)) {
+        _isInsideKey(_submenuKey, event.position) ||
+        // Left to the button the menu hangs from, which toggles it; dismissed
+        // here, that same click reopened it.
+        widget.anchor.contains(event.position)) {
       return;
     }
     _dismiss();
@@ -635,7 +769,9 @@ class _ContextMenuItemTile extends StatelessWidget {
 class _ContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
   _ContextMenuLayoutDelegate({required this.anchor, required this.minWidth});
 
-  final Offset anchor;
+  /// Below and right of its bottom-left; flipped, the menu ends at its right
+  /// edge or its top. A right-click's is a point.
+  final Rect anchor;
   final double minWidth;
 
   @override
@@ -651,16 +787,16 @@ class _ContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
   @override
   Offset getPositionForChild(Size size, Size childSize) {
     const margin = 8.0;
-    double x = anchor.dx;
-    double y = anchor.dy;
+    double x = anchor.left;
+    double y = anchor.bottom;
 
     if (x + childSize.width > size.width - margin) {
-      x = anchor.dx - childSize.width;
+      x = anchor.right - childSize.width;
     }
     x = x.clamp(margin, size.width - childSize.width - margin);
 
     if (y + childSize.height > size.height - margin) {
-      y = anchor.dy - childSize.height;
+      y = anchor.top - childSize.height;
     }
     y = y.clamp(margin, size.height - childSize.height - margin);
 

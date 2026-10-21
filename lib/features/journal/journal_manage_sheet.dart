@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -133,28 +134,27 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
                     ),
                     title: Text(journal.name),
                     subtitle: Text(count == 1 ? '1 entry' : '$count entries'),
-                    trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
-                      onSelected: (action) async {
-                        switch (action) {
-                          case VoyagerMenuCatalogEntry.rename:
-                            await _renameJournal(journal);
-                          case VoyagerMenuCatalogEntry.changeColor:
-                            await _pickColor(journal);
-                          case VoyagerMenuCatalogEntry.settings:
-                            await _openSettings(journal);
-                          case VoyagerMenuCatalogEntry.delete:
-                            await _deleteJournal(journal);
-                          default:
-                            break;
-                        }
-                      },
-                      itemBuilder: (context) => buildCatalogMenu(
-                        context,
+                    trailing: ContextMenuButton(
+                      items: catalogContextMenuItems(
                         // The last journal stays: its entries would have
                         // nowhere to go.
-                        from: _journals.length == 1
+                        _journals.length == 1
                             ? defaultConfigurableManageMenuEntries
                             : configurableManageMenuEntries,
+                        (action) async {
+                          switch (action) {
+                            case VoyagerMenuCatalogEntry.rename:
+                              await _renameJournal(journal);
+                            case VoyagerMenuCatalogEntry.changeColor:
+                              await _pickColor(journal);
+                            case VoyagerMenuCatalogEntry.settings:
+                              await _openSettings(journal);
+                            case VoyagerMenuCatalogEntry.delete:
+                              await _deleteJournal(journal);
+                            default:
+                              break;
+                          }
+                        },
                       ),
                     ),
                   );

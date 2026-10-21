@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -121,10 +124,15 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     final service = ref.read(photoSeriesServiceProvider);
     if (form.name != series.name ||
         form.cadence != series.cadence ||
-        form.reminder != series.reminder) {
+        form.reminder != series.reminder ||
+        form.hideStyle != series.hideStyle) {
       await service.updateSeries(
         series
-            .copyWith(name: form.name, cadence: form.cadence)
+            .copyWith(
+              name: form.name,
+              cadence: form.cadence,
+              hideStyle: form.hideStyle,
+            )
             .withReminder(form.reminder),
       );
     }
@@ -176,25 +184,50 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     if (found == null) return;
     final (:group, :entry) = found;
     final turn = ++_scrollTurn;
-    final groupKey = _groupKeys[group.start];
-    if (groupKey?.currentContext case final target?) {
-      await Scrollable.ensureVisible(
-        target,
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOut,
-      );
-    }
+    final target = _groupKeys[group.start]?.currentContext;
+    final sliver = target?.findRenderObject();
+    if (target == null || sliver == null) return;
+    final viewport = RenderAbstractViewport.of(sliver);
+    final position = Scrollable.of(target).position;
     // A group far down the grid hasn't been laid out yet, so where it sits
-    // is an estimate until the scroll gets near it: again until it holds.
-    for (var i = 0; i < 20; i++) {
-      if (turn != _scrollTurn) return;
-      final target = groupKey?.currentContext;
-      if (target == null || !target.mounted) return;
-      final position = Scrollable.of(target).position;
-      final before = position.pixels;
-      await Scrollable.ensureVisible(target);
-      await WidgetsBinding.instance.endOfFrame;
-      if (position.pixels == before) break;
+    // is an estimate that firms up as the scroll nears it. Eased toward
+    // afresh every frame, rather than animated to the first guess, which
+    // stopped short and then jumped.
+    Future<Duration> nextFrame() {
+      final frame = Completer<Duration>();
+      SchedulerBinding.instance.scheduleFrameCallback(frame.complete);
+      return frame.future;
+    }
+
+    Duration? first;
+    Duration? last;
+    double? jumped;
+    while (true) {
+      final now = await nextFrame();
+      if (turn != _scrollTurn || !target.mounted || !sliver.attached) return;
+      // The user scrolling, dragging or flinging takes over from here.
+      if (jumped != null &&
+          ((position.pixels - jumped).abs() > 0.5 ||
+              position.userScrollDirection != ScrollDirection.idle)) {
+        return;
+      }
+      // Stop easing should the estimate never settle.
+      first ??= now;
+      if (now - first > const Duration(seconds: 2)) break;
+      final goal = viewport
+          .getOffsetToReveal(sliver, 0)
+          .offset
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      final gap = goal - position.pixels;
+      if (gap.abs() < 0.5) {
+        position.jumpTo(goal);
+        break;
+      }
+      final seconds = last == null ? 0 : (now - last).inMicroseconds / 1e6;
+      last = now;
+      // About an easeOut over a quarter second.
+      position.jumpTo(position.pixels + gap * (1 - math.exp(-seconds / 0.06)));
+      jumped = position.pixels;
     }
     // Down to the tile, when the group is taller than the page.
     if (turn != _scrollTurn) return;
@@ -323,16 +356,20 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
             ),
             const SizedBox(width: 8),
             const PhotoVaultLockButton(),
-            PopupMenuButton<String>(
-              tooltip: 'More',
-              icon: const Icon(PhosphorIconsRegular.dotsThreeVertical),
-              onSelected: (choice) => switch (choice) {
-                'edit' => _edit(series, angles),
-                _ => _delete(series),
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit series')),
-                PopupMenuItem(value: 'delete', child: Text('Delete series')),
+            const SizedBox(width: 8),
+            ContextMenuButton(
+              items: [
+                ContextMenuItem(
+                  label: 'Edit series',
+                  icon: PhosphorIconsRegular.pencilSimple,
+                  onTap: () => _edit(series, angles),
+                ),
+                ContextMenuItem(
+                  label: 'Delete series',
+                  icon: PhosphorIconsRegular.trash,
+                  isDestructive: true,
+                  onTap: () => _delete(series),
+                ),
               ],
             ),
             const SizedBox(width: 8),
@@ -527,35 +564,115 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = scheme.onSurface.withValues(alpha: 0.6);
     final date = DateFormat.yMMMd();
-    Widget stat(String value, String label) => Padding(
-      padding: const EdgeInsets.only(right: 24),
+
+    // The schedule reads as a line of facts, not as figures: only counts get
+    // a number's size.
+    Widget fact(IconData icon, String text) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: muted),
+        const SizedBox(width: 6),
+        Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
+      ],
+    );
+
+    // Counts that belong together share a card, titled and tinted by kind.
+    Widget group(
+      IconData icon,
+      String title,
+      Color color,
+      List<(String, String)> figures,
+    ) => Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(value, style: theme.textTheme.titleLarge),
-          Text(label, style: theme.textTheme.bodySmall),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: theme.textTheme.labelMedium?.copyWith(color: color),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (final (i, (value, label)) in figures.indexed) ...[
+                if (i > 0) const SizedBox(width: 20),
+                Text(value, style: theme.textTheme.titleLarge),
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      runSpacing: 8,
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        stat(photoCadenceLabel(series.cadence), 'cadence'),
-        stat('${stats.checkIns}', 'check-ins'),
-        stat('${stats.photos}', 'photos'),
-        stat('${stats.currentStreak}', 'current streak'),
-        stat('${stats.bestStreak}', 'best streak'),
-        stat('${stats.missed}', 'missed'),
-        if (stats.first case final first?)
-          stat(
-            first == stats.latest
-                ? date.format(first)
-                : '${date.format(first)} – ${date.format(stats.latest!)}',
-            'first – latest',
-          ),
-        PhotoPeriodBadge(done: stats.currentDone),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 18,
+          runSpacing: 6,
+          children: [
+            fact(
+              PhosphorIconsRegular.arrowsClockwise,
+              photoCadenceLabel(series.cadence),
+            ),
+            if (stats.first case final first?)
+              fact(
+                PhosphorIconsRegular.calendarBlank,
+                first == stats.latest
+                    ? date.format(first)
+                    : '${date.format(first)} – ${date.format(stats.latest!)}',
+              ),
+            PhotoPeriodBadge(done: stats.currentDone),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            group(PhosphorIconsRegular.images, 'Taken', scheme.onSurface, [
+              ('${stats.checkIns}', 'check-ins'),
+              ('${stats.photos}', 'photos'),
+            ]),
+            group(PhosphorIconsRegular.flame, 'Streak', scheme.primary, [
+              ('${stats.currentStreak}', 'current'),
+              ('${stats.bestStreak}', 'best'),
+            ]),
+            group(
+              PhosphorIconsRegular.calendarX,
+              'Missed',
+              stats.missed > 0 ? scheme.error : scheme.onSurface,
+              [('${stats.missed}', stats.missed == 1 ? 'period' : 'periods')],
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -866,21 +983,28 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
         ? VaultPhoto(
             blobId: images[shown.id]!.blobId,
             thumb: true,
-            // Why a photo is missing isn't blurred with it.
+            // Why a photo is missing isn't hidden with it.
             framePhoto: revealed
                 ? null
                 : (photo) => Stack(
                     fit: StackFit.expand,
                     children: [
-                      ClipRect(
-                        child: ImageFiltered(
-                          imageFilter: ui.ImageFilter.blur(
-                            sigmaX: 18,
-                            sigmaY: 18,
+                      switch (widget.series.hideStyle) {
+                        PhotoHideStyle.blur => ClipRect(
+                          child: ImageFiltered(
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: 18,
+                              sigmaY: 18,
+                            ),
+                            child: photo,
                           ),
-                          child: photo,
                         ),
-                      ),
+                        PhotoHideStyle.blank => ColoredBox(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.12,
+                          ),
+                        ),
+                      },
                       Center(
                         child: Icon(
                           PhosphorIconsRegular.eye,

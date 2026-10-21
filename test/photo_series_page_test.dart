@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/secure_vault/secure_window.dart';
 import 'package:voyager/core/secure_vault/vault_media_service.dart';
@@ -283,6 +284,40 @@ void main() {
     expect(find.text('Unlock to see photos'), findsOneWidget);
   });
 
+  testWidgets('a series set to hide photos blank shows none blurred, and a '
+      'click still reveals', (tester) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container);
+    await _pumpDetail(tester, container, series.id);
+    expect(find.byType(ImageFiltered), findsNWidgets(2));
+
+    await tester.tap(find.byTooltip('More'));
+    await _settle(tester);
+    await tester.tap(find.text('Edit series'));
+    await _settle(tester);
+    await tester.tap(find.text('Blank'));
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await _drain(tester);
+    final saved = await tester.runAsync(
+      () => container.read(photoSeriesRepositoryProvider).listSeries(),
+    );
+    expect(saved!.single.hideStyle, PhotoHideStyle.blank);
+
+    final tiles = find.byType(VaultPhoto);
+    expect(tiles, findsNWidgets(2));
+    expect(find.byType(ImageFiltered), findsNothing);
+    expect(find.byIcon(PhosphorIconsRegular.eye), findsNWidgets(2));
+    await tester.tap(tiles.first, warnIfMissed: false);
+    await _settle(tester);
+    expect(container.read(photoRevealedCheckInsProvider), hasLength(1));
+    expect(find.byIcon(PhosphorIconsRegular.eye), findsOneWidget);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await _settle(tester);
+  });
+
   testWidgets('the first load of a photo completes, as do the ones waiting '
       'on it', (tester) async {
     final container = await _container(tester);
@@ -513,6 +548,92 @@ void main() {
     await tester.tap(find.text('~1 month ago'));
     await _settle(tester);
     expect(find.text('A · ${date.format(old)}'), findsWidgets);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await tester.pump();
+  });
+
+  testWidgets("compare: Overlay's slider doesn't move the check-in row", (
+    tester,
+  ) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container);
+    await _pumpDetail(tester, container, series.id);
+    await tester.tap(find.text('Compare'));
+    await _drain(tester);
+    final before = tester.getTopLeft(find.text('Set A to'));
+
+    await tester.tap(find.text('Overlay'));
+    await _settle(tester);
+    expect(find.text('B over A').hitTestable(), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Set A to')), before);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await tester.pump();
+  });
+
+  testWidgets('playback: stopped part way, it plays again from the start', (
+    tester,
+  ) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container, daysAgo: [14, 7, 0]);
+    await _pumpDetail(tester, container, series.id);
+    await tester.tap(find.text('Playback'));
+    await _drain(tester);
+    final restart = find.ancestor(
+      of: find.byTooltip('Play from the start'),
+      matching: find.byType(IconButton),
+    );
+    expect(tester.widget<IconButton>(restart).onPressed, isNull);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _settle(tester);
+    expect(find.textContaining('2 / 3'), findsOneWidget);
+    await tester.tap(restart);
+    await tester.pump();
+    expect(find.textContaining('1 / 3'), findsOneWidget);
+    expect(find.byTooltip('Pause (Space)'), findsOneWidget);
+
+    container.read(secureVaultSessionProvider.notifier).lock();
+    await tester.pump();
+  });
+
+  testWidgets("playback: a frame's note shows only while stopped on it", (
+    tester,
+  ) async {
+    final container = await _container(tester);
+    await _unlock(tester, container);
+    final series = await _seed(tester, container);
+    final repository = container.read(photoSeriesRepositoryProvider);
+    await tester.runAsync(() async {
+      final oldest = (await repository.listCheckIns()).reduce(
+        (a, b) => a.takenOn.isBefore(b.takenOn) ? a : b,
+      );
+      await container
+          .read(photoSeriesServiceProvider)
+          .setNote(
+            container.read(secureVaultSessionProvider)!,
+            oldest,
+            'Day one',
+          );
+    });
+    await _pumpDetail(tester, container, series.id);
+    await tester.tap(find.text('Playback'));
+    await _drain(tester);
+    expect(find.text('Day one'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _drain(tester);
+    expect(find.text('Day one'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await _drain(tester);
+    expect(find.text('Day one'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(find.text('Day one'), findsNothing);
 
     container.read(secureVaultSessionProvider.notifier).lock();
     await tester.pump();

@@ -98,6 +98,7 @@ The schema bumps from 156. Every table follows the usual conventions: `createdAt
 | `reminderMonthDay` | Monthly and yearly, 1–31, clamped to the month's length. Default 1 |
 | `reminderMonth` | Yearly only, 1–12. Default the month the series was created |
 | `playbackFps` | Last speed used, so playback reopens at it. Default 4 |
+| `hideStyle` | How the grid hides a photo until clicked: `blur` or `blank` (§7.1). Default `blur` |
 | `sortOrder` | Order in the series list |
 
 ### 5.2 `PhotoSeriesAngle`
@@ -176,7 +177,7 @@ Each file is `nonce (12 B) ‖ ciphertext ‖ GCM tag`, so a blob stands alone w
 ### 7.1 Grid
 
 - Newest first, grouped by month for a daily or weekly series and by year for a monthly one, so a group's tiles fill the row (a group per period held one check-in, BUG-290). A yearly series is one group with no heading: a year holds one check-in, and each tile's date already says which. Each tile is one check-in, showing the first angle that has a photo, with dots for which angles are present, plus the date.
-- **Blur:** thumbnails render through an `ImageFilter.blur` until clicked.
+- **Hidden until clicked:** thumbnails render through an `ImageFilter.blur`, or as a blank fill when the series' `hideStyle` is `blank` (chosen in the series dialog). The series list's cover hides the same way.
   - The **first click** reveals that tile.
   - A **second click** opens the viewer.
   - Reveals last until the page is left or the vault locks.

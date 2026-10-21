@@ -69,6 +69,7 @@ class PhotoSeriesService {
     required int sortOrder,
     List<String> angleNames = const [],
     PhotoReminderSettings? reminder,
+    PhotoHideStyle hideStyle = PhotoHideStyle.blur,
   }) async {
     final now = utcNow();
     var series = PhotoSeries(
@@ -76,6 +77,7 @@ class PhotoSeriesService {
       name: name.trim(),
       cadence: cadence,
       reminderMonth: now.toLocal().month,
+      hideStyle: hideStyle,
       sortOrder: sortOrder,
       createdAt: now,
       updatedAt: now,

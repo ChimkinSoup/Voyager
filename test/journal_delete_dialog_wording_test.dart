@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/features/journal/journal_page.dart';
@@ -21,10 +22,7 @@ Future<void> _openDeleteDialog(WidgetTester tester) async {
     matching: find.byType(ListTile),
   );
   await tester.tap(
-    find.descendant(
-      of: row,
-      matching: find.byWidgetPredicate((w) => w is PopupMenuButton),
-    ),
+    find.descendant(of: row, matching: find.byType(ContextMenuButton)),
   );
   await tester.pumpAndSettle();
   await tester.tap(find.text('Delete').last);

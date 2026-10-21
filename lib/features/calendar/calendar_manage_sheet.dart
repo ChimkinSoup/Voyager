@@ -3,6 +3,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -171,26 +172,25 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                               ),
                             ],
                           ),
-                    trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
-                      onSelected: (action) async {
-                        switch (action) {
-                          case VoyagerMenuCatalogEntry.rename:
-                            await _renameCalendar(calendar);
-                          case VoyagerMenuCatalogEntry.changeColor:
-                            await _pickColor(calendar);
-                          case VoyagerMenuCatalogEntry.alsoShow:
-                            await _editOverlays(calendar);
-                          case VoyagerMenuCatalogEntry.delete:
-                            await _deleteCalendar(calendar);
-                          default:
-                            break;
-                        }
-                      },
-                      itemBuilder: (context) => buildCatalogMenu(
-                        context,
-                        from: calendar.id == legacyCalendarId
+                    trailing: ContextMenuButton(
+                      items: catalogContextMenuItems(
+                        calendar.id == legacyCalendarId
                             ? defaultCalendarManageMenuEntries
                             : calendarManageMenuEntries,
+                        (action) async {
+                          switch (action) {
+                            case VoyagerMenuCatalogEntry.rename:
+                              await _renameCalendar(calendar);
+                            case VoyagerMenuCatalogEntry.changeColor:
+                              await _pickColor(calendar);
+                            case VoyagerMenuCatalogEntry.alsoShow:
+                              await _editOverlays(calendar);
+                            case VoyagerMenuCatalogEntry.delete:
+                              await _deleteCalendar(calendar);
+                            default:
+                              break;
+                          }
+                        },
                       ),
                     ),
                   );

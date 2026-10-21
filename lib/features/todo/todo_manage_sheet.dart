@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
@@ -185,26 +186,25 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                     subtitle: Text(
                       '${stat?.active ?? 0} open · ${stat?.completed ?? 0} done',
                     ),
-                    trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
-                      onSelected: (action) async {
-                        switch (action) {
-                          case VoyagerMenuCatalogEntry.rename:
-                            await _renameList(list);
-                          case VoyagerMenuCatalogEntry.changeColor:
-                            await _pickColor(list);
-                          case VoyagerMenuCatalogEntry.settings:
-                            await _openSettings(list);
-                          case VoyagerMenuCatalogEntry.delete:
-                            await _deleteList(list);
-                          default:
-                            break;
-                        }
-                      },
-                      itemBuilder: (context) => buildCatalogMenu(
-                        context,
-                        from: list.id == legacyTodoListId
+                    trailing: ContextMenuButton(
+                      items: catalogContextMenuItems(
+                        list.id == legacyTodoListId
                             ? defaultConfigurableManageMenuEntries
                             : configurableManageMenuEntries,
+                        (action) async {
+                          switch (action) {
+                            case VoyagerMenuCatalogEntry.rename:
+                              await _renameList(list);
+                            case VoyagerMenuCatalogEntry.changeColor:
+                              await _pickColor(list);
+                            case VoyagerMenuCatalogEntry.settings:
+                              await _openSettings(list);
+                            case VoyagerMenuCatalogEntry.delete:
+                              await _deleteList(list);
+                            default:
+                              break;
+                          }
+                        },
                       ),
                     ),
                   );

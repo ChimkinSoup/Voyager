@@ -5,9 +5,9 @@ import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 
 void main() {
   testWidgets('menu semantics raise no assertion', (tester) async {
-    // The catalog menu is what the Manage dialogs hang off each row; its
-    // entries carry SemanticsRole.menuItem, which used to trip an assertion
-    // when the menu opened.
+    // The catalog's popup menu, as the weather picker opens it; its entries
+    // carry SemanticsRole.menuItem, which used to trip an assertion when the
+    // menu opened.
     await tester.pumpWidget(
       MaterialApp(
         theme: VoyagerTheme.light(),

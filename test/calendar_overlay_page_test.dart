@@ -12,8 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
-import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -158,7 +158,7 @@ Future<void> _openAlsoShow(WidgetTester tester, String calendarName) async {
   await tester.tap(
     find.descendant(
       of: find.widgetWithText(ListTile, calendarName),
-      matching: find.byType(PopupMenuButton<VoyagerMenuCatalogEntry>),
+      matching: find.byType(ContextMenuButton),
     ),
   );
   await tester.pumpAndSettle();

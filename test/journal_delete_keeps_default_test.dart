@@ -6,6 +6,7 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 
 import 'support/journal_page_harness.dart';
@@ -29,10 +30,7 @@ void main() {
       matching: find.byType(ListTile),
     );
     await tester.tap(
-      find.descendant(
-        of: row,
-        matching: find.byWidgetPredicate((w) => w is PopupMenuButton),
-      ),
+      find.descendant(of: row, matching: find.byType(ContextMenuButton)),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete').last);
