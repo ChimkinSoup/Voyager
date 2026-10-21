@@ -237,7 +237,17 @@ class VimSession {
 
   /// The character the block caret sits on: the collapsed caret in Normal
   /// mode, the moving end of the selection in Visual.
-  int get caretOffset => _cursor;
+  ///
+  /// A mouse drag in Normal mode paints its caret where the drag ended, which
+  /// is where [_adoptMouseSelection] puts the Visual caret once a key arrives,
+  /// so the first key doesn't make the caret jump.
+  int get caretOffset {
+    final selection = textController.selection;
+    if (mode == VimMode.normal && selection.isValid && !selection.isCollapsed) {
+      return _mouseSelectionEnds(selection).cursor;
+    }
+    return _cursor;
+  }
 
   /// [caretOffset], republished on every move.
   ///
@@ -611,20 +621,29 @@ class VimSession {
     if (mode != VimMode.normal || !selection.isValid || selection.isCollapsed) {
       return;
     }
+    final ends = _mouseSelectionEnds(selection);
+    _visualAnchor = ends.anchor;
+    _visualCursor = ends.cursor;
+    _setMode(VimMode.visual);
+    _applyValue(textController.value.copyWith(selection: _visualSelection()));
+    _clearPending();
+  }
+
+  /// The Visual anchor and caret a dragged [selection] is taken over as.
+  ({int anchor, int cursor}) _mouseSelectionEnds(TextSelection selection) {
     final text = _text;
     // Visual covers the character under its caret, so the dragged range's
     // exclusive end steps back onto its last character.
     int last(int end) => vimClampCaret(text, vimCharStart(text, end - 1));
     final forward = selection.baseOffset < selection.extentOffset;
-    _visualAnchor = forward
-        ? vimClampCaret(text, selection.baseOffset)
-        : last(selection.baseOffset);
-    _visualCursor = forward
-        ? last(selection.extentOffset)
-        : vimClampCaret(text, selection.extentOffset);
-    _setMode(VimMode.visual);
-    _applyValue(textController.value.copyWith(selection: _visualSelection()));
-    _clearPending();
+    return (
+      anchor: forward
+          ? vimClampCaret(text, selection.baseOffset)
+          : last(selection.baseOffset),
+      cursor: forward
+          ? last(selection.extentOffset)
+          : vimClampCaret(text, selection.extentOffset),
+    );
   }
 
   /// Switch an existing charwise Visual selection into linewise, pinning the
