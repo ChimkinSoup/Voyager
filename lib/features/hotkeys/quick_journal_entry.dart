@@ -84,24 +84,77 @@ String _localDayKey(DateTime now) =>
 
 Future<JournalEntry>? _resolving;
 
-/// Today's Quick Journal Entry if there is one, without creating it — for the
-/// notepad, which only creates it once something is written. Gone when the
-/// entry has since been deleted, from anywhere, or re-dated to another day
-/// (one started after midnight and moved back to the day it is about).
-Future<JournalEntry?> findQuickJournalEntry(ProviderContainer container) async {
-  final pointer = await container.read(quickJournalPointerStoreProvider).load();
-  final dayStartHour =
-      (await container.read(settingsRepositoryProvider).getSettings())
-          .dayStartHour;
-  final today = _localDayKey(journalDay(DateTime.now(), dayStartHour));
-  if (pointer == null || pointer.day != today) return null;
-  final existing = await container
+typedef _Target = ({
+  AppSettings settings,
+  DateTime todayStart,
+  String today,
+  String? journalId,
+});
+
+/// Today, and the journal the hotkey files into — null only when there are no
+/// journals at all.
+Future<_Target> _target(ProviderContainer container) async {
+  final settings = await container
+      .read(settingsRepositoryProvider)
+      .getSettings();
+  final todayStart = journalDay(DateTime.now(), settings.dayStartHour);
+  final journals = await container
       .read(journalRepositoryProvider)
-      .getEntry(pointer.entryId);
-  if (existing != null &&
-      existing.deletedAt == null &&
-      _localDayKey(journalDay(existing.entryDate, dayStartHour)) == today) {
-    return existing;
+      .listJournals();
+  return (
+    settings: settings,
+    todayStart: todayStart,
+    today: _localDayKey(todayStart),
+    journalId: resolveNewItemTarget(
+      currentId: null,
+      lastViewedId: settings.lastViewedJournalId,
+      legacyId: legacyJournalId,
+      availableIds: [for (final journal in journals) journal.id],
+    ),
+  );
+}
+
+/// Today's Quick Journal Entry if there is one, without creating it — for the
+/// notepad, which only creates it once something is written.
+///
+/// The hotkey's own entry while it lives: not once deleted, from anywhere, or
+/// re-dated to another day (one started after midnight and moved back to the
+/// day it is about). Otherwise an entry already written today in the journal
+/// the hotkey targets — say one added by hand on the journal page — is adopted
+/// as today's, the latest when there are several.
+Future<JournalEntry?> findQuickJournalEntry(
+  ProviderContainer container,
+) async => _find(container, await _target(container));
+
+Future<JournalEntry?> _find(ProviderContainer container, _Target target) async {
+  final store = container.read(quickJournalPointerStoreProvider);
+  final repo = container.read(journalRepositoryProvider);
+  final pointer = await store.load();
+  final today = target.today;
+  bool isToday(JournalEntry entry) =>
+      _localDayKey(journalDay(entry.entryDate, target.settings.dayStartHour)) ==
+      today;
+  if (pointer != null && pointer.day == today) {
+    final existing = await repo.getEntry(pointer.entryId);
+    if (existing != null && existing.deletedAt == null && isToday(existing)) {
+      return existing;
+    }
+  }
+
+  final journalId = target.journalId;
+  if (journalId == null) return null;
+  // Bounded loosely and filtered by [journalDay], which owns the day-start
+  // rule; the latest comes first.
+  final candidates = await repo.listEntries(
+    journalId: journalId,
+    from: target.todayStart.subtract(const Duration(days: 1)).toUtc(),
+    to: target.todayStart.add(const Duration(days: 2)).toUtc(),
+  );
+  for (final entry in candidates) {
+    if (isToday(entry)) {
+      await store.save(today, entry.id);
+      return entry;
+    }
   }
   return null;
 }
@@ -122,16 +175,16 @@ Future<JournalEntry> resolveQuickJournalEntry(
 }
 
 Future<JournalEntry> _resolve(ProviderContainer container, String? id) async {
-  final existing = await findQuickJournalEntry(container);
+  final target = await _target(container);
+  final existing = await _find(container, target);
   if (existing != null) return existing;
 
   final store = container.read(quickJournalPointerStoreProvider);
   final repo = container.read(journalRepositoryProvider);
-  final settingsRepo = container.read(settingsRepositoryProvider);
-  final settings = await settingsRepo.getSettings();
-  final today = _localDayKey(journalDay(DateTime.now(), settings.dayStartHour));
-  var journals = await repo.listJournals();
-  if (journals.isEmpty) {
+  final settings = target.settings;
+  final today = target.today;
+  var journalId = target.journalId;
+  if (journalId == null) {
     final now = utcNow();
     final defaultJournal = Journal(
       id: legacyJournalId,
@@ -142,16 +195,8 @@ Future<JournalEntry> _resolve(ProviderContainer container, String? id) async {
     );
     await repo.upsertJournal(defaultJournal);
     container.read(remoteSyncServiceProvider).pushJournal(defaultJournal);
-    journals = [defaultJournal];
+    journalId = defaultJournal.id;
   }
-  final journalId =
-      resolveNewItemTarget(
-        currentId: null,
-        lastViewedId: settings.lastViewedJournalId,
-        legacyId: legacyJournalId,
-        availableIds: [for (final journal in journals) journal.id],
-      ) ??
-      legacyJournalId;
 
   // The same fields the journal page stamps on a new entry.
   final weather = container

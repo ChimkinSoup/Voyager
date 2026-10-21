@@ -103,6 +103,11 @@ void main() {
 
   test('yesterday\'s entry is not reused', () async {
     final yesterday = await resolveQuickJournalEntry(container);
+    await DriftJournalRepository(db).upsertEntry(
+      yesterday.copyWith(
+        entryDate: yesterday.entryDate.subtract(const Duration(days: 1)),
+      ),
+    );
     pointers.pointer = (day: '2000-01-01', entryId: yesterday.id);
 
     final today = await resolveQuickJournalEntry(container);
@@ -121,5 +126,39 @@ void main() {
     final next = await resolveQuickJournalEntry(container);
     expect(next.id, isNot(first.id));
     expect(await repo.getEntry(first.id), isNotNull);
+  });
+
+  JournalEntry manualEntry(String id, String journalId) {
+    final now = DateTime.now().toUtc();
+    return JournalEntry(
+      id: id,
+      journalId: journalId,
+      title: '',
+      body: 'by hand',
+      entryDate: now,
+      timestamp: now,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  test('adopts an entry added by hand today in the target journal', () async {
+    await DriftJournalRepository(
+      db,
+    ).upsertEntry(manualEntry('manual', 'journal-b'));
+
+    final entry = await resolveQuickJournalEntry(container);
+    expect(entry.id, 'manual');
+    expect(pointers.pointer?.entryId, 'manual');
+  });
+
+  test('ignores an entry added today in another journal', () async {
+    await DriftJournalRepository(
+      db,
+    ).upsertEntry(manualEntry('manual', 'journal-a'));
+
+    final entry = await resolveQuickJournalEntry(container);
+    expect(entry.id, isNot('manual'));
+    expect(entry.journalId, 'journal-b');
   });
 }
