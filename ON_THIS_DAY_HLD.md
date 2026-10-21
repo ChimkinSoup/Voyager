@@ -1,6 +1,6 @@
 # On This Day — HLD
 
-A per-journal opt-in that brings back an entry from exactly one month ago, or from this day in any past year. The memory appears as a small portrait card tucked into the right edge of the journal page, with only its left edge showing. Clicking that edge slides the card out, turning it slightly counterclockwise as it comes; any interaction elsewhere tucks it back.
+A per-journal opt-in that brings back an entry from 31 days ago, or from this day in any past year. The memory appears as a small portrait card tucked into the right edge of the journal page, with only its left edge showing. Clicking that edge slides the card out, turning it slightly counterclockwise as it comes; any interaction elsewhere tucks it back.
 
 Related: `lib/features/journal/on_this_day.dart` (matching, providers), `lib/features/journal/on_this_day_overlay.dart` (card), `lib/domain/models/journal_models.dart` (`Journal.onThisDayCadence`), `lib/features/journal/journal_settings_dialog.dart`, `lib/features/journal/journal_page.dart`, `lib/core/sync/firestore_document_mapper.dart`, `lib/features/settings/services/backup_collections.dart`.
 
@@ -12,7 +12,7 @@ Status: **implemented** (schema v125).
 
 - Per-journal switch, off by default, with a cadence: **Off / Yearly / Monthly + yearly**.
 - Show matches only on the journal page, as a card that tucks into the right edge rather than vanishing.
-- Never lose a memory to calendar gaps. Entries on days that don't exist in the target month (Jan 31 → February, Feb 29 → a non-leap year) appear on that month's last day.
+- Never lose a memory to calendar gaps. Monthly goes back a fixed 31 days, so every day comes back exactly once. Under yearly, a Feb 29 appears on Feb 28 in a non-leap year.
 - Respect the journal's existing chrome toggles (mood, weather).
 - Sync the setting and carry it through import/export. Dismissals are deliberately **not** synced or persisted (§6.4).
 
@@ -22,7 +22,7 @@ Status: **implemented** (schema v125).
 - "Reflect on this": linking or quoting a memory into today's entry.
 - A global (app-wide) switch. The setting exists only per journal.
 - Matching by anything other than `entryDate` (not `createdAt`).
-- Memories from further back than one month under the monthly cadence. "Monthly" means **the prior month only**.
+- More than one monthly memory day. "Monthly" means **exactly 31 days back** only.
 - Remembering a dismissal across app restarts or devices.
 
 ---
@@ -34,8 +34,8 @@ Status: **implemented** (schema v125).
 | **Where the setting lives** | Per journal only, in Journal settings. No global switch. |
 | **Cadence** | `off` (default) / `yearly` / `monthlyAndYearly`. |
 | **Yearly** | Same month and day in **every** past year. |
-| **Monthly** | Same day in the **immediately prior** month only. Never two or more months back. |
-| **Missing days** | On the last day of a month, also show every entry whose day number is greater than today's. Nothing is skipped. |
+| **Monthly** | The day exactly **31 calendar days** before today. Always in an earlier calendar month, and each day comes back exactly once. |
+| **Missing days** | Yearly only: on the last day of a month, also show every entry whose day number is greater than today's (Feb 29 on Feb 28). Monthly needs no catch-up. |
 | **Surface** | Journal page only. |
 | **Presentation** | A portrait card. Tucked, it stands upright in the right edge with a 24 px strip showing. Out, it sits by the right edge turned ~4° counterclockwise. Clicking the strip brings it out; any interaction outside the card tucks it back. |
 | **Multiple matches** | One card with paging ("1 of 3"), newest first. No stacked cards. The tucked strip shows how far back the first (newest) match is and, with more than one, the count. |
@@ -56,24 +56,24 @@ Today is local date `T` (year `Ty`, month `Tm`, day `Td`), and `lastDay(T)` mean
 - `D.day == Td`, **or** (`lastDay(T)` and `D.day > Td`).
 
 **Monthly** (cadence `monthlyAndYearly` only)
-- `D` falls in the month immediately before `T`, wrapping January to the previous December, and
-- `D.day == Td`, **or** (`lastDay(T)` and `D.day > Td`).
+- `D` is exactly 31 calendar days before `T` (field-based, so DST can't shift it).
 
 Worked examples:
 
 | Today | Yearly shows | Monthly shows |
 |-------|--------------|---------------|
 | 2026-09-24 | Sep 24 of 2025, 2024, … | 2026-08-24 |
-| 2027-02-28 (non-leap) | Feb 28 **and Feb 29** of past years | 2027-01-28, 29, 30, 31 |
-| 2026-04-30 | Apr 30 of past years | 2026-03-30, 31 |
-| 2026-03-31 | Mar 31 of past years | nothing (February has no 31st; Feb 28/29 were shown on Mar 28/29) |
+| 2027-02-28 (non-leap) | Feb 28 **and Feb 29** of past years | 2027-01-28 |
+| 2026-04-30 | Apr 30 of past years | 2026-03-30 |
+| 2026-03-31 | Mar 31 of past years | 2026-02-28 |
+| 2026-03-01 | Mar 1 of past years | 2026-01-29 |
 | 2026-01-15 | Jan 15 of past years | 2025-12-15 |
 
-The two rules can never match the same entry. The monthly match is always in a different month, or in the same month of an earlier year only when `Tm` is January, and yearly requires `D.month == Tm`. The matcher still checks them as `if / else if`.
+The two rules can never match the same entry. 31 days back is always in an earlier calendar month (no month is longer than 31 days), and yearly requires `D.month == Tm`. The matcher still checks them as `if / else if`.
 
 **Ordering:** newest `D` first, then by `timestamp ?? createdAt` (latest first) within a day, then by id.
 
-**Labels:** "1 month ago", "1 year ago", "N years ago", followed by the entry's own date (e.g. "1 month ago · Jan 31"). The date always appears so the last-day catch-up entries read correctly.
+**Labels:** "1 month ago", "1 year ago", "N years ago", followed by the entry's own date (e.g. "1 month ago · Jan 31"). The date always appears so 31-days-back and yearly last-day catch-up entries read correctly.
 
 `matchOnThisDay(today, journals, entries, {journalId})` is a **pure function** with no I/O and no clock reads. `journalId` null means the All view. Every row of the table above is a unit test.
 

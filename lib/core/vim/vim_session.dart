@@ -597,6 +597,36 @@ class VimSession {
     _clearPending();
   }
 
+  /// Vim's `mouse=a`: a range dragged out in Normal mode is taken over as
+  /// charwise Visual, so the key that follows acts on it — `d` deletes it, a
+  /// motion extends it, Escape puts it away — instead of running at the caret
+  /// under a highlight Vim knew nothing about.
+  ///
+  /// Taken over when the next key arrives rather than as the selection moves:
+  /// a selection listener would also catch the select-all a field does when
+  /// focus returns after a window switch, which [restoreSelection] undoes a
+  /// frame later.
+  void _adoptMouseSelection() {
+    final selection = textController.selection;
+    if (mode != VimMode.normal || !selection.isValid || selection.isCollapsed) {
+      return;
+    }
+    final text = _text;
+    // Visual covers the character under its caret, so the dragged range's
+    // exclusive end steps back onto its last character.
+    int last(int end) => vimClampCaret(text, vimCharStart(text, end - 1));
+    final forward = selection.baseOffset < selection.extentOffset;
+    _visualAnchor = forward
+        ? vimClampCaret(text, selection.baseOffset)
+        : last(selection.baseOffset);
+    _visualCursor = forward
+        ? last(selection.extentOffset)
+        : vimClampCaret(text, selection.extentOffset);
+    _setMode(VimMode.visual);
+    _applyValue(textController.value.copyWith(selection: _visualSelection()));
+    _clearPending();
+  }
+
   /// Switch an existing charwise Visual selection into linewise, pinning the
   /// moving end to end-of-line so the caret matches `V` entered from Normal.
   void _promoteToVisualLine() {
@@ -711,6 +741,7 @@ class VimSession {
 
     // Alt/Meta chords belong to the OS and the app's own shortcuts.
     if (alt || meta) return KeyEventResult.ignored;
+    _adoptMouseSelection();
     if (ctrl) return _handleControlKey(key);
 
     if (key == LogicalKeyboardKey.escape) {

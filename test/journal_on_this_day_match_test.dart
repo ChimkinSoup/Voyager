@@ -86,7 +86,7 @@ void main() {
       ]);
     });
 
-    test('2027-02-28 (non-leap): Feb 28 and 29 of past years, Jan 28–31', () {
+    test('2027-02-28 (non-leap): Feb 28 and 29 of past years, Jan 28', () {
       final entries = [
         _entry(2024, 2, 29),
         _entry(2025, 2, 28),
@@ -97,36 +97,29 @@ void main() {
         _entry(2027, 1, 31),
       ];
       expect(_days(DateTime(2027, 2, 28), entries), [
-        '2027-1-31',
-        '2027-1-30',
-        '2027-1-29',
         '2027-1-28',
         '2025-2-28',
         '2024-2-29',
       ]);
     });
 
-    test('2026-04-30: Apr 30 of past years, and Mar 30 and 31', () {
+    test('2026-04-30: Apr 30 of past years, and Mar 30', () {
       final entries = [
         _entry(2025, 4, 30),
         _entry(2026, 3, 29),
         _entry(2026, 3, 30),
         _entry(2026, 3, 31),
       ];
-      expect(_days(DateTime(2026, 4, 30), entries), [
-        '2026-3-31',
-        '2026-3-30',
-        '2025-4-30',
-      ]);
+      expect(_days(DateTime(2026, 4, 30), entries), ['2026-3-30', '2025-4-30']);
     });
 
-    test('2026-03-31: Mar 31 of past years and nothing monthly', () {
+    test('2026-03-31: Mar 31 of past years, and 2026-02-28', () {
       final entries = [
         _entry(2025, 3, 31),
         _entry(2026, 2, 28),
         _entry(2024, 2, 29),
       ];
-      expect(_days(DateTime(2026, 3, 31), entries), ['2025-3-31']);
+      expect(_days(DateTime(2026, 3, 31), entries), ['2026-2-28', '2025-3-31']);
     });
 
     test('2026-01-15: Jan 15 of past years, and 2025-12-15', () {
@@ -147,6 +140,32 @@ void main() {
     expect(_days(DateTime(2027, 2, 28), leapDay), ['2024-2-29']);
     expect(_days(DateTime(2028, 2, 28), leapDay), isEmpty);
     expect(_days(DateTime(2028, 2, 29), leapDay), ['2024-2-29']);
+  });
+
+  test('monthly goes back 31 days, so every day comes back exactly once', () {
+    final journals = [
+      _journal('j', cadence: OnThisDayCadence.monthlyAndYearly),
+    ];
+    final entries = [
+      for (
+        var d = DateTime(2025, 12, 1);
+        d.isBefore(DateTime(2027, 1, 1));
+        d = DateTime(d.year, d.month, d.day + 1)
+      )
+        _entry(d.year, d.month, d.day),
+    ];
+    for (
+      var today = DateTime(2026, 1, 1);
+      today.isBefore(DateTime(2027, 1, 1));
+      today = DateTime(today.year, today.month, today.day + 1)
+    ) {
+      final monthly = matchOnThisDay(today, journals, entries)
+          .where((m) => m.kind == OnThisDayKind.monthAgo)
+          .map((m) => m.localDate)
+          .toList();
+      expect(monthly, [DateTime(today.year, today.month, today.day - 31)]);
+    }
+    expect(_days(DateTime(2026, 3, 1), [_entry(2026, 1, 29)]), ['2026-1-29']);
   });
 
   test('monthly wraps December into January', () {
@@ -251,10 +270,10 @@ void main() {
     final matches = matchOnThisDay(
       DateTime(2027, 2, 28),
       [_journal('j')],
-      [_entry(2027, 1, 31), _entry(2026, 2, 28), _entry(2024, 2, 29)],
+      [_entry(2027, 1, 28), _entry(2026, 2, 28), _entry(2024, 2, 29)],
     );
     expect(matches.map((m) => m.label), [
-      '1 month ago · Jan 31',
+      '1 month ago · Jan 28',
       '1 year ago · Feb 28',
       '3 years ago · Feb 29',
     ]);

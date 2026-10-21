@@ -36,8 +36,9 @@ class OnThisDayMatch {
     OnThisDayKind.yearsAgo => '${yearsAgo}y',
   };
 
-  /// "1 month ago · Jan 31", "3 years ago · Sep 24". The date is always there
-  /// so a last-day catch-up entry (a Feb 29 shown on Feb 28) reads correctly.
+  /// "1 month ago · Jan 28", "3 years ago · Sep 24". The date is always there
+  /// so a 31-days-back entry, or a last-day catch-up one (a Feb 29 shown on
+  /// Feb 28), reads correctly.
   String get label {
     final ago = switch (kind) {
       OnThisDayKind.monthAgo => '1 month ago',
@@ -75,8 +76,9 @@ List<OnThisDayMatch> matchOnThisDay(
   final isLastDay = DateTime(today.year, today.month + 1, 0).day == today.day;
   bool dayMatches(DateTime d) =>
       d.day == today.day || (isLastDay && d.day > today.day);
-  // DateTime normalises month 0 to the previous December.
-  final prior = DateTime(today.year, today.month - 1);
+  // A fixed 31 days back, so every day comes back exactly once whatever the
+  // months' lengths, and always from an earlier calendar month.
+  final monthAgo = addCalendarDays(today, -31);
 
   final matches = <OnThisDayMatch>[];
   for (final entry in entries) {
@@ -84,9 +86,8 @@ List<OnThisDayMatch> matchOnThisDay(
     if (journal == null || entry.isDeleted) continue;
     if (entry.title.trim().isEmpty && entry.body.trim().isEmpty) continue;
     final d = journalDay(entry.entryDate, dayStartHour);
-    if (!dayMatches(d)) continue;
 
-    if (d.year < today.year && d.month == today.month) {
+    if (d.year < today.year && d.month == today.month && dayMatches(d)) {
       matches.add(
         OnThisDayMatch(
           entry: entry,
@@ -97,8 +98,7 @@ List<OnThisDayMatch> matchOnThisDay(
         ),
       );
     } else if (journal.onThisDayCadence == OnThisDayCadence.monthlyAndYearly &&
-        d.year == prior.year &&
-        d.month == prior.month) {
+        d == monthAgo) {
       matches.add(
         OnThisDayMatch(
           entry: entry,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/motion/motion_prefs.dart';
 import 'package:voyager/core/secure_vault/secure_vault_service.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -544,21 +545,24 @@ class _PhotoVaultUnlockCardState extends ConsumerState<PhotoVaultUnlockCard> {
                   SizedBox(
                     width: 260,
                     // A plain field, as the vault's own dialogs use: no Vim,
-                    // snippets or suggestions.
-                    child: TextField(
-                      controller: _password,
-                      focusNode: widget.focusNode,
-                      obscureText: true,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      enableIMEPersonalizedLearning: false,
-                      keyboardType: TextInputType.visiblePassword,
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        isDense: true,
-                        contentPadding: EdgeInsets.fromLTRB(8, 16, 8, 8),
+                    // snippets or suggestions, so the Caps Lock mark is
+                    // opted into by hand.
+                    child: CapsLockCaretIndicator(
+                      child: TextField(
+                        controller: _password,
+                        focusNode: widget.focusNode,
+                        obscureText: true,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        enableIMEPersonalizedLearning: false,
+                        keyboardType: TextInputType.visiblePassword,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          isDense: true,
+                          contentPadding: EdgeInsets.fromLTRB(8, 16, 8, 8),
+                        ),
+                        onSubmitted: (_) => _unlock(),
                       ),
-                      onSubmitted: (_) => _unlock(),
                     ),
                   ),
                   const SizedBox(width: 8),

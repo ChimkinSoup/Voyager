@@ -111,6 +111,52 @@ void main() {
     expect(controller.text, 'bc');
   });
 
+  // A mouse drag in Normal mode is taken over as Visual by the next key, so
+  // that key acts on the range instead of at the caret under it.
+  group('a Normal-mode mouse selection', () {
+    Future<void> drag(WidgetTester tester, int base, int extent) async {
+      await pumpField(tester, vimEnabled: true, text: 'hello world');
+      await press(tester, LogicalKeyboardKey.escape);
+      controller.selection = TextSelection(
+        baseOffset: base,
+        extentOffset: extent,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('Escape clears it onto its last character', (tester) async {
+      await drag(tester, 2, 8);
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(controller.selection, const TextSelection.collapsed(offset: 7));
+    });
+
+    testWidgets('d deletes it', (tester) async {
+      await drag(tester, 2, 8);
+      await typeCommand(tester, 'd');
+      expect(controller.text, 'herld');
+    });
+
+    testWidgets('a motion extends it', (tester) async {
+      await drag(tester, 2, 8);
+      await typeCommand(tester, 'l');
+      expect(
+        controller.selection,
+        const TextSelection(baseOffset: 2, extentOffset: 9),
+      );
+    });
+
+    testWidgets('a backward drag keeps its direction', (tester) async {
+      await drag(tester, 8, 2);
+      await typeCommand(tester, 'l');
+      expect(
+        controller.selection,
+        const TextSelection(baseOffset: 8, extentOffset: 3),
+      );
+      await typeCommand(tester, 'd');
+      expect(controller.text, 'helrld');
+    });
+  });
+
   testWidgets('a at the end of a line keeps the caret on that line', (
     tester,
   ) async {
@@ -424,6 +470,16 @@ void main() {
     await tester.idle();
     await tester.pump();
   }
+
+  testWidgets('<C-[> in Normal clears a mouse selection', (tester) async {
+    await pumpField(tester, vimEnabled: true, text: 'hello world');
+    await press(tester, LogicalKeyboardKey.escape);
+    controller.selection = const TextSelection(baseOffset: 2, extentOffset: 8);
+    await tester.pump();
+
+    await pressCtrl(tester, LogicalKeyboardKey.bracketLeft);
+    expect(controller.selection, const TextSelection.collapsed(offset: 7));
+  });
 
   // Ctrl+A used to fall through to Flutter's select-all, leaving the session
   // in Normal under a full highlight — so a paste spliced in after the first

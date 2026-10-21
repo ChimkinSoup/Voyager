@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/secure_vault/secure_vault_service.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -304,28 +305,32 @@ class _VaultDialogState extends State<_VaultDialog> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 // A plain field: no Vim, snippets, autocorrect or
-                // spellcheck, and nothing the keyboard may learn from.
-                child: TextField(
-                  controller: _controllers[i],
-                  autofocus: i == 0,
-                  obscureText: widget.fields[i].obscure,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                  enableIMEPersonalizedLearning: false,
-                  keyboardType: widget.fields[i].obscure
-                      ? TextInputType.visiblePassword
-                      : TextInputType.text,
-                  textInputAction: i == widget.fields.length - 1
-                      ? TextInputAction.done
-                      : TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: widget.fields[i].label,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                // spellcheck, and nothing the keyboard may learn from. Not
+                // under [VimTextScope] either, so the Caps Lock mark is opted
+                // into by hand.
+                child: CapsLockCaretIndicator(
+                  child: TextField(
+                    controller: _controllers[i],
+                    autofocus: i == 0,
+                    obscureText: widget.fields[i].obscure,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    enableIMEPersonalizedLearning: false,
+                    keyboardType: widget.fields[i].obscure
+                        ? TextInputType.visiblePassword
+                        : TextInputType.text,
+                    textInputAction: i == widget.fields.length - 1
+                        ? TextInputAction.done
+                        : TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: widget.fields[i].label,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                    ),
+                    onSubmitted: i == widget.fields.length - 1
+                        ? (_) => _submit()
+                        : null,
                   ),
-                  onSubmitted: i == widget.fields.length - 1
-                      ? (_) => _submit()
-                      : null,
                 ),
               ),
             if (_error case final error?)
