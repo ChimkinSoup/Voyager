@@ -126,6 +126,15 @@ void main() {
     },
   );
 
+  test('a device has pulled before once any collection has a mark', () async {
+    expect(await sync.hasPulledBefore(), isFalse);
+
+    await writeCalendar('cal-1', 'Work');
+    await sync.pullCalendars();
+
+    expect(await sync.hasPulledBefore(), isTrue);
+  });
+
   test('live sync listens from where the pull left off', () async {
     expect(sync.changedSinceFor(FirestoreCollections.calendars), isNull);
 

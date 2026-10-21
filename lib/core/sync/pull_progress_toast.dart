@@ -11,10 +11,12 @@ import 'package:voyager/core/widgets/voyager_toast.dart';
 /// A normal launch pulls in a second or two and never raises it. A restore
 /// onto an empty device resolves every document's operation log and takes
 /// minutes (BUG-002), and without this the app just looks half-empty while it
-/// fills in.
+/// fills in. The weekly full pull can run long enough to raise it too, and is
+/// worded as a sync, not a restore: nothing on the device was missing.
 class PullProgressToast {
   PullProgressToast(
     this._overlay, {
+    required this.restoring,
     Duration delay = const Duration(seconds: 3),
   }) {
     _timer = Timer(delay, _show);
@@ -23,6 +25,11 @@ class PullProgressToast {
   /// Resolved when the toast is due rather than up front: at launch the
   /// router's navigator may not be built yet.
   final OverlayState? Function() _overlay;
+
+  /// True only when this device has never synced and the pull is filling it
+  /// from scratch; a device catching up says it is syncing instead.
+  final bool restoring;
+
   late final Timer _timer;
   VoyagerToast? _toast;
   var _done = 0;
@@ -41,7 +48,8 @@ class PullProgressToast {
   void complete() {
     _timer.cancel();
     _toast?.update(
-      message: 'Restored ${_count.format(_done)} items',
+      message:
+          '${restoring ? 'Restored' : 'Synced'} ${_count.format(_done)} items',
       icon: PhosphorIconsRegular.check,
       dwell: const Duration(seconds: 4),
     );
@@ -65,8 +73,13 @@ class PullProgressToast {
     );
   }
 
-  String get _progressMessage => _total == 0
-      ? 'Restoring from the cloud…'
-      : 'Restoring from the cloud · ${_count.format(_done)} of '
-            '${_count.format(_total)} items';
+  String get _progressMessage {
+    final action = restoring
+        ? 'Restoring from the cloud'
+        : 'Syncing with the cloud';
+    return _total == 0
+        ? '$action…'
+        : '$action · ${_count.format(_done)} of '
+              '${_count.format(_total)} items';
+  }
 }

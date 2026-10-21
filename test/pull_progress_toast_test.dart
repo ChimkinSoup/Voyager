@@ -1,5 +1,6 @@
 // The startup pull's progress toast: silent on a quick launch, counting on a
-// slow one (a restore onto an empty device), and a tick when it lands.
+// slow one (a restore onto an empty device, or the weekly full pull), and a
+// tick when it lands.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,7 +25,10 @@ Future<BuildContext> _pumpHost(WidgetTester tester) async {
 void main() {
   testWidgets('a pull that lands before the delay never shows', (tester) async {
     final ctx = await _pumpHost(tester);
-    final toast = PullProgressToast(() => Overlay.of(ctx, rootOverlay: true));
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: true,
+    );
 
     toast.report(40, 40);
     toast.complete();
@@ -35,7 +39,10 @@ void main() {
 
   testWidgets('a slow pull counts up, then ticks', (tester) async {
     final ctx = await _pumpHost(tester);
-    final toast = PullProgressToast(() => Overlay.of(ctx, rootOverlay: true));
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: true,
+    );
 
     toast.report(0, 0);
     await tester.pump(const Duration(seconds: 3));
@@ -60,9 +67,38 @@ void main() {
     expect(find.text('Restored 2,880 items'), findsNothing);
   });
 
+  testWidgets('a slow pull on a device that has synced before says syncing', (
+    tester,
+  ) async {
+    final ctx = await _pumpHost(tester);
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: false,
+    );
+
+    toast.report(1204, 2880);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(
+      find.text('Syncing with the cloud · 1,204 of 2,880 items'),
+      findsOneWidget,
+    );
+
+    toast.report(2880, 2880);
+    toast.complete();
+    await tester.pump();
+    expect(find.text('Synced 2,880 items'), findsOneWidget);
+    expect(find.textContaining('Restor'), findsNothing);
+
+    await tester.pumpAndSettle(const Duration(seconds: 10));
+  });
+
   testWidgets('a failed pull takes the toast away', (tester) async {
     final ctx = await _pumpHost(tester);
-    final toast = PullProgressToast(() => Overlay.of(ctx, rootOverlay: true));
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: true,
+    );
 
     toast.report(10, 2880);
     await tester.pump(const Duration(seconds: 3));

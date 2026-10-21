@@ -1880,6 +1880,15 @@ class RemoteSyncService {
   /// ~0.1 s each, so it pays for itself from about 240 documents.
   static const allOperationsMinDocuments = 200;
 
+  /// Whether any collection has been pulled on this device before — false
+  /// only when the next pull is a restore onto an empty device.
+  Future<bool> hasPulledBefore() async {
+    for (final collection in FirestoreCollections.records) {
+      if (await _watermarkStore.read(collection) != null) return true;
+    }
+    return false;
+  }
+
   /// [onProgress] hears how many listed documents have been applied (or
   /// found unchanged) out of how many have been listed so far. The total grows
   /// while collections are still being listed.

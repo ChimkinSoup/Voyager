@@ -433,15 +433,15 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           // The root navigator's own overlay — the one toasts raised from a
           // page reach with `rootOverlay: true`. Looking it up from the
           // navigator's context would search above it and find nothing.
+          // Read here rather than up front: a sign-in change while the
+          // quotes loaded has already replaced the service.
+          final remoteSync = ref.read(remoteSyncServiceProvider);
           final progressToast = PullProgressToast(
             () => router.routerDelegate.navigatorKey.currentState?.overlay,
+            restoring: !await remoteSync.hasPulledBefore(),
           );
           try {
-            // Read here rather than up front: a sign-in change while the
-            // quotes loaded has already replaced the service.
-            await ref
-                .read(remoteSyncServiceProvider)
-                .pullAll(onProgress: progressToast.report);
+            await remoteSync.pullAll(onProgress: progressToast.report);
           } catch (_) {
             progressToast.cancel();
             rethrow;
