@@ -3094,9 +3094,12 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
   /// any typed number first as a dismiss does.
   Future<void> _openInAnalytics(String trackerId) async {
     final router = GoRouter.of(context);
-    ref.read(revealTrackerRequestProvider.notifier).state = trackerId;
+    final reveal = ref.read(revealTrackerRequestProvider.notifier);
     await _flushAndClose();
     router.go('/analytics');
+    // After the route change, so the row's reveal waits on the branch switch
+    // it starts rather than running behind it on the hidden page.
+    reveal.state = trackerId;
   }
 
   @override

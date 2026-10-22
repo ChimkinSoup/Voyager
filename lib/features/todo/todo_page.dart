@@ -42,6 +42,7 @@ import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
@@ -2958,7 +2959,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
       // while the all-tasks view stays on, and the persisted id has to agree
       // with that or a restart would silently move it back.
       _markListViewed(task.listId);
-      _openEditPanel(task);
+      // Once the page has arrived: opened as it crossfades in, the panel
+      // slides under the departing page's fade.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await shellBranchSwitchSettled();
+        if (mounted) _openEditPanel(task);
+      });
     });
     final statsAsync = ref.read(todoListStatsProvider);
 

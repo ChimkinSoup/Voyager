@@ -25,6 +25,15 @@ const shellRailGutter = 5.5;
 /// window comes back already showing the page.
 bool instantShellBranchSwitch = false;
 
+/// Completes once the branch switch in flight, if any, has landed. For a page
+/// that opens something over itself as it arrives — an inbox row's "Show in
+/// Calendar" — whose own entrance would otherwise play under the departing
+/// page's fade, the two motions tearing across each other.
+Future<void> shellBranchSwitchSettled() =>
+    _switchSettling?.future ?? Future<void>.value();
+
+Completer<void>? _switchSettling;
+
 /// Keeps all shell branches mounted and switches between them with the same
 /// motion as [VoyagerCrossfadeIndex]'s glass-safe mode: the branch being left
 /// fades out off the top of the arriving one, which stays at full opacity.
@@ -83,7 +92,13 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
     vsync: this,
     duration: kShellBranchSwitchDuration,
     value: 1,
-  );
+  )..addStatusListener(_settleIfLanded);
+
+  void _settleIfLanded(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    _switchSettling?.complete();
+    _switchSettling = null;
+  }
 
   /// The branch dissolving away. Equals [_toIndex] when settled. Tracked
   /// because it has to be painted *above* the arriving branch, which the
@@ -142,7 +157,8 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
   /// Warms the next branch in the queue, or waits out a switch in flight.
   void _warmNext() {
     if (!mounted) return;
-    if (_progress.isAnimating) {
+    // Held at its start counts too: see [didUpdateWidget].
+    if (_progress.isAnimating || _progress.value < 1) {
       _warmTimer = Timer(_warmupGap, _warmNext);
       return;
     }
@@ -194,6 +210,7 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
     _mounted.add(widget.currentIndex);
     _dismissPopups(_toIndex);
 
+    final generation = ++_switchGeneration;
     if (instantShellBranchSwitch) {
       _fromIndex = _toIndex = widget.currentIndex;
       _progress.value = 1;
@@ -209,8 +226,25 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
     }
     _toIndex = widget.currentIndex;
     _progress.duration = _duration;
-    _progress.forward(from: 0);
+    _switchSettling ??= Completer<void>();
+    // Held at its start, the departing branch still covering the arriving
+    // one, until the arriving one has built and painted. A page catching up
+    // on arrival — Analytics rebuilding for a stat logged in the inbox —
+    // makes those frames slow, and with the fade already running they
+    // skipped a chunk of it.
+    _progress.value = 0;
+    _afterFrames(_arrivalFrames, () {
+      if (generation == _switchGeneration) _progress.forward();
+    });
   }
+
+  /// Bumped by every switch, so a held start a newer switch has replaced is
+  /// dropped.
+  var _switchGeneration = 0;
+
+  /// Frames the fade is held for: as [_warmFrames], one to build and paint
+  /// the arriving branch, one for what that build scheduled.
+  static const _arrivalFrames = _warmFrames;
 
   void _dismissPopups(int index) {
     if (index >= widget.navigatorKeys.length) return;
@@ -225,6 +259,7 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
   @override
   void dispose() {
     _warmTimer?.cancel();
+    _settleIfLanded(AnimationStatus.completed);
     _progress.dispose();
     for (final (node, attachment) in _focusNodes.values) {
       attachment.detach();

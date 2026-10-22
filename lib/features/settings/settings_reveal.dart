@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 
 /// Answers a one-shot reveal request (`reveal_request.dart`) for the Settings
 /// section at [context]: clears it with [clearRequest], scrolls the section
@@ -20,12 +21,16 @@ void revealSettingsSection(
   required VoidCallback clearRequest,
   VoidCallback? onShown,
 }) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (!context.mounted) return;
     clearRequest();
     final list = Scrollable.maybeOf(context);
     if (list == null) return;
     final tabs = Scrollable.maybeOf(list.context)?.position.isScrollingNotifier;
+    // Once Settings has arrived: scrolled as it crossfades in, the page
+    // repaints under the departing one's fade.
+    await shellBranchSwitchSettled();
+    if (!context.mounted || !list.mounted) return;
 
     Future<void> scroll() async {
       if (!context.mounted || !list.mounted) return;

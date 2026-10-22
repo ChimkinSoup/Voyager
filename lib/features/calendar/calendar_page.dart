@@ -43,6 +43,7 @@ import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 import 'package:voyager/features/calendar/calendar_week_morph_entries.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 
 /// Width of the toolbar slot the calendar scope switcher sits in.
@@ -1343,7 +1344,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _sidebarKind = _CalendarSidebarKind.event;
       _sidebarEvent = event;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Once the page has arrived: opened as it crossfades in, the popup
+      // grows under the departing page's fade.
+      await shellBranchSwitchSettled();
       if (!mounted) return;
       // Anchored explicitly: left to itself the popup would sit on
       // [_eventTapState]'s rect, which is whatever bar was last clicked.

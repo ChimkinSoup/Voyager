@@ -18,6 +18,7 @@ import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/key_binding.dart';
+import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -107,16 +108,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     super.dispose();
   }
 
+  /// Swipes to [tab] while Settings is on screen. Arriving from another page
+  /// it jumps there instead, under the page switch's fade, which a swipe
+  /// would otherwise play across.
+  void _showTab(int tab) {
+    if (subtreeIsVisible(context)) {
+      _tabs.animateTo(tab);
+    } else {
+      _tabs.index = tab;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<bool>(revealAutoBackupRequestProvider, (_, next) {
-      if (next) _tabs.animateTo(_dataTab);
+      if (next) _showTab(_dataTab);
     });
     ref.listen<bool>(revealFolderBackupsRequestProvider, (_, next) {
-      if (next) _tabs.animateTo(_dataTab);
+      if (next) _showTab(_dataTab);
     });
     ref.listen<bool>(revealWeatherLocationRequestProvider, (_, next) {
-      if (next) _tabs.animateTo(_pagesTab);
+      if (next) _showTab(_pagesTab);
     });
     final settingsAsync = ref.watch(settingsProvider.settled);
     final takenHotkeys = ref.watch(unavailableHotkeysProvider);

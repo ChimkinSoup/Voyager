@@ -35,6 +35,7 @@ import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/features/analytics/counter_controls.dart';
 import 'package:voyager/features/analytics/mood_trend_card.dart';
 import 'package:voyager/features/analytics/sparkline_touch.dart';
@@ -830,6 +831,10 @@ class _StatTileState extends ConsumerState<_StatTile>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       ref.read(revealTrackerRequestProvider.notifier).state = null;
+      // Once the page has arrived: scrolled as it crossfades in, the whole
+      // page repaints under the departing one's fade.
+      await shellBranchSwitchSettled();
+      if (!mounted) return;
       await Scrollable.ensureVisible(
         context,
         alignment: 0.5,

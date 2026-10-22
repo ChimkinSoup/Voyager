@@ -54,6 +54,12 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   double _barHeight = 60;
   var _resizing = false;
 
+  /// The panel last asked for, which a click toggles against while the
+  /// window is still resizing for it; and a count of the asks, so a resize
+  /// overtaken by a newer one leaves the panel and [_resizing] to that one.
+  _Panel? _wanted;
+  var _panelChange = 0;
+
   /// Read off disk: the Todo page records list touches straight through the
   /// repository, so [settingsProvider] can lag them.
   String? _lastTouchedId;
@@ -109,27 +115,44 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         legacyTodoListId;
   }
 
-  Future<void> _setExtraHeight(double extraHeight) async {
+  /// Whether [change] is still the latest panel change once its resize is
+  /// done.
+  Future<bool> _setExtraHeight(double extraHeight, int change) async {
     _resizing = true;
     await ref.read(floaterControllerProvider).setExtraHeight(extraHeight);
-    if (mounted) setState(() => _resizing = false);
+    if (!mounted || change != _panelChange) return false;
+    setState(() => _resizing = false);
+    return true;
   }
+
+  double _panelHeight(_Panel panel, int listCount) => switch (panel) {
+    _Panel.due => _datePanelHeight,
+    _Panel.list => ScopeMenu.heightFor(context, listCount) + 16,
+  };
 
   Future<void> _togglePanel(_Panel panel, int listCount) async {
     _keepPendingDue();
-    final next = _panel == panel ? null : panel;
+    final next = _wanted == panel ? null : panel;
     if (next == null) {
       _closePanel();
+      return;
+    }
+    _wanted = next;
+    final change = ++_panelChange;
+    final height = _panelHeight(next, listCount);
+    if (_panel != null) {
+      // From one panel to the other: swapped at once, each laid out at its
+      // own height from the top, so the resize after only moves the bottom
+      // edge — the old panel isn't squashed or re-centred into the new size.
+      _resizing = true;
+      setState(() => _panel = next);
+      await _setExtraHeight(height, change);
       return;
     }
     // The window grows first and the panel comes after, into a window already
     // painted at the new size: built in the frame the window grows in, the
     // panel made that frame slow enough for the uncovered area to show black.
-    await _setExtraHeight(switch (next) {
-      _Panel.due => _datePanelHeight,
-      _Panel.list => ScopeMenu.heightFor(context, listCount) + 16,
-    });
-    if (mounted) setState(() => _panel = next);
+    if (await _setExtraHeight(height, change)) setState(() => _panel = next);
   }
 
   Future<void> _flushPendingDue() async => _keepPendingDue();
@@ -149,8 +172,9 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     // Flagged before the rebuild below, which would otherwise measure the
     // window before it has shrunk.
     _resizing = true;
+    _wanted = null;
     setState(() => _panel = null);
-    unawaited(_setExtraHeight(0));
+    unawaited(_setExtraHeight(0, ++_panelChange));
     _titleFocus.requestFocus();
   }
 
@@ -328,77 +352,107 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
       ),
     );
 
+    final panel = _panel;
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (_panel == null && !_resizing) _barHeight = constraints.maxHeight;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(height: _barHeight, child: bar),
-            if (_panel == _Panel.due)
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: SizedBox.fromSize(
-                          size: kDateTimeSelectorPopoverSize,
-                          child: DateTimeSelectorPopover(
-                            initialDateTime: due ?? DateTime.now(),
-                            accentColor: accent,
-                            optionalTime: true,
-                            initialHasTime: hasTime,
-                            onSubmitted: _pickDue,
-                            onChanged: (due) => _pendingDue = due,
-                          ),
-                        ),
-                      ),
+        if (panel == null && !_resizing) _barHeight = constraints.maxHeight;
+        // Laid out at its own height whatever the window's, which only
+        // catches up a frame or two later: the window's bottom edge then
+        // reveals or trims it, and nothing in it moves.
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            maxHeight: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: _barHeight, child: bar),
+                if (panel != null)
+                  SizedBox(
+                    height: _panelHeight(panel, lists.length),
+                    child: _panelFor(
+                      panel,
+                      due: due,
+                      hasTime: hasTime,
+                      lists: lists,
+                      stats: stats,
+                      targetId: targetId,
+                      accent: accent,
                     ),
-                    if (due != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GlassButton(
-                          dense: true,
-                          onPressed: () => _pickDue(null),
-                          label: 'No due date',
-                          color: accent,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            if (_panel == _Panel.list)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  // The Todo page's list menu, minus its All tasks row: a
-                  // task can't be filed under that.
-                  child: ScopeMenu<String>(
-                    items: [
-                      for (final list in lists)
-                        ScopeSwitcherItem<String>(
-                          value: list.id,
-                          label: list.name,
-                          count: () {
-                            final stat = stats?[list.id];
-                            return '${stat?.active ?? 0} | '
-                                '${stat?.completed ?? 0}';
-                          }(),
-                          color: paletteColor(
-                            list.colorValue ?? accent.toARGB32(),
-                            context,
-                          ),
-                        ),
-                    ],
-                    selectedValue: targetId,
-                    onSelected: _pickList,
-                    appAccent: accent,
                   ),
-                ),
-              ),
-          ],
+              ],
+            ),
+          ),
         );
       },
     );
+  }
+
+  Widget _panelFor(
+    _Panel panel, {
+    required DateTime? due,
+    required bool hasTime,
+    required List<TodoListModel> lists,
+    required Map<String, ({int active, int completed})>? stats,
+    required String targetId,
+    required Color accent,
+  }) {
+    return switch (panel) {
+      _Panel.due => Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: SizedBox.fromSize(
+                size: kDateTimeSelectorPopoverSize,
+                child: DateTimeSelectorPopover(
+                  initialDateTime: due ?? DateTime.now(),
+                  accentColor: accent,
+                  optionalTime: true,
+                  initialHasTime: hasTime,
+                  onSubmitted: _pickDue,
+                  onChanged: (due) => _pendingDue = due,
+                ),
+              ),
+            ),
+          ),
+          if (due != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: GlassButton(
+                dense: true,
+                onPressed: () => _pickDue(null),
+                label: 'No due date',
+                color: accent,
+              ),
+            ),
+        ],
+      ),
+      _Panel.list => Padding(
+        padding: const EdgeInsets.all(8),
+        // The Todo page's list menu, minus its All tasks row: a task can't be
+        // filed under that.
+        child: ScopeMenu<String>(
+          items: [
+            for (final list in lists)
+              ScopeSwitcherItem<String>(
+                value: list.id,
+                label: list.name,
+                count: () {
+                  final stat = stats?[list.id];
+                  return '${stat?.active ?? 0} | ${stat?.completed ?? 0}';
+                }(),
+                color: paletteColor(
+                  list.colorValue ?? accent.toARGB32(),
+                  context,
+                ),
+              ),
+          ],
+          selectedValue: targetId,
+          onSelected: _pickList,
+          appAccent: accent,
+        ),
+      ),
+    };
   }
 }

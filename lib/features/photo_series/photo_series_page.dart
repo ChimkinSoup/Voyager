@@ -19,6 +19,7 @@ import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/routing/app_router.dart';
 
 /// The Photos page (PHOTO_SERIES_HLD.md §4): every series as a card, and a
@@ -48,7 +49,11 @@ class _PhotoSeriesPageState extends ConsumerState<PhotoSeriesPage> {
   /// Opens the series an inbox row, sticky or OS notification asked for, over
   /// whatever this page had pushed — or back to its detail, when that series
   /// is already open.
-  void _takeRevealRequest() {
+  Future<void> _takeRevealRequest() async {
+    // Once the page has arrived, a frame after the request: opened as it
+    // crossfades in, the detail zooms under the departing page's fade.
+    await WidgetsBinding.instance.endOfFrame;
+    await shellBranchSwitchSettled();
     if (!mounted) return;
     final id = ref.read(revealPhotoSeriesRequestProvider);
     if (id == null) return;

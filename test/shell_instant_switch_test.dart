@@ -2,6 +2,8 @@
 // the transition there, and the shell's crossfade under a blurred sheet cost
 // more than a frame to raster. Everything else still crossfades.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/motion/motion.dart';
@@ -40,9 +42,33 @@ void main() {
   testWidgets('any other switch still crossfades', (tester) async {
     await pumpAt(tester, 0);
     await pumpAt(tester, 1);
+    // The fade holds for the arriving branch's first frames.
+    await tester.pump();
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(fading(tester), isTrue);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('the fade waits out the arriving branch\'s first frames, and '
+      'shellBranchSwitchSettled completes once it lands', (tester) async {
+    await pumpAt(tester, 0);
+    await pumpAt(tester, 1);
+    var settled = false;
+    unawaited(shellBranchSwitchSettled().then((_) => settled = true));
+
+    // However slow those frames, the fade hasn't started.
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(fading(tester), isFalse);
+    expect(settled, isFalse);
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(fading(tester), isTrue);
+    expect(settled, isFalse);
+
+    await tester.pumpAndSettle();
+    expect(settled, isTrue);
   });
 }
