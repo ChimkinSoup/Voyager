@@ -53,6 +53,16 @@ Future<void> configureDesktopWindow({required bool startHidden}) async {
   try {
     await windowManager.ensureInitialized();
 
+    // A hot restart: the native window kept its options and is already
+    // showing. waitUntilReadyToShow would unmaximize, resize and recenter it,
+    // and the maximize after that sometimes left the view painted at the
+    // 1280x800 size inside a maximized, black-bordered window.
+    if (!_startParked && await windowManager.isVisible()) {
+      _desktopWindowConfigured = true;
+      _windowReady.complete();
+      return;
+    }
+
     final windowOptions = WindowOptions(
       size: _startParked ? null : Size(1280, 800),
       minimumSize: kMainWindowMinimumSize,

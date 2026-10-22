@@ -2831,6 +2831,11 @@ final devGeometricWavePanelOpenProvider = StateProvider<bool>((ref) => false);
 /// Whether the dev-menu leaf design gallery is expanded.
 final devLeafGalleryPanelOpenProvider = StateProvider<bool>((ref) => false);
 
+/// Whether the dev-menu confetti animation gallery is expanded.
+final devConfettiGalleryPanelOpenProvider = StateProvider<bool>(
+  (ref) => false,
+);
+
 /// Dev-only: when true the background is replaced with a row-fade visualiser
 /// that shows the dark<->regular shade transition in isolation. Not persisted —
 /// always off on a fresh launch so it can't be left on by accident.

@@ -4174,6 +4174,11 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
     ConfettiOverlay.burst(
       context,
       globalPosition: box.localToGlobal(box.size.center(Offset.zero)),
+      effect: ConfettiEffect.taskComplete(
+        widget.listColor == null
+            ? Theme.of(context).colorScheme.primary
+            : Color(widget.listColor!),
+      ),
     );
   }
 

@@ -120,6 +120,9 @@ class _VoyagerCheckboxState extends State<VoyagerCheckbox>
     ConfettiOverlay.burst(
       context,
       globalPosition: box.localToGlobal(box.size.center(Offset.zero)),
+      effect: ConfettiEffect.taskComplete(
+        widget.accentColor ?? Theme.of(context).colorScheme.primary,
+      ),
     );
   }
 

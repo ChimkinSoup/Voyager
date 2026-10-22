@@ -15,6 +15,15 @@ const List<Color> kFestiveConfettiColors = <Color>[
   Color(0xFF3A86FF), // bright blue
 ];
 
+/// Silhouette each particle is drawn with.
+enum ConfettiShape {
+  /// Rounded paper strips of random aspect ratio.
+  strip,
+
+  /// Round dots, like sequins or glitter.
+  dot,
+}
+
 /// Immutable description of a one-shot particle burst.
 ///
 /// This is the tuning surface for the [ConfettiOverlay] engine. It's kept
@@ -41,7 +50,35 @@ class ConfettiEffect {
     this.drift = 34,
     this.duration = const Duration(milliseconds: 1100),
     this.scale = 1,
+    this.shape = ConfettiShape.strip,
   });
+
+  /// The burst fired when a task or subtask is completed: gold and
+  /// [accent]-tinted dots that spread in a filled ring, sag under light
+  /// gravity and fade.
+  factory ConfettiEffect.taskComplete(Color accent) {
+    return ConfettiEffect(
+      particleCount: 24,
+      colors: [
+        const Color(0xFFFFD166),
+        const Color(0xFFFFE8A3),
+        const Color(0xFFF4B942),
+        const Color(0xFFFFFFFF),
+        accent,
+        Color.lerp(accent, Colors.white, 0.45)!,
+        Color.lerp(accent, Colors.black, 0.25)!,
+      ],
+      shape: ConfettiShape.dot,
+      minParticleSize: 3,
+      maxParticleSize: 5,
+      spread: math.pi * 2,
+      minSpeed: 45,
+      maxSpeed: 100,
+      gravity: 110,
+      drift: 0,
+      duration: const Duration(milliseconds: 850),
+    );
+  }
 
   /// Number of particles emitted in the burst.
   final int particleCount;
@@ -80,6 +117,9 @@ class ConfettiEffect {
   /// Uniform size/speed multiplier — the primary "resize" knob.
   final double scale;
 
+  /// Particle silhouette.
+  final ConfettiShape shape;
+
   /// Returns a copy of this effect uniformly resized by [factor] (multiplies
   /// the existing [scale]). Handy for reusing one tuned effect at different
   /// sizes: `effect.scaled(0.5)` for a subtle version, `effect.scaled(2)` big.
@@ -98,6 +138,7 @@ class ConfettiEffect {
     double? drift,
     Duration? duration,
     double? scale,
+    ConfettiShape? shape,
   }) {
     return ConfettiEffect(
       particleCount: particleCount ?? this.particleCount,
@@ -112,6 +153,7 @@ class ConfettiEffect {
       drift: drift ?? this.drift,
       duration: duration ?? this.duration,
       scale: scale ?? this.scale,
+      shape: shape ?? this.shape,
     );
   }
 }
@@ -258,7 +300,8 @@ class _ConfettiBurstState extends State<_ConfettiBurst>
           (e.minParticleSize +
               rnd.nextDouble() * (e.maxParticleSize - e.minParticleSize)) *
           e.scale;
-      final aspect = 0.4 + rnd.nextDouble() * 0.55;
+      final isDot = e.shape == ConfettiShape.dot;
+      final aspect = isDot ? 1.0 : 0.4 + rnd.nextDouble() * 0.55;
       final color = colors[rnd.nextInt(colors.length)];
       return _Particle(
         velocity: Offset(math.cos(angle) * speed, math.sin(angle) * speed),
@@ -270,7 +313,7 @@ class _ConfettiBurstState extends State<_ConfettiBurst>
             width: size,
             height: size * aspect,
           ),
-          const Radius.circular(1),
+          Radius.circular(isDot ? size / 2 : 1),
         ),
         rotation: rnd.nextDouble() * math.pi * 2,
         rotationSpeed: (rnd.nextDouble() - 0.5) * 12,
