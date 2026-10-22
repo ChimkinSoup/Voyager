@@ -53,7 +53,14 @@ class AppShell extends ConsumerWidget {
     // showing, the same one the Inbox's Scheduled section opens.
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind != QuickCaptureKind.reminder) return;
-      unawaited(showScheduledReminderEditor(context));
+      final container = ProviderScope.containerOf(context, listen: false);
+      unawaited(
+        showScheduledReminderEditor(
+          context,
+          draft: ref.read(scheduledReminderDraftProvider),
+          onDraft: (draft) => storeScheduledReminderDraft(container, draft),
+        ),
+      );
     });
     final settings =
         ref.watch(settingsProvider.settled).value ?? const AppSettings();

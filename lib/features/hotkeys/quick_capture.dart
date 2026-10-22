@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
+import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 
 /// What a global hotkey captures.
 enum QuickCaptureKind {
@@ -78,6 +79,23 @@ void storeFinanceCaptureDraft(
 ) {
   scheduleMicrotask(
     () => container.read(financeCaptureDraftProvider.notifier).state = draft,
+  );
+}
+
+/// The new-reminder editor's unsaved fields, shared by the Inbox's dialog and
+/// the hotkey floater until a save clears them. Session memory only.
+final scheduledReminderDraftProvider = StateProvider<ScheduledReminderDraft?>(
+  (_) => null,
+);
+
+/// Stores a reminder draft handed back by a closing editor. Deferred: the
+/// editor hands it over from `dispose`, mid tree teardown.
+void storeScheduledReminderDraft(
+  ProviderContainer container,
+  ScheduledReminderDraft? draft,
+) {
+  scheduleMicrotask(
+    () => container.read(scheduledReminderDraftProvider.notifier).state = draft,
   );
 }
 

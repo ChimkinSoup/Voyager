@@ -93,6 +93,70 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 10));
   });
 
+  testWidgets('a slow catch-up with nothing to apply never shows', (
+    tester,
+  ) async {
+    final ctx = await _pumpHost(tester);
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: false,
+    );
+
+    toast.report(0, 0);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    // A weekly full pull that found every document unchanged.
+    toast.report(40, 40);
+    await tester.pump();
+    toast.complete();
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(find.textContaining('Sync'), findsNothing);
+  });
+
+  testWidgets('a slow catch-up shows once something is listed to apply', (
+    tester,
+  ) async {
+    final ctx = await _pumpHost(tester);
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: false,
+    );
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.textContaining('Sync'), findsNothing);
+
+    toast.report(0, 7);
+    await tester.pump();
+    expect(find.text('Syncing with the cloud · 0 of 7 items'), findsOneWidget);
+
+    toast.report(7, 7);
+    toast.complete();
+    await tester.pump();
+    expect(find.text('Synced 7 items'), findsOneWidget);
+
+    await tester.pumpAndSettle(const Duration(seconds: 10));
+  });
+
+  testWidgets('a report after the pull has finished raises nothing', (
+    tester,
+  ) async {
+    final ctx = await _pumpHost(tester);
+    final toast = PullProgressToast(
+      () => Overlay.of(ctx, rootOverlay: true),
+      restoring: false,
+    );
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    toast.cancel();
+    toast.report(0, 7);
+    await tester.pump();
+
+    expect(find.textContaining('Sync'), findsNothing);
+  });
+
   testWidgets('a failed pull takes the toast away', (tester) async {
     final ctx = await _pumpHost(tester);
     final toast = PullProgressToast(

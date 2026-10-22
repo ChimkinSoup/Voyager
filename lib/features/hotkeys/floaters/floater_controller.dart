@@ -30,7 +30,7 @@ const kFinanceFloaterSize = Size(640, 496);
 /// [FloaterController.setHeight]: a weekly rule's day pills, devices that
 /// wrap to another row and the validation line all grow the window.
 /// `reminder_floater_fits_form_test.dart` holds this to the real form.
-const kReminderFloaterSize = Size(kReminderFormWidth, 493);
+const kReminderFloaterSize = Size(kReminderFormWidth, 496);
 
 /// The calendar floater's window: the width the same panel has in the
 /// calendar's popover, and the height it opens at, the panel's for a new

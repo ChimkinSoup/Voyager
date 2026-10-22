@@ -25,7 +25,9 @@ import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
+import 'package:voyager/domain/services/finance_origins.dart';
 import 'package:voyager/domain/services/reminder_schedule.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 
 /// Rows shown before the rest fold behind "Show N more", so a long list of
 /// reminders cannot push the notification feed out of the popover.
@@ -102,8 +104,20 @@ class _ScheduledRemindersSectionState
                   dense: true,
                   tooltip: 'Add scheduled reminder',
                   icon: const Icon(PhosphorIconsRegular.plus, size: 14),
-                  onPressed: () =>
-                      unawaited(showScheduledReminderEditor(context)),
+                  onPressed: () {
+                    final container = ProviderScope.containerOf(
+                      context,
+                      listen: false,
+                    );
+                    unawaited(
+                      showScheduledReminderEditor(
+                        context,
+                        draft: ref.read(scheduledReminderDraftProvider),
+                        onDraft: (draft) =>
+                            storeScheduledReminderDraft(container, draft),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -555,14 +569,54 @@ String _countdown(String lead, DateTime at, DateTime now) {
 // Editor
 // ---------------------------------------------------------------------------
 
-/// Creates a scheduled reminder, or edits [existing].
+/// A new reminder's unsaved fields, kept when the editor closes without a
+/// save, so the Inbox's dialog and the hotkey floater pick up where either
+/// left off. A null field is one left as the form opened it: a fresh form
+/// works those out again, since an untouched next-whole-hour kept as a draft
+/// would reopen later pinned to an hour already gone.
+class ScheduledReminderDraft {
+  const ScheduledReminderDraft({
+    this.title,
+    this.body,
+    this.kind,
+    this.minutes,
+    this.weekdays,
+    this.onceDate,
+    this.deviceIds,
+    this.enabled,
+  });
+
+  final String? title;
+  final String? body;
+  final ReminderScheduleKind? kind;
+  final int? minutes;
+  final Set<int>? weekdays;
+  final DateTime? onceDate;
+
+  /// Null for all devices.
+  final Set<String>? deviceIds;
+  final bool? enabled;
+}
+
+/// Creates a scheduled reminder, or edits [existing]. [draft] prefills a new
+/// one.
+///
+/// [onDraft] receives the unsaved fields when the editor closes without a
+/// save (null when none moved off a fresh form's), and null once a save
+/// starts.
 Future<void> showScheduledReminderEditor(
   BuildContext context, {
   ScheduledReminderRule? existing,
+  ScheduledReminderDraft? draft,
+  ValueChanged<ScheduledReminderDraft?>? onDraft,
 }) {
   return showVoyagerDialog<void>(
     context: context,
-    builder: (_) => _ScheduledReminderEditor(existing: existing),
+    builder: (_) => _ScheduledReminderEditor(
+      existing: existing,
+      draft: draft,
+      onDraft: onDraft,
+    ),
   );
 }
 
@@ -572,16 +626,21 @@ Future<void> showScheduledReminderEditor(
 /// the rule is written.
 ///
 /// [leading] goes before the title. [onHeight] reports the form's height,
-/// for the floater's window to be sized to it.
+/// for the floater's window to be sized to it. [draft] and [onDraft] are as
+/// for [showScheduledReminderEditor].
 Widget scheduledReminderForm({
   required VoidCallback onClose,
+  ScheduledReminderDraft? draft,
   VoidCallback? onSaved,
+  ValueChanged<ScheduledReminderDraft?>? onDraft,
   Widget? leading,
   ValueChanged<double>? onHeight,
 }) {
   return _ScheduledReminderEditor(
+    draft: draft,
     onClose: onClose,
     onSaved: onSaved,
+    onDraft: onDraft,
     leading: leading,
     onHeight: onHeight,
   );
@@ -590,19 +649,27 @@ Widget scheduledReminderForm({
 class _ScheduledReminderEditor extends ConsumerStatefulWidget {
   const _ScheduledReminderEditor({
     this.existing,
+    this.draft,
     this.onClose,
     this.onSaved,
+    this.onDraft,
     this.leading,
     this.onHeight,
   });
 
   final ScheduledReminderRule? existing;
 
+  /// See [showScheduledReminderEditor]. Ignored when editing [existing].
+  final ScheduledReminderDraft? draft;
+
   /// See [scheduledReminderForm]. Null in the dialog, which pops instead.
   final VoidCallback? onClose;
 
   /// See [scheduledReminderForm].
   final VoidCallback? onSaved;
+
+  /// See [showScheduledReminderEditor].
+  final ValueChanged<ScheduledReminderDraft?>? onDraft;
 
   /// See [scheduledReminderForm].
   final Widget? leading;
@@ -629,28 +696,93 @@ class _ScheduledReminderEditorState
   String? _error;
   var _saving = false;
 
+  /// What a fresh form opens with, for the draft to leave out.
+  late final int _freshMinutes;
+  late final DateTime _freshOnceDate;
+  late final int _freshWeekday;
+
+  /// Set once a save has written the rule, so closing keeps no draft of it.
+  var _saved = false;
+
+  /// Completes when the save in flight has finished, either way; null when no
+  /// save is running.
+  Future<void>? _saveSettled;
+
   @override
   void initState() {
     super.initState();
     final rule = widget.existing;
     final now = DateTime.now();
-    _title = TextEditingController(text: rule?.title ?? '');
-    _body = TextEditingController(text: rule?.body ?? '');
-    _kind = rule?.scheduleKind ?? ReminderScheduleKind.once;
     // A new reminder starts on the next whole hour.
-    _minutes = rule?.localTimeMinutes ?? ((now.hour + 1) % 24) * 60;
-    _weekdays = {...?rule?.weeklyWeekdays};
-    if (_weekdays.isEmpty) _weekdays = {now.weekday};
-    _onceDate =
-        rule?.onceLocalDate ??
-        (now.hour == 23 ? DateTime(now.year, now.month, now.day + 1) : now);
-    _allDevices = rule?.targetDeviceIds.isEmpty ?? true;
-    _deviceIds = {...?rule?.targetDeviceIds};
-    _enabled = rule?.enabled ?? true;
+    _freshMinutes = ((now.hour + 1) % 24) * 60;
+    _freshOnceDate = DateTime(
+      now.year,
+      now.month,
+      now.day + (now.hour == 23 ? 1 : 0),
+    );
+    _freshWeekday = now.weekday;
+    final draft = rule == null ? widget.draft : null;
+    _title = TextEditingController(text: rule?.title ?? draft?.title ?? '');
+    _body = TextEditingController(text: rule?.body ?? draft?.body ?? '');
+    _kind = rule?.scheduleKind ?? draft?.kind ?? ReminderScheduleKind.once;
+    _minutes = rule?.localTimeMinutes ?? draft?.minutes ?? _freshMinutes;
+    _weekdays = {...?(rule?.weeklyWeekdays ?? draft?.weekdays)};
+    if (_weekdays.isEmpty) _weekdays = {_freshWeekday};
+    _onceDate = rule?.onceLocalDate ?? draft?.onceDate ?? _freshOnceDate;
+    _allDevices = rule != null
+        ? rule.targetDeviceIds.isEmpty
+        : draft?.deviceIds == null;
+    _deviceIds = {...?(rule?.targetDeviceIds ?? draft?.deviceIds)};
+    _enabled = rule?.enabled ?? draft?.enabled ?? true;
+    // A one-time draft's time can pass while it waits: it reopens on a fresh
+    // form's time instead of one that can't be saved.
+    if (draft != null &&
+        _kind == ReminderScheduleKind.once &&
+        atLocalMinutes(_onceDate, _minutes).isBefore(now)) {
+      _minutes = _freshMinutes;
+      _onceDate = _freshOnceDate;
+    }
+  }
+
+  /// The form's fields that moved off a fresh form's, or null when none did.
+  ScheduledReminderDraft? _unsavedDraft() {
+    if (_saved) return null;
+    final onceDate = DateTime(_onceDate.year, _onceDate.month, _onceDate.day);
+    final draft = ScheduledReminderDraft(
+      title: trimToNull(_title.text),
+      body: trimToNull(_body.text),
+      kind: _kind == ReminderScheduleKind.once ? null : _kind,
+      minutes: _minutes == _freshMinutes ? null : _minutes,
+      weekdays: _sameDays(_weekdays, {_freshWeekday}) ? null : {..._weekdays},
+      onceDate: onceDate == _freshOnceDate ? null : onceDate,
+      deviceIds: _allDevices ? null : {..._deviceIds},
+      enabled: _enabled ? null : false,
+    );
+    if (draft.title == null &&
+        draft.body == null &&
+        draft.kind == null &&
+        draft.minutes == null &&
+        draft.weekdays == null &&
+        draft.onceDate == null &&
+        draft.deviceIds == null &&
+        draft.enabled == null) {
+      return null;
+    }
+    return draft;
   }
 
   @override
   void dispose() {
+    final onDraft = widget.onDraft;
+    final saveSettled = _saveSettled;
+    if (onDraft != null && saveSettled != null) {
+      // Closed while a save is in flight: the fields are a draft only if the
+      // write fails.
+      final draft = _unsavedDraft();
+      unawaited(saveSettled.then((_) => onDraft(_saved ? null : draft)));
+    } else {
+      onDraft?.call(_unsavedDraft());
+    }
     _title.dispose();
     _body.dispose();
     super.dispose();
@@ -817,7 +949,18 @@ class _ScheduledReminderEditorState
         version: existing.version + 1,
       );
     }
-    await ref.read(reminderRepositoryProvider).upsertRule(rule);
+    // Cleared up front, so a form opened while the write runs starts fresh; a
+    // failed save hands the fields back when this form closes.
+    widget.onDraft?.call(null);
+    final settled = Completer<void>();
+    _saveSettled = settled.future;
+    try {
+      await ref.read(reminderRepositoryProvider).upsertRule(rule);
+      _saved = true;
+    } finally {
+      _saving = false;
+      settled.complete();
+    }
     ref.invalidate(scheduledReminderRulesProvider);
     unawaited(ref.read(reminderOsNotifierProvider).requestPermission());
     if (!mounted) return;
@@ -1108,7 +1251,7 @@ class _ScheduledReminderEditorState
           Padding(
             padding: const EdgeInsets.fromLTRB(
               _kTogglePadding,
-              12,
+              8,
               _kTogglePadding,
               14,
             ),
@@ -1138,6 +1281,7 @@ class _ScheduledReminderEditorState
                     ],
                   ),
                 ),
+                const SizedBox(height: 7),
                 form,
                 ...footer,
                 Padding(

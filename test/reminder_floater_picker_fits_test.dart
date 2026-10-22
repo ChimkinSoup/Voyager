@@ -16,6 +16,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
@@ -120,14 +121,28 @@ void main() {
       expectInsideWindow(tester, find.text('Today'), 'the quick-pick row');
       // Narrowed to fit, the quick-pick row wraps onto a second line, which
       // costs the calendar the month's last week unless the picker takes the
-      // window's height back. The clip is inside the popover's own bounds, so
-      // it shows up as the height given rather than as an overflow.
-      final picker = tester.getRect(find.byType(ContextualPopover));
+      // window's height back: all six week rows sit above the Done bar.
       expect(
-        picker.height,
+        tester.getRect(find.byType(ContextualPopover)).height,
         greaterThan(kReminderFloaterSize.height - 40),
         reason: 'the narrowed picker needs the height back for its last week',
       );
+      final doneTop = tester.getRect(find.text('Done')).top;
+      final days = find.descendant(
+        of: find.byType(DateSelectorPopover),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Text && int.tryParse(widget.data ?? '') != null,
+        ),
+      );
+      expect(days, findsNWidgets(42));
+      for (final day in days.evaluate()) {
+        final box = day.renderObject! as RenderBox;
+        expect(
+          box.localToGlobal(box.size.bottomLeft(Offset.zero)).dy,
+          lessThanOrEqualTo(doneTop),
+          reason: 'a week of the calendar is cut off above the Done bar',
+        );
+      }
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

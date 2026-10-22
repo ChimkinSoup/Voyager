@@ -19,7 +19,7 @@ class PullProgressToast {
     required this.restoring,
     Duration delay = const Duration(seconds: 3),
   }) {
-    _timer = Timer(delay, _show);
+    _timer = Timer(delay, _onDelay);
   }
 
   /// Resolved when the toast is due rather than up front: at launch the
@@ -32,6 +32,10 @@ class PullProgressToast {
 
   late final Timer _timer;
   VoyagerToast? _toast;
+
+  /// Whether the delay has passed, so the toast shows as soon as there is
+  /// something to count.
+  var _due = false;
   var _done = 0;
   var _total = 0;
 
@@ -41,12 +45,17 @@ class PullProgressToast {
   void report(int done, int total) {
     _done = done;
     _total = total;
-    _toast?.update(message: _progressMessage);
+    if (_toast == null && _due) {
+      _show();
+    } else {
+      _toast?.update(message: _progressMessage);
+    }
   }
 
   /// Turns the spinner into a tick, if the toast is showing at all.
   void complete() {
     _timer.cancel();
+    _due = false;
     _toast?.update(
       message:
           '${restoring ? 'Restored' : 'Synced'} ${_count.format(_done)} items',
@@ -59,10 +68,20 @@ class PullProgressToast {
   /// would only claim it is still going.
   void cancel() {
     _timer.cancel();
+    _due = false;
     _toast?.dismiss();
   }
 
+  void _onDelay() {
+    _due = true;
+    _show();
+  }
+
+  /// A catch-up with nothing to apply stays silent however long it runs:
+  /// listing every collection alone can pass the delay (68 empty listings
+  /// took 3 s on Windows). A restore always has something coming.
   void _show() {
+    if (!restoring && _done >= _total) return;
     final overlay = _overlay();
     if (overlay == null || !overlay.mounted) return;
     _toast = showVoyagerToastIn(
