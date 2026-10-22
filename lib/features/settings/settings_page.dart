@@ -398,6 +398,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           title: Text('Global hotkeys'),
                           subtitle: Text('Available on Windows only'),
                         ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Sound',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      SwitchListTile(
+                        title: const Text('Sounds'),
+                        subtitle: const Text(
+                          'Plays a short sound when you complete, save or log '
+                          'something. Off silences every sound, the task '
+                          'chime included',
+                        ),
+                        value: settings.soundsEnabled,
+                        onChanged: (v) =>
+                            _save(ref, settings.copyWith(soundsEnabled: v)),
+                      ),
                     ],
                   ),
                   KeepAliveScrollView(
@@ -469,6 +486,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         onChanged: (v) => _save(
                           ref,
                           settings.copyWith(hideCompletedTasks: v),
+                        ),
+                      ),
+                      SwitchListTile(
+                        title: const Text('Sound on task completion'),
+                        subtitle: const Text(
+                          'Plays a short chime when you complete a task',
+                        ),
+                        value: settings.taskCompleteSoundEnabled,
+                        onChanged: (v) => _save(
+                          ref,
+                          settings.copyWith(taskCompleteSoundEnabled: v),
                         ),
                       ),
                       const SizedBox(height: 16),

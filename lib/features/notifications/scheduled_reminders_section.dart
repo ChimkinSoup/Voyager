@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
@@ -964,6 +965,7 @@ class _ScheduledReminderEditorState
     ref.invalidate(scheduledReminderRulesProvider);
     unawaited(ref.read(reminderOsNotifierProvider).requestPermission());
     if (!mounted) return;
+    ref.read(appSoundsProvider).play(AppSound.saved);
     widget.onSaved?.call();
     _close();
   }

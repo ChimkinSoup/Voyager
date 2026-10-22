@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -763,6 +764,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     _restTimer = Timer(Duration(seconds: seconds), () {
       if (!mounted) return;
       state = state.copyWith(clearRest: true);
+      _ref.read(appSoundsProvider).play(AppSound.restTimerEnd);
     });
   }
 
@@ -794,6 +796,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       final ended = current.copyWith(endedAt: utcNow());
       await _repo.upsertSession(ended);
       _pushSession(ended);
+      _ref.read(appSoundsProvider).play(AppSound.workoutFinished);
     } finally {
       _closing = false;
       _invalidate();

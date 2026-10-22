@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
@@ -965,6 +966,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     // Only reached once the write has landed: clearing the draft on a failed
     // save would discard the one remaining copy of the work.
     if (_isCreate) {
+      ref.read(appSoundsProvider).play(AppSound.leetCodeSaved);
       _draftClosed = true;
       _draftTimer?.cancel();
       unawaited(_draftStore.clear());

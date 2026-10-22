@@ -14,6 +14,7 @@ import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/effects/confetti.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
@@ -1284,6 +1285,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       final lists = await _ensureDefaultList();
       final repo = ref.read(todoRepositoryProvider);
       final remoteSync = ref.read(remoteSyncServiceProvider);
+      final sounds = ref.read(appSoundsProvider);
       final now = utcNow();
       final listId = _listIdForNewTask(lists);
       // Adding is a touch too: the todo hotkey's bar defaults to this list.
@@ -1302,6 +1304,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         await repo.upsertTask(updated);
         remoteSync.pushTodoTaskInBackground(updated);
       }
+      sounds.play(AppSound.saved);
       final placed = batch.tasks.firstWhere((t) => t.id == task.id);
       if (!mounted) return;
       setState(() {
@@ -4169,6 +4172,7 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
   /// a task. Reuses the shared [ConfettiOverlay] engine so the effect floats
   /// above the list and survives the row animating away.
   void _celebrate() {
+    playTaskCompleteSound(context);
     final box = _checkboxKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     ConfettiOverlay.burst(

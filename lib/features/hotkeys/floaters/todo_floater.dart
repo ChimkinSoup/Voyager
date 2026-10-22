@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
@@ -283,6 +284,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
       final listName = lists
           .firstWhere((list) => list.id == listId, orElse: () => lists.first)
           .name;
+      container.read(appSoundsProvider).play(AppSound.saved);
       await container
           .read(floaterControllerProvider)
           .completeWith('Added to $listName');

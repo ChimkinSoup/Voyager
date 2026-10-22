@@ -62,6 +62,8 @@ class AppSettings {
     this.alertOnPeriodicPrompts = false,
     this.alertTimeHour = 9,
     this.hideCompletedTasks = false,
+    this.taskCompleteSoundEnabled = true,
+    this.soundsEnabled = true,
     this.vimModeEnabled = false,
     this.snippetsEnabled = true,
     this.autocorrectEnabled = true,
@@ -263,6 +265,12 @@ class AppSettings {
   final bool alertOnPeriodicPrompts;
   final int alertTimeHour;
   final bool hideCompletedTasks;
+
+  /// Whether completing a task plays a short chime alongside its confetti.
+  final bool taskCompleteSoundEnabled;
+
+  /// Whether the app plays any sound at all; off silences the task chime too.
+  final bool soundsEnabled;
 
   /// Whether Vim keybindings are active in the app's text boxes.
   final bool vimModeEnabled;
@@ -608,6 +616,8 @@ class AppSettings {
     String? srsGoodKey,
     String? srsEasyKey,
     bool? hideCompletedTasks,
+    bool? taskCompleteSoundEnabled,
+    bool? soundsEnabled,
     bool? vimModeEnabled,
     bool? snippetsEnabled,
     bool? autocorrectEnabled,
@@ -809,6 +819,9 @@ class AppSettings {
           alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
+      taskCompleteSoundEnabled:
+          taskCompleteSoundEnabled ?? this.taskCompleteSoundEnabled,
+      soundsEnabled: soundsEnabled ?? this.soundsEnabled,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
       autocorrectEnabled: autocorrectEnabled ?? this.autocorrectEnabled,

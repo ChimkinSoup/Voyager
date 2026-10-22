@@ -8,6 +8,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/theme/palette_color.dart';
@@ -965,6 +966,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         occurrenceDay == null) {
       await repo.upsertEvent(edited);
       ref.invalidate(calendarEventsProvider);
+      ref.read(appSoundsProvider).play(AppSound.saved);
       resetSidebar();
       return;
     }
@@ -1003,6 +1005,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
     }
     ref.invalidate(calendarEventsProvider);
+    ref.read(appSoundsProvider).play(AppSound.saved);
     resetSidebar();
   }
 

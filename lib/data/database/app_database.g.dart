@@ -8647,6 +8647,36 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _taskCompleteSoundEnabledMeta =
+      const VerificationMeta('taskCompleteSoundEnabled');
+  @override
+  late final GeneratedColumn<bool> taskCompleteSoundEnabled =
+      GeneratedColumn<bool>(
+        'task_complete_sound_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("task_complete_sound_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _soundsEnabledMeta = const VerificationMeta(
+    'soundsEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> soundsEnabled = GeneratedColumn<bool>(
+    'sounds_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sounds_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _vimModeEnabledMeta = const VerificationMeta(
     'vimModeEnabled',
   );
@@ -10327,6 +10357,8 @@ class $SettingsTableTable extends SettingsTable
     alertOnPeriodicPrompts,
     alertTimeHour,
     hideCompletedTasks,
+    taskCompleteSoundEnabled,
+    soundsEnabled,
     vimModeEnabled,
     snippetsEnabled,
     autocorrectEnabled,
@@ -10696,6 +10728,24 @@ class $SettingsTableTable extends SettingsTable
         hideCompletedTasks.isAcceptableOrUnknown(
           data['hide_completed_tasks']!,
           _hideCompletedTasksMeta,
+        ),
+      );
+    }
+    if (data.containsKey('task_complete_sound_enabled')) {
+      context.handle(
+        _taskCompleteSoundEnabledMeta,
+        taskCompleteSoundEnabled.isAcceptableOrUnknown(
+          data['task_complete_sound_enabled']!,
+          _taskCompleteSoundEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sounds_enabled')) {
+      context.handle(
+        _soundsEnabledMeta,
+        soundsEnabled.isAcceptableOrUnknown(
+          data['sounds_enabled']!,
+          _soundsEnabledMeta,
         ),
       );
     }
@@ -11984,6 +12034,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}hide_completed_tasks'],
       )!,
+      taskCompleteSoundEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}task_complete_sound_enabled'],
+      )!,
+      soundsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sounds_enabled'],
+      )!,
       vimModeEnabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}vim_mode_enabled'],
@@ -12547,6 +12605,8 @@ class SettingsTableData extends DataClass
   final bool alertOnPeriodicPrompts;
   final int alertTimeHour;
   final bool hideCompletedTasks;
+  final bool taskCompleteSoundEnabled;
+  final bool soundsEnabled;
   final bool vimModeEnabled;
   final bool snippetsEnabled;
 
@@ -12830,6 +12890,8 @@ class SettingsTableData extends DataClass
     required this.alertOnPeriodicPrompts,
     required this.alertTimeHour,
     required this.hideCompletedTasks,
+    required this.taskCompleteSoundEnabled,
+    required this.soundsEnabled,
     required this.vimModeEnabled,
     required this.snippetsEnabled,
     required this.autocorrectEnabled,
@@ -13007,6 +13069,10 @@ class SettingsTableData extends DataClass
     map['alert_on_periodic_prompts'] = Variable<bool>(alertOnPeriodicPrompts);
     map['alert_time_hour'] = Variable<int>(alertTimeHour);
     map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks);
+    map['task_complete_sound_enabled'] = Variable<bool>(
+      taskCompleteSoundEnabled,
+    );
+    map['sounds_enabled'] = Variable<bool>(soundsEnabled);
     map['vim_mode_enabled'] = Variable<bool>(vimModeEnabled);
     map['snippets_enabled'] = Variable<bool>(snippetsEnabled);
     map['autocorrect_enabled'] = Variable<bool>(autocorrectEnabled);
@@ -13375,6 +13441,8 @@ class SettingsTableData extends DataClass
       alertOnPeriodicPrompts: Value(alertOnPeriodicPrompts),
       alertTimeHour: Value(alertTimeHour),
       hideCompletedTasks: Value(hideCompletedTasks),
+      taskCompleteSoundEnabled: Value(taskCompleteSoundEnabled),
+      soundsEnabled: Value(soundsEnabled),
       vimModeEnabled: Value(vimModeEnabled),
       snippetsEnabled: Value(snippetsEnabled),
       autocorrectEnabled: Value(autocorrectEnabled),
@@ -13662,6 +13730,10 @@ class SettingsTableData extends DataClass
       ),
       alertTimeHour: serializer.fromJson<int>(json['alertTimeHour']),
       hideCompletedTasks: serializer.fromJson<bool>(json['hideCompletedTasks']),
+      taskCompleteSoundEnabled: serializer.fromJson<bool>(
+        json['taskCompleteSoundEnabled'],
+      ),
+      soundsEnabled: serializer.fromJson<bool>(json['soundsEnabled']),
       vimModeEnabled: serializer.fromJson<bool>(json['vimModeEnabled']),
       snippetsEnabled: serializer.fromJson<bool>(json['snippetsEnabled']),
       autocorrectEnabled: serializer.fromJson<bool>(json['autocorrectEnabled']),
@@ -14025,6 +14097,10 @@ class SettingsTableData extends DataClass
       'alertOnPeriodicPrompts': serializer.toJson<bool>(alertOnPeriodicPrompts),
       'alertTimeHour': serializer.toJson<int>(alertTimeHour),
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
+      'taskCompleteSoundEnabled': serializer.toJson<bool>(
+        taskCompleteSoundEnabled,
+      ),
+      'soundsEnabled': serializer.toJson<bool>(soundsEnabled),
       'vimModeEnabled': serializer.toJson<bool>(vimModeEnabled),
       'snippetsEnabled': serializer.toJson<bool>(snippetsEnabled),
       'autocorrectEnabled': serializer.toJson<bool>(autocorrectEnabled),
@@ -14304,6 +14380,8 @@ class SettingsTableData extends DataClass
     bool? alertOnPeriodicPrompts,
     int? alertTimeHour,
     bool? hideCompletedTasks,
+    bool? taskCompleteSoundEnabled,
+    bool? soundsEnabled,
     bool? vimModeEnabled,
     bool? snippetsEnabled,
     bool? autocorrectEnabled,
@@ -14471,6 +14549,9 @@ class SettingsTableData extends DataClass
         alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
     alertTimeHour: alertTimeHour ?? this.alertTimeHour,
     hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
+    taskCompleteSoundEnabled:
+        taskCompleteSoundEnabled ?? this.taskCompleteSoundEnabled,
+    soundsEnabled: soundsEnabled ?? this.soundsEnabled,
     vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
     snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
     autocorrectEnabled: autocorrectEnabled ?? this.autocorrectEnabled,
@@ -14810,6 +14891,12 @@ class SettingsTableData extends DataClass
       hideCompletedTasks: data.hideCompletedTasks.present
           ? data.hideCompletedTasks.value
           : this.hideCompletedTasks,
+      taskCompleteSoundEnabled: data.taskCompleteSoundEnabled.present
+          ? data.taskCompleteSoundEnabled.value
+          : this.taskCompleteSoundEnabled,
+      soundsEnabled: data.soundsEnabled.present
+          ? data.soundsEnabled.value
+          : this.soundsEnabled,
       vimModeEnabled: data.vimModeEnabled.present
           ? data.vimModeEnabled.value
           : this.vimModeEnabled,
@@ -15245,6 +15332,8 @@ class SettingsTableData extends DataClass
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
+          ..write('taskCompleteSoundEnabled: $taskCompleteSoundEnabled, ')
+          ..write('soundsEnabled: $soundsEnabled, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
           ..write('snippetsEnabled: $snippetsEnabled, ')
           ..write('autocorrectEnabled: $autocorrectEnabled, ')
@@ -15442,6 +15531,8 @@ class SettingsTableData extends DataClass
     alertOnPeriodicPrompts,
     alertTimeHour,
     hideCompletedTasks,
+    taskCompleteSoundEnabled,
+    soundsEnabled,
     vimModeEnabled,
     snippetsEnabled,
     autocorrectEnabled,
@@ -15607,6 +15698,8 @@ class SettingsTableData extends DataClass
           other.alertOnPeriodicPrompts == this.alertOnPeriodicPrompts &&
           other.alertTimeHour == this.alertTimeHour &&
           other.hideCompletedTasks == this.hideCompletedTasks &&
+          other.taskCompleteSoundEnabled == this.taskCompleteSoundEnabled &&
+          other.soundsEnabled == this.soundsEnabled &&
           other.vimModeEnabled == this.vimModeEnabled &&
           other.snippetsEnabled == this.snippetsEnabled &&
           other.autocorrectEnabled == this.autocorrectEnabled &&
@@ -15794,6 +15887,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> alertOnPeriodicPrompts;
   final Value<int> alertTimeHour;
   final Value<bool> hideCompletedTasks;
+  final Value<bool> taskCompleteSoundEnabled;
+  final Value<bool> soundsEnabled;
   final Value<bool> vimModeEnabled;
   final Value<bool> snippetsEnabled;
   final Value<bool> autocorrectEnabled;
@@ -15954,6 +16049,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertOnPeriodicPrompts = const Value.absent(),
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
+    this.taskCompleteSoundEnabled = const Value.absent(),
+    this.soundsEnabled = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
     this.snippetsEnabled = const Value.absent(),
     this.autocorrectEnabled = const Value.absent(),
@@ -16115,6 +16212,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertOnPeriodicPrompts = const Value.absent(),
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
+    this.taskCompleteSoundEnabled = const Value.absent(),
+    this.soundsEnabled = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
     this.snippetsEnabled = const Value.absent(),
     this.autocorrectEnabled = const Value.absent(),
@@ -16276,6 +16375,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? alertOnPeriodicPrompts,
     Expression<int>? alertTimeHour,
     Expression<bool>? hideCompletedTasks,
+    Expression<bool>? taskCompleteSoundEnabled,
+    Expression<bool>? soundsEnabled,
     Expression<bool>? vimModeEnabled,
     Expression<bool>? snippetsEnabled,
     Expression<bool>? autocorrectEnabled,
@@ -16447,6 +16548,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (alertTimeHour != null) 'alert_time_hour': alertTimeHour,
       if (hideCompletedTasks != null)
         'hide_completed_tasks': hideCompletedTasks,
+      if (taskCompleteSoundEnabled != null)
+        'task_complete_sound_enabled': taskCompleteSoundEnabled,
+      if (soundsEnabled != null) 'sounds_enabled': soundsEnabled,
       if (vimModeEnabled != null) 'vim_mode_enabled': vimModeEnabled,
       if (snippetsEnabled != null) 'snippets_enabled': snippetsEnabled,
       if (autocorrectEnabled != null) 'autocorrect_enabled': autocorrectEnabled,
@@ -16711,6 +16815,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? alertOnPeriodicPrompts,
     Value<int>? alertTimeHour,
     Value<bool>? hideCompletedTasks,
+    Value<bool>? taskCompleteSoundEnabled,
+    Value<bool>? soundsEnabled,
     Value<bool>? vimModeEnabled,
     Value<bool>? snippetsEnabled,
     Value<bool>? autocorrectEnabled,
@@ -16877,6 +16983,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
+      taskCompleteSoundEnabled:
+          taskCompleteSoundEnabled ?? this.taskCompleteSoundEnabled,
+      soundsEnabled: soundsEnabled ?? this.soundsEnabled,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
       autocorrectEnabled: autocorrectEnabled ?? this.autocorrectEnabled,
@@ -17186,6 +17295,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (hideCompletedTasks.present) {
       map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks.value);
+    }
+    if (taskCompleteSoundEnabled.present) {
+      map['task_complete_sound_enabled'] = Variable<bool>(
+        taskCompleteSoundEnabled.value,
+      );
+    }
+    if (soundsEnabled.present) {
+      map['sounds_enabled'] = Variable<bool>(soundsEnabled.value);
     }
     if (vimModeEnabled.present) {
       map['vim_mode_enabled'] = Variable<bool>(vimModeEnabled.value);
@@ -17780,6 +17897,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
+          ..write('taskCompleteSoundEnabled: $taskCompleteSoundEnabled, ')
+          ..write('soundsEnabled: $soundsEnabled, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
           ..write('snippetsEnabled: $snippetsEnabled, ')
           ..write('autocorrectEnabled: $autocorrectEnabled, ')
@@ -61006,6 +61125,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> alertOnPeriodicPrompts,
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
+      Value<bool> taskCompleteSoundEnabled,
+      Value<bool> soundsEnabled,
       Value<bool> vimModeEnabled,
       Value<bool> snippetsEnabled,
       Value<bool> autocorrectEnabled,
@@ -61168,6 +61289,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> alertOnPeriodicPrompts,
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
+      Value<bool> taskCompleteSoundEnabled,
+      Value<bool> soundsEnabled,
       Value<bool> vimModeEnabled,
       Value<bool> snippetsEnabled,
       Value<bool> autocorrectEnabled,
@@ -61447,6 +61570,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get hideCompletedTasks => $composableBuilder(
     column: $table.hideCompletedTasks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get taskCompleteSoundEnabled => $composableBuilder(
+    column: $table.taskCompleteSoundEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get soundsEnabled => $composableBuilder(
+    column: $table.soundsEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -62262,6 +62395,16 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get taskCompleteSoundEnabled => $composableBuilder(
+    column: $table.taskCompleteSoundEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get soundsEnabled => $composableBuilder(
+    column: $table.soundsEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get vimModeEnabled => $composableBuilder(
     column: $table.vimModeEnabled,
     builder: (column) => ColumnOrderings(column),
@@ -63074,6 +63217,16 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get taskCompleteSoundEnabled => $composableBuilder(
+    column: $table.taskCompleteSoundEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get soundsEnabled => $composableBuilder(
+    column: $table.soundsEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get vimModeEnabled => $composableBuilder(
     column: $table.vimModeEnabled,
     builder: (column) => column,
@@ -63805,6 +63958,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
+                Value<bool> taskCompleteSoundEnabled = const Value.absent(),
+                Value<bool> soundsEnabled = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
                 Value<bool> snippetsEnabled = const Value.absent(),
                 Value<bool> autocorrectEnabled = const Value.absent(),
@@ -63989,6 +64144,8 @@ class $$SettingsTableTableTableManager
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
+                taskCompleteSoundEnabled: taskCompleteSoundEnabled,
+                soundsEnabled: soundsEnabled,
                 vimModeEnabled: vimModeEnabled,
                 snippetsEnabled: snippetsEnabled,
                 autocorrectEnabled: autocorrectEnabled,
@@ -64158,6 +64315,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
+                Value<bool> taskCompleteSoundEnabled = const Value.absent(),
+                Value<bool> soundsEnabled = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
                 Value<bool> snippetsEnabled = const Value.absent(),
                 Value<bool> autocorrectEnabled = const Value.absent(),
@@ -64342,6 +64501,8 @@ class $$SettingsTableTableTableManager
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
+                taskCompleteSoundEnabled: taskCompleteSoundEnabled,
+                soundsEnabled: soundsEnabled,
                 vimModeEnabled: vimModeEnabled,
                 snippetsEnabled: snippetsEnabled,
                 autocorrectEnabled: autocorrectEnabled,

@@ -19,6 +19,7 @@ import 'package:voyager/features/dev/dev_out_of_sync_purge_tile.dart';
 import 'package:voyager/features/dev/dev_error_log_tile.dart';
 import 'package:voyager/features/dev/dev_perf_stall_log_tile.dart';
 import 'package:voyager/features/dev/dev_remote_purge_tile.dart';
+import 'package:voyager/features/dev/dev_sound_gallery_tile.dart';
 import 'package:voyager/features/dev/dev_sync_backlog_tile.dart';
 import 'package:voyager/features/dev/dev_sync_compare_tile.dart';
 import 'package:voyager/features/dev/dev_todo_sort_debug_tile.dart';
@@ -243,6 +244,8 @@ class DevPage extends ConsumerWidget {
         const DevLeafGallerySection(),
         const Divider(height: 32),
         const DevConfettiGallerySection(),
+        const Divider(height: 32),
+        const DevSoundGallerySection(),
         const Divider(height: 32),
         const DevSyncCompareSection(),
         const Divider(height: 32),

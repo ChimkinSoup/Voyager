@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
@@ -23,12 +24,10 @@ Future<void> toggleCalendarEventDone({
   // to another one would mark a day the user never clicked.
   final occurrence = calendarOccurrenceStartOn(current, occurrenceDay);
   if (occurrence == null) return;
+  final done = !calendarEventDoneOn(current, occurrence);
   await repository.upsertEvent(
-    setCalendarEventDone(
-      current,
-      occurrence,
-      done: !calendarEventDoneOn(current, occurrence),
-    ),
+    setCalendarEventDone(current, occurrence, done: done),
   );
   container.invalidate(calendarEventsProvider);
+  if (done) container.read(appSoundsProvider).play(AppSound.calendarDone);
 }

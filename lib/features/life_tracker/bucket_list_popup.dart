@@ -10,6 +10,7 @@ import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
@@ -205,6 +206,9 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
     );
     if (!mounted) return;
     ref.invalidate(bucketListItemsProvider);
+    if (!wasCompleted) {
+      ref.read(appSoundsProvider).play(AppSound.bucketListDone);
+    }
   }
 
   /// Returns null when the prompt was skipped or dismissed, and the (trimmed)

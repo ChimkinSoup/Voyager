@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -259,6 +260,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
       // Through the container, not `ref`: the invalidate has to land even
       // when the sheet was dismissed mid-write.
       container.invalidate(goalAllocationsProvider);
+      container.read(appSoundsProvider).play(AppSound.money);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;

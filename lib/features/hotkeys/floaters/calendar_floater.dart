@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/widgets/report_height.dart';
@@ -74,6 +75,7 @@ class _CalendarFloaterState extends ConsumerState<CalendarFloater> {
                 .read(calendarRepositoryProvider)
                 .upsertEvent(newCalendarEventFromPanel(data));
             container.invalidate(calendarEventsProvider);
+            container.read(appSoundsProvider).play(AppSound.saved);
             await _floaters.completeWith('Event added');
           }()),
           onCancel: () => unawaited(_floaters.dismiss()),

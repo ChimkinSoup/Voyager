@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/session_resume/session_checkpoint.dart';
 import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
 import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
@@ -505,6 +506,9 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       });
       _flipController.showFront();
       _checkpoint.persist();
+      if (_queue!.isEmpty) {
+        ref.read(appSoundsProvider).play(AppSound.studyDeckFinished);
+      }
       return;
     }
 
@@ -547,6 +551,9 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     });
     _flipController.showFront();
     _checkpoint.persist();
+    if (_queue!.isEmpty) {
+      ref.read(appSoundsProvider).play(AppSound.studyDeckFinished);
+    }
 
     _invalidateFor(graded);
   }

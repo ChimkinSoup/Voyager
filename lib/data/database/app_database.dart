@@ -818,6 +818,9 @@ class SettingsTable extends Table {
   IntColumn get alertTimeHour => integer().withDefault(const Constant(9))();
   BoolColumn get hideCompletedTasks =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get taskCompleteSoundEnabled =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get soundsEnabled => boolean().withDefault(const Constant(true))();
   BoolColumn get vimModeEnabled =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get snippetsEnabled =>
@@ -2223,7 +2226,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 162;
+  int get schemaVersion => 164;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3982,6 +3985,18 @@ class AppDatabase extends _$AppDatabase {
           'photo_series_table',
           photoSeriesTable,
           photoSeriesTable.hideStyle,
+        );
+      }
+      if (from < 163) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.taskCompleteSoundEnabled,
+        );
+      }
+      if (from < 164) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.soundsEnabled,
         );
       }
     },

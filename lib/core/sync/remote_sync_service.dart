@@ -4004,6 +4004,13 @@ class RemoteSyncService {
     final List<({String id, Map<String, dynamic> data})> docs;
     SyncWatermark? advance;
     Stopwatch? stopwatch;
+    // TEMP timing: tells whether a slow startup sync is down to a slow
+    // network (the listing below) or something else (waiting on op logs,
+    // resolving CRDTs), split out in the [sync-timing] line after the pull.
+    // Delete every line marked "TEMP timing" before the final release.
+    Duration? listedAt; // TEMP timing
+    final logWait = Stopwatch(); // TEMP timing
+    final resolveWait = Stopwatch(); // TEMP timing
     var full = false;
     DateTime? previousFullPullAt;
     if (onlyFirestoreDocumentIds != null) {
@@ -4028,6 +4035,7 @@ class RemoteSyncService {
     } else {
       stopwatch = Stopwatch()..start();
       final listed = await _listChangedDocuments(collection);
+      listedAt = stopwatch.elapsed; // TEMP timing
       docs = listed.documents;
       advance = listed.advance;
       full = listed.full;
@@ -4075,7 +4083,10 @@ class RemoteSyncService {
       final firestoreDocId = doc.data['id'] as String? ?? doc.id;
       final localDocId = _localDocumentId(collection, firestoreDocId);
       final logId = operationLogId(doc);
+      logWait.start(); // TEMP timing
       final operationLog = resolveCrdt ? await operationLogs[logId]! : null;
+      logWait.stop(); // TEMP timing
+      resolveWait.start(); // TEMP timing
       final crdtPayload = operationLog != null
           ? await _crdtResolver.resolvePayload(
               _syncRepository,
@@ -4084,6 +4095,7 @@ class RemoteSyncService {
               remoteOperations: operationLog,
             )
           : null;
+      resolveWait.stop(); // TEMP timing
       final remote = _normalizeRemoteDocument(
         collection,
         crdtPayload ?? doc.data,
@@ -4109,6 +4121,17 @@ class RemoteSyncService {
     if (advance != null) {
       await _watermarkStore.write(collection, advance);
       _changedSince[collection] = advance.changedSince;
+    }
+    // TEMP timing
+    if (stopwatch != null && stopwatch.elapsedMilliseconds >= 1000) {
+      debugPrint(
+        '[sync-timing] $collection total ${stopwatch.elapsedMilliseconds}ms '
+        '(${docs.length} docs, ${toApply.length} applied, '
+        '${resolveCrdt ? operationLogs.length : 0} op logs): '
+        'listing ${listedAt?.inMilliseconds}ms, '
+        'op-log wait ${logWait.elapsedMilliseconds}ms, '
+        'crdt resolve ${resolveWait.elapsedMilliseconds}ms',
+      );
     }
     if (stopwatch != null) {
       (Zone.current[_pullTimingsKey] as List<_PullTiming>?)?.add(

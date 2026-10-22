@@ -65,6 +65,7 @@ dependencies:
   geolocator: ^14.0.2
   cryptography: ^2.9.0
   camera: ^0.12.1
+  audioplayers: ^6.8.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -209,6 +210,7 @@ flutter:
     - assets/rankings_map_style.json
     - assets/dictionary_en.txt
     - assets/app_icon.ico
+    - assets/sounds/
   fonts:
     - family: IosevkaAile
       fonts:

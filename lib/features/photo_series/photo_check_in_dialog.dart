@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -430,6 +431,10 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
       rethrow;
     } finally {
       _openSave = null;
+    }
+    // Replacing one photo is not a check-in.
+    if (mounted && !_replacing) {
+      ref.read(appSoundsProvider).play(AppSound.photoCheckIn);
     }
     // A lock mid-save has already closed this; popping again would close
     // the page under it.

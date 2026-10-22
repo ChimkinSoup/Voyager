@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -463,6 +464,7 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
       container.invalidate(assetRoomEventsProvider);
       container.invalidate(transactionsProvider);
       container.invalidate(assetValuationsProvider);
+      container.read(appSoundsProvider).play(AppSound.money);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
@@ -785,6 +787,7 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
       );
       container.invalidate(assetRoomEventsProvider);
       container.invalidate(assetValuationsProvider);
+      container.read(appSoundsProvider).play(AppSound.money);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;

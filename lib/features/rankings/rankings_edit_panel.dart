@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/layout/hover_inset.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
@@ -104,6 +105,12 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
 
   late final ProviderContainer _container;
 
+  /// The version of the entry and of each child as the panel first saw it,
+  /// so closing it can tell whether anything was changed. A child is taken
+  /// as it first appears — loaded after the panel opened, or created in it —
+  /// so arriving is not a change.
+  final _firstSeenVersions = <String, int>{};
+
   /// The overall score an open popover is showing, before it is written. A
   /// record so a drafted clear — a null score — counts.
   ({double? score})? _draftScore;
@@ -138,11 +145,25 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
     _titleController = TextEditingController(text: _current.title);
     _notesController = TextEditingController(text: _current.notes);
     _notesFocusNode = FocusNode();
+    _noteVersions();
   }
+
+  void _noteVersions() {
+    _firstSeenVersions.putIfAbsent(_current.id, () => _current.version);
+    for (final child in widget.children) {
+      _firstSeenVersions.putIfAbsent(child.id, () => child.version);
+    }
+  }
+
+  /// Whether the entry or a child has been written since first seen.
+  bool get _changed =>
+      _current.version != _firstSeenVersions[_current.id] ||
+      widget.children.any((c) => c.version != _firstSeenVersions[c.id]);
 
   @override
   void didUpdateWidget(RankingsEditPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _noteVersions();
     if (oldWidget.parent.id == widget.parent.id) {
       // Same entry: keep whatever the user is typing, but take everything the
       // list or the quick-rate may have changed underneath — unless a save is
@@ -182,6 +203,15 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
   @override
   void dispose() {
     _saveTimer?.cancel();
+    // Closing after a change, not after only opening or creating the
+    // entry. Text still on its debounce is about to be written below, except
+    // a blank title, which [_commitText] refuses.
+    final title = _titleController.text.trim();
+    if (_changed ||
+        (title.isNotEmpty && title != _current.title) ||
+        _notesController.text != _current.notes) {
+      _container.read(appSoundsProvider).play(AppSound.rankingSaved);
+    }
     // Fire-and-forget: dispose cannot be async, and the repository write does
     // not need this widget to still exist.
     final committing = _commitText();

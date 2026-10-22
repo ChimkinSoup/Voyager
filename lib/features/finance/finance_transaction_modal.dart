@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
@@ -475,6 +476,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       // is recording a consequence of *this* save, and a failure there has to
       // land in this sheet's error line rather than on a dismissed one.
       await widget.onSaved?.call(transaction);
+      container.read(appSoundsProvider).play(AppSound.money);
       if (mounted) _close();
     } catch (e) {
       if (!mounted) return;

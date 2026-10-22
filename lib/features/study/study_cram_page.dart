@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/media/widgets/media_lightbox.dart';
 import 'package:voyager/core/session_resume/session_checkpoint.dart';
 import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
@@ -445,6 +446,9 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       });
       _flipController.showFront();
       _checkpoint.persist();
+      if (_complete) {
+        ref.read(appSoundsProvider).play(AppSound.studyDeckFinished);
+      }
     });
   }
 

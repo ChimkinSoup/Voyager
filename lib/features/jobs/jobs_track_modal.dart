@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -506,6 +507,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
 
     final url = _urlController.text.trim();
     final notes = _notesController.text.trim();
+    // Read before the await: the sheet can be closed while the save runs.
+    final sounds = ref.read(appSoundsProvider);
     final JobApplication created;
     try {
       created = await JobsActions(ref).createApplication(
@@ -547,6 +550,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _draftTimer?.cancel();
     unawaited(_draftStore.clear());
 
+    sounds.play(AppSound.jobTracked);
     if (mounted) Navigator.of(context).pop(created);
   }
 

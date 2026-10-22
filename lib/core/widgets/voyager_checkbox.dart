@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/effects/confetti.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// A custom checkbox (not Material [Checkbox]) with a fill/pop animation and
@@ -27,8 +28,8 @@ class VoyagerCheckbox extends StatefulWidget {
   /// Space around the box, which is also part of the tap target.
   final EdgeInsetsGeometry padding;
 
-  /// Fires a confetti burst from the checkbox when tapping completes it
-  /// (false → true).
+  /// Fires a confetti burst and the task-complete chime from the checkbox when
+  /// tapping completes it (false → true).
   final bool celebrateOnComplete;
 
   @override
@@ -115,6 +116,7 @@ class _VoyagerCheckboxState extends State<VoyagerCheckbox>
   }
 
   void _celebrate() {
+    playTaskCompleteSound(context);
     final box = _boxKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     ConfettiOverlay.burst(
