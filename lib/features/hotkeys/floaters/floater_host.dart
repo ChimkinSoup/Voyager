@@ -100,15 +100,21 @@ class _FloaterSurface extends StatelessWidget {
                 key: ValueKey(kind),
                 onGenerateRoute: (_) => PageRouteBuilder<void>(
                   transitionDuration: Duration.zero,
-                  pageBuilder: (_, _, _) => Material(
-                    type: MaterialType.transparency,
-                    child: switch (kind) {
-                      QuickCaptureKind.todo => const TodoFloater(),
-                      QuickCaptureKind.journal => const JournalFloater(),
-                      QuickCaptureKind.finance => const FinanceFloater(),
-                      QuickCaptureKind.reminder => const ReminderFloater(),
-                      QuickCaptureKind.calendar => const CalendarFloater(),
-                    },
+                  // Opaque so a click on the floater's bare background stops
+                  // here: a transparency Material lets it through to the
+                  // route's modal barrier, which plays the Windows ding.
+                  pageBuilder: (_, _, _) => Listener(
+                    behavior: HitTestBehavior.opaque,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: switch (kind) {
+                        QuickCaptureKind.todo => const TodoFloater(),
+                        QuickCaptureKind.journal => const JournalFloater(),
+                        QuickCaptureKind.finance => const FinanceFloater(),
+                        QuickCaptureKind.reminder => const ReminderFloater(),
+                        QuickCaptureKind.calendar => const CalendarFloater(),
+                      },
+                    ),
                   ),
                 ),
               ),
