@@ -3090,6 +3090,15 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Closes the inbox onto Analytics, scrolled to [trackerId]'s row, saving
+  /// any typed number first as a dismiss does.
+  Future<void> _openInAnalytics(String trackerId) async {
+    final router = GoRouter.of(context);
+    ref.read(revealTrackerRequestProvider.notifier).state = trackerId;
+    await _flushAndClose();
+    router.go('/analytics');
+  }
+
   @override
   Widget build(BuildContext context) {
     final expanded = ref.watch(_logStatsExpandedProvider);
@@ -3221,6 +3230,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                   dragIndex: i,
                   onDirtyChanged: (dirty) =>
                       _onDirtyChanged(listed[i].id, dirty),
+                  onOpen: () => unawaited(_openInAnalytics(listed[i].id)),
                 ),
               ),
             ),

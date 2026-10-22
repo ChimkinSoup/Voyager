@@ -90,10 +90,14 @@ class TrackerEntryRow extends ConsumerStatefulWidget {
     required this.date,
     this.onDirtyChanged,
     this.dragIndex,
+    this.onOpen,
   });
 
   final StatisticTracker tracker;
   final DateTime date;
+
+  /// Called on a tap on the row's name. A hold there still drags it.
+  final VoidCallback? onOpen;
 
   /// This row's position in an enclosing reorderable list, which makes its
   /// name a press-and-hold drag handle. Only the name: the editor beside it
@@ -376,22 +380,25 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
       ),
     );
     final dragIndex = widget.dragIndex;
-    if (dragIndex == null) return name;
+    final onOpen = widget.onOpen;
+    if (dragIndex == null && onOpen == null) return name;
     // Filled out to the editor's height and painted (transparently) so the
     // whole cell takes the press, not just the glyphs.
-    return QuickDelayedDragStartListener(
-      index: dragIndex,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.grab,
-        child: ColoredBox(
-          color: Colors.transparent,
-          child: SizedBox(
-            height: _editorHeight,
-            child: Align(alignment: Alignment.centerLeft, child: name),
-          ),
+    Widget cell = MouseRegion(
+      cursor: onOpen != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.grab,
+      child: ColoredBox(
+        color: Colors.transparent,
+        child: SizedBox(
+          height: _editorHeight,
+          child: Align(alignment: Alignment.centerLeft, child: name),
         ),
       ),
     );
+    if (onOpen != null) cell = GestureDetector(onTap: onOpen, child: cell);
+    if (dragIndex == null) return cell;
+    return QuickDelayedDragStartListener(index: dragIndex, child: cell);
   }
 
   Widget _buildEditor(TrackerValue? existing, ThemeData theme, Color accent) {

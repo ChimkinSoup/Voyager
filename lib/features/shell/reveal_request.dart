@@ -45,6 +45,12 @@ final revealFolderBackupsRequestProvider = StateProvider<bool>((ref) => false);
 /// it when it mounts as well as when it changes, and sets it back to null.
 final revealPhotoSeriesRequestProvider = StateProvider<String?>((ref) => null);
 
+/// A one-shot request to scroll Analytics to a tracker's row, by id — set by
+/// a tap on that tracker's name in the inbox's Log stats section. The row
+/// takes it when it mounts as well as when it changes, and sets it back to
+/// null.
+final revealTrackerRequestProvider = StateProvider<String?>((ref) => null);
+
 /// A one-shot request, by series id, to start a check-in once that series'
 /// detail is open — set beside [revealPhotoSeriesRequestProvider] by a tap on
 /// its OS notification on Android, where the check-in opens the camera

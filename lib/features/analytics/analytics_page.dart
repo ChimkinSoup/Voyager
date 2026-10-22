@@ -33,6 +33,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/analytics/counter_controls.dart';
 import 'package:voyager/features/analytics/mood_trend_card.dart';
@@ -746,7 +747,7 @@ class _SectionLabel extends StatelessWidget {
 /// which is the whole tile except the chart and the squares, i.e. exactly the
 /// region that is supposed to open the popup and start a drag. Neither
 /// gesture fired anywhere.
-class _StatTile extends StatefulWidget {
+class _StatTile extends ConsumerStatefulWidget {
   const _StatTile({
     required this.tracker,
     required this.analytics,
@@ -776,14 +777,87 @@ class _StatTile extends StatefulWidget {
   final int? dragIndex;
 
   @override
-  State<_StatTile> createState() => _StatTileState();
+  ConsumerState<_StatTile> createState() => _StatTileState();
 }
 
-class _StatTileState extends State<_StatTile> {
+class _StatTileState extends ConsumerState<_StatTile>
+    with SingleTickerProviderStateMixin {
   bool _hovered = false;
+
+  /// Swells in and slowly fades once a reveal has scrolled here, to pick the
+  /// row out. Made on the first reveal: most tiles never need one.
+  AnimationController? _flash;
+  Animation<double>? _flashOpacity;
+
+  /// Quick to rise, a moment at full, then a long settle — so it reads as the
+  /// row being pointed at rather than a light switched on and off.
+  static final _flashCurve = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 0.0,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeOutCubic)),
+      weight: 18,
+    ),
+    TweenSequenceItem(tween: ConstantTween(1.0), weight: 17),
+    TweenSequenceItem(
+      tween: Tween(
+        begin: 1.0,
+        end: 0.0,
+      ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+      weight: 65,
+    ),
+  ]);
+
+  @override
+  void dispose() {
+    _flash?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // A request made before this row mounted, e.g. while trackers loaded.
+    _reveal(ref.read(revealTrackerRequestProvider));
+  }
+
+  /// Answers a tap on this tracker in the inbox's Log stats section: scrolls
+  /// the page so this row sits mid-screen, then flashes it. After the frame,
+  /// so the route change that came with the request has laid the page out.
+  void _reveal(String? trackerId) {
+    if (trackerId != widget.tracker.id) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      ref.read(revealTrackerRequestProvider.notifier).state = null;
+      await Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+      // A beat after the scroll settles, so the eye has landed first.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+      if (_flash == null) {
+        final flash = AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1100),
+        );
+        setState(() {
+          _flash = flash;
+          _flashOpacity = _flashCurve.animate(flash);
+        });
+      }
+      unawaited(_flash!.forward(from: 0));
+    });
+  }
+
+  Color get _flashColor => paletteColor(widget.tracker.colorValue, context);
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(revealTrackerRequestProvider, (_, id) => _reveal(id));
     Widget tapTarget = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _showStatisticDetail(
@@ -817,6 +891,25 @@ class _StatTileState extends State<_StatTile> {
               child: DecoratedBox(decoration: widget.decoration(_hovered)),
             ),
           ),
+          if (_flashOpacity case final flashOpacity?)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: FadeTransition(
+                  opacity: flashOpacity,
+                  // The tile's own hover look, stronger: the row lighting up
+                  // as if pointed at, not a box laid over it.
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _flashColor.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _flashColor.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // Hit-tested only where the content above doesn't claim the pointer.
           Positioned.fill(child: tapTarget),
           widget.builder(context, _hovered),

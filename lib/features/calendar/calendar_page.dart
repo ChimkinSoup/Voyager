@@ -95,6 +95,10 @@ class _DrawnCalendars {
 
 enum _CalendarSidebarKind { none, event, todo }
 
+/// Whether an event editor has been built yet this run — for real, or by
+/// [_EventPanelWarmup].
+bool _eventPanelBuilt = false;
+
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
 
@@ -132,6 +136,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// path resolves the edited occurrence from, so "this event only" splits off
   /// the instance the user actually clicked.
   DateTime? _sidebarOccurrenceDay;
+
+  /// The event or to-do editor open over the page, if any: inside its route,
+  /// so [_closeOpenPopup] can close it.
+  BuildContext? _popupContext;
+
+  /// Counts editors opened, so one closing doesn't reset the sidebar state of
+  /// another opened since.
+  int _popupGeneration = 0;
+
+  /// The latest event editor's save, which [_closeOpenPopup] waits out.
+  Future<void>? _eventSave;
 
   /// Last pointer-down position (global screen coordinates).
   /// Used to anchor day/slot-tap popups near the cursor.
@@ -566,6 +581,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         : (calendarOccurrenceStartOn(event, date) ??
               DateUtils.dateOnly(event.start.toLocal()));
     _sidebarOccurrenceDay = occurrenceDay;
+    final generation = ++_popupGeneration;
+    _eventPanelBuilt = true;
     final settings =
         ref.read(settingsProvider).valueOrNull ?? const AppSettings();
     final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
@@ -590,33 +607,62 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       targetRect: rect,
       width: _eventPopupWidth,
       accentColor: accentColor,
-      builder: (ctx) => CalendarEventPanel(
-        key: ValueKey(event?.id ?? 'new-${date.millisecondsSinceEpoch}'),
-        // A repeating event is one row drawn on many days; the panel shows the
-        // occurrence that was clicked rather than the series anchor, so opening
-        // the March instance of a weekly event does not read "January".
-        event: event == null ? null : occurrenceView(event, occurrenceDay),
-        initialDate: date,
-        calendars: calendars,
-        initialCalendarId: initialCalendarId,
-        focusTitleOnOpen: focusTitle,
-        initialIsFullDay: !timedByDefault,
-        onSave: (data) {
-          // Close popup first so the user sees immediate feedback, then
-          // persist asynchronously.
-          if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-          _saveSidebarEvent(data);
-        },
-        onCancel: () {
-          if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-        },
-        onToggleDone: event == null
-            ? null
-            : () => _toggleEventDone(event, occurrenceDay),
+      builder: (ctx) => _popupContextFor(
+        ctx,
+        CalendarEventPanel(
+          key: ValueKey(event?.id ?? 'new-${date.millisecondsSinceEpoch}'),
+          // A repeating event is one row drawn on many days; the panel shows the
+          // occurrence that was clicked rather than the series anchor, so opening
+          // the March instance of a weekly event does not read "January".
+          event: event == null ? null : occurrenceView(event, occurrenceDay),
+          initialDate: date,
+          calendars: calendars,
+          initialCalendarId: initialCalendarId,
+          focusTitleOnOpen: focusTitle,
+          initialIsFullDay: !timedByDefault,
+          onSave: (data) {
+            // Close popup first so the user sees immediate feedback, then
+            // persist asynchronously.
+            if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+            _eventSave = _saveSidebarEvent(data);
+          },
+          onCancel: () {
+            if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+          },
+          onToggleDone: event == null
+              ? null
+              : () => _toggleEventDone(event, occurrenceDay),
+        ),
       ),
     );
     // Popup closed for any reason (save, cancel, barrier tap).
-    if (mounted) _resetSidebar();
+    if (mounted && generation == _popupGeneration) _resetSidebar();
+  }
+
+  /// Records [ctx] as the open editor's, for [_closeOpenPopup].
+  Widget _popupContextFor(BuildContext ctx, Widget panel) {
+    _popupContext = ctx;
+    return panel;
+  }
+
+  /// Closes the editor open over the page, if any, as a click outside it
+  /// would: an event's valid edits are saved.
+  ///
+  /// Returns once that save is done, its repeating-event prompt answered
+  /// included, so nothing it shows lands over the next editor.
+  Future<void> _closeOpenPopup() async {
+    final popup = _popupContext;
+    if (popup == null || !popup.mounted) return;
+    final route = ModalRoute.of(popup);
+    // Already on its way out: popping down to it would never find it.
+    if (route == null || !route.isActive) return;
+    final navigator = Navigator.of(popup);
+    // Down to the editor itself, past a picker open over it.
+    navigator.popUntil((r) => r == route);
+    final before = _eventSave;
+    await navigator.maybePop();
+    final save = _eventSave;
+    if (save != null && !identical(save, before)) await save;
   }
 
   Future<void> _openTodoSidebar(CalendarTodoMarker marker) async {
@@ -630,8 +676,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _sidebarEvent = null;
       _sidebarOccurrenceDay = null;
     });
+    final generation = ++_popupGeneration;
     await _showTodoPopup(task: task, rect: rect);
-    if (mounted) _resetSidebar();
+    if (mounted && generation == _popupGeneration) _resetSidebar();
   }
 
   /// Re-reads the task lists a write touched.
@@ -756,19 +803,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       context: context,
       targetRect: rect,
       width: _eventPopupWidth,
-      builder: (ctx) => CalendarTodoPanel(
-        key: ValueKey(task.id),
-        task: task,
-        lists: lists,
-        listColors: listColors,
-        focusTitleOnOpen: true,
-        onSave: (updatedTask) async {
-          if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-          await _saveTodoTask(before: task, after: updatedTask);
-        },
-        onCancel: () {
-          if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-        },
+      builder: (ctx) => _popupContextFor(
+        ctx,
+        CalendarTodoPanel(
+          key: ValueKey(task.id),
+          task: task,
+          lists: lists,
+          listColors: listColors,
+          focusTitleOnOpen: true,
+          onSave: (updatedTask) async {
+            if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+            await _saveTodoTask(before: task, after: updatedTask);
+          },
+          onCancel: () {
+            if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+          },
+        ),
       ),
     );
   }
@@ -796,6 +846,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   Future<void> _saveSidebarEvent(Map<String, dynamic> result) async {
+    // Resets only while this save's editor is still the latest: one opened
+    // since — by a reveal, while this was still writing — keeps its state.
+    final generation = _popupGeneration;
+    void resetSidebar() {
+      if (mounted && generation == _popupGeneration) _resetSidebar();
+    }
+
     final occurrenceDay = _sidebarOccurrenceDay;
     final repo = ref.read(calendarRepositoryProvider);
     // Re-read: the row may have been marked done from the open panel, and
@@ -816,7 +873,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             'This event was deleted on another device, so the edit '
             "wasn't saved",
       );
-      _resetSidebar();
+      resetSidebar();
       return;
     }
     // The panel was handed an occurrence view, so its start/end are expressed
@@ -885,7 +942,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           occurrenceDay == null ? event : occurrenceView(event, occurrenceDay),
           edited,
         )) {
-      if (mounted) _resetSidebar();
+      resetSidebar();
       return;
     }
 
@@ -897,7 +954,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         occurrenceDay == null) {
       await repo.upsertEvent(edited);
       ref.invalidate(calendarEventsProvider);
-      if (mounted) _resetSidebar();
+      resetSidebar();
       return;
     }
 
@@ -908,7 +965,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       isDelete: false,
     );
     if (scope == null || !mounted) {
-      if (mounted) _resetSidebar();
+      resetSidebar();
       return;
     }
 
@@ -935,7 +992,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
     }
     ref.invalidate(calendarEventsProvider);
-    if (mounted) _resetSidebar();
+    resetSidebar();
   }
 
   /// Slides every detached occurrence of [master] by [shiftDays].
@@ -1247,7 +1304,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// Handles "Show in Calendar" from the notification popover: snaps the
   /// view to the event's month (switching to the all-view if the open
   /// calendar neither owns nor overlays it) and opens its edit sidebar.
-  void _revealCalendarEvent(CalendarEvent event, {DateTime? day}) {
+  Future<void> _revealCalendarEvent(
+    CalendarEvent event, {
+    DateTime? day,
+  }) async {
+    // One editor at a time: one already open — revealed a moment ago, say —
+    // is closed first, saving it against its own event before the state
+    // below moves on to this one.
+    await _closeOpenPopup();
+    if (!mounted) return;
     // The occurrence the caller was looking at, not the series anchor: a
     // weekly event surfaced by the inbox for tonight must not open January.
     final target = day ?? event.start;
@@ -1272,18 +1337,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _mode = CalendarViewMode.month;
       _focused = DateTime(target.year, target.month, 1);
       _rememberViewedMonth(_focused);
+      // Set here rather than by [_openEventSidebar] after the frame, whose
+      // setState rebuilt the whole page a second time, in the frame after
+      // this one, as the branch switch got under way.
+      _sidebarKind = _CalendarSidebarKind.event;
+      _sidebarEvent = event;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Anchored explicitly: left to itself the popup would sit on
       // [_eventTapState]'s rect, which is whatever bar was last clicked.
-      _openEventSidebar(
-        event: event,
-        day: target,
-        focusTitle: false,
-        anchorRect:
-            _eventBarRect(calendarEventTapKey(event, target)) ??
-            _calendarAreaCentreRect(),
+      unawaited(
+        _showEventPopup(
+          rect:
+              _eventBarRect(calendarEventTapKey(event, target)) ??
+              _calendarAreaCentreRect(),
+          event: event,
+          date: target,
+          focusTitle: false,
+        ),
       );
     });
   }
@@ -2881,7 +2953,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       if (next == null || next.type != RevealTargetType.event) return;
       final event = next.event!;
       ref.read(revealRequestProvider.notifier).state = null;
-      _revealCalendarEvent(event, day: next.day);
+      unawaited(_revealCalendarEvent(event, day: next.day));
     });
     // The calendar hotkey's in-app path.
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
@@ -2949,6 +3021,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           _shiftFocus(delta, weekStartsMonday: weekStartsMonday),
       child: Stack(
         children: [
+          const Positioned(left: 0, top: 0, child: _EventPanelWarmup()),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -4891,3 +4964,70 @@ class _MonthWeekMorphCell extends StatelessWidget {
 
 DateTime _weekStart(DateTime focused, bool weekStartsMonday) =>
     calendarWeekStart(focused, weekStartsMonday);
+
+/// Builds an event editor once, offstage, a while after startup, so the first
+/// real one doesn't also pay for building its code paths cold. That first open
+/// usually comes from the inbox, landing in the middle of the branch switch,
+/// and it cost ~180ms more than any later open in a debug build.
+///
+/// Its own widget, so the build it asks for is its own and not the page's.
+class _EventPanelWarmup extends ConsumerStatefulWidget {
+  const _EventPanelWarmup();
+
+  @override
+  ConsumerState<_EventPanelWarmup> createState() => _EventPanelWarmupState();
+}
+
+class _EventPanelWarmupState extends ConsumerState<_EventPanelWarmup> {
+  /// After the shell's startup warm-up of every branch, so the two don't
+  /// share frames.
+  static const _delay = Duration(seconds: 8);
+
+  Timer? _timer;
+  bool _building = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_eventPanelBuilt && !DevFlags.disableCache) {
+      _timer = Timer(_delay, _build);
+    }
+  }
+
+  void _build() {
+    if (!mounted || _eventPanelBuilt) return;
+    _eventPanelBuilt = true;
+    setState(() => _building = true);
+    // One frame builds and lays it out; that is all there is to warm.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _building = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_building) return const SizedBox.shrink();
+    return Offstage(
+      child: SizedBox(
+        width: _CalendarPageState._eventPopupWidth,
+        height: 600,
+        child: Material(
+          type: MaterialType.transparency,
+          child: CalendarEventPanel(
+            initialDate: DateTime.now(),
+            calendars: ref.read(calendarsProvider).valueOrNull ?? const [],
+            initialCalendarId: legacyCalendarId,
+            onSave: (_) {},
+            onCancel: () {},
+          ),
+        ),
+      ),
+    );
+  }
+}

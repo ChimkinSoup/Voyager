@@ -490,5 +490,105 @@ void main() {
         moreOrLessEquals(expectedLeft, epsilon: 8),
       );
     });
+
+    testWidgets('a second reveal replaces the open editor, saving it', (
+      tester,
+    ) async {
+      _desktopWindow(tester);
+      final (db, repo) = await _seed(homeOverlays: ['h']);
+      final today = DateTime.now();
+      final now = utcNow();
+      await repo.upsertEvent(
+        CalendarEvent(
+          id: 'gym',
+          calendarId: 'h',
+          title: 'Gym',
+          start: DateTime(today.year, today.month, 25),
+          end: DateTime(today.year, today.month, 25, 23, 59),
+          colorValue: 0xFF00AA00,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final container = _container(db);
+      await _pumpPage(tester, db, container);
+
+      await reveal(tester, container, repo);
+      await tester.enterText(_panelField(0), 'Bank holiday');
+      container.read(revealRequestProvider.notifier).state =
+          RevealRequest.event((await repo.getEvent('gym'))!);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(CalendarEventPanel), findsOneWidget);
+      expect(
+        tester.widget<EditableText>(_panelField(0)).controller.text,
+        'Gym',
+      );
+      expect((await repo.getEvent('hol'))!.title, 'Bank holiday');
+
+      // Saved as the existing row it is: had the first editor's save reset
+      // the page's sidebar state once this one was open, it would have gone
+      // through the new-event path, rebuilding the row at version 0.
+      final gymBefore = (await repo.getEvent('gym'))!;
+      await tester.enterText(_panelField(0), 'Gym day');
+      await tester.tap(find.text('Save').last);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      final gym = (await repo.getEvent('gym'))!;
+      expect(gym.title, 'Gym day');
+      expect(gym.version, greaterThan(gymBefore.version));
+      expect(find.byType(CalendarEventPanel), findsNothing);
+    });
+
+    testWidgets('a replaced repeating event asks its scope before the next '
+        'editor opens', (tester) async {
+      _desktopWindow(tester);
+      final (db, repo) = await _seed(homeOverlays: ['h']);
+      final today = DateTime.now();
+      final now = utcNow();
+      await repo.upsertEvent(
+        CalendarEvent(
+          id: 'run',
+          calendarId: 'h',
+          title: 'Run',
+          start: DateTime(today.year, today.month, 3),
+          end: DateTime(today.year, today.month, 3, 23, 59),
+          colorValue: 0xFF0000AA,
+          recurrence: const RecurrenceRule(frequency: EventRecurrence.weekly),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final container = _container(db);
+      await _pumpPage(tester, db, container);
+
+      container
+          .read(revealRequestProvider.notifier)
+          .state = RevealRequest.event(
+        (await repo.getEvent('run'))!,
+        day: DateTime(today.year, today.month, 10),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.enterText(_panelField(0), 'Long run');
+
+      await reveal(tester, container, repo);
+      expect(find.text('This event only'), findsOneWidget);
+      expect(
+        find.byType(CalendarEventPanel),
+        findsNothing,
+        reason: 'the next editor waits for the answer',
+      );
+
+      await tester.tap(find.text('This event only'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(CalendarEventPanel), findsOneWidget);
+      expect(
+        tester.widget<EditableText>(_panelField(0)).controller.text,
+        'Holiday',
+      );
+    });
   });
 }
