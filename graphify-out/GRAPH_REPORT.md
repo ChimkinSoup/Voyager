@@ -1,7 +1,7 @@
 # Graph Report - Voyager  (2026-10-21)
 
 ## Corpus Check
-- 926 files · ~428,094,580 words
+- 926 files · ~428,094,668 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e115d85a`
+- Built from commit: `53e0f865`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2949,7 +2949,7 @@ Cohesion: 0.40
 Nodes (5): GeometricTextureParams, GeometricWaveParams, GeometricTextureParamsNotifier, GeometricWaveParamsNotifier, StateNotifier
 
 ## Knowledge Gaps
-- **19960 isolated node(s):** `1. Goals`, `2. Non-goals (v1)`, `3. Product decisions (locked)`, `4. Matching rules`, `5.1 States` (+19955 more)
+- **19960 isolated node(s):** `VimRegister`, `VimSearchMemory`, `_Await`, `_DotRecord`, `isVisual` (+19955 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **140 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2958,7 +2958,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `_Action` connect `folder_backup_list_dialog.dart` to `Other`?**
   _High betweenness centrality (0.012) - this node is a cross-community bridge._
-- **What connects `1. Goals`, `2. Non-goals (v1)`, `3. Product decisions (locked)` to the rest of the system?**
+- **What connects `VimRegister`, `VimSearchMemory`, `_Await` to the rest of the system?**
   _20014 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `app_database.dart` be split into smaller, more focused modules?**
   _Cohesion score 0.00411522633744856 - nodes in this community are weakly interconnected._

@@ -584,9 +584,11 @@ class _PhotoVaultUnlockCardState extends ConsumerState<PhotoVaultUnlockCard> {
                   ),
                 ),
               const SizedBox(height: 6),
-              TextButton(
+              GlassButton(
                 onPressed: () => showSecureVaultResetDialog(context, ref),
-                child: const Text('Reset vault'),
+                label: 'Reset vault',
+                dense: true,
+                canRequestFocus: true,
               ),
             ],
           ],

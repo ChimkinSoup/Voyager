@@ -1023,76 +1023,84 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
             _menu.currentState?.openMenuAt(details.globalPosition),
         child: SizedBox(
           width: 150,
-          child: InkWell(
-            onTap: _tap,
-            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-                  child: AspectRatio(
-                    aspectRatio: 3 / 4,
-                    // Locked, the placeholder shows as it is: there's
-                    // nothing under it to hide.
-                    child: photo,
+          // The hover fill paints on the nearest Material; without one here
+          // that's the Scaffold's, outside the scroll view's clip, so a tile
+          // scrolled under the app bar lit up over it.
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: _tap,
+              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
+                    child: AspectRatio(
+                      aspectRatio: 3 / 4,
+                      // Locked, the placeholder shows as it is: there's
+                      // nothing under it to hide.
+                      child: photo,
+                    ),
                   ),
-                ),
-                // Inset from the hover fill, which reaches the tile's edges.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-                  // The dots below the date when they don't fit beside it,
-                  // as with many angles.
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    runSpacing: 3,
-                    children: [
-                      Text(
-                        DateFormat.yMMMd().format(_checkIn.takenOn),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        runSpacing: 3,
-                        children: [
-                          if (_checkIn.hasNote)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(
+                  // Inset from the hover fill, which reaches the tile's edges.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                DateFormat.yMMMd().format(_checkIn.takenOn),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                            if (_checkIn.hasNote) ...[
+                              const SizedBox(width: 8),
+                              Icon(
                                 PhosphorIconsRegular.note,
                                 size: 12,
                                 color: theme.colorScheme.onSurface.withValues(
                                   alpha: 0.6,
                                 ),
                               ),
-                            ),
-                          // Which angles this check-in has.
-                          for (final angle in widget.angles)
-                            Tooltip(
-                              message: angle.name,
-                              child: Container(
-                                width: 6,
-                                height: 6,
-                                margin: const EdgeInsets.only(left: 3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: images.containsKey(angle.id)
-                                      ? theme.colorScheme.primary
-                                      : theme.colorScheme.onSurface.withValues(
-                                          alpha: 0.2,
-                                        ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Wrap(
+                          runSpacing: 3,
+                          children: [
+                            // Which angles this check-in has.
+                            for (final angle in widget.angles)
+                              Tooltip(
+                                message: angle.name,
+                                child: Container(
+                                  width: 6,
+                                  height: 6,
+                                  margin: const EdgeInsets.only(right: 3),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: images.containsKey(angle.id)
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.2),
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -414,12 +414,28 @@ class VoyagerTheme {
           animationDuration: const Duration(milliseconds: 90),
         ),
       ),
+      // Selected segments default to secondaryContainer, which here falls
+      // back to the translucent secondary; fill them with the accent.
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: outlinedButtonStyle.copyWith(
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(fieldRadius),
             ),
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) =>
+                states.contains(WidgetState.selected) &&
+                    !states.contains(WidgetState.disabled)
+                ? accent
+                : null,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) =>
+                states.contains(WidgetState.selected) &&
+                    !states.contains(WidgetState.disabled)
+                ? onAccent
+                : null,
           ),
         ),
       ),

@@ -697,7 +697,7 @@ void main() {
         mouse.scroll(Offset(0, -400 * math.log(2))),
       );
       await tester.pump();
-      expect(find.textContaining('Zoom 200%'), findsOneWidget);
+      expect(find.text('200%'), findsOneWidget);
       // Shift + → nudges 10 px.
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -815,7 +815,12 @@ void main() {
       await _pumpDetail(tester, container, series.id);
       await menu(tester, 0, 'Align');
 
-      await tester.tap(find.byType(Slider).last);
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(Row, 'Rotation'),
+          matching: find.byType(Slider),
+        ),
+      );
       await tester.pump();
       final rotation = find.textContaining('°');
       final before = tester.widget<Text>(rotation).data;

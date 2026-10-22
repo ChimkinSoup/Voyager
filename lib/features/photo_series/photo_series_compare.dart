@@ -200,7 +200,7 @@ class _PhotoSeriesCompareState extends ConsumerState<PhotoSeriesCompare> {
                         top: 0,
                         bottom: 0,
                         width: 2,
-                        child: const ColoredBox(color: Colors.white),
+                        child: ColoredBox(color: theme.colorScheme.primary),
                       ),
                     ],
                   ),
@@ -328,6 +328,13 @@ class _PhotoSeriesCompareState extends ConsumerState<PhotoSeriesCompare> {
                         ChoiceChip(
                           label: Text(shown.name),
                           selected: shown.id == angle.id,
+                          selectedColor: theme.colorScheme.primary,
+                          checkmarkColor: theme.colorScheme.onPrimary,
+                          labelStyle: TextStyle(
+                            color: shown.id == angle.id
+                                ? theme.colorScheme.onPrimary
+                                : null,
+                          ),
                           onSelected: (_) =>
                               setState(() => _angleId = shown.id),
                         ),

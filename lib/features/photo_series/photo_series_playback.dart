@@ -294,6 +294,13 @@ class _PhotoSeriesPlaybackState extends ConsumerState<PhotoSeriesPlayback>
                       ChoiceChip(
                         label: Text(shown.name),
                         selected: shown.id == angle.id,
+                        selectedColor: theme.colorScheme.primary,
+                        checkmarkColor: theme.colorScheme.onPrimary,
+                        labelStyle: TextStyle(
+                          color: shown.id == angle.id
+                              ? theme.colorScheme.onPrimary
+                              : null,
+                        ),
                         onSelected: (_) => _setAngle(shown.id),
                       ),
                   ],

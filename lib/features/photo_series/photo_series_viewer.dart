@@ -330,6 +330,15 @@ class _PhotoViewerState extends ConsumerState<_PhotoViewer> {
                         ChoiceChip(
                           label: Text(shown.name),
                           selected: shown.id == angle.id,
+                          selectedColor: Theme.of(context).colorScheme.primary,
+                          checkmarkColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimary,
+                          labelStyle: TextStyle(
+                            color: shown.id == angle.id
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : null,
+                          ),
                           onSelected: (_) =>
                               setState(() => _angleId = shown.id),
                         ),

@@ -23,6 +23,9 @@ const _kMaxAlignScale = 8.0;
 /// shot. A photo on its side was turned at ingest.
 const _kMaxAlignRotation = math.pi / 4;
 
+/// How close to level the rotation slider snaps to 0.
+const _kRotationSnap = math.pi / 180;
+
 /// The frame [angle]'s alignment editor draws underneath (PHOTO_SERIES_HLD.md
 /// §10): its chosen reference while that photo is among [frames], else its
 /// first. [frames] are the angle's photos, oldest first.
@@ -356,12 +359,27 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                     max: _kMaxAlignRotation,
                     readout:
                         '${(_draft.alignRotation * 180 / math.pi).toStringAsFixed(1)}°',
-                    onChanged: (value) => _set(rotation: value),
+                    onChanged: (value) => _set(
+                      rotation: value.abs() < _kRotationSnap ? 0 : value,
+                    ),
+                  ),
+                  // Logarithmic, so 50% and 200% sit evenly either side of
+                  // 100%. About the photo's centre, as Rotation turns it, so
+                  // it doesn't move a photo already placed.
+                  _SliderRow(
+                    label: 'Zoom',
+                    value: math.log(_draft.alignScale),
+                    min: math.log(_kMinAlignScale),
+                    max: math.log(_kMaxAlignScale),
+                    readout: '${(_draft.alignScale * 100).round()}%',
+                    onChanged: (value) => _transform(
+                      zoom: math.exp(value) / _draft.alignScale,
+                      focal: _offset,
+                    ),
                   ),
                   Text(
                     'Drag to move, scroll or pinch to zoom, arrow keys to '
-                    'nudge (Shift for more). Zoom '
-                    '${(_draft.alignScale * 100).round()}%.',
+                    'nudge (Shift for more).',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],

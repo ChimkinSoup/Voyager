@@ -4,226 +4,6 @@
   "graph": {},
   "nodes": [
     {
-      "label": "ON_THIS_DAY_HLD.md",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "on_this_day_hld",
-      "community": 340,
-      "norm_label": "on_this_day_hld.md"
-    },
-    {
-      "label": "On This Day \u2014 HLD",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "on_this_day_hld_on_this_day_hld",
-      "community": 340,
-      "norm_label": "on this day \u2014 hld"
-    },
-    {
-      "label": "1. Goals",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L11",
-      "_origin": "ast",
-      "id": "on_this_day_hld_1_goals",
-      "community": 340,
-      "norm_label": "1. goals"
-    },
-    {
-      "label": "2. Non-goals (v1)",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L19",
-      "_origin": "ast",
-      "id": "on_this_day_hld_2_non_goals_v1",
-      "community": 340,
-      "norm_label": "2. non-goals (v1)"
-    },
-    {
-      "label": "3. Product decisions (locked)",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L30",
-      "_origin": "ast",
-      "id": "on_this_day_hld_3_product_decisions_locked",
-      "community": 340,
-      "norm_label": "3. product decisions (locked)"
-    },
-    {
-      "label": "4. Matching rules",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L50",
-      "_origin": "ast",
-      "id": "on_this_day_hld_4_matching_rules",
-      "community": 340,
-      "norm_label": "4. matching rules"
-    },
-    {
-      "label": "5. The card",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L82",
-      "_origin": "ast",
-      "id": "on_this_day_hld_5_the_card",
-      "community": 340,
-      "norm_label": "5. the card"
-    },
-    {
-      "label": "5.1 States",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L84",
-      "_origin": "ast",
-      "id": "on_this_day_hld_5_1_states",
-      "community": 340,
-      "norm_label": "5.1 states"
-    },
-    {
-      "label": "5.2 What tucks it away",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L98",
-      "_origin": "ast",
-      "id": "on_this_day_hld_5_2_what_tucks_it_away",
-      "community": 340,
-      "norm_label": "5.2 what tucks it away"
-    },
-    {
-      "label": "5.3 Geometry and motion",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L111",
-      "_origin": "ast",
-      "id": "on_this_day_hld_5_3_geometry_and_motion",
-      "community": 340,
-      "norm_label": "5.3 geometry and motion"
-    },
-    {
-      "label": "5.4 Content",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L124",
-      "_origin": "ast",
-      "id": "on_this_day_hld_5_4_content",
-      "community": 340,
-      "norm_label": "5.4 content"
-    },
-    {
-      "label": "5.5 Compact width",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L137",
-      "_origin": "ast",
-      "id": "on_this_day_hld_5_5_compact_width",
-      "community": 340,
-      "norm_label": "5.5 compact width"
-    },
-    {
-      "label": "6. Data model",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L143",
-      "_origin": "ast",
-      "id": "on_this_day_hld_6_data_model",
-      "community": 340,
-      "norm_label": "6. data model"
-    },
-    {
-      "label": "6.1 `Journal`",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L145",
-      "_origin": "ast",
-      "id": "on_this_day_hld_6_1_journal",
-      "community": 340,
-      "norm_label": "6.1 `journal`"
-    },
-    {
-      "label": "6.2 Sync",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L154",
-      "_origin": "ast",
-      "id": "on_this_day_hld_6_2_sync",
-      "community": 340,
-      "norm_label": "6.2 sync"
-    },
-    {
-      "label": "6.3 Import / export",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L160",
-      "_origin": "ast",
-      "id": "on_this_day_hld_6_3_import_export",
-      "community": 340,
-      "norm_label": "6.3 import / export"
-    },
-    {
-      "label": "6.4 Dismissals (in memory only)",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L166",
-      "_origin": "ast",
-      "id": "on_this_day_hld_6_4_dismissals_in_memory_only",
-      "community": 340,
-      "norm_label": "6.4 dismissals (in memory only)"
-    },
-    {
-      "label": "7. Providers and data flow",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L177",
-      "_origin": "ast",
-      "id": "on_this_day_hld_7_providers_and_data_flow",
-      "community": 340,
-      "norm_label": "7. providers and data flow"
-    },
-    {
-      "label": "8. Settings UI",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L196",
-      "_origin": "ast",
-      "id": "on_this_day_hld_8_settings_ui",
-      "community": 340,
-      "norm_label": "8. settings ui"
-    },
-    {
-      "label": "9. Testing",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L204",
-      "_origin": "ast",
-      "id": "on_this_day_hld_9_testing",
-      "community": 340,
-      "norm_label": "9. testing"
-    },
-    {
-      "label": "10. Open points",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L221",
-      "_origin": "ast",
-      "id": "on_this_day_hld_10_open_points",
-      "community": 340,
-      "norm_label": "10. open points"
-    },
-    {
-      "label": "11. Files touched",
-      "file_type": "document",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L230",
-      "_origin": "ast",
-      "id": "on_this_day_hld_11_files_touched",
-      "community": 340,
-      "norm_label": "11. files touched"
-    },
-    {
       "label": "vim_session.dart",
       "file_type": "code",
       "source_file": "lib/core/vim/vim_session.dart",
@@ -672,16 +452,6 @@
       "id": "vimmode_get",
       "community": 17,
       "norm_label": "vimmode get"
-    },
-    {
-      "label": "caretOffset",
-      "file_type": "code",
-      "source_file": "lib/core/vim/vim_session.dart",
-      "source_location": null,
-      "_origin": "ast",
-      "id": "lib_core_vim_vim_session_caretoffset",
-      "community": 17,
-      "norm_label": "caretoffset"
     },
     {
       "label": "caretListenable",
@@ -1232,6 +1002,16 @@
       "id": "lib_core_vim_vim_session_adoptmouseselection",
       "community": 17,
       "norm_label": "_adoptmouseselection"
+    },
+    {
+      "label": "_mouseSelectionEnds",
+      "file_type": "code",
+      "source_file": "lib/core/vim/vim_session.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "lib_core_vim_vim_session_mouseselectionends",
+      "community": 17,
+      "norm_label": "_mouseselectionends"
     },
     {
       "label": "_promoteToVisualLine",
@@ -1814,14 +1594,234 @@
       "norm_label": "package:voyager/core/vim/vim_text_ops.dart"
     },
     {
+      "label": "ON_THIS_DAY_HLD.md",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "on_this_day_hld.md",
+      "id": "on_this_day_hld"
+    },
+    {
+      "label": "On This Day \u2014 HLD",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "on this day \u2014 hld",
+      "id": "on_this_day_hld_on_this_day_hld"
+    },
+    {
+      "label": "1. Goals",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L11",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "1. goals",
+      "id": "on_this_day_hld_1_goals"
+    },
+    {
+      "label": "2. Non-goals (v1)",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L19",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "2. non-goals (v1)",
+      "id": "on_this_day_hld_2_non_goals_v1"
+    },
+    {
+      "label": "3. Product decisions (locked)",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L30",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "3. product decisions (locked)",
+      "id": "on_this_day_hld_3_product_decisions_locked"
+    },
+    {
+      "label": "4. Matching rules",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L50",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "4. matching rules",
+      "id": "on_this_day_hld_4_matching_rules"
+    },
+    {
+      "label": "5. The card",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L82",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "5. the card",
+      "id": "on_this_day_hld_5_the_card"
+    },
+    {
+      "label": "5.1 States",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L84",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "5.1 states",
+      "id": "on_this_day_hld_5_1_states"
+    },
+    {
+      "label": "5.2 What tucks it away",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L98",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "5.2 what tucks it away",
+      "id": "on_this_day_hld_5_2_what_tucks_it_away"
+    },
+    {
+      "label": "5.3 Geometry and motion",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L111",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "5.3 geometry and motion",
+      "id": "on_this_day_hld_5_3_geometry_and_motion"
+    },
+    {
+      "label": "5.4 Content",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L124",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "5.4 content",
+      "id": "on_this_day_hld_5_4_content"
+    },
+    {
+      "label": "5.5 Compact width",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L137",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "5.5 compact width",
+      "id": "on_this_day_hld_5_5_compact_width"
+    },
+    {
+      "label": "6. Data model",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L143",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "6. data model",
+      "id": "on_this_day_hld_6_data_model"
+    },
+    {
+      "label": "6.1 `Journal`",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L145",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "6.1 `journal`",
+      "id": "on_this_day_hld_6_1_journal"
+    },
+    {
+      "label": "6.2 Sync",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L154",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "6.2 sync",
+      "id": "on_this_day_hld_6_2_sync"
+    },
+    {
+      "label": "6.3 Import / export",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L160",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "6.3 import / export",
+      "id": "on_this_day_hld_6_3_import_export"
+    },
+    {
+      "label": "6.4 Dismissals (in memory only)",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L166",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "6.4 dismissals (in memory only)",
+      "id": "on_this_day_hld_6_4_dismissals_in_memory_only"
+    },
+    {
+      "label": "7. Providers and data flow",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L177",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "7. providers and data flow",
+      "id": "on_this_day_hld_7_providers_and_data_flow"
+    },
+    {
+      "label": "8. Settings UI",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L196",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "8. settings ui",
+      "id": "on_this_day_hld_8_settings_ui"
+    },
+    {
+      "label": "9. Testing",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L204",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "9. testing",
+      "id": "on_this_day_hld_9_testing"
+    },
+    {
+      "label": "10. Open points",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L221",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "10. open points",
+      "id": "on_this_day_hld_10_open_points"
+    },
+    {
+      "label": "11. Files touched",
+      "file_type": "document",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L230",
+      "_origin": "ast",
+      "community": 340,
+      "norm_label": "11. files touched",
+      "id": "on_this_day_hld_11_files_touched"
+    },
+    {
       "label": "on_this_day.dart",
       "file_type": "code",
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day",
       "community": 168,
-      "norm_label": "on_this_day.dart"
+      "norm_label": "on_this_day.dart",
+      "id": "lib_features_journal_on_this_day"
     },
     {
       "label": "OnThisDayKind",
@@ -1829,9 +1829,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_onthisdaykind",
       "community": 168,
-      "norm_label": "onthisdaykind"
+      "norm_label": "onthisdaykind",
+      "id": "lib_features_journal_on_this_day_onthisdaykind"
     },
     {
       "label": "OnThisDayMatch",
@@ -1839,9 +1839,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_onthisdaymatch",
       "community": 168,
-      "norm_label": "onthisdaymatch"
+      "norm_label": "onthisdaymatch",
+      "id": "lib_features_journal_on_this_day_onthisdaymatch"
     },
     {
       "label": "entry",
@@ -1849,9 +1849,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_entry",
       "community": 168,
-      "norm_label": "entry"
+      "norm_label": "entry",
+      "id": "lib_features_journal_on_this_day_entry"
     },
     {
       "label": "JournalEntry",
@@ -1859,9 +1859,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "journalentry",
       "community": 605,
-      "norm_label": "journalentry"
+      "norm_label": "journalentry",
+      "id": "journalentry"
     },
     {
       "label": "journal",
@@ -1869,9 +1869,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_journal",
       "community": 168,
-      "norm_label": "journal"
+      "norm_label": "journal",
+      "id": "lib_features_journal_on_this_day_journal"
     },
     {
       "label": "Journal",
@@ -1879,9 +1879,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "journal",
       "community": 168,
-      "norm_label": "journal"
+      "norm_label": "journal",
+      "id": "journal"
     },
     {
       "label": "kind",
@@ -1889,9 +1889,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_kind",
       "community": 168,
-      "norm_label": "kind"
+      "norm_label": "kind",
+      "id": "lib_features_journal_on_this_day_kind"
     },
     {
       "label": "localDate",
@@ -1899,9 +1899,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_localdate",
       "community": 168,
-      "norm_label": "localdate"
+      "norm_label": "localdate",
+      "id": "lib_features_journal_on_this_day_localdate"
     },
     {
       "label": "DateTime",
@@ -1909,9 +1909,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "datetime",
       "community": 179,
-      "norm_label": "datetime"
+      "norm_label": "datetime",
+      "id": "datetime"
     },
     {
       "label": "yearsAgo",
@@ -1919,9 +1919,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_yearsago",
       "community": 168,
-      "norm_label": "yearsago"
+      "norm_label": "yearsago",
+      "id": "lib_features_journal_on_this_day_yearsago"
     },
     {
       "label": "shortAgo",
@@ -1929,9 +1929,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_shortago",
       "community": 168,
-      "norm_label": "shortago"
+      "norm_label": "shortago",
+      "id": "lib_features_journal_on_this_day_shortago"
     },
     {
       "label": "dayStartHour",
@@ -1939,9 +1939,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_daystarthour",
       "community": 168,
-      "norm_label": "daystarthour"
+      "norm_label": "daystarthour",
+      "id": "lib_features_journal_on_this_day_daystarthour"
     },
     {
       "label": "String? journalId,\n  int",
@@ -1949,9 +1949,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "string_journalid_int",
       "community": 168,
-      "norm_label": "string? journalid,\n  int"
+      "norm_label": "string? journalid,\n  int",
+      "id": "string_journalid_int"
     },
     {
       "label": "enabled",
@@ -1959,9 +1959,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_enabled",
       "community": 168,
-      "norm_label": "enabled"
+      "norm_label": "enabled",
+      "id": "lib_features_journal_on_this_day_enabled"
     },
     {
       "label": "isLastDay",
@@ -1969,9 +1969,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_islastday",
       "community": 168,
-      "norm_label": "islastday"
+      "norm_label": "islastday",
+      "id": "lib_features_journal_on_this_day_islastday"
     },
     {
       "label": "monthAgo",
@@ -1979,9 +1979,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_monthago",
       "community": 168,
-      "norm_label": "monthago"
+      "norm_label": "monthago",
+      "id": "lib_features_journal_on_this_day_monthago"
     },
     {
       "label": "matches",
@@ -1989,9 +1989,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_matches",
       "community": 168,
-      "norm_label": "matches"
+      "norm_label": "matches",
+      "id": "lib_features_journal_on_this_day_matches"
     },
     {
       "label": "return",
@@ -1999,9 +1999,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "return",
       "community": 539,
-      "norm_label": "return"
+      "norm_label": "return",
+      "id": "return"
     },
     {
       "label": "onThisDayDismissedProvider",
@@ -2009,9 +2009,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_onthisdaydismissedprovider",
       "community": 168,
-      "norm_label": "onthisdaydismissedprovider"
+      "norm_label": "onthisdaydismissedprovider",
+      "id": "lib_features_journal_on_this_day_onthisdaydismissedprovider"
     },
     {
       "label": "OnThisDayQuery",
@@ -2019,9 +2019,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_onthisdayquery",
       "community": 168,
-      "norm_label": "onthisdayquery"
+      "norm_label": "onthisdayquery",
+      "id": "lib_features_journal_on_this_day_onthisdayquery"
     },
     {
       "label": "typedef",
@@ -2029,9 +2029,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "typedef",
       "community": 423,
-      "norm_label": "typedef"
+      "norm_label": "typedef",
+      "id": "typedef"
     },
     {
       "label": "onThisDayProvider",
@@ -2039,9 +2039,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_onthisdayprovider",
       "community": 168,
-      "norm_label": "onthisdayprovider"
+      "norm_label": "onthisdayprovider",
+      "id": "lib_features_journal_on_this_day_onthisdayprovider"
     },
     {
       "label": "matchOnThisDay",
@@ -2049,9 +2049,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_matchonthisday",
       "community": 168,
-      "norm_label": "matchonthisday"
+      "norm_label": "matchonthisday",
+      "id": "lib_features_journal_on_this_day_matchonthisday"
     },
     {
       "label": "dayMatches",
@@ -2059,9 +2059,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_daymatches",
       "community": 168,
-      "norm_label": "daymatches"
+      "norm_label": "daymatches",
+      "id": "lib_features_journal_on_this_day_daymatches"
     },
     {
       "label": "within",
@@ -2069,9 +2069,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_within",
       "community": 168,
-      "norm_label": "within"
+      "norm_label": "within",
+      "id": "lib_features_journal_on_this_day_within"
     },
     {
       "label": "onThisDayDismissalKey",
@@ -2079,9 +2079,9 @@
       "source_file": "lib/features/journal/on_this_day.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_journal_on_this_day_onthisdaydismissalkey",
       "community": 168,
-      "norm_label": "onthisdaydismissalkey"
+      "norm_label": "onthisdaydismissalkey",
+      "id": "lib_features_journal_on_this_day_onthisdaydismissalkey"
     },
     {
       "label": "package:flutter_riverpod/flutter_riverpod.dart",
@@ -2089,9 +2089,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_flutter_riverpod_flutter_riverpod_dart",
       "community": 127,
-      "norm_label": "package:flutter_riverpod/flutter_riverpod.dart"
+      "norm_label": "package:flutter_riverpod/flutter_riverpod.dart",
+      "id": "package_flutter_riverpod_flutter_riverpod_dart"
     },
     {
       "label": "package:intl/intl.dart",
@@ -2099,9 +2099,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_intl_intl_dart",
       "community": 83,
-      "norm_label": "package:intl/intl.dart"
+      "norm_label": "package:intl/intl.dart",
+      "id": "package_intl_intl_dart"
     },
     {
       "label": "package:voyager/app/providers.dart",
@@ -2109,9 +2109,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_app_providers_dart",
       "community": 127,
-      "norm_label": "package:voyager/app/providers.dart"
+      "norm_label": "package:voyager/app/providers.dart",
+      "id": "package_voyager_app_providers_dart"
     },
     {
       "label": "package:voyager/core/utils/calendar_days.dart",
@@ -2119,9 +2119,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_utils_calendar_days_dart",
       "community": 210,
-      "norm_label": "package:voyager/core/utils/calendar_days.dart"
+      "norm_label": "package:voyager/core/utils/calendar_days.dart",
+      "id": "package_voyager_core_utils_calendar_days_dart"
     },
     {
       "label": "package:voyager/domain/models/enums.dart",
@@ -2129,9 +2129,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_domain_models_enums_dart",
       "community": 168,
-      "norm_label": "package:voyager/domain/models/enums.dart"
+      "norm_label": "package:voyager/domain/models/enums.dart",
+      "id": "package_voyager_domain_models_enums_dart"
     },
     {
       "label": "package:voyager/domain/models/journal_models.dart",
@@ -2139,9 +2139,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_domain_models_journal_models_dart",
       "community": 338,
-      "norm_label": "package:voyager/domain/models/journal_models.dart"
+      "norm_label": "package:voyager/domain/models/journal_models.dart",
+      "id": "package_voyager_domain_models_journal_models_dart"
     },
     {
       "label": "secure_vault_dialogs.dart",
@@ -2149,9 +2149,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs",
       "community": 342,
-      "norm_label": "secure_vault_dialogs.dart"
+      "norm_label": "secure_vault_dialogs.dart",
+      "id": "lib_features_notifications_secure_vault_dialogs"
     },
     {
       "label": "_Field",
@@ -2159,9 +2159,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_field",
       "community": 342,
-      "norm_label": "_field"
+      "norm_label": "_field",
+      "id": "lib_features_notifications_secure_vault_dialogs_field"
     },
     {
       "label": "_VaultDialog",
@@ -2169,9 +2169,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_vaultdialog",
       "community": 342,
-      "norm_label": "_vaultdialog"
+      "norm_label": "_vaultdialog",
+      "id": "lib_features_notifications_secure_vault_dialogs_vaultdialog"
     },
     {
       "label": "StatefulWidget",
@@ -2179,9 +2179,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "statefulwidget",
       "community": 485,
-      "norm_label": "statefulwidget"
+      "norm_label": "statefulwidget",
+      "id": "statefulwidget"
     },
     {
       "label": "_VaultDialogState",
@@ -2189,9 +2189,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_vaultdialogstate",
       "community": 342,
-      "norm_label": "_vaultdialogstate"
+      "norm_label": "_vaultdialogstate",
+      "id": "lib_features_notifications_secure_vault_dialogs_vaultdialogstate"
     },
     {
       "label": "State",
@@ -2199,9 +2199,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "state",
       "community": 485,
-      "norm_label": "state"
+      "norm_label": "state",
+      "id": "state"
     },
     {
       "label": "header",
@@ -2209,9 +2209,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_header",
       "community": 342,
-      "norm_label": "header"
+      "norm_label": "header",
+      "id": "lib_features_notifications_secure_vault_dialogs_header"
     },
     {
       "label": "service",
@@ -2219,9 +2219,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_service",
       "community": 342,
-      "norm_label": "service"
+      "norm_label": "service",
+      "id": "lib_features_notifications_secure_vault_dialogs_service"
     },
     {
       "label": "repository",
@@ -2229,9 +2229,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_repository",
       "community": 342,
-      "norm_label": "repository"
+      "norm_label": "repository",
+      "id": "lib_features_notifications_secure_vault_dialogs_repository"
     },
     {
       "label": "lost",
@@ -2239,9 +2239,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_lost",
       "community": 342,
-      "norm_label": "lost"
+      "norm_label": "lost",
+      "id": "lib_features_notifications_secure_vault_dialogs_lost"
     },
     {
       "label": "reset",
@@ -2249,9 +2249,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_reset",
       "community": 342,
-      "norm_label": "reset"
+      "norm_label": "reset",
+      "id": "lib_features_notifications_secure_vault_dialogs_reset"
     },
     {
       "label": "key",
@@ -2259,9 +2259,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_key",
       "community": 342,
-      "norm_label": "key"
+      "norm_label": "key",
+      "id": "lib_features_notifications_secure_vault_dialogs_key"
     },
     {
       "label": "null",
@@ -2269,9 +2269,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_null",
       "community": 342,
-      "norm_label": "null"
+      "norm_label": "null",
+      "id": "lib_features_notifications_secure_vault_dialogs_null"
     },
     {
       "label": "secureVaultLostProvider",
@@ -2279,9 +2279,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_securevaultlostprovider",
       "community": 160,
-      "norm_label": "securevaultlostprovider"
+      "norm_label": "securevaultlostprovider",
+      "id": "lib_features_notifications_secure_vault_dialogs_securevaultlostprovider"
     },
     {
       "label": "notes",
@@ -2289,9 +2289,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_notes",
       "community": 342,
-      "norm_label": "notes"
+      "norm_label": "notes",
+      "id": "lib_features_notifications_secure_vault_dialogs_notes"
     },
     {
       "label": "photos",
@@ -2299,9 +2299,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_photos",
       "community": 342,
-      "norm_label": "photos"
+      "norm_label": "photos",
+      "id": "lib_features_notifications_secure_vault_dialogs_photos"
     },
     {
       "label": "parts",
@@ -2309,9 +2309,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_parts",
       "community": 342,
-      "norm_label": "parts"
+      "norm_label": "parts",
+      "id": "lib_features_notifications_secure_vault_dialogs_parts"
     },
     {
       "label": "label",
@@ -2319,9 +2319,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_label",
       "community": 342,
-      "norm_label": "label"
+      "norm_label": "label",
+      "id": "lib_features_notifications_secure_vault_dialogs_label"
     },
     {
       "label": "obscure",
@@ -2329,9 +2329,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_obscure",
       "community": 342,
-      "norm_label": "obscure"
+      "norm_label": "obscure",
+      "id": "lib_features_notifications_secure_vault_dialogs_obscure"
     },
     {
       "label": "destructive",
@@ -2339,9 +2339,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_destructive",
       "community": 342,
-      "norm_label": "destructive"
+      "norm_label": "destructive",
+      "id": "lib_features_notifications_secure_vault_dialogs_destructive"
     },
     {
       "label": "title",
@@ -2349,9 +2349,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_title",
       "community": 342,
-      "norm_label": "title"
+      "norm_label": "title",
+      "id": "lib_features_notifications_secure_vault_dialogs_title"
     },
     {
       "label": "message",
@@ -2359,9 +2359,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_message",
       "community": 342,
-      "norm_label": "message"
+      "norm_label": "message",
+      "id": "lib_features_notifications_secure_vault_dialogs_message"
     },
     {
       "label": "fields",
@@ -2369,9 +2369,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_fields",
       "community": 342,
-      "norm_label": "fields"
+      "norm_label": "fields",
+      "id": "lib_features_notifications_secure_vault_dialogs_fields"
     },
     {
       "label": "confirmLabel",
@@ -2379,9 +2379,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_confirmlabel",
       "community": 342,
-      "norm_label": "confirmlabel"
+      "norm_label": "confirmlabel",
+      "id": "lib_features_notifications_secure_vault_dialogs_confirmlabel"
     },
     {
       "label": "secondaryLabel",
@@ -2389,9 +2389,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_secondarylabel",
       "community": 342,
-      "norm_label": "secondarylabel"
+      "norm_label": "secondarylabel",
+      "id": "lib_features_notifications_secure_vault_dialogs_secondarylabel"
     },
     {
       "label": "onSecondary",
@@ -2399,9 +2399,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_onsecondary",
       "community": 342,
-      "norm_label": "onsecondary"
+      "norm_label": "onsecondary",
+      "id": "lib_features_notifications_secure_vault_dialogs_onsecondary"
     },
     {
       "label": "VoidCallback",
@@ -2409,9 +2409,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "voidcallback",
       "community": 476,
-      "norm_label": "voidcallback"
+      "norm_label": "voidcallback",
+      "id": "voidcallback"
     },
     {
       "label": "_controllers",
@@ -2419,9 +2419,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_controllers",
       "community": 342,
-      "norm_label": "_controllers"
+      "norm_label": "_controllers",
+      "id": "lib_features_notifications_secure_vault_dialogs_controllers"
     },
     {
       "label": "_error",
@@ -2429,9 +2429,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_error",
       "community": 342,
-      "norm_label": "_error"
+      "norm_label": "_error",
+      "id": "lib_features_notifications_secure_vault_dialogs_error"
     },
     {
       "label": "_busy",
@@ -2439,9 +2439,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_busy",
       "community": 342,
-      "norm_label": "_busy"
+      "norm_label": "_busy",
+      "id": "lib_features_notifications_secure_vault_dialogs_busy"
     },
     {
       "label": "toggleSecureVault",
@@ -2449,9 +2449,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_togglesecurevault",
       "community": 342,
-      "norm_label": "togglesecurevault"
+      "norm_label": "togglesecurevault",
+      "id": "lib_features_notifications_secure_vault_dialogs_togglesecurevault"
     },
     {
       "label": "secureVaultSessionProvider",
@@ -2459,9 +2459,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "securevaultsessionprovider",
       "community": 24,
-      "norm_label": "securevaultsessionprovider"
+      "norm_label": "securevaultsessionprovider",
+      "id": "securevaultsessionprovider"
     },
     {
       "label": "secureVaultServiceProvider",
@@ -2469,9 +2469,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "securevaultserviceprovider",
       "community": 342,
-      "norm_label": "securevaultserviceprovider"
+      "norm_label": "securevaultserviceprovider",
+      "id": "securevaultserviceprovider"
     },
     {
       "label": "showChangeVaultPasswordDialog",
@@ -2479,9 +2479,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_showchangevaultpassworddialog",
       "community": 342,
-      "norm_label": "showchangevaultpassworddialog"
+      "norm_label": "showchangevaultpassworddialog",
+      "id": "lib_features_notifications_secure_vault_dialogs_showchangevaultpassworddialog"
     },
     {
       "label": "_show",
@@ -2489,9 +2489,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_show",
       "community": 342,
-      "norm_label": "_show"
+      "norm_label": "_show",
+      "id": "lib_features_notifications_secure_vault_dialogs_show"
     },
     {
       "label": "showSecureVaultSetupDialog",
@@ -2499,9 +2499,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_showsecurevaultsetupdialog",
       "community": 342,
-      "norm_label": "showsecurevaultsetupdialog"
+      "norm_label": "showsecurevaultsetupdialog",
+      "id": "lib_features_notifications_secure_vault_dialogs_showsecurevaultsetupdialog"
     },
     {
       "label": "_showUnlock",
@@ -2509,9 +2509,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_showunlock",
       "community": 342,
-      "norm_label": "_showunlock"
+      "norm_label": "_showunlock",
+      "id": "lib_features_notifications_secure_vault_dialogs_showunlock"
     },
     {
       "label": "notificationRepositoryProvider",
@@ -2519,9 +2519,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "notificationrepositoryprovider",
       "community": 342,
-      "norm_label": "notificationrepositoryprovider"
+      "norm_label": "notificationrepositoryprovider",
+      "id": "notificationrepositoryprovider"
     },
     {
       "label": "unlockSecureVault",
@@ -2529,9 +2529,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_unlocksecurevault",
       "community": 342,
-      "norm_label": "unlocksecurevault"
+      "norm_label": "unlocksecurevault",
+      "id": "lib_features_notifications_secure_vault_dialogs_unlocksecurevault"
     },
     {
       "label": "setLostSecureNoteCount",
@@ -2539,9 +2539,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_setlostsecurenotecount",
       "community": 342,
-      "norm_label": "setlostsecurenotecount"
+      "norm_label": "setlostsecurenotecount",
+      "id": "lib_features_notifications_secure_vault_dialogs_setlostsecurenotecount"
     },
     {
       "label": "setLostVaultPhotoCount",
@@ -2549,9 +2549,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_setlostvaultphotocount",
       "community": 342,
-      "norm_label": "setlostvaultphotocount"
+      "norm_label": "setlostvaultphotocount",
+      "id": "lib_features_notifications_secure_vault_dialogs_setlostvaultphotocount"
     },
     {
       "label": "showSecureVaultResetDialog",
@@ -2559,9 +2559,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_showsecurevaultresetdialog",
       "community": 342,
-      "norm_label": "showsecurevaultresetdialog"
+      "norm_label": "showsecurevaultresetdialog",
+      "id": "lib_features_notifications_secure_vault_dialogs_showsecurevaultresetdialog"
     },
     {
       "label": "secureVaultLostMessage",
@@ -2569,9 +2569,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_securevaultlostmessage",
       "community": 342,
-      "norm_label": "securevaultlostmessage"
+      "norm_label": "securevaultlostmessage",
+      "id": "lib_features_notifications_secure_vault_dialogs_securevaultlostmessage"
     },
     {
       "label": "_checkNewPassword",
@@ -2579,9 +2579,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_checknewpassword",
       "community": 342,
-      "norm_label": "_checknewpassword"
+      "norm_label": "_checknewpassword",
+      "id": "lib_features_notifications_secure_vault_dialogs_checknewpassword"
     },
     {
       "label": "createState",
@@ -2589,9 +2589,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_createstate",
       "community": 342,
-      "norm_label": "createstate"
+      "norm_label": "createstate",
+      "id": "lib_features_notifications_secure_vault_dialogs_createstate"
     },
     {
       "label": "dispose",
@@ -2599,9 +2599,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_dispose",
       "community": 342,
-      "norm_label": "dispose"
+      "norm_label": "dispose",
+      "id": "lib_features_notifications_secure_vault_dialogs_dispose"
     },
     {
       "label": "_submit",
@@ -2609,9 +2609,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_submit",
       "community": 342,
-      "norm_label": "_submit"
+      "norm_label": "_submit",
+      "id": "lib_features_notifications_secure_vault_dialogs_submit"
     },
     {
       "label": "build",
@@ -2619,9 +2619,9 @@
       "source_file": "lib/features/notifications/secure_vault_dialogs.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_notifications_secure_vault_dialogs_build",
       "community": 342,
-      "norm_label": "build"
+      "norm_label": "build",
+      "id": "lib_features_notifications_secure_vault_dialogs_build"
     },
     {
       "label": "package:flutter/material.dart",
@@ -2629,9 +2629,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_flutter_material_dart",
       "community": 746,
-      "norm_label": "package:flutter/material.dart"
+      "norm_label": "package:flutter/material.dart",
+      "id": "package_flutter_material_dart"
     },
     {
       "label": "package:voyager/core/caps_lock/caps_lock_caret_indicator.dart",
@@ -2639,9 +2639,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_caps_lock_caps_lock_caret_indicator_dart",
       "community": 342,
-      "norm_label": "package:voyager/core/caps_lock/caps_lock_caret_indicator.dart"
+      "norm_label": "package:voyager/core/caps_lock/caps_lock_caret_indicator.dart",
+      "id": "package_voyager_core_caps_lock_caps_lock_caret_indicator_dart"
     },
     {
       "label": "package:voyager/core/secure_vault/secure_vault_service.dart",
@@ -2649,9 +2649,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_secure_vault_secure_vault_service_dart",
       "community": 342,
-      "norm_label": "package:voyager/core/secure_vault/secure_vault_service.dart"
+      "norm_label": "package:voyager/core/secure_vault/secure_vault_service.dart",
+      "id": "package_voyager_core_secure_vault_secure_vault_service_dart"
     },
     {
       "label": "package:voyager/core/widgets/glass_button.dart",
@@ -2659,9 +2659,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_widgets_glass_button_dart",
       "community": 746,
-      "norm_label": "package:voyager/core/widgets/glass_button.dart"
+      "norm_label": "package:voyager/core/widgets/glass_button.dart",
+      "id": "package_voyager_core_widgets_glass_button_dart"
     },
     {
       "label": "package:voyager/core/widgets/voyager_dialog.dart",
@@ -2669,9 +2669,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_widgets_voyager_dialog_dart",
       "community": 746,
-      "norm_label": "package:voyager/core/widgets/voyager_dialog.dart"
+      "norm_label": "package:voyager/core/widgets/voyager_dialog.dart",
+      "id": "package_voyager_core_widgets_voyager_dialog_dart"
     },
     {
       "label": "package:voyager/features/notifications/secure_vault_session.dart",
@@ -2679,9 +2679,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_notifications_secure_vault_session_dart",
       "community": 24,
-      "norm_label": "package:voyager/features/notifications/secure_vault_session.dart"
+      "norm_label": "package:voyager/features/notifications/secure_vault_session.dart",
+      "id": "package_voyager_features_notifications_secure_vault_session_dart"
     },
     {
       "label": "photo_series_page.dart",
@@ -2689,9 +2689,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page",
       "community": 160,
-      "norm_label": "photo_series_page.dart"
+      "norm_label": "photo_series_page.dart",
+      "id": "lib_features_photo_series_photo_series_page"
     },
     {
       "label": "PhotoSeriesPage",
@@ -2699,9 +2699,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photoseriespage",
       "community": 160,
-      "norm_label": "photoseriespage"
+      "norm_label": "photoseriespage",
+      "id": "lib_features_photo_series_photo_series_page_photoseriespage"
     },
     {
       "label": "ConsumerStatefulWidget",
@@ -2709,9 +2709,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "consumerstatefulwidget",
       "community": 134,
-      "norm_label": "consumerstatefulwidget"
+      "norm_label": "consumerstatefulwidget",
+      "id": "consumerstatefulwidget"
     },
     {
       "label": "_PhotoSeriesPageState",
@@ -2719,9 +2719,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photoseriespagestate",
       "community": 160,
-      "norm_label": "_photoseriespagestate"
+      "norm_label": "_photoseriespagestate",
+      "id": "lib_features_photo_series_photo_series_page_photoseriespagestate"
     },
     {
       "label": "ConsumerState",
@@ -2729,9 +2729,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "consumerstate",
       "community": 134,
-      "norm_label": "consumerstate"
+      "norm_label": "consumerstate",
+      "id": "consumerstate"
     },
     {
       "label": "routerProvider",
@@ -2739,9 +2739,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "routerprovider",
       "community": 274,
-      "norm_label": "routerprovider"
+      "norm_label": "routerprovider",
+      "id": "routerprovider"
     },
     {
       "label": "photoSeriesPageVisibleProvider",
@@ -2749,9 +2749,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photoseriespagevisibleprovider",
       "community": 355,
-      "norm_label": "photoseriespagevisibleprovider"
+      "norm_label": "photoseriespagevisibleprovider",
+      "id": "photoseriespagevisibleprovider"
     },
     {
       "label": "revealPhotoSeriesRequestProvider",
@@ -2759,9 +2759,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "revealphotoseriesrequestprovider",
       "community": 160,
-      "norm_label": "revealphotoseriesrequestprovider"
+      "norm_label": "revealphotoseriesrequestprovider",
+      "id": "revealphotoseriesrequestprovider"
     },
     {
       "label": "photoRevealedCheckInsProvider",
@@ -2769,9 +2769,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photorevealedcheckinsprovider",
       "community": 24,
-      "norm_label": "photorevealedcheckinsprovider"
+      "norm_label": "photorevealedcheckinsprovider",
+      "id": "photorevealedcheckinsprovider"
     },
     {
       "label": "photoSeriesCheckInRequestProvider",
@@ -2779,9 +2779,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photoseriescheckinrequestprovider",
       "community": 24,
-      "norm_label": "photoseriescheckinrequestprovider"
+      "norm_label": "photoseriescheckinrequestprovider",
+      "id": "photoseriescheckinrequestprovider"
     },
     {
       "label": "_SeriesList",
@@ -2789,9 +2789,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_serieslist",
       "community": 160,
-      "norm_label": "_serieslist"
+      "norm_label": "_serieslist",
+      "id": "lib_features_photo_series_photo_series_page_serieslist"
     },
     {
       "label": "ConsumerWidget",
@@ -2799,9 +2799,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "consumerwidget",
       "community": 400,
-      "norm_label": "consumerwidget"
+      "norm_label": "consumerwidget",
+      "id": "consumerwidget"
     },
     {
       "label": "photoSeriesSnapshotProvider",
@@ -2809,9 +2809,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photoseriessnapshotprovider",
       "community": 24,
-      "norm_label": "photoseriessnapshotprovider"
+      "norm_label": "photoseriessnapshotprovider",
+      "id": "photoseriessnapshotprovider"
     },
     {
       "label": "photoSeriesTodayProvider",
@@ -2819,9 +2819,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photoseriestodayprovider",
       "community": 160,
-      "norm_label": "photoseriestodayprovider"
+      "norm_label": "photoseriestodayprovider",
+      "id": "photoseriestodayprovider"
     },
     {
       "label": "_PhotoSeriesDetailRoute",
@@ -2829,9 +2829,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photoseriesdetailroute",
       "community": 160,
-      "norm_label": "_photoseriesdetailroute"
+      "norm_label": "_photoseriesdetailroute",
+      "id": "lib_features_photo_series_photo_series_page_photoseriesdetailroute"
     },
     {
       "label": "PageRouteBuilder",
@@ -2839,9 +2839,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "pageroutebuilder",
       "community": 160,
-      "norm_label": "pageroutebuilder"
+      "norm_label": "pageroutebuilder",
+      "id": "pageroutebuilder"
     },
     {
       "label": "_SeriesCard",
@@ -2849,9 +2849,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_seriescard",
       "community": 24,
-      "norm_label": "_seriescard"
+      "norm_label": "_seriescard",
+      "id": "lib_features_photo_series_photo_series_page_seriescard"
     },
     {
       "label": "PhotoPeriodBadge",
@@ -2859,9 +2859,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photoperiodbadge",
       "community": 160,
-      "norm_label": "photoperiodbadge"
+      "norm_label": "photoperiodbadge",
+      "id": "lib_features_photo_series_photo_series_page_photoperiodbadge"
     },
     {
       "label": "StatelessWidget",
@@ -2869,9 +2869,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "statelesswidget",
       "community": 200,
-      "norm_label": "statelesswidget"
+      "norm_label": "statelesswidget",
+      "id": "statelesswidget"
     },
     {
       "label": "_NewSeriesCard",
@@ -2879,9 +2879,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_newseriescard",
       "community": 160,
-      "norm_label": "_newseriescard"
+      "norm_label": "_newseriescard",
+      "id": "lib_features_photo_series_photo_series_page_newseriescard"
     },
     {
       "label": "PhotoVaultLockButton",
@@ -2889,9 +2889,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photovaultlockbutton",
       "community": 24,
-      "norm_label": "photovaultlockbutton"
+      "norm_label": "photovaultlockbutton",
+      "id": "lib_features_photo_series_photo_series_page_photovaultlockbutton"
     },
     {
       "label": "PhotoVaultUnlockCard",
@@ -2899,9 +2899,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photovaultunlockcard",
       "community": 160,
-      "norm_label": "photovaultunlockcard"
+      "norm_label": "photovaultunlockcard",
+      "id": "lib_features_photo_series_photo_series_page_photovaultunlockcard"
     },
     {
       "label": "_PhotoVaultUnlockCardState",
@@ -2909,9 +2909,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photovaultunlockcardstate",
       "community": 160,
-      "norm_label": "_photovaultunlockcardstate"
+      "norm_label": "_photovaultunlockcardstate",
+      "id": "lib_features_photo_series_photo_series_page_photovaultunlockcardstate"
     },
     {
       "label": "secureVaultHeaderProvider",
@@ -2919,9 +2919,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "securevaultheaderprovider",
       "community": 160,
-      "norm_label": "securevaultheaderprovider"
+      "norm_label": "securevaultheaderprovider",
+      "id": "securevaultheaderprovider"
     },
     {
       "label": "_router",
@@ -2929,9 +2929,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_router",
       "community": 160,
-      "norm_label": "_router"
+      "norm_label": "_router",
+      "id": "lib_features_photo_series_photo_series_page_router"
     },
     {
       "label": "_visibleFlag",
@@ -2939,9 +2939,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_visibleflag",
       "community": 160,
-      "norm_label": "_visibleflag"
+      "norm_label": "_visibleflag",
+      "id": "lib_features_photo_series_photo_series_page_visibleflag"
     },
     {
       "label": "_visible",
@@ -2949,9 +2949,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_visible",
       "community": 160,
-      "norm_label": "_visible"
+      "norm_label": "_visible",
+      "id": "lib_features_photo_series_photo_series_page_visible"
     },
     {
       "label": "seriesId",
@@ -2959,9 +2959,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_seriesid",
       "community": 160,
-      "norm_label": "seriesid"
+      "norm_label": "seriesid",
+      "id": "lib_features_photo_series_photo_series_page_seriesid"
     },
     {
       "label": "delegatedTransition",
@@ -2969,9 +2969,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_delegatedtransition",
       "community": 160,
-      "norm_label": "delegatedtransition"
+      "norm_label": "delegatedtransition",
+      "id": "lib_features_photo_series_photo_series_page_delegatedtransition"
     },
     {
       "label": "DelegatedTransitionBuilder? get",
@@ -2979,9 +2979,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "delegatedtransitionbuilder_get",
       "community": 160,
-      "norm_label": "delegatedtransitionbuilder? get"
+      "norm_label": "delegatedtransitionbuilder? get",
+      "id": "delegatedtransitionbuilder_get"
     },
     {
       "label": "angleOrder",
@@ -2989,9 +2989,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_angleorder",
       "community": 160,
-      "norm_label": "angleorder"
+      "norm_label": "angleorder",
+      "id": "lib_features_photo_series_photo_series_page_angleorder"
     },
     {
       "label": "checkIns",
@@ -2999,9 +2999,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_checkins",
       "community": 160,
-      "norm_label": "checkins"
+      "norm_label": "checkins",
+      "id": "lib_features_photo_series_photo_series_page_checkins"
     },
     {
       "label": "null",
@@ -3009,9 +3009,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_null",
       "community": 160,
-      "norm_label": "null"
+      "norm_label": "null",
+      "id": "lib_features_photo_series_photo_series_page_null"
     },
     {
       "label": "series",
@@ -3019,9 +3019,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_series",
       "community": 160,
-      "norm_label": "series"
+      "norm_label": "series",
+      "id": "lib_features_photo_series_photo_series_page_series"
     },
     {
       "label": "PhotoSeries",
@@ -3029,9 +3029,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photoseries",
       "community": 160,
-      "norm_label": "photoseries"
+      "norm_label": "photoseries",
+      "id": "photoseries"
     },
     {
       "label": "snapshot",
@@ -3039,9 +3039,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_snapshot",
       "community": 160,
-      "norm_label": "snapshot"
+      "norm_label": "snapshot",
+      "id": "lib_features_photo_series_photo_series_page_snapshot"
     },
     {
       "label": "PhotoSeriesSnapshot",
@@ -3049,9 +3049,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "photoseriessnapshot",
       "community": 240,
-      "norm_label": "photoseriessnapshot"
+      "norm_label": "photoseriessnapshot",
+      "id": "photoseriessnapshot"
     },
     {
       "label": "now",
@@ -3059,9 +3059,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_now",
       "community": 160,
-      "norm_label": "now"
+      "norm_label": "now",
+      "id": "lib_features_photo_series_photo_series_page_now"
     },
     {
       "label": "done",
@@ -3069,9 +3069,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_done",
       "community": 160,
-      "norm_label": "done"
+      "norm_label": "done",
+      "id": "lib_features_photo_series_photo_series_page_done"
     },
     {
       "label": "onTap",
@@ -3079,9 +3079,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_ontap",
       "community": 160,
-      "norm_label": "ontap"
+      "norm_label": "ontap",
+      "id": "lib_features_photo_series_photo_series_page_ontap"
     },
     {
       "label": "focusNode",
@@ -3089,9 +3089,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_focusnode",
       "community": 160,
-      "norm_label": "focusnode"
+      "norm_label": "focusnode",
+      "id": "lib_features_photo_series_photo_series_page_focusnode"
     },
     {
       "label": "FocusNode?",
@@ -3099,9 +3099,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "focusnode",
       "community": 491,
-      "norm_label": "focusnode?"
+      "norm_label": "focusnode?",
+      "id": "focusnode"
     },
     {
       "label": "_password",
@@ -3109,9 +3109,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_password",
       "community": 160,
-      "norm_label": "_password"
+      "norm_label": "_password",
+      "id": "lib_features_photo_series_photo_series_page_password"
     },
     {
       "label": "_error",
@@ -3119,9 +3119,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_error",
       "community": 160,
-      "norm_label": "_error"
+      "norm_label": "_error",
+      "id": "lib_features_photo_series_photo_series_page_error"
     },
     {
       "label": "_busy",
@@ -3129,9 +3129,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_busy",
       "community": 160,
-      "norm_label": "_busy"
+      "norm_label": "_busy",
+      "id": "lib_features_photo_series_photo_series_page_busy"
     },
     {
       "label": "createState",
@@ -3139,9 +3139,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_createstate",
       "community": 160,
-      "norm_label": "createstate"
+      "norm_label": "createstate",
+      "id": "lib_features_photo_series_photo_series_page_createstate"
     },
     {
       "label": "initState",
@@ -3149,9 +3149,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_initstate",
       "community": 160,
-      "norm_label": "initstate"
+      "norm_label": "initstate",
+      "id": "lib_features_photo_series_photo_series_page_initstate"
     },
     {
       "label": "_takeRevealRequest",
@@ -3159,9 +3159,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_takerevealrequest",
       "community": 160,
-      "norm_label": "_takerevealrequest"
+      "norm_label": "_takerevealrequest",
+      "id": "lib_features_photo_series_photo_series_page_takerevealrequest"
     },
     {
       "label": "dispose",
@@ -3169,9 +3169,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_dispose",
       "community": 160,
-      "norm_label": "dispose"
+      "norm_label": "dispose",
+      "id": "lib_features_photo_series_photo_series_page_dispose"
     },
     {
       "label": "_onLocation",
@@ -3179,9 +3179,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_onlocation",
       "community": 160,
-      "norm_label": "_onlocation"
+      "norm_label": "_onlocation",
+      "id": "lib_features_photo_series_photo_series_page_onlocation"
     },
     {
       "label": "_applyLocation",
@@ -3189,9 +3189,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_applylocation",
       "community": 24,
-      "norm_label": "_applylocation"
+      "norm_label": "_applylocation",
+      "id": "lib_features_photo_series_photo_series_page_applylocation"
     },
     {
       "label": "build",
@@ -3199,9 +3199,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_build",
       "community": 160,
-      "norm_label": "build"
+      "norm_label": "build",
+      "id": "lib_features_photo_series_photo_series_page_build"
     },
     {
       "label": "_create",
@@ -3209,9 +3209,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_create",
       "community": 160,
-      "norm_label": "_create"
+      "norm_label": "_create",
+      "id": "lib_features_photo_series_photo_series_page_create"
     },
     {
       "label": "openPhotoSeries",
@@ -3219,9 +3219,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_openphotoseries",
       "community": 160,
-      "norm_label": "openphotoseries"
+      "norm_label": "openphotoseries",
+      "id": "lib_features_photo_series_photo_series_page_openphotoseries"
     },
     {
       "label": "_zoom",
@@ -3229,9 +3229,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_zoom",
       "community": 160,
-      "norm_label": "_zoom"
+      "norm_label": "_zoom",
+      "id": "lib_features_photo_series_photo_series_page_zoom"
     },
     {
       "label": "photoSeriesCover",
@@ -3239,9 +3239,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_photoseriescover",
       "community": 160,
-      "norm_label": "photoseriescover"
+      "norm_label": "photoseriescover",
+      "id": "lib_features_photo_series_photo_series_page_photoseriescover"
     },
     {
       "label": "_unlock",
@@ -3249,9 +3249,9 @@
       "source_file": "lib/features/photo_series/photo_series_page.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "lib_features_photo_series_photo_series_page_unlock",
       "community": 160,
-      "norm_label": "_unlock"
+      "norm_label": "_unlock",
+      "id": "lib_features_photo_series_photo_series_page_unlock"
     },
     {
       "label": "dart:ui",
@@ -3259,9 +3259,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "dart_ui",
       "community": 436,
-      "norm_label": "dart:ui"
+      "norm_label": "dart:ui",
+      "id": "dart_ui"
     },
     {
       "label": "package:phosphoricons_flutter/phosphoricons_flutter.dart",
@@ -3269,9 +3269,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_phosphoricons_flutter_phosphoricons_flutter_dart",
       "community": 591,
-      "norm_label": "package:phosphoricons_flutter/phosphoricons_flutter.dart"
+      "norm_label": "package:phosphoricons_flutter/phosphoricons_flutter.dart",
+      "id": "package_phosphoricons_flutter_phosphoricons_flutter_dart"
     },
     {
       "label": "package:voyager/core/motion/motion_prefs.dart",
@@ -3279,9 +3279,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_motion_motion_prefs_dart",
       "community": 301,
-      "norm_label": "package:voyager/core/motion/motion_prefs.dart"
+      "norm_label": "package:voyager/core/motion/motion_prefs.dart",
+      "id": "package_voyager_core_motion_motion_prefs_dart"
     },
     {
       "label": "package:voyager/core/theme/voyager_theme.dart",
@@ -3289,9 +3289,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_core_theme_voyager_theme_dart",
       "community": 388,
-      "norm_label": "package:voyager/core/theme/voyager_theme.dart"
+      "norm_label": "package:voyager/core/theme/voyager_theme.dart",
+      "id": "package_voyager_core_theme_voyager_theme_dart"
     },
     {
       "label": "package:voyager/domain/models/photo_series_models.dart",
@@ -3299,9 +3299,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_domain_models_photo_series_models_dart",
       "community": 396,
-      "norm_label": "package:voyager/domain/models/photo_series_models.dart"
+      "norm_label": "package:voyager/domain/models/photo_series_models.dart",
+      "id": "package_voyager_domain_models_photo_series_models_dart"
     },
     {
       "label": "package:voyager/domain/photo_series/photo_series_periods.dart",
@@ -3309,9 +3309,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_domain_photo_series_photo_series_periods_dart",
       "community": 396,
-      "norm_label": "package:voyager/domain/photo_series/photo_series_periods.dart"
+      "norm_label": "package:voyager/domain/photo_series/photo_series_periods.dart",
+      "id": "package_voyager_domain_photo_series_photo_series_periods_dart"
     },
     {
       "label": "package:voyager/features/notifications/secure_vault_dialogs.dart",
@@ -3319,9 +3319,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_notifications_secure_vault_dialogs_dart",
       "community": 160,
-      "norm_label": "package:voyager/features/notifications/secure_vault_dialogs.dart"
+      "norm_label": "package:voyager/features/notifications/secure_vault_dialogs.dart",
+      "id": "package_voyager_features_notifications_secure_vault_dialogs_dart"
     },
     {
       "label": "package:voyager/features/photo_series/photo_series_detail.dart",
@@ -3329,9 +3329,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_photo_series_photo_series_detail_dart",
       "community": 160,
-      "norm_label": "package:voyager/features/photo_series/photo_series_detail.dart"
+      "norm_label": "package:voyager/features/photo_series/photo_series_detail.dart",
+      "id": "package_voyager_features_photo_series_photo_series_detail_dart"
     },
     {
       "label": "package:voyager/features/photo_series/photo_series_dialogs.dart",
@@ -3339,9 +3339,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_photo_series_photo_series_dialogs_dart",
       "community": 160,
-      "norm_label": "package:voyager/features/photo_series/photo_series_dialogs.dart"
+      "norm_label": "package:voyager/features/photo_series/photo_series_dialogs.dart",
+      "id": "package_voyager_features_photo_series_photo_series_dialogs_dart"
     },
     {
       "label": "package:voyager/features/photo_series/photo_series_providers.dart",
@@ -3349,9 +3349,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_photo_series_photo_series_providers_dart",
       "community": 376,
-      "norm_label": "package:voyager/features/photo_series/photo_series_providers.dart"
+      "norm_label": "package:voyager/features/photo_series/photo_series_providers.dart",
+      "id": "package_voyager_features_photo_series_photo_series_providers_dart"
     },
     {
       "label": "package:voyager/features/photo_series/vault_activity.dart",
@@ -3359,9 +3359,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_photo_series_vault_activity_dart",
       "community": 240,
-      "norm_label": "package:voyager/features/photo_series/vault_activity.dart"
+      "norm_label": "package:voyager/features/photo_series/vault_activity.dart",
+      "id": "package_voyager_features_photo_series_vault_activity_dart"
     },
     {
       "label": "package:voyager/features/photo_series/vault_image_cache.dart",
@@ -3369,9 +3369,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_photo_series_vault_image_cache_dart",
       "community": 240,
-      "norm_label": "package:voyager/features/photo_series/vault_image_cache.dart"
+      "norm_label": "package:voyager/features/photo_series/vault_image_cache.dart",
+      "id": "package_voyager_features_photo_series_vault_image_cache_dart"
     },
     {
       "label": "package:voyager/features/shell/reveal_request.dart",
@@ -3379,9 +3379,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_features_shell_reveal_request_dart",
       "community": 164,
-      "norm_label": "package:voyager/features/shell/reveal_request.dart"
+      "norm_label": "package:voyager/features/shell/reveal_request.dart",
+      "id": "package_voyager_features_shell_reveal_request_dart"
     },
     {
       "label": "package:voyager/routing/app_router.dart",
@@ -3389,9 +3389,9 @@
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
-      "id": "package_voyager_routing_app_router_dart",
       "community": 444,
-      "norm_label": "package:voyager/routing/app_router.dart"
+      "norm_label": "package:voyager/routing/app_router.dart",
+      "id": "package_voyager_routing_app_router_dart"
     },
     {
       "label": "quick_journal_entry.dart",
@@ -260689,216 +260689,6 @@
   ],
   "links": [
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "source": "on_this_day_hld",
-      "target": "on_this_day_hld_on_this_day_hld",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L221",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_10_open_points",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L230",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_11_files_touched",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L11",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_1_goals",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L19",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_2_non_goals_v1",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L30",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_3_product_decisions_locked",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L50",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_4_matching_rules",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L82",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_5_the_card",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L143",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_6_data_model",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L177",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_7_providers_and_data_flow",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L196",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_8_settings_ui",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L204",
-      "weight": 1.0,
-      "source": "on_this_day_hld_on_this_day_hld",
-      "target": "on_this_day_hld_9_testing",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L84",
-      "weight": 1.0,
-      "source": "on_this_day_hld_5_the_card",
-      "target": "on_this_day_hld_5_1_states",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L98",
-      "weight": 1.0,
-      "source": "on_this_day_hld_5_the_card",
-      "target": "on_this_day_hld_5_2_what_tucks_it_away",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L111",
-      "weight": 1.0,
-      "source": "on_this_day_hld_5_the_card",
-      "target": "on_this_day_hld_5_3_geometry_and_motion",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L124",
-      "weight": 1.0,
-      "source": "on_this_day_hld_5_the_card",
-      "target": "on_this_day_hld_5_4_content",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L137",
-      "weight": 1.0,
-      "source": "on_this_day_hld_5_the_card",
-      "target": "on_this_day_hld_5_5_compact_width",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L145",
-      "weight": 1.0,
-      "source": "on_this_day_hld_6_data_model",
-      "target": "on_this_day_hld_6_1_journal",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L154",
-      "weight": 1.0,
-      "source": "on_this_day_hld_6_data_model",
-      "target": "on_this_day_hld_6_2_sync",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L160",
-      "weight": 1.0,
-      "source": "on_this_day_hld_6_data_model",
-      "target": "on_this_day_hld_6_3_import_export",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "ON_THIS_DAY_HLD.md",
-      "source_location": "L166",
-      "weight": 1.0,
-      "source": "on_this_day_hld_6_data_model",
-      "target": "on_this_day_hld_6_4_dismissals_in_memory_only",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -261101,16 +260891,6 @@
       "weight": 1.0,
       "source": "lib_core_vim_vim_session",
       "target": "lib_core_vim_vim_session_caretlistenable"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "lib/core/vim/vim_session.dart",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "lib_core_vim_vim_session",
-      "target": "lib_core_vim_vim_session_caretoffset"
     },
     {
       "relation": "defines",
@@ -261662,6 +261442,16 @@
       "weight": 1.0,
       "source": "lib_core_vim_vim_session",
       "target": "lib_core_vim_vim_session_modelistenable"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/core/vim/vim_session.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "lib_core_vim_vim_session",
+      "target": "lib_core_vim_vim_session_mouseselectionends"
     },
     {
       "relation": "defines",
@@ -275981,6 +275771,216 @@
       "weight": 1.0,
       "source": "lib_core_vim_vim_text_scope",
       "target": "package_voyager_core_vim_vim_text_ops_dart"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld",
+      "target": "on_this_day_hld_on_this_day_hld"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L221",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_10_open_points"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L230",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_11_files_touched"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_1_goals"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_2_non_goals_v1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L30",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_3_product_decisions_locked"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L50",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_4_matching_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L82",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_5_the_card"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L143",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_6_data_model"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L177",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_7_providers_and_data_flow"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L196",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_8_settings_ui"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L204",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_on_this_day_hld",
+      "target": "on_this_day_hld_9_testing"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L84",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_5_the_card",
+      "target": "on_this_day_hld_5_1_states"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L98",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_5_the_card",
+      "target": "on_this_day_hld_5_2_what_tucks_it_away"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L111",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_5_the_card",
+      "target": "on_this_day_hld_5_3_geometry_and_motion"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L124",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_5_the_card",
+      "target": "on_this_day_hld_5_4_content"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L137",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_5_the_card",
+      "target": "on_this_day_hld_5_5_compact_width"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L145",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_6_data_model",
+      "target": "on_this_day_hld_6_1_journal"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L154",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_6_data_model",
+      "target": "on_this_day_hld_6_2_sync"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L160",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_6_data_model",
+      "target": "on_this_day_hld_6_3_import_export"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ON_THIS_DAY_HLD.md",
+      "source_location": "L166",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "on_this_day_hld_6_data_model",
+      "target": "on_this_day_hld_6_4_dismissals_in_memory_only"
     },
     {
       "relation": "references",
@@ -630545,5 +630545,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e115d85a1aeac2289c9d2a417b2e301262716411"
+  "built_at_commit": "53e0f86547e3dbd5690e3ce47fc3b4c1fe6d1952"
 }
