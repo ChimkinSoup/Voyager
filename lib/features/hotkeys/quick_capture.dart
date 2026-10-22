@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 
@@ -96,6 +97,24 @@ void storeScheduledReminderDraft(
 ) {
   scheduleMicrotask(
     () => container.read(scheduledReminderDraftProvider.notifier).state = draft,
+  );
+}
+
+/// The new-event panel's unsaved fields, kept across the calendar floater's
+/// dismissals until a save clears them, and taken up by the calendar page's
+/// in-app path. Session memory only.
+final calendarCaptureDraftProvider = StateProvider<CalendarEventDraft?>(
+  (_) => null,
+);
+
+/// Stores a new-event draft handed back by a closing panel. Deferred: the
+/// panel hands it over from `dispose`, mid tree teardown.
+void storeCalendarCaptureDraft(
+  ProviderContainer container,
+  CalendarEventDraft? draft,
+) {
+  scheduleMicrotask(
+    () => container.read(calendarCaptureDraftProvider.notifier).state = draft,
   );
 }
 

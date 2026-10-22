@@ -70,11 +70,24 @@ class PastEndScrollController extends ScrollController {
   PastEndScrollController({
     required this.fieldKey,
     required this.pastEnd,
+    this.startAtEnd = false,
     String text = '',
   }) : _lastText = text;
 
   final GlobalKey<State<TextField>> fieldKey;
   final double Function() pastEnd;
+
+  /// Whether the first layout lands at the end of the text rather than the
+  /// top, for a field opened with its caret after the last line. Otherwise
+  /// [EditableText] reveals that caret on focus with a scroll down from the
+  /// top.
+  final bool startAtEnd;
+
+  /// Whether the first layout has happened. Kept here rather than on the
+  /// position, which [Scrollable] replaces when its dependencies change (the
+  /// window moving to a screen with another pixel ratio, say), and a
+  /// replacement must not jump back to the end.
+  var _placed = false;
 
   String _lastText;
   bool _liftScheduled = false;
@@ -180,6 +193,16 @@ class _PastEndScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    final applied = _applyContentDimensions(minScrollExtent, maxScrollExtent);
+    // Before the first paint, so the top of the text never shows.
+    if (!_owner._placed) {
+      _owner._placed = true;
+      if (_owner.startAtEnd) correctPixels(this.maxScrollExtent);
+    }
+    return applied;
+  }
+
+  bool _applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
     final pastEnd = _owner.pastEnd();
     _owner._handleLaidOut(pastEnd);
     final room = pastEnd > 0 && hasViewportDimension

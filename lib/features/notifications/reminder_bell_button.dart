@@ -239,7 +239,7 @@ class _OptionRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         child: Row(
           children: [
             Expanded(child: Text(label, style: theme.textTheme.bodySmall)),

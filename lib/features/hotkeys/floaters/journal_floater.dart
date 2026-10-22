@@ -385,6 +385,8 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
                                 scrollPastEnd: _fanHasImages
                                     ? MediaFanStack.tallest + 8
                                     : 0,
+                                // The caret opens after the last line.
+                                startScrolledToEnd: true,
                                 keyboardType: TextInputType.multiline,
                                 decoration: const InputDecoration(
                                   hintText: 'Write something…',

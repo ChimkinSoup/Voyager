@@ -53,6 +53,7 @@ import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -1641,14 +1642,23 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
                           minWidth: 40,
                           minHeight: 40,
                         ),
+                        // The theme's edge is the app accent;
+                        // this menu belongs to the journal.
+                        shape: VoyagerMenuTheme.shape(_accentColor),
                         onSelected: (entry) {
                           setState(
                             () => _weatherIcon = entry.weatherIconValue!,
                           );
                           _scheduleAutosave();
                         },
-                        itemBuilder: (context) =>
-                            buildCatalogMenu(context, from: weatherMenuEntries),
+                        itemBuilder: (context) => buildCatalogMenu(
+                          context,
+                          from: weatherMenuEntries,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Builder(

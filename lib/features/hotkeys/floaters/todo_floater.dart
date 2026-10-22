@@ -23,8 +23,14 @@ import 'package:voyager/features/hotkeys/quick_capture.dart';
 
 enum _Panel { due, list }
 
-/// The picker plus the "No due date" button under it.
-final double _datePanelHeight = kDateTimeSelectorPopoverSize.height + 56;
+/// Taller than the picker's own size, for the width the bar gives it: the
+/// picker spends the extra height on a wider calendar.
+final double _datePickerHeight = kDateTimeSelectorPopoverSize.height + 80;
+
+/// The slot under the picker that the "No due date" button is centred in.
+/// Fixed rather than the button's own height, which the window is sized for
+/// before it is laid out: a taller button scales down to fit instead.
+const double _noDueDateHeight = 53;
 
 /// The todo hotkey's Spotlight-style quick-add bar.
 ///
@@ -126,7 +132,14 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   }
 
   double _panelHeight(_Panel panel, int listCount) => switch (panel) {
-    _Panel.due => _datePanelHeight,
+    // Room for the "No due date" button only when it shows, so the picker
+    // above it is the same size either way.
+    _Panel.due =>
+      1 +
+          _datePickerHeight +
+          (ref.read(todoCaptureDraftProvider).dueDate == null
+              ? 0
+              : _noDueDateHeight),
     _Panel.list => ScopeMenu.heightFor(context, listCount) + 16,
   };
 
@@ -401,29 +414,29 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     return switch (panel) {
       _Panel.due => Column(
         children: [
+          // Edge to edge under the bar, so the panel reads as the bar opening
+          // up rather than a picker set on the window's background.
+          const Divider(height: 1),
           Expanded(
-            child: Center(
-              child: SizedBox.fromSize(
-                size: kDateTimeSelectorPopoverSize,
-                child: DateTimeSelectorPopover(
-                  initialDateTime: due ?? DateTime.now(),
-                  accentColor: accent,
-                  optionalTime: true,
-                  initialHasTime: hasTime,
-                  onSubmitted: _pickDue,
-                  onChanged: (due) => _pendingDue = due,
-                ),
-              ),
+            child: DateTimeSelectorPopover(
+              initialDateTime: due ?? DateTime.now(),
+              accentColor: accent,
+              optionalTime: true,
+              initialHasTime: hasTime,
+              onSubmitted: _pickDue,
+              onChanged: (due) => _pendingDue = due,
             ),
           ),
           if (due != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: GlassButton(
-                dense: true,
-                onPressed: () => _pickDue(null),
-                label: 'No due date',
-                color: accent,
+            SizedBox(
+              height: _noDueDateHeight,
+              child: Center(
+                child: GlassButton(
+                  dense: true,
+                  onPressed: () => _pickDue(null),
+                  label: 'No due date',
+                  color: accent,
+                ),
               ),
             ),
         ],

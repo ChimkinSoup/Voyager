@@ -37,6 +37,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 
@@ -3095,6 +3096,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                         minWidth: 40,
                                         minHeight: 40,
                                       ),
+                                      // The theme's edge is the app accent;
+                                      // this menu belongs to the journal.
+                                      shape: VoyagerMenuTheme.shape(
+                                        accentColor,
+                                      ),
                                       onSelected: (entry) {
                                         setState(() {
                                           _weatherIcon = entry.weatherIconValue;
@@ -3106,6 +3112,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           buildCatalogMenu(
                                             context,
                                             from: weatherMenuEntries,
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 20,
+                                                  vertical: 14,
+                                                ),
                                           ),
                                     ),
                                     const SizedBox(width: 8),

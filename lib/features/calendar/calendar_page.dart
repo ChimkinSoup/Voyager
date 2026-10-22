@@ -547,6 +547,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     bool focusTitle = true,
     Rect? anchorRect,
     bool timedByDefault = false,
+    CalendarEventDraft? draft,
   }) {
     final Rect rect;
     if (anchorRect != null) {
@@ -567,6 +568,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       date: day ?? _focused,
       focusTitle: focusTitle,
       timedByDefault: timedByDefault,
+      draft: draft,
     );
   }
 
@@ -576,6 +578,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required DateTime date,
     bool focusTitle = true,
     bool timedByDefault = false,
+    CalendarEventDraft? draft,
   }) async {
     final occurrenceDay = event == null
         ? DateUtils.dateOnly(date)
@@ -603,6 +606,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 settings.accentColor,
           );
 
+    // Captured now: the panel hands its draft back from dispose.
+    final container = ProviderScope.containerOf(context, listen: false);
     await showContextualPopoverAt(
       context: context,
       targetRect: rect,
@@ -621,6 +626,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           initialCalendarId: initialCalendarId,
           focusTitleOnOpen: focusTitle,
           initialIsFullDay: !timedByDefault,
+          draft: draft,
+          // Hands a taken-up floater draft back if the popover closes unsaved.
+          onDraft: draft == null
+              ? null
+              : (d) => storeCalendarCaptureDraft(container, d),
           onSave: (data) {
             // Close popup first so the user sees immediate feedback, then
             // persist asynchronously.
@@ -1203,15 +1213,23 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     CalendarEvent? event,
     DateTime? day,
     Rect? anchorRect,
+    CalendarEventDraft? draft,
   }) async {
-    _openEventSidebar(event: event, day: day, anchorRect: anchorRect);
+    _openEventSidebar(
+      event: event,
+      day: day,
+      anchorRect: anchorRect,
+      draft: draft,
+    );
   }
 
-  /// The toolbar's "Add event", and the calendar hotkey's in-app path.
-  void _addEvent() {
+  /// The toolbar's "Add event", and the calendar hotkey's in-app path, which
+  /// starts from the calendar floater's draft.
+  void _addEvent({CalendarEventDraft? draft}) {
     final box =
         _addEventButtonKey.currentContext?.findRenderObject() as RenderBox?;
     _openEditor(
+      draft: draft,
       day: _defaultNewEventDate(),
       // Not the cursor, which a hotkey press says nothing about.
       anchorRect: box == null
@@ -2961,7 +2979,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
     // The calendar hotkey's in-app path.
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
-      if (request?.kind == QuickCaptureKind.calendar) _addEvent();
+      if (request?.kind != QuickCaptureKind.calendar) return;
+      // The draft now belongs to the popover, so the floater stops offering
+      // it.
+      final notifier = ref.read(calendarCaptureDraftProvider.notifier);
+      final draft = notifier.state;
+      notifier.state = null;
+      _addEvent(draft: draft);
     });
 
     // Editing the open calendar's overlay list, or any event write, reloads

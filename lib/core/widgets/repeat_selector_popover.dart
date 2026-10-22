@@ -186,7 +186,7 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
     // of its own; the custom editor is a form and has to inset itself clear of
     // the clipped corners.
     final page = Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -366,7 +366,7 @@ class _OptionRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
           child: Row(
             children: [
               Expanded(

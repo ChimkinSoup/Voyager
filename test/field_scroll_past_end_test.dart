@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
 
 /// Pumps a 300px-tall expanding body holding [text] and returns the range its
 /// text can scroll.
@@ -233,5 +234,76 @@ void main() {
 
       expect(position.pixels, 0);
     });
+  });
+
+  testWidgets('startScrolledToEnd opens on the last line without a scroll', (
+    tester,
+  ) async {
+    final text = _lines(40);
+    final controller = TextEditingController.fromValue(
+      TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      ),
+    );
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    // Focused before the field is built, as the journal floater does.
+    focusNode.requestFocus();
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: VimEnabledScope(
+            enabled: false,
+            child: Scaffold(
+              body: SizedBox(
+                height: 300,
+                child: VoyagerTextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  maxLines: null,
+                  expands: true,
+                  startScrolledToEnd: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(EditableText),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    expect(focusNode.hasFocus, isTrue);
+    expect(position.maxScrollExtent, greaterThan(0));
+    // The very first frame, and every one after it, sits at the end.
+    expect(position.pixels, position.maxScrollExtent);
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(position.pixels, position.maxScrollExtent);
+    }
+
+    // A pixel ratio change has the Scrollable replace its position, which
+    // must not jump back to the end.
+    position.jumpTo(0);
+    tester.view.devicePixelRatio = tester.view.devicePixelRatio + 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pump();
+    final replaced = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(EditableText),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    expect(replaced, isNot(same(position)));
+    expect(replaced.pixels, 0);
   });
 }

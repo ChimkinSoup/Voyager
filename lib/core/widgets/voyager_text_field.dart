@@ -51,6 +51,7 @@ class VoyagerTextField extends StatefulWidget {
     this.snippetsAllowed = true,
     this.autocorrectAllowed = true,
     this.scrollPastEnd = 0,
+    this.startScrolledToEnd = false,
     this.sensitive = false,
   }) : assert(
          tagScope == null || controller != null,
@@ -109,6 +110,10 @@ class VoyagerTextField extends StatefulWidget {
   /// something floating over its bottom corner. See [PastEndScrollController].
   final double scrollPastEnd;
 
+  /// Whether the field first shows the end of its text rather than the top.
+  /// See [PastEndScrollController.startAtEnd].
+  final bool startScrolledToEnd;
+
   /// For text that must go nowhere but the field — a Secure Note. Turns off
   /// spellcheck, snippets and autocorrect, and asks the keyboard for no
   /// suggestions and no learning. Vim stays.
@@ -128,6 +133,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       PastEndScrollController(
         fieldKey: _fieldKey,
         pastEnd: () => widget.scrollPastEnd,
+        startAtEnd: widget.startScrolledToEnd,
         text: widget.controller?.text ?? '',
       );
 

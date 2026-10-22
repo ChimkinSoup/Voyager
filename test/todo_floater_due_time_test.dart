@@ -45,7 +45,7 @@ void main() {
     await tester.tap(find.byIcon(PhosphorIconsRegular.calendar));
     tester.view.physicalSize = Size(
       1344,
-      60 + kDateTimeSelectorPopoverSize.height + 50,
+      60 + kDateTimeSelectorPopoverSize.height + 134,
     );
     await tester.pumpAndSettle();
   }

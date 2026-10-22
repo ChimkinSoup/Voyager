@@ -21,6 +21,7 @@ Future<LeetCodeApiQuestion?> showLeetCodeSearchPopover(
     buttonContext: buttonContext,
     width: 320,
     height: 320,
+    accentBorder: true,
     accentColor: accent,
     builder: (_) => ProviderScope(
       parent: ProviderScope.containerOf(context),

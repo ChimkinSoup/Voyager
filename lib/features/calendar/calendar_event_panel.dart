@@ -61,6 +61,8 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
     this.initialIsFullDay = true,
     this.onToggleDone,
     this.leading,
+    this.draft,
+    this.onDraft,
   });
 
   final CalendarEvent? event;
@@ -87,8 +89,17 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
   /// popover.
   final Widget? leading;
 
+  /// Unsaved fields to start a *new* event from; ignored when [event] is
+  /// non-null.
+  final CalendarEventDraft? draft;
+
+  /// Receives the unsaved fields when the panel closes without a save (null
+  /// when its title and notes are both empty), and null after a save or an
+  /// explicit cancel.
+  final ValueChanged<CalendarEventDraft?>? onDraft;
+
   @override
-  ConsumerState<CalendarEventPanel> createState() => _CalendarEventPanelState();
+  ConsumerState<CalendarEventPanel> createState() => CalendarEventPanelState();
 }
 
 /// The new event a [CalendarEventPanel]'s save payload describes, as both the
@@ -111,7 +122,42 @@ CalendarEvent newCalendarEventFromPanel(Map<String, dynamic> result) {
   );
 }
 
-class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
+/// A new event's unsaved fields, as [CalendarEventPanel.onDraft] hands them
+/// back.
+class CalendarEventDraft {
+  const CalendarEventDraft({
+    required this.title,
+    required this.notes,
+    required this.isFullDay,
+    required this.start,
+    required this.end,
+    required this.colorValue,
+    required this.recurrence,
+    required this.calendarId,
+    required this.calendarIdBasis,
+    required this.reminderOffset,
+    required this.createdOn,
+  });
+
+  final String title;
+  final String notes;
+  final bool isFullDay;
+  final DateTime start;
+  final DateTime end;
+  final int colorValue;
+  final RecurrenceRule recurrence;
+  final String calendarId;
+
+  /// The panel's [CalendarEventPanel.initialCalendarId] when the draft was
+  /// written: [calendarId] only stands while that is still the default.
+  final String calendarIdBasis;
+  final int? reminderOffset;
+
+  /// The day the draft was written: [start] and [end] only stand that day.
+  final DateTime createdOn;
+}
+
+class CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final FocusNode _titleFocusNode;
@@ -147,14 +193,21 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   void initState() {
     super.initState();
     final e = widget.event;
+    final draft = e == null ? widget.draft : null;
     _eventId = e?.id ?? newId();
-    _reminderOffset = entityReminderOffset(
-      ref.read(entityRemindersProvider).valueOrNull ?? const [],
-      ReminderSourceKind.calendarEvent,
-      _eventId,
+    _reminderOffset = draft != null
+        ? draft.reminderOffset
+        : entityReminderOffset(
+            ref.read(entityRemindersProvider).valueOrNull ?? const [],
+            ReminderSourceKind.calendarEvent,
+            _eventId,
+          );
+    _titleController = TextEditingController(
+      text: e?.title ?? draft?.title ?? '',
     );
-    _titleController = TextEditingController(text: e?.title ?? '');
-    _notesController = TextEditingController(text: e?.notes ?? '');
+    _notesController = TextEditingController(
+      text: e?.notes ?? draft?.notes ?? '',
+    );
     _lastNotesText = _notesController.text;
     // Tab walks the three controls that are always on screen: title → notes →
     // all-day. The time pill used to sit between title and notes, but it only
@@ -239,6 +292,22 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _calendarId = e?.calendarId ?? widget.initialCalendarId;
     _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
     _recurrence = e?.recurrence ?? RecurrenceRule.none;
+    if (draft != null) {
+      if (draft.createdOn == DateUtils.dateOnly(DateTime.now())) {
+        _isFullDay = draft.isFullDay;
+        _start = draft.start;
+        _end = draft.end;
+        // Its rule is anchored to the start it was written with.
+        _recurrence = draft.recurrence;
+      }
+      // An empty list is one not loaded yet, which the basis alone answers.
+      if (draft.calendarIdBasis == widget.initialCalendarId &&
+          (widget.calendars.isEmpty ||
+              widget.calendars.any((c) => c.id == draft.calendarId))) {
+        _calendarId = draft.calendarId;
+        _colorValue = draft.colorValue;
+      }
+    }
     _isDone = _doneState(e);
     _scheduleTitleFocusIfNeeded();
   }
@@ -290,8 +359,11 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   @override
   void didUpdateWidget(covariant CalendarEventPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A new day alone doesn't replace what was typed into a new event, such
+    // as the calendar floater's draft when it is rebuilt past midnight.
     if (oldWidget.event?.id != widget.event?.id ||
-        oldWidget.initialDate != widget.initialDate) {
+        (oldWidget.initialDate != widget.initialDate &&
+            (widget.event != null || _isBlank))) {
       final e = widget.event;
       _titleController.text = e?.title ?? '';
       _notesController.text = e?.notes ?? '';
@@ -320,6 +392,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
 
   @override
   void dispose() {
+    widget.onDraft?.call(unsavedDraft());
     _titleController.dispose();
     _notesController.dispose();
     _titleFocusNode.dispose();
@@ -347,6 +420,29 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     'calendarId': _calendarId,
     'id': _eventId,
   };
+
+  bool get _isBlank =>
+      _titleController.text.trim().isEmpty &&
+      _notesController.text.trim().isEmpty;
+
+  /// What [CalendarEventPanel.onDraft] would be handed if the panel closed
+  /// now.
+  CalendarEventDraft? unsavedDraft() {
+    if (_closingAfterSave || _intentionalDiscard || _isBlank) return null;
+    return CalendarEventDraft(
+      title: _titleController.text,
+      notes: _notesController.text,
+      isFullDay: _isFullDay,
+      start: _start,
+      end: _end,
+      colorValue: _colorValue,
+      recurrence: _recurrence,
+      calendarId: _calendarId,
+      calendarIdBasis: widget.initialCalendarId,
+      reminderOffset: _reminderOffset,
+      createdOn: DateUtils.dateOnly(DateTime.now()),
+    );
+  }
 
   /// Returns true when the form is valid and [onSave] was called.
   bool _trySave({bool showValidationErrors = true}) {

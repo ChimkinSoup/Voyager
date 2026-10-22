@@ -254,13 +254,15 @@ class VoyagerPopupMenuRoute<T> extends PopupRoute<T> {
 
 /// Builds popup menu entries with position-aware rounded hover highlights.
 List<PopupMenuEntry<T>> voyagerPopupMenuEntries<T>(
-  List<({T value, Widget child})> items,
-) {
+  List<({T value, Widget child})> items, {
+  EdgeInsets? padding,
+}) {
   return [
     for (var i = 0; i < items.length; i++)
       VoyagerPopupMenuItem<T>(
         value: items[i].value,
         position: VoyagerMenuTheme.positionFor(i, items.length),
+        padding: padding,
         child: items[i].child,
       ),
   ];

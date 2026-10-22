@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -10,6 +12,9 @@ import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
 /// The size to open [DateTimeSelectorPopover] at: tall enough for its
 /// calendar half to fit all six week rows above the Done bar.
 const kDateTimeSelectorPopoverSize = Size(500, 440);
+
+/// The Done bar's height, under its 1px divider.
+const double _doneBarHeight = 48;
 
 /// What [DateTimeSelectorPopover] returns. [hasTime] is false only for an
 /// optional time left unset, when [dateTime] is the day's local midnight; a
@@ -270,140 +275,160 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: DateSelectorPopover(
-                        initialStartDate: _currentDateTime,
-                        initialEndDate: _currentDateTime,
-                        singleDateMode: true,
-                        inlineMode: true,
-                        onDateSelected: (newDate) {
-                          setState(() {
-                            _currentDateTime = DateTime(
-                              newDate.year,
-                              newDate.month,
-                              newDate.day,
-                              _currentDateTime.hour,
-                              _currentDateTime.minute,
-                            );
-                          });
-                          _changed();
-                          _mainFocus.requestFocus();
-                        },
+              // The calendar's rows are as tall as its columns are wide, and
+              // [kDateTimeSelectorPopoverSize] is only tall enough for six of
+              // them at its width: shown any wider, the calendar widens only
+              // as far as the extra height fits its six rows, and the time
+              // side takes the rest.
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: math.min(
+                        (constraints.maxWidth - 1) * 3 / 5,
+                        (kDateTimeSelectorPopoverSize.width - 1) * 3 / 5 +
+                            // Above the standard size's, less the Done bar
+                            // and its divider below this row.
+                            math.max(
+                                  0,
+                                  constraints.maxHeight -
+                                      (kDateTimeSelectorPopoverSize.height -
+                                          _doneBarHeight -
+                                          1),
+                                ) *
+                                7 /
+                                6,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: DateSelectorPopover(
+                          initialStartDate: _currentDateTime,
+                          initialEndDate: _currentDateTime,
+                          singleDateMode: true,
+                          inlineMode: true,
+                          onDateSelected: (newDate) {
+                            setState(() {
+                              _currentDateTime = DateTime(
+                                newDate.year,
+                                newDate.month,
+                                newDate.day,
+                                _currentDateTime.hour,
+                                _currentDateTime.minute,
+                              );
+                            });
+                            _changed();
+                            _mainFocus.requestFocus();
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(
-                    flex: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 16.0),
-                      child: Stack(
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              AnimatedOpacity(
-                                duration: const Duration(milliseconds: 150),
-                                opacity: _timeSelected ? 1.0 : 0.25,
-                                child: Listener(
-                                  onPointerDown: (_) {
-                                    if (_timeFocus.hasFocus) {
-                                      _mainFocus.requestFocus();
-                                    }
-                                  },
-                                  child: VoyagerTimePickerSpinner(
-                                    time: _currentDateTime,
-                                    isActive: _timeSelected,
-                                    normalTextStyle: _timeSelected
-                                        ? activeNormalTextStyle
-                                        : inactiveNormalTextStyle,
-                                    highlightedTextStyle: _timeSelected
-                                        ? activeHighlightTextStyle
-                                        : inactiveHighlightTextStyle,
-                                    spacing: 4,
-                                    itemHeight: 40,
-                                    onTimeChange: (newTime) {
-                                      setState(() {
-                                        if (!_timeSelected &&
-                                            widget.optionalTime) {
-                                          _timeSelected = true;
-                                        }
-                                        _currentDateTime = newTime;
-                                        _timeController.text = _formatTime(
-                                          _currentDateTime,
-                                        );
-                                      });
-                                      _changed();
-                                    },
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              AnimatedOpacity(
-                                duration: const Duration(milliseconds: 150),
-                                opacity: _timeSelected ? 1.0 : 0.25,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32.0,
-                                  ),
-                                  child: TimeEntryField(
-                                    active: _timeFocus.hasFocus,
-                                    accent: accent,
-                                    controller: _timeController,
-                                    focusNode: _timeFocus,
-                                    hintText: 'Time',
-                                    onTap: () {
-                                      // The tap that lands focus here selects
-                                      // the whole time; a later tap places the
-                                      // cursor instead of fighting the user.
-                                      if (_selectAllNextTap) {
-                                        selectAllTimeText(_timeController);
-                                        _selectAllNextTap = false;
+                    const VerticalDivider(width: 1),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: Stack(
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 150),
+                                  opacity: _timeSelected ? 1.0 : 0.25,
+                                  child: Listener(
+                                    onPointerDown: (_) {
+                                      if (_timeFocus.hasFocus) {
+                                        _mainFocus.requestFocus();
                                       }
                                     },
-                                    selectAllPending: () => _selectAllNextTap,
-                                    onSubmitted: (_) => _submit(),
+                                    child: VoyagerTimePickerSpinner(
+                                      time: _currentDateTime,
+                                      isActive: _timeSelected,
+                                      normalTextStyle: _timeSelected
+                                          ? activeNormalTextStyle
+                                          : inactiveNormalTextStyle,
+                                      highlightedTextStyle: _timeSelected
+                                          ? activeHighlightTextStyle
+                                          : inactiveHighlightTextStyle,
+                                      spacing: 4,
+                                      itemHeight: 40,
+                                      onTimeChange: (newTime) {
+                                        setState(() {
+                                          if (!_timeSelected &&
+                                              widget.optionalTime) {
+                                            _timeSelected = true;
+                                          }
+                                          _currentDateTime = newTime;
+                                          _timeController.text = _formatTime(
+                                            _currentDateTime,
+                                          );
+                                        });
+                                        _changed();
+                                      },
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          if (widget.optionalTime && _timeSelected)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton(
-                                icon: Icon(PhosphorIconsRegular.x, size: 16),
-                                onPressed: () {
-                                  setState(() {
-                                    _timeSelected = false;
-                                    _timeController.text = '';
-                                    if (_timeFocus.hasFocus) {
-                                      _mainFocus.requestFocus();
-                                    }
-                                  });
-                                  _changed();
-                                },
-                              ),
+                                const SizedBox(height: 16),
+                                AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 150),
+                                  opacity: _timeSelected ? 1.0 : 0.25,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 32.0,
+                                    ),
+                                    child: TimeEntryField(
+                                      active: _timeFocus.hasFocus,
+                                      accent: accent,
+                                      controller: _timeController,
+                                      focusNode: _timeFocus,
+                                      hintText: 'Time',
+                                      onTap: () {
+                                        // The tap that lands focus here selects
+                                        // the whole time; a later tap places the
+                                        // cursor instead of fighting the user.
+                                        if (_selectAllNextTap) {
+                                          selectAllTimeText(_timeController);
+                                          _selectAllNextTap = false;
+                                        }
+                                      },
+                                      selectAllPending: () => _selectAllNextTap,
+                                      onSubmitted: (_) => _submit(),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                        ],
+                            if (widget.optionalTime && _timeSelected)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: IconButton(
+                                  icon: Icon(PhosphorIconsRegular.x, size: 16),
+                                  onPressed: () {
+                                    setState(() {
+                                      _timeSelected = false;
+                                      _timeController.text = '';
+                                      if (_timeFocus.hasFocus) {
+                                        _mainFocus.requestFocus();
+                                      }
+                                    });
+                                    _changed();
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1),
             InkWell(
               onTap: _submit,
               child: Container(
-                height: 48,
+                height: _doneBarHeight,
                 alignment: Alignment.center,
                 child: Text(
                   'Done',

@@ -10,18 +10,48 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_app_icon.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 
 /// The calendar hotkey's floater: the calendar's new-event panel, for today,
 /// all day, in the calendar the calendar page last had open — what its "Add
-/// event" button would open. Always fresh, like the reminder floater: nothing
-/// is kept when the floater is dismissed.
-class CalendarFloater extends ConsumerWidget {
+/// event" button would open. Drafts kept across dismissals, and taken into
+/// the app by the floater's icon.
+class CalendarFloater extends ConsumerStatefulWidget {
   const CalendarFloater({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CalendarFloater> createState() => _CalendarFloaterState();
+}
+
+class _CalendarFloaterState extends ConsumerState<CalendarFloater> {
+  final _panel = GlobalKey<CalendarEventPanelState>();
+  late final FloaterController _floaters;
+
+  @override
+  void initState() {
+    super.initState();
+    _floaters = ref.read(floaterControllerProvider)..registerFlush(_keepDraft);
+  }
+
+  @override
+  void dispose() {
+    _floaters.unregisterFlush(_keepDraft);
+    super.dispose();
+  }
+
+  /// Run before every dismiss, so the draft is stored before "Open in app"
+  /// asks the calendar page to take it up, rather than from the panel's
+  /// `dispose`, which can come after.
+  Future<void> _keepDraft() async {
+    final panel = _panel.currentState;
+    if (panel == null) return;
+    ref.read(calendarCaptureDraftProvider.notifier).state = panel
+        .unsavedDraft();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final container = ProviderScope.containerOf(context, listen: false);
-    final floaters = ref.read(floaterControllerProvider);
     final settings = ref.read(settingsProvider).valueOrNull;
     final lastViewed = settings?.calendarShowAllCalendars == false
         ? settings?.lastViewedCalendarId
@@ -31,20 +61,22 @@ class CalendarFloater extends ConsumerWidget {
     // would otherwise overflow it.
     return VoyagerScrollView(
       child: ReportHeight(
-        onHeight: floaters.setHeight,
+        onHeight: _floaters.setHeight,
         child: CalendarEventPanel(
+          key: _panel,
           initialDate: DateUtils.dateOnly(DateTime.now()),
           calendars: ref.read(calendarsProvider).valueOrNull ?? const [],
           initialCalendarId: lastViewed ?? legacyCalendarId,
           focusTitleOnOpen: true,
+          draft: ref.read(calendarCaptureDraftProvider),
           onSave: (data) => unawaited(() async {
             await container
                 .read(calendarRepositoryProvider)
                 .upsertEvent(newCalendarEventFromPanel(data));
             container.invalidate(calendarEventsProvider);
-            await floaters.completeWith('Event added');
+            await _floaters.completeWith('Event added');
           }()),
-          onCancel: () => unawaited(floaters.dismiss()),
+          onCancel: () => unawaited(_floaters.dismiss()),
           leading: const FloaterAppIcon(VoyagerIcons.calendar, size: 20),
         ),
       ),

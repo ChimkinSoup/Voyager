@@ -135,12 +135,13 @@ Widget defaultCatalogMenuChild(VoyagerMenuCatalogEntry entry) {
 /// [from] sets canonical ordering (defaults to all catalog entries).
 /// [visible] filters which entries appear; order follows [from].
 /// [childOverrides] replaces the default child for specific entries (e.g. a red
-/// delete row or extra widgets).
+/// delete row or extra widgets). [padding] overrides each row's padding.
 List<PopupMenuEntry<VoyagerMenuCatalogEntry>> buildCatalogMenu(
   BuildContext context, {
   Iterable<VoyagerMenuCatalogEntry> from = VoyagerMenuCatalogEntry.values,
   Set<VoyagerMenuCatalogEntry>? visible,
   Map<VoyagerMenuCatalogEntry, VoyagerMenuChildBuilder>? childOverrides,
+  EdgeInsets? padding,
 }) {
   final shown = visible == null
       ? from.toList()
@@ -154,7 +155,7 @@ List<PopupMenuEntry<VoyagerMenuCatalogEntry>> buildCatalogMenu(
             childOverrides?[entry]?.call(context, entry) ??
             defaultCatalogMenuChild(entry),
       ),
-  ]);
+  ], padding: padding);
 }
 
 /// [entries] as context-menu items, for an action menu such as a manage

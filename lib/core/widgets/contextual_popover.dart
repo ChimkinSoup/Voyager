@@ -72,6 +72,7 @@ Future<T?> showContextualPopover<T>({
   double width = 220,
   double? height,
   Color? accentColor,
+  bool accentBorder = false,
   BuildContext? tapThroughContext,
 }) async {
   final button = buttonContext.findRenderObject() as RenderBox?;
@@ -90,6 +91,7 @@ Future<T?> showContextualPopover<T>({
       width: width,
       height: height,
       accentColor: accentColor,
+      accentBorder: accentBorder,
       tapThroughRect: _overlayRectOf(tapThroughContext, overlay),
       capturedThemes: InheritedTheme.capture(
         from: context,
@@ -118,6 +120,7 @@ Future<T?> showContextualPopoverAt<T>({
   double width = 220,
   double? height,
   Color? accentColor,
+  bool accentBorder = false,
 }) async {
   final overlay =
       Navigator.of(context).overlay?.context.findRenderObject() as RenderBox?;
@@ -134,6 +137,7 @@ Future<T?> showContextualPopoverAt<T>({
       width: width,
       height: height,
       accentColor: accentColor,
+      accentBorder: accentBorder,
       capturedThemes: InheritedTheme.capture(
         from: context,
         to: Navigator.of(context).context,
@@ -142,8 +146,8 @@ Future<T?> showContextualPopoverAt<T>({
   );
 }
 
-/// Hosts a [ContextualPopover] whose accent border can be updated by
-/// descendants via [ContextualPopoverAccent.update].
+/// Hosts a [ContextualPopover] whose accent can be updated by descendants
+/// via [ContextualPopoverAccent.update].
 class ContextualPopoverAccentHost extends StatefulWidget {
   const ContextualPopoverAccentHost({
     super.key,
@@ -151,12 +155,17 @@ class ContextualPopoverAccentHost extends StatefulWidget {
     required this.width,
     this.height,
     this.accentColor,
+    this.accentBorder = false,
   });
 
   final Widget child;
   final double width;
   final double? height;
   final Color? accentColor;
+
+  /// False keeps [accentColor]'s tint on the content but draws the neutral
+  /// hairline instead of the 2px accent edge.
+  final bool accentBorder;
 
   @override
   State<ContextualPopoverAccentHost> createState() =>
@@ -191,7 +200,7 @@ class _ContextualPopoverAccentHostState
     Widget popover = ContextualPopover(
       width: widget.width,
       height: widget.height,
-      accentColor: _accentColor,
+      accentColor: widget.accentBorder ? _accentColor : null,
       child: widget.child,
     );
     if (_accentColor != null) {
@@ -227,7 +236,9 @@ class _ContextualPopoverAccentScope extends InheritedWidget {
   bool updateShouldNotify(_ContextualPopoverAccentScope oldWidget) => false;
 }
 
-/// Updates the accent border of the enclosing [ContextualPopoverAccentHost].
+/// Updates the accent of the enclosing [ContextualPopoverAccentHost]: its
+/// content's tint, and its border when the host has
+/// [ContextualPopoverAccentHost.accentBorder].
 abstract final class ContextualPopoverAccent {
   static void update(BuildContext context, Color color) {
     final scope = _ContextualPopoverAccentScope.maybeOf(context);
@@ -243,6 +254,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T>
     required this.width,
     this.height,
     this.accentColor,
+    this.accentBorder = false,
     this.tapThroughRect,
     required this.capturedThemes,
   });
@@ -252,6 +264,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T>
   final double width;
   final double? height;
   final Color? accentColor;
+  final bool accentBorder;
 
   /// Region, in overlay coordinates, where a click outside the popover both
   /// closes it and reaches whatever is under it, instead of being spent on
@@ -337,6 +350,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T>
         width: width,
         height: height,
         accentColor: accentColor,
+        accentBorder: accentBorder,
         child: builder(context),
       ),
     );

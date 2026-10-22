@@ -65,6 +65,7 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
         kNotificationPopoverWidth,
         MediaQuery.sizeOf(context).width - 16,
       ),
+      accentBorder: true,
       accentColor: widget.accent,
       builder: (ctx) => const NotificationInboxPopover(),
     );
