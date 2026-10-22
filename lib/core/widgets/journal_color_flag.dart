@@ -1,44 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 
 /// Flag anchored to the top-right corner of a text field.
+///
+/// Opens the same popover and rows as [ScopeSwitcher], so moving an item
+/// looks identical to switching which scope the page shows.
 class JournalTitleCornerFlag extends StatelessWidget {
   const JournalTitleCornerFlag({
     super.key,
     required this.colorValue,
+    required this.items,
+    required this.selectedValue,
     required this.onSelected,
-    required this.menuEntries,
     this.size = 22,
     this.tooltip = 'Move to journal',
   });
 
   final int colorValue;
+  final List<ScopeSwitcherItem<String>> items;
+  final String selectedValue;
   final ValueChanged<String> onSelected;
-  final List<PopupMenuEntry<String>> Function(BuildContext context) menuEntries;
   final double size;
   final String tooltip;
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: tooltip,
-      padding: EdgeInsets.zero,
-      splashRadius: 0,
-      borderRadius: BorderRadius.zero,
-      offset: Offset.zero,
-      style: const ButtonStyle(
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        minimumSize: WidgetStatePropertyAll(Size.zero),
-        padding: WidgetStatePropertyAll(EdgeInsets.zero),
-        overlayColor: WidgetStatePropertyAll(Colors.transparent),
-      ),
-      itemBuilder: menuEntries,
-      onSelected: onSelected,
-      child: JournalBookmarkFlag(
-        colorValue: colorValue,
-        size: size,
-        snapToTopEdge: true,
+    return Tooltip(
+      message: tooltip,
+      child: Builder(
+        builder: (buttonContext) => MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showContextualPopover<void>(
+              context: context,
+              buttonContext: buttonContext,
+              // ScopeSwitcher's default popover width.
+              width: 260,
+              builder: (popoverContext) => ScopeMenu<String>(
+                items: items,
+                selectedValue: selectedValue,
+                onSelected: (value) {
+                  Navigator.of(popoverContext).pop();
+                  onSelected(value);
+                },
+                appAccent: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            child: JournalBookmarkFlag(
+              colorValue: colorValue,
+              size: size,
+              snapToTopEdge: true,
+            ),
+          ),
+        ),
       ),
     );
   }

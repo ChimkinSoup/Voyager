@@ -6,10 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -21,8 +24,7 @@ import 'package:voyager/features/hotkeys/quick_capture.dart';
 enum _Panel { due, list }
 
 /// The picker plus the "No due date" button under it.
-final double _datePanelHeight = kDateTimeSelectorPopoverSize.height + 50;
-const double _listRowHeight = 40;
+final double _datePanelHeight = kDateTimeSelectorPopoverSize.height + 56;
 
 /// The todo hotkey's Spotlight-style quick-add bar.
 ///
@@ -125,7 +127,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     // panel made that frame slow enough for the uncovered area to show black.
     await _setExtraHeight(switch (next) {
       _Panel.due => _datePanelHeight,
-      _Panel.list => (listCount * _listRowHeight + 16).clamp(0, 320),
+      _Panel.list => ScopeMenu.heightFor(context, listCount) + 16,
     });
     if (mounted) setState(() => _panel = next);
   }
@@ -266,6 +268,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final lists = ref.watch(todoListsProvider.settled).valueOrNull ?? const [];
+    final stats = ref.watch(todoListStatsProvider).valueOrNull;
     final draft = ref.watch(todoCaptureDraftProvider);
     final targetId = _targetListId(lists, _lastTouchedId, draft);
     final targetName = lists
@@ -352,33 +355,45 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
                       ),
                     ),
                     if (due != null)
-                      TextButton(
-                        onPressed: () => _pickDue(null),
-                        child: const Text('No due date'),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GlassButton(
+                          dense: true,
+                          onPressed: () => _pickDue(null),
+                          label: 'No due date',
+                          color: accent,
+                        ),
                       ),
                   ],
                 ),
               ),
             if (_panel == _Panel.list)
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  children: [
-                    for (final list in lists)
-                      SizedBox(
-                        height: _listRowHeight,
-                        child: ListTile(
-                          dense: true,
-                          selected: list.id == targetId,
-                          selectedColor: accent,
-                          title: Text(list.name),
-                          onTap: () => _pickList(list.id),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  // The Todo page's list menu, minus its All tasks row: a
+                  // task can't be filed under that.
+                  child: ScopeMenu<String>(
+                    items: [
+                      for (final list in lists)
+                        ScopeSwitcherItem<String>(
+                          value: list.id,
+                          label: list.name,
+                          count: () {
+                            final stat = stats?[list.id];
+                            return '${stat?.active ?? 0} | '
+                                '${stat?.completed ?? 0}';
+                          }(),
+                          color: paletteColor(
+                            list.colorValue ?? accent.toARGB32(),
+                            context,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                    selectedValue: targetId,
+                    onSelected: _pickList,
+                    appAccent: accent,
+                  ),
                 ),
               ),
           ],

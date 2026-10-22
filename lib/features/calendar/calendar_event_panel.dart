@@ -19,11 +19,11 @@ import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/repeat_selector_popover.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
-import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -602,43 +602,13 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                               onSelected: (v) =>
                                   setState(() => _calendarId = v),
                               tooltip: 'Move to calendar',
-                              menuEntries: (_) => [
-                                for (
-                                  var i = 0;
-                                  i < widget.calendars.length;
-                                  i++
-                                )
-                                  VoyagerPopupMenuItem<String>(
-                                    value: widget.calendars[i].id,
-                                    position: VoyagerMenuTheme.positionFor(
-                                      i,
-                                      widget.calendars.length,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        JournalBookmarkFlag(
-                                          colorValue: _calendarFlagColor(
-                                            widget.calendars[i],
-                                          ),
-                                          size: 12,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(widget.calendars[i].name),
-                                        ),
-                                        if (widget.calendars[i].id ==
-                                            _calendarId)
-                                          Icon(
-                                            PhosphorIconsRegular.check,
-                                            size: 18,
-                                            color: Color(
-                                              _calendarFlagColor(
-                                                widget.calendars[i],
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
+                              selectedValue: _calendarId,
+                              items: [
+                                for (final calendar in widget.calendars)
+                                  ScopeSwitcherItem<String>(
+                                    value: calendar.id,
+                                    label: calendar.name,
+                                    color: Color(_calendarFlagColor(calendar)),
                                   ),
                               ],
                             ),

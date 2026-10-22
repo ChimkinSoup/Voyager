@@ -84,15 +84,14 @@ class ScopeSwitcher<T> extends StatelessWidget {
                 : () => showContextualPopover<void>(
                     context: context,
                     buttonContext: buttonContext,
-                    accentColor: accent,
                     width: popoverWidth,
-                    builder: (context) => _ScopeMenu<T>(
+                    builder: (context) => ScopeMenu<T>(
                       items: items,
                       selectedValue: selectedValue,
-                      onSelected: onSelected,
-                      // Resolved here, outside the popover: inside it the
-                      // theme's primary is re-tinted to [accent], so the
-                      // all-scope row would wear the open scope's colour.
+                      onSelected: (value) {
+                        Navigator.of(context).pop();
+                        onSelected(value);
+                      },
                       appAccent: theme.colorScheme.primary,
                     ),
                   ),
@@ -143,8 +142,11 @@ class ScopeSwitcher<T> extends StatelessWidget {
   }
 }
 
-class _ScopeMenu<T> extends StatelessWidget {
-  const _ScopeMenu({
+/// The switcher's rows: also shown inline by the todo floater, whose window
+/// is too short to open the popover in.
+class ScopeMenu<T> extends StatelessWidget {
+  const ScopeMenu({
+    super.key,
     required this.items,
     required this.selectedValue,
     required this.onSelected,
@@ -156,10 +158,25 @@ class _ScopeMenu<T> extends StatelessWidget {
   final ValueChanged<T> onSelected;
   final Color appAccent;
 
+  static const _maxHeight = 320.0;
+
+  /// The menu's height for [count] rows, for a host that must size its
+  /// window before the menu is built.
+  static double heightFor(BuildContext context, int count) {
+    final line = TextPainter(
+      text: TextSpan(text: 'Ag', style: Theme.of(context).textTheme.bodySmall),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final rowHeight = line.height + _ScopeMenuRow._verticalPadding * 2;
+    line.dispose();
+    return (count * rowHeight).clamp(0, _maxHeight);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 320),
+      constraints: const BoxConstraints(maxHeight: _maxHeight),
       child: ListView(
         shrinkWrap: true,
         padding: EdgeInsets.zero,
@@ -170,10 +187,7 @@ class _ScopeMenu<T> extends StatelessWidget {
               count: item.count,
               color: item.color ?? appAccent,
               selected: item.value == selectedValue,
-              onTap: () {
-                Navigator.of(context).pop();
-                onSelected(item.value);
-              },
+              onTap: () => onSelected(item.value),
             ),
         ],
       ),
@@ -196,6 +210,8 @@ class _ScopeMenuRow extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  static const _verticalPadding = 9.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -203,7 +219,10 @@ class _ScopeMenuRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: _verticalPadding,
+        ),
         child: Row(
           children: [
             Expanded(

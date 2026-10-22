@@ -16,13 +16,13 @@ import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
-import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -33,7 +33,6 @@ import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
-import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -1600,36 +1599,14 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
                         child: JournalTitleCornerFlag(
                           colorValue: _accentColor.toARGB32(),
                           onSelected: _moveToJournal,
-                          menuEntries: (_) => [
-                            for (var i = 0; i < widget.journals.length; i++)
-                              VoyagerPopupMenuItem<String>(
-                                value: widget.journals[i].id,
-                                position: VoyagerMenuTheme.positionFor(
-                                  i,
-                                  widget.journals.length,
-                                ),
-                                child: Row(
-                                  children: [
-                                    JournalBookmarkFlag(
-                                      colorValue:
-                                          widget.journals[i].colorValue ??
-                                          _accentColor.toARGB32(),
-                                      size: 12,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(widget.journals[i].name),
-                                    ),
-                                    if (widget.journals[i].id ==
-                                        _entry.journalId)
-                                      Icon(
-                                        PhosphorIconsRegular.check,
-                                        size: 18,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                      ),
-                                  ],
+                          selectedValue: _entry.journalId,
+                          items: [
+                            for (final journal in widget.journals)
+                              ScopeSwitcherItem<String>(
+                                value: journal.id,
+                                label: journal.name,
+                                color: Color(
+                                  journal.colorValue ?? _accentColor.toARGB32(),
                                 ),
                               ),
                           ],

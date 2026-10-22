@@ -35,12 +35,10 @@ import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
-import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
-import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
@@ -2454,32 +2452,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return JournalTitleCornerFlag(
       colorValue: color,
       onSelected: _moveEntryToJournal,
-      menuEntries: (_) => [
-        for (var i = 0; i < journals.length; i++)
-          VoyagerPopupMenuItem<String>(
-            value: journals[i].id,
-            position: VoyagerMenuTheme.positionFor(i, journals.length),
-            child: Row(
-              children: [
-                JournalBookmarkFlag(
-                  colorValue: _journalFlagColor(journals[i]),
-                  size: 12,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    journals[i].name,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (journals[i].id == entry.journalId)
-                  Icon(
-                    PhosphorIconsRegular.check,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-              ],
-            ),
+      selectedValue: entry.journalId,
+      items: [
+        for (final journal in journals)
+          ScopeSwitcherItem<String>(
+            value: journal.id,
+            label: journal.name,
+            color: Color(_journalFlagColor(journal)),
           ),
       ],
     );

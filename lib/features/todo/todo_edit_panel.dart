@@ -19,7 +19,6 @@ import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
-import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/domain/todo/todo_recurring_completion.dart';
@@ -30,6 +29,7 @@ import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -39,7 +39,6 @@ import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/notifications/reminder_bell_button.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
-import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
@@ -1332,33 +1331,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                               widget.listColor ??
                               theme.colorScheme.primary.toARGB32(),
                           onSelected: _moveToList,
-                          menuEntries: (_) => [
-                            for (var i = 0; i < widget.lists.length; i++)
-                              VoyagerPopupMenuItem<String>(
-                                value: widget.lists[i].id,
-                                position: VoyagerMenuTheme.positionFor(
-                                  i,
-                                  widget.lists.length,
-                                ),
-                                child: Row(
-                                  children: [
-                                    JournalBookmarkFlag(
-                                      colorValue: _listFlagColor(
-                                        widget.lists[i],
-                                      ),
-                                      size: 12,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: Text(widget.lists[i].name)),
-                                    if (widget.lists[i].id ==
-                                        widget.task.listId)
-                                      Icon(
-                                        PhosphorIconsRegular.check,
-                                        size: 18,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                  ],
-                                ),
+                          selectedValue: widget.task.listId,
+                          items: [
+                            for (final list in widget.lists)
+                              ScopeSwitcherItem<String>(
+                                value: list.id,
+                                label: list.name,
+                                color: Color(_listFlagColor(list)),
                               ),
                           ],
                         ),
