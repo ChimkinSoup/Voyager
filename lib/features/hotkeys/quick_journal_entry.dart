@@ -122,9 +122,18 @@ Future<_Target> _target(ProviderContainer container) async {
 /// day it is about). Otherwise an entry already written today in the journal
 /// the hotkey targets — say one added by hand on the journal page — is adopted
 /// as today's, the latest when there are several.
-Future<JournalEntry?> findQuickJournalEntry(
+///
+/// With the journal the hotkey targets, which a new entry would be filed into
+/// — null only when there are no journals at all.
+Future<({JournalEntry? entry, String? targetJournalId})> findQuickJournalEntry(
   ProviderContainer container,
-) async => _find(container, await _target(container));
+) async {
+  final target = await _target(container);
+  return (
+    entry: await _find(container, target),
+    targetJournalId: target.journalId,
+  );
+}
 
 Future<JournalEntry?> _find(ProviderContainer container, _Target target) async {
   final store = container.read(quickJournalPointerStoreProvider);

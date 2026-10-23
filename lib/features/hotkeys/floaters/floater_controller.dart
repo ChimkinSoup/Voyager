@@ -70,6 +70,10 @@ class FloaterController extends ChangeNotifier with WindowListener {
   String? get confirmation => _confirmation;
   String? _confirmation;
 
+  /// The check beside [confirmation], when not the app accent.
+  Color? get confirmationColor => _confirmationColor;
+  Color? _confirmationColor;
+
   /// Blur only dismisses once the floater has actually had focus, so a blur
   /// still in flight from before it opened can't close it straight away.
   var _armed = false;
@@ -193,14 +197,16 @@ class FloaterController extends ChangeNotifier with WindowListener {
     );
   });
 
-  /// Shows [message] briefly, then dismisses.
-  Future<void> completeWith(String message) => _serial(() async {
-    if (_active == null) return;
-    _confirmation = message;
-    notifyListeners();
-    await Future<void>.delayed(const Duration(milliseconds: 750));
-    await _dismiss(showMain: false);
-  });
+  /// Shows [message] briefly, then dismisses; its check in [color] when given.
+  Future<void> completeWith(String message, {Color? color}) =>
+      _serial(() async {
+        if (_active == null) return;
+        _confirmation = message;
+        _confirmationColor = color;
+        notifyListeners();
+        await Future<void>.delayed(const Duration(milliseconds: 750));
+        await _dismiss(showMain: false);
+      });
 
   /// Tray "Open Voyager".
   Future<void> showMainWindow() => _serial(() async {
@@ -285,6 +291,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
       onRestore: () {
         _active = null;
         _confirmation = null;
+        _confirmationColor = null;
         notifyListeners();
       },
     );

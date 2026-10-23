@@ -281,13 +281,18 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         ..invalidate(todoListStatsProvider);
       container.read(todoCaptureDraftProvider.notifier).state =
           const TodoCaptureDraft();
-      final listName = lists
-          .firstWhere((list) => list.id == listId, orElse: () => lists.first)
-          .name;
+      final list = lists.firstWhere(
+        (list) => list.id == listId,
+        orElse: () => lists.first,
+      );
+      final listColor = list.colorValue;
       container.read(appSoundsProvider).play(AppSound.saved);
       await container
           .read(floaterControllerProvider)
-          .completeWith('Added to $listName');
+          .completeWith(
+            'Added to ${list.name}',
+            color: listColor == null ? null : Color(listColor),
+          );
     } catch (error, stack) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -305,15 +310,16 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
     final lists = ref.watch(todoListsProvider.settled).valueOrNull ?? const [];
     final stats = ref.watch(todoListStatsProvider).valueOrNull;
     final draft = ref.watch(todoCaptureDraftProvider);
     final targetId = _targetListId(lists, _lastTouchedId, draft);
-    final targetName = lists
-        .where((list) => list.id == targetId)
-        .map((list) => list.name)
-        .firstOrNull;
+    final targetList = lists.where((list) => list.id == targetId).firstOrNull;
+    final targetName = targetList?.name;
+    // The target list's color, as the Todo page's composer wears it.
+    final accent = Color(
+      targetList?.colorValue ?? theme.colorScheme.primary.toARGB32(),
+    );
     final due = draft.dueDate;
     final hasTime = due != null && draft.dueHasTime;
 
@@ -458,14 +464,15 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
                   return '${stat?.active ?? 0} | ${stat?.completed ?? 0}';
                 }(),
                 color: paletteColor(
-                  list.colorValue ?? accent.toARGB32(),
+                  list.colorValue ??
+                      Theme.of(context).colorScheme.primary.toARGB32(),
                   context,
                 ),
               ),
           ],
           selectedValue: targetId,
           onSelected: _pickList,
-          appAccent: accent,
+          appAccent: Theme.of(context).colorScheme.primary,
         ),
       ),
     };

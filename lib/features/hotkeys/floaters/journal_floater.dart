@@ -60,6 +60,10 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
 
   JournalEntry? _entry;
 
+  /// The journal a new entry would be filed into, whose color the notepad
+  /// wears until it is bound to an entry.
+  String? _targetJournalId;
+
   /// The id today's entry is created as, handed to the image targets before
   /// it exists.
   final _pendingId = newId();
@@ -94,9 +98,12 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   }
 
   Future<void> _bind() async {
-    final entry = await findQuickJournalEntry(_container);
+    final (:entry, :targetJournalId) = await findQuickJournalEntry(_container);
     if (!mounted) return;
-    setState(() => _loaded = true);
+    setState(() {
+      _loaded = true;
+      _targetJournalId = targetJournalId;
+    });
     if (entry == null) {
       _focus.requestFocus();
       return;
@@ -339,8 +346,16 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
     final entry = _entry;
+    // The entry's journal color, as the journal page wears it.
+    final journalId = entry?.journalId ?? _targetJournalId;
+    final journal =
+        (ref.watch(journalsProvider.settled).valueOrNull ?? const [])
+            .where((journal) => journal.id == journalId)
+            .firstOrNull;
+    final accent = Color(
+      journal?.colorValue ?? theme.colorScheme.primary.toARGB32(),
+    );
     final entryId = entry?.id ?? _pendingId;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

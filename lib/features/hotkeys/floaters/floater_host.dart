@@ -63,17 +63,26 @@ class _FloaterHostState extends ConsumerState<FloaterHost> {
           ),
         ),
         if (kind != null)
-          _FloaterSurface(kind: kind, confirmation: controller.confirmation),
+          _FloaterSurface(
+            kind: kind,
+            confirmation: controller.confirmation,
+            confirmationColor: controller.confirmationColor,
+          ),
       ],
     );
   }
 }
 
 class _FloaterSurface extends StatelessWidget {
-  const _FloaterSurface({required this.kind, required this.confirmation});
+  const _FloaterSurface({
+    required this.kind,
+    required this.confirmation,
+    required this.confirmationColor,
+  });
 
   final QuickCaptureKind kind;
   final String? confirmation;
+  final Color? confirmationColor;
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +137,7 @@ class _FloaterSurface extends StatelessWidget {
                     children: [
                       Icon(
                         PhosphorIconsRegular.checkCircle,
-                        color: theme.colorScheme.primary,
+                        color: confirmationColor ?? theme.colorScheme.primary,
                       ),
                       const SizedBox(width: 8),
                       Text(confirmation, style: theme.textTheme.titleSmall),
