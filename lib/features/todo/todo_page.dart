@@ -91,6 +91,9 @@ typedef _RowSignature = ({
   String searchKeywordsKey,
   bool isActiveMatch,
   String? listBadgeName,
+  // Whether a date-only due date is past depends on the day, so a row cached
+  // before midnight can't be reused after it.
+  DateTime today,
 });
 
 /// A [ScrollController] that can be told to hold whatever the view is
@@ -2380,6 +2383,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       searchKeywordsKey: searchKeywords.join(' '),
       isActiveMatch: isActiveMatch,
       listBadgeName: listBadgeName,
+      today: ref.read(todayProvider(0)),
     );
     if (!DevFlags.disableCache) {
       final cached = _rowWidgetCache[task.id];
@@ -2923,6 +2927,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
         unawaited(_takeQuickCaptureDraft());
       }
     });
+    // The page stays mounted, so rebuild when the day turns over: rows show a
+    // date-only due date as overdue from the day after it.
+    ref.watch(todayProvider(0));
     final settingsAsync = ref.watch(settingsProvider.settled);
     final settings = settingsAsync.valueOrNull;
     _applySavedViewPreferences(settings);

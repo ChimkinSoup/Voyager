@@ -556,6 +556,9 @@ class _StudyStatsHeader extends ConsumerWidget {
 
     // Due ids and the due count come from the same list, so the button can
     // never offer to study a number of cards different from the one it shows.
+    // Re-read each minute: cards come due at any time of day, not only when
+    // something else rebuilds the header.
+    ref.watch(minuteTickProvider);
     final now = DateTime.now().toUtc();
     final dueIds = {
       for (final card in cardsAsync.valueOrNull ?? const <StudyCard>[])

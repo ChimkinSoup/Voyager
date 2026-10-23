@@ -23,6 +23,8 @@ class BudgetPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final budgets = ref.watch(budgetsProvider.settled).valueOrNull ?? const [];
+    // Rebuilds when the day turns over, so the period follows the clock.
+    ref.watch(todayProvider(0));
     final now = DateTime.now();
     final transactions = settledTransactions(
       ref.watch(transactionsProvider.settled).valueOrNull ?? const [],

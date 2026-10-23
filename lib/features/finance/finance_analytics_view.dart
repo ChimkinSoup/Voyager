@@ -243,6 +243,8 @@ class _CashFlowCard extends ConsumerWidget {
     final granularity = ref.watch(
       financeUiPrefsProvider.select((prefs) => prefs.cashFlowGranularity),
     );
+    // Rebuilds when the day turns over, so the periods follow the clock.
+    ref.watch(todayProvider(0));
     final transactions = settledTransactions(
       ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
       DateTime.now(),
@@ -756,6 +758,8 @@ class _BreakdownCard extends ConsumerWidget {
       financeUiPrefsProvider.select((prefs) => prefs.breakdownMode),
     );
     final focus = ref.watch(_breakdownFocusProvider);
+    // Rebuilds when the day turns over, so the period follows the clock.
+    ref.watch(todayProvider(0));
     final now = DateTime.now();
     final transactions = settledTransactions(
       ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
@@ -1618,6 +1622,8 @@ class _NetWorthCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
+    // Rebuilds when the day turns over, so the figures follow the clock.
+    ref.watch(todayProvider(0));
     final transactions = settledTransactions(
       ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
       DateTime.now(),

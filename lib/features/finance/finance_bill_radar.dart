@@ -33,6 +33,8 @@ class BillRadarPanel extends ConsumerWidget {
     // now, and subscriptionsProvider is keepAlive, so an order baked at fetch
     // time decays — on a long desktop session a bill that has just come due
     // stays sorted last while its own tile correctly reads "Due today".
+    // Watching the day rebuilds the panel when it turns over.
+    ref.watch(todayProvider(0));
     final now = DateTime.now();
     final subscriptions = [
       ...(subscriptionsAsync.valueOrNull ?? const <Subscription>[]),

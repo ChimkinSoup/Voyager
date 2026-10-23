@@ -30,6 +30,8 @@ class FinanceGoalsView extends ConsumerWidget {
     // is a full scan of every allocation, and it was being run three times
     // per goal (the total, the completed count, and each card).
     final allocatedByGoal = <String, int>{};
+    // Rebuilds when the day turns over, so the goals follow the clock.
+    ref.watch(todayProvider(0));
     final now = DateTime.now();
     for (final a in allocations) {
       if (!isGoalAllocationSettled(a, now)) continue;

@@ -27,19 +27,6 @@ final workoutPlannerModeProvider = StateProvider<WorkoutPlanMode>(
   (ref) => WorkoutPlanMode.weekly,
 );
 
-/// Today's local date, recomputed at each local midnight so a planner left
-/// open overnight moves its "today" column and "Start today" with the clock.
-final _workoutTodayProvider = Provider.autoDispose<DateTime>((ref) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final timer = Timer(
-    DateTime(now.year, now.month, now.day + 1).difference(now),
-    ref.invalidateSelf,
-  );
-  ref.onDispose(timer.cancel);
-  return today;
-});
-
 class WorkoutPage extends ConsumerWidget {
   const WorkoutPage({super.key});
 
@@ -504,7 +491,7 @@ class _StartTodayButton extends ConsumerWidget {
     }
 
     final active = ref.watch(activeWorkoutPlanProvider) ?? plan;
-    final dayIndex = active.dayIndexForDate(ref.watch(_workoutTodayProvider));
+    final dayIndex = active.dayIndexForDate(ref.watch(todayProvider(0)));
 
     return GlassButton(
       dense: true,
@@ -580,7 +567,7 @@ class _DayBoard extends ConsumerWidget {
     final live = ref.watch(
       workoutSessionControllerProvider.select((s) => s.isLive),
     );
-    final todayIndex = plan.dayIndexForDate(ref.watch(_workoutTodayProvider));
+    final todayIndex = plan.dayIndexForDate(ref.watch(todayProvider(0)));
 
     Widget columnFor(int dayIndex) {
       final dayEntries = [

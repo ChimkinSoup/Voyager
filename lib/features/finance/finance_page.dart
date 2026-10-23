@@ -644,6 +644,9 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         ? ref.watch(financeCategoriesProvider.settled).valueOrNull ??
               const <FinanceCategory>[]
         : const <FinanceCategory>[];
+    // The page stays mounted, so rebuild when the day turns over to move the
+    // TODAY / YESTERDAY headers and the hero's month-to-date.
+    ref.watch(todayProvider(0));
     final now = DateTime.now();
 
     ref.listen<FinanceLedgerJump?>(financeLedgerJumpProvider, (_, jump) {

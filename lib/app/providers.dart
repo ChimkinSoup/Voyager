@@ -2390,6 +2390,8 @@ final trackerValuesProvider = FutureProvider.family((
     final adjustments = await ref.watch(
       counterAdjustmentsProvider(trackerId).future,
     );
+    // The series runs through today; recompute when the day turns over.
+    ref.watch(todayProvider(0));
     return counterSeriesValues(tracker, adjustments, today: DateTime.now());
   }
   // Readings logged under another type stay stored but out of view: a number
@@ -2439,6 +2441,8 @@ final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
   ref.keepAlive();
   final trackers = await ref.watch(trackersProvider.future);
   final prompt = ref.watch(periodicPromptServiceProvider);
+  // Kept alive, so recompute when the day (and with it the period) turns over.
+  ref.watch(todayProvider(0));
   final today = DateTime.now();
   // Counters are never "due": there's no value for a day to be missing.
   final dueTrackers = trackers.where(

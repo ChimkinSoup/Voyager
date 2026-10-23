@@ -2990,6 +2990,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       notifier.state = null;
       _addEvent(draft: draft);
     });
+    // The page stays mounted, and its cells read the clock only on build, so
+    // rebuild when the day turns over to move the "today" marker.
+    ref.watch(todayProvider(0));
 
     // Editing the open calendar's overlay list, or any event write, reloads
     // these; keep drawing the old set meanwhile, and rebuild once, when the
