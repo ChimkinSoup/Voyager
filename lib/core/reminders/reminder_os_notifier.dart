@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path/path.dart' as p;
+import 'package:timezone/data/latest_10y.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voyager/core/platform/platform_info.dart';
 
@@ -191,15 +193,29 @@ class LocalNotificationsReminderOsNotifier implements ReminderOsNotifier {
       final android = _android;
       await _plugin.cancelAllPendingNotifications();
       final exact = await android?.canScheduleExactNotifications() ?? false;
+      final zone = await _localZone();
       final now = DateTime.now();
       for (final alert in alerts) {
         if (!alert.fireAt.isAfter(now)) continue;
+        final wall = alert.fireAt.toLocal();
         await _plugin.zonedSchedule(
           id: _idFor(alert.sourceKey),
-          // UTC rather than a named zone: the instant is recomputed from the
-          // device's wall clock every time the app runs, which is what keeps
-          // a reminder on local time across a timezone change.
-          scheduledDate: tz.TZDateTime.from(alert.fireAt.toUtc(), tz.UTC),
+          // As a wall-clock time in this device's zone, which the plugin keeps
+          // beside each alarm: a timezone change while the app is closed
+          // moves every alarm to the same time in the new zone (see
+          // VoyagerTimeZoneChangedReceiver), as the app does when it runs.
+          // An instant in UTC where the zone isn't known.
+          scheduledDate: zone == null
+              ? tz.TZDateTime.from(alert.fireAt.toUtc(), tz.UTC)
+              : tz.TZDateTime(
+                  zone,
+                  wall.year,
+                  wall.month,
+                  wall.day,
+                  wall.hour,
+                  wall.minute,
+                  wall.second,
+                ),
           notificationDetails: _details,
           androidScheduleMode: exact
               ? AndroidScheduleMode.exactAllowWhileIdle
@@ -211,6 +227,24 @@ class LocalNotificationsReminderOsNotifier implements ReminderOsNotifier {
       }
     } catch (error, stackTrace) {
       _report(error, stackTrace, 'scheduling reminder notifications');
+    }
+  }
+
+  static const _timezoneChannel = MethodChannel('voyager/timezone');
+  var _timeZonesLoaded = false;
+
+  /// This device's zone (MainActivity's `voyager/timezone`), or null when
+  /// the name is one the timezone database doesn't hold.
+  Future<tz.Location?> _localZone() async {
+    try {
+      if (!_timeZonesLoaded) {
+        tz_data.initializeTimeZones();
+        _timeZonesLoaded = true;
+      }
+      final name = await _timezoneChannel.invokeMethod<String>('localZone');
+      return name == null ? null : tz.getLocation(name);
+    } catch (_) {
+      return null;
     }
   }
 

@@ -162,6 +162,7 @@ Future<void> restoreTaskWithSubtasks(
         dueHasTime: task.dueHasTime,
         completed: task.completed,
         completedAt: task.completedAt,
+        completedUtcOffsetMinutes: task.completedUtcOffsetMinutes,
         starred: task.starred,
         sortOrder: task.sortOrder,
         dueDateSetAt: task.dueDateSetAt,

@@ -76,6 +76,7 @@ Future<void> restoreCalendarEvents(
         calendarId: event.calendarId,
         title: event.title,
         start: event.start,
+        utcOffsetMinutes: event.utcOffsetMinutes,
         end: event.end,
         isFullDay: event.isFullDay,
         colorValue: event.colorValue,

@@ -130,6 +130,10 @@ Future<AssetRoomEvent> saveRoomCashEvent(
     kind: kind,
     amountCents: amountCents,
     occurredAt: occurredAt,
+    // An unchanged date keeps the offset it was entered at.
+    utcOffsetMinutes: occurredAt == onDisk?.occurredAt
+        ? onDisk?.utcOffsetMinutes
+        : null,
     transactionId: txId,
     valuationId: valuationId,
     note: note,
@@ -146,6 +150,9 @@ Future<AssetRoomEvent> saveRoomCashEvent(
       type: roomCashType(kind),
       amountCents: amountCents,
       occurredAt: occurredAt,
+      utcOffsetMinutes: occurredAt == tx?.occurredAt
+          ? tx?.utcOffsetMinutes
+          : null,
       // A contribution's source is the account, so the ledger row reads as
       // "TFSA - note" without anyone typing it.
       origin: tx?.origin ?? asset.name,
@@ -220,6 +227,10 @@ Future<void> saveRoomTransfer(
         kind: kind,
         amountCents: amountCents,
         occurredAt: occurredAt,
+        // An unchanged date keeps the offset it was entered at.
+        utcOffsetMinutes: occurredAt == onDisk?.occurredAt
+            ? onDisk?.utcOffsetMinutes
+            : null,
         valuationId: valuationId,
         counterAssetId: counter.id,
         transferGroupId: groupId,
@@ -265,6 +276,7 @@ Future<void> syncRoomEventFromTransaction(
     event.copyWith(
       amountCents: transaction.amountCents,
       occurredAt: transaction.occurredAt,
+      utcOffsetMinutes: transaction.utcOffsetMinutes,
       note: transaction.note,
       clearNote: transaction.note == null,
       updatedAt: utcNow(),

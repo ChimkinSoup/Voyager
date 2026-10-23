@@ -7,6 +7,7 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -79,6 +80,59 @@ DateTime parseFirestoreDateOrNow(dynamic value) =>
     parseFirestoreDate(value) ?? utcNow();
 
 String? _dateToFirestore(DateTime? value) => value?.toUtc().toIso8601String();
+
+/// A recorded wall clock ([recordedWallClock]) as it syncs: ISO 8601 with
+/// the recording offset, `2026-10-22T23:30:00.000+09:00`.
+///
+/// In the date string itself rather than a field beside it: uploads merge
+/// into the stored document key by key, so a build that rewrote the date
+/// alone would have left a stale offset next to it. One that writes it
+/// without (`…Z`) now simply leaves none. Every build parses either form as
+/// the same instant.
+String _recordedToFirestore(DateTime value, int? utcOffsetMinutes) {
+  final offset = recordedOffset(value, utcOffsetMinutes);
+  final wall = recordedInstant(
+    value,
+    utcOffsetMinutes,
+  ).toUtc().add(Duration(minutes: offset)).toIso8601String();
+  final sign = offset < 0 ? '-' : '+';
+  final hours = (offset.abs() ~/ 60).toString().padLeft(2, '0');
+  final minutes = (offset.abs() % 60).toString().padLeft(2, '0');
+  // Without the trailing `Z` of the UTC form the wall clock was built in.
+  return '${wall.substring(0, wall.length - 1)}$sign$hours:$minutes';
+}
+
+final _isoOffsetPattern = RegExp(r'([+-])(\d{2}):?(\d{2})$');
+
+/// The recording offset a synced date string carries ([_recordedToFirestore]),
+/// or null for a UTC (`…Z`) or legacy value, which is read in this device's
+/// zone.
+int? firestoreRecordedOffset(dynamic value) {
+  if (value is! String || value.endsWith('Z')) return null;
+  final match = _isoOffsetPattern.firstMatch(value);
+  if (match == null) return null;
+  final minutes = int.parse(match.group(2)!) * 60 + int.parse(match.group(3)!);
+  return match.group(1) == '-' ? -minutes : minutes;
+}
+
+/// [data]'s [field] as the wall clock it was recorded on; null when the
+/// document carries no [field].
+DateTime? _recordedFromFirestore(Map<String, dynamic> data, String field) {
+  final instant = parseFirestoreDate(data[field]);
+  if (instant == null) return null;
+  return recordedWallClock(instant, firestoreRecordedOffset(data[field]));
+}
+
+/// The offset that goes with [_recordedFromFirestore]'s value: the
+/// document's own when it carries [field], [fallback] (the local copy's)
+/// when it doesn't — a date and its offset always come from the same copy.
+int? _recordedOffsetFromFirestore(
+  Map<String, dynamic> data,
+  String field,
+  int? fallback,
+) => parseFirestoreDate(data[field]) == null
+    ? fallback
+    : firestoreRecordedOffset(data[field]);
 
 /// Non-nullable counterpart of [_dateToFirestore].
 ///
@@ -294,7 +348,7 @@ Map<String, dynamic> leetCodeProblemToFirestore(LeetCodeProblem problem) => {
   // reads, so it shows the primary write-up instead of a blank card. That
   // device writing back is handled on the way in.
   ...leetCodeLegacySolutionFields(problem.primarySolution),
-  'solvedAt': _dateToFirestoreRequired(problem.solvedAt),
+  'solvedAt': _recordedToFirestore(problem.solvedAt, problem.utcOffsetMinutes),
   'interval': problem.interval,
   'ease': problem.ease,
   'dueAt': _dateToFirestore(problem.dueAt),
@@ -398,9 +452,14 @@ LeetCodeProblem mergeLeetCodeProblemFromRemote(
     // device already has rather than being blanked.
     solutions: _mergeLeetCodeSolutions(data, local),
     solvedAt:
-        parseFirestoreDate(data['solvedAt']) ??
+        _recordedFromFirestore(data, 'solvedAt') ??
         local?.solvedAt ??
         remoteUpdated,
+    utcOffsetMinutes: _recordedOffsetFromFirestore(
+      data,
+      'solvedAt',
+      local?.utcOffsetMinutes,
+    ),
     interval: (data['interval'] as num?)?.toDouble() ?? local?.interval ?? 0,
     ease: (data['ease'] as num?)?.toDouble() ?? local?.ease ?? 2.5,
     // A device still running the pre-SRS build writes no dueAt at all, so an
@@ -2171,7 +2230,7 @@ Map<String, dynamic> journalEntryToFirestore(JournalEntry entry) => {
   'title': entry.title,
   'body': entry.body,
   'richBodyJson': entry.richBodyJson,
-  'entryDate': _dateToFirestoreRequired(entry.entryDate),
+  'entryDate': _recordedToFirestore(entry.entryDate, entry.utcOffsetMinutes),
   'timestamp': _dateToFirestore(entry.timestamp),
   'tags': entry.tags,
   'mood': entry.mood,
@@ -2247,10 +2306,17 @@ JournalEntry mergeJournalEntryFromRemote(
     body: body,
     richBodyJson: richBodyJson,
     entryDate: metadataRemoteWins
-        ? (parseFirestoreDate(data['entryDate']) ??
+        ? (_recordedFromFirestore(data, 'entryDate') ??
               local?.entryDate ??
               remoteUpdated)
         : local!.entryDate,
+    utcOffsetMinutes: metadataRemoteWins
+        ? _recordedOffsetFromFirestore(
+            data,
+            'entryDate',
+            local?.utcOffsetMinutes,
+          )
+        : local.utcOffsetMinutes,
     timestamp: metadataRemoteWins
         ? (data.containsKey('timestamp')
               ? parseFirestoreDate(data['timestamp'])
@@ -2347,15 +2413,21 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'listId': todoListDocumentIdForFirestore(task.listId),
   'title': task.title,
   'notes': task.notes,
-  'dueDate': _dateToFirestore(task.dueDate),
+  'dueDate': _dateToFirestore(
+    taskDateForStorage(task.dueDate, hasTime: task.dueHasTime),
+  ),
   'dueHasTime': task.dueHasTime,
   'completed': task.completed,
-  'completedAt': _dateToFirestore(task.completedAt),
+  'completedAt': task.completedAt == null
+      ? null
+      : _recordedToFirestore(task.completedAt!, task.completedUtcOffsetMinutes),
   'starred': task.starred,
   'sortOrder': task.sortOrder,
   'dueDateSetAt': _dateToFirestore(task.dueDateSetAt),
   'recurrence': task.recurrence.toStorage(),
-  'recurrenceAnchor': _dateToFirestore(task.recurrenceAnchor),
+  'recurrenceAnchor': _dateToFirestore(
+    taskDateForStorage(task.recurrenceAnchor, hasTime: task.dueHasTime),
+  ),
   'parentTaskId': task.parentTaskId,
   'createdAt': _dateToFirestoreRequired(task.createdAt),
   'updatedAt': _dateToFirestoreRequired(task.updatedAt),
@@ -2426,7 +2498,7 @@ TodoTask mergeTodoTaskFromRemote(
         ? (data['title'] as String? ?? local?.title ?? '')
         : local!.title,
     notes: notes,
-    dueDate: dueDate,
+    dueDate: taskDateFromStorage(dueDate, hasTime: dueHasTime),
     dueHasTime: dueHasTime,
     completed: metadataRemoteWins
         ? (data['completed'] as bool? ?? local?.completed ?? false)
@@ -2436,6 +2508,11 @@ TodoTask mergeTodoTaskFromRemote(
               ? parseFirestoreDate(data['completedAt'])
               : local?.completedAt)
         : local!.completedAt,
+    completedUtcOffsetMinutes: metadataRemoteWins
+        ? (data.containsKey('completedAt')
+              ? firestoreRecordedOffset(data['completedAt'])
+              : local?.completedUtcOffsetMinutes)
+        : local.completedUtcOffsetMinutes,
     starred: metadataRemoteWins
         ? (data['starred'] as bool? ?? local?.starred ?? false)
         : local!.starred,
@@ -2457,11 +2534,14 @@ TodoTask mergeTodoTaskFromRemote(
               ? RecurrenceRule.parse(data['recurrence'] as String?)
               : (local?.recurrence ?? RecurrenceRule.none))
         : local!.recurrence,
-    recurrenceAnchor: metadataRemoteWins
-        ? (data.containsKey('recurrenceAnchor')
-              ? parseFirestoreDate(data['recurrenceAnchor'])
-              : local?.recurrenceAnchor)
-        : local!.recurrenceAnchor,
+    recurrenceAnchor: taskDateFromStorage(
+      metadataRemoteWins
+          ? (data.containsKey('recurrenceAnchor')
+                ? parseFirestoreDate(data['recurrenceAnchor'])
+                : local?.recurrenceAnchor)
+          : local!.recurrenceAnchor,
+      hasTime: dueHasTime,
+    ),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2481,7 +2561,10 @@ Map<String, dynamic> todoTaskCompletionToFirestore(
 ) => {
   'id': completion.id,
   'taskId': completion.taskId,
-  'completedAt': _dateToFirestoreRequired(completion.completedAt),
+  'completedAt': _recordedToFirestore(
+    completion.completedAt,
+    completion.utcOffsetMinutes,
+  ),
   'dueDate': _dateToFirestore(completion.dueDate),
   'version': completion.version,
   'deletedAt': _dateToFirestore(completion.deletedAt),
@@ -2506,6 +2589,11 @@ TodoTaskCompletion mergeTodoTaskCompletionFromRemote(
         parseFirestoreDate(data['completedAt']) ??
         local?.completedAt ??
         utcNow(),
+    utcOffsetMinutes: _recordedOffsetFromFirestore(
+      data,
+      'completedAt',
+      local?.utcOffsetMinutes,
+    ),
     dueDate: data.containsKey('dueDate')
         ? parseFirestoreDate(data['dueDate'])
         : local?.dueDate,
@@ -2519,7 +2607,7 @@ Map<String, dynamic> dreamEntryToFirestore(DreamEntry entry) => {
   'title': entry.title,
   'body': entry.body,
   'notes': entry.notes,
-  'entryDate': _dateToFirestoreRequired(entry.entryDate),
+  'entryDate': _recordedToFirestore(entry.entryDate, entry.utcOffsetMinutes),
   'tags': entry.tags,
   'createdAt': _dateToFirestoreRequired(entry.createdAt),
   'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
@@ -2543,7 +2631,10 @@ bool dreamRemoteWinsTie(Map<String, dynamic> data, DreamEntry local) {
     ((data['notes'] as String?) ?? '').compareTo(local.notes ?? ''),
     if (remoteDate != null)
       remoteDate.microsecondsSinceEpoch.compareTo(
-        local.entryDate.microsecondsSinceEpoch,
+        recordedInstant(
+          local.entryDate,
+          local.utcOffsetMinutes,
+        ).microsecondsSinceEpoch,
       ),
     if (remoteTags != null)
       remoteTags.join('\n').compareTo(local.tags.join('\n')),
@@ -2608,10 +2699,17 @@ DreamEntry mergeDreamEntryFromRemote(
         ? (data.containsKey('notes') ? data['notes'] as String? : local?.notes)
         : local!.notes,
     entryDate: metadataRemoteWins
-        ? (parseFirestoreDate(data['entryDate']) ??
+        ? (_recordedFromFirestore(data, 'entryDate') ??
               local?.entryDate ??
               remoteUpdated)
         : local!.entryDate,
+    utcOffsetMinutes: metadataRemoteWins
+        ? _recordedOffsetFromFirestore(
+            data,
+            'entryDate',
+            local?.utcOffsetMinutes,
+          )
+        : local.utcOffsetMinutes,
     tags: tags,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
@@ -2736,39 +2834,47 @@ Calendar mergeCalendarFromRemote(
   );
 }
 
-Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) => {
-  'id': event.id,
-  'calendarId': calendarReferenceIdForFirestore(event.calendarId),
-  'title': event.title,
-  'start': _dateToFirestoreRequired(event.start),
-  'end': _dateToFirestoreRequired(event.end),
-  'isFullDay': event.isFullDay,
-  'colorValue': event.colorValue,
-  'notes': event.notes,
-  'source': event.source.name,
-  'externalId': event.externalId,
-  'recurrence': event.recurrence.toStorage(),
-  'recurrenceEndDate': _dateToFirestore(event.recurrenceEndDate),
-  'exceptionDates': encodeExceptionDates(event.exceptionDates),
-  'recurrenceParentId': event.recurrenceParentId,
-  'recurrenceDate': _dateToFirestore(event.recurrenceDate),
-  'isDone': event.isDone,
-  // Left out rather than sent empty: uploads merge into the stored document
-  // key by key, so the marks of several devices accumulate there, and an
-  // empty map would be written over all of them.
-  if (event.doneMarks.isNotEmpty)
-    'doneMarks': {
-      for (final entry in event.doneMarks.entries)
-        calendarDateKey(entry.key): {
-          'done': entry.value.done,
-          'at': _dateToFirestoreRequired(entry.value.at),
-        },
-    },
-  'createdAt': _dateToFirestoreRequired(event.createdAt),
-  'updatedAt': _dateToFirestoreRequired(event.updatedAt),
-  'version': event.version,
-  'deletedAt': _dateToFirestore(event.deletedAt),
-};
+Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) {
+  final offset = recordedOffset(event.start, event.utcOffsetMinutes);
+  return {
+    'id': event.id,
+    'calendarId': calendarReferenceIdForFirestore(event.calendarId),
+    'title': event.title,
+    'start': _recordedToFirestore(event.start, offset),
+    // Both ends at the start's offset — see DriftCalendarRepository.
+    'end': _recordedToFirestore(event.end, offset),
+    'isFullDay': event.isFullDay,
+    'colorValue': event.colorValue,
+    'notes': event.notes,
+    'source': event.source.name,
+    'externalId': event.externalId,
+    'recurrence': event.recurrence.toStorage(),
+    'recurrenceEndDate': _dateToFirestore(
+      storedCalendarDayOrNull(event.recurrenceEndDate),
+    ),
+    'exceptionDates': encodeExceptionDates(event.exceptionDates),
+    'recurrenceParentId': event.recurrenceParentId,
+    'recurrenceDate': _dateToFirestore(
+      storedCalendarDayOrNull(event.recurrenceDate),
+    ),
+    'isDone': event.isDone,
+    // Left out rather than sent empty: uploads merge into the stored document
+    // key by key, so the marks of several devices accumulate there, and an
+    // empty map would be written over all of them.
+    if (event.doneMarks.isNotEmpty)
+      'doneMarks': {
+        for (final entry in event.doneMarks.entries)
+          calendarDateKey(entry.key): {
+            'done': entry.value.done,
+            'at': _dateToFirestoreRequired(entry.value.at),
+          },
+      },
+    'createdAt': _dateToFirestoreRequired(event.createdAt),
+    'updatedAt': _dateToFirestoreRequired(event.updatedAt),
+    'version': event.version,
+    'deletedAt': _dateToFirestore(event.deletedAt),
+  };
+}
 
 CalendarEvent mergeCalendarEventFromRemote(
   Map<String, dynamic> data,
@@ -2798,6 +2904,7 @@ CalendarEvent mergeCalendarEventFromRemote(
       title: local.title,
       start: local.start,
       end: local.end,
+      utcOffsetMinutes: local.utcOffsetMinutes,
       isFullDay: local.isFullDay,
       colorValue: local.colorValue,
       notes: local.notes,
@@ -2820,8 +2927,14 @@ CalendarEvent mergeCalendarEventFromRemote(
       _ => local?.calendarId ?? legacyCalendarId,
     },
     title: data['title'] as String? ?? local?.title ?? '',
-    start: parseFirestoreDate(data['start']) ?? local?.start ?? remoteUpdated,
-    end: parseFirestoreDate(data['end']) ?? local?.end ?? remoteUpdated,
+    start:
+        _recordedFromFirestore(data, 'start') ?? local?.start ?? remoteUpdated,
+    end: _recordedFromFirestore(data, 'end') ?? local?.end ?? remoteUpdated,
+    utcOffsetMinutes: _recordedOffsetFromFirestore(
+      data,
+      'start',
+      local?.utcOffsetMinutes,
+    ),
     isFullDay: data['isFullDay'] as bool? ?? local?.isFullDay ?? true,
     colorValue:
         (data['colorValue'] as num?)?.toInt() ??
@@ -2838,7 +2951,7 @@ CalendarEvent mergeCalendarEventFromRemote(
         ? RecurrenceRule.parse(data['recurrence'] as String?)
         : (local?.recurrence ?? RecurrenceRule.none),
     recurrenceEndDate:
-        parseFirestoreDate(data['recurrenceEndDate']) ??
+        calendarDayOfOrNull(parseFirestoreDate(data['recurrenceEndDate'])) ??
         (data.containsKey('recurrenceEndDate')
             ? null
             : local?.recurrenceEndDate),
@@ -2849,7 +2962,7 @@ CalendarEvent mergeCalendarEventFromRemote(
         ? data['recurrenceParentId'] as String?
         : local?.recurrenceParentId,
     recurrenceDate:
-        parseFirestoreDate(data['recurrenceDate']) ??
+        calendarDayOfOrNull(parseFirestoreDate(data['recurrenceDate'])) ??
         (data.containsKey('recurrenceDate') ? null : local?.recurrenceDate),
     isDone: data['isDone'] as bool? ?? local?.isDone ?? false,
     doneMarks: doneMarks,
@@ -2976,7 +3089,7 @@ StatisticTracker mergeTrackerFromRemote(
 Map<String, dynamic> trackerValueToFirestore(TrackerValue value) => {
   'id': value.id,
   'trackerId': value.trackerId,
-  'periodStart': _dateToFirestoreRequired(value.periodStart),
+  'periodStart': _dateToFirestoreRequired(storedCalendarDay(value.periodStart)),
   'intValue': value.intValue,
   'boolValue': value.boolValue,
   'enumValue': value.enumValue,
@@ -3006,7 +3119,7 @@ TrackerValue mergeTrackerValueFromRemote(
     id: id,
     trackerId: data['trackerId'] as String? ?? local?.trackerId ?? '',
     periodStart:
-        parseFirestoreDate(data['periodStart']) ??
+        calendarDayOfOrNull(parseFirestoreDate(data['periodStart'])) ??
         local?.periodStart ??
         remoteUpdated,
     intValue: (data['intValue'] as num?)?.toDouble(),
@@ -3078,14 +3191,18 @@ Map<String, dynamic> transactionToFirestore(FinancialTransaction tx) => {
   'id': tx.id,
   'type': tx.type.name,
   'amountCents': tx.amountCents,
-  'occurredAt': _dateToFirestoreRequired(tx.occurredAt),
+  'occurredAt': _recordedToFirestore(tx.occurredAt, tx.utcOffsetMinutes),
   'origin': tx.origin,
   'note': tx.note,
   'tags': tx.tags,
   'roomEventId': tx.roomEventId,
   'subscriptionId': tx.subscriptionId,
-  'settlesDueDate': _dateToFirestore(tx.settlesDueDate),
-  'paidThroughBefore': _dateToFirestore(tx.paidThroughBefore),
+  'settlesDueDate': _dateToFirestore(
+    storedCalendarDayOrNull(tx.settlesDueDate),
+  ),
+  'paidThroughBefore': _dateToFirestore(
+    storedCalendarDayOrNull(tx.paidThroughBefore),
+  ),
   'createdAt': _dateToFirestoreRequired(tx.createdAt),
   'updatedAt': _dateToFirestoreRequired(tx.updatedAt),
   'version': tx.version,
@@ -3116,9 +3233,14 @@ FinancialTransaction mergeTransactionFromRemote(
     amountCents:
         (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
     occurredAt:
-        parseFirestoreDate(data['occurredAt']) ??
+        _recordedFromFirestore(data, 'occurredAt') ??
         local?.occurredAt ??
         remoteUpdated,
+    utcOffsetMinutes: _recordedOffsetFromFirestore(
+      data,
+      'occurredAt',
+      local?.utcOffsetMinutes,
+    ),
     origin: data.containsKey('origin')
         ? data['origin'] as String?
         : local?.origin,
@@ -3133,10 +3255,10 @@ FinancialTransaction mergeTransactionFromRemote(
         ? data['subscriptionId'] as String?
         : local?.subscriptionId,
     settlesDueDate: data.containsKey('settlesDueDate')
-        ? parseFirestoreDate(data['settlesDueDate'])
+        ? calendarDayOfOrNull(parseFirestoreDate(data['settlesDueDate']))
         : local?.settlesDueDate,
     paidThroughBefore: data.containsKey('paidThroughBefore')
-        ? parseFirestoreDate(data['paidThroughBefore'])
+        ? calendarDayOfOrNull(parseFirestoreDate(data['paidThroughBefore']))
         : local?.paidThroughBefore,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
@@ -3153,8 +3275,12 @@ Map<String, dynamic> subscriptionToFirestore(Subscription subscription) => {
   'name': subscription.name,
   'amountCents': subscription.amountCents,
   'period': subscription.period.name,
-  'anchorDueDate': _dateToFirestoreRequired(subscription.anchorDueDate),
-  'paidThroughDate': _dateToFirestore(subscription.paidThroughDate),
+  'anchorDueDate': _dateToFirestoreRequired(
+    storedCalendarDay(subscription.anchorDueDate),
+  ),
+  'paidThroughDate': _dateToFirestore(
+    storedCalendarDayOrNull(subscription.paidThroughDate),
+  ),
   'colorValue': subscription.colorValue,
   'note': subscription.note,
   'store': subscription.store,
@@ -3189,14 +3315,14 @@ Subscription mergeSubscriptionFromRemote(
       local?.period ?? BillingPeriod.monthly,
     ),
     anchorDueDate:
-        parseFirestoreDate(data['anchorDueDate']) ??
+        calendarDayOfOrNull(parseFirestoreDate(data['anchorDueDate'])) ??
         local?.anchorDueDate ??
         remoteUpdated,
     // Keyed on presence, not on null: clearing a recorded payment is what an
     // edited due date does, and `?? local` would let every device that had
     // one keep it forever.
     paidThroughDate: data.containsKey('paidThroughDate')
-        ? parseFirestoreDate(data['paidThroughDate'])
+        ? calendarDayOfOrNull(parseFirestoreDate(data['paidThroughDate']))
         : local?.paidThroughDate,
     colorValue:
         (data['colorValue'] as num?)?.toInt() ??
@@ -3349,7 +3475,7 @@ Map<String, dynamic> assetValuationToFirestore(AssetValuation valuation) => {
   'id': valuation.id,
   'assetId': valuation.assetId,
   'valueCents': valuation.valueCents,
-  'asOf': _dateToFirestoreRequired(valuation.asOf),
+  'asOf': _dateToFirestoreRequired(storedCalendarDay(valuation.asOf)),
   'createdAt': _dateToFirestoreRequired(valuation.createdAt),
   'updatedAt': _dateToFirestoreRequired(valuation.updatedAt),
   'version': valuation.version,
@@ -3374,7 +3500,10 @@ AssetValuation mergeAssetValuationFromRemote(
     id: id,
     assetId: data['assetId'] as String? ?? local?.assetId ?? '',
     valueCents: (data['valueCents'] as num?)?.toInt() ?? local?.valueCents ?? 0,
-    asOf: parseFirestoreDate(data['asOf']) ?? local?.asOf ?? remoteUpdated,
+    asOf:
+        calendarDayOfOrNull(parseFirestoreDate(data['asOf'])) ??
+        local?.asOf ??
+        remoteUpdated,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -3441,7 +3570,7 @@ Map<String, dynamic> assetRoomEventToFirestore(AssetRoomEvent event) => {
   'roomId': event.roomId,
   'kind': event.kind.name,
   'amountCents': event.amountCents,
-  'occurredAt': _dateToFirestoreRequired(event.occurredAt),
+  'occurredAt': _recordedToFirestore(event.occurredAt, event.utcOffsetMinutes),
   'transactionId': event.transactionId,
   'valuationId': event.valuationId,
   'counterAssetId': event.counterAssetId,
@@ -3479,9 +3608,14 @@ AssetRoomEvent mergeAssetRoomEventFromRemote(
     amountCents:
         (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
     occurredAt:
-        parseFirestoreDate(data['occurredAt']) ??
+        _recordedFromFirestore(data, 'occurredAt') ??
         local?.occurredAt ??
         remoteUpdated,
+    utcOffsetMinutes: _recordedOffsetFromFirestore(
+      data,
+      'occurredAt',
+      local?.utcOffsetMinutes,
+    ),
     transactionId: data['transactionId'] as String?,
     valuationId: data['valuationId'] as String?,
     counterAssetId: data['counterAssetId'] as String?,
@@ -3503,7 +3637,7 @@ Map<String, dynamic> savingsGoalToFirestore(SavingsGoal goal) => {
   'targetCents': goal.targetCents,
   'colorValue': goal.colorValue,
   'note': goal.note,
-  'targetDate': _dateToFirestore(goal.targetDate),
+  'targetDate': _dateToFirestore(storedCalendarDayOrNull(goal.targetDate)),
   'createdAt': _dateToFirestoreRequired(goal.createdAt),
   'updatedAt': _dateToFirestoreRequired(goal.updatedAt),
   'version': goal.version,
@@ -3534,7 +3668,7 @@ SavingsGoal mergeSavingsGoalFromRemote(
         local?.colorValue ??
         0xFF7C9EFF,
     note: data['note'] as String?,
-    targetDate: parseFirestoreDate(data['targetDate']),
+    targetDate: calendarDayOfOrNull(parseFirestoreDate(data['targetDate'])),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -3549,7 +3683,9 @@ Map<String, dynamic> goalAllocationToFirestore(GoalAllocation allocation) => {
   'id': allocation.id,
   'goalId': allocation.goalId,
   'amountCents': allocation.amountCents,
-  'allocatedAt': _dateToFirestoreRequired(allocation.allocatedAt),
+  'allocatedAt': _dateToFirestoreRequired(
+    storedCalendarDay(allocation.allocatedAt),
+  ),
   'note': allocation.note,
   'createdAt': _dateToFirestoreRequired(allocation.createdAt),
   'updatedAt': _dateToFirestoreRequired(allocation.updatedAt),
@@ -3577,7 +3713,7 @@ GoalAllocation mergeGoalAllocationFromRemote(
     amountCents:
         (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
     allocatedAt:
-        parseFirestoreDate(data['allocatedAt']) ??
+        calendarDayOfOrNull(parseFirestoreDate(data['allocatedAt'])) ??
         local?.allocatedAt ??
         remoteUpdated,
     note: data['note'] as String?,
@@ -4291,7 +4427,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'srsEasyKey': s.srsEasyKey,
   'timelineModeYearZero': s.timelineModeYearZero,
   'birthYear': s.birthYear,
-  'birthDate': _dateToFirestore(s.birthDate),
+  'birthDate': _dateToFirestore(storedCalendarDayOrNull(s.birthDate)),
   'alertOnPeriodicPrompts': s.alertOnPeriodicPrompts,
   'alertTimeHour': s.alertTimeHour,
   'hideCompletedTasks': s.hideCompletedTasks,
@@ -4538,7 +4674,7 @@ AppSettings mergeSettingsFromRemote(
     timelineModeYearZero: data['timelineModeYearZero'] as bool?,
     birthYear: _remoteInt(data, 'birthYear'),
     clearBirthYear: _remoteClears(data, 'birthYear'),
-    birthDate: parseFirestoreDate(data['birthDate']),
+    birthDate: calendarDayOfOrNull(parseFirestoreDate(data['birthDate'])),
     clearBirthDate: _remoteClears(data, 'birthDate'),
     alertOnPeriodicPrompts: data['alertOnPeriodicPrompts'] as bool?,
     alertTimeHour: _remoteInt(data, 'alertTimeHour'),

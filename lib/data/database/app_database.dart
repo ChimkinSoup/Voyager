@@ -10,6 +10,8 @@ import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/core/utils/calendar_days.dart'
+    show recordedInstant, storedCalendarDay;
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
@@ -64,6 +66,9 @@ class JournalEntriesTable extends Table {
   TextColumn get body => text()();
   TextColumn get richBodyJson => text().nullable()();
   DateTimeColumn get entryDate => dateTime()();
+
+  /// The recording device's UTC offset at [entryDate]; see `recordedWallClock`.
+  IntColumn get utcOffsetMinutes => integer().nullable()();
   DateTimeColumn get timestamp => dateTime().nullable()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   IntColumn get mood => integer().nullable()();
@@ -86,6 +91,9 @@ class DreamEntriesTable extends Table {
   TextColumn get body => text()();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get entryDate => dateTime()();
+
+  /// The recording device's UTC offset at [entryDate]; see `recordedWallClock`.
+  IntColumn get utcOffsetMinutes => integer().nullable()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -130,6 +138,9 @@ class LeetCodeProblemsTable extends Table {
   TextColumn get code => text().withDefault(const Constant(''))();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get solvedAt => dateTime()();
+
+  /// The solving device's UTC offset at [solvedAt]; see `recordedWallClock`.
+  IntColumn get utcOffsetMinutes => integer().nullable()();
 
   /// SRS review state for the Review Deck, mirroring [StudyCardsTable]'s.
   /// `dueAt` is nullable rather than backfilled: a null reads as "due now",
@@ -204,6 +215,9 @@ class TodoTasksTable extends Table {
 
   /// See [TodoTask.completedAt].
   DateTimeColumn get completedAt => dateTime().nullable()();
+
+  /// The ticking device's UTC offset at [completedAt].
+  IntColumn get completedUtcOffsetMinutes => integer().nullable()();
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
@@ -233,6 +247,9 @@ class TodoTaskCompletionsTable extends Table {
   TextColumn get id => text()();
   TextColumn get taskId => text()();
   DateTimeColumn get completedAt => dateTime()();
+
+  /// The ticking device's UTC offset at [completedAt].
+  IntColumn get utcOffsetMinutes => integer().nullable()();
   DateTimeColumn get dueDate => dateTime().nullable()();
 
   /// Bumped by an un-tick and by a re-tick of the same occurrence. See
@@ -269,6 +286,9 @@ class CalendarEventsTable extends Table {
   TextColumn get title => text()();
   DateTimeColumn get start => dateTime()();
   DateTimeColumn get end => dateTime()();
+
+  /// The setting device's UTC offset at [start]; see `recordedWallClock`.
+  IntColumn get utcOffsetMinutes => integer().nullable()();
   BoolColumn get isFullDay => boolean().withDefault(const Constant(true))();
   IntColumn get colorValue =>
       integer().withDefault(const Constant(0xFF7C9EFF))();
@@ -375,6 +395,9 @@ class TransactionsTable extends Table {
   TextColumn get note => text().nullable()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get occurredAt => dateTime()();
+
+  /// The recording device's UTC offset at [occurredAt]; see `recordedWallClock`.
+  IntColumn get utcOffsetMinutes => integer().nullable()();
   TextColumn get roomEventId => text().nullable()();
   TextColumn get subscriptionId => text().nullable()();
   DateTimeColumn get settlesDueDate => dateTime().nullable()();
@@ -476,6 +499,9 @@ class AssetRoomEventsTable extends Table {
   TextColumn get kind => text()();
   IntColumn get amountCents => integer()();
   DateTimeColumn get occurredAt => dateTime()();
+
+  /// The recording device's UTC offset at [occurredAt]; see `recordedWallClock`.
+  IntColumn get utcOffsetMinutes => integer().nullable()();
   TextColumn get transactionId => text().nullable()();
   TextColumn get valuationId => text().nullable()();
   TextColumn get counterAssetId => text().nullable()();
@@ -2226,7 +2252,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 164;
+  int get schemaVersion => 166;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3999,6 +4025,98 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.soundsEnabled,
         );
       }
+      if (from < 165) {
+        await _moveDateOnlyFieldsToUtcDays(const [
+          (
+            'todo_tasks_table',
+            ['due_date', 'recurrence_anchor'],
+            'due_has_time = 0',
+          ),
+          ('calendar_events_table', ['recurrence_end_date'], ''),
+          ('tracker_values_table', ['period_start'], ''),
+          ('counter_adjustments_table', ['day'], ''),
+          (
+            'transactions_table',
+            ['settles_due_date', 'paid_through_before'],
+            '',
+          ),
+          ('subscriptions_table', ['anchor_due_date', 'paid_through_date'], ''),
+          ('asset_valuations_table', ['as_of'], ''),
+          ('savings_goals_table', ['target_date'], ''),
+          ('goal_allocations_table', ['allocated_at'], ''),
+          ('settings_table', ['birth_date'], ''),
+        ]);
+        await _addColumnIfNotExists(
+          migrator,
+          'journal_entries_table',
+          journalEntriesTable,
+          journalEntriesTable.utcOffsetMinutes,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'dream_entries_table',
+          dreamEntriesTable,
+          dreamEntriesTable.utcOffsetMinutes,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'transactions_table',
+          transactionsTable,
+          transactionsTable.utcOffsetMinutes,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'asset_room_events_table',
+          assetRoomEventsTable,
+          assetRoomEventsTable.utcOffsetMinutes,
+        );
+        await _stampRecordedOffsets(const [
+          ('journal_entries_table', 'entry_date', 'utc_offset_minutes'),
+          ('dream_entries_table', 'entry_date', 'utc_offset_minutes'),
+          ('transactions_table', 'occurred_at', 'utc_offset_minutes'),
+          ('asset_room_events_table', 'occurred_at', 'utc_offset_minutes'),
+        ]);
+      }
+      if (from < 166) {
+        // The same two moves for the rest of the records that name a day:
+        // task ticks and LeetCode solves keep the offset they were made at,
+        // and calendar events become wall-clock times (see
+        // CalendarEvent.start), their override date a UTC-midnight day.
+        await _addColumnIfNotExists(
+          migrator,
+          'todo_tasks_table',
+          todoTasksTable,
+          todoTasksTable.completedUtcOffsetMinutes,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'todo_task_completions_table',
+          todoTaskCompletionsTable,
+          todoTaskCompletionsTable.utcOffsetMinutes,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'leet_code_problems_table',
+          leetCodeProblemsTable,
+          leetCodeProblemsTable.utcOffsetMinutes,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'calendar_events_table',
+          calendarEventsTable,
+          calendarEventsTable.utcOffsetMinutes,
+        );
+        await _moveDateOnlyFieldsToUtcDays(const [
+          ('calendar_events_table', ['recurrence_date'], ''),
+        ]);
+        await _stampRecordedOffsets(const [
+          ('todo_tasks_table', 'completed_at', 'completed_utc_offset_minutes'),
+          ('todo_task_completions_table', 'completed_at', 'utc_offset_minutes'),
+          ('leet_code_problems_table', 'solved_at', 'utc_offset_minutes'),
+          ('calendar_events_table', 'start', 'utc_offset_minutes'),
+        ]);
+        await _alignEventEndsToStartOffset();
+      }
     },
   );
 
@@ -4206,6 +4324,163 @@ class AppDatabase extends _$AppDatabase {
           dateApplied: Value(day),
           version: Value(row.read<int>('version') + 1),
         ),
+      );
+    }
+  }
+
+  /// v165: rewrites the remaining date-only columns from the instant of a
+  /// local midnight to UTC midnight of the same calendar day, as
+  /// [_moveJobDatesAppliedToUtcDays] did for jobs — see `storedCalendarDay`.
+  /// A task's due date and anchor only when it has no time of day.
+  ///
+  /// The day is read off the stored text wherever the text carries the
+  /// writer's offset, so a device that has moved zones since still gets the
+  /// day it was written for; only the `…Z` form is read in this device's
+  /// zone. At a bumped version (bar settings and counters — see below), so
+  /// the repaired value outranks the old one on the next pull.
+  ///
+  /// [fields] lists each table's columns and the rows to take (a `WHERE`
+  /// clause, or empty for all).
+  Future<void> _moveDateOnlyFieldsToUtcDays(
+    List<(String, List<String>, String)> fields,
+  ) async {
+    for (final (table, columns, where) in fields) {
+      final rows = await customSelect(
+        'SELECT rowid AS rid, ${columns.join(', ')} FROM $table'
+        '${where.isEmpty ? '' : ' WHERE $where'}',
+      ).get();
+      for (final row in rows) {
+        final sets = <String>[];
+        final args = <Object?>[];
+        for (final column in columns) {
+          final raw = row.data[column];
+          if (raw is! String) continue;
+          final DateTime day;
+          if (raw.endsWith('Z')) {
+            final parsed = DateTime.tryParse(raw);
+            if (parsed == null) continue;
+            day = storedCalendarDay(parsed);
+          } else {
+            final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(raw);
+            if (match == null) continue;
+            day = DateTime.utc(
+              int.parse(match.group(1)!),
+              int.parse(match.group(2)!),
+              int.parse(match.group(3)!),
+            );
+          }
+          final text = day.toIso8601String();
+          if (raw == text) continue;
+          sets.add('$column = ?');
+          args.add(text);
+        }
+        if (sets.isEmpty) continue;
+        // Not settings, which have no version, nor counter adjustments,
+        // whose day already syncs as a `yyyy-MM-dd` key: bumping each
+        // device's delta row there changes nothing remote and ties its
+        // version with that device's next tap.
+        if (table != 'settings_table' &&
+            table != 'counter_adjustments_table') {
+          sets.add('version = version + 1');
+        }
+        await customStatement(
+          'UPDATE $table SET ${sets.join(', ')} WHERE rowid = ?',
+          [...args, row.read<int>('rid')],
+        );
+      }
+    }
+  }
+
+  /// v165: fills the new `utc_offset_minutes` beside each journal and dream
+  /// entry's date and each transaction's and room event's, so they keep the
+  /// day and time they were written at wherever they are read
+  /// (`recordedWallClock`).
+  ///
+  /// Taken from the stored text where it carries the writer's offset (Drift
+  /// writes a local `DateTime` as `… -04:00`); the `…Z` form a pull or a Trash
+  /// restore left has lost it, and takes this device's offset at that
+  /// instant — the zone it has been showing in. The version is left alone:
+  /// another device fills its own copy the same way, and the field travels
+  /// with the record's next edit.
+  ///
+  /// [fields] names each table's moment column and the offset column beside
+  /// it. A row whose moment is null (an open task) is left without one.
+  Future<void> _stampRecordedOffsets(
+    List<(String, String, String)> fields,
+  ) async {
+    final offsetPattern = RegExp(r' ?([+-])(\d{2}):(\d{2})$');
+    for (final (table, column, offsetColumn) in fields) {
+      final rows = await customSelect(
+        'SELECT rowid AS rid, $column FROM $table '
+        'WHERE $offsetColumn IS NULL',
+      ).get();
+      for (final row in rows) {
+        final raw = row.data[column];
+        if (raw is! String) continue;
+        final int minutes;
+        final match = offsetPattern.firstMatch(raw);
+        if (match != null) {
+          final sign = match.group(1) == '-' ? -1 : 1;
+          minutes =
+              sign *
+              (int.parse(match.group(2)!) * 60 + int.parse(match.group(3)!));
+        } else {
+          final parsed = DateTime.tryParse(raw);
+          if (parsed == null) continue;
+          minutes = parsed.toLocal().timeZoneOffset.inMinutes;
+        }
+        await customStatement(
+          'UPDATE $table SET $offsetColumn = ? WHERE rowid = ?',
+          [minutes, row.read<int>('rid')],
+        );
+      }
+    }
+  }
+
+  /// v166: re-stores each event's `end` at its start's offset, the one both
+  /// ends are read at now, keeping the wall-clock time it showed — so a
+  /// multi-day event across a DST change still ends at the hour it did. The
+  /// wall clock is the stored text's own where it carries an offset, this
+  /// device's local time for the `…Z` form.
+  Future<void> _alignEventEndsToStartOffset() async {
+    final rows = await customSelect(
+      'SELECT rowid AS rid, "end", utc_offset_minutes FROM calendar_events_table '
+      'WHERE utc_offset_minutes IS NOT NULL',
+    ).get();
+    final wallPattern = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?',
+    );
+    for (final row in rows) {
+      final raw = row.data['end'];
+      if (raw is! String) continue;
+      final parsed = DateTime.tryParse(raw);
+      if (parsed == null) continue;
+      final DateTime wall;
+      final match = raw.endsWith('Z') ? null : wallPattern.firstMatch(raw);
+      if (match == null) {
+        wall = parsed.toLocal();
+      } else {
+        int part(int i) => int.parse(match.group(i)!);
+        final fraction = (match.group(7) ?? '').padRight(6, '0');
+        wall = DateTime(
+          part(1),
+          part(2),
+          part(3),
+          part(4),
+          part(5),
+          part(6),
+          0,
+          int.parse(fraction),
+        );
+      }
+      final aligned = recordedInstant(
+        wall,
+        row.read<int>('utc_offset_minutes'),
+      );
+      if (aligned.isAtSameMomentAs(parsed)) continue;
+      await customStatement(
+        'UPDATE calendar_events_table SET "end" = ? WHERE rowid = ?',
+        [aligned.toIso8601String(), row.read<int>('rid')],
       );
     }
   }

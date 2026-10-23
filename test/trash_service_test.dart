@@ -605,7 +605,7 @@ void main() {
         );
         await todos.logCompletion(
           TodoTaskCompletion(
-            id: todoTaskCompletionId(id, null),
+            id: todoTaskCompletionId(id, null, dueHasTime: false),
             taskId: id,
             completedAt: created,
           ),
@@ -626,7 +626,7 @@ void main() {
       await trash.erase(await trash.list());
 
       expect(await counted(), ['other']);
-      final erased = await todos.getCompletion(todoTaskCompletionId('t', null));
+      final erased = await todos.getCompletion(todoTaskCompletionId('t', null, dueHasTime: false));
       expect(isErasedAt(erased!.deletedAt), isTrue);
       expect(erased.version, kEraseVersionStep);
       await trash.uploads;

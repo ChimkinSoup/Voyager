@@ -46,8 +46,10 @@ void main() {
     test('reads existing due dates by the midnight rule', () async {
       var db = AppDatabase(NativeDatabase(file));
       var repo = DriftTodoRepository(db);
-      await repo.upsertTask(_task('timed', afternoon));
-      await repo.upsertTask(_task('dated', midnight));
+      // Written with a time so both are stored as the instants builds before
+      // the field wrote (a date alone is UTC midnight now).
+      await repo.upsertTask(_task('timed', afternoon, hasTime: true));
+      await repo.upsertTask(_task('dated', midnight, hasTime: true));
       await repo.upsertTask(_task('undated', null));
       await db.close();
 
@@ -88,7 +90,9 @@ void main() {
 
     test('a document from before the field is read by the midnight rule', () {
       Map<String, dynamic> legacy(DateTime due) =>
-          todoTaskToFirestore(_task('t', due))..remove('dueHasTime');
+          // Written with a time for the instant form those builds synced.
+          todoTaskToFirestore(_task('t', due, hasTime: true))
+            ..remove('dueHasTime');
       expect(
         mergeTodoTaskFromRemote(legacy(afternoon), 't').dueHasTime,
         isTrue,

@@ -63,6 +63,7 @@ Future<({AppDatabase db, DateTime due})> _openAndMove(
           updatedAt: now,
           sortOrder: -1000000,
           dueDate: due.toUtc(),
+          dueHasTime: true,
           recurrence: const RecurrenceRule(frequency: EventRecurrence.daily),
           recurrenceAnchor: due.toUtc(),
         ),

@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:voyager/core/utils/calendar_days.dart';
+
 import 'package:voyager/domain/models/study_models.dart';
 
 const double kStudyBaseEase = 2.5;
@@ -101,7 +103,7 @@ StudyCard resetStudyCardSrs(StudyCard card, {DateTime? now}) {
 int studyDaysUntilDue(StudyCard card, {DateTime? now}) {
   final today = _dateOnly((now ?? DateTime.now()).toLocal());
   final due = _dateOnly(card.dueAt.toLocal());
-  final days = due.difference(today).inDays;
+  final days = calendarDaysBetween(today, due);
   return days < 0 ? 0 : days;
 }
 

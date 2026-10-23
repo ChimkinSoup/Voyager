@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
@@ -116,6 +117,7 @@ class LeetCodeProblem extends SoftDeletable {
     this.examples = const [],
     this.solutions = const [],
     required this.solvedAt,
+    this.utcOffsetMinutes,
     this.interval = 0,
     this.ease = 2.5,
     this.dueAt,
@@ -147,7 +149,15 @@ class LeetCodeProblem extends SoftDeletable {
   /// Records written before a problem could hold more than one solution have
   /// their single flat solution folded in here as the only entry.
   final List<LeetCodeSolution> solutions;
+
+  /// The wall clock where the problem was solved, [utcOffsetMinutes] from
+  /// UTC — so it keeps its day on the activity calendar wherever it is read.
+  /// See `recordedWallClock`.
   final DateTime solvedAt;
+
+  /// The solving device's UTC offset at [solvedAt]; null on problems from
+  /// before it was kept, whose [solvedAt] is this device's local time.
+  final int? utcOffsetMinutes;
 
   /// The solution shown when there is only room for one — the tile back, the
   /// "Copy code" action. Null when nothing has been written down yet.
@@ -203,6 +213,7 @@ class LeetCodeProblem extends SoftDeletable {
     List<String>? examples,
     List<LeetCodeSolution>? solutions,
     DateTime? solvedAt,
+    int? utcOffsetMinutes,
     double? interval,
     double? ease,
     DateTime? dueAt,
@@ -227,6 +238,12 @@ class LeetCodeProblem extends SoftDeletable {
       examples: examples ?? this.examples,
       solutions: solutions ?? this.solutions,
       solvedAt: solvedAt ?? this.solvedAt,
+      // A new solve date without an offset is on this device's clock.
+      utcOffsetMinutes:
+          utcOffsetMinutes ??
+          (solvedAt == null || solvedAt == this.solvedAt
+              ? this.utcOffsetMinutes
+              : null),
       interval: interval ?? this.interval,
       ease: ease ?? this.ease,
       dueAt: dueAt ?? this.dueAt,
@@ -250,7 +267,11 @@ class LeetCodeProblem extends SoftDeletable {
     'examples': examples,
     'solutions': [for (final solution in solutions) solution.toJson()],
     ...leetCodeLegacySolutionFields(primarySolution),
-    'solvedAt': solvedAt.toUtc().toIso8601String(),
+    'solvedAt': recordedInstant(
+      solvedAt,
+      utcOffsetMinutes,
+    ).toUtc().toIso8601String(),
+    'utcOffsetMinutes': recordedOffset(solvedAt, utcOffsetMinutes),
     'interval': interval,
     'ease': ease,
     'dueAt': dueAt?.toUtc().toIso8601String(),
@@ -290,7 +311,11 @@ class LeetCodeProblem extends SoftDeletable {
               code: json['code'] as String?,
               notes: json['notes'] as String?,
             ),
-      solvedAt: DateTime.parse(json['solvedAt'] as String).toUtc(),
+      solvedAt: recordedWallClock(
+        DateTime.parse(json['solvedAt'] as String),
+        json['utcOffsetMinutes'] as int?,
+      ),
+      utcOffsetMinutes: json['utcOffsetMinutes'] as int?,
       interval: (json['interval'] as num?)?.toDouble() ?? 0,
       ease: (json['ease'] as num?)?.toDouble() ?? 2.5,
       dueAt: json['dueAt'] != null

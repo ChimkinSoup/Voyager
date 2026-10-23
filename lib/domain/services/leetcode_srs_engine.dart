@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:voyager/core/utils/calendar_days.dart';
+
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -62,6 +64,7 @@ LeetCodeProblem restoreLeetCodeProblemSrs(
     examples: problem.examples,
     solutions: problem.solutions,
     solvedAt: problem.solvedAt,
+    utcOffsetMinutes: problem.utcOffsetMinutes,
     interval: snapshot.interval,
     ease: snapshot.ease,
     dueAt: snapshot.dueAt,
@@ -92,7 +95,7 @@ int leetCodeDaysUntilDue(LeetCodeProblem problem, {DateTime? now}) {
   if (dueAt == null) return 0;
   final today = _dateOnly((now ?? DateTime.now()).toLocal());
   final due = _dateOnly(dueAt.toLocal());
-  final days = due.difference(today).inDays;
+  final days = calendarDaysBetween(today, due);
   return days < 0 ? 0 : days;
 }
 

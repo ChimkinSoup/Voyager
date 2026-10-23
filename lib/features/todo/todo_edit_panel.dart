@@ -1051,6 +1051,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       dueHasTime: subtask.dueHasTime,
       completed: subtask.completed,
       completedAt: subtask.completedAt,
+      completedUtcOffsetMinutes: subtask.completedUtcOffsetMinutes,
       starred: subtask.starred,
       sortOrder: subtask.sortOrder,
       dueDateSetAt: subtask.dueDateSetAt,
@@ -1122,6 +1123,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       title: subtask.title,
       completed: subtask.completed,
       completedAt: subtask.completedAt,
+      completedUtcOffsetMinutes: subtask.completedUtcOffsetMinutes,
       createdAt: now,
       updatedAt: now,
     );

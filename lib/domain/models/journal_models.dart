@@ -1,4 +1,5 @@
 import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
@@ -97,6 +98,7 @@ class JournalEntry extends SoftDeletable {
     required this.title,
     required this.body,
     required this.entryDate,
+    this.utcOffsetMinutes,
     this.richBodyJson,
     this.timestamp,
     this.tags = const [],
@@ -111,7 +113,16 @@ class JournalEntry extends SoftDeletable {
   final String title;
   final String body;
   final String? richBodyJson;
+
+  /// The wall clock where the entry was written, [utcOffsetMinutes] from UTC
+  /// — so it keeps its day and time wherever it is read. See
+  /// `recordedWallClock`.
   final DateTime entryDate;
+
+  /// The writing device's UTC offset at [entryDate]. Null on entries from
+  /// before it was kept, whose [entryDate] is this device's local time; the
+  /// repository fills it in on the next save.
+  final int? utcOffsetMinutes;
   final DateTime? timestamp;
   final List<String> tags;
 
@@ -132,6 +143,7 @@ class JournalEntry extends SoftDeletable {
     String? body,
     String? richBodyJson,
     DateTime? entryDate,
+    int? utcOffsetMinutes,
     DateTime? timestamp,
     List<String>? tags,
     int? mood,
@@ -157,6 +169,13 @@ class JournalEntry extends SoftDeletable {
       body: body ?? this.body,
       richBodyJson: richBodyJson ?? this.richBodyJson,
       entryDate: entryDate ?? this.entryDate,
+      // A date picked here is on this device's clock, so a new one without
+      // an offset drops the old one and is stamped with this device's.
+      utcOffsetMinutes:
+          utcOffsetMinutes ??
+          (entryDate == null || entryDate == this.entryDate
+              ? this.utcOffsetMinutes
+              : null),
       timestamp: timestamp ?? this.timestamp,
       tags: tags ?? this.tags,
       mood: clearMood ? null : mood ?? this.mood,
@@ -177,7 +196,11 @@ class JournalEntry extends SoftDeletable {
     'title': title,
     'body': body,
     'richBodyJson': richBodyJson,
-    'entryDate': entryDate.toUtc().toIso8601String(),
+    'entryDate': recordedInstant(
+      entryDate,
+      utcOffsetMinutes,
+    ).toUtc().toIso8601String(),
+    'utcOffsetMinutes': recordedOffset(entryDate, utcOffsetMinutes),
     'timestamp': timestamp?.toUtc().toIso8601String(),
     'tags': tags,
     'mood': mood,
@@ -199,7 +222,11 @@ class JournalEntry extends SoftDeletable {
       journalId: json['journalId'] as String,
       title: json['title'] as String,
       body: json['body'] as String,
-      entryDate: DateTime.parse(json['entryDate'] as String).toUtc(),
+      entryDate: recordedWallClock(
+        DateTime.parse(json['entryDate'] as String),
+        json['utcOffsetMinutes'] as int?,
+      ),
+      utcOffsetMinutes: json['utcOffsetMinutes'] as int?,
       richBodyJson: json['richBodyJson'] as String?,
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'] as String).toUtc()

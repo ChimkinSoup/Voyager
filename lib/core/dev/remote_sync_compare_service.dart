@@ -580,7 +580,8 @@ class RemoteSyncCompareService {
     _addInstantDiff(
       diffs,
       'dueDate',
-      local.dueDate,
+      // In the form it syncs in: a date alone is UTC midnight there.
+      taskDateForStorage(local.dueDate, hasTime: local.dueHasTime),
       parseFirestoreDate(remote['dueDate']),
     );
     compare(

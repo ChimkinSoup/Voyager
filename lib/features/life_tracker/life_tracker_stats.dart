@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:intl/intl.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/features/life_tracker/weeping_cherry_geometry.dart';
 
 /// Which life statistic a label points at. Fixed set per the Life Tracker spec.
@@ -250,7 +251,7 @@ LifeStatValue resolveLifeStat({
 /// the tree's leaves rest on the ground.
 int? weeksLivedFor(DateTime? birthDate, DateTime now) {
   if (birthDate == null) return null;
-  final days = now.difference(birthDate).inDays;
+  final days = calendarDaysBetween(birthDate, now);
   if (days <= 0) return 0;
   return (days ~/ 7).clamp(0, lifespanWeeks);
 }

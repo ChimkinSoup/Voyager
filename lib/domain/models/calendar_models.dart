@@ -102,6 +102,7 @@ class CalendarEvent extends SoftDeletable {
     required this.title,
     required this.start,
     required this.end,
+    this.utcOffsetMinutes,
     this.isFullDay = true,
     this.colorValue = 0xFF7C9EFF,
     this.notes = '',
@@ -118,8 +119,18 @@ class CalendarEvent extends SoftDeletable {
 
   final String calendarId;
   final String title;
+
+  /// [start] and [end] are the wall clock where the event was set,
+  /// [utcOffsetMinutes] from UTC (`recordedWallClock`): an event keeps its
+  /// day and time wherever it is read, so a 9 AM event is at 9 AM after a
+  /// flight, and its exception dates and done marks — which are dates — keep
+  /// naming the occurrences they were set on.
   final DateTime start;
   final DateTime end;
+
+  /// The setting device's UTC offset at [start]; null on events from before
+  /// it was kept, whose times are this device's local time.
+  final int? utcOffsetMinutes;
   final bool isFullDay;
   final int colorValue;
   final String notes;
@@ -177,6 +188,7 @@ class CalendarEvent extends SoftDeletable {
     String? title,
     DateTime? start,
     DateTime? end,
+    int? utcOffsetMinutes,
     bool? isFullDay,
     int? colorValue,
     String? notes,
@@ -203,6 +215,11 @@ class CalendarEvent extends SoftDeletable {
       title: title ?? this.title,
       start: start ?? this.start,
       end: end ?? this.end,
+      // A start picked here is on this device's clock, so a new one without
+      // an offset drops the old one and is stamped with this device's.
+      utcOffsetMinutes:
+          utcOffsetMinutes ??
+          (start == null || start == this.start ? this.utcOffsetMinutes : null),
       isFullDay: isFullDay ?? this.isFullDay,
       colorValue: colorValue ?? this.colorValue,
       notes: notes ?? this.notes,

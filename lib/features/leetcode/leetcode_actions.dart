@@ -324,6 +324,7 @@ Future<void> _restoreProblem(
     examples: snapshot.examples,
     solutions: snapshot.solutions,
     solvedAt: snapshot.solvedAt,
+    utcOffsetMinutes: snapshot.utcOffsetMinutes,
     interval: snapshot.interval,
     ease: snapshot.ease,
     dueAt: snapshot.dueAt,

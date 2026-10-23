@@ -440,6 +440,13 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
           occurredAt,
           (t) => t.occurredAt,
         ),
+        // A date picked here is on this device's clock; an untouched one
+        // keeps the offset it was entered at.
+        utcOffsetMinutes: pick(
+          _date != _opened.date,
+          null,
+          (t) => t.utcOffsetMinutes,
+        ),
         origin: pick(
           _originController.text != _opened.origin,
           trimToNull(_originController.text),

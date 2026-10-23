@@ -596,6 +596,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       body: snapshot.body,
       notes: snapshot.notes,
       entryDate: snapshot.entryDate,
+      utcOffsetMinutes: snapshot.utcOffsetMinutes,
       tags: snapshot.tags,
     );
     try {
@@ -1481,6 +1482,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
     _weatherIcon = _opened.weatherIcon ?? 'sunny';
     _entry = _entry.copyWith(
       entryDate: _opened.entryDate,
+      utcOffsetMinutes: _opened.utcOffsetMinutes,
       journalId: _opened.journalId,
       bumpVersion: false,
     );
@@ -2022,7 +2024,11 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
     _titleController.text = _opened.title;
     _bodyController.text = _opened.body;
     _notesController.text = _opened.notes ?? '';
-    _entry = _entry.copyWith(entryDate: _opened.entryDate, bumpVersion: false);
+    _entry = _entry.copyWith(
+      entryDate: _opened.entryDate,
+      utcOffsetMinutes: _opened.utcOffsetMinutes,
+      bumpVersion: false,
+    );
     _saveAndClose();
   }
 

@@ -26,6 +26,9 @@ final photoSeriesPageVisibleProvider = StateProvider<bool>((ref) => false);
 /// overnight moves its current period, its badges and its streaks with the
 /// clock.
 final photoSeriesTodayProvider = Provider.autoDispose<DateTime>((ref) {
+  // Also re-read each minute: the timer is an instant, so a PC asleep past
+  // it or a timezone change moves local midnight out from under it.
+  ref.watch(minuteTickProvider);
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final timer = Timer(

@@ -8,6 +8,7 @@ import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -38,6 +39,15 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(null)
                     }
+                    else -> result.notImplemented()
+                }
+            }
+        // This device's zone, which reminders are scheduled in so they keep
+        // their wall-clock time (see reminder_os_notifier.dart).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "voyager/timezone")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "localZone" -> result.success(TimeZone.getDefault().id)
                     else -> result.notImplemented()
                 }
             }

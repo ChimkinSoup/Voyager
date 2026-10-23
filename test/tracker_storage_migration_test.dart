@@ -28,6 +28,24 @@ Future<void> _rewindToSchema88(File file) async {
   await db.close();
 }
 
+/// Stores [local] as row [id]'s `period_start` the way builds before schema
+/// 165 did — Drift's local wall time with its offset, not UTC midnight of
+/// the day.
+Future<void> _writeLegacyPeriodStart(
+  AppDatabase db,
+  String id,
+  DateTime local,
+) {
+  final offset = local.timeZoneOffset;
+  final sign = offset.isNegative ? '-' : '+';
+  final hours = offset.inHours.abs().toString().padLeft(2, '0');
+  final minutes = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+  return db.customStatement(
+    'UPDATE tracker_values_table SET period_start = ? WHERE id = ?',
+    ['${local.toIso8601String()} $sign$hours:$minutes', id],
+  );
+}
+
 void main() {
   late Directory dir;
   late File file;
@@ -123,6 +141,11 @@ void main() {
         updatedAt: now,
       ),
     );
+    await _writeLegacyPeriodStart(
+      seed,
+      'weekly-1_2026-10-19',
+      DateTime(2026, 10, 18),
+    );
     await seed.close();
 
     await _rewindToSchema88(file);
@@ -160,6 +183,11 @@ void main() {
         updatedAt: now,
       ),
     );
+    await _writeLegacyPeriodStart(
+      seed,
+      'weekly-1_2026-03-09',
+      DateTime(2026, 3, 7, 23),
+    );
     await seed.close();
 
     await _rewindToSchema88(file);
@@ -191,6 +219,11 @@ void main() {
         updatedAt: now,
       ),
     );
+    await _writeLegacyPeriodStart(
+      seed,
+      'weekly-1_2026-10-19',
+      DateTime(2026, 10, 19),
+    );
     await seed.close();
 
     await _rewindToSchema88(file);
@@ -202,8 +235,9 @@ void main() {
     await upgraded.close();
 
     expect(values.single.periodStart, DateTime(2026, 10, 19));
-    // Untouched, so an already-correct row costs no sync traffic.
-    expect(values.single.version, 4);
+    // Untouched by this repair, so an already-correct row costs no sync
+    // traffic; the one bump is schema 165 moving the day to UTC midnight.
+    expect(values.single.version, 5);
   });
 
   test('88→89 leaves the other cadences alone', () async {

@@ -11,6 +11,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
@@ -144,8 +145,8 @@ void main() {
         valueId,
       );
       expect(
-        parseFirestoreDate(remote!['periodStart'])!.isAtSameMomentAs(monday),
-        isTrue,
+        calendarDayOf(parseFirestoreDate(remote!['periodStart'])!),
+        monday,
       );
       expect(remote['version'], 1);
     });
@@ -201,13 +202,23 @@ void main() {
 
     test("a value on another time zone's Monday is left alone, so two devices "
         "zones apart don't move it back and forth", () async {
+      // As a build before UTC-midnight days synced it: the instant of that
+      // zone's local midnight.
       final elsewhereMonday = monday.add(const Duration(hours: 3));
       await replaceServerValue(elsewhereMonday);
+      final doc = (await server.getDocument(
+        FirestoreCollections.trackerValues,
+        valueId,
+      ))!;
+      await server.upsertDocument(FirestoreCollections.trackerValues, valueId, {
+        ...doc,
+        'periodStart': elsewhereMonday.toUtc().toIso8601String(),
+      });
 
       await sync.pullAll();
 
       final local = await DriftTrackerRepository(db).getValue(valueId);
-      expect(local!.periodStart.isAtSameMomentAs(elsewhereMonday), isTrue);
+      expect(local!.periodStart, monday);
       expect(local.version, 0);
       final remote = await server.getDocument(
         FirestoreCollections.trackerValues,

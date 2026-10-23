@@ -3028,7 +3028,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (d == today) return 'Today';
-    final yesterday = today.subtract(const Duration(days: 1));
+    final yesterday = addCalendarDays(today, -1);
     if (d == yesterday) return 'Yesterday';
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }

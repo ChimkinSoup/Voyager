@@ -7,7 +7,7 @@ int chartBucketHour(DateTime localTime) => (localTime.hour ~/ 3) * 3;
 
 List<ForecastPeriod> periodsForDay(List<ForecastPeriod> periods, DateTime day) {
   final dayStart = DateTime(day.year, day.month, day.day);
-  final dayEnd = dayStart.add(const Duration(days: 1));
+  final dayEnd = DateTime(day.year, day.month, day.day + 1);
   final buckets = <int, ForecastPeriod>{};
 
   for (final period in periods) {
@@ -176,7 +176,7 @@ DayForecastChartSeries buildDayForecastChartSeries(
 
   final nextMidnight = midnightBucketForDay(
     periods,
-    day.add(const Duration(days: 1)),
+    DateTime(day.year, day.month, day.day + 1),
   );
   if (nextMidnight != null) {
     minTemp = nextMidnight.tempC < minTemp ? nextMidnight.tempC : minTemp;

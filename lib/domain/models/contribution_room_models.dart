@@ -143,6 +143,7 @@ class AssetRoomEvent extends SoftDeletable {
     required this.kind,
     required this.amountCents,
     required this.occurredAt,
+    this.utcOffsetMinutes,
     this.transactionId,
     this.valuationId,
     this.counterAssetId,
@@ -161,8 +162,14 @@ class AssetRoomEvent extends SoftDeletable {
   /// Magnitude, always >= 0; [kind] carries the direction.
   final int amountCents;
 
-  /// Local wall-clock. Its calendar day decides settled vs upcoming.
+  /// The wall clock where the event was entered ([utcOffsetMinutes] from UTC
+  /// — see `recordedWallClock`). Its calendar day decides settled vs upcoming
+  /// and its year the tax year, wherever it is read.
   final DateTime occurredAt;
+
+  /// The entering device's UTC offset at [occurredAt]; null on rows from
+  /// before it was kept, whose [occurredAt] is this device's local time.
+  final int? utcOffsetMinutes;
 
   /// The paired ledger row. Null for transfers, which move no cash.
   final String? transactionId;
@@ -183,6 +190,7 @@ class AssetRoomEvent extends SoftDeletable {
     RoomEventKind? kind,
     int? amountCents,
     DateTime? occurredAt,
+    int? utcOffsetMinutes,
     String? transactionId,
     String? valuationId,
     String? counterAssetId,
@@ -203,6 +211,13 @@ class AssetRoomEvent extends SoftDeletable {
       kind: kind ?? this.kind,
       amountCents: amountCents ?? this.amountCents,
       occurredAt: occurredAt ?? this.occurredAt,
+      // A date picked here is on this device's clock — see
+      // FinancialTransaction.copyWith.
+      utcOffsetMinutes:
+          utcOffsetMinutes ??
+          (occurredAt == null || occurredAt == this.occurredAt
+              ? this.utcOffsetMinutes
+              : null),
       transactionId: transactionId ?? this.transactionId,
       valuationId: valuationId ?? this.valuationId,
       counterAssetId: counterAssetId ?? this.counterAssetId,

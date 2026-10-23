@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
@@ -56,6 +57,7 @@ class TodoTask extends SoftDeletable {
     this.dueHasTime = false,
     this.completed = false,
     this.completedAt,
+    this.completedUtcOffsetMinutes,
     this.starred = false,
     this.sortOrder = 0,
     this.dueDateSetAt,
@@ -79,6 +81,11 @@ class TodoTask extends SoftDeletable {
   /// tasks completed before the field existed. A repeating task never holds
   /// one — its ticks are [TodoTaskCompletion] rows.
   final DateTime? completedAt;
+
+  /// The ticking device's UTC offset at [completedAt], so the day it was
+  /// done in can be read where it was done (`recordedWallClock`). Null with
+  /// [completedAt], and on ticks from before it was kept.
+  final int? completedUtcOffsetMinutes;
   final bool starred;
   final int sortOrder;
   final DateTime? dueDateSetAt;
@@ -141,6 +148,10 @@ class TodoTask extends SoftDeletable {
       completedAt: completed == null || completed == this.completed
           ? completedAt
           : (completed ? DateTime.now().toUtc() : null),
+      completedUtcOffsetMinutes:
+          completed == null || completed == this.completed
+          ? completedUtcOffsetMinutes
+          : (completed ? DateTime.now().timeZoneOffset.inMinutes : null),
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       dueDateSetAt: clearDueDateSetAt
@@ -169,6 +180,7 @@ class TodoTask extends SoftDeletable {
     'dueHasTime': dueHasTime,
     'completed': completed,
     'completedAt': completedAt?.toUtc().toIso8601String(),
+    'completedUtcOffsetMinutes': completedUtcOffsetMinutes,
     'starred': starred,
     'sortOrder': sortOrder,
     'dueDateSetAt': dueDateSetAt?.toUtc().toIso8601String(),
@@ -198,6 +210,7 @@ class TodoTask extends SoftDeletable {
       completedAt: json['completedAt'] != null
           ? DateTime.parse(json['completedAt'] as String).toUtc()
           : null,
+      completedUtcOffsetMinutes: json['completedUtcOffsetMinutes'] as int?,
       starred: json['starred'] as bool? ?? false,
       sortOrder: json['sortOrder'] as int? ?? 0,
       dueDateSetAt: json['dueDateSetAt'] != null
@@ -220,12 +233,40 @@ bool legacyDueHasTime(DateTime? due) {
   return local != null && (local.hour != 0 || local.minute != 0);
 }
 
+/// A task's [TodoTask.dueDate] or [TodoTask.recurrenceAnchor] in the form it
+/// is stored and synced in: a date-only due day as UTC midnight (see
+/// [storedCalendarDay]), a timed one as the instant it is.
+DateTime? taskDateForStorage(DateTime? value, {required bool hasTime}) =>
+    value == null || hasTime ? value : storedCalendarDay(value);
+
+/// The reverse of [taskDateForStorage]: a date-only due day back at local
+/// midnight, so it names the same day in every zone.
+DateTime? taskDateFromStorage(DateTime? value, {required bool hasTime}) =>
+    value == null || hasTime ? value : calendarDayOf(value);
+
 /// The id of [taskId]'s completion against [dueDate]: one row per occurrence.
 ///
 /// Derived rather than random so every device addresses the same row. Two
 /// devices ticking the same task offline write one row, not two, and an
 /// un-tick can tombstone the row before the tick itself has synced in.
-String todoTaskCompletionId(String taskId, DateTime? dueDate) =>
+///
+/// Keyed on the due date's stored form ([taskDateForStorage]): a day alone as
+/// UTC midnight, the same instant in every zone. Its local midnight is a
+/// different instant in each one, which gave one occurrence a different id
+/// on every device.
+String todoTaskCompletionId(
+  String taskId,
+  DateTime? dueDate, {
+  required bool dueHasTime,
+}) {
+  final key = taskDateForStorage(dueDate, hasTime: dueHasTime);
+  return '${taskId}_${key?.microsecondsSinceEpoch ?? 'undated'}';
+}
+
+/// The id builds before UTC-midnight due days gave the occurrence on
+/// [dueDate]: keyed on this device's local midnight for a day alone. Looked up
+/// as well, so a tick logged before the change is still found.
+String legacyTodoTaskCompletionId(String taskId, DateTime? dueDate) =>
     '${taskId}_${dueDate?.microsecondsSinceEpoch ?? 'undated'}';
 
 /// One tick of a task's checkbox — the history [TodoTask.completedAt] can't
@@ -243,6 +284,7 @@ class TodoTaskCompletion {
     required this.id,
     required this.taskId,
     required this.completedAt,
+    this.utcOffsetMinutes,
     this.dueDate,
     this.version = 0,
     this.deletedAt,
@@ -255,6 +297,10 @@ class TodoTaskCompletion {
   /// how an un-tick finds the row after the task's due date has changed.
   final DateTime completedAt;
 
+  /// The ticking device's UTC offset at [completedAt]; null on ticks from
+  /// before it was kept. See [TodoTask.completedUtcOffsetMinutes].
+  final int? utcOffsetMinutes;
+
   /// The due date the tick was against — for a repeating task, the occurrence
   /// that was done, which its row forgets as soon as it rolls forward.
   final DateTime? dueDate;
@@ -266,6 +312,7 @@ class TodoTaskCompletion {
     id: id,
     taskId: taskId,
     completedAt: completedAt,
+    utcOffsetMinutes: utcOffsetMinutes,
     dueDate: dueDate,
     version: version + 1,
     deletedAt: utcNow(),

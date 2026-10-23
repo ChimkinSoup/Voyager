@@ -1096,6 +1096,7 @@ class _TransactionRow extends ConsumerWidget {
             type: snapshot.type,
             amountCents: snapshot.amountCents,
             occurredAt: snapshot.occurredAt,
+            utcOffsetMinutes: snapshot.utcOffsetMinutes,
             origin: snapshot.origin,
             note: snapshot.note,
             tags: snapshot.tags,

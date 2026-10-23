@@ -900,6 +900,17 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _timestampMeta = const VerificationMeta(
     'timestamp',
   );
@@ -1029,6 +1040,7 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     body,
     richBodyJson,
     entryDate,
+    utcOffsetMinutes,
     timestamp,
     tagsJson,
     mood,
@@ -1098,6 +1110,15 @@ class $JournalEntriesTableTable extends JournalEntriesTable
       );
     } else if (isInserting) {
       context.missing(_entryDateMeta);
+    }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
     }
     if (data.containsKey('timestamp')) {
       context.handle(
@@ -1214,6 +1235,10 @@ class $JournalEntriesTableTable extends JournalEntriesTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}entry_date'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       timestamp: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}timestamp'],
@@ -1275,6 +1300,9 @@ class JournalEntriesTableData extends DataClass
   final String body;
   final String? richBodyJson;
   final DateTime entryDate;
+
+  /// The recording device's UTC offset at [entryDate]; see `recordedWallClock`.
+  final int? utcOffsetMinutes;
   final DateTime? timestamp;
   final String tagsJson;
   final int? mood;
@@ -1293,6 +1321,7 @@ class JournalEntriesTableData extends DataClass
     required this.body,
     this.richBodyJson,
     required this.entryDate,
+    this.utcOffsetMinutes,
     this.timestamp,
     required this.tagsJson,
     this.mood,
@@ -1316,6 +1345,9 @@ class JournalEntriesTableData extends DataClass
       map['rich_body_json'] = Variable<String>(richBodyJson);
     }
     map['entry_date'] = Variable<DateTime>(entryDate);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     if (!nullToAbsent || timestamp != null) {
       map['timestamp'] = Variable<DateTime>(timestamp);
     }
@@ -1354,6 +1386,9 @@ class JournalEntriesTableData extends DataClass
           ? const Value.absent()
           : Value(richBodyJson),
       entryDate: Value(entryDate),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       timestamp: timestamp == null && nullToAbsent
           ? const Value.absent()
           : Value(timestamp),
@@ -1392,6 +1427,7 @@ class JournalEntriesTableData extends DataClass
       body: serializer.fromJson<String>(json['body']),
       richBodyJson: serializer.fromJson<String?>(json['richBodyJson']),
       entryDate: serializer.fromJson<DateTime>(json['entryDate']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       timestamp: serializer.fromJson<DateTime?>(json['timestamp']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       mood: serializer.fromJson<int?>(json['mood']),
@@ -1415,6 +1451,7 @@ class JournalEntriesTableData extends DataClass
       'body': serializer.toJson<String>(body),
       'richBodyJson': serializer.toJson<String?>(richBodyJson),
       'entryDate': serializer.toJson<DateTime>(entryDate),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'timestamp': serializer.toJson<DateTime?>(timestamp),
       'tagsJson': serializer.toJson<String>(tagsJson),
       'mood': serializer.toJson<int?>(mood),
@@ -1436,6 +1473,7 @@ class JournalEntriesTableData extends DataClass
     String? body,
     Value<String?> richBodyJson = const Value.absent(),
     DateTime? entryDate,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     Value<DateTime?> timestamp = const Value.absent(),
     String? tagsJson,
     Value<int?> mood = const Value.absent(),
@@ -1454,6 +1492,9 @@ class JournalEntriesTableData extends DataClass
     body: body ?? this.body,
     richBodyJson: richBodyJson.present ? richBodyJson.value : this.richBodyJson,
     entryDate: entryDate ?? this.entryDate,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     timestamp: timestamp.present ? timestamp.value : this.timestamp,
     tagsJson: tagsJson ?? this.tagsJson,
     mood: mood.present ? mood.value : this.mood,
@@ -1476,6 +1517,9 @@ class JournalEntriesTableData extends DataClass
           ? data.richBodyJson.value
           : this.richBodyJson,
       entryDate: data.entryDate.present ? data.entryDate.value : this.entryDate,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
       tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
       mood: data.mood.present ? data.mood.value : this.mood,
@@ -1505,6 +1549,7 @@ class JournalEntriesTableData extends DataClass
           ..write('body: $body, ')
           ..write('richBodyJson: $richBodyJson, ')
           ..write('entryDate: $entryDate, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('timestamp: $timestamp, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('mood: $mood, ')
@@ -1528,6 +1573,7 @@ class JournalEntriesTableData extends DataClass
     body,
     richBodyJson,
     entryDate,
+    utcOffsetMinutes,
     timestamp,
     tagsJson,
     mood,
@@ -1550,6 +1596,7 @@ class JournalEntriesTableData extends DataClass
           other.body == this.body &&
           other.richBodyJson == this.richBodyJson &&
           other.entryDate == this.entryDate &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.timestamp == this.timestamp &&
           other.tagsJson == this.tagsJson &&
           other.mood == this.mood &&
@@ -1571,6 +1618,7 @@ class JournalEntriesTableCompanion
   final Value<String> body;
   final Value<String?> richBodyJson;
   final Value<DateTime> entryDate;
+  final Value<int?> utcOffsetMinutes;
   final Value<DateTime?> timestamp;
   final Value<String> tagsJson;
   final Value<int?> mood;
@@ -1590,6 +1638,7 @@ class JournalEntriesTableCompanion
     this.body = const Value.absent(),
     this.richBodyJson = const Value.absent(),
     this.entryDate = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.mood = const Value.absent(),
@@ -1610,6 +1659,7 @@ class JournalEntriesTableCompanion
     required String body,
     this.richBodyJson = const Value.absent(),
     required DateTime entryDate,
+    this.utcOffsetMinutes = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.mood = const Value.absent(),
@@ -1636,6 +1686,7 @@ class JournalEntriesTableCompanion
     Expression<String>? body,
     Expression<String>? richBodyJson,
     Expression<DateTime>? entryDate,
+    Expression<int>? utcOffsetMinutes,
     Expression<DateTime>? timestamp,
     Expression<String>? tagsJson,
     Expression<int>? mood,
@@ -1656,6 +1707,7 @@ class JournalEntriesTableCompanion
       if (body != null) 'body': body,
       if (richBodyJson != null) 'rich_body_json': richBodyJson,
       if (entryDate != null) 'entry_date': entryDate,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (timestamp != null) 'timestamp': timestamp,
       if (tagsJson != null) 'tags_json': tagsJson,
       if (mood != null) 'mood': mood,
@@ -1678,6 +1730,7 @@ class JournalEntriesTableCompanion
     Value<String>? body,
     Value<String?>? richBodyJson,
     Value<DateTime>? entryDate,
+    Value<int?>? utcOffsetMinutes,
     Value<DateTime?>? timestamp,
     Value<String>? tagsJson,
     Value<int?>? mood,
@@ -1698,6 +1751,7 @@ class JournalEntriesTableCompanion
       body: body ?? this.body,
       richBodyJson: richBodyJson ?? this.richBodyJson,
       entryDate: entryDate ?? this.entryDate,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       timestamp: timestamp ?? this.timestamp,
       tagsJson: tagsJson ?? this.tagsJson,
       mood: mood ?? this.mood,
@@ -1733,6 +1787,9 @@ class JournalEntriesTableCompanion
     }
     if (entryDate.present) {
       map['entry_date'] = Variable<DateTime>(entryDate.value);
+    }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
     }
     if (timestamp.present) {
       map['timestamp'] = Variable<DateTime>(timestamp.value);
@@ -1782,6 +1839,7 @@ class JournalEntriesTableCompanion
           ..write('body: $body, ')
           ..write('richBodyJson: $richBodyJson, ')
           ..write('entryDate: $entryDate, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('timestamp: $timestamp, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('mood: $mood, ')
@@ -1852,6 +1910,17 @@ class $DreamEntriesTableTable extends DreamEntriesTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _tagsJsonMeta = const VerificationMeta(
     'tagsJson',
   );
@@ -1916,6 +1985,7 @@ class $DreamEntriesTableTable extends DreamEntriesTable
     body,
     notes,
     entryDate,
+    utcOffsetMinutes,
     tagsJson,
     createdAt,
     updatedAt,
@@ -1968,6 +2038,15 @@ class $DreamEntriesTableTable extends DreamEntriesTable
       );
     } else if (isInserting) {
       context.missing(_entryDateMeta);
+    }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
     }
     if (data.containsKey('tags_json')) {
       context.handle(
@@ -2032,6 +2111,10 @@ class $DreamEntriesTableTable extends DreamEntriesTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}entry_date'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       tagsJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}tags_json'],
@@ -2068,6 +2151,9 @@ class DreamEntriesTableData extends DataClass
   final String body;
   final String? notes;
   final DateTime entryDate;
+
+  /// The recording device's UTC offset at [entryDate]; see `recordedWallClock`.
+  final int? utcOffsetMinutes;
   final String tagsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -2079,6 +2165,7 @@ class DreamEntriesTableData extends DataClass
     required this.body,
     this.notes,
     required this.entryDate,
+    this.utcOffsetMinutes,
     required this.tagsJson,
     required this.createdAt,
     required this.updatedAt,
@@ -2095,6 +2182,9 @@ class DreamEntriesTableData extends DataClass
       map['notes'] = Variable<String>(notes);
     }
     map['entry_date'] = Variable<DateTime>(entryDate);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     map['tags_json'] = Variable<String>(tagsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2114,6 +2204,9 @@ class DreamEntriesTableData extends DataClass
           ? const Value.absent()
           : Value(notes),
       entryDate: Value(entryDate),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       tagsJson: Value(tagsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -2135,6 +2228,7 @@ class DreamEntriesTableData extends DataClass
       body: serializer.fromJson<String>(json['body']),
       notes: serializer.fromJson<String?>(json['notes']),
       entryDate: serializer.fromJson<DateTime>(json['entryDate']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -2151,6 +2245,7 @@ class DreamEntriesTableData extends DataClass
       'body': serializer.toJson<String>(body),
       'notes': serializer.toJson<String?>(notes),
       'entryDate': serializer.toJson<DateTime>(entryDate),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'tagsJson': serializer.toJson<String>(tagsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -2165,6 +2260,7 @@ class DreamEntriesTableData extends DataClass
     String? body,
     Value<String?> notes = const Value.absent(),
     DateTime? entryDate,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     String? tagsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -2176,6 +2272,9 @@ class DreamEntriesTableData extends DataClass
     body: body ?? this.body,
     notes: notes.present ? notes.value : this.notes,
     entryDate: entryDate ?? this.entryDate,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     tagsJson: tagsJson ?? this.tagsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -2189,6 +2288,9 @@ class DreamEntriesTableData extends DataClass
       body: data.body.present ? data.body.value : this.body,
       notes: data.notes.present ? data.notes.value : this.notes,
       entryDate: data.entryDate.present ? data.entryDate.value : this.entryDate,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -2205,6 +2307,7 @@ class DreamEntriesTableData extends DataClass
           ..write('body: $body, ')
           ..write('notes: $notes, ')
           ..write('entryDate: $entryDate, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -2221,6 +2324,7 @@ class DreamEntriesTableData extends DataClass
     body,
     notes,
     entryDate,
+    utcOffsetMinutes,
     tagsJson,
     createdAt,
     updatedAt,
@@ -2236,6 +2340,7 @@ class DreamEntriesTableData extends DataClass
           other.body == this.body &&
           other.notes == this.notes &&
           other.entryDate == this.entryDate &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.tagsJson == this.tagsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -2250,6 +2355,7 @@ class DreamEntriesTableCompanion
   final Value<String> body;
   final Value<String?> notes;
   final Value<DateTime> entryDate;
+  final Value<int?> utcOffsetMinutes;
   final Value<String> tagsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -2262,6 +2368,7 @@ class DreamEntriesTableCompanion
     this.body = const Value.absent(),
     this.notes = const Value.absent(),
     this.entryDate = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -2275,6 +2382,7 @@ class DreamEntriesTableCompanion
     required String body,
     this.notes = const Value.absent(),
     required DateTime entryDate,
+    this.utcOffsetMinutes = const Value.absent(),
     this.tagsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -2293,6 +2401,7 @@ class DreamEntriesTableCompanion
     Expression<String>? body,
     Expression<String>? notes,
     Expression<DateTime>? entryDate,
+    Expression<int>? utcOffsetMinutes,
     Expression<String>? tagsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -2306,6 +2415,7 @@ class DreamEntriesTableCompanion
       if (body != null) 'body': body,
       if (notes != null) 'notes': notes,
       if (entryDate != null) 'entry_date': entryDate,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (tagsJson != null) 'tags_json': tagsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -2321,6 +2431,7 @@ class DreamEntriesTableCompanion
     Value<String>? body,
     Value<String?>? notes,
     Value<DateTime>? entryDate,
+    Value<int?>? utcOffsetMinutes,
     Value<String>? tagsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -2334,6 +2445,7 @@ class DreamEntriesTableCompanion
       body: body ?? this.body,
       notes: notes ?? this.notes,
       entryDate: entryDate ?? this.entryDate,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       tagsJson: tagsJson ?? this.tagsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -2360,6 +2472,9 @@ class DreamEntriesTableCompanion
     }
     if (entryDate.present) {
       map['entry_date'] = Variable<DateTime>(entryDate.value);
+    }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
     }
     if (tagsJson.present) {
       map['tags_json'] = Variable<String>(tagsJson.value);
@@ -2390,6 +2505,7 @@ class DreamEntriesTableCompanion
           ..write('body: $body, ')
           ..write('notes: $notes, ')
           ..write('entryDate: $entryDate, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3029,6 +3145,17 @@ class $TodoTasksTableTable extends TodoTasksTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _completedUtcOffsetMinutesMeta =
+      const VerificationMeta('completedUtcOffsetMinutes');
+  @override
+  late final GeneratedColumn<int> completedUtcOffsetMinutes =
+      GeneratedColumn<int>(
+        'completed_utc_offset_minutes',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _starredMeta = const VerificationMeta(
     'starred',
   );
@@ -3147,6 +3274,7 @@ class $TodoTasksTableTable extends TodoTasksTable
     dueHasTime,
     completed,
     completedAt,
+    completedUtcOffsetMinutes,
     starred,
     sortOrder,
     dueDateSetAt,
@@ -3232,6 +3360,15 @@ class $TodoTasksTableTable extends TodoTasksTable
         completedAt.isAcceptableOrUnknown(
           data['completed_at']!,
           _completedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('completed_utc_offset_minutes')) {
+      context.handle(
+        _completedUtcOffsetMinutesMeta,
+        completedUtcOffsetMinutes.isAcceptableOrUnknown(
+          data['completed_utc_offset_minutes']!,
+          _completedUtcOffsetMinutesMeta,
         ),
       );
     }
@@ -3344,6 +3481,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}completed_at'],
       ),
+      completedUtcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}completed_utc_offset_minutes'],
+      ),
       starred: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}starred'],
@@ -3404,6 +3545,9 @@ class TodoTasksTableData extends DataClass
 
   /// See [TodoTask.completedAt].
   final DateTime? completedAt;
+
+  /// The ticking device's UTC offset at [completedAt].
+  final int? completedUtcOffsetMinutes;
   final bool starred;
   final int sortOrder;
   final DateTime? dueDateSetAt;
@@ -3431,6 +3575,7 @@ class TodoTasksTableData extends DataClass
     required this.dueHasTime,
     required this.completed,
     this.completedAt,
+    this.completedUtcOffsetMinutes,
     required this.starred,
     required this.sortOrder,
     this.dueDateSetAt,
@@ -3460,6 +3605,11 @@ class TodoTasksTableData extends DataClass
     map['completed'] = Variable<bool>(completed);
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
+    }
+    if (!nullToAbsent || completedUtcOffsetMinutes != null) {
+      map['completed_utc_offset_minutes'] = Variable<int>(
+        completedUtcOffsetMinutes,
+      );
     }
     map['starred'] = Variable<bool>(starred);
     map['sort_order'] = Variable<int>(sortOrder);
@@ -3498,6 +3648,10 @@ class TodoTasksTableData extends DataClass
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(completedAt),
+      completedUtcOffsetMinutes:
+          completedUtcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedUtcOffsetMinutes),
       starred: Value(starred),
       sortOrder: Value(sortOrder),
       dueDateSetAt: dueDateSetAt == null && nullToAbsent
@@ -3531,6 +3685,9 @@ class TodoTasksTableData extends DataClass
       dueHasTime: serializer.fromJson<bool>(json['dueHasTime']),
       completed: serializer.fromJson<bool>(json['completed']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
+      completedUtcOffsetMinutes: serializer.fromJson<int?>(
+        json['completedUtcOffsetMinutes'],
+      ),
       starred: serializer.fromJson<bool>(json['starred']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       dueDateSetAt: serializer.fromJson<DateTime?>(json['dueDateSetAt']),
@@ -3557,6 +3714,9 @@ class TodoTasksTableData extends DataClass
       'dueHasTime': serializer.toJson<bool>(dueHasTime),
       'completed': serializer.toJson<bool>(completed),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
+      'completedUtcOffsetMinutes': serializer.toJson<int?>(
+        completedUtcOffsetMinutes,
+      ),
       'starred': serializer.toJson<bool>(starred),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
@@ -3579,6 +3739,7 @@ class TodoTasksTableData extends DataClass
     bool? dueHasTime,
     bool? completed,
     Value<DateTime?> completedAt = const Value.absent(),
+    Value<int?> completedUtcOffsetMinutes = const Value.absent(),
     bool? starred,
     int? sortOrder,
     Value<DateTime?> dueDateSetAt = const Value.absent(),
@@ -3598,6 +3759,9 @@ class TodoTasksTableData extends DataClass
     dueHasTime: dueHasTime ?? this.dueHasTime,
     completed: completed ?? this.completed,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
+    completedUtcOffsetMinutes: completedUtcOffsetMinutes.present
+        ? completedUtcOffsetMinutes.value
+        : this.completedUtcOffsetMinutes,
     starred: starred ?? this.starred,
     sortOrder: sortOrder ?? this.sortOrder,
     dueDateSetAt: dueDateSetAt.present ? dueDateSetAt.value : this.dueDateSetAt,
@@ -3627,6 +3791,9 @@ class TodoTasksTableData extends DataClass
       completedAt: data.completedAt.present
           ? data.completedAt.value
           : this.completedAt,
+      completedUtcOffsetMinutes: data.completedUtcOffsetMinutes.present
+          ? data.completedUtcOffsetMinutes.value
+          : this.completedUtcOffsetMinutes,
       starred: data.starred.present ? data.starred.value : this.starred,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       dueDateSetAt: data.dueDateSetAt.present
@@ -3657,6 +3824,7 @@ class TodoTasksTableData extends DataClass
           ..write('dueHasTime: $dueHasTime, ')
           ..write('completed: $completed, ')
           ..write('completedAt: $completedAt, ')
+          ..write('completedUtcOffsetMinutes: $completedUtcOffsetMinutes, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
@@ -3681,6 +3849,7 @@ class TodoTasksTableData extends DataClass
     dueHasTime,
     completed,
     completedAt,
+    completedUtcOffsetMinutes,
     starred,
     sortOrder,
     dueDateSetAt,
@@ -3704,6 +3873,7 @@ class TodoTasksTableData extends DataClass
           other.dueHasTime == this.dueHasTime &&
           other.completed == this.completed &&
           other.completedAt == this.completedAt &&
+          other.completedUtcOffsetMinutes == this.completedUtcOffsetMinutes &&
           other.starred == this.starred &&
           other.sortOrder == this.sortOrder &&
           other.dueDateSetAt == this.dueDateSetAt &&
@@ -3725,6 +3895,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<bool> dueHasTime;
   final Value<bool> completed;
   final Value<DateTime?> completedAt;
+  final Value<int?> completedUtcOffsetMinutes;
   final Value<bool> starred;
   final Value<int> sortOrder;
   final Value<DateTime?> dueDateSetAt;
@@ -3745,6 +3916,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.dueHasTime = const Value.absent(),
     this.completed = const Value.absent(),
     this.completedAt = const Value.absent(),
+    this.completedUtcOffsetMinutes = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
@@ -3766,6 +3938,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.dueHasTime = const Value.absent(),
     this.completed = const Value.absent(),
     this.completedAt = const Value.absent(),
+    this.completedUtcOffsetMinutes = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
@@ -3791,6 +3964,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<bool>? dueHasTime,
     Expression<bool>? completed,
     Expression<DateTime>? completedAt,
+    Expression<int>? completedUtcOffsetMinutes,
     Expression<bool>? starred,
     Expression<int>? sortOrder,
     Expression<DateTime>? dueDateSetAt,
@@ -3812,6 +3986,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (dueHasTime != null) 'due_has_time': dueHasTime,
       if (completed != null) 'completed': completed,
       if (completedAt != null) 'completed_at': completedAt,
+      if (completedUtcOffsetMinutes != null)
+        'completed_utc_offset_minutes': completedUtcOffsetMinutes,
       if (starred != null) 'starred': starred,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
@@ -3835,6 +4011,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<bool>? dueHasTime,
     Value<bool>? completed,
     Value<DateTime?>? completedAt,
+    Value<int?>? completedUtcOffsetMinutes,
     Value<bool>? starred,
     Value<int>? sortOrder,
     Value<DateTime?>? dueDateSetAt,
@@ -3856,6 +4033,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       dueHasTime: dueHasTime ?? this.dueHasTime,
       completed: completed ?? this.completed,
       completedAt: completedAt ?? this.completedAt,
+      completedUtcOffsetMinutes:
+          completedUtcOffsetMinutes ?? this.completedUtcOffsetMinutes,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
@@ -3898,6 +4077,11 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     }
     if (completedAt.present) {
       map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (completedUtcOffsetMinutes.present) {
+      map['completed_utc_offset_minutes'] = Variable<int>(
+        completedUtcOffsetMinutes.value,
+      );
     }
     if (starred.present) {
       map['starred'] = Variable<bool>(starred.value);
@@ -3944,6 +4128,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('dueHasTime: $dueHasTime, ')
           ..write('completed: $completed, ')
           ..write('completedAt: $completedAt, ')
+          ..write('completedUtcOffsetMinutes: $completedUtcOffsetMinutes, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
@@ -3998,6 +4183,17 @@ class $TodoTaskCompletionsTableTable extends TodoTaskCompletionsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _dueDateMeta = const VerificationMeta(
     'dueDate',
   );
@@ -4037,6 +4233,7 @@ class $TodoTaskCompletionsTableTable extends TodoTaskCompletionsTable
     id,
     taskId,
     completedAt,
+    utcOffsetMinutes,
     dueDate,
     version,
     deletedAt,
@@ -4076,6 +4273,15 @@ class $TodoTaskCompletionsTableTable extends TodoTaskCompletionsTable
       );
     } else if (isInserting) {
       context.missing(_completedAtMeta);
+    }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
     }
     if (data.containsKey('due_date')) {
       context.handle(
@@ -4119,6 +4325,10 @@ class $TodoTaskCompletionsTableTable extends TodoTaskCompletionsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}completed_at'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       dueDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_date'],
@@ -4145,6 +4355,9 @@ class TodoTaskCompletionsTableData extends DataClass
   final String id;
   final String taskId;
   final DateTime completedAt;
+
+  /// The ticking device's UTC offset at [completedAt].
+  final int? utcOffsetMinutes;
   final DateTime? dueDate;
 
   /// Bumped by an un-tick and by a re-tick of the same occurrence. See
@@ -4155,6 +4368,7 @@ class TodoTaskCompletionsTableData extends DataClass
     required this.id,
     required this.taskId,
     required this.completedAt,
+    this.utcOffsetMinutes,
     this.dueDate,
     required this.version,
     this.deletedAt,
@@ -4165,6 +4379,9 @@ class TodoTaskCompletionsTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['task_id'] = Variable<String>(taskId);
     map['completed_at'] = Variable<DateTime>(completedAt);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     if (!nullToAbsent || dueDate != null) {
       map['due_date'] = Variable<DateTime>(dueDate);
     }
@@ -4180,6 +4397,9 @@ class TodoTaskCompletionsTableData extends DataClass
       id: Value(id),
       taskId: Value(taskId),
       completedAt: Value(completedAt),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       dueDate: dueDate == null && nullToAbsent
           ? const Value.absent()
           : Value(dueDate),
@@ -4199,6 +4419,7 @@ class TodoTaskCompletionsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       taskId: serializer.fromJson<String>(json['taskId']),
       completedAt: serializer.fromJson<DateTime>(json['completedAt']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -4211,6 +4432,7 @@ class TodoTaskCompletionsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'taskId': serializer.toJson<String>(taskId),
       'completedAt': serializer.toJson<DateTime>(completedAt),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
       'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -4221,6 +4443,7 @@ class TodoTaskCompletionsTableData extends DataClass
     String? id,
     String? taskId,
     DateTime? completedAt,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     Value<DateTime?> dueDate = const Value.absent(),
     int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -4228,6 +4451,9 @@ class TodoTaskCompletionsTableData extends DataClass
     id: id ?? this.id,
     taskId: taskId ?? this.taskId,
     completedAt: completedAt ?? this.completedAt,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
     version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -4241,6 +4467,9 @@ class TodoTaskCompletionsTableData extends DataClass
       completedAt: data.completedAt.present
           ? data.completedAt.value
           : this.completedAt,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -4253,6 +4482,7 @@ class TodoTaskCompletionsTableData extends DataClass
           ..write('id: $id, ')
           ..write('taskId: $taskId, ')
           ..write('completedAt: $completedAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('dueDate: $dueDate, ')
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt')
@@ -4261,8 +4491,15 @@ class TodoTaskCompletionsTableData extends DataClass
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, taskId, completedAt, dueDate, version, deletedAt);
+  int get hashCode => Object.hash(
+    id,
+    taskId,
+    completedAt,
+    utcOffsetMinutes,
+    dueDate,
+    version,
+    deletedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4270,6 +4507,7 @@ class TodoTaskCompletionsTableData extends DataClass
           other.id == this.id &&
           other.taskId == this.taskId &&
           other.completedAt == this.completedAt &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.dueDate == this.dueDate &&
           other.version == this.version &&
           other.deletedAt == this.deletedAt);
@@ -4280,6 +4518,7 @@ class TodoTaskCompletionsTableCompanion
   final Value<String> id;
   final Value<String> taskId;
   final Value<DateTime> completedAt;
+  final Value<int?> utcOffsetMinutes;
   final Value<DateTime?> dueDate;
   final Value<int> version;
   final Value<DateTime?> deletedAt;
@@ -4288,6 +4527,7 @@ class TodoTaskCompletionsTableCompanion
     this.id = const Value.absent(),
     this.taskId = const Value.absent(),
     this.completedAt = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -4297,6 +4537,7 @@ class TodoTaskCompletionsTableCompanion
     required String id,
     required String taskId,
     required DateTime completedAt,
+    this.utcOffsetMinutes = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -4308,6 +4549,7 @@ class TodoTaskCompletionsTableCompanion
     Expression<String>? id,
     Expression<String>? taskId,
     Expression<DateTime>? completedAt,
+    Expression<int>? utcOffsetMinutes,
     Expression<DateTime>? dueDate,
     Expression<int>? version,
     Expression<DateTime>? deletedAt,
@@ -4317,6 +4559,7 @@ class TodoTaskCompletionsTableCompanion
       if (id != null) 'id': id,
       if (taskId != null) 'task_id': taskId,
       if (completedAt != null) 'completed_at': completedAt,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (dueDate != null) 'due_date': dueDate,
       if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -4328,6 +4571,7 @@ class TodoTaskCompletionsTableCompanion
     Value<String>? id,
     Value<String>? taskId,
     Value<DateTime>? completedAt,
+    Value<int?>? utcOffsetMinutes,
     Value<DateTime?>? dueDate,
     Value<int>? version,
     Value<DateTime?>? deletedAt,
@@ -4337,6 +4581,7 @@ class TodoTaskCompletionsTableCompanion
       id: id ?? this.id,
       taskId: taskId ?? this.taskId,
       completedAt: completedAt ?? this.completedAt,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       dueDate: dueDate ?? this.dueDate,
       version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -4355,6 +4600,9 @@ class TodoTaskCompletionsTableCompanion
     }
     if (completedAt.present) {
       map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
     }
     if (dueDate.present) {
       map['due_date'] = Variable<DateTime>(dueDate.value);
@@ -4377,6 +4625,7 @@ class TodoTaskCompletionsTableCompanion
           ..write('id: $id, ')
           ..write('taskId: $taskId, ')
           ..write('completedAt: $completedAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('dueDate: $dueDate, ')
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
@@ -4962,6 +5211,17 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isFullDayMeta = const VerificationMeta(
     'isFullDay',
   );
@@ -5156,6 +5416,7 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     title,
     start,
     end,
+    utcOffsetMinutes,
     isFullDay,
     colorValue,
     notes,
@@ -5219,6 +5480,15 @@ class $CalendarEventsTableTable extends CalendarEventsTable
       );
     } else if (isInserting) {
       context.missing(_endMeta);
+    }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
     }
     if (data.containsKey('is_full_day')) {
       context.handle(
@@ -5364,6 +5634,10 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}end'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       isFullDay: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_full_day'],
@@ -5444,6 +5718,9 @@ class CalendarEventsTableData extends DataClass
   final String title;
   final DateTime start;
   final DateTime end;
+
+  /// The setting device's UTC offset at [start]; see `recordedWallClock`.
+  final int? utcOffsetMinutes;
   final bool isFullDay;
   final int colorValue;
   final String notes;
@@ -5479,6 +5756,7 @@ class CalendarEventsTableData extends DataClass
     required this.title,
     required this.start,
     required this.end,
+    this.utcOffsetMinutes,
     required this.isFullDay,
     required this.colorValue,
     required this.notes,
@@ -5504,6 +5782,9 @@ class CalendarEventsTableData extends DataClass
     map['title'] = Variable<String>(title);
     map['start'] = Variable<DateTime>(start);
     map['end'] = Variable<DateTime>(end);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     map['is_full_day'] = Variable<bool>(isFullDay);
     map['color_value'] = Variable<int>(colorValue);
     map['notes'] = Variable<String>(notes);
@@ -5540,6 +5821,9 @@ class CalendarEventsTableData extends DataClass
       title: Value(title),
       start: Value(start),
       end: Value(end),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       isFullDay: Value(isFullDay),
       colorValue: Value(colorValue),
       notes: Value(notes),
@@ -5580,6 +5864,7 @@ class CalendarEventsTableData extends DataClass
       title: serializer.fromJson<String>(json['title']),
       start: serializer.fromJson<DateTime>(json['start']),
       end: serializer.fromJson<DateTime>(json['end']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       isFullDay: serializer.fromJson<bool>(json['isFullDay']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
       notes: serializer.fromJson<String>(json['notes']),
@@ -5611,6 +5896,7 @@ class CalendarEventsTableData extends DataClass
       'title': serializer.toJson<String>(title),
       'start': serializer.toJson<DateTime>(start),
       'end': serializer.toJson<DateTime>(end),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'isFullDay': serializer.toJson<bool>(isFullDay),
       'colorValue': serializer.toJson<int>(colorValue),
       'notes': serializer.toJson<String>(notes),
@@ -5636,6 +5922,7 @@ class CalendarEventsTableData extends DataClass
     String? title,
     DateTime? start,
     DateTime? end,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     bool? isFullDay,
     int? colorValue,
     String? notes,
@@ -5658,6 +5945,9 @@ class CalendarEventsTableData extends DataClass
     title: title ?? this.title,
     start: start ?? this.start,
     end: end ?? this.end,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     isFullDay: isFullDay ?? this.isFullDay,
     colorValue: colorValue ?? this.colorValue,
     notes: notes ?? this.notes,
@@ -5690,6 +5980,9 @@ class CalendarEventsTableData extends DataClass
       title: data.title.present ? data.title.value : this.title,
       start: data.start.present ? data.start.value : this.start,
       end: data.end.present ? data.end.value : this.end,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       isFullDay: data.isFullDay.present ? data.isFullDay.value : this.isFullDay,
       colorValue: data.colorValue.present
           ? data.colorValue.value
@@ -5731,6 +6024,7 @@ class CalendarEventsTableData extends DataClass
           ..write('title: $title, ')
           ..write('start: $start, ')
           ..write('end: $end, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('isFullDay: $isFullDay, ')
           ..write('colorValue: $colorValue, ')
           ..write('notes: $notes, ')
@@ -5758,6 +6052,7 @@ class CalendarEventsTableData extends DataClass
     title,
     start,
     end,
+    utcOffsetMinutes,
     isFullDay,
     colorValue,
     notes,
@@ -5784,6 +6079,7 @@ class CalendarEventsTableData extends DataClass
           other.title == this.title &&
           other.start == this.start &&
           other.end == this.end &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.isFullDay == this.isFullDay &&
           other.colorValue == this.colorValue &&
           other.notes == this.notes &&
@@ -5809,6 +6105,7 @@ class CalendarEventsTableCompanion
   final Value<String> title;
   final Value<DateTime> start;
   final Value<DateTime> end;
+  final Value<int?> utcOffsetMinutes;
   final Value<bool> isFullDay;
   final Value<int> colorValue;
   final Value<String> notes;
@@ -5832,6 +6129,7 @@ class CalendarEventsTableCompanion
     this.title = const Value.absent(),
     this.start = const Value.absent(),
     this.end = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.isFullDay = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.notes = const Value.absent(),
@@ -5856,6 +6154,7 @@ class CalendarEventsTableCompanion
     required String title,
     required DateTime start,
     required DateTime end,
+    this.utcOffsetMinutes = const Value.absent(),
     this.isFullDay = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.notes = const Value.absent(),
@@ -5885,6 +6184,7 @@ class CalendarEventsTableCompanion
     Expression<String>? title,
     Expression<DateTime>? start,
     Expression<DateTime>? end,
+    Expression<int>? utcOffsetMinutes,
     Expression<bool>? isFullDay,
     Expression<int>? colorValue,
     Expression<String>? notes,
@@ -5909,6 +6209,7 @@ class CalendarEventsTableCompanion
       if (title != null) 'title': title,
       if (start != null) 'start': start,
       if (end != null) 'end': end,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (isFullDay != null) 'is_full_day': isFullDay,
       if (colorValue != null) 'color_value': colorValue,
       if (notes != null) 'notes': notes,
@@ -5936,6 +6237,7 @@ class CalendarEventsTableCompanion
     Value<String>? title,
     Value<DateTime>? start,
     Value<DateTime>? end,
+    Value<int?>? utcOffsetMinutes,
     Value<bool>? isFullDay,
     Value<int>? colorValue,
     Value<String>? notes,
@@ -5960,6 +6262,7 @@ class CalendarEventsTableCompanion
       title: title ?? this.title,
       start: start ?? this.start,
       end: end ?? this.end,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       isFullDay: isFullDay ?? this.isFullDay,
       colorValue: colorValue ?? this.colorValue,
       notes: notes ?? this.notes,
@@ -5997,6 +6300,9 @@ class CalendarEventsTableCompanion
     }
     if (end.present) {
       map['end'] = Variable<DateTime>(end.value);
+    }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
     }
     if (isFullDay.present) {
       map['is_full_day'] = Variable<bool>(isFullDay.value);
@@ -6060,6 +6366,7 @@ class CalendarEventsTableCompanion
           ..write('title: $title, ')
           ..write('start: $start, ')
           ..write('end: $end, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('isFullDay: $isFullDay, ')
           ..write('colorValue: $colorValue, ')
           ..write('notes: $notes, ')
@@ -19560,6 +19867,17 @@ class $TransactionsTableTable extends TransactionsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _roomEventIdMeta = const VerificationMeta(
     'roomEventId',
   );
@@ -19660,6 +19978,7 @@ class $TransactionsTableTable extends TransactionsTable
     note,
     tagsJson,
     occurredAt,
+    utcOffsetMinutes,
     roomEventId,
     subscriptionId,
     settlesDueDate,
@@ -19730,6 +20049,15 @@ class $TransactionsTableTable extends TransactionsTable
       );
     } else if (isInserting) {
       context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
     }
     if (data.containsKey('room_event_id')) {
       context.handle(
@@ -19832,6 +20160,10 @@ class $TransactionsTableTable extends TransactionsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}occurred_at'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       roomEventId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}room_event_id'],
@@ -19882,6 +20214,9 @@ class TransactionsTableData extends DataClass
   final String? note;
   final String tagsJson;
   final DateTime occurredAt;
+
+  /// The recording device's UTC offset at [occurredAt]; see `recordedWallClock`.
+  final int? utcOffsetMinutes;
   final String? roomEventId;
   final String? subscriptionId;
   final DateTime? settlesDueDate;
@@ -19898,6 +20233,7 @@ class TransactionsTableData extends DataClass
     this.note,
     required this.tagsJson,
     required this.occurredAt,
+    this.utcOffsetMinutes,
     this.roomEventId,
     this.subscriptionId,
     this.settlesDueDate,
@@ -19921,6 +20257,9 @@ class TransactionsTableData extends DataClass
     }
     map['tags_json'] = Variable<String>(tagsJson);
     map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     if (!nullToAbsent || roomEventId != null) {
       map['room_event_id'] = Variable<String>(roomEventId);
     }
@@ -19953,6 +20292,9 @@ class TransactionsTableData extends DataClass
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       tagsJson: Value(tagsJson),
       occurredAt: Value(occurredAt),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       roomEventId: roomEventId == null && nullToAbsent
           ? const Value.absent()
           : Value(roomEventId),
@@ -19987,6 +20329,7 @@ class TransactionsTableData extends DataClass
       note: serializer.fromJson<String?>(json['note']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       roomEventId: serializer.fromJson<String?>(json['roomEventId']),
       subscriptionId: serializer.fromJson<String?>(json['subscriptionId']),
       settlesDueDate: serializer.fromJson<DateTime?>(json['settlesDueDate']),
@@ -20010,6 +20353,7 @@ class TransactionsTableData extends DataClass
       'note': serializer.toJson<String?>(note),
       'tagsJson': serializer.toJson<String>(tagsJson),
       'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'roomEventId': serializer.toJson<String?>(roomEventId),
       'subscriptionId': serializer.toJson<String?>(subscriptionId),
       'settlesDueDate': serializer.toJson<DateTime?>(settlesDueDate),
@@ -20029,6 +20373,7 @@ class TransactionsTableData extends DataClass
     Value<String?> note = const Value.absent(),
     String? tagsJson,
     DateTime? occurredAt,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     Value<String?> roomEventId = const Value.absent(),
     Value<String?> subscriptionId = const Value.absent(),
     Value<DateTime?> settlesDueDate = const Value.absent(),
@@ -20045,6 +20390,9 @@ class TransactionsTableData extends DataClass
     note: note.present ? note.value : this.note,
     tagsJson: tagsJson ?? this.tagsJson,
     occurredAt: occurredAt ?? this.occurredAt,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     roomEventId: roomEventId.present ? roomEventId.value : this.roomEventId,
     subscriptionId: subscriptionId.present
         ? subscriptionId.value
@@ -20073,6 +20421,9 @@ class TransactionsTableData extends DataClass
       occurredAt: data.occurredAt.present
           ? data.occurredAt.value
           : this.occurredAt,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       roomEventId: data.roomEventId.present
           ? data.roomEventId.value
           : this.roomEventId,
@@ -20102,6 +20453,7 @@ class TransactionsTableData extends DataClass
           ..write('note: $note, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('roomEventId: $roomEventId, ')
           ..write('subscriptionId: $subscriptionId, ')
           ..write('settlesDueDate: $settlesDueDate, ')
@@ -20123,6 +20475,7 @@ class TransactionsTableData extends DataClass
     note,
     tagsJson,
     occurredAt,
+    utcOffsetMinutes,
     roomEventId,
     subscriptionId,
     settlesDueDate,
@@ -20143,6 +20496,7 @@ class TransactionsTableData extends DataClass
           other.note == this.note &&
           other.tagsJson == this.tagsJson &&
           other.occurredAt == this.occurredAt &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.roomEventId == this.roomEventId &&
           other.subscriptionId == this.subscriptionId &&
           other.settlesDueDate == this.settlesDueDate &&
@@ -20162,6 +20516,7 @@ class TransactionsTableCompanion
   final Value<String?> note;
   final Value<String> tagsJson;
   final Value<DateTime> occurredAt;
+  final Value<int?> utcOffsetMinutes;
   final Value<String?> roomEventId;
   final Value<String?> subscriptionId;
   final Value<DateTime?> settlesDueDate;
@@ -20179,6 +20534,7 @@ class TransactionsTableCompanion
     this.note = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.occurredAt = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.roomEventId = const Value.absent(),
     this.subscriptionId = const Value.absent(),
     this.settlesDueDate = const Value.absent(),
@@ -20197,6 +20553,7 @@ class TransactionsTableCompanion
     this.note = const Value.absent(),
     this.tagsJson = const Value.absent(),
     required DateTime occurredAt,
+    this.utcOffsetMinutes = const Value.absent(),
     this.roomEventId = const Value.absent(),
     this.subscriptionId = const Value.absent(),
     this.settlesDueDate = const Value.absent(),
@@ -20220,6 +20577,7 @@ class TransactionsTableCompanion
     Expression<String>? note,
     Expression<String>? tagsJson,
     Expression<DateTime>? occurredAt,
+    Expression<int>? utcOffsetMinutes,
     Expression<String>? roomEventId,
     Expression<String>? subscriptionId,
     Expression<DateTime>? settlesDueDate,
@@ -20238,6 +20596,7 @@ class TransactionsTableCompanion
       if (note != null) 'note': note,
       if (tagsJson != null) 'tags_json': tagsJson,
       if (occurredAt != null) 'occurred_at': occurredAt,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (roomEventId != null) 'room_event_id': roomEventId,
       if (subscriptionId != null) 'subscription_id': subscriptionId,
       if (settlesDueDate != null) 'settles_due_date': settlesDueDate,
@@ -20258,6 +20617,7 @@ class TransactionsTableCompanion
     Value<String?>? note,
     Value<String>? tagsJson,
     Value<DateTime>? occurredAt,
+    Value<int?>? utcOffsetMinutes,
     Value<String?>? roomEventId,
     Value<String?>? subscriptionId,
     Value<DateTime?>? settlesDueDate,
@@ -20276,6 +20636,7 @@ class TransactionsTableCompanion
       note: note ?? this.note,
       tagsJson: tagsJson ?? this.tagsJson,
       occurredAt: occurredAt ?? this.occurredAt,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       roomEventId: roomEventId ?? this.roomEventId,
       subscriptionId: subscriptionId ?? this.subscriptionId,
       settlesDueDate: settlesDueDate ?? this.settlesDueDate,
@@ -20311,6 +20672,9 @@ class TransactionsTableCompanion
     }
     if (occurredAt.present) {
       map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
     }
     if (roomEventId.present) {
       map['room_event_id'] = Variable<String>(roomEventId.value);
@@ -20352,6 +20716,7 @@ class TransactionsTableCompanion
           ..write('note: $note, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('roomEventId: $roomEventId, ')
           ..write('subscriptionId: $subscriptionId, ')
           ..write('settlesDueDate: $settlesDueDate, ')
@@ -23843,6 +24208,17 @@ class $AssetRoomEventsTableTable extends AssetRoomEventsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _transactionIdMeta = const VerificationMeta(
     'transactionId',
   );
@@ -23949,6 +24325,7 @@ class $AssetRoomEventsTableTable extends AssetRoomEventsTable
     kind,
     amountCents,
     occurredAt,
+    utcOffsetMinutes,
     transactionId,
     valuationId,
     counterAssetId,
@@ -24018,6 +24395,15 @@ class $AssetRoomEventsTableTable extends AssetRoomEventsTable
       );
     } else if (isInserting) {
       context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
     }
     if (data.containsKey('transaction_id')) {
       context.handle(
@@ -24125,6 +24511,10 @@ class $AssetRoomEventsTableTable extends AssetRoomEventsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}occurred_at'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       transactionId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}transaction_id'],
@@ -24178,6 +24568,9 @@ class AssetRoomEventsTableData extends DataClass
   final String kind;
   final int amountCents;
   final DateTime occurredAt;
+
+  /// The recording device's UTC offset at [occurredAt]; see `recordedWallClock`.
+  final int? utcOffsetMinutes;
   final String? transactionId;
   final String? valuationId;
   final String? counterAssetId;
@@ -24194,6 +24587,7 @@ class AssetRoomEventsTableData extends DataClass
     required this.kind,
     required this.amountCents,
     required this.occurredAt,
+    this.utcOffsetMinutes,
     this.transactionId,
     this.valuationId,
     this.counterAssetId,
@@ -24213,6 +24607,9 @@ class AssetRoomEventsTableData extends DataClass
     map['kind'] = Variable<String>(kind);
     map['amount_cents'] = Variable<int>(amountCents);
     map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     if (!nullToAbsent || transactionId != null) {
       map['transaction_id'] = Variable<String>(transactionId);
     }
@@ -24245,6 +24642,9 @@ class AssetRoomEventsTableData extends DataClass
       kind: Value(kind),
       amountCents: Value(amountCents),
       occurredAt: Value(occurredAt),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       transactionId: transactionId == null && nullToAbsent
           ? const Value.absent()
           : Value(transactionId),
@@ -24279,6 +24679,7 @@ class AssetRoomEventsTableData extends DataClass
       kind: serializer.fromJson<String>(json['kind']),
       amountCents: serializer.fromJson<int>(json['amountCents']),
       occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       transactionId: serializer.fromJson<String?>(json['transactionId']),
       valuationId: serializer.fromJson<String?>(json['valuationId']),
       counterAssetId: serializer.fromJson<String?>(json['counterAssetId']),
@@ -24300,6 +24701,7 @@ class AssetRoomEventsTableData extends DataClass
       'kind': serializer.toJson<String>(kind),
       'amountCents': serializer.toJson<int>(amountCents),
       'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'transactionId': serializer.toJson<String?>(transactionId),
       'valuationId': serializer.toJson<String?>(valuationId),
       'counterAssetId': serializer.toJson<String?>(counterAssetId),
@@ -24319,6 +24721,7 @@ class AssetRoomEventsTableData extends DataClass
     String? kind,
     int? amountCents,
     DateTime? occurredAt,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     Value<String?> transactionId = const Value.absent(),
     Value<String?> valuationId = const Value.absent(),
     Value<String?> counterAssetId = const Value.absent(),
@@ -24335,6 +24738,9 @@ class AssetRoomEventsTableData extends DataClass
     kind: kind ?? this.kind,
     amountCents: amountCents ?? this.amountCents,
     occurredAt: occurredAt ?? this.occurredAt,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     transactionId: transactionId.present
         ? transactionId.value
         : this.transactionId,
@@ -24365,6 +24771,9 @@ class AssetRoomEventsTableData extends DataClass
       occurredAt: data.occurredAt.present
           ? data.occurredAt.value
           : this.occurredAt,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       transactionId: data.transactionId.present
           ? data.transactionId.value
           : this.transactionId,
@@ -24394,6 +24803,7 @@ class AssetRoomEventsTableData extends DataClass
           ..write('kind: $kind, ')
           ..write('amountCents: $amountCents, ')
           ..write('occurredAt: $occurredAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('transactionId: $transactionId, ')
           ..write('valuationId: $valuationId, ')
           ..write('counterAssetId: $counterAssetId, ')
@@ -24415,6 +24825,7 @@ class AssetRoomEventsTableData extends DataClass
     kind,
     amountCents,
     occurredAt,
+    utcOffsetMinutes,
     transactionId,
     valuationId,
     counterAssetId,
@@ -24435,6 +24846,7 @@ class AssetRoomEventsTableData extends DataClass
           other.kind == this.kind &&
           other.amountCents == this.amountCents &&
           other.occurredAt == this.occurredAt &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.transactionId == this.transactionId &&
           other.valuationId == this.valuationId &&
           other.counterAssetId == this.counterAssetId &&
@@ -24454,6 +24866,7 @@ class AssetRoomEventsTableCompanion
   final Value<String> kind;
   final Value<int> amountCents;
   final Value<DateTime> occurredAt;
+  final Value<int?> utcOffsetMinutes;
   final Value<String?> transactionId;
   final Value<String?> valuationId;
   final Value<String?> counterAssetId;
@@ -24471,6 +24884,7 @@ class AssetRoomEventsTableCompanion
     this.kind = const Value.absent(),
     this.amountCents = const Value.absent(),
     this.occurredAt = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.transactionId = const Value.absent(),
     this.valuationId = const Value.absent(),
     this.counterAssetId = const Value.absent(),
@@ -24489,6 +24903,7 @@ class AssetRoomEventsTableCompanion
     required String kind,
     required int amountCents,
     required DateTime occurredAt,
+    this.utcOffsetMinutes = const Value.absent(),
     this.transactionId = const Value.absent(),
     this.valuationId = const Value.absent(),
     this.counterAssetId = const Value.absent(),
@@ -24514,6 +24929,7 @@ class AssetRoomEventsTableCompanion
     Expression<String>? kind,
     Expression<int>? amountCents,
     Expression<DateTime>? occurredAt,
+    Expression<int>? utcOffsetMinutes,
     Expression<String>? transactionId,
     Expression<String>? valuationId,
     Expression<String>? counterAssetId,
@@ -24532,6 +24948,7 @@ class AssetRoomEventsTableCompanion
       if (kind != null) 'kind': kind,
       if (amountCents != null) 'amount_cents': amountCents,
       if (occurredAt != null) 'occurred_at': occurredAt,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (transactionId != null) 'transaction_id': transactionId,
       if (valuationId != null) 'valuation_id': valuationId,
       if (counterAssetId != null) 'counter_asset_id': counterAssetId,
@@ -24552,6 +24969,7 @@ class AssetRoomEventsTableCompanion
     Value<String>? kind,
     Value<int>? amountCents,
     Value<DateTime>? occurredAt,
+    Value<int?>? utcOffsetMinutes,
     Value<String?>? transactionId,
     Value<String?>? valuationId,
     Value<String?>? counterAssetId,
@@ -24570,6 +24988,7 @@ class AssetRoomEventsTableCompanion
       kind: kind ?? this.kind,
       amountCents: amountCents ?? this.amountCents,
       occurredAt: occurredAt ?? this.occurredAt,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       transactionId: transactionId ?? this.transactionId,
       valuationId: valuationId ?? this.valuationId,
       counterAssetId: counterAssetId ?? this.counterAssetId,
@@ -24603,6 +25022,9 @@ class AssetRoomEventsTableCompanion
     }
     if (occurredAt.present) {
       map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
     }
     if (transactionId.present) {
       map['transaction_id'] = Variable<String>(transactionId.value);
@@ -24646,6 +25068,7 @@ class AssetRoomEventsTableCompanion
           ..write('kind: $kind, ')
           ..write('amountCents: $amountCents, ')
           ..write('occurredAt: $occurredAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('transactionId: $transactionId, ')
           ..write('valuationId: $valuationId, ')
           ..write('counterAssetId: $counterAssetId, ')
@@ -34272,6 +34695,17 @@ class $LeetCodeProblemsTableTable extends LeetCodeProblemsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _utcOffsetMinutesMeta = const VerificationMeta(
+    'utcOffsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> utcOffsetMinutes = GeneratedColumn<int>(
+    'utc_offset_minutes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _intervalMeta = const VerificationMeta(
     'interval',
   );
@@ -34380,6 +34814,7 @@ class $LeetCodeProblemsTableTable extends LeetCodeProblemsTable
     code,
     notes,
     solvedAt,
+    utcOffsetMinutes,
     interval,
     ease,
     dueAt,
@@ -34538,6 +34973,15 @@ class $LeetCodeProblemsTableTable extends LeetCodeProblemsTable
     } else if (isInserting) {
       context.missing(_solvedAtMeta);
     }
+    if (data.containsKey('utc_offset_minutes')) {
+      context.handle(
+        _utcOffsetMinutesMeta,
+        utcOffsetMinutes.isAcceptableOrUnknown(
+          data['utc_offset_minutes']!,
+          _utcOffsetMinutesMeta,
+        ),
+      );
+    }
     if (data.containsKey('interval')) {
       context.handle(
         _intervalMeta,
@@ -34677,6 +35121,10 @@ class $LeetCodeProblemsTableTable extends LeetCodeProblemsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}solved_at'],
       )!,
+      utcOffsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}utc_offset_minutes'],
+      ),
       interval: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}interval'],
@@ -34754,6 +35202,9 @@ class LeetCodeProblemsTableData extends DataClass
   final String? notes;
   final DateTime solvedAt;
 
+  /// The solving device's UTC offset at [solvedAt]; see `recordedWallClock`.
+  final int? utcOffsetMinutes;
+
   /// SRS review state for the Review Deck, mirroring [StudyCardsTable]'s.
   /// `dueAt` is nullable rather than backfilled: a null reads as "due now",
   /// which is exactly right both for a freshly tracked problem and for every
@@ -34785,6 +35236,7 @@ class LeetCodeProblemsTableData extends DataClass
     required this.code,
     this.notes,
     required this.solvedAt,
+    this.utcOffsetMinutes,
     required this.interval,
     required this.ease,
     this.dueAt,
@@ -34829,6 +35281,9 @@ class LeetCodeProblemsTableData extends DataClass
       map['notes'] = Variable<String>(notes);
     }
     map['solved_at'] = Variable<DateTime>(solvedAt);
+    if (!nullToAbsent || utcOffsetMinutes != null) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes);
+    }
     map['interval'] = Variable<double>(interval);
     map['ease'] = Variable<double>(ease);
     if (!nullToAbsent || dueAt != null) {
@@ -34878,6 +35333,9 @@ class LeetCodeProblemsTableData extends DataClass
           ? const Value.absent()
           : Value(notes),
       solvedAt: Value(solvedAt),
+      utcOffsetMinutes: utcOffsetMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(utcOffsetMinutes),
       interval: Value(interval),
       ease: Value(ease),
       dueAt: dueAt == null && nullToAbsent
@@ -34919,6 +35377,7 @@ class LeetCodeProblemsTableData extends DataClass
       code: serializer.fromJson<String>(json['code']),
       notes: serializer.fromJson<String?>(json['notes']),
       solvedAt: serializer.fromJson<DateTime>(json['solvedAt']),
+      utcOffsetMinutes: serializer.fromJson<int?>(json['utcOffsetMinutes']),
       interval: serializer.fromJson<double>(json['interval']),
       ease: serializer.fromJson<double>(json['ease']),
       dueAt: serializer.fromJson<DateTime?>(json['dueAt']),
@@ -34951,6 +35410,7 @@ class LeetCodeProblemsTableData extends DataClass
       'code': serializer.toJson<String>(code),
       'notes': serializer.toJson<String?>(notes),
       'solvedAt': serializer.toJson<DateTime>(solvedAt),
+      'utcOffsetMinutes': serializer.toJson<int?>(utcOffsetMinutes),
       'interval': serializer.toJson<double>(interval),
       'ease': serializer.toJson<double>(ease),
       'dueAt': serializer.toJson<DateTime?>(dueAt),
@@ -34981,6 +35441,7 @@ class LeetCodeProblemsTableData extends DataClass
     String? code,
     Value<String?> notes = const Value.absent(),
     DateTime? solvedAt,
+    Value<int?> utcOffsetMinutes = const Value.absent(),
     double? interval,
     double? ease,
     Value<DateTime?> dueAt = const Value.absent(),
@@ -35014,6 +35475,9 @@ class LeetCodeProblemsTableData extends DataClass
     code: code ?? this.code,
     notes: notes.present ? notes.value : this.notes,
     solvedAt: solvedAt ?? this.solvedAt,
+    utcOffsetMinutes: utcOffsetMinutes.present
+        ? utcOffsetMinutes.value
+        : this.utcOffsetMinutes,
     interval: interval ?? this.interval,
     ease: ease ?? this.ease,
     dueAt: dueAt.present ? dueAt.value : this.dueAt,
@@ -35065,6 +35529,9 @@ class LeetCodeProblemsTableData extends DataClass
       code: data.code.present ? data.code.value : this.code,
       notes: data.notes.present ? data.notes.value : this.notes,
       solvedAt: data.solvedAt.present ? data.solvedAt.value : this.solvedAt,
+      utcOffsetMinutes: data.utcOffsetMinutes.present
+          ? data.utcOffsetMinutes.value
+          : this.utcOffsetMinutes,
       interval: data.interval.present ? data.interval.value : this.interval,
       ease: data.ease.present ? data.ease.value : this.ease,
       dueAt: data.dueAt.present ? data.dueAt.value : this.dueAt,
@@ -35099,6 +35566,7 @@ class LeetCodeProblemsTableData extends DataClass
           ..write('code: $code, ')
           ..write('notes: $notes, ')
           ..write('solvedAt: $solvedAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('interval: $interval, ')
           ..write('ease: $ease, ')
           ..write('dueAt: $dueAt, ')
@@ -35131,6 +35599,7 @@ class LeetCodeProblemsTableData extends DataClass
     code,
     notes,
     solvedAt,
+    utcOffsetMinutes,
     interval,
     ease,
     dueAt,
@@ -35162,6 +35631,7 @@ class LeetCodeProblemsTableData extends DataClass
           other.code == this.code &&
           other.notes == this.notes &&
           other.solvedAt == this.solvedAt &&
+          other.utcOffsetMinutes == this.utcOffsetMinutes &&
           other.interval == this.interval &&
           other.ease == this.ease &&
           other.dueAt == this.dueAt &&
@@ -35192,6 +35662,7 @@ class LeetCodeProblemsTableCompanion
   final Value<String> code;
   final Value<String?> notes;
   final Value<DateTime> solvedAt;
+  final Value<int?> utcOffsetMinutes;
   final Value<double> interval;
   final Value<double> ease;
   final Value<DateTime?> dueAt;
@@ -35220,6 +35691,7 @@ class LeetCodeProblemsTableCompanion
     this.code = const Value.absent(),
     this.notes = const Value.absent(),
     this.solvedAt = const Value.absent(),
+    this.utcOffsetMinutes = const Value.absent(),
     this.interval = const Value.absent(),
     this.ease = const Value.absent(),
     this.dueAt = const Value.absent(),
@@ -35249,6 +35721,7 @@ class LeetCodeProblemsTableCompanion
     this.code = const Value.absent(),
     this.notes = const Value.absent(),
     required DateTime solvedAt,
+    this.utcOffsetMinutes = const Value.absent(),
     this.interval = const Value.absent(),
     this.ease = const Value.absent(),
     this.dueAt = const Value.absent(),
@@ -35283,6 +35756,7 @@ class LeetCodeProblemsTableCompanion
     Expression<String>? code,
     Expression<String>? notes,
     Expression<DateTime>? solvedAt,
+    Expression<int>? utcOffsetMinutes,
     Expression<double>? interval,
     Expression<double>? ease,
     Expression<DateTime>? dueAt,
@@ -35313,6 +35787,7 @@ class LeetCodeProblemsTableCompanion
       if (code != null) 'code': code,
       if (notes != null) 'notes': notes,
       if (solvedAt != null) 'solved_at': solvedAt,
+      if (utcOffsetMinutes != null) 'utc_offset_minutes': utcOffsetMinutes,
       if (interval != null) 'interval': interval,
       if (ease != null) 'ease': ease,
       if (dueAt != null) 'due_at': dueAt,
@@ -35344,6 +35819,7 @@ class LeetCodeProblemsTableCompanion
     Value<String>? code,
     Value<String?>? notes,
     Value<DateTime>? solvedAt,
+    Value<int?>? utcOffsetMinutes,
     Value<double>? interval,
     Value<double>? ease,
     Value<DateTime?>? dueAt,
@@ -35373,6 +35849,7 @@ class LeetCodeProblemsTableCompanion
       code: code ?? this.code,
       notes: notes ?? this.notes,
       solvedAt: solvedAt ?? this.solvedAt,
+      utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
       interval: interval ?? this.interval,
       ease: ease ?? this.ease,
       dueAt: dueAt ?? this.dueAt,
@@ -35442,6 +35919,9 @@ class LeetCodeProblemsTableCompanion
     if (solvedAt.present) {
       map['solved_at'] = Variable<DateTime>(solvedAt.value);
     }
+    if (utcOffsetMinutes.present) {
+      map['utc_offset_minutes'] = Variable<int>(utcOffsetMinutes.value);
+    }
     if (interval.present) {
       map['interval'] = Variable<double>(interval.value);
     }
@@ -35493,6 +35973,7 @@ class LeetCodeProblemsTableCompanion
           ..write('code: $code, ')
           ..write('notes: $notes, ')
           ..write('solvedAt: $solvedAt, ')
+          ..write('utcOffsetMinutes: $utcOffsetMinutes, ')
           ..write('interval: $interval, ')
           ..write('ease: $ease, ')
           ..write('dueAt: $dueAt, ')
@@ -57496,6 +57977,7 @@ typedef $$JournalEntriesTableTableCreateCompanionBuilder =
       required String body,
       Value<String?> richBodyJson,
       required DateTime entryDate,
+      Value<int?> utcOffsetMinutes,
       Value<DateTime?> timestamp,
       Value<String> tagsJson,
       Value<int?> mood,
@@ -57517,6 +57999,7 @@ typedef $$JournalEntriesTableTableUpdateCompanionBuilder =
       Value<String> body,
       Value<String?> richBodyJson,
       Value<DateTime> entryDate,
+      Value<int?> utcOffsetMinutes,
       Value<DateTime?> timestamp,
       Value<String> tagsJson,
       Value<int?> mood,
@@ -57567,6 +58050,11 @@ class $$JournalEntriesTableTableFilterComposer
 
   ColumnFilters<DateTime> get entryDate => $composableBuilder(
     column: $table.entryDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57665,6 +58153,11 @@ class $$JournalEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get timestamp => $composableBuilder(
     column: $table.timestamp,
     builder: (column) => ColumnOrderings(column),
@@ -57749,6 +58242,11 @@ class $$JournalEntriesTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get entryDate =>
       $composableBuilder(column: $table.entryDate, builder: (column) => column);
+
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get timestamp =>
       $composableBuilder(column: $table.timestamp, builder: (column) => column);
@@ -57839,6 +58337,7 @@ class $$JournalEntriesTableTableTableManager
                 Value<String> body = const Value.absent(),
                 Value<String?> richBodyJson = const Value.absent(),
                 Value<DateTime> entryDate = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<DateTime?> timestamp = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<int?> mood = const Value.absent(),
@@ -57858,6 +58357,7 @@ class $$JournalEntriesTableTableTableManager
                 body: body,
                 richBodyJson: richBodyJson,
                 entryDate: entryDate,
+                utcOffsetMinutes: utcOffsetMinutes,
                 timestamp: timestamp,
                 tagsJson: tagsJson,
                 mood: mood,
@@ -57879,6 +58379,7 @@ class $$JournalEntriesTableTableTableManager
                 required String body,
                 Value<String?> richBodyJson = const Value.absent(),
                 required DateTime entryDate,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<DateTime?> timestamp = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<int?> mood = const Value.absent(),
@@ -57898,6 +58399,7 @@ class $$JournalEntriesTableTableTableManager
                 body: body,
                 richBodyJson: richBodyJson,
                 entryDate: entryDate,
+                utcOffsetMinutes: utcOffsetMinutes,
                 timestamp: timestamp,
                 tagsJson: tagsJson,
                 mood: mood,
@@ -57947,6 +58449,7 @@ typedef $$DreamEntriesTableTableCreateCompanionBuilder =
       required String body,
       Value<String?> notes,
       required DateTime entryDate,
+      Value<int?> utcOffsetMinutes,
       Value<String> tagsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -57961,6 +58464,7 @@ typedef $$DreamEntriesTableTableUpdateCompanionBuilder =
       Value<String> body,
       Value<String?> notes,
       Value<DateTime> entryDate,
+      Value<int?> utcOffsetMinutes,
       Value<String> tagsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -58000,6 +58504,11 @@ class $$DreamEntriesTableTableFilterComposer
 
   ColumnFilters<DateTime> get entryDate => $composableBuilder(
     column: $table.entryDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58063,6 +58572,11 @@ class $$DreamEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get tagsJson => $composableBuilder(
     column: $table.tagsJson,
     builder: (column) => ColumnOrderings(column),
@@ -58112,6 +58626,11 @@ class $$DreamEntriesTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get entryDate =>
       $composableBuilder(column: $table.entryDate, builder: (column) => column);
+
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get tagsJson =>
       $composableBuilder(column: $table.tagsJson, builder: (column) => column);
@@ -58174,6 +58693,7 @@ class $$DreamEntriesTableTableTableManager
                 Value<String> body = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> entryDate = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -58186,6 +58706,7 @@ class $$DreamEntriesTableTableTableManager
                 body: body,
                 notes: notes,
                 entryDate: entryDate,
+                utcOffsetMinutes: utcOffsetMinutes,
                 tagsJson: tagsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -58200,6 +58721,7 @@ class $$DreamEntriesTableTableTableManager
                 required String body,
                 Value<String?> notes = const Value.absent(),
                 required DateTime entryDate,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -58212,6 +58734,7 @@ class $$DreamEntriesTableTableTableManager
                 body: body,
                 notes: notes,
                 entryDate: entryDate,
+                utcOffsetMinutes: utcOffsetMinutes,
                 tagsJson: tagsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -58526,6 +59049,7 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<bool> dueHasTime,
       Value<bool> completed,
       Value<DateTime?> completedAt,
+      Value<int?> completedUtcOffsetMinutes,
       Value<bool> starred,
       Value<int> sortOrder,
       Value<DateTime?> dueDateSetAt,
@@ -58548,6 +59072,7 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<bool> dueHasTime,
       Value<bool> completed,
       Value<DateTime?> completedAt,
+      Value<int?> completedUtcOffsetMinutes,
       Value<bool> starred,
       Value<int> sortOrder,
       Value<DateTime?> dueDateSetAt,
@@ -58611,6 +59136,11 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<DateTime> get completedAt => $composableBuilder(
     column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get completedUtcOffsetMinutes => $composableBuilder(
+    column: $table.completedUtcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58714,6 +59244,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get completedUtcOffsetMinutes => $composableBuilder(
+    column: $table.completedUtcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get starred => $composableBuilder(
     column: $table.starred,
     builder: (column) => ColumnOrderings(column),
@@ -58802,6 +59337,11 @@ class $$TodoTasksTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get completedUtcOffsetMinutes => $composableBuilder(
+    column: $table.completedUtcOffsetMinutes,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get starred =>
       $composableBuilder(column: $table.starred, builder: (column) => column);
 
@@ -58882,6 +59422,7 @@ class $$TodoTasksTableTableTableManager
                 Value<bool> dueHasTime = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
+                Value<int?> completedUtcOffsetMinutes = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
@@ -58902,6 +59443,7 @@ class $$TodoTasksTableTableTableManager
                 dueHasTime: dueHasTime,
                 completed: completed,
                 completedAt: completedAt,
+                completedUtcOffsetMinutes: completedUtcOffsetMinutes,
                 starred: starred,
                 sortOrder: sortOrder,
                 dueDateSetAt: dueDateSetAt,
@@ -58924,6 +59466,7 @@ class $$TodoTasksTableTableTableManager
                 Value<bool> dueHasTime = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
+                Value<int?> completedUtcOffsetMinutes = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
@@ -58944,6 +59487,7 @@ class $$TodoTasksTableTableTableManager
                 dueHasTime: dueHasTime,
                 completed: completed,
                 completedAt: completedAt,
+                completedUtcOffsetMinutes: completedUtcOffsetMinutes,
                 starred: starred,
                 sortOrder: sortOrder,
                 dueDateSetAt: dueDateSetAt,
@@ -58985,6 +59529,7 @@ typedef $$TodoTaskCompletionsTableTableCreateCompanionBuilder =
       required String id,
       required String taskId,
       required DateTime completedAt,
+      Value<int?> utcOffsetMinutes,
       Value<DateTime?> dueDate,
       Value<int> version,
       Value<DateTime?> deletedAt,
@@ -58995,6 +59540,7 @@ typedef $$TodoTaskCompletionsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> taskId,
       Value<DateTime> completedAt,
+      Value<int?> utcOffsetMinutes,
       Value<DateTime?> dueDate,
       Value<int> version,
       Value<DateTime?> deletedAt,
@@ -59022,6 +59568,11 @@ class $$TodoTaskCompletionsTableTableFilterComposer
 
   ColumnFilters<DateTime> get completedAt => $composableBuilder(
     column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -59065,6 +59616,11 @@ class $$TodoTaskCompletionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get dueDate => $composableBuilder(
     column: $table.dueDate,
     builder: (column) => ColumnOrderings(column),
@@ -59098,6 +59654,11 @@ class $$TodoTaskCompletionsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get completedAt => $composableBuilder(
     column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => column,
   );
 
@@ -59160,6 +59721,7 @@ class $$TodoTaskCompletionsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> taskId = const Value.absent(),
                 Value<DateTime> completedAt = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -59168,6 +59730,7 @@ class $$TodoTaskCompletionsTableTableTableManager
                 id: id,
                 taskId: taskId,
                 completedAt: completedAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 dueDate: dueDate,
                 version: version,
                 deletedAt: deletedAt,
@@ -59178,6 +59741,7 @@ class $$TodoTaskCompletionsTableTableTableManager
                 required String id,
                 required String taskId,
                 required DateTime completedAt,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -59186,6 +59750,7 @@ class $$TodoTaskCompletionsTableTableTableManager
                 id: id,
                 taskId: taskId,
                 completedAt: completedAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 dueDate: dueDate,
                 version: version,
                 deletedAt: deletedAt,
@@ -59494,6 +60059,7 @@ typedef $$CalendarEventsTableTableCreateCompanionBuilder =
       required String title,
       required DateTime start,
       required DateTime end,
+      Value<int?> utcOffsetMinutes,
       Value<bool> isFullDay,
       Value<int> colorValue,
       Value<String> notes,
@@ -59519,6 +60085,7 @@ typedef $$CalendarEventsTableTableUpdateCompanionBuilder =
       Value<String> title,
       Value<DateTime> start,
       Value<DateTime> end,
+      Value<int?> utcOffsetMinutes,
       Value<bool> isFullDay,
       Value<int> colorValue,
       Value<String> notes,
@@ -59569,6 +60136,11 @@ class $$CalendarEventsTableTableFilterComposer
 
   ColumnFilters<DateTime> get end => $composableBuilder(
     column: $table.end,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -59687,6 +60259,11 @@ class $$CalendarEventsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isFullDay => $composableBuilder(
     column: $table.isFullDay,
     builder: (column) => ColumnOrderings(column),
@@ -59793,6 +60370,11 @@ class $$CalendarEventsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get end =>
       $composableBuilder(column: $table.end, builder: (column) => column);
+
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get isFullDay =>
       $composableBuilder(column: $table.isFullDay, builder: (column) => column);
@@ -59905,6 +60487,7 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<DateTime> start = const Value.absent(),
                 Value<DateTime> end = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<bool> isFullDay = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<String> notes = const Value.absent(),
@@ -59928,6 +60511,7 @@ class $$CalendarEventsTableTableTableManager
                 title: title,
                 start: start,
                 end: end,
+                utcOffsetMinutes: utcOffsetMinutes,
                 isFullDay: isFullDay,
                 colorValue: colorValue,
                 notes: notes,
@@ -59953,6 +60537,7 @@ class $$CalendarEventsTableTableTableManager
                 required String title,
                 required DateTime start,
                 required DateTime end,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<bool> isFullDay = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<String> notes = const Value.absent(),
@@ -59976,6 +60561,7 @@ class $$CalendarEventsTableTableTableManager
                 title: title,
                 start: start,
                 end: end,
+                utcOffsetMinutes: utcOffsetMinutes,
                 isFullDay: isFullDay,
                 colorValue: colorValue,
                 notes: notes,
@@ -65431,6 +66017,7 @@ typedef $$TransactionsTableTableCreateCompanionBuilder =
       Value<String?> note,
       Value<String> tagsJson,
       required DateTime occurredAt,
+      Value<int?> utcOffsetMinutes,
       Value<String?> roomEventId,
       Value<String?> subscriptionId,
       Value<DateTime?> settlesDueDate,
@@ -65450,6 +66037,7 @@ typedef $$TransactionsTableTableUpdateCompanionBuilder =
       Value<String?> note,
       Value<String> tagsJson,
       Value<DateTime> occurredAt,
+      Value<int?> utcOffsetMinutes,
       Value<String?> roomEventId,
       Value<String?> subscriptionId,
       Value<DateTime?> settlesDueDate,
@@ -65502,6 +66090,11 @@ class $$TransactionsTableTableFilterComposer
 
   ColumnFilters<DateTime> get occurredAt => $composableBuilder(
     column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -65590,6 +66183,11 @@ class $$TransactionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get roomEventId => $composableBuilder(
     column: $table.roomEventId,
     builder: (column) => ColumnOrderings(column),
@@ -65662,6 +66260,11 @@ class $$TransactionsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
     column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => column,
   );
 
@@ -65745,6 +66348,7 @@ class $$TransactionsTableTableTableManager
                 Value<String?> note = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<DateTime> occurredAt = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<String?> roomEventId = const Value.absent(),
                 Value<String?> subscriptionId = const Value.absent(),
                 Value<DateTime?> settlesDueDate = const Value.absent(),
@@ -65762,6 +66366,7 @@ class $$TransactionsTableTableTableManager
                 note: note,
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 roomEventId: roomEventId,
                 subscriptionId: subscriptionId,
                 settlesDueDate: settlesDueDate,
@@ -65781,6 +66386,7 @@ class $$TransactionsTableTableTableManager
                 Value<String?> note = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 required DateTime occurredAt,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<String?> roomEventId = const Value.absent(),
                 Value<String?> subscriptionId = const Value.absent(),
                 Value<DateTime?> settlesDueDate = const Value.absent(),
@@ -65798,6 +66404,7 @@ class $$TransactionsTableTableTableManager
                 note: note,
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 roomEventId: roomEventId,
                 subscriptionId: subscriptionId,
                 settlesDueDate: settlesDueDate,
@@ -67592,6 +68199,7 @@ typedef $$AssetRoomEventsTableTableCreateCompanionBuilder =
       required String kind,
       required int amountCents,
       required DateTime occurredAt,
+      Value<int?> utcOffsetMinutes,
       Value<String?> transactionId,
       Value<String?> valuationId,
       Value<String?> counterAssetId,
@@ -67611,6 +68219,7 @@ typedef $$AssetRoomEventsTableTableUpdateCompanionBuilder =
       Value<String> kind,
       Value<int> amountCents,
       Value<DateTime> occurredAt,
+      Value<int?> utcOffsetMinutes,
       Value<String?> transactionId,
       Value<String?> valuationId,
       Value<String?> counterAssetId,
@@ -67659,6 +68268,11 @@ class $$AssetRoomEventsTableTableFilterComposer
 
   ColumnFilters<DateTime> get occurredAt => $composableBuilder(
     column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -67747,6 +68361,11 @@ class $$AssetRoomEventsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get transactionId => $composableBuilder(
     column: $table.transactionId,
     builder: (column) => ColumnOrderings(column),
@@ -67821,6 +68440,11 @@ class $$AssetRoomEventsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
     column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => column,
   );
 
@@ -67909,6 +68533,7 @@ class $$AssetRoomEventsTableTableTableManager
                 Value<String> kind = const Value.absent(),
                 Value<int> amountCents = const Value.absent(),
                 Value<DateTime> occurredAt = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<String?> transactionId = const Value.absent(),
                 Value<String?> valuationId = const Value.absent(),
                 Value<String?> counterAssetId = const Value.absent(),
@@ -67926,6 +68551,7 @@ class $$AssetRoomEventsTableTableTableManager
                 kind: kind,
                 amountCents: amountCents,
                 occurredAt: occurredAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 transactionId: transactionId,
                 valuationId: valuationId,
                 counterAssetId: counterAssetId,
@@ -67945,6 +68571,7 @@ class $$AssetRoomEventsTableTableTableManager
                 required String kind,
                 required int amountCents,
                 required DateTime occurredAt,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<String?> transactionId = const Value.absent(),
                 Value<String?> valuationId = const Value.absent(),
                 Value<String?> counterAssetId = const Value.absent(),
@@ -67962,6 +68589,7 @@ class $$AssetRoomEventsTableTableTableManager
                 kind: kind,
                 amountCents: amountCents,
                 occurredAt: occurredAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 transactionId: transactionId,
                 valuationId: valuationId,
                 counterAssetId: counterAssetId,
@@ -72897,6 +73525,7 @@ typedef $$LeetCodeProblemsTableTableCreateCompanionBuilder =
       Value<String> code,
       Value<String?> notes,
       required DateTime solvedAt,
+      Value<int?> utcOffsetMinutes,
       Value<double> interval,
       Value<double> ease,
       Value<DateTime?> dueAt,
@@ -72927,6 +73556,7 @@ typedef $$LeetCodeProblemsTableTableUpdateCompanionBuilder =
       Value<String> code,
       Value<String?> notes,
       Value<DateTime> solvedAt,
+      Value<int?> utcOffsetMinutes,
       Value<double> interval,
       Value<double> ease,
       Value<DateTime?> dueAt,
@@ -73034,6 +73664,11 @@ class $$LeetCodeProblemsTableTableFilterComposer
 
   ColumnFilters<DateTime> get solvedAt => $composableBuilder(
     column: $table.solvedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -73177,6 +73812,11 @@ class $$LeetCodeProblemsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get interval => $composableBuilder(
     column: $table.interval,
     builder: (column) => ColumnOrderings(column),
@@ -73301,6 +73941,11 @@ class $$LeetCodeProblemsTableTableAnnotationComposer
   GeneratedColumn<DateTime> get solvedAt =>
       $composableBuilder(column: $table.solvedAt, builder: (column) => column);
 
+  GeneratedColumn<int> get utcOffsetMinutes => $composableBuilder(
+    column: $table.utcOffsetMinutes,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get interval =>
       $composableBuilder(column: $table.interval, builder: (column) => column);
 
@@ -73392,6 +74037,7 @@ class $$LeetCodeProblemsTableTableTableManager
                 Value<String> code = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> solvedAt = const Value.absent(),
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<double> interval = const Value.absent(),
                 Value<double> ease = const Value.absent(),
                 Value<DateTime?> dueAt = const Value.absent(),
@@ -73420,6 +74066,7 @@ class $$LeetCodeProblemsTableTableTableManager
                 code: code,
                 notes: notes,
                 solvedAt: solvedAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 interval: interval,
                 ease: ease,
                 dueAt: dueAt,
@@ -73450,6 +74097,7 @@ class $$LeetCodeProblemsTableTableTableManager
                 Value<String> code = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 required DateTime solvedAt,
+                Value<int?> utcOffsetMinutes = const Value.absent(),
                 Value<double> interval = const Value.absent(),
                 Value<double> ease = const Value.absent(),
                 Value<DateTime?> dueAt = const Value.absent(),
@@ -73478,6 +74126,7 @@ class $$LeetCodeProblemsTableTableTableManager
                 code: code,
                 notes: notes,
                 solvedAt: solvedAt,
+                utcOffsetMinutes: utcOffsetMinutes,
                 interval: interval,
                 ease: ease,
                 dueAt: dueAt,

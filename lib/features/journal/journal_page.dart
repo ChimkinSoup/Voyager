@@ -1164,6 +1164,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             customQuote: fresh.customQuote,
             weatherIcon: fresh.weatherIcon,
             entryDate: fresh.entryDate,
+            utcOffsetMinutes: fresh.utcOffsetMinutes,
             version: fresh.version,
             bumpVersion: false,
           );
@@ -1623,6 +1624,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       title: entry.title,
       body: draftBody,
       entryDate: entry.entryDate,
+      utcOffsetMinutes: entry.utcOffsetMinutes,
       richBodyJson: entry.richBodyJson,
       timestamp: entry.timestamp,
       tags: entry.tags,

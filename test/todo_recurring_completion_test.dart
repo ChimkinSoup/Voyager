@@ -33,6 +33,8 @@ Future<AppDatabase> _pumpWithRepeatingTask(
   required RecurrenceRule rule,
   required DateTime dueLocal,
   DateTime? anchorLocal,
+  // A due date with a time of day; without it only the day is stored.
+  bool dueHasTime = false,
   // An extra dated sibling, so a test can pin where the rolled task lands
   // relative to it rather than only what date it carries.
   DateTime? siblingDueLocal,
@@ -53,6 +55,7 @@ Future<AppDatabase> _pumpWithRepeatingTask(
       // Ahead of the seeded "Task 0" row so it sits at the top of the section.
       sortOrder: -1000000,
       dueDate: dueLocal.toUtc(),
+      dueHasTime: dueHasTime,
       recurrence: rule,
       recurrenceAnchor: (anchorLocal ?? dueLocal).toUtc(),
     ),
@@ -160,6 +163,7 @@ void main() {
     final db = await _pumpWithRepeatingTask(
       tester,
       rule: const RecurrenceRule(frequency: EventRecurrence.weekly),
+      dueHasTime: true,
       dueLocal: DateTime.now().copyWith(
         hour: 9,
         minute: 30,

@@ -115,6 +115,7 @@ Future<void> restoreJournalEntry(
     body: entry.body,
     richBodyJson: entry.richBodyJson,
     entryDate: entry.entryDate,
+    utcOffsetMinutes: entry.utcOffsetMinutes,
     timestamp: entry.timestamp,
     tags: entry.tags,
     mood: entry.mood,

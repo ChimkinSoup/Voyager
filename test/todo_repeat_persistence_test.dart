@@ -35,6 +35,8 @@ TodoTask _task({DateTime? dueDate, RecurrenceRule? recurrence}) {
     createdAt: now,
     updatedAt: now,
     dueDate: dueDate,
+    // A time of day, so the panel keeps it rather than only the day.
+    dueHasTime: dueDate != null,
     recurrence: recurrence ?? RecurrenceRule.none,
   );
 }

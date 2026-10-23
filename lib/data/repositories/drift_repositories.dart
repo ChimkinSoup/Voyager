@@ -11,6 +11,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -41,6 +42,43 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/domain/services/ordered_list_edit.dart';
+
+/// [moment]'s wall clock where it was recorded (`recordedWallClock`), in
+/// julian days: the stored instant moved by the [offset] beside it, or by
+/// this device's current one on a row from before it was kept. What lists
+/// order and filter on, so SQL agrees with the day and time the app shows.
+Expression<double> _recordedWallJulian(
+  Expression<DateTime> moment,
+  Expression<int> offset,
+) =>
+    moment.julianday +
+    coalesce([
+          offset,
+          Constant(DateTime.now().timeZoneOffset.inMinutes),
+        ]).cast<double>() /
+        const Constant(1440.0);
+
+/// [instant] on this device's wall clock, in julian days — the bound a
+/// caller's local day boundary is compared against [_recordedWallJulian] at.
+Expression<double> _localWallJulian(DateTime instant) {
+  final local = instant.toLocal();
+  return Variable<DateTime>(
+    DateTime.utc(
+      local.year,
+      local.month,
+      local.day,
+      local.hour,
+      local.minute,
+      local.second,
+      local.millisecond,
+    ),
+  ).julianday;
+}
+
+/// The offset stored beside [task]'s `completedAt`: none while it is open.
+int? _completedOffset(TodoTask task) => task.completedAt == null
+    ? null
+    : recordedOffset(task.completedAt!, task.completedUtcOffsetMinutes);
 
 /// A tombstone the purge may drop: deleted before [cutoff], and not erased —
 /// see [SoftDeletePolicy.isExpired].
@@ -249,14 +287,28 @@ class DriftJournalRepository implements JournalRepository {
       query = query..where((t) => t.journalId.equals(journalId));
     }
     if (from != null) {
-      query = query..where((t) => t.entryDate.isBiggerOrEqualValue(from));
+      query = query
+        ..where(
+          (t) => _recordedWallJulian(
+            t.entryDate,
+            t.utcOffsetMinutes,
+          ).isBiggerOrEqual(_localWallJulian(from)),
+        );
     }
     if (to != null) {
-      query = query..where((t) => t.entryDate.isSmallerOrEqualValue(to));
+      query = query
+        ..where(
+          (t) => _recordedWallJulian(
+            t.entryDate,
+            t.utcOffsetMinutes,
+          ).isSmallerOrEqual(_localWallJulian(to)),
+        );
     }
     query = query
       ..orderBy([
-        (t) => OrderingTerm.desc(t.entryDate),
+        (t) => OrderingTerm.desc(
+          _recordedWallJulian(t.entryDate, t.utcOffsetMinutes),
+        ),
         (t) => OrderingTerm.desc(t.createdAt),
         (t) => OrderingTerm.desc(t.id),
       ]);
@@ -331,7 +383,12 @@ class DriftJournalRepository implements JournalRepository {
             title: Value(entry.title),
             body: Value(entry.body),
             richBodyJson: Value(entry.richBodyJson),
-            entryDate: Value(entry.entryDate),
+            entryDate: Value(
+              recordedInstant(entry.entryDate, entry.utcOffsetMinutes),
+            ),
+            utcOffsetMinutes: Value(
+              recordedOffset(entry.entryDate, entry.utcOffsetMinutes),
+            ),
             timestamp: Value(entry.timestamp),
             tagsJson: Value(jsonEncode(entry.tags)),
             mood: Value(entry.mood),
@@ -436,7 +493,8 @@ class DriftJournalRepository implements JournalRepository {
     title: row.title,
     body: row.body,
     richBodyJson: row.richBodyJson,
-    entryDate: row.entryDate,
+    entryDate: recordedWallClock(row.entryDate, row.utcOffsetMinutes),
+    utcOffsetMinutes: row.utcOffsetMinutes,
     timestamp: row.timestamp,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
     mood: row.mood,
@@ -467,14 +525,28 @@ class DriftDreamRepository implements DreamRepository {
   }) async {
     var query = _db.select(_db.dreamEntriesTable);
     if (from != null) {
-      query = query..where((t) => t.entryDate.isBiggerOrEqualValue(from));
+      query = query
+        ..where(
+          (t) => _recordedWallJulian(
+            t.entryDate,
+            t.utcOffsetMinutes,
+          ).isBiggerOrEqual(_localWallJulian(from)),
+        );
     }
     if (to != null) {
-      query = query..where((t) => t.entryDate.isSmallerOrEqualValue(to));
+      query = query
+        ..where(
+          (t) => _recordedWallJulian(
+            t.entryDate,
+            t.utcOffsetMinutes,
+          ).isSmallerOrEqual(_localWallJulian(to)),
+        );
     }
     query = query
       ..orderBy([
-        (t) => OrderingTerm.desc(t.entryDate),
+        (t) => OrderingTerm.desc(
+          _recordedWallJulian(t.entryDate, t.utcOffsetMinutes),
+        ),
         (t) => OrderingTerm.desc(t.createdAt),
         (t) => OrderingTerm.desc(t.id),
       ]);
@@ -509,7 +581,12 @@ class DriftDreamRepository implements DreamRepository {
             title: Value(entry.title),
             body: Value(entry.body),
             notes: Value(entry.notes),
-            entryDate: Value(entry.entryDate),
+            entryDate: Value(
+              recordedInstant(entry.entryDate, entry.utcOffsetMinutes),
+            ),
+            utcOffsetMinutes: Value(
+              recordedOffset(entry.entryDate, entry.utcOffsetMinutes),
+            ),
             tagsJson: Value(jsonEncode(entry.tags)),
             createdAt: Value(entry.createdAt),
             updatedAt: Value(entry.updatedAt),
@@ -565,7 +642,8 @@ class DriftDreamRepository implements DreamRepository {
     title: row.title,
     body: row.body,
     notes: row.notes,
-    entryDate: row.entryDate,
+    entryDate: recordedWallClock(row.entryDate, row.utcOffsetMinutes),
+    utcOffsetMinutes: row.utcOffsetMinutes,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -587,7 +665,9 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
   }) async {
     final query = _db.select(_db.leetCodeProblemsTable)
       ..orderBy([
-        (t) => OrderingTerm.desc(t.solvedAt),
+        (t) => OrderingTerm.desc(
+          _recordedWallJulian(t.solvedAt, t.utcOffsetMinutes),
+        ),
         (t) => OrderingTerm.desc(t.createdAt),
         (t) => OrderingTerm.desc(t.id),
       ]);
@@ -637,7 +717,12 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
             codeLanguage: Value(problem.codeLanguage),
             code: Value(problem.primarySolution?.code ?? ''),
             notes: Value(problem.primarySolution?.notes),
-            solvedAt: Value(problem.solvedAt),
+            solvedAt: Value(
+              recordedInstant(problem.solvedAt, problem.utcOffsetMinutes),
+            ),
+            utcOffsetMinutes: Value(
+              recordedOffset(problem.solvedAt, problem.utcOffsetMinutes),
+            ),
             interval: Value(problem.interval),
             ease: Value(problem.ease),
             dueAt: Value(problem.dueAt),
@@ -715,7 +800,8 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
     solutions: LeetCodeSolution.listFromJson(
       jsonDecode(row.solutionsJson) as List,
     ),
-    solvedAt: row.solvedAt,
+    solvedAt: recordedWallClock(row.solvedAt, row.utcOffsetMinutes),
+    utcOffsetMinutes: row.utcOffsetMinutes,
     interval: row.interval,
     ease: row.ease,
     dueAt: row.dueAt,
@@ -1423,15 +1509,19 @@ class DriftTodoRepository implements TodoRepository {
     listId: r.listId,
     title: r.title,
     notes: r.notes,
-    dueDate: r.dueDate,
+    dueDate: taskDateFromStorage(r.dueDate, hasTime: r.dueHasTime),
     dueHasTime: r.dueHasTime,
     completed: r.completed,
     completedAt: r.completedAt,
+    completedUtcOffsetMinutes: r.completedUtcOffsetMinutes,
     starred: r.starred,
     sortOrder: r.sortOrder,
     dueDateSetAt: r.dueDateSetAt,
     recurrence: RecurrenceRule.parse(r.recurrence),
-    recurrenceAnchor: r.recurrenceAnchor,
+    recurrenceAnchor: taskDateFromStorage(
+      r.recurrenceAnchor,
+      hasTime: r.dueHasTime,
+    ),
     parentTaskId: r.parentTaskId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -1453,15 +1543,23 @@ class DriftTodoRepository implements TodoRepository {
             parentTaskId: Value(task.parentTaskId),
             title: Value(task.title),
             notes: Value(task.notes),
-            dueDate: Value(task.dueDate),
+            dueDate: Value(
+              taskDateForStorage(task.dueDate, hasTime: task.dueHasTime),
+            ),
             dueHasTime: Value(task.dueHasTime),
             completed: Value(task.completed),
             completedAt: Value(task.completedAt),
+            completedUtcOffsetMinutes: Value(_completedOffset(task)),
             starred: Value(task.starred),
             sortOrder: Value(task.sortOrder),
             dueDateSetAt: Value(task.dueDateSetAt),
             recurrence: Value(task.recurrence.toStorage()),
-            recurrenceAnchor: Value(task.recurrenceAnchor),
+            recurrenceAnchor: Value(
+              taskDateForStorage(
+                task.recurrenceAnchor,
+                hasTime: task.dueHasTime,
+              ),
+            ),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
             version: Value(task.version),
@@ -1488,15 +1586,23 @@ class DriftTodoRepository implements TodoRepository {
             parentTaskId: Value(task.parentTaskId),
             title: Value(task.title),
             notes: Value(task.notes),
-            dueDate: Value(task.dueDate),
+            dueDate: Value(
+              taskDateForStorage(task.dueDate, hasTime: task.dueHasTime),
+            ),
             dueHasTime: Value(task.dueHasTime),
             completed: Value(task.completed),
             completedAt: Value(task.completedAt),
+            completedUtcOffsetMinutes: Value(_completedOffset(task)),
             starred: Value(task.starred),
             sortOrder: Value(task.sortOrder),
             dueDateSetAt: Value(task.dueDateSetAt),
             recurrence: Value(task.recurrence.toStorage()),
-            recurrenceAnchor: Value(task.recurrenceAnchor),
+            recurrenceAnchor: Value(
+              taskDateForStorage(
+                task.recurrenceAnchor,
+                hasTime: task.dueHasTime,
+              ),
+            ),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
             version: Value(task.version),
@@ -1585,6 +1691,12 @@ class DriftTodoRepository implements TodoRepository {
             id: Value(completion.id),
             taskId: Value(completion.taskId),
             completedAt: Value(completion.completedAt),
+            utcOffsetMinutes: Value(
+              recordedOffset(
+                completion.completedAt,
+                completion.utcOffsetMinutes,
+              ),
+            ),
             dueDate: Value(completion.dueDate),
             version: Value(completion.version),
             deletedAt: Value(completion.deletedAt),
@@ -1630,6 +1742,7 @@ class DriftTodoRepository implements TodoRepository {
         id: row.id,
         taskId: row.taskId,
         completedAt: row.completedAt,
+        utcOffsetMinutes: row.utcOffsetMinutes,
         dueDate: row.dueDate,
         version: row.version,
         deletedAt: row.deletedAt,
@@ -1783,10 +1896,22 @@ class DriftCalendarRepository implements CalendarRepository {
       query = query..where((t) => t.calendarId.equals(calendarId));
     }
     if (from != null) {
-      query = query..where((t) => t.start.isBiggerOrEqualValue(from));
+      query = query
+        ..where(
+          (t) => _recordedWallJulian(
+            t.start,
+            t.utcOffsetMinutes,
+          ).isBiggerOrEqual(_localWallJulian(from)),
+        );
     }
     if (to != null) {
-      query = query..where((t) => t.end.isSmallerOrEqualValue(to));
+      query = query
+        ..where(
+          (t) => _recordedWallJulian(
+            t.end,
+            t.utcOffsetMinutes,
+          ).isSmallerOrEqual(_localWallJulian(to)),
+        );
     }
     final rows = await query.get();
     return rows
@@ -1808,6 +1933,7 @@ class DriftCalendarRepository implements CalendarRepository {
     CalendarEvent event, {
     bool recordLocalActivity = true,
   }) async {
+    final offset = recordedOffset(event.start, event.utcOffsetMinutes);
     await _db
         .into(_db.calendarEventsTable)
         .insertOnConflictUpdate(
@@ -1815,18 +1941,25 @@ class DriftCalendarRepository implements CalendarRepository {
             id: Value(event.id),
             calendarId: Value(event.calendarId),
             title: Value(event.title),
-            start: Value(event.start),
-            end: Value(event.end),
+            start: Value(recordedInstant(event.start, offset)),
+            // Both ends at the start's offset, so a multi-day event across a
+            // DST change reads its end back on the clock it was set on.
+            end: Value(recordedInstant(event.end, offset)),
+            utcOffsetMinutes: Value(offset),
             isFullDay: Value(event.isFullDay),
             colorValue: Value(event.colorValue),
             notes: Value(event.notes),
             source: Value(event.source.name),
             externalId: Value(event.externalId),
             recurrence: Value(event.recurrence.toStorage()),
-            recurrenceEndDate: Value(event.recurrenceEndDate),
+            recurrenceEndDate: Value(
+              storedCalendarDayOrNull(event.recurrenceEndDate),
+            ),
             exceptionDates: Value(encodeExceptionDates(event.exceptionDates)),
             recurrenceParentId: Value(event.recurrenceParentId),
-            recurrenceDate: Value(event.recurrenceDate),
+            recurrenceDate: Value(
+              storedCalendarDayOrNull(event.recurrenceDate),
+            ),
             isDone: Value(event.isDone),
             doneMarks: Value(encodeDoneMarks(event.doneMarks)),
             createdAt: Value(event.createdAt),
@@ -1901,18 +2034,19 @@ class DriftCalendarRepository implements CalendarRepository {
     id: row.id,
     calendarId: row.calendarId,
     title: row.title,
-    start: row.start,
-    end: row.end,
+    start: recordedWallClock(row.start, row.utcOffsetMinutes),
+    utcOffsetMinutes: row.utcOffsetMinutes,
+    end: recordedWallClock(row.end, row.utcOffsetMinutes),
     isFullDay: row.isFullDay,
     colorValue: row.colorValue,
     notes: row.notes,
     source: EventSource.values.byName(row.source),
     externalId: row.externalId,
     recurrence: recurrenceFromStorage(row.recurrence),
-    recurrenceEndDate: row.recurrenceEndDate,
+    recurrenceEndDate: calendarDayOfOrNull(row.recurrenceEndDate),
     exceptionDates: decodeExceptionDates(row.exceptionDates),
     recurrenceParentId: row.recurrenceParentId,
-    recurrenceDate: row.recurrenceDate,
+    recurrenceDate: calendarDayOfOrNull(row.recurrenceDate),
     isDone: row.isDone,
     doneMarks: decodeDoneMarks(row.doneMarks),
     createdAt: row.createdAt,
@@ -2024,7 +2158,7 @@ class DriftTrackerRepository implements TrackerRepository {
           TrackerValuesTableCompanion(
             id: Value(value.id),
             trackerId: Value(value.trackerId),
-            periodStart: Value(value.periodStart),
+            periodStart: Value(storedCalendarDay(value.periodStart)),
             intValue: Value(value.intValue),
             boolValue: Value(value.boolValue),
             enumValue: Value(value.enumValue),
@@ -2080,7 +2214,7 @@ class DriftTrackerRepository implements TrackerRepository {
           CounterAdjustmentsTableCompanion(
             id: Value(adjustment.id),
             trackerId: Value(adjustment.trackerId),
-            day: Value(adjustment.day),
+            day: Value(storedCalendarDay(adjustment.day)),
             deviceId: Value(adjustment.deviceId),
             delta: Value(adjustment.delta),
             createdAt: Value(adjustment.createdAt),
@@ -2134,7 +2268,7 @@ class DriftTrackerRepository implements TrackerRepository {
           CounterAdjustmentsTableCompanion.insert(
             id: id,
             trackerId: trackerId,
-            day: date,
+            day: storedCalendarDay(date),
             deviceId: deviceId,
             delta: delta,
             createdAt: now,
@@ -2286,7 +2420,7 @@ class DriftTrackerRepository implements TrackerRepository {
       CounterAdjustment(
         id: row.id,
         trackerId: row.trackerId,
-        day: row.day,
+        day: calendarDayOf(row.day),
         deviceId: row.deviceId,
         delta: row.delta,
         createdAt: row.createdAt,
@@ -2298,7 +2432,7 @@ class DriftTrackerRepository implements TrackerRepository {
   TrackerValue _mapValue(TrackerValuesTableData row) => TrackerValue(
     id: row.id,
     trackerId: row.trackerId,
-    periodStart: row.periodStart,
+    periodStart: calendarDayOf(row.periodStart),
     intValue: row.intValue,
     boolValue: row.boolValue,
     enumValue: row.enumValue,
@@ -3259,11 +3393,26 @@ class DriftFinanceRepository implements FinanceRepository {
             origin: Value(transaction.origin),
             note: Value(transaction.note),
             tagsJson: Value(jsonEncode(transaction.tags)),
-            occurredAt: Value(transaction.occurredAt),
+            occurredAt: Value(
+              recordedInstant(
+                transaction.occurredAt,
+                transaction.utcOffsetMinutes,
+              ),
+            ),
+            utcOffsetMinutes: Value(
+              recordedOffset(
+                transaction.occurredAt,
+                transaction.utcOffsetMinutes,
+              ),
+            ),
             roomEventId: Value(transaction.roomEventId),
             subscriptionId: Value(transaction.subscriptionId),
-            settlesDueDate: Value(transaction.settlesDueDate),
-            paidThroughBefore: Value(transaction.paidThroughBefore),
+            settlesDueDate: Value(
+              storedCalendarDayOrNull(transaction.settlesDueDate),
+            ),
+            paidThroughBefore: Value(
+              storedCalendarDayOrNull(transaction.paidThroughBefore),
+            ),
             createdAt: Value(transaction.createdAt),
             updatedAt: Value(transaction.updatedAt),
             version: Value(transaction.version),
@@ -3339,8 +3488,10 @@ class DriftFinanceRepository implements FinanceRepository {
             name: Value(subscription.name),
             amountCents: Value(subscription.amountCents),
             period: Value(subscription.period.name),
-            anchorDueDate: Value(subscription.anchorDueDate),
-            paidThroughDate: Value(subscription.paidThroughDate),
+            anchorDueDate: Value(storedCalendarDay(subscription.anchorDueDate)),
+            paidThroughDate: Value(
+              storedCalendarDayOrNull(subscription.paidThroughDate),
+            ),
             colorValue: Value(subscription.colorValue),
             note: Value(subscription.note),
             store: Value(subscription.store),
@@ -3577,7 +3728,7 @@ class DriftFinanceRepository implements FinanceRepository {
             id: Value(valuation.id),
             assetId: Value(valuation.assetId),
             valueCents: Value(valuation.valueCents),
-            asOf: Value(valuation.asOf),
+            asOf: Value(storedCalendarDay(valuation.asOf)),
             createdAt: Value(valuation.createdAt),
             updatedAt: Value(valuation.updatedAt),
             version: Value(valuation.version),
@@ -3706,7 +3857,12 @@ class DriftFinanceRepository implements FinanceRepository {
             roomId: Value(event.roomId),
             kind: Value(event.kind.name),
             amountCents: Value(event.amountCents),
-            occurredAt: Value(event.occurredAt),
+            occurredAt: Value(
+              recordedInstant(event.occurredAt, event.utcOffsetMinutes),
+            ),
+            utcOffsetMinutes: Value(
+              recordedOffset(event.occurredAt, event.utcOffsetMinutes),
+            ),
             transactionId: Value(event.transactionId),
             valuationId: Value(event.valuationId),
             counterAssetId: Value(event.counterAssetId),
@@ -3791,6 +3947,7 @@ class DriftFinanceRepository implements FinanceRepository {
             kind: member.kind,
             amountCents: member.amountCents,
             occurredAt: member.occurredAt,
+            utcOffsetMinutes: member.utcOffsetMinutes,
             transactionId: member.transactionId,
             valuationId: member.valuationId,
             counterAssetId: member.counterAssetId,
@@ -3812,6 +3969,7 @@ class DriftFinanceRepository implements FinanceRepository {
             type: transaction.type,
             amountCents: transaction.amountCents,
             occurredAt: transaction.occurredAt,
+            utcOffsetMinutes: transaction.utcOffsetMinutes,
             origin: transaction.origin,
             note: transaction.note,
             tags: transaction.tags,
@@ -3852,7 +4010,7 @@ class DriftFinanceRepository implements FinanceRepository {
             targetCents: Value(goal.targetCents),
             colorValue: Value(goal.colorValue),
             note: Value(goal.note),
-            targetDate: Value(goal.targetDate),
+            targetDate: Value(storedCalendarDayOrNull(goal.targetDate)),
             createdAt: Value(goal.createdAt),
             updatedAt: Value(goal.updatedAt),
             version: Value(goal.version),
@@ -3920,7 +4078,7 @@ class DriftFinanceRepository implements FinanceRepository {
             id: Value(allocation.id),
             goalId: Value(allocation.goalId),
             amountCents: Value(allocation.amountCents),
-            allocatedAt: Value(allocation.allocatedAt),
+            allocatedAt: Value(storedCalendarDay(allocation.allocatedAt)),
             note: Value(allocation.note),
             createdAt: Value(allocation.createdAt),
             updatedAt: Value(allocation.updatedAt),
@@ -3959,7 +4117,7 @@ class DriftFinanceRepository implements FinanceRepository {
     colorValue: row.colorValue,
     note: row.note,
     // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
-    targetDate: row.targetDate?.toLocal(),
+    targetDate: calendarDayOfOrNull(row.targetDate),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -3971,7 +4129,7 @@ class DriftFinanceRepository implements FinanceRepository {
     goalId: row.goalId,
     amountCents: row.amountCents,
     // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
-    allocatedAt: row.allocatedAt.toLocal(),
+    allocatedAt: calendarDayOf(row.allocatedAt),
     note: row.note,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -4014,7 +4172,8 @@ class DriftFinanceRepository implements FinanceRepository {
         RoomEventKind.contribution,
     amountCents: row.amountCents,
     // Stored in UTC; local like [_map]'s occurredAt.
-    occurredAt: row.occurredAt.toLocal(),
+    occurredAt: recordedWallClock(row.occurredAt, row.utcOffsetMinutes),
+    utcOffsetMinutes: row.utcOffsetMinutes,
     transactionId: row.transactionId,
     valuationId: row.valuationId,
     counterAssetId: row.counterAssetId,
@@ -4043,7 +4202,7 @@ class DriftFinanceRepository implements FinanceRepository {
     assetId: row.assetId,
     valueCents: row.valueCents,
     // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
-    asOf: row.asOf.toLocal(),
+    asOf: calendarDayOf(row.asOf),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -4133,8 +4292,8 @@ class DriftFinanceRepository implements FinanceRepository {
     amountCents: row.amountCents,
     period: BillingPeriod.values.byName(row.period),
     // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
-    anchorDueDate: row.anchorDueDate.toLocal(),
-    paidThroughDate: row.paidThroughDate?.toLocal(),
+    anchorDueDate: calendarDayOf(row.anchorDueDate),
+    paidThroughDate: calendarDayOfOrNull(row.paidThroughDate),
     colorValue: row.colorValue,
     note: row.note,
     store: row.store,
@@ -4157,11 +4316,12 @@ class DriftFinanceRepository implements FinanceRepository {
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
     // Synced rows are stored in UTC and read back as UTC DateTimes. Every
     // finance view buckets by the local calendar day, so convert here once.
-    occurredAt: row.occurredAt.toLocal(),
+    occurredAt: recordedWallClock(row.occurredAt, row.utcOffsetMinutes),
+    utcOffsetMinutes: row.utcOffsetMinutes,
     roomEventId: row.roomEventId,
     subscriptionId: row.subscriptionId,
-    settlesDueDate: row.settlesDueDate?.toLocal(),
-    paidThroughBefore: row.paidThroughBefore?.toLocal(),
+    settlesDueDate: calendarDayOfOrNull(row.settlesDueDate),
+    paidThroughBefore: calendarDayOfOrNull(row.paidThroughBefore),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -4681,7 +4841,7 @@ class DriftSettingsRepository implements SettingsRepository {
       calendarNavigateRightKey: row.calendarNavigateRightKey,
       timelineModeYearZero: row.timelineModeYearZero,
       birthYear: row.birthYear,
-      birthDate: row.birthDate,
+      birthDate: calendarDayOfOrNull(row.birthDate),
       alertOnPeriodicPrompts: row.alertOnPeriodicPrompts,
       alertTimeHour: row.alertTimeHour,
       hideCompletedTasks: row.hideCompletedTasks,
@@ -5050,7 +5210,7 @@ class DriftSettingsRepository implements SettingsRepository {
             calendarNavigateRightKey: Value(settings.calendarNavigateRightKey),
             timelineModeYearZero: Value(settings.timelineModeYearZero),
             birthYear: Value(settings.birthYear),
-            birthDate: Value(settings.birthDate),
+            birthDate: Value(storedCalendarDayOrNull(settings.birthDate)),
             alertOnPeriodicPrompts: Value(settings.alertOnPeriodicPrompts),
             alertTimeHour: Value(settings.alertTimeHour),
             hideCompletedTasks: Value(settings.hideCompletedTasks),

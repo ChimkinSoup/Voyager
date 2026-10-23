@@ -861,6 +861,7 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
       body: snapshot.body,
       notes: snapshot.notes,
       entryDate: snapshot.entryDate,
+      utcOffsetMinutes: snapshot.utcOffsetMinutes,
       tags: snapshot.tags,
     );
     try {

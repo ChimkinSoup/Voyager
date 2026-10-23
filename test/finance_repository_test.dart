@@ -1051,9 +1051,18 @@ void main() {
       'allocatedAt': (await repo.listGoalAllocations()).single.allocatedAt,
       'asOf': (await repo.listAssetValuations()).single.asOf,
     };
+    // Every field but occurredAt names a day only, and reads back as that
+    // local day's midnight (storedCalendarDay).
+    final local = at.toLocal();
     for (final MapEntry(:key, :value) in dates.entries) {
       expect(value.isUtc, isFalse, reason: key);
-      expect(value, at.toLocal(), reason: key);
+      expect(
+        value,
+        key == 'occurredAt'
+            ? local
+            : DateTime(local.year, local.month, local.day),
+        reason: key,
+      );
     }
   });
 }

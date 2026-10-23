@@ -301,8 +301,9 @@ class DayHourGrid extends StatelessWidget {
               IconButton(
                 onPressed: onDayChanged == null
                     ? null
-                    : () =>
-                          onDayChanged!(day.subtract(const Duration(days: 1))),
+                    : () => onDayChanged!(
+                        DateTime(day.year, day.month, day.day - 1),
+                      ),
                 icon: const Icon(Icons.chevron_left),
               ),
               Expanded(
@@ -315,7 +316,9 @@ class DayHourGrid extends StatelessWidget {
               IconButton(
                 onPressed: onDayChanged == null
                     ? null
-                    : () => onDayChanged!(day.add(const Duration(days: 1))),
+                    : () => onDayChanged!(
+                        DateTime(day.year, day.month, day.day + 1),
+                      ),
                 icon: const Icon(Icons.chevron_right),
               ),
             ],

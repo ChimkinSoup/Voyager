@@ -942,6 +942,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       examples: _parsedExamples,
       solutions: _parsedSolutions,
       solvedAt: existing?.solvedAt ?? now,
+      utcOffsetMinutes: existing?.utcOffsetMinutes,
       interval: existing?.interval ?? 0,
       ease: existing?.ease ?? 2.5,
       dueAt: existing?.dueAt,

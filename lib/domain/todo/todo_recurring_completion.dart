@@ -138,9 +138,26 @@ Future<void> recordTodoCompletionChange({
     sync.pushTodoTaskCompletion(completion);
   }
 
+  // [task]'s occurrence row and its id: under the current id, or under the
+  // one an older build gave it, so its own row is the one updated.
+  Future<(String, TodoTaskCompletion?)> occurrence(TodoTask task) async {
+    final id = todoTaskCompletionId(
+      task.id,
+      task.dueDate,
+      dueHasTime: task.dueHasTime,
+    );
+    final found = await repo.getCompletion(id);
+    if (found != null) return (id, found);
+    final legacyId = legacyTodoTaskCompletionId(task.id, task.dueDate);
+    if (legacyId != id) {
+      final legacy = await repo.getCompletion(legacyId);
+      if (legacy != null) return (legacyId, legacy);
+    }
+    return (id, null);
+  }
+
   if (!before.completed && after.completed) {
-    final id = todoTaskCompletionId(after.id, after.dueDate);
-    final existing = await repo.getCompletion(id);
+    final (id, existing) = await occurrence(after);
     // Already counted: this occurrence was ticked before and never taken back.
     if (existing != null && existing.deletedAt == null) return;
     await write(
@@ -148,7 +165,9 @@ Future<void> recordTodoCompletionChange({
         id: id,
         taskId: after.id,
         completedAt: after.completedAt ?? utcNow(),
-        dueDate: after.dueDate,
+        utcOffsetMinutes: after.completedUtcOffsetMinutes,
+        // In the zone-free form the id is keyed on.
+        dueDate: taskDateForStorage(after.dueDate, hasTime: after.dueHasTime),
         version: existing == null ? 0 : existing.version + 1,
       ),
     );
@@ -163,8 +182,7 @@ Future<void> recordTodoCompletionChange({
     // Then by occurrence: the tick may be another device's, logged at its own
     // moment, or not synced in yet — in which case the tombstone goes first
     // and outranks the row when it lands.
-    final id = todoTaskCompletionId(before.id, before.dueDate);
-    final existing = await repo.getCompletion(id);
+    final (id, existing) = await occurrence(before);
     if (existing != null && existing.deletedAt != null) return;
     await write(
       existing?.deleted() ??
@@ -172,7 +190,11 @@ Future<void> recordTodoCompletionChange({
             id: id,
             taskId: before.id,
             completedAt: completedAt,
-            dueDate: before.dueDate,
+            utcOffsetMinutes: before.completedUtcOffsetMinutes,
+            dueDate: taskDateForStorage(
+              before.dueDate,
+              hasTime: before.dueHasTime,
+            ),
             version: 1,
             deletedAt: utcNow(),
           ),

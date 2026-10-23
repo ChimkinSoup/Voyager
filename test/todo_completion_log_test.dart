@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -44,9 +45,10 @@ void main() {
     repo = DriftTodoRepository(db);
   });
 
+  // Local midnight: the form a date-only due day reads back in.
   DateTime today() {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day).toUtc();
+    return DateTime(now.year, now.month, now.day);
   }
 
   Future<TodoTask> seed({RecurrenceRule rule = RecurrenceRule.none}) async {
@@ -112,7 +114,7 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.single.taskId, _taskId);
       expect(rows.single.completedAt, stored.completedAt);
-      expect(rows.single.dueDate, today());
+      expect(rows.single.dueDate, storedCalendarDay(today()));
     });
 
     test('each roll-forward of a repeat logs the occurrence it ticked',
@@ -129,7 +131,11 @@ void main() {
       expect(stored.completedAt, isNull);
 
       final dues = [for (final c in await live()) c.dueDate]..sort();
-      expect(dues, [today(), afterFirst.dueDate]);
+      // Zone-free, as the row's id is keyed (todoTaskCompletionId).
+      expect(dues, [
+        storedCalendarDay(today()),
+        storedCalendarDay(afterFirst.dueDate!),
+      ]);
     });
 
     test('a tick saved before the roll-forward is logged once', () async {
@@ -224,7 +230,11 @@ void main() {
       );
 
       final arriving = TodoTaskCompletion(
-        id: todoTaskCompletionId(_taskId, stored.dueDate),
+        id: todoTaskCompletionId(
+          _taskId,
+          stored.dueDate,
+          dueHasTime: stored.dueHasTime,
+        ),
         taskId: _taskId,
         completedAt: stored.completedAt!,
         dueDate: stored.dueDate,
@@ -240,7 +250,11 @@ void main() {
     test('two devices ticking the same occurrence log one row, and an un-tick '
         'takes it back whichever moment the task kept', () async {
       final open = await seed();
-      final id = todoTaskCompletionId(_taskId, open.dueDate);
+      final id = todoTaskCompletionId(
+        _taskId,
+        open.dueDate,
+        dueHasTime: open.dueHasTime,
+      );
       // This device's tick is on record; the task kept the other device's.
       await repo.logCompletion(
         TodoTaskCompletion(

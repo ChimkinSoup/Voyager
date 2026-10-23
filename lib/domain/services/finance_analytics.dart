@@ -431,11 +431,8 @@ List<NetWorthPoint> netWorthSeries(
   // reflects the present rather than a stale month-end.
   final dates = <DateTime>[
     for (var i = months - 1; i >= 1; i--)
-      DateTime(
-        today.year,
-        today.month - i + 1,
-        1,
-      ).subtract(const Duration(days: 1)),
+      // Day 0: the previous month's last day, at midnight even across DST.
+      DateTime(today.year, today.month - i + 1, 0),
     DateTime(today.year, today.month, today.day),
   ];
 

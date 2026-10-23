@@ -53,9 +53,16 @@ final leetCodeClockProvider = Provider.autoDispose<DateTime>((ref) {
   final timer = Timer(next.difference(now), ref.invalidateSelf);
   // A timer's countdown may not run while the PC sleeps, so a long one can
   // wake hours late. The wall clock is checked each minute as well, and the
-  // pages rebuild only once the moment has actually passed.
+  // pages rebuild only once the moment has actually passed. The date is
+  // checked too: [next] is a fixed instant, and a timezone change moves local
+  // midnight without moving it.
   final wake = Timer.periodic(const Duration(minutes: 1), (_) {
-    if (!DateTime.now().isBefore(next)) ref.invalidateSelf();
+    final current = DateTime.now();
+    if (!current.isBefore(next) ||
+        DateTime(current.year, current.month, current.day) !=
+            DateTime(now.year, now.month, now.day)) {
+      ref.invalidateSelf();
+    }
   });
   ref.onDispose(() {
     timer.cancel();

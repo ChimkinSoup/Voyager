@@ -3506,6 +3506,7 @@ class RemoteSyncService {
                   ? local.richBodyJson
                   : merged.richBodyJson,
               entryDate: merged.entryDate,
+              utcOffsetMinutes: merged.utcOffsetMinutes,
               timestamp: merged.timestamp,
               tags: extractTags(owed),
               mood: merged.mood,
@@ -3714,6 +3715,7 @@ class RemoteSyncService {
               body: owed,
               notes: merged.notes,
               entryDate: merged.entryDate,
+              utcOffsetMinutes: merged.utcOffsetMinutes,
               tags: extractTags(owed),
               createdAt: merged.createdAt,
               updatedAt: merged.updatedAt,
@@ -3758,6 +3760,7 @@ class RemoteSyncService {
               body: merged.body,
               notes: stored['notes'] as String?,
               entryDate: merged.entryDate,
+              utcOffsetMinutes: merged.utcOffsetMinutes,
               tags: merged.tags,
               createdAt: merged.createdAt,
               updatedAt:
@@ -3957,6 +3960,7 @@ class RemoteSyncService {
                 dueHasTime: merged.dueHasTime,
                 completed: merged.completed,
                 completedAt: merged.completedAt,
+                completedUtcOffsetMinutes: merged.completedUtcOffsetMinutes,
                 starred: merged.starred,
                 sortOrder: merged.sortOrder,
                 dueDateSetAt: merged.dueDateSetAt,

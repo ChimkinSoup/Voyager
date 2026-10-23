@@ -5,6 +5,7 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
@@ -180,11 +181,15 @@ String? _name(Map<String, dynamic> data) => data['name'] as String?;
 String? _field(Map<String, dynamic> data, String key) => data[key] as String?;
 
 /// "+$100.00 on Oct 31, 2026", the way the finance undo toasts name a row.
+///
+/// A [dateOnly] field (a valuation's or an allocation's day) is read as its
+/// calendar day; a transaction's moment on the clock it was entered on.
 String? _amountOn(
   Map<String, dynamic> data,
   String centsKey,
   String dateKey, {
   required bool signed,
+  bool dateOnly = false,
 }) {
   final cents = (data[centsKey] as num?)?.toInt();
   final date = parseFirestoreDate(data[dateKey]);
@@ -192,7 +197,10 @@ String? _amountOn(
   final amount = signed
       ? formatCents(cents, signed: true)
       : formatNetCents(cents);
-  return '$amount on ${DateFormat('MMM d, yyyy').format(date.toLocal())}';
+  final day = dateOnly
+      ? calendarDayOf(date)
+      : recordedWallClock(date, firestoreRecordedOffset(data[dateKey]));
+  return '$amount on ${DateFormat('MMM d, yyyy').format(day)}';
 }
 
 /// A title, or the first line of a prose body for a row never titled.
@@ -611,7 +619,8 @@ final _kinds = <TrashKind>[
     collection: FirestoreCollections.assetValuations,
     feature: TrashFeature.finance,
     noun: 'valuation',
-    title: (data) => _amountOn(data, 'valueCents', 'asOf', signed: false),
+    title: (data) =>
+        _amountOn(data, 'valueCents', 'asOf', signed: false, dateOnly: true),
     wipe: const ['valueCents'],
     parents: const [TrashParent(FirestoreCollections.assets, 'assetId')],
   ),
@@ -634,8 +643,13 @@ final _kinds = <TrashKind>[
     collection: FirestoreCollections.goalAllocations,
     feature: TrashFeature.finance,
     noun: 'allocation',
-    title: (data) =>
-        _amountOn(data, 'amountCents', 'allocatedAt', signed: true),
+    title: (data) => _amountOn(
+      data,
+      'amountCents',
+      'allocatedAt',
+      signed: true,
+      dateOnly: true,
+    ),
     wipe: const ['note', 'amountCents'],
     parents: const [TrashParent(FirestoreCollections.savingsGoals, 'goalId')],
   ),

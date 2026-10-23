@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
 class DreamEntry extends SoftDeletable {
@@ -10,6 +11,7 @@ class DreamEntry extends SoftDeletable {
     required this.title,
     required this.body,
     required this.entryDate,
+    this.utcOffsetMinutes,
     this.notes,
     this.tags = const [],
   });
@@ -17,7 +19,14 @@ class DreamEntry extends SoftDeletable {
   final String title;
   final String body;
   final String? notes;
+
+  /// The wall clock where the dream was logged, [utcOffsetMinutes] from UTC
+  /// — see `recordedWallClock`.
   final DateTime entryDate;
+
+  /// The logging device's UTC offset at [entryDate]; null on entries from
+  /// before it was kept, whose [entryDate] is this device's local time.
+  final int? utcOffsetMinutes;
   final List<String> tags;
 
   DreamEntry copyWith({
@@ -26,6 +35,7 @@ class DreamEntry extends SoftDeletable {
     String? body,
     String? notes,
     DateTime? entryDate,
+    int? utcOffsetMinutes,
     List<String>? tags,
     DateTime? deletedAt,
     int? version,
@@ -41,6 +51,12 @@ class DreamEntry extends SoftDeletable {
       body: body ?? this.body,
       notes: notes ?? this.notes,
       entryDate: entryDate ?? this.entryDate,
+      // A date picked here is on this device's clock — see JournalEntry.
+      utcOffsetMinutes:
+          utcOffsetMinutes ??
+          (entryDate == null || entryDate == this.entryDate
+              ? this.utcOffsetMinutes
+              : null),
       tags: tags ?? this.tags,
     );
   }
@@ -54,7 +70,11 @@ class DreamEntry extends SoftDeletable {
     'title': title,
     'body': body,
     'notes': notes,
-    'entryDate': entryDate.toUtc().toIso8601String(),
+    'entryDate': recordedInstant(
+      entryDate,
+      utcOffsetMinutes,
+    ).toUtc().toIso8601String(),
+    'utcOffsetMinutes': recordedOffset(entryDate, utcOffsetMinutes),
     'tags': tags,
   };
 
@@ -70,7 +90,11 @@ class DreamEntry extends SoftDeletable {
       title: json['title'] as String,
       body: json['body'] as String,
       notes: json['notes'] as String?,
-      entryDate: DateTime.parse(json['entryDate'] as String).toUtc(),
+      entryDate: recordedWallClock(
+        DateTime.parse(json['entryDate'] as String),
+        json['utcOffsetMinutes'] as int?,
+      ),
+      utcOffsetMinutes: json['utcOffsetMinutes'] as int?,
       tags: List<String>.from(json['tags'] as List? ?? const []),
     );
   }

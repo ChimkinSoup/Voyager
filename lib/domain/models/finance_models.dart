@@ -20,6 +20,7 @@ class FinancialTransaction extends SoftDeletable {
     required this.type,
     required this.amountCents,
     required this.occurredAt,
+    this.utcOffsetMinutes,
     this.origin,
     this.note,
     this.tags = const [],
@@ -34,10 +35,15 @@ class FinancialTransaction extends SoftDeletable {
   /// Absolute magnitude of the transaction in cents (always >= 0).
   final int amountCents;
 
-  /// When the transaction took place (local wall-clock, matching the tracker
-  /// convention of storing the naive local instant rather than UTC). The
-  /// ledger groups transactions by this value's calendar day.
+  /// When the transaction took place, on the wall clock where it was entered
+  /// ([utcOffsetMinutes] from UTC — see `recordedWallClock`), so it keeps its
+  /// day wherever it is read. The ledger groups transactions by this value's
+  /// calendar day.
   final DateTime occurredAt;
+
+  /// The entering device's UTC offset at [occurredAt]; null on rows from
+  /// before it was kept, whose [occurredAt] is this device's local time.
+  final int? utcOffsetMinutes;
 
   /// Where the money went (an expense's store) or came from (a deposit's
   /// source). Null when unset. Compared case-sensitively everywhere: `Walmart`
@@ -82,6 +88,7 @@ class FinancialTransaction extends SoftDeletable {
     TransactionType? type,
     int? amountCents,
     DateTime? occurredAt,
+    int? utcOffsetMinutes,
     String? origin,
     bool clearOrigin = false,
     String? note,
@@ -102,6 +109,13 @@ class FinancialTransaction extends SoftDeletable {
       type: type ?? this.type,
       amountCents: amountCents ?? this.amountCents,
       occurredAt: occurredAt ?? this.occurredAt,
+      // A date picked here is on this device's clock, so a new one without
+      // an offset drops the old one and is stamped with this device's.
+      utcOffsetMinutes:
+          utcOffsetMinutes ??
+          (occurredAt == null || occurredAt == this.occurredAt
+              ? this.utcOffsetMinutes
+              : null),
       origin: clearOrigin ? null : (origin ?? this.origin),
       note: note ?? this.note,
       tags: tags ?? this.tags,
@@ -399,10 +413,10 @@ DateTime _addMonths(DateTime date, int months) {
 
 /// Number of days in the given calendar month.
 int daysInMonth(int year, int month) {
-  final firstOfNext = month == 12
-      ? DateTime(year + 1, 1, 1)
-      : DateTime(year, month + 1, 1);
-  return firstOfNext.subtract(const Duration(days: 1)).day;
+  // Day 0 of the next month is this month's last day. Not the 1st minus a
+  // Duration, which lands a day early where clocks spring forward on the
+  // month's last day.
+  return DateTime(year, month + 1, 0).day;
 }
 
 /// A soft monthly spending limit on a single tag (e.g. "keep #dining_out under

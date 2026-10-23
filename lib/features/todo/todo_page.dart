@@ -4308,7 +4308,7 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
     final accent = listColor ?? theme.colorScheme.primary;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
 
     return [
       ContextMenuItem(

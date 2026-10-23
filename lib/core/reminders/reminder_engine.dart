@@ -441,9 +441,11 @@ class ReminderEngine extends ChangeNotifier {
     // Well under Android's 500-alarm ceiling; the rest are scheduled as the
     // nearer ones fire and the app re-evaluates.
     final planned = alerts.take(50).toList();
+    // In UTC: a local fireAt prints no offset, so after a timezone change the
+    // same wall-clock time at a new instant would match and skip rescheduling.
     final signature = [
       for (final alert in planned)
-        '${alert.sourceKey}@${alert.fireAt.toIso8601String()}|'
+        '${alert.sourceKey}@${alert.fireAt.toUtc().toIso8601String()}|'
             '${alert.title}|${alert.body}',
     ].join('\n');
     if (signature == _alertSignature) return;
