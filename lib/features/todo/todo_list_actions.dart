@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/utils/fallback_container.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
@@ -242,14 +242,32 @@ Future<Map<String, DateTime>> detachMediaForTasks(
   return stamps;
 }
 
+/// Where a deleted list's tasks go with "Move": the list set as the default
+/// view, or failing that the oldest one left. Null when no list other than
+/// [excludingId] is left. The `fallbackJournalFor` twin.
+TodoListModel? fallbackTodoListFor(
+  List<TodoListModel> lists, {
+  String? excludingId,
+  String? defaultTodoListId,
+}) {
+  return pickFallbackContainer(
+    lists.where((l) => l.id != excludingId && l.deletedAt == null),
+    id: (l) => l.id,
+    createdAt: (l) => l.createdAt,
+    preferredId: defaultTodoListId,
+  );
+}
+
 /// Prompts for, and carries out, the deletion of [list].
 ///
 /// Shared by the list dropdown's manage menu and the manage sheet, which used
 /// to keep near-identical copies of this body and had already drifted apart.
 ///
-/// [allLists] is only used to find — or fabricate — the built-in fallback list;
-/// the task count driving the dialog and both branches is read from the
-/// repository here rather than taken from the caller. A caller-supplied count
+/// The last list can't be deleted: its tasks would have nowhere to go.
+///
+/// [allLists] is only used to pick the fallback list; the task count driving
+/// the dialog and both branches is read from the repository here rather than
+/// taken from the caller. A caller-supplied count
 /// is not trustworthy for a destructive decision: the page sources it from a
 /// `FutureProvider` it only `read`s, which reports zero for every non-selected
 /// list while unresolved. A wrong zero skipped both branches and left every
@@ -261,7 +279,15 @@ Future<bool> deleteTodoList(
   required TodoListModel list,
   required List<TodoListModel> allLists,
 }) async {
-  if (list.id == legacyTodoListId) return false;
+  // Read from the database, as the trash's restore does, so the two pick the
+  // same list even while the settings provider is still loading.
+  final settings = await ref.read(settingsRepositoryProvider).getSettings();
+  final fallback = fallbackTodoListFor(
+    allLists,
+    excludingId: list.id,
+    defaultTodoListId: settings.defaultTodoListId,
+  );
+  if (fallback == null || !context.mounted) return false;
 
   final repo = ref.read(todoRepositoryProvider);
   final remoteSync = ref.read(remoteSyncServiceProvider);
@@ -274,16 +300,7 @@ Future<bool> deleteTodoList(
   final total = tasks.where((task) => task.parentTaskId == null).length;
   if (!context.mounted) return false;
 
-  // Hoisted out of the async gap below: the orElse closure that fabricates a
-  // replacement list used to read Theme.of(context) after the dialog awaited.
-  final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
-  final fallbackName =
-      allLists
-          .where((item) => item.id == legacyTodoListId)
-          .map((item) => item.name)
-          .where((name) => name.isNotEmpty)
-          .firstOrNull ??
-      'To-do';
+  final fallbackName = fallback.name.isNotEmpty ? fallback.name : 'To-do';
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${list.name}"?',
@@ -310,24 +327,7 @@ Future<bool> deleteTodoList(
   // [deleteJournalList].
   final deletedAt = utcNow();
   if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
-    final fallback = allLists.firstWhere(
-      (item) => item.id == legacyTodoListId,
-      orElse: () {
-        final now = utcNow();
-        return TodoListModel(
-          id: legacyTodoListId,
-          name: 'To-do',
-          colorValue: fallbackColor,
-          createdAt: now,
-          updatedAt: now,
-        );
-      },
-    );
-    if (!allLists.any((item) => item.id == legacyTodoListId)) {
-      await repo.upsertList(fallback);
-      remoteSync.pushTodoList(fallback);
-    }
-    await _moveTasksToDefaultList(repo, remoteSync, tasks);
+    await _moveTasksToList(repo, remoteSync, tasks, fallback.id);
   } else if (choice == DeleteContainerChoice.deleteAll && tasks.isNotEmpty) {
     // Push exactly the rows the repository wrote. Re-`copyWith`-ing the local
     // snapshots instead — which is what this used to do — sent the remote a
@@ -349,37 +349,38 @@ Future<bool> deleteTodoList(
   ref.invalidate(todoListsProvider);
   ref.invalidate(todoTasksProvider(list.id));
   if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
-    ref.invalidate(todoTasksProvider(legacyTodoListId));
+    ref.invalidate(todoTasksProvider(fallback.id));
   }
   ref.invalidate(allTodoTasksProvider);
   ref.invalidate(todoListStatsProvider);
   return true;
 }
 
-/// Reassigns [tasks] to the built-in list, placing each one into that list's
-/// ordering as it arrives.
+/// Reassigns [tasks] to [listId], placing each one into that list's ordering
+/// as it arrives.
 ///
 /// A bare `UPDATE ... SET listId` is not enough: `sortOrder` is per-list and
 /// every list restarts from the same bases, so the incoming tasks would land
 /// carrying the source list's numbering and collide one-for-one with what is
 /// already there, leaving `compareTodoTasks` to break every tie on `createdAt`.
-Future<void> _moveTasksToDefaultList(
+Future<void> _moveTasksToList(
   TodoRepository repo,
   RemoteSyncService remoteSync,
   List<TodoTask> tasks,
+  String listId,
 ) async {
   // Already-deleted rows stay where they are rather than being dragged into
-  // the default list's trash.
+  // the destination list's trash.
   final live = tasks.where((task) => task.deletedAt == null).toList();
   if (live.isEmpty) return;
 
-  var destActive = activeTopLevelTasks(await repo.listTasks(legacyTodoListId));
+  var destActive = activeTopLevelTasks(await repo.listTasks(listId));
   final writes = <String, TodoTask>{};
 
   // Subtasks and completed tasks carry no placement of their own; they just
   // follow their list.
   for (final task in live) {
-    final moved = task.copyWith(listId: legacyTodoListId);
+    final moved = task.copyWith(listId: listId);
     if (task.completed || task.isSubtask) {
       writes[moved.id] = moved;
       continue;

@@ -624,13 +624,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   /// the journal last actually opened — see [resolveNewItemTarget], which the
   /// todo page's `_listIdForNewTask` also calls so the two views agree.
   String _journalIdForNewEntry(List<Journal> journals) {
+    final settings = ref.read(settingsProvider).valueOrNull;
     return resolveNewItemTarget(
           currentId: _journalFilter,
-          lastViewedId: ref
-              .read(settingsProvider)
-              .valueOrNull
-              ?.lastViewedJournalId,
-          legacyId: legacyJournalId,
+          lastViewedId: settings?.lastViewedJournalId,
+          defaultId: settings?.defaultJournalId,
           availableIds: [for (final j in journals) j.id],
         ) ??
         legacyJournalId;

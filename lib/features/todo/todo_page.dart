@@ -1087,7 +1087,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     return resolveNewItemTarget(
           currentId: _selectedListId,
           lastViewedId: settings?.lastViewedTodoListId,
-          legacyId: legacyTodoListId,
+          defaultId: settings?.defaultTodoListId,
           availableIds: [for (final list in lists) list.id],
         ) ??
         legacyTodoListId;
@@ -1151,10 +1151,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
       ref.read(remoteSyncServiceProvider).pushTodoList(list);
       lists = await repo.listLists();
     }
+    final defaultListId = ref
+        .read(settingsProvider)
+        .valueOrNull
+        ?.defaultTodoListId;
     _selectedListId ??= lists
         .cast<TodoListModel?>()
         .firstWhere(
-          (l) => l!.id == legacyTodoListId,
+          (l) => l!.id == defaultListId,
           orElse: () => lists.isNotEmpty ? lists.first : null,
         )
         ?.id;
@@ -1165,13 +1169,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// last actually opened — see [resolveNewItemTarget], which the journal
   /// page's `_journalIdForNewEntry` also calls so the two views agree.
   String _listIdForNewTask(List<TodoListModel> lists) {
+    final settings = ref.read(settingsProvider).valueOrNull;
     return resolveNewItemTarget(
           currentId: _selectedListId,
-          lastViewedId: ref
-              .read(settingsProvider)
-              .valueOrNull
-              ?.lastViewedTodoListId,
-          legacyId: legacyTodoListId,
+          lastViewedId: settings?.lastViewedTodoListId,
+          defaultId: settings?.defaultTodoListId,
           availableIds: [for (final list in lists) list.id],
         ) ??
         legacyTodoListId;

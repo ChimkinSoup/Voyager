@@ -175,7 +175,10 @@ class TrashService {
         final target = await _remainingContainer(parent, rows);
         if (target == null) throw blocked();
         targetId = target.id;
-        fallbackName = target.kind.title(target.data);
+        final title = target.kind.title(target.data);
+        fallbackName = title == null || title.isEmpty
+            ? parent.fallbackName
+            : title;
       } else {
         targetId = parent.fallbackId;
         // The default container goes by whatever it was renamed to, if it

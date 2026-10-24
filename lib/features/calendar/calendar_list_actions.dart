@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
+import 'package:voyager/core/utils/fallback_container.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/calendar/calendar_overlay_dialog.dart';
 
 Future<String?> promptCalendarName(
@@ -151,9 +153,36 @@ void _invalidateCalendarDeleteProviders(WidgetRef ref) {
   ref.invalidate(calendarEventsProvider);
 }
 
+/// Where a deleted calendar's events go with "Move": the default calendar, or
+/// failing that the oldest one left. Null when no calendar other than
+/// [excludingId] is left. The `fallbackJournalFor` twin.
+Calendar? fallbackCalendarFor(
+  List<Calendar> calendars, {
+  String? excludingId,
+  String? defaultCalendarId,
+}) {
+  return pickFallbackContainer(
+    calendars.where((c) => c.id != excludingId && c.deletedAt == null),
+    id: (c) => c.id,
+    createdAt: (c) => c.createdAt,
+    preferredId: defaultCalendarId,
+  );
+}
+
+/// The calendar new events fall back to and To-Do's markers show on: the
+/// default calendar, or failing that the oldest one.
+String? defaultCalendarIdFor(List<Calendar> calendars, AppSettings? settings) {
+  return fallbackCalendarFor(
+    calendars,
+    defaultCalendarId: settings?.defaultCalendarId,
+  )?.id;
+}
+
 /// Deletes a calendar and (per user choice) either soft-deletes its events or
 /// moves them to the default calendar. Calendars are local-only, so there is
 /// no remote-sync step to follow up with.
+///
+/// The last calendar can't be deleted: its events would have nowhere to go.
 Future<bool> deleteCalendarList(
   BuildContext context,
   WidgetRef ref, {
@@ -163,18 +192,16 @@ Future<bool> deleteCalendarList(
   VoidCallback? onConfirmed,
   VoidCallback? onLocalDeleteFailed,
 }) async {
-  if (calendar.id == legacyCalendarId) return false;
-
-  // Read out of the theme before the dialog: the orElse below runs after the
-  // await, where [context] may already be dead.
-  final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
-
-  final fallbackName =
-      allCalendars
-          .where((item) => item.id == legacyCalendarId)
-          .map((item) => item.name)
-          .firstOrNull ??
-      'Calendar';
+  // Read from the database, as the trash's restore does, so the two pick the
+  // same calendar even while the settings provider is still loading.
+  final settings = await ref.read(settingsRepositoryProvider).getSettings();
+  final fallback = fallbackCalendarFor(
+    allCalendars,
+    excludingId: calendar.id,
+    defaultCalendarId: settings.defaultCalendarId,
+  );
+  if (fallback == null || !context.mounted) return false;
+  final fallbackName = fallback.name;
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${calendar.name}"?',
@@ -203,23 +230,7 @@ Future<bool> deleteCalendarList(
       await repo.softDeleteEventsInCalendar(calendar.id, at: deletedAt);
     } else if (choice == DeleteContainerChoice.moveToDefault &&
         eventCount > 0) {
-      final fallback = allCalendars.firstWhere(
-        (item) => item.id == legacyCalendarId,
-        orElse: () {
-          final now = utcNow();
-          return Calendar(
-            id: legacyCalendarId,
-            name: 'Calendar',
-            colorValue: fallbackColor,
-            createdAt: now,
-            updatedAt: now,
-          );
-        },
-      );
-      if (!allCalendars.any((item) => item.id == legacyCalendarId)) {
-        await repo.upsertCalendar(fallback);
-      }
-      await repo.reassignEventsCalendar(calendar.id, legacyCalendarId);
+      await repo.reassignEventsCalendar(calendar.id, fallback.id);
     }
 
     await repo.softDeleteCalendar(calendar.id, at: deletedAt);

@@ -1539,9 +1539,9 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
       padding: const EdgeInsets.only(right: 12),
       // The text alone sets the row's height, so one note's highlight meets
       // the next with no gap. The delete X is laid over the row's right end
-      // rather than beside the text, shrunk to a square of the row's height
-      // (the exit SizeTransition clips anything that spills past it); the
-      // text keeps the X's slot clear either way, so the row is the same
+      // rather than beside the text, its hover fill a rounded rectangle as
+      // tall as the text's highlight, with a hairline gap between the two;
+      // the text keeps the X's slot clear either way, so the row is the same
       // size while it is being edited.
       child: Stack(
         children: [
@@ -1563,16 +1563,17 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
               bottom: 0,
               end: _inboxDismissSlotSize,
               width: _inboxDismissSlotSize,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: _HoverRevealed(
-                    revealed: _hovered,
-                    child: _InboxDismissButton(
-                      onPressed: widget.onCopy!,
-                      icon: PhosphorIconsRegular.copy,
-                      tooltip: 'Copy',
-                    ),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(
+                  start: _kInboxSlotGap,
+                ),
+                child: _HoverRevealed(
+                  revealed: _hovered,
+                  child: _InboxDismissButton(
+                    onPressed: widget.onCopy!,
+                    icon: PhosphorIconsRegular.copy,
+                    tooltip: 'Copy',
+                    fillSlot: true,
                   ),
                 ),
               ),
@@ -1583,12 +1584,15 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
               bottom: 0,
               end: 0,
               width: _inboxDismissSlotSize,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: _HoverRevealed(
-                    revealed: _hovered,
-                    child: _InboxDismissButton(onPressed: _handleDelete),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(
+                  start: _kInboxSlotGap,
+                ),
+                child: _HoverRevealed(
+                  revealed: _hovered,
+                  child: _InboxDismissButton(
+                    onPressed: _handleDelete,
+                    fillSlot: true,
                   ),
                 ),
               ),
@@ -3508,6 +3512,10 @@ const double _kInboxDismissSize = 30;
 
 double get _inboxDismissSlotSize => isAndroid ? 48 : _kInboxDismissSize;
 
+/// Space between a reminder's text highlight and its controls' hover fills,
+/// so the two read as separate boxes rather than one notched one.
+const double _kInboxSlotGap = 2;
+
 /// Compact dismiss ✕ used on inbox reminder and feed rows — or, given
 /// another [icon], a control of the same size beside it.
 class _InboxDismissButton extends StatelessWidget {
@@ -3515,11 +3523,17 @@ class _InboxDismissButton extends StatelessWidget {
     required this.onPressed,
     this.icon = PhosphorIconsRegular.x,
     this.tooltip,
+    this.fillSlot = false,
   });
 
   final VoidCallback onPressed;
   final IconData icon;
   final String? tooltip;
+
+  /// Takes the whole box its parent gives it, as a rounded rectangle, rather
+  /// than a fixed circle — so its hover fill stands as tall as the row beside
+  /// it, the same shape as the row's own highlight.
+  final bool fillSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -3532,8 +3546,15 @@ class _InboxDismissButton extends StatelessWidget {
       // constraints say, which is the oversized hover fill.
       style: IconButton.styleFrom(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: fillSlot
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+              )
+            : null,
       ),
-      constraints: isAndroid
+      constraints: fillSlot
+          ? const BoxConstraints()
+          : isAndroid
           ? kMinTouchTarget
           : const BoxConstraints.tightFor(
               width: _kInboxDismissSize,

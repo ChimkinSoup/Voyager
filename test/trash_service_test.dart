@@ -8,6 +8,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -479,6 +480,82 @@ void main() {
       },
     );
 
+    test('a task whose list is in the trash too goes to the default-view '
+        'list when one is set', () async {
+      for (final (id, name) in [
+        (legacyTodoListId, 'To-do'),
+        ('a', 'Alpha'),
+        ('b', 'Beta'),
+      ]) {
+        await todos.upsertList(
+          TodoListModel(
+            id: id,
+            name: name,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+      }
+      final settingsRepo = DriftSettingsRepository(db);
+      await settingsRepo.saveSettings(
+        (await settingsRepo.getSettings()).copyWith(defaultTodoListId: 'b'),
+      );
+      await todos.upsertTask(
+        TodoTask(
+          id: 't',
+          listId: 'a',
+          title: 'A3 trashed',
+          sortOrder: 0,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      await todos.softDeleteTask('t');
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await todos.softDeleteList('a', at: utcNow());
+
+      final item = (await trash.list()).firstWhere((i) => i.id == 't');
+
+      expect(await trash.restore(item), 'Beta');
+      expect((await todos.getTask('t'))!.listId, 'b');
+    });
+
+    test('an event whose calendar is in the trash too goes to the default '
+        'calendar when one is set', () async {
+      for (final (id, name) in [
+        (legacyCalendarId, 'Calendar'),
+        ('a', 'Alpha'),
+        ('b', 'Beta'),
+      ]) {
+        await calendars.upsertCalendar(
+          Calendar(id: id, name: name, createdAt: created, updatedAt: created),
+        );
+      }
+      final settingsRepo = DriftSettingsRepository(db);
+      await settingsRepo.saveSettings(
+        (await settingsRepo.getSettings()).copyWith(defaultCalendarId: 'b'),
+      );
+      await calendars.upsertEvent(
+        CalendarEvent(
+          id: 'ev',
+          calendarId: 'a',
+          title: 'Dentist',
+          start: created,
+          end: created,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      await calendars.softDeleteEvent('ev');
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await calendars.softDeleteCalendar('a', at: utcNow());
+
+      final item = (await trash.list()).firstWhere((i) => i.id == 'ev');
+
+      expect(await trash.restore(item), 'Beta');
+      expect((await calendars.getEvent('ev'))!.calendarId, 'b');
+    });
+
     test('a card whose deck is gone has nowhere to go', () async {
       await study.upsertDeck(
         StudyDeck(
@@ -626,7 +703,9 @@ void main() {
       await trash.erase(await trash.list());
 
       expect(await counted(), ['other']);
-      final erased = await todos.getCompletion(todoTaskCompletionId('t', null, dueHasTime: false));
+      final erased = await todos.getCompletion(
+        todoTaskCompletionId('t', null, dueHasTime: false),
+      );
       expect(isErasedAt(erased!.deletedAt), isTrue);
       expect(erased.version, kEraseVersionStep);
       await trash.uploads;
@@ -818,24 +897,27 @@ void main() {
           ),
         );
 
-    test('a transaction is named by store and note, else amount and date', () async {
-      await addTransaction('both', store: 'P24 Store', note: 'P24 tx note');
-      await addTransaction('store', store: 'Only Store');
-      await addTransaction('none');
-      for (final id in ['both', 'store', 'none']) {
-        await finance.softDeleteTransaction(id);
-      }
+    test(
+      'a transaction is named by store and note, else amount and date',
+      () async {
+        await addTransaction('both', store: 'P24 Store', note: 'P24 tx note');
+        await addTransaction('store', store: 'Only Store');
+        await addTransaction('none');
+        for (final id in ['both', 'store', 'none']) {
+          await finance.softDeleteTransaction(id);
+        }
 
-      final labels = {
-        for (final item in await trash.list()) item.id: trashItemLabel(item),
-      };
+        final labels = {
+          for (final item in await trash.list()) item.id: trashItemLabel(item),
+        };
 
-      expect(labels, {
-        'both': '"P24 Store - P24 tx note"',
-        'store': '"Only Store"',
-        'none': '"-\$12.34 on Oct 3, 2026"',
-      });
-    });
+        expect(labels, {
+          'both': '"P24 Store - P24 tx note"',
+          'store': '"Only Store"',
+          'none': '"-\$12.34 on Oct 3, 2026"',
+        });
+      },
+    );
 
     test('Delete forever empties a transaction\'s store and a '
         'subscription\'s store', () async {

@@ -108,7 +108,7 @@ Future<_Target> _target(ProviderContainer container) async {
     journalId: resolveNewItemTarget(
       currentId: null,
       lastViewedId: settings.lastViewedJournalId,
-      legacyId: legacyJournalId,
+      defaultId: settings.defaultJournalId,
       availableIds: [for (final journal in journals) journal.id],
     ),
   );

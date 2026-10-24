@@ -110,13 +110,14 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   static String _targetListId(
     List<TodoListModel> lists,
     String? lastTouchedId,
+    String? defaultListId,
     TodoCaptureDraft draft,
   ) {
     final picked = draft.listIdBasis == lastTouchedId ? draft.listId : null;
     return resolveNewItemTarget(
           currentId: picked,
           lastViewedId: lastTouchedId,
-          legacyId: legacyTodoListId,
+          defaultId: defaultListId,
           availableIds: [for (final list in lists) list.id],
         ) ??
         legacyTodoListId;
@@ -249,7 +250,12 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
       }
       final settingsRepo = container.read(settingsRepositoryProvider);
       final settings = await settingsRepo.getSettings();
-      final listId = _targetListId(lists, settings.lastViewedTodoListId, draft);
+      final listId = _targetListId(
+        lists,
+        settings.lastViewedTodoListId,
+        settings.defaultTodoListId,
+        draft,
+      );
       final now = utcNow();
       final due = draft.dueDate?.toUtc();
       final task = TodoTask(
@@ -313,7 +319,12 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
     final lists = ref.watch(todoListsProvider.settled).valueOrNull ?? const [];
     final stats = ref.watch(todoListStatsProvider).valueOrNull;
     final draft = ref.watch(todoCaptureDraftProvider);
-    final targetId = _targetListId(lists, _lastTouchedId, draft);
+    final targetId = _targetListId(
+      lists,
+      _lastTouchedId,
+      ref.watch(settingsProvider).valueOrNull?.defaultTodoListId,
+      draft,
+    );
     final targetList = lists.where((list) => list.id == targetId).firstOrNull;
     final targetName = targetList?.name;
     // The target list's color, as the Todo page's composer wears it.

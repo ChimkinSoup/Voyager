@@ -136,11 +136,11 @@ void main() {
     expect(
       find.text(
         'This list has no tasks, only 1 subtask of a task elsewhere. Move it '
-        'to "To-do", or delete everything.',
+        'to "Harness", or delete everything.',
       ),
       findsOneWidget,
     );
-    expect(find.text('Move to "To-do"'), findsOneWidget);
+    expect(find.text('Move to "Harness"'), findsOneWidget);
     expect(find.text('Delete all tasks'), findsOneWidget);
 
     await tester.tap(find.text('Cancel').last);

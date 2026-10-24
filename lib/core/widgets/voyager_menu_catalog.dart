@@ -9,6 +9,8 @@ enum VoyagerMenuCatalogEntry {
   changeColor,
   settings,
   alsoShow,
+  setDefault,
+  clearDefault,
   delete,
   weatherSunny,
   weatherCloudy,
@@ -38,29 +40,12 @@ const configurableManageMenuEntries = [
   VoyagerMenuCatalogEntry.delete,
 ];
 
-/// [configurableManageMenuEntries] for the built-in default journal/list, which
-/// can be renamed and configured but not deleted.
+/// [configurableManageMenuEntries] for the last journal/list left, which can be
+/// renamed and configured but not deleted.
 const defaultConfigurableManageMenuEntries = [
   VoyagerMenuCatalogEntry.rename,
   VoyagerMenuCatalogEntry.changeColor,
   VoyagerMenuCatalogEntry.settings,
-];
-
-/// Calendar manage menus: a calendar has no settings sheet, but it can show
-/// other calendars' events alongside its own.
-const calendarManageMenuEntries = [
-  VoyagerMenuCatalogEntry.rename,
-  VoyagerMenuCatalogEntry.changeColor,
-  VoyagerMenuCatalogEntry.alsoShow,
-  VoyagerMenuCatalogEntry.delete,
-];
-
-/// [calendarManageMenuEntries] for the default calendar, which cannot be
-/// deleted.
-const defaultCalendarManageMenuEntries = [
-  VoyagerMenuCatalogEntry.rename,
-  VoyagerMenuCatalogEntry.changeColor,
-  VoyagerMenuCatalogEntry.alsoShow,
 ];
 
 /// Default entries and order for journal entry weather picker.
@@ -80,6 +65,8 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
     VoyagerMenuCatalogEntry.changeColor => 'Change color',
     VoyagerMenuCatalogEntry.settings => 'Settings',
     VoyagerMenuCatalogEntry.alsoShow => 'Also show',
+    VoyagerMenuCatalogEntry.setDefault => 'Set as default',
+    VoyagerMenuCatalogEntry.clearDefault => 'Remove as default',
     VoyagerMenuCatalogEntry.delete => 'Delete',
     VoyagerMenuCatalogEntry.weatherSunny => 'Sunny',
     VoyagerMenuCatalogEntry.weatherCloudy => 'Cloudy',
@@ -92,6 +79,8 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
     VoyagerMenuCatalogEntry.changeColor => PhosphorIconsRegular.palette,
     VoyagerMenuCatalogEntry.settings => PhosphorIconsRegular.slidersHorizontal,
     VoyagerMenuCatalogEntry.alsoShow => PhosphorIconsRegular.stack,
+    VoyagerMenuCatalogEntry.setDefault => PhosphorIconsRegular.star,
+    VoyagerMenuCatalogEntry.clearDefault => PhosphorIconsFill.star,
     VoyagerMenuCatalogEntry.delete => PhosphorIconsRegular.trash,
     VoyagerMenuCatalogEntry.weatherSunny => weatherIconData('sunny'),
     VoyagerMenuCatalogEntry.weatherCloudy => weatherIconData('cloudy'),

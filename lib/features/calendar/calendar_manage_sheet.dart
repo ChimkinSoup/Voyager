@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -16,7 +15,8 @@ import 'package:voyager/features/trash/trash_kinds.dart';
 /// gear.
 ///
 /// The journal and todo twins carry a Settings row; a calendar has no
-/// per-entity settings sheet to open, so this one does not.
+/// per-entity settings sheet to open, so its default is set from its menu
+/// here instead.
 ///
 /// Returns the id of a calendar created here, so the page can select it.
 Future<String?> showCalendarManageSheet(
@@ -107,6 +107,22 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
     await _reload();
   }
 
+  /// Setting a default clears whichever calendar held it before, because
+  /// [AppSettings.defaultCalendarId] is a single field.
+  Future<void> _saveDefaultCalendar(
+    Calendar calendar, {
+    required bool isDefault,
+  }) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    final settings = await settingsRepo.getSettings();
+    await settingsNotifier.saveSettings(
+      isDefault
+          ? settings.copyWith(defaultCalendarId: calendar.id)
+          : settings.copyWith(clearDefaultCalendarId: true),
+    );
+  }
+
   /// The names of the calendars [calendar] also shows, in its list's order.
   List<String> _overlayNames(Calendar calendar) {
     final names = {for (final item in _calendars) item.id: item.name};
@@ -118,6 +134,10 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final defaultCalendarId = ref
+        .watch(settingsProvider)
+        .valueOrNull
+        ?.defaultCalendarId;
     return AlertDialog(
       title: const Text('Manage calendars'),
       content: SizedBox(
@@ -135,8 +155,12 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                   final calendar = _calendars[index];
                   final count = _counts[calendar.id] ?? 0;
                   final overlayNames = _overlayNames(calendar);
+                  final isDefault = calendar.id == defaultCalendarId;
                   final countLabel = Text(
-                    count == 1 ? '1 event' : '$count events',
+                    [
+                      count == 1 ? '1 event' : '$count events',
+                      if (isDefault) 'Default',
+                    ].join(' · '),
                   );
                   return ListTile(
                     shape: RoundedRectangleBorder(
@@ -174,9 +198,18 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                           ),
                     trailing: ContextMenuButton(
                       items: catalogContextMenuItems(
-                        calendar.id == legacyCalendarId
-                            ? defaultCalendarManageMenuEntries
-                            : calendarManageMenuEntries,
+                        [
+                          VoyagerMenuCatalogEntry.rename,
+                          VoyagerMenuCatalogEntry.changeColor,
+                          VoyagerMenuCatalogEntry.alsoShow,
+                          isDefault
+                              ? VoyagerMenuCatalogEntry.clearDefault
+                              : VoyagerMenuCatalogEntry.setDefault,
+                          // The last calendar stays: its events would have
+                          // nowhere to go.
+                          if (_calendars.length > 1)
+                            VoyagerMenuCatalogEntry.delete,
+                        ],
                         (action) async {
                           switch (action) {
                             case VoyagerMenuCatalogEntry.rename:
@@ -185,6 +218,16 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                               await _pickColor(calendar);
                             case VoyagerMenuCatalogEntry.alsoShow:
                               await _editOverlays(calendar);
+                            case VoyagerMenuCatalogEntry.setDefault:
+                              await _saveDefaultCalendar(
+                                calendar,
+                                isDefault: true,
+                              );
+                            case VoyagerMenuCatalogEntry.clearDefault:
+                              await _saveDefaultCalendar(
+                                calendar,
+                                isDefault: false,
+                              );
                             case VoyagerMenuCatalogEntry.delete:
                               await _deleteCalendar(calendar);
                             default:

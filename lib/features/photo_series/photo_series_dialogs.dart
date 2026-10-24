@@ -53,6 +53,7 @@ class _AngleDraft {
 
   final String? id;
   final TextEditingController controller;
+  final focus = FocusNode();
 }
 
 class _PhotoSeriesDialog extends StatefulWidget {
@@ -86,6 +87,7 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
     _nameFocus.dispose();
     for (final angle in _angles) {
       angle.controller.dispose();
+      angle.focus.dispose();
     }
     super.dispose();
   }
@@ -214,6 +216,16 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
     }
   }
 
+  /// Adds an empty angle at [index] and puts the caret in it.
+  void _addAngle(int index) {
+    final angle = _AngleDraft(null, '');
+    setState(() => _angles.insert(index, angle));
+    // Its field is only built next frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) angle.focus.requestFocus();
+    });
+  }
+
   void _move(int index, int by) {
     setState(() {
       final angle = _angles.removeAt(index);
@@ -331,6 +343,19 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
                       Expanded(
                         child: VoyagerTextField(
                           controller: angle.controller,
+                          focusNode: angle.focus,
+                          textInputAction: TextInputAction.next,
+                          // Enter starts the next angle, or moves to it if
+                          // it is already an empty one; on an empty one it
+                          // just keeps the caret there.
+                          onSubmitted: (text) => text.trim().isEmpty
+                              ? angle.focus.requestFocus()
+                              : i + 1 < _angles.length &&
+                                    _angles[i + 1].controller.text
+                                        .trim()
+                                        .isEmpty
+                              ? _angles[i + 1].focus.requestFocus()
+                              : _addAngle(i + 1),
                           decoration: InputDecoration(
                             hintText: 'Angle ${i + 1}',
                             isDense: true,
@@ -356,7 +381,9 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
                         onPressed: _angles.length == 1
                             ? null
                             : () => setState(() {
-                                _angles.removeAt(i).controller.dispose();
+                                final removed = _angles.removeAt(i);
+                                removed.controller.dispose();
+                                removed.focus.dispose();
                               }),
                       ),
                     ],
@@ -365,8 +392,7 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: GlassButton(
-                  onPressed: () =>
-                      setState(() => _angles.add(_AngleDraft(null, ''))),
+                  onPressed: () => _addAngle(_angles.length),
                   icon: const Icon(PhosphorIconsRegular.plus, size: 13),
                   label: 'Add angle',
                   dense: true,

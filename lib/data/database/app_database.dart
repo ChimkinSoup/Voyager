@@ -928,6 +928,11 @@ class SettingsTable extends Table {
   /// [lastViewedTodoListId] and [todoShowAllTasks]. The [defaultJournalId]
   /// twin, kept as its own column for the same reason.
   TextColumn get defaultTodoListId => text().nullable()();
+
+  /// The calendar the calendar page always opens into, overriding
+  /// [lastViewedCalendarId] and [calendarShowAllCalendars], and where a
+  /// deleted calendar's events go. The [defaultTodoListId] twin.
+  TextColumn get defaultCalendarId => text().nullable()();
   // Kept separate from the lastViewed* ids above rather than folded into them
   // as a sentinel: the all-view and "which one was I actually in" are two
   // independent facts, and storing them in one column loses the second, which
@@ -2252,7 +2257,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 166;
+  int get schemaVersion => 167;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4116,6 +4121,12 @@ class AppDatabase extends _$AppDatabase {
           ('calendar_events_table', 'start', 'utc_offset_minutes'),
         ]);
         await _alignEventEndsToStartOffset();
+      }
+      if (from < 167) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.defaultCalendarId,
+        );
       }
     },
   );

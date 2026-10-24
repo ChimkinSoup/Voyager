@@ -4443,6 +4443,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'snippetExpandKey': s.snippetExpandKey.name,
   'defaultJournalId': s.defaultJournalId,
   'defaultTodoListId': s.defaultTodoListId,
+  'defaultCalendarId': s.defaultCalendarId,
   'geometricTextureScale': s.geometricTextureScale,
   'geometricTextureIntensity': s.geometricTextureIntensity,
   'geometricTextureFocalSpread': s.geometricTextureFocalSpread,
@@ -4698,6 +4699,8 @@ AppSettings mergeSettingsFromRemote(
     clearDefaultJournalId: _remoteClears(data, 'defaultJournalId'),
     defaultTodoListId: data['defaultTodoListId'] as String?,
     clearDefaultTodoListId: _remoteClears(data, 'defaultTodoListId'),
+    defaultCalendarId: data['defaultCalendarId'] as String?,
+    clearDefaultCalendarId: _remoteClears(data, 'defaultCalendarId'),
     geometricTextureScale: _remoteDouble(data, 'geometricTextureScale'),
     geometricTextureIntensity: _remoteDouble(data, 'geometricTextureIntensity'),
     geometricTextureFocalSpread: _remoteDouble(

@@ -9212,6 +9212,18 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _defaultCalendarIdMeta = const VerificationMeta(
+    'defaultCalendarId',
+  );
+  @override
+  late final GeneratedColumn<String> defaultCalendarId =
+      GeneratedColumn<String>(
+        'default_calendar_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _journalShowAllEntriesMeta =
       const VerificationMeta('journalShowAllEntries');
   @override
@@ -10684,6 +10696,7 @@ class $SettingsTableTable extends SettingsTable
     leetCodeCheatCollapsedSectionsJson,
     defaultJournalId,
     defaultTodoListId,
+    defaultCalendarId,
     journalShowAllEntries,
     todoShowAllTasks,
     calendarShowAllCalendars,
@@ -11212,6 +11225,15 @@ class $SettingsTableTable extends SettingsTable
         defaultTodoListId.isAcceptableOrUnknown(
           data['default_todo_list_id']!,
           _defaultTodoListIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_calendar_id')) {
+      context.handle(
+        _defaultCalendarIdMeta,
+        defaultCalendarId.isAcceptableOrUnknown(
+          data['default_calendar_id']!,
+          _defaultCalendarIdMeta,
         ),
       );
     }
@@ -12421,6 +12443,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}default_todo_list_id'],
       ),
+      defaultCalendarId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_calendar_id'],
+      ),
       journalShowAllEntries: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}journal_show_all_entries'],
@@ -12986,6 +13012,11 @@ class SettingsTableData extends DataClass
   /// [lastViewedTodoListId] and [todoShowAllTasks]. The [defaultJournalId]
   /// twin, kept as its own column for the same reason.
   final String? defaultTodoListId;
+
+  /// The calendar the calendar page always opens into, overriding
+  /// [lastViewedCalendarId] and [calendarShowAllCalendars], and where a
+  /// deleted calendar's events go. The [defaultTodoListId] twin.
+  final String? defaultCalendarId;
   final bool journalShowAllEntries;
   final bool todoShowAllTasks;
   final bool calendarShowAllCalendars;
@@ -13217,6 +13248,7 @@ class SettingsTableData extends DataClass
     required this.leetCodeCheatCollapsedSectionsJson,
     this.defaultJournalId,
     this.defaultTodoListId,
+    this.defaultCalendarId,
     required this.journalShowAllEntries,
     required this.todoShowAllTasks,
     required this.calendarShowAllCalendars,
@@ -13429,6 +13461,9 @@ class SettingsTableData extends DataClass
     }
     if (!nullToAbsent || defaultTodoListId != null) {
       map['default_todo_list_id'] = Variable<String>(defaultTodoListId);
+    }
+    if (!nullToAbsent || defaultCalendarId != null) {
+      map['default_calendar_id'] = Variable<String>(defaultCalendarId);
     }
     map['journal_show_all_entries'] = Variable<bool>(journalShowAllEntries);
     map['todo_show_all_tasks'] = Variable<bool>(todoShowAllTasks);
@@ -13789,6 +13824,9 @@ class SettingsTableData extends DataClass
       defaultTodoListId: defaultTodoListId == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultTodoListId),
+      defaultCalendarId: defaultCalendarId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultCalendarId),
       journalShowAllEntries: Value(journalShowAllEntries),
       todoShowAllTasks: Value(todoShowAllTasks),
       calendarShowAllCalendars: Value(calendarShowAllCalendars),
@@ -14080,6 +14118,9 @@ class SettingsTableData extends DataClass
       defaultJournalId: serializer.fromJson<String?>(json['defaultJournalId']),
       defaultTodoListId: serializer.fromJson<String?>(
         json['defaultTodoListId'],
+      ),
+      defaultCalendarId: serializer.fromJson<String?>(
+        json['defaultCalendarId'],
       ),
       journalShowAllEntries: serializer.fromJson<bool>(
         json['journalShowAllEntries'],
@@ -14440,6 +14481,7 @@ class SettingsTableData extends DataClass
       ),
       'defaultJournalId': serializer.toJson<String?>(defaultJournalId),
       'defaultTodoListId': serializer.toJson<String?>(defaultTodoListId),
+      'defaultCalendarId': serializer.toJson<String?>(defaultCalendarId),
       'journalShowAllEntries': serializer.toJson<bool>(journalShowAllEntries),
       'todoShowAllTasks': serializer.toJson<bool>(todoShowAllTasks),
       'calendarShowAllCalendars': serializer.toJson<bool>(
@@ -14707,6 +14749,7 @@ class SettingsTableData extends DataClass
     String? leetCodeCheatCollapsedSectionsJson,
     Value<String?> defaultJournalId = const Value.absent(),
     Value<String?> defaultTodoListId = const Value.absent(),
+    Value<String?> defaultCalendarId = const Value.absent(),
     bool? journalShowAllEntries,
     bool? todoShowAllTasks,
     bool? calendarShowAllCalendars,
@@ -14897,6 +14940,9 @@ class SettingsTableData extends DataClass
     defaultTodoListId: defaultTodoListId.present
         ? defaultTodoListId.value
         : this.defaultTodoListId,
+    defaultCalendarId: defaultCalendarId.present
+        ? defaultCalendarId.value
+        : this.defaultCalendarId,
     journalShowAllEntries: journalShowAllEntries ?? this.journalShowAllEntries,
     todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
     calendarShowAllCalendars:
@@ -15258,6 +15304,9 @@ class SettingsTableData extends DataClass
       defaultTodoListId: data.defaultTodoListId.present
           ? data.defaultTodoListId.value
           : this.defaultTodoListId,
+      defaultCalendarId: data.defaultCalendarId.present
+          ? data.defaultCalendarId.value
+          : this.defaultCalendarId,
       journalShowAllEntries: data.journalShowAllEntries.present
           ? data.journalShowAllEntries.value
           : this.journalShowAllEntries,
@@ -15663,6 +15712,7 @@ class SettingsTableData extends DataClass
           )
           ..write('defaultJournalId: $defaultJournalId, ')
           ..write('defaultTodoListId: $defaultTodoListId, ')
+          ..write('defaultCalendarId: $defaultCalendarId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
           ..write('todoShowAllTasks: $todoShowAllTasks, ')
           ..write('calendarShowAllCalendars: $calendarShowAllCalendars, ')
@@ -15858,6 +15908,7 @@ class SettingsTableData extends DataClass
     leetCodeCheatCollapsedSectionsJson,
     defaultJournalId,
     defaultTodoListId,
+    defaultCalendarId,
     journalShowAllEntries,
     todoShowAllTasks,
     calendarShowAllCalendars,
@@ -16029,6 +16080,7 @@ class SettingsTableData extends DataClass
               this.leetCodeCheatCollapsedSectionsJson &&
           other.defaultJournalId == this.defaultJournalId &&
           other.defaultTodoListId == this.defaultTodoListId &&
+          other.defaultCalendarId == this.defaultCalendarId &&
           other.journalShowAllEntries == this.journalShowAllEntries &&
           other.todoShowAllTasks == this.todoShowAllTasks &&
           other.calendarShowAllCalendars == this.calendarShowAllCalendars &&
@@ -16214,6 +16266,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String> leetCodeCheatCollapsedSectionsJson;
   final Value<String?> defaultJournalId;
   final Value<String?> defaultTodoListId;
+  final Value<String?> defaultCalendarId;
   final Value<bool> journalShowAllEntries;
   final Value<bool> todoShowAllTasks;
   final Value<bool> calendarShowAllCalendars;
@@ -16376,6 +16429,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.leetCodeCheatCollapsedSectionsJson = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
     this.defaultTodoListId = const Value.absent(),
+    this.defaultCalendarId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
     this.todoShowAllTasks = const Value.absent(),
     this.calendarShowAllCalendars = const Value.absent(),
@@ -16539,6 +16593,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.leetCodeCheatCollapsedSectionsJson = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
     this.defaultTodoListId = const Value.absent(),
+    this.defaultCalendarId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
     this.todoShowAllTasks = const Value.absent(),
     this.calendarShowAllCalendars = const Value.absent(),
@@ -16702,6 +16757,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? leetCodeCheatCollapsedSectionsJson,
     Expression<String>? defaultJournalId,
     Expression<String>? defaultTodoListId,
+    Expression<String>? defaultCalendarId,
     Expression<bool>? journalShowAllEntries,
     Expression<bool>? todoShowAllTasks,
     Expression<bool>? calendarShowAllCalendars,
@@ -16887,6 +16943,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             leetCodeCheatCollapsedSectionsJson,
       if (defaultJournalId != null) 'default_journal_id': defaultJournalId,
       if (defaultTodoListId != null) 'default_todo_list_id': defaultTodoListId,
+      if (defaultCalendarId != null) 'default_calendar_id': defaultCalendarId,
       if (journalShowAllEntries != null)
         'journal_show_all_entries': journalShowAllEntries,
       if (todoShowAllTasks != null) 'todo_show_all_tasks': todoShowAllTasks,
@@ -17142,6 +17199,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String>? leetCodeCheatCollapsedSectionsJson,
     Value<String?>? defaultJournalId,
     Value<String?>? defaultTodoListId,
+    Value<String?>? defaultCalendarId,
     Value<bool>? journalShowAllEntries,
     Value<bool>? todoShowAllTasks,
     Value<bool>? calendarShowAllCalendars,
@@ -17319,6 +17377,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           this.leetCodeCheatCollapsedSectionsJson,
       defaultJournalId: defaultJournalId ?? this.defaultJournalId,
       defaultTodoListId: defaultTodoListId ?? this.defaultTodoListId,
+      defaultCalendarId: defaultCalendarId ?? this.defaultCalendarId,
       journalShowAllEntries:
           journalShowAllEntries ?? this.journalShowAllEntries,
       todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
@@ -17684,6 +17743,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (defaultTodoListId.present) {
       map['default_todo_list_id'] = Variable<String>(defaultTodoListId.value);
+    }
+    if (defaultCalendarId.present) {
+      map['default_calendar_id'] = Variable<String>(defaultCalendarId.value);
     }
     if (journalShowAllEntries.present) {
       map['journal_show_all_entries'] = Variable<bool>(
@@ -18228,6 +18290,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           )
           ..write('defaultJournalId: $defaultJournalId, ')
           ..write('defaultTodoListId: $defaultTodoListId, ')
+          ..write('defaultCalendarId: $defaultCalendarId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
           ..write('todoShowAllTasks: $todoShowAllTasks, ')
           ..write('calendarShowAllCalendars: $calendarShowAllCalendars, ')
@@ -61731,6 +61794,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String> leetCodeCheatCollapsedSectionsJson,
       Value<String?> defaultJournalId,
       Value<String?> defaultTodoListId,
+      Value<String?> defaultCalendarId,
       Value<bool> journalShowAllEntries,
       Value<bool> todoShowAllTasks,
       Value<bool> calendarShowAllCalendars,
@@ -61895,6 +61959,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String> leetCodeCheatCollapsedSectionsJson,
       Value<String?> defaultJournalId,
       Value<String?> defaultTodoListId,
+      Value<String?> defaultCalendarId,
       Value<bool> journalShowAllEntries,
       Value<bool> todoShowAllTasks,
       Value<bool> calendarShowAllCalendars,
@@ -62257,6 +62322,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get defaultTodoListId => $composableBuilder(
     column: $table.defaultTodoListId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultCalendarId => $composableBuilder(
+    column: $table.defaultCalendarId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -63083,6 +63153,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get defaultCalendarId => $composableBuilder(
+    column: $table.defaultCalendarId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get journalShowAllEntries => $composableBuilder(
     column: $table.journalShowAllEntries,
     builder: (column) => ColumnOrderings(column),
@@ -63903,6 +63978,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get defaultCalendarId => $composableBuilder(
+    column: $table.defaultCalendarId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get journalShowAllEntries => $composableBuilder(
     column: $table.journalShowAllEntries,
     builder: (column) => column,
@@ -64567,6 +64647,7 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<String?> defaultJournalId = const Value.absent(),
                 Value<String?> defaultTodoListId = const Value.absent(),
+                Value<String?> defaultCalendarId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
                 Value<bool> todoShowAllTasks = const Value.absent(),
                 Value<bool> calendarShowAllCalendars = const Value.absent(),
@@ -64751,6 +64832,7 @@ class $$SettingsTableTableTableManager
                     leetCodeCheatCollapsedSectionsJson,
                 defaultJournalId: defaultJournalId,
                 defaultTodoListId: defaultTodoListId,
+                defaultCalendarId: defaultCalendarId,
                 journalShowAllEntries: journalShowAllEntries,
                 todoShowAllTasks: todoShowAllTasks,
                 calendarShowAllCalendars: calendarShowAllCalendars,
@@ -64924,6 +65006,7 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<String?> defaultJournalId = const Value.absent(),
                 Value<String?> defaultTodoListId = const Value.absent(),
+                Value<String?> defaultCalendarId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
                 Value<bool> todoShowAllTasks = const Value.absent(),
                 Value<bool> calendarShowAllCalendars = const Value.absent(),
@@ -65108,6 +65191,7 @@ class $$SettingsTableTableTableManager
                     leetCodeCheatCollapsedSectionsJson,
                 defaultJournalId: defaultJournalId,
                 defaultTodoListId: defaultTodoListId,
+                defaultCalendarId: defaultCalendarId,
                 journalShowAllEntries: journalShowAllEntries,
                 todoShowAllTasks: todoShowAllTasks,
                 calendarShowAllCalendars: calendarShowAllCalendars,

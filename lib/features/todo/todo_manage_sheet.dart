@@ -10,7 +10,6 @@ import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
-import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
@@ -188,7 +187,9 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                     ),
                     trailing: ContextMenuButton(
                       items: catalogContextMenuItems(
-                        list.id == legacyTodoListId
+                        // The last list stays: its tasks would have nowhere
+                        // to go.
+                        _lists.length == 1
                             ? defaultConfigurableManageMenuEntries
                             : configurableManageMenuEntries,
                         (action) async {

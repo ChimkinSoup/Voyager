@@ -12,7 +12,7 @@ void main() {
         resolveNewItemTarget(
           currentId: 'work',
           lastViewedId: 'personal',
-          legacyId: 'legacy',
+          defaultId: 'legacy',
           availableIds: const ['legacy', 'work', 'personal'],
         ),
         'work',
@@ -26,7 +26,7 @@ void main() {
         resolveNewItemTarget(
           currentId: null,
           lastViewedId: 'personal',
-          legacyId: 'legacy',
+          defaultId: 'legacy',
           availableIds: const ['legacy', 'work', 'personal'],
         ),
         'personal',
@@ -38,7 +38,7 @@ void main() {
         resolveNewItemTarget(
           currentId: 'deleted',
           lastViewedId: 'also-deleted',
-          legacyId: 'legacy',
+          defaultId: 'legacy',
           availableIds: const ['legacy', 'work'],
         ),
         'legacy',
@@ -50,7 +50,7 @@ void main() {
         resolveNewItemTarget(
           currentId: null,
           lastViewedId: null,
-          legacyId: 'legacy',
+          defaultId: 'legacy',
           availableIds: const ['work', 'personal'],
         ),
         'work',
@@ -62,7 +62,7 @@ void main() {
         resolveNewItemTarget(
           currentId: 'work',
           lastViewedId: 'personal',
-          legacyId: 'legacy',
+          defaultId: 'legacy',
           availableIds: const [],
         ),
         isNull,

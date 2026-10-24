@@ -40,6 +40,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/calendar/calendar_event_done.dart';
 import 'package:voyager/features/calendar/calendar_import_dialog.dart';
+import 'package:voyager/features/calendar/calendar_list_actions.dart';
 import 'package:voyager/features/calendar/calendar_manage_sheet.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 import 'package:voyager/features/calendar/calendar_week_morph_entries.dart';
@@ -117,8 +118,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   DateTime? _dayViewDate;
 
   /// Selected calendar to view; `null` means every calendar is shown (the
-  /// "all calendars" toggle is on). Defaults to the built-in default
-  /// calendar.
+  /// "all calendars" toggle is on). Starts on the built-in calendar until the
+  /// saved view is restored.
   String? _selectedCalendarId = legacyCalendarId;
 
   /// Last specific (non-null) calendar selected. Restored when the "all
@@ -291,19 +292,48 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _weekTimelineScrollController.addListener(_onWeekTimelineScrolled);
     final now = DateTime.now();
     _lastViewedMonth = DateTime(now.year, now.month, 1);
-    _restoreSavedCalendarView(ref.read(settingsProvider).valueOrNull);
+    _restoreSavedCalendarView(
+      ref.read(settingsProvider).valueOrNull,
+      ref.read(calendarsProvider).valueOrNull,
+    );
     _ensureDefaultCalendar();
   }
 
-  /// Reopens the calendar the page was last left on, all-calendars included.
+  /// Reopens the default calendar if one is set, otherwise the calendar the
+  /// page was last left on, all-calendars included.
   ///
   /// Both facts are restored, not one or the other: the all-view still needs
   /// the concrete calendar, since that is where a new event is filed.
-  void _restoreSavedCalendarView(AppSettings? settings) {
-    if (settings == null) return;
+  void _restoreSavedCalendarView(
+    AppSettings? settings,
+    List<Calendar>? calendars,
+  ) {
+    // Only the loaded calendars can say whether a saved id is still live.
+    if (settings == null || calendars == null) return;
+    final defaultId = settings.defaultCalendarId;
+    if (defaultId != null) {
+      // A deleted default keeps its id, so restoring the calendar from the
+      // trash brings the setting back; until then the page opens as if there
+      // were none.
+      if (calendars.any((c) => c.id == defaultId)) {
+        // A default replaces the whole "reopen where you left off" restore,
+        // as the To-Do and Journal defaults do.
+        _appliedSavedCalendarView = true;
+        _lastSpecificCalendarId = defaultId;
+        _selectedCalendarId = defaultId;
+        return;
+      }
+    }
     _appliedSavedCalendarView = true;
     final savedId = settings.lastViewedCalendarId;
     if (savedId != null) _lastSpecificCalendarId = savedId;
+    // The saved calendar, or the built-in one it starts on, may since have
+    // been deleted.
+    if (calendars.isNotEmpty &&
+        !calendars.any((c) => c.id == _lastSpecificCalendarId)) {
+      _lastSpecificCalendarId =
+          defaultCalendarIdFor(calendars, settings) ?? legacyCalendarId;
+    }
     _selectedCalendarId = settings.calendarShowAllCalendars
         ? null
         : _lastSpecificCalendarId;
@@ -312,9 +342,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// The [initState] restore, retried on the first build that actually has
   /// settings — `ref.read` returns null while the provider is still loading,
   /// which is the normal case on a cold start.
-  void _applySavedCalendarPreferences(AppSettings? settings) {
+  void _applySavedCalendarPreferences(
+    AppSettings? settings,
+    List<Calendar>? calendars,
+  ) {
     if (_appliedSavedCalendarView || settings == null) return;
-    _restoreSavedCalendarView(settings);
+    final before = _selectedCalendarId;
+    _restoreSavedCalendarView(settings, calendars);
+    // This build already watched the events of the calendar it started on.
+    if (_selectedCalendarId != before) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   Future<void> _persistCalendarView() async {
@@ -334,13 +374,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
-  /// Lazily creates the built-in default calendar for fresh installs (schema
+  /// Lazily creates the built-in calendar for fresh installs (schema
   /// migrations backfill it for existing databases, but a brand-new database
   /// never runs the migration ladder).
+  ///
+  /// Only when there is no calendar at all: making it next to the others
+  /// would bring back a "Calendar" the user deleted.
   Future<void> _ensureDefaultCalendar() async {
     final repo = ref.read(calendarRepositoryProvider);
     final calendars = await repo.listCalendars();
-    if (calendars.any((c) => c.id == legacyCalendarId)) return;
+    if (calendars.isNotEmpty) return;
     final now = utcNow();
     final settings =
         ref.read(settingsProvider).valueOrNull ?? const AppSettings();
@@ -594,7 +637,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ref.read(settingsProvider).valueOrNull ?? const AppSettings();
     final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
     final initialCalendarId =
-        event?.calendarId ?? _selectedCalendarId ?? legacyCalendarId;
+        event?.calendarId ??
+        _selectedCalendarId ??
+        defaultCalendarIdFor(calendars, settings) ??
+        legacyCalendarId;
 
     // Always pass an accent color so the popup gets a border.  For existing events use
     // the event color; for new events use the target calendar's color, so the
@@ -1547,7 +1593,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     }
     setState(() {
       if (!liveIds.contains(_lastSpecificCalendarId)) {
-        _lastSpecificCalendarId = legacyCalendarId;
+        _lastSpecificCalendarId =
+            defaultCalendarIdFor(
+              calendars,
+              ref.read(settingsProvider).valueOrNull,
+            ) ??
+            legacyCalendarId;
       }
       if (_selectedCalendarId != null &&
           !liveIds.contains(_selectedCalendarId)) {
@@ -3032,6 +3083,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ref.watch(settingsProvider.settled).value ?? const AppSettings();
     _applySavedCalendarPreferences(
       ref.watch(settingsProvider.settled).valueOrNull,
+      ref.read(calendarsProvider).valueOrNull,
     );
     final weekStartsMonday = settings.weekStartsOnMonday;
     _workoutDays = settings.showWorkoutsOnCalendar
@@ -3213,7 +3265,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                           const <CalendarTodoMarker>[];
                       final showTodos =
                           _selectedCalendarId == null ||
-                          _selectedCalendarId == legacyCalendarId;
+                          _selectedCalendarId ==
+                              defaultCalendarIdFor(calendars, settings);
                       final todos = showTodos
                           ? rawTodos
                           : const <CalendarTodoMarker>[];

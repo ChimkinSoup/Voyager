@@ -85,14 +85,15 @@ class TrashParent {
 
   /// A container whose feature has no fixed default: the row goes to one of
   /// those still there, the one [preferred] names or else the oldest.
+  /// [fallbackName] names it when it has no name of its own.
   const TrashParent.orRemaining(
     this.collection,
     this.key, {
     required Future<String?> Function(AppDatabase db) this.preferred,
+    this.fallbackName,
     this.localId = _sameId,
   }) : hasFallback = true,
-       fallbackId = null,
-       fallbackName = null;
+       fallbackId = null;
 
   final String collection;
   final String key;
@@ -169,12 +170,18 @@ String _sameId(String id) => id;
 
 /// The journal set as the default view, where a deleted journal's entries go
 /// too (`fallbackJournalFor`).
-Future<String?> _defaultJournalId(AppDatabase db) async {
-  final row = await (db.select(
-    db.settingsTable,
-  )..where((t) => t.id.equals(1))).getSingleOrNull();
-  return row?.defaultJournalId;
-}
+Future<String?> _defaultJournalId(AppDatabase db) async =>
+    (await _settingsRow(db))?.defaultJournalId;
+
+Future<String?> _defaultTodoListId(AppDatabase db) async =>
+    (await _settingsRow(db))?.defaultTodoListId;
+
+Future<String?> _defaultCalendarId(AppDatabase db) async =>
+    (await _settingsRow(db))?.defaultCalendarId;
+
+Future<SettingsTableData?> _settingsRow(AppDatabase db) => (db.select(
+  db.settingsTable,
+)..where((t) => t.id.equals(1))).getSingleOrNull();
 
 String? _name(Map<String, dynamic> data) => data['name'] as String?;
 
@@ -292,10 +299,10 @@ final _kinds = <TrashKind>[
       ),
     ],
     parents: const [
-      TrashParent.orDefault(
+      TrashParent.orRemaining(
         FirestoreCollections.todoLists,
         'listId',
-        fallbackId: legacyTodoListId,
+        preferred: _defaultTodoListId,
         fallbackName: 'To-do',
         localId: todoListDocumentIdFromFirestore,
       ),
@@ -337,10 +344,10 @@ final _kinds = <TrashKind>[
       TrashChild(FirestoreCollections.calendarEvents, ['recurrenceParentId']),
     ],
     parents: const [
-      TrashParent.orDefault(
+      TrashParent.orRemaining(
         FirestoreCollections.calendars,
         'calendarId',
-        fallbackId: legacyCalendarId,
+        preferred: _defaultCalendarId,
         fallbackName: 'Calendar',
         localId: calendarReferenceIdFromFirestore,
       ),

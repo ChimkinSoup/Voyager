@@ -98,6 +98,35 @@ void main() {
     expect(find.text('All calendars'), findsNothing);
   });
 
+  testWidgets('opens on the default calendar over the saved all-view', (
+    tester,
+  ) async {
+    await _pumpCalendar(
+      tester,
+      configureSettings: (s) => s.copyWith(
+        defaultCalendarId: 'work',
+        lastViewedCalendarId: legacyCalendarId,
+        calendarShowAllCalendars: true,
+      ),
+    );
+
+    expect(find.text('Work'), findsOneWidget);
+    expect(find.text('All calendars'), findsNothing);
+  });
+
+  testWidgets('a deleted default calendar is passed over for the saved view', (
+    tester,
+  ) async {
+    await _pumpCalendar(
+      tester,
+      configureSettings: (s) =>
+          s.copyWith(defaultCalendarId: 'gone', lastViewedCalendarId: 'work'),
+    );
+
+    expect(find.text('Work'), findsOneWidget);
+    expect(find.text('All calendars'), findsNothing);
+  });
+
   // The all-view is its own fact, so it is restored on its own — and the
   // dropdown says so rather than naming whichever calendar was open when the
   // toggle went on, which read as if that one were still the filter.

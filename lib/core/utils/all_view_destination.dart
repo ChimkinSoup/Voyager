@@ -13,7 +13,7 @@ library;
 ///     deliberately leaves pointing at whatever was last opened.
 ///  2. [lastViewedId] — the id restored from settings, which covers the case
 ///     where the app reopened straight into the all-view.
-///  3. [legacyId] — the built-in default list, if it still exists.
+///  3. [defaultId] — the list/journal set as the default, if it still exists.
 ///  4. The first available id.
 ///
 /// Each candidate is only accepted if it is still present in [availableIds];
@@ -22,11 +22,11 @@ library;
 String? resolveNewItemTarget({
   required String? currentId,
   required String? lastViewedId,
-  required String legacyId,
+  required String? defaultId,
   required List<String> availableIds,
 }) {
   if (availableIds.isEmpty) return null;
-  for (final candidate in [currentId, lastViewedId, legacyId]) {
+  for (final candidate in [currentId, lastViewedId, defaultId]) {
     if (candidate != null && availableIds.contains(candidate)) return candidate;
   }
   return availableIds.first;

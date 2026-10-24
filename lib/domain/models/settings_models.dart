@@ -82,6 +82,7 @@ class AppSettings {
     this.leetCodeCheatCollapsedSections = const [],
     this.defaultJournalId,
     this.defaultTodoListId,
+    this.defaultCalendarId,
     this.journalShowAllEntries = false,
     this.todoShowAllTasks = false,
     this.calendarShowAllCalendars = false,
@@ -346,6 +347,11 @@ class AppSettings {
   /// [lastViewedTodoListId] and [todoShowAllTasks]; null restores whatever was
   /// last open.
   final String? defaultTodoListId;
+
+  /// The calendar the calendar page always opens into, and where a deleted
+  /// calendar's events go. When set it wins over both [lastViewedCalendarId]
+  /// and [calendarShowAllCalendars]; null restores whatever was last open.
+  final String? defaultCalendarId;
 
   /// Whether the page was left in its "All journals" / "All tasks" view. Held
   /// apart from the ids above so restoring the all-view doesn't lose track of
@@ -642,6 +648,7 @@ class AppSettings {
     List<String>? leetCodeCheatCollapsedSections,
     String? defaultJournalId,
     String? defaultTodoListId,
+    String? defaultCalendarId,
     bool? journalShowAllEntries,
     bool? todoShowAllTasks,
     bool? calendarShowAllCalendars,
@@ -768,6 +775,7 @@ class AppSettings {
     bool clearLeetCodeCheatLastTabId = false,
     bool clearDefaultJournalId = false,
     bool clearDefaultTodoListId = false,
+    bool clearDefaultCalendarId = false,
     bool clearJournalEntryListWidth = false,
     bool clearEditSidePanelWidth = false,
     bool clearCustomStartupPage = false,
@@ -858,6 +866,9 @@ class AppSettings {
       defaultTodoListId: clearDefaultTodoListId
           ? null
           : (defaultTodoListId ?? this.defaultTodoListId),
+      defaultCalendarId: clearDefaultCalendarId
+          ? null
+          : (defaultCalendarId ?? this.defaultCalendarId),
       journalShowAllEntries:
           journalShowAllEntries ?? this.journalShowAllEntries,
       todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
