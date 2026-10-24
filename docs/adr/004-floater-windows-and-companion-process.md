@@ -85,3 +85,46 @@ plumbing than option 2.
 - The command set the companion needs from Voyager.
 - Whether the companion starts on demand or stays resident for instant
   opening.
+
+## Amendment: Gaia's data lives in Voyager's DB (2026-10-24)
+
+### Context
+The companion now has a design (`GAIA_HLD.md`). Its chats must sync across
+devices, continue on Android, and appear on a Gaia page inside Voyager. That
+makes them Voyager data, needing the outbox, soft delete and trash. Keeping
+them in a companion-owned SQLite file would need a second sync client. On
+desktop that means a second process opening the Firestore C++ SDK, whose
+on-disk cache is single-process.
+
+### Decision
+- Gaia's collections (chats, messages, memories, prompt queue, settings) live
+  in Voyager's drift DB and sync through the normal repositories. The
+  companion still never opens the DB or Firebase. It reads and writes these
+  collections over the named pipe, like any other command. This replaces
+  "Its own state" above.
+- The companion is **resident**: it hides rather than exits, because
+  background runs and beacon mode need it while its window is closed.
+- Launching `voyager.exe --companion` without a running main instance starts
+  the main instance first. There is no reduced mode.
+- The companion spawns and owns the agent CLI processes. Region capture uses
+  a frozen frame inside the companion's own window, so it needs no extra
+  window.
+- Gaia's tools reach the agent CLIs through `voyager.exe --gaia-mcp`. This is
+  a windowless stdio MCP shim, one per agent spawn, that relays calls to the
+  companion over the pipe. Nothing listens on a localhost port. Like
+  `--companion`, `main.cpp` branches on it before the single-instance mutex.
+  It takes no mutex and runs no Flutter engine.
+- The named pipe is created with a DACL for the current user only. Each
+  client is checked with `GetNamedPipeClientProcessId` against the companion
+  PID (or a shim the companion spawned).
+- An app update drains the companion first: active runs are waited on or
+  cancelled, then both processes exit and relaunch.
+
+### Consequences
+- The IPC protocol carries chat persistence and token streaming as well as
+  Voyager commands.
+- A companion crash loses an in-flight run, which is recorded as
+  `interrupted`. Persisted history is unaffected.
+- All three open questions above are answered. Voyager not running and
+  resident vs. on-demand are settled here, and the command set is specified in
+  `GAIA_HLD.md` §5.3 and §10.
