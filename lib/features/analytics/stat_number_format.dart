@@ -81,3 +81,26 @@ double niceAxisStep(double maxValue, int lines) {
   }
   return math.max(1, 10 * magnitude);
 }
+
+/// A sparkline's y-axis over the plotted values [ys]: [lines] round gridlines
+/// up from 0 or, once a counter has gone below zero — or always, with
+/// [fitToData] — up from the round step under its lowest point.
+({double minY, double maxY, double step}) sparklineYAxis(
+  Iterable<double> ys,
+  int lines, {
+  bool fitToData = false,
+}) {
+  // An empty series has no range to fit, and keeps the 0-based axis.
+  final fit = fitToData && ys.isNotEmpty;
+  final dataMax = ys.fold<double>(fit ? double.negativeInfinity : 1, math.max);
+  final dataMin = ys.fold<double>(fit ? double.infinity : 0, math.min);
+  if (!fit && dataMin >= 0) {
+    final step = niceAxisStep(dataMax, lines);
+    return (minY: 0, maxY: step * (lines - 1), step: step);
+  }
+  // Sized for one interval fewer than drawn, so rounding the floor down by up
+  // to a step can't leave the top short of the peak.
+  final step = niceAxisStep(dataMax - dataMin, lines - 1);
+  final minY = (dataMin / step).floorToDouble() * step;
+  return (minY: minY, maxY: minY + step * (lines - 1), step: step);
+}

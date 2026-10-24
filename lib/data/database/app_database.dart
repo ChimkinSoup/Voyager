@@ -339,6 +339,8 @@ class TrackersTable extends Table {
   TextColumn get enumOptionsJson => text().withDefault(const Constant('[]'))();
   TextColumn get defaultEnumOption => text().nullable()();
   TextColumn get trackingStyle => text().nullable()();
+  BoolColumn get fitAxisToData =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
@@ -2257,7 +2259,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 167;
+  int get schemaVersion => 168;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4126,6 +4128,14 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.defaultCalendarId,
+        );
+      }
+      if (from < 168) {
+        await _addColumnIfNotExists(
+          migrator,
+          'trackers_table',
+          trackersTable,
+          trackersTable.fitAxisToData,
         );
       }
     },

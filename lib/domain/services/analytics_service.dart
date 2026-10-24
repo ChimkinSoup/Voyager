@@ -89,12 +89,18 @@ class AnalyticsService {
   /// symmetrically, below zero). Interpolated values are clamped into
   /// `[0, upperBound]` so the curve stays inside the range the user can
   /// actually record.
+  ///
+  /// [holdBeforeFirst] draws the days before the first record at that record's
+  /// value instead of 0. It's for a tracker whose axis is fitted to its data
+  /// ([StatisticTracker.fitAxisToData]): there a 0 lies far below the axis, and
+  /// the leading days would plunge off the bottom of the chart.
   List<FlSpot> interpolateConsecutive({
     required List<TrackerValue> values,
     required DateTime from,
     required DateTime to,
     int maxDays = 365,
     int? upperBound,
+    bool holdBeforeFirst = false,
   }) {
     final maxY = (upperBound != null && upperBound > 0)
         ? upperBound.toDouble()
@@ -181,13 +187,16 @@ class AnalyticsService {
         }
       }
       if (segIdx == null) {
-        // Before the first record the series simply didn't exist yet, so it
-        // reads as a flat zero baseline. Clamping to the first known value
-        // instead — as the trailing side still does — back-fills a fiction:
-        // a journaling streak whose first point is 1 would draw a solid
-        // "1 day streak, every day" line across months with no entries at all.
+        // Before the first record the series simply didn't exist yet, so by
+        // default it reads as a flat zero baseline. Clamping to the first known
+        // value instead — as the trailing side does — back-fills a fiction: a
+        // journaling streak whose first point is 1 would draw a solid "1 day
+        // streak, every day" line across months with no entries at all. Only
+        // [holdBeforeFirst] holds it, because a fitted axis has no 0 to draw.
         if (day < knownSpots.first.x) {
-          result.add(FlSpot(day.toDouble(), 0));
+          result.add(
+            FlSpot(day.toDouble(), holdBeforeFirst ? knownSpots.first.y : 0),
+          );
         } else {
           // Past the last record, clamp to the final value.
           result.add(FlSpot(day.toDouble(), knownSpots.last.y));

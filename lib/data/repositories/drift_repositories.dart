@@ -2104,6 +2104,7 @@ class DriftTrackerRepository implements TrackerRepository {
             enumOptionsJson: Value(jsonEncode(tracker.enumOptions)),
             defaultEnumOption: Value(tracker.defaultEnumOption),
             trackingStyle: Value(tracker.trackingStyle?.name),
+            fitAxisToData: Value(tracker.fitAxisToData),
             starred: Value(tracker.starred),
             sortOrder: Value(tracker.sortOrder),
             createdAt: Value(tracker.createdAt),
@@ -2408,6 +2409,7 @@ class DriftTrackerRepository implements TrackerRepository {
     trackingStyle: row.trackingStyle == null
         ? null
         : TrackerStyle.values.byName(row.trackingStyle!),
+    fitAxisToData: row.fitAxisToData,
     starred: row.starred,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,

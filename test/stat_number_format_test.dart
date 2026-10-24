@@ -116,4 +116,39 @@ void main() {
       }
     });
   });
+
+  group('sparklineYAxis', () {
+    test('starts at 0 unless fitted', () {
+      final axis = sparklineYAxis([168.4, 171.2], 3);
+      expect(axis.minY, 0);
+      expect(axis.maxY, greaterThanOrEqualTo(171.2));
+    });
+
+    test('a fitted axis covers the data from a round floor', () {
+      for (final ys in [
+        [168.4, 171.2],
+        [165.0, 175.0],
+        [170.0, 170.0],
+        [0.2, 0.8],
+        [-12.0, 40.0],
+      ]) {
+        for (final lines in [3, 6]) {
+          final axis = sparklineYAxis(ys, lines, fitToData: true);
+          final reason = '$ys with $lines lines';
+          expect(axis.minY, lessThanOrEqualTo(ys.first), reason: reason);
+          expect(axis.maxY, greaterThanOrEqualTo(ys.last), reason: reason);
+          expect(axis.minY % axis.step, 0, reason: reason);
+          expect(axis.maxY - axis.minY, axis.step * (lines - 1));
+        }
+      }
+      // Weight-like data no longer reaches down to 0.
+      expect(sparklineYAxis([168.4, 171.2], 3, fitToData: true).minY, 168);
+    });
+
+    test('an empty fitted series falls back to the 0-based axis', () {
+      final axis = sparklineYAxis(const [], 3, fitToData: true);
+      expect(axis.minY, 0);
+      expect(axis.maxY, greaterThan(0));
+    });
+  });
 }

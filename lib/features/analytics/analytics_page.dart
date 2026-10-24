@@ -1211,6 +1211,7 @@ class _SparklineRow extends ConsumerWidget {
                       // their first year of data, squished onto the left edge.
                       maxDays: totalDays,
                       upperBound: tracker.integerCap,
+                      holdBeforeFirst: tracker.fitAxisToData,
                     );
                     // Period-start anchors across the window, drawn as an
                     // invisible zero-height line. fl_chart only hit-tests near a
@@ -1261,7 +1262,11 @@ class _SparklineRow extends ConsumerWidget {
                     // three evenly spaced, round gridlines instead of an arbitrary
                     // 15% headroom above the peak.
                     final (minY: minY, maxY: maxY, step: yStep) =
-                        _sparklineYAxis(spots, _sparklineGridLines);
+                        sparklineYAxis(
+                          spots.map((s) => s.y),
+                          _sparklineGridLines,
+                          fitToData: tracker.fitAxisToData,
+                        );
                     // fl_chart lays the axis titles out *around* the plot
                     // (`FlTitlesData.allSidesPadding`), so the plot area is this
                     // widget's box inset by whatever each axis reserves — top and
@@ -2410,6 +2415,9 @@ void _openSparklinePeriodEditor({
     value: resolved.value,
     interpolatedY: anchorY,
     onRecordedDay: resolved.onRecordedDay,
+    x: anchorX,
+    from: from,
+    values: values,
   );
   final valueLabel = reading.label;
   // The bubble stands down as the editor takes over, rather than the two
@@ -2518,6 +2526,9 @@ Widget _sparklineHoverBubble({
                   value: resolved.value,
                   interpolatedY: spot.y,
                   onRecordedDay: resolved.onRecordedDay,
+                  x: touch.x,
+                  from: from,
+                  values: values,
                 );
           final valueLabel = reading.label;
           // Anchored to the *touched point on the curve*, never to the
@@ -2794,26 +2805,6 @@ const _sparklineDataBarIndex = 1;
 /// has the room to be read as a real chart.
 const _sparklineGridLines = 3;
 
-/// A sparkline's y-axis: [lines] round gridlines up from 0 or, once a
-/// counter has gone below zero, up from the round step under its lowest
-/// point.
-({double minY, double maxY, double step}) _sparklineYAxis(
-  List<FlSpot> spots,
-  int lines,
-) {
-  final dataMax = spots.map((s) => s.y).fold<double>(1, math.max);
-  final dataMin = spots.map((s) => s.y).fold<double>(0, math.min);
-  if (dataMin >= 0) {
-    final step = niceAxisStep(dataMax, lines);
-    return (minY: 0, maxY: step * (lines - 1), step: step);
-  }
-  // Sized for one interval fewer than drawn, so rounding the floor down by up
-  // to a step can't leave the top short of the peak.
-  final step = niceAxisStep(dataMax - dataMin, lines - 1);
-  final minY = (dataMin / step).floorToDouble() * step;
-  return (minY: minY, maxY: minY + step * (lines - 1), step: step);
-}
-
 const _sparklineDetailGridLines = 6;
 
 /// Periods the grid tile's sparkline spans, and how many periods apart its
@@ -3025,13 +3016,26 @@ String? _hoverValueLabel({
 /// Only integer trackers interpolate — [AnalyticsService.interpolateConsecutive]
 /// reads `intValue` and emits nothing without it — so boolean and enum
 /// sparklines have no curve to read and keep the dash.
+///
+/// With [StatisticTracker.fitAxisToData] the days before the first record are
+/// drawn at that record's value, not measured — so those days keep the dash
+/// rather than passing the held value off as an estimate.
 ({String? label, bool isEstimate}) _sparklineValueReading({
   required StatisticTracker tracker,
   required TrackerValue? value,
   required double? interpolatedY,
   required bool onRecordedDay,
+  required double x,
+  required DateTime from,
+  required List<TrackerValue> values,
 }) {
   final interpolates = tracker.type == TrackerType.integer;
+  final beforeFirstRecord =
+      tracker.fitAxisToData &&
+      values.every(
+        (v) =>
+            v.intValue == null || calendarDaysBetween(from, v.periodStart) > x,
+      );
   // A record only speaks for the one day it's pinned to. Hovering any other
   // day of its period lands on interpolated curve, so the reading comes off
   // the curve there — see [resolveSparklinePeriod]'s `onRecordedDay`. Boolean
@@ -3043,7 +3047,7 @@ String? _hoverValueLabel({
   return sparklineValueReading(
     storedLabel: storedLabel,
     interpolates: interpolates,
-    interpolatedY: interpolatedY,
+    interpolatedY: beforeFirstRecord ? null : interpolatedY,
   );
 }
 
@@ -4560,6 +4564,7 @@ Future<void> _deleteTracker(
           enumOptions: tracker.enumOptions,
           defaultEnumOption: tracker.defaultEnumOption,
           trackingStyle: tracker.trackingStyle,
+          fitAxisToData: tracker.fitAxisToData,
           starred: tracker.starred,
           sortOrder: tracker.sortOrder,
           isDefault: tracker.isDefault,
@@ -5615,6 +5620,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
           to: todayPeriod,
           maxDays: totalDays,
           upperBound: tracker.integerCap,
+          holdBeforeFirst: tracker.fitAxisToData,
         );
 
         // One anchor per period start across the whole window, rendered as an
@@ -5648,9 +5654,10 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
             promptService.trackerPeriodStartFor(date, tracker.cadence);
 
         // The popup has the height to carry a full six-line scale.
-        final (minY: minY, maxY: maxY, step: yStep) = _sparklineYAxis(
-          spots,
+        final (minY: minY, maxY: maxY, step: yStep) = sparklineYAxis(
+          spots.map((s) => s.y),
           _sparklineDetailGridLines,
+          fitToData: tracker.fitAxisToData,
         );
         // See the matching note on the grid sparkline: the plot area is the
         // chart's box inset by what the axis titles reserve, and the hover
@@ -6718,6 +6725,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   late int _colorValue;
   var _initialized = false;
   late bool _showOnCalendar;
+  late bool _fitAxisToData;
   late bool _hasCap;
   late bool _defaultBool;
   String? _defaultEnumOption;
@@ -6738,6 +6746,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
     _trackingStyle = t?.effectiveTrackingStyle ?? TrackerStyle.independent;
     _colorValue = t?.colorValue ?? 0xFF7C9EFF;
     _showOnCalendar = t?.showOnCalendar ?? false;
+    _fitAxisToData = t?.fitAxisToData ?? false;
     _hasCap = t?.integerCap != null;
     _defaultBool = t?.defaultBool ?? false;
     _defaultEnumOption = t?.defaultEnumOption;
@@ -6987,6 +6996,18 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 activeColor: accent,
                 onChanged: (value) => setState(() => _showOnCalendar = value),
               ),
+              if (_type == TrackerType.counter ||
+                  (_type == TrackerType.integer &&
+                      _trackingStyle == TrackerStyle.consecutive))
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  title: const Text('Fit axis to data'),
+                  value: _fitAxisToData,
+                  activeColor: accent,
+                  onChanged: (value) => setState(() => _fitAxisToData = value),
+                ),
               if (_type == TrackerType.integer) ...[
                 const SizedBox(height: _kTrackerOptionGap),
                 if (!_hasCap) ...[
@@ -7428,6 +7449,12 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       defaultEnumOption: _defaultEnumOption,
       // Only set trackingStyle for integer type; null for others
       trackingStyle: _type == TrackerType.integer ? _trackingStyle : null,
+      // Like trackingStyle, only kept for the types that show its switch.
+      fitAxisToData:
+          _fitAxisToData &&
+          (_type == TrackerType.counter ||
+              (_type == TrackerType.integer &&
+                  _trackingStyle == TrackerStyle.consecutive)),
       starred: widget.tracker?.starred ?? false,
       sortOrder: widget.tracker?.sortOrder ?? 0,
       createdAt: widget.tracker?.createdAt ?? now,

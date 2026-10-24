@@ -6533,6 +6533,21 @@ class $TrackersTableTable extends TrackersTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _fitAxisToDataMeta = const VerificationMeta(
+    'fitAxisToData',
+  );
+  @override
+  late final GeneratedColumn<bool> fitAxisToData = GeneratedColumn<bool>(
+    'fit_axis_to_data',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("fit_axis_to_data" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _starredMeta = const VerificationMeta(
     'starred',
   );
@@ -6619,6 +6634,7 @@ class $TrackersTableTable extends TrackersTable
     enumOptionsJson,
     defaultEnumOption,
     trackingStyle,
+    fitAxisToData,
     starred,
     sortOrder,
     createdAt,
@@ -6730,6 +6746,15 @@ class $TrackersTableTable extends TrackersTable
         ),
       );
     }
+    if (data.containsKey('fit_axis_to_data')) {
+      context.handle(
+        _fitAxisToDataMeta,
+        fitAxisToData.isAcceptableOrUnknown(
+          data['fit_axis_to_data']!,
+          _fitAxisToDataMeta,
+        ),
+      );
+    }
     if (data.containsKey('starred')) {
       context.handle(
         _starredMeta,
@@ -6827,6 +6852,10 @@ class $TrackersTableTable extends TrackersTable
         DriftSqlType.string,
         data['${effectivePrefix}tracking_style'],
       ),
+      fitAxisToData: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}fit_axis_to_data'],
+      )!,
       starred: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}starred'],
@@ -6874,6 +6903,7 @@ class TrackersTableData extends DataClass
   final String enumOptionsJson;
   final String? defaultEnumOption;
   final String? trackingStyle;
+  final bool fitAxisToData;
   final bool starred;
   final int sortOrder;
   final DateTime createdAt;
@@ -6893,6 +6923,7 @@ class TrackersTableData extends DataClass
     required this.enumOptionsJson,
     this.defaultEnumOption,
     this.trackingStyle,
+    required this.fitAxisToData,
     required this.starred,
     required this.sortOrder,
     required this.createdAt,
@@ -6921,6 +6952,7 @@ class TrackersTableData extends DataClass
     if (!nullToAbsent || trackingStyle != null) {
       map['tracking_style'] = Variable<String>(trackingStyle);
     }
+    map['fit_axis_to_data'] = Variable<bool>(fitAxisToData);
     map['starred'] = Variable<bool>(starred);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -6952,6 +6984,7 @@ class TrackersTableData extends DataClass
       trackingStyle: trackingStyle == null && nullToAbsent
           ? const Value.absent()
           : Value(trackingStyle),
+      fitAxisToData: Value(fitAxisToData),
       starred: Value(starred),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
@@ -6983,6 +7016,7 @@ class TrackersTableData extends DataClass
         json['defaultEnumOption'],
       ),
       trackingStyle: serializer.fromJson<String?>(json['trackingStyle']),
+      fitAxisToData: serializer.fromJson<bool>(json['fitAxisToData']),
       starred: serializer.fromJson<bool>(json['starred']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -7007,6 +7041,7 @@ class TrackersTableData extends DataClass
       'enumOptionsJson': serializer.toJson<String>(enumOptionsJson),
       'defaultEnumOption': serializer.toJson<String?>(defaultEnumOption),
       'trackingStyle': serializer.toJson<String?>(trackingStyle),
+      'fitAxisToData': serializer.toJson<bool>(fitAxisToData),
       'starred': serializer.toJson<bool>(starred),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -7029,6 +7064,7 @@ class TrackersTableData extends DataClass
     String? enumOptionsJson,
     Value<String?> defaultEnumOption = const Value.absent(),
     Value<String?> trackingStyle = const Value.absent(),
+    bool? fitAxisToData,
     bool? starred,
     int? sortOrder,
     DateTime? createdAt,
@@ -7052,6 +7088,7 @@ class TrackersTableData extends DataClass
     trackingStyle: trackingStyle.present
         ? trackingStyle.value
         : this.trackingStyle,
+    fitAxisToData: fitAxisToData ?? this.fitAxisToData,
     starred: starred ?? this.starred,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
@@ -7089,6 +7126,9 @@ class TrackersTableData extends DataClass
       trackingStyle: data.trackingStyle.present
           ? data.trackingStyle.value
           : this.trackingStyle,
+      fitAxisToData: data.fitAxisToData.present
+          ? data.fitAxisToData.value
+          : this.fitAxisToData,
       starred: data.starred.present ? data.starred.value : this.starred,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -7113,6 +7153,7 @@ class TrackersTableData extends DataClass
           ..write('enumOptionsJson: $enumOptionsJson, ')
           ..write('defaultEnumOption: $defaultEnumOption, ')
           ..write('trackingStyle: $trackingStyle, ')
+          ..write('fitAxisToData: $fitAxisToData, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
@@ -7137,6 +7178,7 @@ class TrackersTableData extends DataClass
     enumOptionsJson,
     defaultEnumOption,
     trackingStyle,
+    fitAxisToData,
     starred,
     sortOrder,
     createdAt,
@@ -7160,6 +7202,7 @@ class TrackersTableData extends DataClass
           other.enumOptionsJson == this.enumOptionsJson &&
           other.defaultEnumOption == this.defaultEnumOption &&
           other.trackingStyle == this.trackingStyle &&
+          other.fitAxisToData == this.fitAxisToData &&
           other.starred == this.starred &&
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
@@ -7181,6 +7224,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
   final Value<String> enumOptionsJson;
   final Value<String?> defaultEnumOption;
   final Value<String?> trackingStyle;
+  final Value<bool> fitAxisToData;
   final Value<bool> starred;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
@@ -7201,6 +7245,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     this.enumOptionsJson = const Value.absent(),
     this.defaultEnumOption = const Value.absent(),
     this.trackingStyle = const Value.absent(),
+    this.fitAxisToData = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -7222,6 +7267,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     this.enumOptionsJson = const Value.absent(),
     this.defaultEnumOption = const Value.absent(),
     this.trackingStyle = const Value.absent(),
+    this.fitAxisToData = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required DateTime createdAt,
@@ -7248,6 +7294,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     Expression<String>? enumOptionsJson,
     Expression<String>? defaultEnumOption,
     Expression<String>? trackingStyle,
+    Expression<bool>? fitAxisToData,
     Expression<bool>? starred,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
@@ -7269,6 +7316,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
       if (enumOptionsJson != null) 'enum_options_json': enumOptionsJson,
       if (defaultEnumOption != null) 'default_enum_option': defaultEnumOption,
       if (trackingStyle != null) 'tracking_style': trackingStyle,
+      if (fitAxisToData != null) 'fit_axis_to_data': fitAxisToData,
       if (starred != null) 'starred': starred,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
@@ -7292,6 +7340,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     Value<String>? enumOptionsJson,
     Value<String?>? defaultEnumOption,
     Value<String?>? trackingStyle,
+    Value<bool>? fitAxisToData,
     Value<bool>? starred,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
@@ -7313,6 +7362,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
       enumOptionsJson: enumOptionsJson ?? this.enumOptionsJson,
       defaultEnumOption: defaultEnumOption ?? this.defaultEnumOption,
       trackingStyle: trackingStyle ?? this.trackingStyle,
+      fitAxisToData: fitAxisToData ?? this.fitAxisToData,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
@@ -7362,6 +7412,9 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     if (trackingStyle.present) {
       map['tracking_style'] = Variable<String>(trackingStyle.value);
     }
+    if (fitAxisToData.present) {
+      map['fit_axis_to_data'] = Variable<bool>(fitAxisToData.value);
+    }
     if (starred.present) {
       map['starred'] = Variable<bool>(starred.value);
     }
@@ -7401,6 +7454,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
           ..write('enumOptionsJson: $enumOptionsJson, ')
           ..write('defaultEnumOption: $defaultEnumOption, ')
           ..write('trackingStyle: $trackingStyle, ')
+          ..write('fitAxisToData: $fitAxisToData, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
@@ -60686,6 +60740,7 @@ typedef $$TrackersTableTableCreateCompanionBuilder =
       Value<String> enumOptionsJson,
       Value<String?> defaultEnumOption,
       Value<String?> trackingStyle,
+      Value<bool> fitAxisToData,
       Value<bool> starred,
       Value<int> sortOrder,
       required DateTime createdAt,
@@ -60708,6 +60763,7 @@ typedef $$TrackersTableTableUpdateCompanionBuilder =
       Value<String> enumOptionsJson,
       Value<String?> defaultEnumOption,
       Value<String?> trackingStyle,
+      Value<bool> fitAxisToData,
       Value<bool> starred,
       Value<int> sortOrder,
       Value<DateTime> createdAt,
@@ -60783,6 +60839,11 @@ class $$TrackersTableTableFilterComposer
 
   ColumnFilters<String> get trackingStyle => $composableBuilder(
     column: $table.trackingStyle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get fitAxisToData => $composableBuilder(
+    column: $table.fitAxisToData,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -60886,6 +60947,11 @@ class $$TrackersTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get fitAxisToData => $composableBuilder(
+    column: $table.fitAxisToData,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get starred => $composableBuilder(
     column: $table.starred,
     builder: (column) => ColumnOrderings(column),
@@ -60978,6 +61044,11 @@ class $$TrackersTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get fitAxisToData => $composableBuilder(
+    column: $table.fitAxisToData,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get starred =>
       $composableBuilder(column: $table.starred, builder: (column) => column);
 
@@ -61044,6 +61115,7 @@ class $$TrackersTableTableTableManager
                 Value<String> enumOptionsJson = const Value.absent(),
                 Value<String?> defaultEnumOption = const Value.absent(),
                 Value<String?> trackingStyle = const Value.absent(),
+                Value<bool> fitAxisToData = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -61064,6 +61136,7 @@ class $$TrackersTableTableTableManager
                 enumOptionsJson: enumOptionsJson,
                 defaultEnumOption: defaultEnumOption,
                 trackingStyle: trackingStyle,
+                fitAxisToData: fitAxisToData,
                 starred: starred,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
@@ -61086,6 +61159,7 @@ class $$TrackersTableTableTableManager
                 Value<String> enumOptionsJson = const Value.absent(),
                 Value<String?> defaultEnumOption = const Value.absent(),
                 Value<String?> trackingStyle = const Value.absent(),
+                Value<bool> fitAxisToData = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
@@ -61106,6 +61180,7 @@ class $$TrackersTableTableTableManager
                 enumOptionsJson: enumOptionsJson,
                 defaultEnumOption: defaultEnumOption,
                 trackingStyle: trackingStyle,
+                fitAxisToData: fitAxisToData,
                 starred: starred,
                 sortOrder: sortOrder,
                 createdAt: createdAt,

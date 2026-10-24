@@ -64,6 +64,7 @@ class StatisticTracker extends SoftDeletable {
     this.enumOptions = const [],
     this.defaultEnumOption,
     this.trackingStyle,
+    this.fitAxisToData = false,
     this.starred = false,
     this.sortOrder = 0,
     this.isDefault = false,
@@ -83,6 +84,11 @@ class StatisticTracker extends SoftDeletable {
   /// Null for boolean / enum trackers (always independent/heatmap).
   /// For integer trackers, null is treated as [TrackerStyle.independent].
   final TrackerStyle? trackingStyle;
+
+  /// Whether the sparkline's y-axis spans just the recorded readings rather
+  /// than starting at 0 — for values like body weight, where 0 is far below
+  /// anything ever logged and squashes the curve against the top.
+  final bool fitAxisToData;
 
   /// Forces the tracker above all others in the grid view, regardless of
   /// [cadence]. Starred trackers form their own freely-reorderable group.
@@ -137,6 +143,7 @@ class StatisticTracker extends SoftDeletable {
       trackingStyle: identical(trackingStyle, _unset)
           ? this.trackingStyle
           : trackingStyle as TrackerStyle?,
+      fitAxisToData: fitAxisToData,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       isDefault: isDefault,

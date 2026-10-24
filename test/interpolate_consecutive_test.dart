@@ -75,6 +75,23 @@ void main() {
     // The trailing side still clamps to the last known value.
     expect(spots.last.y, 5);
   });
+
+  // A fitted axis (e.g. body weight around 170) puts 0 far below the chart.
+  test('holdBeforeFirst draws the leading days at the first record', () {
+    final spots = analytics.interpolateConsecutive(
+      values: [value(20, 170), value(21, 171)],
+      from: from,
+      to: from.add(const Duration(days: 30)),
+      maxDays: 30,
+      holdBeforeFirst: true,
+    );
+
+    expect(spots.first.x, 0);
+    for (final spot in spots.where((s) => s.x < 20)) {
+      expect(spot.y, 170, reason: 'day ${spot.x}');
+    }
+    expect(spots.last.y, 171);
+  });
   // BUG-099: one value used to come back as a lone spot, and the sparkline's
   // click resolver clamps into the series' own x range, so every click on
   // the chart resolved to that one day and overwrote it.

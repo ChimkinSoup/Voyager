@@ -3014,6 +3014,7 @@ Map<String, dynamic> trackerToFirestore(StatisticTracker tracker) => {
   'enumOptions': tracker.enumOptions,
   'defaultEnumOption': tracker.defaultEnumOption,
   'trackingStyle': tracker.trackingStyle?.name,
+  'fitAxisToData': tracker.fitAxisToData,
   'starred': tracker.starred,
   'sortOrder': tracker.sortOrder,
   'createdAt': _dateToFirestoreRequired(tracker.createdAt),
@@ -3074,6 +3075,8 @@ StatisticTracker mergeTrackerFromRemote(
             remoteStyle,
             local?.trackingStyle ?? TrackerStyle.independent,
           ),
+    fitAxisToData:
+        data['fitAxisToData'] as bool? ?? local?.fitAxisToData ?? false,
     starred: data['starred'] as bool? ?? local?.starred ?? false,
     sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
     createdAt:
