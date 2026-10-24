@@ -145,6 +145,7 @@ Future<PhotoSeries> _seed(
   ProviderContainer container, {
   List<int> daysAgo = const [7, 0],
   TrackerCadence cadence = TrackerCadence.weekly,
+  List<String> angleNames = const ['Front'],
 }) async {
   late PhotoSeries series;
   await tester.runAsync(() async {
@@ -153,11 +154,11 @@ Future<PhotoSeries> _seed(
       name: 'Progress',
       cadence: cadence,
       sortOrder: 0,
-      angleNames: ['Front'],
+      angleNames: angleNames,
     );
     final angle =
         (await container.read(photoSeriesRepositoryProvider).listAngles())
-            .single;
+            .first;
     final session = container.read(secureVaultSessionProvider)!;
     final today = DateTime.now();
     for (final day in [
@@ -754,6 +755,137 @@ void main() {
 
       container.read(secureVaultSessionProvider.notifier).lock();
       await tester.pump();
+    });
+
+    testWidgets('a photo picked for a check-in is aligned before it saves', (
+      tester,
+    ) async {
+      final file = File(
+        '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+      )..writeAsBytesSync(_jpeg());
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+      FilePicker.platform = _FakeFilePicker(file.path);
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      final service = container.read(photoSeriesServiceProvider);
+      final before = await images(tester, container);
+      await tester.runAsync(
+        () => service.setAlignment(
+          before.last.copyWith(alignScale: 1.5, alignRotation: 0.1),
+        ),
+      );
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      expect(find.text('Align'), findsNothing);
+      await tester.tap(find.text('Choose file…'));
+      await _drain(tester);
+
+      await tester.tap(find.text('Align'));
+      await _settle(tester);
+      expect(find.textContaining('Align Front'), findsOneWidget);
+      // The reference underneath, the picked photo over it.
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog).last,
+          matching: find.byType(AlignedPhotoFrame),
+        ),
+        findsNWidgets(2),
+      );
+      await tester.tap(find.text('Copy from previous'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(GlassButton, 'Done'));
+      await _settle(tester);
+      expect(find.textContaining('Align Front'), findsNothing);
+      // Nothing saved yet; the preview shows it aligned.
+      expect(await images(tester, container), hasLength(before.length));
+      expect(find.byType(AlignedPhotoFrame), findsOneWidget);
+
+      await tester.tap(find.text('Next'));
+      await _settle(tester);
+      await tester.tap(find.text('Save'));
+      await _drain(tester);
+      final added = (await images(
+        tester,
+        container,
+      )).where((image) => !before.any((old) => old.id == image.id)).single;
+      expect(added.alignScale, 1.5);
+      expect(added.alignRotation, 0.1);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('a replacement aligns over the photos before it, not the one '
+        'it replaces', (tester) async {
+      final file = File(
+        '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+      )..writeAsBytesSync(_jpeg());
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+      FilePicker.platform = _FakeFilePicker(file.path);
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      final service = container.read(photoSeriesServiceProvider);
+      final before = await images(tester, container);
+      await tester.runAsync(
+        () => service.setAlignment(before.first.copyWith(alignScale: 1.5)),
+      );
+      await _pumpDetail(tester, container, series.id);
+
+      await tester.tap(
+        find.byType(VaultPhoto).first,
+        buttons: kSecondaryButton,
+        warnIfMissed: false,
+      );
+      await _settle(tester);
+      // A submenu opens on hover.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: tester.getCenter(find.text('Photo')));
+      await _settle(tester);
+      await tester.tap(find.text('Replace Front'));
+      await _settle(tester);
+      await tester.tap(find.text('Choose file…'));
+      await _drain(tester);
+      await tester.tap(find.text('Align'));
+      await _settle(tester);
+      await tester.tap(find.text('Copy from previous'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(GlassButton, 'Done'));
+      await _settle(tester);
+      await tester.tap(find.text('Save'));
+      await _drain(tester);
+      final added = (await images(
+        tester,
+        container,
+      )).where((image) => !before.any((old) => old.id == image.id)).single;
+      expect(added.alignScale, 1.5);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    });
+
+    testWidgets('a first photo has nothing to align over', (tester) async {
+      final file = File(
+        '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+      )..writeAsBytesSync(_jpeg());
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+      FilePicker.platform = _FakeFilePicker(file.path);
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container, daysAgo: const []);
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await tester.tap(find.text('Choose file…'));
+      await _drain(tester);
+      expect(find.text('Choose another…'), findsOneWidget);
+      expect(find.text('Align'), findsNothing);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
     });
 
     testWidgets('replacing the reference photo hands it the role', (
@@ -1503,6 +1635,75 @@ void main() {
         container.read(secureVaultSessionProvider.notifier).lock();
         await _settle(tester);
       });
+    });
+
+    testWidgets('Ctrl+Enter takes a photo picked on to the review, and saves '
+        'from the note', (tester) async {
+      final file = File(
+        '${Directory.systemTemp.createTempSync('voyager_photo').path}/a.jpg',
+      )..writeAsBytesSync(_jpeg());
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+      FilePicker.platform = _FakeFilePicker(file.path);
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(
+        tester,
+        container,
+        daysAgo: const [],
+        angleNames: ['Front', 'Side'],
+      );
+      await _pumpDetail(tester, container, series.id);
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      Future<void> ctrlEnter() async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await _drain(tester);
+      }
+
+      // No photo yet: not a Skip.
+      await ctrlEnter();
+      expect(find.text('Front · 1 of 2'), findsOneWidget);
+
+      await tester.tap(find.text('Choose file…'));
+      await _drain(tester);
+      await ctrlEnter();
+      expect(find.text('Side · 2 of 2'), findsOneWidget);
+      // None for this angle, though there is one for another.
+      await ctrlEnter();
+      expect(find.text('Side · 2 of 2'), findsOneWidget);
+
+      await tester.tap(find.text('Skip'));
+      await _settle(tester);
+      await tester.enterText(find.byType(EditableText), 'typed note');
+      await _settle(tester);
+      // Back to an angle from the note: the field goes with the chord's
+      // focus.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Front'),
+        ),
+      );
+      await _settle(tester);
+      await ctrlEnter();
+      expect(find.text('Side · 2 of 2'), findsOneWidget);
+
+      await tester.tap(find.text('Skip'));
+      await _settle(tester);
+      await ctrlEnter();
+      expect(find.text('Note (optional)'), findsNothing);
+      late List<PhotoCheckIn> checkIns;
+      await tester.runAsync(() async {
+        checkIns = await container
+            .read(photoSeriesRepositoryProvider)
+            .listCheckIns();
+      });
+      expect(checkIns.single.noteCiphertext, isNotNull);
+
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
     });
 
     testWidgets('BUG-288/290: the grid groups a weekly series by month, and a '

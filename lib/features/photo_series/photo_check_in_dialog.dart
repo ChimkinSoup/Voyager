@@ -12,13 +12,17 @@ import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
 import 'package:voyager/domain/services/media_ingest.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
+import 'package:voyager/features/photo_series/photo_align_editor.dart';
 import 'package:voyager/features/photo_series/photo_capture_screen.dart';
+import 'package:voyager/features/photo_series/photo_frame.dart';
+import 'package:voyager/features/photo_series/photo_series_playback.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/photo_series_service.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
@@ -145,13 +149,17 @@ Future<void> _showCheckIn(
 
 /// A photo picked for one step, still plain, in memory only.
 class _Picked {
-  const _Picked(this.bytes, this.takenOn);
+  const _Picked(this.bytes, this.takenOn, [this.aligned]);
 
   final Uint8List bytes;
 
   /// When the file says it was taken: EXIF, else its modified date. Null for
   /// a paste or a drop with neither.
   final DateTime? takenOn;
+
+  /// The transform the user gave it in the alignment editor, if they did.
+  /// Only its transform means anything.
+  final PhotoCheckInImage? aligned;
 }
 
 class _CheckInDialog extends ConsumerStatefulWidget {
@@ -355,6 +363,95 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     if (mounted) Navigator.pop(context);
   }
 
+  /// Ctrl+Enter: what Next or Save would do, once there is a photo for it —
+  /// never a Skip.
+  void _submit() {
+    if (_saving || _picked.isEmpty) return;
+    if (_step < _reviewStep && !_replacing) {
+      if (_picked.containsKey(_angles[_step].id)) _next();
+      return;
+    }
+    _save();
+  }
+
+  void _next() => setState(() {
+    _step++;
+    _error = null;
+  });
+
+  /// [angle] as it is now: [_angles] are as they were when this opened,
+  /// before its first photo, say, fixed its frame.
+  PhotoSeriesAngle _live(PhotoSeriesAngle angle) =>
+      ref
+          .read(photoSeriesSnapshotProvider)
+          .valueOrNull
+          ?.angles
+          .where((live) => live.id == angle.id)
+          .firstOrNull ??
+      angle;
+
+  /// [angle]'s photos the picked one can be aligned over, oldest first: not
+  /// the one it replaces.
+  List<PhotoFrameEntry> _alignFrames(PhotoSeriesAngle angle) {
+    final snapshot = ref.read(photoSeriesSnapshotProvider).valueOrNull;
+    if (snapshot == null) return const [];
+    return [
+      for (final frame in photoAngleFrames(snapshot, angle.id))
+        if (frame.checkIn.id != widget.checkIn?.id) frame,
+    ];
+  }
+
+  /// The latest of [frames] the check-in comes after, as the grid orders
+  /// them: a new one comes after every one on its day.
+  PhotoCheckInImage? _previous(List<PhotoFrameEntry> frames) {
+    final checkIn = widget.checkIn;
+    final takenOn = checkIn?.takenOn ?? _takenOn;
+    return frames
+        .where((frame) {
+          final byDate = frame.checkIn.takenOn.compareTo(takenOn);
+          return byDate < 0 ||
+              (byDate == 0 &&
+                  (checkIn == null ||
+                      frame.checkIn.createdAt.isBefore(checkIn.createdAt)));
+        })
+        .lastOrNull
+        ?.image;
+  }
+
+  /// Aligns [angle]'s picked photo over its reference, keeping the transform
+  /// for the save.
+  Future<void> _align(PhotoSeriesAngle angle) async {
+    final picked = _picked[angle.id]!;
+    final now = DateTime.now();
+    final frames = _alignFrames(angle);
+    final aligned = await showPickedPhotoAlignEditor(
+      context,
+      angle: _live(angle),
+      frames: frames,
+      takenOn: widget.checkIn?.takenOn ?? _takenOn,
+      previous: _previous(frames),
+      // Not a row: only carries the transform.
+      image:
+          picked.aligned ??
+          PhotoCheckInImage(
+            id: '',
+            checkInId: '',
+            angleId: angle.id,
+            blobId: '',
+            createdAt: now,
+            updatedAt: now,
+          ),
+      bytes: picked.bytes,
+    );
+    // Cancelled, or the photo went meanwhile.
+    if (aligned == null || !mounted || !identical(_picked[angle.id], picked)) {
+      return;
+    }
+    setState(
+      () => _picked[angle.id] = _Picked(picked.bytes, picked.takenOn, aligned),
+    );
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -377,6 +474,7 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         checkIn: checkIn,
         angleId: angle.id,
         bytes: _picked[angle.id]!.bytes,
+        aligned: _picked[angle.id]!.aligned,
       );
     } else {
       await service.createCheckIn(
@@ -385,6 +483,9 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         takenOn: _takenOn,
         photos: {
           for (final entry in _picked.entries) entry.key: entry.value.bytes,
+        },
+        aligned: {
+          for (final entry in _picked.entries) entry.key: ?entry.value.aligned,
         },
         note: _note.text,
       );
@@ -481,7 +582,8 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
                   _paste,
             },
           },
-          child: Focus(
+          child: CtrlEnterToSubmitScope(
+            onSubmit: _submit,
             autofocus: true,
             child: AlertDialog(
               title: Text(title),
@@ -551,10 +653,7 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         ),
       if (!onReview)
         GlassButton(
-          onPressed: () => setState(() {
-            _step++;
-            _error = null;
-          }),
+          onPressed: _next,
           label: _picked.containsKey(angle!.id) ? 'Next' : 'Skip',
           dense: true,
         )
@@ -580,25 +679,33 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       clipBehavior: Clip.antiAlias,
-      child: picked != null
-          ? PlainPhotoPreview(bytes: picked.bytes)
-          : Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    PhosphorIconsRegular.image,
-                    size: 32,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Drop a photo here, paste one, or choose a file',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
+      child: switch (picked) {
+        _Picked(:final bytes, aligned: final aligned?) => Center(
+          child: AlignedPhotoFrame(
+            aspect: _live(angle).frameAspect ?? kDefaultPhotoFrameAspect,
+            image: aligned,
+            child: PlainPhotoPreview(bytes: bytes),
+          ),
+        ),
+        _Picked(:final bytes) => PlainPhotoPreview(bytes: bytes),
+        null => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                PhosphorIconsRegular.image,
+                size: 32,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                'Drop a photo here, paste one, or choose a file',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      },
     );
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -641,6 +748,14 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
               label: 'Paste',
               dense: true,
             ),
+            // Over the angle's reference, which its first photo has none of.
+            if (picked != null && _alignFrames(angle).isNotEmpty)
+              GlassButton(
+                onPressed: () => _align(angle),
+                icon: const Icon(PhosphorIconsRegular.frameCorners, size: 13),
+                label: 'Align',
+                dense: true,
+              ),
             if (picked != null)
               GlassButton(
                 onPressed: () => setState(() => _picked.remove(angle.id)),

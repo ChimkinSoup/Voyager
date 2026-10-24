@@ -191,12 +191,14 @@ class PhotoSeriesService {
   }
 
   /// A new check-in of [series] on [takenOn], with one photo per angle in
-  /// [photos] and an optional [note]. Refuses one with no photo.
+  /// [photos] and an optional [note]. Refuses one with no photo. [aligned]
+  /// holds, by angle id, the transforms to give their photos.
   Future<PhotoCheckIn> createCheckIn({
     required SecureVaultSession session,
     required PhotoSeries series,
     required DateTime takenOn,
     required Map<String, Uint8List> photos,
+    Map<String, PhotoCheckInImage> aligned = const {},
     String note = '',
   }) async {
     // An angle removed on another device while the dialog was open takes no
@@ -238,7 +240,12 @@ class PhotoSeriesService {
     final images = <PhotoCheckInImage>[];
     final angles = <PhotoSeriesAngle>[];
     for (final (angleId, image) in sealed) {
-      final (row, angle) = await _store(checkIn.id, angleId, image);
+      final (row, angle) = await _store(
+        checkIn.id,
+        angleId,
+        image,
+        aligned[angleId],
+      );
       images.add(row);
       if (angle != null) angles.add(angle);
     }
@@ -251,12 +258,14 @@ class PhotoSeriesService {
   }
 
   /// Gives [checkIn] [bytes] as its photo of [angleId], replacing any it had.
-  /// A replaced reference hands the role to the new photo.
+  /// A replaced reference hands the role to the new photo. With [aligned],
+  /// the new photo takes its transform.
   Future<void> setPhoto({
     required SecureVaultSession session,
     required PhotoCheckIn checkIn,
     required String angleId,
     required Uint8List bytes,
+    PhotoCheckInImage? aligned,
   }) async {
     final now = utcNow();
     final replaced = [
@@ -264,7 +273,13 @@ class PhotoSeriesService {
         if (image.checkInId == checkIn.id && image.angleId == angleId)
           image.copyWith(deletedAt: now, bumpVersion: true),
     ];
-    var (image, angle) = await _ingest(session, checkIn.id, angleId, bytes);
+    var (image, angle) = await _ingest(
+      session,
+      checkIn.id,
+      angleId,
+      bytes,
+      aligned,
+    );
     final current = angle ?? await _repository.getAngle(angleId);
     if (current != null &&
         replaced.any((old) => old.id == current.referenceImageId)) {
@@ -397,21 +412,25 @@ class PhotoSeriesService {
 
   /// Seals [bytes] as a blob and makes the image row showing it. The angle
   /// comes back too when this is its first photo, which fixes its frame.
+  /// The row takes [aligned]'s transform, when given.
   Future<(PhotoCheckInImage, PhotoSeriesAngle?)> _ingest(
     SecureVaultSession session,
     String checkInId,
     String angleId,
     Uint8List bytes,
+    PhotoCheckInImage? aligned,
   ) async => _store(
     checkInId,
     angleId,
     await _media.seal(bytes, key: session.key, vaultId: session.vaultId),
+    aligned,
   );
 
   Future<(PhotoCheckInImage, PhotoSeriesAngle?)> _store(
     String checkInId,
     String angleId,
     SealedVaultImage sealed,
+    PhotoCheckInImage? aligned,
   ) async {
     final blob = await _media.store(sealed);
     final now = utcNow();
@@ -420,6 +439,10 @@ class PhotoSeriesService {
       checkInId: checkInId,
       angleId: angleId,
       blobId: blob.id,
+      alignScale: aligned?.alignScale ?? 1,
+      alignRotation: aligned?.alignRotation ?? 0,
+      alignDx: aligned?.alignDx ?? 0,
+      alignDy: aligned?.alignDy ?? 0,
       createdAt: now,
       updatedAt: now,
     );

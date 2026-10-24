@@ -54,16 +54,52 @@ Future<void> showPhotoAlignEditor(
       _AlignEditor(angle: angle, frames: frames, image: image),
 );
 
+/// The alignment editor for a photo not saved yet: [bytes], to be saved
+/// under [takenOn], starting from [image]'s transform. Comes back with the
+/// transform on Done — saving nothing — and null on Cancel. Copy from
+/// previous copies [previous].
+Future<PhotoCheckInImage?> showPickedPhotoAlignEditor(
+  BuildContext context, {
+  required PhotoSeriesAngle angle,
+  required List<PhotoFrameEntry> frames,
+  required PhotoCheckInImage image,
+  required Uint8List bytes,
+  required DateTime takenOn,
+  required PhotoCheckInImage? previous,
+}) => showVoyagerDialog<PhotoCheckInImage>(
+  context: context,
+  builder: (context) => _AlignEditor(
+    angle: angle,
+    frames: frames,
+    image: image,
+    bytes: bytes,
+    takenOn: takenOn,
+    previous: previous,
+  ),
+);
+
 class _AlignEditor extends ConsumerStatefulWidget {
   const _AlignEditor({
     required this.angle,
     required this.frames,
     required this.image,
+    this.bytes,
+    this.takenOn,
+    this.previous,
   });
 
   final PhotoSeriesAngle angle;
   final List<PhotoFrameEntry> frames;
   final PhotoCheckInImage image;
+
+  /// The photo when it isn't saved yet: [image] only carries its transform.
+  final Uint8List? bytes;
+
+  /// The day it will be saved under, with [bytes].
+  final DateTime? takenOn;
+
+  /// What Copy from previous copies, with [bytes].
+  final PhotoCheckInImage? previous;
 
   @override
   ConsumerState<_AlignEditor> createState() => _AlignEditorState();
@@ -84,8 +120,11 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
   int get _at =>
       widget.frames.indexWhere((frame) => frame.image.id == widget.image.id);
 
-  PhotoCheckInImage? get _previous =>
-      _at > 0 ? widget.frames[_at - 1].image : null;
+  PhotoCheckInImage? get _previous => widget.bytes != null
+      ? widget.previous
+      : _at > 0
+      ? widget.frames[_at - 1].image
+      : null;
 
   /// The photo underneath; none while aligning the reference itself.
   PhotoCheckInImage? get _reference {
@@ -170,6 +209,12 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
   });
 
   Future<void> _done() async {
+    if (widget.bytes != null) {
+      if (ModalRoute.of(context)?.isCurrent ?? false) {
+        Navigator.pop(context, _draft);
+      }
+      return;
+    }
     if (_changed) {
       setState(() => _saving = true);
       try {
@@ -185,22 +230,26 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
     }
   }
 
-  Widget _photo(PhotoCheckInImage image, double aspect) => AlignedPhotoFrame(
-    aspect: aspect,
-    image: image,
-    child: VaultPhoto(
-      key: ValueKey(image.blobId),
-      blobId: image.blobId,
-      thumb: false,
-      fit: BoxFit.contain,
-      // The thumbnail while the full image decodes or downloads.
-      placeholder: VaultPhoto(
-        blobId: image.blobId,
-        thumb: true,
-        fit: BoxFit.contain,
-      ),
-    ),
-  );
+  /// [image] from the vault, or from [bytes] when it isn't saved yet.
+  Widget _photo(PhotoCheckInImage image, double aspect, {Uint8List? bytes}) =>
+      AlignedPhotoFrame(
+        aspect: aspect,
+        image: image,
+        child: bytes != null
+            ? PlainPhotoPreview(bytes: bytes)
+            : VaultPhoto(
+                key: ValueKey(image.blobId),
+                blobId: image.blobId,
+                thumb: false,
+                fit: BoxFit.contain,
+                // The thumbnail while the full image decodes or downloads.
+                placeholder: VaultPhoto(
+                  blobId: image.blobId,
+                  thumb: true,
+                  fit: BoxFit.contain,
+                ),
+              ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -213,7 +262,8 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
     final theme = Theme.of(context);
     final aspect = widget.angle.frameAspect ?? kDefaultPhotoFrameAspect;
     final reference = _reference;
-    final takenOn = _at < 0 ? null : widget.frames[_at].checkIn.takenOn;
+    final takenOn =
+        widget.takenOn ?? (_at < 0 ? null : widget.frames[_at].checkIn.takenOn);
     final stageHeight = math.min(
       460.0,
       MediaQuery.sizeOf(context).height * 0.5,
@@ -320,7 +370,11 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                                         opacity: reference == null
                                             ? 1
                                             : _opacity,
-                                        child: _photo(_draft, aspect),
+                                        child: _photo(
+                                          _draft,
+                                          aspect,
+                                          bytes: widget.bytes,
+                                        ),
                                       ),
                                       IgnorePointer(
                                         child: DecoratedBox(
