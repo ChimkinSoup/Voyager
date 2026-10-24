@@ -98,6 +98,16 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       journal: journal,
       allJournals: _journals,
       entryCount: _counts[journal.id] ?? 0,
+      // The delete can take a while on a big journal; show the spinner for it
+      // rather than leaving the stale list up.
+      onConfirmed: () {
+        if (mounted) setState(() => _loading = true);
+      },
+      // Reloaded rather than just un-spun: a partial failure may already
+      // have moved or deleted some of the contents.
+      onLocalDeleteFailed: () {
+        if (mounted) _reload();
+      },
     );
     if (!deleted || !mounted) return;
     await _reload();

@@ -260,8 +260,8 @@ TodoListModel? fallbackTodoListFor(
 
 /// Prompts for, and carries out, the deletion of [list].
 ///
-/// Shared by the list dropdown's manage menu and the manage sheet, which used
-/// to keep near-identical copies of this body and had already drifted apart.
+/// Called from the manage sheet. The list dropdown's manage menu used to keep
+/// a near-identical copy of this body, and the two had already drifted apart.
 ///
 /// The last list can't be deleted: its tasks would have nowhere to go.
 ///
@@ -273,11 +273,17 @@ TodoListModel? fallbackTodoListFor(
 /// list while unresolved. A wrong zero skipped both branches and left every
 /// task in the list with `deletedAt == null` pointing at a deleted list —
 /// invisible in every view, absent from trash, and never purged.
+///
+/// [onConfirmed] runs immediately after the user confirms, before local I/O.
+/// The upload runs in the background once the local delete is done, as
+/// [deleteJournalList]'s does.
 Future<bool> deleteTodoList(
   BuildContext context,
   WidgetRef ref, {
   required TodoListModel list,
   required List<TodoListModel> allLists,
+  VoidCallback? onConfirmed,
+  VoidCallback? onLocalDeleteFailed,
 }) async {
   // Read from the database, as the trash's restore does, so the two pick the
   // same list even while the settings provider is still loading.
@@ -294,6 +300,7 @@ Future<bool> deleteTodoList(
   // Resolved before the dialog, so the media detach below is not reaching
   // through a BuildContext across an async gap.
   final container = ProviderScope.containerOf(context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
   final tasks = await repo.listTasks(list.id, topLevelOnly: false);
   // Counted as the list's own row in Manage lists counts it: subtasks ride
   // along with their parents and aren't tasks of their own (BUG-073).
@@ -323,56 +330,119 @@ Future<bool> deleteTodoList(
   );
   if (!context.mounted || choice == DeleteContainerChoice.cancel) return false;
 
-  // One instant for the list and the tasks it takes with it — see
-  // [deleteJournalList].
-  final deletedAt = utcNow();
-  if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
-    await _moveTasksToList(repo, remoteSync, tasks, fallback.id);
-  } else if (choice == DeleteContainerChoice.deleteAll && tasks.isNotEmpty) {
-    // Push exactly the rows the repository wrote. Re-`copyWith`-ing the local
-    // snapshots instead — which is what this used to do — sent the remote a
-    // version the local row never reached, leaving the two permanently out of
-    // step on every deleted task.
-    final deleted = await repo.softDeleteTasksInList(list.id, at: deletedAt);
-    await remoteSync.pushTodoTasksBatch(deleted);
-    await detachMediaForTasks(container, deleted);
+  onConfirmed?.call();
+
+  void reportSyncError(Object error, StackTrace stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'todo_list_actions',
+        context: ErrorDescription('while syncing todo list delete remotely'),
+      ),
+    );
   }
 
-  await repo.softDeleteList(list.id, at: deletedAt);
-  // A default-view id is left in place: the page and the list settings treat
-  // an id with no live list behind it as no default, and restoring the list
-  // from the trash then brings the setting back with it (BUG-072).
-  final deletedList = (await repo.listLists(
-    includeDeleted: true,
-  )).firstWhere((item) => item.id == list.id);
-  remoteSync.pushTodoList(deletedList);
-  ref.invalidate(todoListsProvider);
-  ref.invalidate(todoTasksProvider(list.id));
-  if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
-    ref.invalidate(todoTasksProvider(fallback.id));
+  // Through the container rather than `ref`: the manage dialog can be
+  // dismissed while the delete runs, and its `WidgetRef` then throws.
+  void invalidateProviders() {
+    container
+      ..invalidate(todoListsProvider)
+      ..invalidate(todoTasksProvider(list.id))
+      ..invalidate(allTodoTasksProvider)
+      ..invalidate(todoListStatsProvider);
+    if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
+      container.invalidate(todoTasksProvider(fallback.id));
+    }
   }
-  ref.invalidate(allTodoTasksProvider);
-  ref.invalidate(todoListStatsProvider);
+
+  // Started as soon as the task rows are written, so they still reach the
+  // remote if a later local step fails.
+  Future<void> taskPush = Future.value();
+  // Set once the tasks are moved or deleted: a failure after that point
+  // leaves them that way, and the toast has to say so.
+  String? partialFailure;
+  final TodoListModel deletedList;
+  try {
+    // One instant for the list and the tasks it takes with it — see
+    // [deleteJournalList].
+    final deletedAt = utcNow();
+    if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
+      final moved = await _moveTasksToList(repo, tasks, fallback.id);
+      partialFailure =
+          'Moved the tasks to "$fallbackName", but couldn\'t remove the list. '
+          'Try again.';
+      taskPush = remoteSync
+          .pushTodoTasksBatch(moved)
+          .catchError(reportSyncError);
+    } else if (choice == DeleteContainerChoice.deleteAll && tasks.isNotEmpty) {
+      // Push exactly the rows the repository wrote. Re-`copyWith`-ing the
+      // local snapshots instead — which is what this used to do — sent the
+      // remote a version the local row never reached, leaving the two
+      // permanently out of step on every deleted task.
+      final deleted = await repo.softDeleteTasksInList(list.id, at: deletedAt);
+      partialFailure =
+          "Deleted the tasks, but couldn't remove the list. Try again.";
+      taskPush = remoteSync
+          .pushTodoTasksBatch(deleted)
+          .catchError(reportSyncError);
+      await detachMediaForTasks(container, deleted);
+    }
+
+    await repo.softDeleteList(list.id, at: deletedAt);
+    // A default-view id is left in place: the page and the list settings
+    // treat an id with no live list behind it as no default, and restoring
+    // the list from the trash then brings the setting back with it (BUG-072).
+    deletedList = (await repo.listLists(
+      includeDeleted: true,
+    )).firstWhere((item) => item.id == list.id);
+  } catch (error, stackTrace) {
+    // Some task rows may already have changed; show them as they now are.
+    invalidateProviders();
+    showDeleteFailedToast(
+      overlay,
+      message: partialFailure ?? 'Could not delete.',
+    );
+    onLocalDeleteFailed?.call();
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'todo_list_actions',
+        context: ErrorDescription('while deleting todo list locally'),
+      ),
+    );
+    return false;
+  }
+
+  // The list after its tasks, so no other device pulls a deleted list whose
+  // tasks still look live.
+  unawaited(
+    taskPush
+        .then((_) => remoteSync.pushTodoList(deletedList))
+        .catchError(reportSyncError),
+  );
+  invalidateProviders();
+
   return true;
 }
 
 /// Reassigns [tasks] to [listId], placing each one into that list's ordering
-/// as it arrives.
+/// as it arrives, and returns the rows written for the caller to push.
 ///
 /// A bare `UPDATE ... SET listId` is not enough: `sortOrder` is per-list and
 /// every list restarts from the same bases, so the incoming tasks would land
 /// carrying the source list's numbering and collide one-for-one with what is
 /// already there, leaving `compareTodoTasks` to break every tie on `createdAt`.
-Future<void> _moveTasksToList(
+Future<List<TodoTask>> _moveTasksToList(
   TodoRepository repo,
-  RemoteSyncService remoteSync,
   List<TodoTask> tasks,
   String listId,
 ) async {
   // Already-deleted rows stay where they are rather than being dragged into
   // the destination list's trash.
   final live = tasks.where((task) => task.deletedAt == null).toList();
-  if (live.isEmpty) return;
+  if (live.isEmpty) return const [];
 
   var destActive = activeTopLevelTasks(await repo.listTasks(listId));
   final writes = <String, TodoTask>{};
@@ -399,7 +469,7 @@ Future<void> _moveTasksToList(
 
   final rows = writes.values.toList();
   await repo.upsertTasksBatch(rows);
-  await remoteSync.pushTodoTasksBatch(rows);
+  return rows;
 }
 
 /// Saves [task]'s move to another list, and pushes it.

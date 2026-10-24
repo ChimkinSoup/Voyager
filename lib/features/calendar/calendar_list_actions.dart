@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/fallback_container.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -148,9 +149,12 @@ Future<Calendar?> createCalendarList(
   return created;
 }
 
-void _invalidateCalendarDeleteProviders(WidgetRef ref) {
-  ref.invalidate(calendarsProvider);
-  ref.invalidate(calendarEventsProvider);
+/// Through the container rather than a `WidgetRef`: the manage dialog can be
+/// dismissed while the delete runs, and its ref then throws.
+void _invalidateCalendarDeleteProviders(ProviderContainer container) {
+  container
+    ..invalidate(calendarsProvider)
+    ..invalidate(calendarEventsProvider);
 }
 
 /// Where a deleted calendar's events go with "Move": the default calendar, or
@@ -192,6 +196,10 @@ Future<bool> deleteCalendarList(
   VoidCallback? onConfirmed,
   VoidCallback? onLocalDeleteFailed,
 }) async {
+  // Resolved before the first await, so the toast and the provider refreshes
+  // below are not reaching through a BuildContext across an async gap.
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final container = ProviderScope.containerOf(context, listen: false);
   // Read from the database, as the trash's restore does, so the two pick the
   // same calendar even while the settings provider is still loading.
   final settings = await ref.read(settingsRepositoryProvider).getSettings();
@@ -221,6 +229,9 @@ Future<bool> deleteCalendarList(
   onConfirmed?.call();
 
   final repo = ref.read(calendarRepositoryProvider);
+  // Set once the events are moved or deleted: a failure after that point
+  // leaves them that way, and the toast has to say so.
+  String? partialFailure;
 
   try {
     // One instant for the calendar and the events it takes with it — see
@@ -228,13 +239,25 @@ Future<bool> deleteCalendarList(
     final deletedAt = utcNow();
     if (choice == DeleteContainerChoice.deleteAll && eventCount > 0) {
       await repo.softDeleteEventsInCalendar(calendar.id, at: deletedAt);
+      partialFailure =
+          "Deleted the events, but couldn't remove the calendar. Try again.";
     } else if (choice == DeleteContainerChoice.moveToDefault &&
         eventCount > 0) {
       await repo.reassignEventsCalendar(calendar.id, fallback.id);
+      partialFailure =
+          'Moved the events to "$fallbackName", but couldn\'t remove the '
+          'calendar. Try again.';
     }
 
     await repo.softDeleteCalendar(calendar.id, at: deletedAt);
   } catch (error, stackTrace) {
+    // Some events may already have moved or been deleted; show them as they
+    // now are.
+    _invalidateCalendarDeleteProviders(container);
+    showDeleteFailedToast(
+      overlay,
+      message: partialFailure ?? 'Could not delete.',
+    );
     onLocalDeleteFailed?.call();
     FlutterError.reportError(
       FlutterErrorDetails(
@@ -247,7 +270,7 @@ Future<bool> deleteCalendarList(
     return false;
   }
 
-  _invalidateCalendarDeleteProviders(ref);
+  _invalidateCalendarDeleteProviders(container);
 
   return true;
 }

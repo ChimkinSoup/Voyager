@@ -215,6 +215,21 @@ class _HideStreak {
 /// that took the slot ends the streak without having to know about it.
 final _hideStreak = Expando<_HideStreak>('hide undo streak');
 
+/// Says a delete failed. Shared by [softDeleteWithUndo] and the container
+/// deletes, so every failed delete looks the same. [message] is for a delete
+/// that got partway, to say what already happened.
+void showDeleteFailedToast(
+  OverlayState overlay, {
+  String message = 'Could not delete.',
+}) {
+  showVoyagerToastIn(
+    overlay,
+    message: message,
+    icon: PhosphorIconsRegular.warning,
+    dwell: const Duration(seconds: 4),
+  );
+}
+
 /// Runs [delete], then offers [restore] for [kSoftDeleteUndoDwell].
 ///
 /// Returns whether the delete actually landed, so a caller that took the row
@@ -243,12 +258,7 @@ Future<bool> softDeleteWithUndo({
   try {
     await delete();
   } catch (error, stackTrace) {
-    showVoyagerToastIn(
-      overlay,
-      message: 'Could not delete.',
-      icon: PhosphorIconsRegular.warning,
-      dwell: const Duration(seconds: 4),
-    );
+    showDeleteFailedToast(overlay);
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: error,

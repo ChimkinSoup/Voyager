@@ -102,6 +102,16 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
       calendar: calendar,
       allCalendars: _calendars,
       eventCount: _counts[calendar.id] ?? 0,
+      // The delete can take a while on a big calendar; show the spinner for
+      // it rather than leaving the stale list up.
+      onConfirmed: () {
+        if (mounted) setState(() => _loading = true);
+      },
+      // Reloaded rather than just un-spun: a partial failure may already
+      // have moved or deleted some of the contents.
+      onLocalDeleteFailed: () {
+        if (mounted) _reload();
+      },
     );
     if (!deleted || !mounted) return;
     await _reload();

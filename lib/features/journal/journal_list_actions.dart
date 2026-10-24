@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/fallback_container.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -103,13 +104,19 @@ Future<Journal?> createJournalList(BuildContext context, WidgetRef ref) async {
   return created;
 }
 
-void _invalidateJournalDeleteProviders(WidgetRef ref, String journalId) {
-  ref.invalidate(journalEntriesProvider);
-  ref.invalidate(allJournalEntriesProvider);
-  ref.invalidate(journalListEntriesProvider);
-  ref.invalidate(journalListEntriesProvider(journalId));
-  ref.invalidate(journalEntryCountsProvider);
-  ref.invalidate(journalsProvider);
+/// Through the container rather than a `WidgetRef`: the manage dialog can be
+/// dismissed while the delete runs, and its ref then throws.
+void _invalidateJournalDeleteProviders(
+  ProviderContainer container,
+  String journalId,
+) {
+  container
+    ..invalidate(journalEntriesProvider)
+    ..invalidate(allJournalEntriesProvider)
+    ..invalidate(journalListEntriesProvider)
+    ..invalidate(journalListEntriesProvider(journalId))
+    ..invalidate(journalEntryCountsProvider)
+    ..invalidate(journalsProvider);
 }
 
 /// Pushes the rows the local delete just wrote, re-read from SQLite rather
@@ -131,13 +138,23 @@ Future<void> _syncJournalDeleteRemote({
   required List<String> affectedEntryIds,
 }) async {
   if (choice != DeleteContainerChoice.cancel && entryCount > 0) {
-    for (final id in affectedEntryIds) {
-      final stored = await repository.getEntry(id);
-      if (stored != null) remoteSync.pushJournalEntryNow(stored);
-    }
+    await _pushStoredJournalEntries(remoteSync, repository, affectedEntryIds);
   }
 
   await remoteSync.pushJournalById(journal.id);
+}
+
+/// The entry half of [_syncJournalDeleteRemote], on its own for a delete that
+/// failed after the entries were already written.
+Future<void> _pushStoredJournalEntries(
+  RemoteSyncService remoteSync,
+  JournalRepository repository,
+  List<String> entryIds,
+) async {
+  for (final id in entryIds) {
+    final stored = await repository.getEntry(id);
+    if (stored != null) remoteSync.pushJournalEntryNow(stored);
+  }
 }
 
 /// Where a deleted journal's entries go with "Move": the journal set as the
@@ -170,6 +187,10 @@ Future<bool> deleteJournalList(
   VoidCallback? onConfirmed,
   VoidCallback? onLocalDeleteFailed,
 }) async {
+  // Resolved before the first await, so the toast and the provider refreshes
+  // below are not reaching through a BuildContext across an async gap.
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final container = ProviderScope.containerOf(context, listen: false);
   // Read from the database, as the trash's restore does, so the two pick the
   // same journal even while the settings provider is still loading.
   final settings = await ref.read(settingsRepositoryProvider).getSettings();
@@ -201,6 +222,20 @@ Future<bool> deleteJournalList(
   final repo = ref.read(journalRepositoryProvider);
   final remoteSync = ref.read(remoteSyncServiceProvider);
   var affectedEntryIds = const <String>[];
+  // Set once the entries are moved or deleted: a failure after that point
+  // leaves them that way, and the toast has to say so.
+  String? partialFailure;
+
+  void reportSyncError(Object error, StackTrace stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'journal_list_actions',
+        context: ErrorDescription('while syncing journal delete remotely'),
+      ),
+    );
+  }
 
   try {
     if (entryCount > 0) {
@@ -213,9 +248,14 @@ Future<bool> deleteJournalList(
     final deletedAt = utcNow();
     if (choice == DeleteContainerChoice.deleteAll && entryCount > 0) {
       await repo.softDeleteEntriesInJournal(journal.id, at: deletedAt);
+      partialFailure =
+          "Deleted the entries, but couldn't remove the journal. Try again.";
     } else if (choice == DeleteContainerChoice.moveToDefault &&
         entryCount > 0) {
       await repo.reassignEntriesJournal(journal.id, fallback.id);
+      partialFailure =
+          'Moved the entries to "${fallback.name}", but couldn\'t remove the '
+          'journal. Try again.';
     }
 
     await repo.softDeleteJournal(journal.id, at: deletedAt);
@@ -224,6 +264,23 @@ Future<bool> deleteJournalList(
     // the journal from the trash then brings the setting back with it, as
     // deleteTodoList does for lists (BUG-072).
   } catch (error, stackTrace) {
+    // Some entries may already have moved or been deleted; show them as they
+    // now are.
+    _invalidateJournalDeleteProviders(container, journal.id);
+    // The entries that did change still have to reach the remote.
+    if (partialFailure != null) {
+      unawaited(
+        _pushStoredJournalEntries(
+          remoteSync,
+          repo,
+          affectedEntryIds,
+        ).catchError(reportSyncError),
+      );
+    }
+    showDeleteFailedToast(
+      overlay,
+      message: partialFailure ?? 'Could not delete.',
+    );
     onLocalDeleteFailed?.call();
     FlutterError.reportError(
       FlutterErrorDetails(
@@ -236,7 +293,7 @@ Future<bool> deleteJournalList(
     return false;
   }
 
-  _invalidateJournalDeleteProviders(ref, journal.id);
+  _invalidateJournalDeleteProviders(container, journal.id);
 
   unawaited(
     _syncJournalDeleteRemote(
@@ -246,16 +303,7 @@ Future<bool> deleteJournalList(
       choice: choice,
       entryCount: entryCount,
       affectedEntryIds: affectedEntryIds,
-    ).catchError((Object error, StackTrace stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'journal_list_actions',
-          context: ErrorDescription('while syncing journal delete remotely'),
-        ),
-      );
-    }),
+    ).catchError(reportSyncError),
   );
 
   return true;
