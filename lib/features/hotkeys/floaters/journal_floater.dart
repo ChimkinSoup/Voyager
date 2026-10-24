@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/media/widgets/media_drop_target.dart';
 import 'package:voyager/core/media/widgets/media_fan_stack.dart';
@@ -52,10 +51,8 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   late final JournalWriteCoordinator _coordinator;
   late final JournalRepository _repository;
   late final Future<void> Function() _flushCallback;
-  late final Future<void> Function() _closeFlushCallback;
 
   late final void Function() _invalidateJournalCaches;
-  late final AppSounds _sounds;
   late final ProviderContainer _container;
 
   JournalEntry? _entry;
@@ -76,10 +73,6 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   Timer? _saveTimer;
   var _deleted = false;
 
-  /// Typed in since the floater last closed, which plays the saved sound for
-  /// it.
-  var _edited = false;
-
   @override
   void initState() {
     super.initState();
@@ -88,11 +81,9 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
     _coordinator = ref.read(journalWriteCoordinatorProvider);
     _repository = ref.read(journalRepositoryProvider);
     _invalidateJournalCaches = ref.read(journalEntryCacheInvalidatorProvider);
-    _sounds = ref.read(appSoundsProvider);
     _container = ProviderScope.containerOf(context, listen: false);
     _flushCallback = _flush;
-    _closeFlushCallback = _flushOnClose;
-    _floaters.registerFlush(_closeFlushCallback);
+    _floaters.registerFlush(_flushCallback);
     PendingFlushRegistry.instance.register(_flushCallback);
     unawaited(_bind());
   }
@@ -191,7 +182,6 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   }
 
   void _handleChanged(String text) {
-    _edited = true;
     final entry = _entry;
     if (entry == null) {
       _lastText = text;
@@ -262,16 +252,6 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
     _invalidateJournalCaches();
   }
 
-  /// [_flush] as the floater closes, with the saved sound for what was typed.
-  /// Only here: the app-wide flushes also run on focus loss and page switches,
-  /// with the notepad still open.
-  Future<void> _flushOnClose() async {
-    await _flush();
-    if (!_edited || _entry == null || _deleted) return;
-    _edited = false;
-    _sounds.play(AppSound.saved);
-  }
-
   Future<void> _delete() async {
     final entry = _entry;
     if (entry == null || _deleted) return;
@@ -304,7 +284,7 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
 
   @override
   void dispose() {
-    _floaters.unregisterFlush(_closeFlushCallback);
+    _floaters.unregisterFlush(_flushCallback);
     PendingFlushRegistry.instance.unregister(_flushCallback);
     if (_entry != null || _creating != null) {
       unawaited(() async {
