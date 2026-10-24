@@ -1,0 +1,6 @@
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+var n = 0;
+for (final l in (await tr.listLists()).where((x) => x.id.startsWith('opl-l') && x.id.compareTo('opl-l2') >= 0 && x.id.compareTo('opl-l9') <= 0)) { final deletedAt = DateTime.now().toUtc(); final deleted = await tr.softDeleteTasksInList(l.id, at: deletedAt); await r.pushTodoTasksBatch(deleted); n += deleted.length; await tr.softDeleteList(l.id, at: deletedAt); r.pushTodoList((await tr.listLists(includeDeleted: true)).firstWhere((x) => x.id == l.id)); }
+debugPrint('OPL deleted ' + n.toString() + ' tasks');
+invalidateAllDataProvidersIn(c);

@@ -1,0 +1,9 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+var tasks = <TodoTask>[];
+for (var li = 0; li < 10; li++) { final l = TodoListModel(id: 'opl-l$li', createdAt: now, updatedAt: now, version: 1, name: 'OPL list $li'); await tr.upsertList(l); r.pushTodoList(l); for (var ti = 0; ti < 30; ti++) { tasks.add(TodoTask(id: 'opl-l$li-t$ti', createdAt: now, updatedAt: now, version: 1, listId: l.id, title: 'OPL $li.$ti v0', notes: '', sortOrder: ti)); } }
+await tr.upsertTasksBatch(tasks); await r.pushTodoTasksBatch(tasks);
+for (var round = 1; round <= 5; round++) { tasks = [for (final t in tasks) t.copyWith(title: 'OPL ' + t.id.substring(4) + ' v' + round.toString())]; await tr.upsertTasksBatch(tasks); await r.pushTodoTasksBatch(tasks); }
+debugPrint('OPL seeded ' + tasks.length.toString() + ' tasks');
+invalidateAllDataProvidersIn(c);

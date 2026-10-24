@@ -26,6 +26,7 @@ import 'package:voyager/domain/services/character_operation.dart';
 /// [afterReadingAll] once that read has answered.
 class _RecordingSyncRepository extends InMemorySyncRepository {
   final logsRead = <String>[];
+  final batchesRead = <List<String>>[];
   var allLogReads = 0;
   bool failReadingAll = false;
   Future<void> Function()? afterReadingAll;
@@ -35,6 +36,14 @@ class _RecordingSyncRepository extends InMemorySyncRepository {
   Future<List<SyncOperation>> listOperations(String documentId) {
     logsRead.add(documentId);
     return super.listOperations(documentId);
+  }
+
+  @override
+  Future<Map<String, List<SyncOperation>>> listOperationsForDocuments(
+    List<String> documentIds,
+  ) {
+    batchesRead.add(documentIds);
+    return super.listOperationsForDocuments(documentIds);
   }
 
   @override
@@ -327,6 +336,100 @@ void main() {
       expect(titles[_lastTask], 'Week ${_tasks - 1}');
     },
   );
+
+  /// Task [i]'s document moved, so an incremental pull lists it, and its log
+  /// carries [title].
+  Future<void> editTask(int i, String title) async {
+    final task = TodoTask(
+      id: 'task-$i',
+      listId: 'list-1',
+      title: 'Stale $i',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await server.upsertDocument(
+      FirestoreCollections.todoTasks,
+      task.id,
+      todoTaskToFirestore(task),
+    );
+    await appendTitle(task, title, sequence: 2);
+  }
+
+  test('an incremental pull with as many logs to resolve shares one read '
+      'too', () async {
+    final device = newDevice();
+    await device.sync.pullAll();
+    for (var i = 0; i < _tasks; i++) {
+      await editTask(i, 'Edited $i');
+    }
+    server.logsRead.clear();
+
+    await device.sync.pullAll();
+
+    expect(server.allLogReads, 2);
+    expect(server.logsRead.length, lessThanOrEqualTo(1));
+    final titles = await device.taskTitles();
+    expect(titles['task-0'], 'Edited 0');
+    expect(titles[_lastTask], 'Edited ${_tasks - 1}');
+  });
+
+  test('fewer logs are asked for 30 to a query', () async {
+    final device = newDevice();
+    await device.sync.pullAll();
+    for (var i = 0; i < 40; i++) {
+      await editTask(i, 'Edited $i');
+    }
+    server.batchesRead.clear();
+
+    await device.sync.pullAll();
+
+    expect(server.allLogReads, 1, reason: 'too few for a read of every log');
+    expect([for (final batch in server.batchesRead) batch.length], [30, 10]);
+    final titles = await device.taskTitles();
+    expect(titles['task-0'], 'Edited 0');
+    expect(titles['task-39'], 'Edited 39');
+  });
+
+  test('an incremental pull skips the log of a deletion this device already '
+      'holds, and still resolves one it does not', () async {
+    final device = newDevice();
+    await device.sync.pullAll();
+    final deletedAt = now.add(const Duration(hours: 1));
+    for (final id in ['task-0', 'task-1']) {
+      final held = (await device.todos.getTask(id))!;
+      final tombstone = held.copyWith(
+        deletedAt: deletedAt,
+        updatedAt: deletedAt,
+      );
+      await server.upsertDocument(
+        FirestoreCollections.todoTasks,
+        id,
+        todoTaskToFirestore(tombstone),
+      );
+      await server.appendOperation(
+        SyncOperation(
+          id: 'device-a_${id}_2',
+          documentId: id,
+          sequence: 2,
+          payload: jsonEncode(todoTaskToFirestore(tombstone)),
+          deviceId: 'device-a',
+          timestamp: deletedAt,
+        ),
+      );
+      // This device deleted task-0 itself; task-1 went elsewhere.
+      if (id == 'task-0') {
+        await device.todos.upsertTask(tombstone, recordLocalActivity: false);
+      }
+    }
+    server.logsRead.clear();
+
+    await device.sync.pullAll();
+
+    expect(server.logsRead, isNot(contains('task-0')));
+    expect(server.logsRead, contains('task-1'));
+    expect((await device.todos.getTask('task-0'))?.deletedAt, deletedAt);
+    expect((await device.todos.getTask('task-1'))?.deletedAt, deletedAt);
+  });
 
   test('a first pull of fewer documents asks for each log on its own, '
       'without reading every log in the account', () async {

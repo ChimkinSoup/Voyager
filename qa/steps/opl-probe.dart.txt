@@ -1,0 +1,11 @@
+final repo = c.read(syncRepositoryProvider);
+final ids = [for (var i = 0; i < 29; i++) 'opl-l' + (i % 10).toString() + '-t' + (i ~/ 10).toString(), 'opl-missing'];
+final sw = Stopwatch()..start();
+final batched = await repo.listOperationsForDocuments(ids);
+final batchMs = sw.elapsedMilliseconds;
+sw.reset();
+final single = {for (final id in ids) id: await repo.listOperations(id)};
+final singleMs = sw.elapsedMilliseconds;
+var same = 0; var differ = <String>[]; var ops = 0;
+for (final id in ids) { final a = [for (final o in batched[id] ?? single[id]!.sublist(0, 0)) o.id + '/' + o.sequence.toString() + '/' + o.payload.length.toString()]; final b = [for (final o in single[id]!) o.id + '/' + o.sequence.toString() + '/' + o.payload.length.toString()]; ops += b.length; if (a.join(',') == b.join(',')) { same++; } else { differ.add(id); } }
+debugPrint('OPL probe ids=' + ids.length.toString() + ' ops=' + ops.toString() + ' same=' + same.toString() + ' differ=' + differ.toString() + ' batchedKeys=' + batched.length.toString() + ' batchMs=' + batchMs.toString() + ' oneByOneMs=' + singleMs.toString());

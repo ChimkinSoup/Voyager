@@ -1869,16 +1869,32 @@ class RemoteSyncService {
   /// How many operation logs a pull has in flight at once.
   static const _operationLogConcurrency = 16;
 
+  /// How many operation logs one query asks for: Firestore's cap on an `in`
+  /// filter. 312 tasks deleted at once, one query each, took a startup pull
+  /// 648 s on Windows' single worker.
+  static const _operationLogBatchSize = 30;
+
+  /// How many of those queries a pull has in flight at once. Each can carry
+  /// 30 long-lived logs of operations up to ~1 MB apiece, and Windows runs
+  /// them on one worker anyway, so a few keep the memory near the 16 MB pages
+  /// of [SyncRepository.listAllOperations] at little cost in time (not yet
+  /// measured).
+  static const _operationLogBatchConcurrency = 4;
+
   /// Zone key under which [pullAll] shares one read of every operation log
   /// among the collections it pulls whole — see [_operationLogsFor].
   static const _allOperationsKey = #remoteSyncAllOperations;
 
-  /// How many logs a collection's full pull must resolve before it starts
+  /// How many logs a collection's pull must resolve before it starts
   /// the read of every operation log, which costs the whole account's logs
-  /// however few it needs. Measured on a 15,786-operation account (profile
-  /// build, BUG-002): the read took ~24 s, and fetching one log per document
-  /// ~0.1 s each, so it pays for itself from about 240 documents.
-  static const allOperationsMinDocuments = 200;
+  /// however few it needs. Against one query per document (~0.1 s each,
+  /// BUG-002) it paid for itself from about 240 documents; against batches of
+  /// [_operationLogBatchSize] it rarely does. On a 1,053-log account
+  /// (18,611 operations, 122 MB; debug build, 2026-10-24) the read took
+  /// 116 s, while 312 of its longest-lived logs (9,548 operations) took
+  /// 14-45 s in batches. So only a pull needing nearly every log reads them
+  /// all.
+  static const allOperationsMinDocuments = 1000;
 
   /// Whether any collection has been pulled on this device before — false
   /// only when the next pull is a restore onto an empty device.
@@ -2014,10 +2030,13 @@ class RemoteSyncService {
   /// a weekly one can skip), and one query per document was most of a
   /// restore: ~800 logs, 16 at a time, on Firestore's one worker on Windows
   /// (BUG-002). A weekly full pull of an account edited that week skips
-  /// nothing and paid the same: 603 logs took 88 s against 17 s for the read.
-  /// So inside [pullAll], once a full pull has [allOperationsMinDocuments]
-  /// logs to resolve, it takes them from one paged read of every log, which
-  /// any other collection pulled whole then shares, however few it needs.
+  /// nothing and paid the same: 603 logs took 88 s against 17 s for the read,
+  /// and an incremental pull after a bulk delete too: 312 long-lived tasks'
+  /// logs took 648 s. So inside [pullAll], once a pull has
+  /// [allOperationsMinDocuments] logs to resolve, it takes them from one
+  /// paged read of every log, which any other collection pulled whole then
+  /// shares, however few it needs. A smaller incremental pull doesn't: a
+  /// batch or two of its own beats waiting minutes on that read.
   /// Each takes its logs out of that read, so what was applied isn't held
   /// until the pull ends.
   /// That read can miss what reached a log
@@ -2031,10 +2050,9 @@ class RemoteSyncService {
     required bool full,
   }) async {
     final shared = Zone.current[_allOperationsKey] as _AllOperations?;
-    if (!full ||
-        shared == null ||
+    if (shared == null ||
         documentIds.isEmpty ||
-        (shared.query == null &&
+        ((shared.query == null || !full) &&
             documentIds.length < allOperationsMinDocuments)) {
       return _fetchOperationLogs(documentIds);
     }
@@ -2087,8 +2105,8 @@ class RemoteSyncService {
     );
   }
 
-  /// Each of [documentIds]' operation logs, fetched at most
-  /// [_operationLogConcurrency] at a time.
+  /// Each of [documentIds]' operation logs, fetched [_operationLogBatchSize]
+  /// to a query, at most [_operationLogBatchConcurrency] queries at a time.
   Map<String, Future<List<SyncOperation>>> _fetchOperationLogs(
     List<String> documentIds,
   ) {
@@ -2099,16 +2117,27 @@ class RemoteSyncService {
     var next = 0;
     Future<void> worker() async {
       while (next < queue.length) {
-        final id = queue[next++];
+        final batch = queue.sublist(
+          next,
+          next + _operationLogBatchSize > queue.length
+              ? queue.length
+              : next + _operationLogBatchSize,
+        );
+        next += batch.length;
         try {
-          completers[id]!.complete(await _syncRepository.listOperations(id));
+          final logs = await _syncRepository.listOperationsForDocuments(batch);
+          for (final id in batch) {
+            completers[id]!.complete(logs[id] ?? const []);
+          }
         } catch (error, stackTrace) {
-          completers[id]!.completeError(error, stackTrace);
+          for (final id in batch) {
+            completers[id]!.completeError(error, stackTrace);
+          }
         }
       }
     }
 
-    for (var i = 0; i < _operationLogConcurrency; i++) {
+    for (var i = 0; i < _operationLogBatchConcurrency; i++) {
       unawaited(worker());
     }
     return {
@@ -4053,21 +4082,31 @@ class RemoteSyncService {
         );
     // Snapshot-only collections never wrote an operation log, so resolving
     // one would spend an indexed query per document to learn nothing. The
-    // rest are all requested up front, [_operationLogConcurrency] at a time —
-    // or, on a full pull, read in one go (see [_operationLogsFor]): one
-    // round trip per document, back to back, was nearly all of a full pull
-    // (456 todo tasks took 81 s). The apply loop below still runs in order;
-    // only the waiting overlaps.
-    final unchanged =
-        resolveCrdt && full && previousFullPullAt != null && localRow != null
-        ? await _unchangedSinceLastFullPull(
+    // rest are all requested up front, in batches — or, past a few hundred,
+    // read in one go (see [_operationLogsFor]): one round trip per document,
+    // back to back, was nearly all of a full pull (456 todo tasks took 81 s).
+    // The apply loop below still runs in order; only the waiting overlaps.
+    final unchanged = !resolveCrdt || localRow == null
+        ? const <String>{}
+        : full
+        ? previousFullPullAt == null
+              ? const <String>{}
+              : await _unchangedSinceLastFullPull(
+                  collection,
+                  docs,
+                  since: previousFullPullAt,
+                  operationLogId: operationLogId,
+                  localRow: localRow,
+                )
+        // A deletion this device already holds at the listed revision, most
+        // often its own coming back: applying it changes nothing, and a
+        // deleted row owes no text (see the journal entry pull).
+        : await _heldAtListedRevision(
             collection,
             docs,
-            since: previousFullPullAt,
-            operationLogId: operationLogId,
             localRow: localRow,
-          )
-        : const <String>{};
+            deletedOnly: true,
+          );
     final toApply = [
       for (final doc in docs)
         if (!unchanged.contains(doc.id)) doc,
@@ -4233,9 +4272,23 @@ class RemoteSyncService {
       );
       return const {};
     }
+    return _heldAtListedRevision(collection, [
+      for (final doc in docs)
+        if (!moved.contains(operationLogId(doc))) doc,
+    ], localRow: localRow);
+  }
+
+  /// Those of [docs] this device holds at the listed revision and deletion,
+  /// and no editor has open — only deleted ones when [deletedOnly].
+  Future<Set<String>> _heldAtListedRevision(
+    String collection,
+    List<({String id, Map<String, dynamic> data})> docs, {
+    required Future<SoftDeletable?> Function(String localId) localRow,
+    bool deletedOnly = false,
+  }) async {
     final candidates = [
       for (final doc in docs)
-        if (!moved.contains(operationLogId(doc)))
+        if (!deletedOnly || parseFirestoreDate(doc.data['deletedAt']) != null)
           (
             doc: doc,
             localId: _localDocumentId(

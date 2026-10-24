@@ -283,6 +283,11 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
+  Future<Map<String, List<SyncOperation>>> listOperationsForDocuments(
+    List<String> documentIds,
+  ) async => {for (final id in documentIds) id: await listOperations(id)};
+
+  @override
   Future<Set<String>> listOperationDocumentIdsSince(DateTime since) async => {
     for (final entry in _operationWriteTimes.entries)
       if (!entry.value.isBefore(since)) entry.key,

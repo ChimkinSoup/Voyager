@@ -13,6 +13,7 @@ $date = Get-Date -Format "yyyy-MM-dd"
 
 Write-Host "Building $version · $sha · $date"
 flutter build windows --release `
+    --dart-define-from-file=dart_defines.json `
     --dart-define=BUILD_VERSION=$version `
     --dart-define=BUILD_SHA=$sha `
     --dart-define=BUILD_DATE=$date

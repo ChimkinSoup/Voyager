@@ -1541,6 +1541,13 @@ abstract class SyncRepository {
   Future<void> appendOperationGroup(List<SyncOperation> operations);
   Future<List<SyncOperation>> listOperations(String documentId);
 
+  /// [listOperations] for each of [documentIds] — at most 30, Firestore's cap
+  /// on an `in` filter — in one query, keyed by document id. A document with
+  /// no operations may be missing from the map.
+  Future<Map<String, List<SyncOperation>>> listOperationsForDocuments(
+    List<String> documentIds,
+  );
+
   /// The documents with an operation the server took in at or after [since]
   /// (its write time, not the operation's own `timestamp`), read from the
   /// server: what a full pull must still resolve from its log even when the

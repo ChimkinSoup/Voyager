@@ -4,6 +4,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -60,6 +61,7 @@ const double _calendarScopeSlotWidth = 170;
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
 final _mmmmFormat = DateFormat.MMMM();
+final _todayFormat = DateFormat.MMMEd();
 
 /// What `.when(skipLoadingOnReload: true)` would draw from [value], as a value
 /// that holds still while a reload is in flight.
@@ -2992,7 +2994,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
     // The page stays mounted, and its cells read the clock only on build, so
     // rebuild when the day turns over to move the "today" marker.
-    ref.watch(todayProvider(0));
+    final today = ref.watch(todayProvider(0));
 
     // Editing the open calendar's overlay list, or any event write, reloads
     // these; keep drawing the old set meanwhile, and rebuild once, when the
@@ -3063,13 +3065,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               children: [
                 // Two groups rather than one Row: when a narrow window cannot
                 // hold both on one line (a half-screen snap), the right-hand
-                // group drops to a second line instead of overflowing. On one
-                // line spaceBetween pushes them apart, as a Spacer did.
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
+                // group drops to a second line instead of overflowing.
+                _CalendarToolbar(
                   children: [
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -3083,41 +3080,85 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                         _buildCalendarSelector(context, calendars),
                       ],
                     ),
-                    if (ref
-                        .watch(devSettingsProvider)
-                        .showCalendarInstantViewSwitch)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Instant Switch:',
-                            style: TextStyle(fontSize: 10, color: Colors.grey),
-                          ),
-                          const SizedBox(width: 4),
-                          GlassButton(
-                            onPressed: () =>
-                                _instantSwitchToWeekView(weekStartsMonday),
-                            label: 'W',
-                            dense: true,
-                          ),
-                          const SizedBox(width: 4),
-                          GlassButton(
-                            onPressed: () =>
-                                _instantSwitchToMonthView(weekStartsMonday),
-                            label: 'M',
-                            dense: true,
-                          ),
-                          const SizedBox(width: 4),
-                          GlassButton(
-                            onPressed: _instantSwitchToYearView,
-                            label: 'Y',
-                            dense: true,
-                          ),
-                        ],
+                    // Stays put whichever period is on screen, so paging
+                    // ahead still shows where "now" is.
+                    // A faint accent wash at the toolbar controls' height and
+                    // corner radius, so it reads as one of them.
+                    Container(
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.12),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.35),
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          VoyagerTheme.fieldRadius,
+                        ),
                       ),
+                      // Hugs the text; an aligned Container would take the
+                      // whole toolbar width.
+                      child: Center(
+                        widthFactor: 1,
+                        child: Text(
+                          _todayFormat.format(today),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                // Darkened in light like Add event's label
+                                // (BUG-214).
+                                color: themedLabelInk(
+                                  Theme.of(context),
+                                  Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                        ),
+                      ),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (ref
+                            .watch(devSettingsProvider)
+                            .showCalendarInstantViewSwitch) ...[
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Instant Switch:',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              GlassButton(
+                                onPressed: () =>
+                                    _instantSwitchToWeekView(weekStartsMonday),
+                                label: 'W',
+                                dense: true,
+                              ),
+                              const SizedBox(width: 4),
+                              GlassButton(
+                                onPressed: () =>
+                                    _instantSwitchToMonthView(weekStartsMonday),
+                                label: 'M',
+                                dense: true,
+                              ),
+                              const SizedBox(width: 4),
+                              GlassButton(
+                                onPressed: _instantSwitchToYearView,
+                                label: 'Y',
+                                dense: true,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         if (_isWeekMorphing)
                           _buildMorphFocusHeader(context, weekStartsMonday)
                         else if (_mode != CalendarViewMode.month &&
@@ -5064,4 +5105,87 @@ class _EventPanelWarmupState extends ConsumerState<_EventPanelWarmup> {
       ),
     );
   }
+}
+
+/// The toolbar: the left-hand group, today's date centred on the page, and the
+/// right-hand group, in that order.
+///
+/// Centred on the page rather than in the gap between the groups, which are
+/// far from the same width — a [Wrap] would leave the date well off centre.
+/// Where the centre would overlap a group, the date slides along the gap
+/// instead. When a narrow window has no gap wide enough, the right-hand
+/// group drops to a second line, the date centred beside it, or below it when
+/// even that does not fit.
+class _CalendarToolbar extends MultiChildRenderObjectWidget {
+  const _CalendarToolbar({required super.children})
+    : assert(children.length == 3);
+
+  @override
+  _RenderCalendarToolbar createRenderObject(BuildContext context) =>
+      _RenderCalendarToolbar();
+}
+
+class _CalendarToolbarParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderCalendarToolbar extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _CalendarToolbarParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _CalendarToolbarParentData> {
+  static const _gap = 16.0;
+  static const _runSpacing = 8.0;
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _CalendarToolbarParentData) {
+      child.parentData = _CalendarToolbarParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final width = constraints.maxWidth;
+    final [left, date, right] = getChildrenAsList();
+    for (final child in [left, date, right]) {
+      child.layout(BoxConstraints(maxWidth: width), parentUsesSize: true);
+    }
+    final dateX = (width - date.size.width) / 2;
+
+    // Each line's children centred on its tallest.
+    var y = 0.0;
+    void line(List<(RenderBox, double)> placed) {
+      final height = placed.map((p) => p.$1.size.height).reduce(max);
+      for (final (child, x) in placed) {
+        (child.parentData! as _CalendarToolbarParentData).offset = Offset(
+          x,
+          y + (height - child.size.height) / 2,
+        );
+      }
+      y += height + _runSpacing;
+    }
+
+    final rightX = width - right.size.width;
+    // Nudged off centre into the gap before the toolbar gives up a line.
+    final gapStart = left.size.width + _gap;
+    final gapEnd = rightX - _gap - date.size.width;
+    if (gapStart <= gapEnd) {
+      line([(left, 0), (date, dateX.clamp(gapStart, gapEnd)), (right, rightX)]);
+    } else {
+      line([(left, 0)]);
+      if (right.size.width + _gap <= dateX) {
+        line([(right, 0), (date, dateX)]);
+      } else {
+        line([(right, 0)]);
+        line([(date, dateX)]);
+      }
+    }
+    size = constraints.constrain(Size(width, y - _runSpacing));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
 }

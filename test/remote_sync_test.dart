@@ -203,7 +203,7 @@ void main() {
     expect(tasks.single.title, 'CRDT title');
   });
 
-  test('pull reads each operation log once, several at a time', () async {
+  test('pull reads each operation log once, many to a query', () async {
     final now = utcNow();
     await todoRepo.upsertList(
       TodoListModel(
@@ -247,10 +247,10 @@ void main() {
     expect(tasks.map((t) => t.title), containsAll(['CRDT 0', 'CRDT 19']));
     expect(tasks, hasLength(20));
     // Once per task, where resolving and conflict detection used to ask
-    // separately — and not one after another.
+    // separately — and not one query each.
     expect(syncRepo.operationReads, hasLength(20));
     expect(syncRepo.operationReads.toSet(), hasLength(20));
-    expect(syncRepo.maxOperationReadsInFlight, greaterThan(1));
+    expect(syncRepo.operationBatches, 1);
   });
 
   test('push then pull propagates journal entry updates and deletes', () async {
@@ -617,24 +617,23 @@ void main() {
   );
 }
 
-/// Records every operation-log read, and how many were waiting at once.
+/// Records every operation-log read, and how many batched queries asked for
+/// them.
 class _CountingSyncRepository extends InMemorySyncRepository {
   final operationReads = <String>[];
-  var _inFlight = 0;
-  var maxOperationReadsInFlight = 0;
+  var operationBatches = 0;
 
   @override
-  Future<List<SyncOperation>> listOperations(String documentId) async {
+  Future<List<SyncOperation>> listOperations(String documentId) {
     operationReads.add(documentId);
-    _inFlight++;
-    if (_inFlight > maxOperationReadsInFlight) {
-      maxOperationReadsInFlight = _inFlight;
-    }
-    try {
-      await Future<void>.delayed(Duration.zero);
-      return await super.listOperations(documentId);
-    } finally {
-      _inFlight--;
-    }
+    return super.listOperations(documentId);
+  }
+
+  @override
+  Future<Map<String, List<SyncOperation>>> listOperationsForDocuments(
+    List<String> documentIds,
+  ) {
+    operationBatches++;
+    return super.listOperationsForDocuments(documentIds);
   }
 }

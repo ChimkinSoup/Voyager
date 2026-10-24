@@ -612,6 +612,24 @@ class FirestoreSyncRepository implements SyncRepository {
     );
   }
 
+  @override
+  Future<Map<String, List<SyncOperation>>> listOperationsForDocuments(
+    List<String> documentIds,
+  ) async {
+    final query = await _collection(
+      'sync_operations',
+    ).where('documentId', whereIn: documentIds).get();
+    final logs = <String, List<SyncOperation>>{};
+    // In document-name order, as a per-document query returns them, so each
+    // log reaches [_sortOperations] exactly as [listOperations]' does.
+    for (final doc in query.docs) {
+      final operation = _parseOperation(doc.data());
+      logs.putIfAbsent(operation.documentId, () => []).add(operation);
+    }
+    logs.updateAll((_, operations) => _sortOperations(operations));
+    return logs;
+  }
+
   static SyncOperation _parseOperation(Map<String, dynamic> data) =>
       SyncOperation(
         id: data['id'] as String,
@@ -840,6 +858,11 @@ class NoOpSyncRepository implements SyncRepository {
   @override
   Future<List<SyncOperation>> listOperations(String documentId) async =>
       const [];
+
+  @override
+  Future<Map<String, List<SyncOperation>>> listOperationsForDocuments(
+    List<String> documentIds,
+  ) async => {};
 
   @override
   Future<Set<String>> listOperationDocumentIdsSince(DateTime since) async => {};
