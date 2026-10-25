@@ -1174,10 +1174,21 @@ can't be built to §5.1's standard. It comes back once a login works: record
 fixtures, then add it beside the Codex adapter. Until then Gemini reaches
 Gaia only through the Gemini API adapter.
 
+Phase 2 as built: a native session that missed turns gets them as a
+Gaia-rendered transcript before the user's message, newest 60k characters
+verbatim and older ones summarised by the utility model (or noted as left
+out). That covers a vendor switch, a switch back (only what it missed) and
+a device with no session yet. A message that ends in `/deep` waits for the
+§7.5 confirmation, and a turned-down switch keeps the message in the
+composer. The context size in that dialog comes from Claude Code's
+per-request usage. Codex reports only whole-turn totals, so after a Codex
+reply the dialog leaves the size out.
+
 Phase 1 as built: the drift tables are `gaia_chats`, `gaia_messages` and
 `gaia_settings`, plus an FTS5 table for search. A message uploads once it
 stops streaming. A chat continued on another device starts a new native
-session there without the earlier turns, until session catch-up (Phase 6).
+session there, which since Phase 2 gets the earlier turns as a handoff
+preamble (§7.4); the run lease is still Phase 6.
 A message whose parts encode to over 800 KB uploads them as JSON pieces in
 `gaia_message_chunks` (`{messageId}_{n}`), written before the message, which
 keeps only `partChunks`. An erase deletes the chunks. The update drain runs

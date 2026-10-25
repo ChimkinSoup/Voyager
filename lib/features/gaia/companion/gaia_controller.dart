@@ -7,6 +7,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -194,6 +195,18 @@ class GaiaController extends ChangeNotifier {
         runner.setInstructions(instructions),
     ]);
   }
+
+  /// The current chat's context at its last reply that said (§7.5).
+  int? get contextTokens => messages.reversed
+      .map((message) => message.contextTokens)
+      .nonNulls
+      .firstOrNull;
+
+  /// Whether switching the current chat to [tier] needs the user's yes
+  /// (§7.5): a change after the chat's first reply.
+  bool switchNeedsConfirm(GaiaTier tier) =>
+      tier != nextTier &&
+      messages.any((message) => message.role == GaiaMessageRole.assistant);
 
   /// The tier the next message in the current chat goes to (§7.2).
   GaiaTier get nextTier => pickedTier ?? currentChat?.tier ?? lastTier;
@@ -419,9 +432,28 @@ class GaiaController extends ChangeNotifier {
     unawaited(_persist(reply));
 
     final builder = GaiaTurnBuilder();
-    final sessionId = agent == null
+    final session = agent == null
         ? null
-        : chat.sessionOn(_deviceId, adapter: agent.adapter);
+        : chat.agentSessions[gaiaSessionKey(_deviceId, adapter: agent.adapter)];
+    final sessionId = session?.sessionId;
+    // What the session didn't see: the whole chat for a new session, or
+    // the turns another agent or device took since (§7.4).
+    var sent = prompt;
+    if (script == null && agent != null && runner != null) {
+      final unseen = gaiaUnseenTurns(
+        list,
+        lastSeq: session?.lastSeq ?? -1,
+        beforeSeq: seq,
+      );
+      if (unseen.isNotEmpty) {
+        final (older, recent) = gaiaSplitHandoff(unseen);
+        final summary = older.isEmpty
+            ? null
+            : await _utility.summarize(gaiaTranscriptText(older));
+        sent =
+            '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$prompt';
+      }
+    }
     void onEvent(GaiaAgentEvent event) {
       if (!builder.apply(event)) return;
       reply = _replace(reply, reply.copyWith(parts: builder.parts));
@@ -458,7 +490,7 @@ class GaiaController extends ChangeNotifier {
               chatId: chatId,
               sessionId: sessionId,
               model: agent.model,
-              prompt: prompt,
+              prompt: sent,
               onEvent: onEvent,
             );
       // Here at once, so a next message straight away resumes it; the main
@@ -499,6 +531,7 @@ class GaiaController extends ChangeNotifier {
             : reply.copyWith(
                 parts: parts,
                 status: GaiaMessageStatus.complete,
+                contextTokens: result.contextTokens,
                 needsInput: gaiaEndsWithQuestion(
                   parts.whereType<GaiaTextPart>().lastOrNull?.text ?? '',
                 ),

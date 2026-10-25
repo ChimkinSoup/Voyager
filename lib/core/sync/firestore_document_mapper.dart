@@ -4428,6 +4428,7 @@ Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'adapter': message.adapter,
   'error': message.error,
   'needsInput': message.needsInput,
+  'contextTokens': message.contextTokens,
   'createdAt': _dateToFirestoreRequired(message.createdAt),
   'updatedAt': _dateToFirestoreRequired(message.updatedAt),
   'version': message.version,
@@ -4461,6 +4462,7 @@ GaiaMessage mergeGaiaMessageFromRemote(
     adapter: data['adapter'] as String?,
     error: data['error'] as String?,
     needsInput: data['needsInput'] as bool? ?? false,
+    contextTokens: (data['contextTokens'] as num?)?.toInt(),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

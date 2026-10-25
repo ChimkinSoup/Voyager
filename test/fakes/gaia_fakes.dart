@@ -210,6 +210,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
             sessionId: event.sessionId,
             isError: event.isError,
             text: event.text,
+            contextTokens: event.contextTokens,
           ),
         );
       }

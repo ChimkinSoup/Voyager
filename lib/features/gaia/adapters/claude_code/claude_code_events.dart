@@ -54,11 +54,17 @@ class ClaudeResult extends ClaudeEvent {
     required this.sessionId,
     required this.isError,
     required this.text,
+    this.contextTokens,
   });
 
   final String sessionId;
   final bool isError;
   final String text;
+
+  /// The context at the turn's last model call: its input, cache read and
+  /// cache write tokens. Read leniently, since it's only shown: null when
+  /// `usage` isn't the shape below.
+  final int? contextTokens;
 }
 
 /// Anything the adapter doesn't read: hooks, status, rate limits, subagent
@@ -129,10 +135,26 @@ ClaudeEvent parseClaudeLine(String line) {
         isError: field<bool>(decoded, 'is_error'),
         // Absent on some error subtypes; the error is then in `subtype`.
         text: decoded['result'] as String? ?? field<String>(decoded, 'subtype'),
+        contextTokens: claudeContextTokens(decoded['usage']),
       );
     default:
       return const ClaudeIgnored();
   }
+}
+
+/// `usage.iterations`' last entry (one per model call in the turn; observed
+/// on 2.1.310), or `usage` itself when there are none.
+int? claudeContextTokens(Object? usage) {
+  if (usage is! Map) return null;
+  final last = switch (usage['iterations']) {
+    [..., final Map last] => last,
+    _ => usage,
+  };
+  int count(String key) => (last[key] as num?)?.toInt() ?? 0;
+  if (last['input_tokens'] is! num) return null;
+  return count('input_tokens') +
+      count('cache_read_input_tokens') +
+      count('cache_creation_input_tokens');
 }
 
 /// What Gaia reads of [event]; null for the session's own bookkeeping.

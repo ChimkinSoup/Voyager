@@ -58387,6 +58387,17 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _contextTokensMeta = const VerificationMeta(
+    'contextTokens',
+  );
+  @override
+  late final GeneratedColumn<int> contextTokens = GeneratedColumn<int>(
+    'context_tokens',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58444,6 +58455,7 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     adapter,
     error,
     needsInput,
+    contextTokens,
     createdAt,
     updatedAt,
     version,
@@ -58530,6 +58542,15 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         needsInput.isAcceptableOrUnknown(data['needs_input']!, _needsInputMeta),
       );
     }
+    if (data.containsKey('context_tokens')) {
+      context.handle(
+        _contextTokensMeta,
+        contextTokens.isAcceptableOrUnknown(
+          data['context_tokens']!,
+          _contextTokensMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58607,6 +58628,10 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         DriftSqlType.bool,
         data['${effectivePrefix}needs_input'],
       )!,
+      contextTokens: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}context_tokens'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58648,6 +58673,9 @@ class GaiaMessagesTableData extends DataClass
   final String? adapter;
   final String? error;
   final bool needsInput;
+
+  /// The session's context when a reply finished, in tokens.
+  final int? contextTokens;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58663,6 +58691,7 @@ class GaiaMessagesTableData extends DataClass
     this.adapter,
     this.error,
     required this.needsInput,
+    this.contextTokens,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58687,6 +58716,9 @@ class GaiaMessagesTableData extends DataClass
       map['error'] = Variable<String>(error);
     }
     map['needs_input'] = Variable<bool>(needsInput);
+    if (!nullToAbsent || contextTokens != null) {
+      map['context_tokens'] = Variable<int>(contextTokens);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58714,6 +58746,9 @@ class GaiaMessagesTableData extends DataClass
           ? const Value.absent()
           : Value(error),
       needsInput: Value(needsInput),
+      contextTokens: contextTokens == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contextTokens),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58739,6 +58774,7 @@ class GaiaMessagesTableData extends DataClass
       adapter: serializer.fromJson<String?>(json['adapter']),
       error: serializer.fromJson<String?>(json['error']),
       needsInput: serializer.fromJson<bool>(json['needsInput']),
+      contextTokens: serializer.fromJson<int?>(json['contextTokens']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58759,6 +58795,7 @@ class GaiaMessagesTableData extends DataClass
       'adapter': serializer.toJson<String?>(adapter),
       'error': serializer.toJson<String?>(error),
       'needsInput': serializer.toJson<bool>(needsInput),
+      'contextTokens': serializer.toJson<int?>(contextTokens),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58777,6 +58814,7 @@ class GaiaMessagesTableData extends DataClass
     Value<String?> adapter = const Value.absent(),
     Value<String?> error = const Value.absent(),
     bool? needsInput,
+    Value<int?> contextTokens = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58792,6 +58830,9 @@ class GaiaMessagesTableData extends DataClass
     adapter: adapter.present ? adapter.value : this.adapter,
     error: error.present ? error.value : this.error,
     needsInput: needsInput ?? this.needsInput,
+    contextTokens: contextTokens.present
+        ? contextTokens.value
+        : this.contextTokens,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58811,6 +58852,9 @@ class GaiaMessagesTableData extends DataClass
       needsInput: data.needsInput.present
           ? data.needsInput.value
           : this.needsInput,
+      contextTokens: data.contextTokens.present
+          ? data.contextTokens.value
+          : this.contextTokens,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58831,6 +58875,7 @@ class GaiaMessagesTableData extends DataClass
           ..write('adapter: $adapter, ')
           ..write('error: $error, ')
           ..write('needsInput: $needsInput, ')
+          ..write('contextTokens: $contextTokens, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58851,6 +58896,7 @@ class GaiaMessagesTableData extends DataClass
     adapter,
     error,
     needsInput,
+    contextTokens,
     createdAt,
     updatedAt,
     version,
@@ -58870,6 +58916,7 @@ class GaiaMessagesTableData extends DataClass
           other.adapter == this.adapter &&
           other.error == this.error &&
           other.needsInput == this.needsInput &&
+          other.contextTokens == this.contextTokens &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58888,6 +58935,7 @@ class GaiaMessagesTableCompanion
   final Value<String?> adapter;
   final Value<String?> error;
   final Value<bool> needsInput;
+  final Value<int?> contextTokens;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58904,6 +58952,7 @@ class GaiaMessagesTableCompanion
     this.adapter = const Value.absent(),
     this.error = const Value.absent(),
     this.needsInput = const Value.absent(),
+    this.contextTokens = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58921,6 +58970,7 @@ class GaiaMessagesTableCompanion
     this.adapter = const Value.absent(),
     this.error = const Value.absent(),
     this.needsInput = const Value.absent(),
+    this.contextTokens = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58945,6 +58995,7 @@ class GaiaMessagesTableCompanion
     Expression<String>? adapter,
     Expression<String>? error,
     Expression<bool>? needsInput,
+    Expression<int>? contextTokens,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58962,6 +59013,7 @@ class GaiaMessagesTableCompanion
       if (adapter != null) 'adapter': adapter,
       if (error != null) 'error': error,
       if (needsInput != null) 'needs_input': needsInput,
+      if (contextTokens != null) 'context_tokens': contextTokens,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58981,6 +59033,7 @@ class GaiaMessagesTableCompanion
     Value<String?>? adapter,
     Value<String?>? error,
     Value<bool>? needsInput,
+    Value<int?>? contextTokens,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58998,6 +59051,7 @@ class GaiaMessagesTableCompanion
       adapter: adapter ?? this.adapter,
       error: error ?? this.error,
       needsInput: needsInput ?? this.needsInput,
+      contextTokens: contextTokens ?? this.contextTokens,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59039,6 +59093,9 @@ class GaiaMessagesTableCompanion
     if (needsInput.present) {
       map['needs_input'] = Variable<bool>(needsInput.value);
     }
+    if (contextTokens.present) {
+      map['context_tokens'] = Variable<int>(contextTokens.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59070,6 +59127,7 @@ class GaiaMessagesTableCompanion
           ..write('adapter: $adapter, ')
           ..write('error: $error, ')
           ..write('needsInput: $needsInput, ')
+          ..write('contextTokens: $contextTokens, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -88027,6 +88085,7 @@ typedef $$GaiaMessagesTableTableCreateCompanionBuilder =
       Value<String?> adapter,
       Value<String?> error,
       Value<bool> needsInput,
+      Value<int?> contextTokens,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -88045,6 +88104,7 @@ typedef $$GaiaMessagesTableTableUpdateCompanionBuilder =
       Value<String?> adapter,
       Value<String?> error,
       Value<bool> needsInput,
+      Value<int?> contextTokens,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -88108,6 +88168,11 @@ class $$GaiaMessagesTableTableFilterComposer
 
   ColumnFilters<bool> get needsInput => $composableBuilder(
     column: $table.needsInput,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get contextTokens => $composableBuilder(
+    column: $table.contextTokens,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88191,6 +88256,11 @@ class $$GaiaMessagesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get contextTokens => $composableBuilder(
+    column: $table.contextTokens,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88250,6 +88320,11 @@ class $$GaiaMessagesTableTableAnnotationComposer
 
   GeneratedColumn<bool> get needsInput => $composableBuilder(
     column: $table.needsInput,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get contextTokens => $composableBuilder(
+    column: $table.contextTokens,
     builder: (column) => column,
   );
 
@@ -88316,6 +88391,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<String?> adapter = const Value.absent(),
                 Value<String?> error = const Value.absent(),
                 Value<bool> needsInput = const Value.absent(),
+                Value<int?> contextTokens = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -88332,6 +88408,7 @@ class $$GaiaMessagesTableTableTableManager
                 adapter: adapter,
                 error: error,
                 needsInput: needsInput,
+                contextTokens: contextTokens,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -88350,6 +88427,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<String?> adapter = const Value.absent(),
                 Value<String?> error = const Value.absent(),
                 Value<bool> needsInput = const Value.absent(),
+                Value<int?> contextTokens = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -88366,6 +88444,7 @@ class $$GaiaMessagesTableTableTableManager
                 adapter: adapter,
                 error: error,
                 needsInput: needsInput,
+                contextTokens: contextTokens,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

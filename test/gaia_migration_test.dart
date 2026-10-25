@@ -1,6 +1,7 @@
 // Schema 169 adds Gaia's chats, messages and settings, and the FTS5 table
 // its search reads; 170 moves each search row to its message's rowid; 171
-// adds Phase 2's tiers and agents; 172 the utility model and router. The
+// adds Phase 2's tiers and agents; 172 the utility model and router; 173
+// each reply's context size. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -232,5 +233,42 @@ void main() {
     final saved = await repo.getSettings();
     expect(saved.utilityAcknowledged, isTrue);
     expect(saved.routerRubric, 'r');
+  });
+
+  test("172→173 adds a reply's context size", () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    final seedRepo = DriftGaiaRepository(seed);
+    await seedRepo.upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Hi',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    final message = GaiaMessage(
+      id: 'm1',
+      chatId: 'c1',
+      seq: 1,
+      role: GaiaMessageRole.assistant,
+      parts: const [GaiaTextPart('hello')],
+      status: GaiaMessageStatus.complete,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await seedRepo.upsertMessage(message);
+    await seed.customStatement(
+      'ALTER TABLE gaia_messages_table DROP COLUMN context_tokens',
+    );
+    await seed.customStatement('PRAGMA user_version = 172');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect((await repo.getMessage('m1'))!.contextTokens, isNull);
+    await repo.upsertMessage(message.copyWith(contextTokens: 1234));
+    expect((await repo.getMessage('m1'))!.contextTokens, 1234);
   });
 }

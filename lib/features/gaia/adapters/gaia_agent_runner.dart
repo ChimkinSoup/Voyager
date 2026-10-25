@@ -31,12 +31,17 @@ class GaiaTurnResult {
     required this.sessionId,
     required this.isError,
     required this.text,
+    this.contextTokens,
   });
 
   /// The native session to resume next time.
   final String sessionId;
   final bool isError;
   final String text;
+
+  /// How many tokens the session's context held at the turn's last model
+  /// call; null when the backend doesn't say.
+  final int? contextTokens;
 }
 
 /// A turn that ended without a result: the process died, or its output

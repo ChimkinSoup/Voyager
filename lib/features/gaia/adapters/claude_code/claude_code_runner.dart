@@ -73,6 +73,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       sessionId: result.sessionId,
       isError: result.isError,
       text: result.text,
+      contextTokens: result.contextTokens,
     );
   }
 

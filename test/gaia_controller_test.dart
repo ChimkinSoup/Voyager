@@ -143,12 +143,13 @@ void main() {
     Future<(int, int, int)?> Function()? cliVersion,
     GaiaDebug? debug,
     GaiaUtility? utility,
+    Map<String, FakeClaudeRunner> otherRunners = const {},
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
       pipe: main.companion,
       window: window,
-      runners: {kGaiaClaudeCodeAdapter: runner},
+      runners: {kGaiaClaudeCodeAdapter: runner, ...otherRunners},
       cliVersions: {
         kGaiaClaudeCodeAdapter: cliVersion ?? () async => (2, 1, 310),
       },
@@ -401,6 +402,89 @@ void main() {
         contains('No agent is set for Standard'),
       );
     });
+  });
+
+  group('switching tiers and vendors', () {
+    late FakeClaudeRunner codex;
+
+    setUp(() async {
+      codex = FakeClaudeRunner();
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'agents': [
+          ...kGaiaDefaultAgents.map((agent) => agent.toJson()),
+          const GaiaAgent(
+            id: 'sol',
+            label: 'GPT-6.1 Sol',
+            adapter: kGaiaCodexAdapter,
+            model: 'gpt-6.1-sol',
+          ).toJson(),
+        ],
+        'tiers': {'quick': 'haiku', 'standard': 'sonnet', 'deep': 'sol'},
+      };
+      await startCompanion(otherRunners: {kGaiaCodexAdapter: codex});
+    });
+
+    test('a switch needs a yes only after the first reply', () async {
+      expect(controller.switchNeedsConfirm(GaiaTier.deep), isFalse);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(controller.switchNeedsConfirm(GaiaTier.deep), isTrue);
+      expect(controller.switchNeedsConfirm(GaiaTier.standard), isFalse);
+    });
+
+    test("a reply keeps its session's context size, for the warning", () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect((await main.messages()).last.contextTokens, 26642);
+      expect(controller.contextTokens, 26642);
+    });
+
+    test(
+      'another vendor gets the transcript; back again, only what it missed',
+      () async {
+        final turns = claudeFixtureTurns('tool_call_two_turns.jsonl');
+        runner.turns.addAll([turns[0], ...claudeFixtureTurns('resume.jsonl')]);
+        codex.turns.add(turns[1]);
+
+        await controller.send('Run echo gaia-fixture');
+        await settle();
+        expect(runner.sent.single.prompt, 'Run echo gaia-fixture');
+
+        controller.pickTier(GaiaTier.deep);
+        await controller.send('Now say done');
+        await settle();
+        final handoff = codex.sent.single;
+        expect(handoff.sessionId, isNull);
+        expect(handoff.model, 'gpt-6.1-sol');
+        expect(handoff.prompt, startsWith('<gaia_transcript>'));
+        expect(handoff.prompt, contains('joining a chat'));
+        expect(handoff.prompt, contains('User:\nRun echo gaia-fixture'));
+        expect(handoff.prompt, contains('Assistant (Sonnet 5.5):'));
+        expect(handoff.prompt, endsWith('\nNow say done'));
+
+        controller.pickTier(GaiaTier.standard);
+        await controller.send('What did it print?');
+        await settle();
+        final back = runner.sent.last;
+        expect(back.sessionId, '67acd0d4-e23e-47e7-adf3-39e11f8f2670');
+        expect(back.prompt, contains('Since your last turn'));
+        expect(back.prompt, contains('User:\nNow say done'));
+        expect(back.prompt, isNot(contains('Run echo gaia-fixture')));
+        expect(back.prompt, endsWith('\nWhat did it print?'));
+
+        // What's stored is what the user typed, and each reply's adapter.
+        final messages = await main.messages();
+        expect(messages.map((m) => m.text).toList()[2], 'Now say done');
+        expect(messages.map((m) => m.adapter).whereType<String>(), [
+          kGaiaClaudeCodeAdapter,
+          kGaiaCodexAdapter,
+          kGaiaClaudeCodeAdapter,
+        ]);
+      },
+    );
   });
 
   group('utility model', () {

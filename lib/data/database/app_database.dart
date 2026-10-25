@@ -2221,6 +2221,9 @@ class GaiaMessagesTable extends Table {
   TextColumn get adapter => text().nullable()();
   TextColumn get error => text().nullable()();
   BoolColumn get needsInput => boolean().withDefault(const Constant(false))();
+
+  /// The session's context when a reply finished, in tokens.
+  IntColumn get contextTokens => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2347,7 +2350,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 172;
+  int get schemaVersion => 173;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4274,6 +4277,14 @@ class AppDatabase extends _$AppDatabase {
             column,
           );
         }
+      }
+      if (from >= 169 && from < 173) {
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_messages_table',
+          gaiaMessagesTable,
+          gaiaMessagesTable.contextTokens,
+        );
       }
       if (from >= 169 && from < 172) {
         // Gaia Phase 2: the utility model and router (GAIA_HLD.md §5.1, §7.2).

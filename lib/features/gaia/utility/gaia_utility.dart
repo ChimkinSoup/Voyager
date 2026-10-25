@@ -9,6 +9,7 @@ import 'package:voyager/features/gaia/utility/gemini_api.dart';
 /// last used tier takes it (§7.2: it aims for about 300 ms).
 const _routeTimeout = Duration(seconds: 2);
 const _titleTimeout = Duration(seconds: 15);
+const _summaryTimeout = Duration(seconds: 30);
 
 /// Gaia's small internal jobs on the utility model (GAIA_HLD.md §5.1): the
 /// tier router and chat titles. Gemini on an API key, for sub-second
@@ -89,6 +90,30 @@ class GaiaUtility {
       return cleanTitle(answer);
     } catch (error) {
       debugPrint('[gaia] title: $error');
+      return null;
+    } finally {
+      api.close();
+    }
+  }
+
+  /// A summary of [transcript] for an agent taking the chat over (§7.4),
+  /// or null to leave the older turns out.
+  Future<String?> summarize(String transcript) async {
+    final api = await _api();
+    if (api == null) return null;
+    try {
+      final answer = await api
+          .generate(
+            system:
+                'Summarise this conversation in under 300 words for an '
+                'assistant taking it over. Keep the facts, decisions and '
+                'open questions; leave out pleasantries.',
+            prompt: _clip(transcript, 200000),
+          )
+          .timeout(_summaryTimeout);
+      return answer.trim().isEmpty ? null : answer.trim();
+    } catch (error) {
+      debugPrint('[gaia] summary: $error');
       return null;
     } finally {
       api.close();

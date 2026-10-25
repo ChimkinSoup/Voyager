@@ -12,6 +12,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
+import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
@@ -436,9 +437,69 @@ class _Messages extends StatelessWidget {
             vertical: 16,
           ),
           itemCount: messages.length,
-          itemBuilder: (context, index) =>
-              _MessageView(message: messages[messages.length - 1 - index]),
+          itemBuilder: (context, index) {
+            final i = messages.length - 1 - index;
+            final message = messages[i];
+            final switched = _switchedFrom(messages, i);
+            final view = _MessageView(message: message);
+            if (switched == null) return view;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _VendorDivider(to: message.adapter!),
+                view,
+              ],
+            );
+          },
         ),
+      ),
+    );
+  }
+}
+
+/// The adapter of the reply before [index]'s, when [index] is a reply on
+/// another one: the point a chat moved between vendors (§7.4).
+String? _switchedFrom(List<GaiaMessage> messages, int index) {
+  final adapter = messages[index].adapter;
+  if (messages[index].role != GaiaMessageRole.assistant || adapter == null) {
+    return null;
+  }
+  for (var i = index - 1; i >= 0; i--) {
+    final earlier = messages[i];
+    if (earlier.role != GaiaMessageRole.assistant || earlier.adapter == null) {
+      continue;
+    }
+    return earlier.adapter == adapter ? null : earlier.adapter;
+  }
+  return null;
+}
+
+class _VendorDivider extends StatelessWidget {
+  const _VendorDivider({required this.to});
+
+  final String to;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Switched to ${kGaiaClis[to]?.name ?? to} · a transcript '
+              'carried over',
+              style: muted,
+            ),
+          ),
+          const Expanded(child: Divider()),
+        ],
       ),
     );
   }
@@ -558,13 +619,32 @@ class _ComposerState extends State<_Composer> {
   final _vanish = GlobalKey<GaiaVanishState>();
 
   @override
+  void initState() {
+    super.initState();
+    _text.addListener(() => unawaited(_takeTierCommand()));
+  }
+
+  @override
   void dispose() {
     _text.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  void _send() {
+  /// An inline `/quick`, `/std` or `/deep` (§7.3), once completed: taken
+  /// out of the draft whether or not the switch is confirmed. False when
+  /// the user turned the switch down.
+  Future<bool> _takeTierCommand({bool atEnd = false}) async {
+    final command = findGaiaTierCommand(_text.value, atEnd: atEnd);
+    if (command == null) return true;
+    _text.value = command.value;
+    return switchGaiaTier(context, widget.controller, command.tier);
+  }
+
+  /// A command ending the message switches before it's sent; turned down,
+  /// the message stays in the composer.
+  Future<void> _send() async {
+    if (!await _takeTierCommand(atEnd: true) || !mounted) return;
     final text = _text.text;
     if (text.trim().isEmpty || widget.controller.currentRunning) return;
     _vanish.currentState!.vanish();
@@ -645,7 +725,7 @@ class _TierPicker extends StatelessWidget {
       menuChildren: [
         for (final tier in GaiaTier.values)
           MenuItemButton(
-            onPressed: () => controller.pickTier(tier),
+            onPressed: () => switchGaiaTier(context, controller, tier),
             leadingIcon: Icon(tier == current ? Icons.check : null, size: 16),
             child: Text(
               '${tier.label} · ${controller.agentFor(tier)?.label ?? 'no agent'}',
@@ -662,6 +742,77 @@ class _TierPicker extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Switches the current chat's next message to [tier]: silently before
+/// its first reply, after the user's yes once there is one (§7.5). The
+/// dialog says what the switch costs: the prompt cache, and across vendors
+/// everything but a transcript. Ctrl+Enter confirms; Esc keeps the tier,
+/// and the result is false.
+Future<bool> switchGaiaTier(
+  BuildContext context,
+  GaiaController controller,
+  GaiaTier tier,
+) async {
+  if (!controller.switchNeedsConfirm(tier)) {
+    controller.pickTier(tier);
+    return true;
+  }
+  final from = controller.nextTier;
+  final fromAgent = controller.agentFor(from);
+  final toAgent = controller.agentFor(tier);
+  String name(GaiaTier tier, GaiaAgent? agent) =>
+      agent == null ? tier.label : '${tier.label} (${agent.label})';
+  String cli(GaiaAgent? agent) =>
+      kGaiaClis[agent?.adapter]?.name ?? agent?.adapter ?? 'the other agent';
+  final crossVendor =
+      fromAgent != null &&
+      toAgent != null &&
+      fromAgent.adapter != toAgent.adapter;
+  final tokens = controller.contextTokens;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
+            Navigator.of(context).pop(true),
+      },
+      child: Focus(
+        autofocus: true,
+        child: AlertDialog(
+          title: Text(
+            'Switch from ${name(from, fromAgent)} to '
+            '${name(tier, toAgent)}?',
+          ),
+          content: Text(
+            [
+              'The prompt cache is lost, so the next message re-reads the '
+                  'whole context and uses extra tokens.',
+              if (tokens != null)
+                'Current context: ${(tokens / 1000).round()}k tokens.',
+              if (crossVendor)
+                'Only a transcript carries over to ${cli(toAgent)}. '
+                    "${cli(fromAgent)}'s tool history doesn't.",
+              'Press Ctrl+Enter to switch.',
+            ].join('\n\n'),
+          ),
+          actions: [
+            GaiaButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            GaiaButton(
+              label: 'Switch',
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (confirmed != true) return false;
+  controller.pickTier(tier);
+  return true;
 }
 
 /// In place of the composer while Voyager waits to quit or update (§3.2):
