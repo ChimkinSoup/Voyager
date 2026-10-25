@@ -24,6 +24,9 @@ class GaiaWindow {
   /// The mode on screen; null while hidden.
   GaiaMode? shown;
 
+  /// On screen and in front: not behind other apps or minimised.
+  bool get foreground => shown != null && GetForegroundWindow() == _hwnd;
+
   /// The Gaia window's frame from when it was last on screen, in physical
   /// pixels, so a floater opened over it can put it back.
   ({int left, int top, int width, int height})? _windowFrame;

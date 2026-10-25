@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
+import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:window_manager/window_manager.dart';
@@ -24,9 +29,12 @@ class GaiaApp extends StatelessWidget {
         title: 'Gaia',
         debugShowCheckedModeBanner: false,
         theme: _onGaiaSurface(Color(accent)),
-        home: ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) => _GaiaShell(controller: controller),
+        home: _RunToasts(
+          controller: controller,
+          child: ListenableBuilder(
+            listenable: Listenable.merge([controller, controller.debug]),
+            builder: (context, _) => _GaiaShell(controller: controller),
+          ),
         ),
       ),
     );
@@ -46,6 +54,53 @@ class GaiaApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shows Gaia's toast for each run the controller says finished while Gaia
+/// was on screen. Clicked, it opens that chat.
+class _RunToasts extends StatefulWidget {
+  const _RunToasts({required this.controller, required this.child});
+
+  final GaiaController controller;
+  final Widget child;
+
+  @override
+  State<_RunToasts> createState() => _RunToastsState();
+}
+
+class _RunToastsState extends State<_RunToasts> {
+  late final StreamSubscription<GaiaRunToast> _toasts;
+
+  @override
+  void initState() {
+    super.initState();
+    _toasts = widget.controller.toasts.listen(_show);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_toasts.cancel());
+    super.dispose();
+  }
+
+  void _show(GaiaRunToast toast) {
+    if (!mounted) return;
+    showGaiaToast(
+      context,
+      icon: toast.error
+          ? Icons.error_outline
+          : toast.question
+          ? Icons.help_outline
+          : Icons.check_circle_outline,
+      iconColor: toast.error ? Theme.of(context).colorScheme.error : null,
+      title: toast.title,
+      body: toast.body,
+      onTap: () => widget.controller.selectChat(toast.chatId),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _GaiaShell extends StatelessWidget {
@@ -75,17 +130,41 @@ class _GaiaShell extends StatelessWidget {
         if (floater)
           const SingleActivator(LogicalKeyboardKey.escape): () =>
               controller.dismiss(),
+        const SingleActivator(
+          LogicalKeyboardKey.keyD,
+          control: true,
+          shift: true,
+        ): () =>
+            showGaiaDebugMenu(context, controller),
       },
       child: Scaffold(
-        body: floater
-            ? chat
-            : Row(
-                children: [
-                  SizedBox(width: 260, child: _Sidebar(controller: controller)),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: chat),
-                ],
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: floater
+                  ? chat
+                  : Row(
+                      children: [
+                        SizedBox(
+                          width: 260,
+                          child: _Sidebar(controller: controller),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: chat),
+                      ],
+                    ),
+            ),
+            if (controller.debug.showFps)
+              Positioned(
+                // Above the composer, clear of the toasts below the header.
+                bottom: 76,
+                right: 12,
+                child: IgnorePointer(
+                  child: FpsCounterCard(monitor: controller.debug.fps),
+                ),
               ),
+          ],
+        ),
       ),
     );
   }
@@ -217,6 +296,17 @@ class _Sidebar extends StatelessWidget {
                   onTap: () => controller.selectChat(chat.id),
                 ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              tooltip: 'Debug menu (Ctrl+Shift+D)',
+              icon: const Icon(Icons.bug_report_outlined, size: 18),
+              onPressed: () => showGaiaDebugMenu(context, controller),
+            ),
           ),
         ),
       ],

@@ -43,20 +43,34 @@ class FpsCounterOverlay extends ConsumerWidget {
     );
     if (!visible) return const SizedBox.shrink();
 
-    return const Positioned(
+    return Positioned(
       top: 12,
       right: 12,
-      child: IgnorePointer(child: _FpsCard()),
+      child: IgnorePointer(
+        // The card listens itself; watching the monitor would rebuild this
+        // too.
+        child: FpsCounterCard(monitor: ref.watch(fpsMonitorProvider.notifier)),
+      ),
     );
   }
 }
 
-class _FpsCard extends ConsumerWidget {
-  const _FpsCard();
+/// The HUD's card for [monitor]. Also Gaia's, whose companion has no
+/// providers.
+class FpsCounterCard extends StatelessWidget {
+  const FpsCounterCard({super.key, required this.monitor});
+
+  final FpsMonitorController monitor;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final monitor = ref.watch(fpsMonitorProvider);
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: monitor,
+      builder: (context, _) => _card(context),
+    );
+  }
+
+  Widget _card(BuildContext context) {
     final theme = Theme.of(context);
 
     return RepaintBoundary(

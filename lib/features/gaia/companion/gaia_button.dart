@@ -184,7 +184,7 @@ class _GaiaButtonState extends State<GaiaButton> with TickerProviderStateMixin {
                       child: ImageFiltered(
                         imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
                         child: CustomPaint(
-                          painter: _GlowPainter(
+                          painter: GaiaGlowPainter(
                             angle: _angle,
                             hover: _hover,
                             cursor: () => _cursor,
@@ -227,9 +227,9 @@ class _GaiaButtonState extends State<GaiaButton> with TickerProviderStateMixin {
 }
 
 /// The light: an elliptical radial gradient on the ring at [angle], moving
-/// onto the cursor as [hover] runs.
-class _GlowPainter extends CustomPainter {
-  _GlowPainter({
+/// onto the cursor as [hover] runs. Also the Gaia toast's.
+class GaiaGlowPainter extends CustomPainter {
+  GaiaGlowPainter({
     required this.angle,
     required this.hover,
     required this.cursor,
@@ -284,5 +284,5 @@ class _GlowPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GlowPainter old) => old.idle != idle || old.lit != lit;
+  bool shouldRepaint(GaiaGlowPainter old) => old.idle != idle || old.lit != lit;
 }

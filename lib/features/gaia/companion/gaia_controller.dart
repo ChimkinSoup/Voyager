@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
@@ -15,6 +16,15 @@ const _uuid = Uuid();
 /// How often a streaming reply is written through to the main instance. The
 /// companion's own view updates on every delta.
 const _persistEvery = Duration(seconds: 1);
+
+/// A finished run, as Gaia's own toast shows it.
+typedef GaiaRunToast = ({
+  String chatId,
+  String title,
+  String body,
+  bool error,
+  bool question,
+});
 
 /// The companion's state: chats read from and written to the main instance,
 /// runs on the Claude Code CLI, the window mode, Abort, and the drain before
@@ -26,11 +36,21 @@ class GaiaController extends ChangeNotifier {
     required this._runner,
     this._cliVersion = claudeCodeVersion,
     this._exit = exit,
-  });
+    GaiaDebug? debug,
+  }) : debug = debug ?? GaiaDebug();
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
   final ClaudeCodeRunner _runner;
+
+  /// The debug menu's toggles; scripted replies play on [_scripted].
+  final GaiaDebug debug;
+  final _scripted = GaiaScriptedRunner();
+
+  /// Runs that finished in another chat while Gaia was on screen, for its
+  /// own toast.
+  Stream<GaiaRunToast> get toasts => _toasts.stream;
+  final _toasts = StreamController<GaiaRunToast>.broadcast();
 
   /// `claude --version`, and how the companion ends: parameters for tests.
   final Future<(int, int, int)?> Function() _cliVersion;
@@ -100,6 +120,7 @@ class GaiaController extends ChangeNotifier {
       // The main instance is gone, let go of this companion, or never
       // answered: a companion never outlives it.
       ..onDisconnected = () {
+        _scripted.killAll();
         unawaited(_runner.killAll().whenComplete(() => _exit(0)));
       };
     if (!await _pipe.connect()) return _exit(0);
@@ -264,9 +285,23 @@ class GaiaController extends ChangeNotifier {
       chats = [chat, ...chats];
       _messages[chat.id] = [];
       currentChatId = chat.id;
-      await _pipe.request('putChat', {'chat': chat.toJson()});
+      try {
+        await _pipe.request('putChat', {'chat': chat.toJson()});
+      } on GaiaPipeException catch (error) {
+        // The main instance is going away: no run whose chat can't be kept.
+        debugPrint('[gaia] chat not saved, not sending: $error');
+        chats = [
+          for (final c in chats)
+            if (c.id != chat.id) c,
+        ];
+        _messages.remove(chat.id);
+        if (currentChatId == chat.id) currentChatId = null;
+        notifyListeners();
+        return;
+      }
     }
     final chatId = chat.id;
+    final script = debug.scriptFor(prompt);
     final list = _messages[chatId] ??= [];
     final seq = list.isEmpty ? 0 : list.last.seq + 1;
     final question = GaiaMessage(
@@ -288,7 +323,7 @@ class GaiaController extends ChangeNotifier {
       status: GaiaMessageStatus.streaming,
       createdAt: now,
       updatedAt: now,
-      model: kGaiaClaudeModel,
+      model: script == null ? kGaiaClaudeModel : 'gaia-debug-script',
     );
     list.addAll([question, reply]);
     _running.add(chatId);
@@ -300,47 +335,59 @@ class GaiaController extends ChangeNotifier {
 
     final builder = ClaudeTurnBuilder();
     final sessionId = chat.sessionOn(_deviceId);
-    try {
-      final result = await _runner.send(
-        chatId: chatId,
-        sessionId: sessionId,
-        newSessionId: sessionId ?? _uuid.v4(),
-        prompt: prompt,
-        onEvent: (event) {
-          if (!builder.apply(event)) return;
-          reply = _replace(reply, reply.copyWith(parts: builder.parts));
-          final last = _lastPersist[reply.id];
-          if (last == null || DateTime.now().difference(last) > _persistEvery) {
-            unawaited(_persist(reply));
-          }
-        },
-      );
-      // Here at once, so a next message straight away resumes it; the main
-      // instance's copy follows.
-      if (_chat(chatId) case final current?) {
-        final updated = current.copyWith(
-          agentSessions: {
-            ...current.agentSessions,
-            gaiaSessionKey(_deviceId): GaiaAgentSession(
-              sessionId: result.sessionId,
-              lastSeq: reply.seq,
-            ),
-          },
-        );
-        chats = [for (final c in chats) c.id == chatId ? updated : c];
+    void onEvent(ClaudeEvent event) {
+      if (!builder.apply(event)) return;
+      reply = _replace(reply, reply.copyWith(parts: builder.parts));
+      final last = _lastPersist[reply.id];
+      if (last == null || DateTime.now().difference(last) > _persistEvery) {
+        unawaited(_persist(reply));
       }
-      unawaited(
-        _pipe
-            .request('setSession', {
-              'chatId': chatId,
-              'sessionId': result.sessionId,
-              'lastSeq': reply.seq,
-            })
-            .catchError((Object error) {
-              debugPrint('[gaia] session not saved: $error');
-              return null;
-            }),
-      );
+    }
+
+    try {
+      final result = script == null
+          ? await _runner.send(
+              chatId: chatId,
+              sessionId: sessionId,
+              newSessionId: sessionId ?? _uuid.v4(),
+              prompt: prompt,
+              onEvent: onEvent,
+            )
+          : await _scripted.send(
+              chatId: chatId,
+              script: script,
+              replyDelay: debug.replyDelay,
+              streamSpeed: debug.streamSpeed,
+              onEvent: onEvent,
+            );
+      // Here at once, so a next message straight away resumes it; the main
+      // instance's copy follows. A scripted reply has no session to resume.
+      if (script == null) {
+        if (_chat(chatId) case final current?) {
+          final updated = current.copyWith(
+            agentSessions: {
+              ...current.agentSessions,
+              gaiaSessionKey(_deviceId): GaiaAgentSession(
+                sessionId: result.sessionId,
+                lastSeq: reply.seq,
+              ),
+            },
+          );
+          chats = [for (final c in chats) c.id == chatId ? updated : c];
+        }
+        unawaited(
+          _pipe
+              .request('setSession', {
+                'chatId': chatId,
+                'sessionId': result.sessionId,
+                'lastSeq': reply.seq,
+              })
+              .catchError((Object error) {
+                debugPrint('[gaia] session not saved: $error');
+                return null;
+              }),
+        );
+      }
       final parts = builder.finished;
       reply = _replace(
         reply,
@@ -389,6 +436,7 @@ class GaiaController extends ChangeNotifier {
   Future<void> stop(String chatId) async {
     if (!_running.contains(chatId)) return;
     _stopping.add(chatId);
+    _scripted.stop(chatId);
     await _runner.stop(chatId);
   }
 
@@ -401,10 +449,17 @@ class GaiaController extends ChangeNotifier {
     ],
   });
 
-  /// A reply that finished while Gaia was hidden raises a toast (§14), one
-  /// that ends on a question saying so (§10.1).
+  /// A reply that finished while Gaia was hidden, or its window behind other
+  /// apps, raises a Windows toast (§14), one that ends on a question saying
+  /// so (§10.1). In front, Gaia's own toast says the same, unless the chat is
+  /// the one in view; a floater, topmost and so still on screen while
+  /// another app has focus, shows it for every chat.
   void _reportDone(String chatId, GaiaMessage reply) {
-    if (!_notifyOnDone || _window.shown != null || draining != null) return;
+    if (!_notifyOnDone || draining != null) return;
+    final front = _window.foreground;
+    if (front && chatId == currentChatId) return;
+    final floating =
+        _window.shown == GaiaMode.small || _window.shown == GaiaMode.large;
     final String title;
     final String body;
     switch (reply.status) {
@@ -419,10 +474,21 @@ class GaiaController extends ChangeNotifier {
         return;
     }
     final chatTitle = _chat(chatId)?.title ?? '';
+    final toast = (
+      chatId: chatId,
+      title: title,
+      body: chatTitle.isEmpty ? body : '$chatTitle: $body',
+      error: reply.status == GaiaMessageStatus.error,
+      question: reply.needsInput,
+    );
+    if (front || floating) {
+      _toasts.add(toast);
+      return;
+    }
     _pipe.notify('runDone', {
-      'chatId': chatId,
-      'title': title,
-      'body': chatTitle.isEmpty ? body : '$chatTitle: $body',
+      'chatId': toast.chatId,
+      'title': toast.title,
+      'body': toast.body,
     });
   }
 
@@ -447,6 +513,7 @@ class GaiaController extends ChangeNotifier {
   /// Stops every run; each reply is kept, marked `interrupted`.
   Future<void> cancelDrain() async {
     _drainCancelled = true;
+    _scripted.killAll();
     await _runner.killAll();
   }
 
@@ -479,6 +546,7 @@ class GaiaController extends ChangeNotifier {
       }
     }
     notifyListeners();
+    _scripted.killAll();
     await Future.wait([_runner.killAll(), ...saves]);
   }
 

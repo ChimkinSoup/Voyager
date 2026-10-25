@@ -4,6 +4,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
@@ -117,6 +118,7 @@ void main() {
 
   Future<void> startCompanion({
     Future<(int, int, int)?> Function()? cliVersion,
+    GaiaDebug? debug,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
@@ -125,6 +127,7 @@ void main() {
       runner: runner,
       cliVersion: cliVersion ?? () async => (2, 1, 310),
       exit: exits.add,
+      debug: debug,
     );
     await controller.start();
     await settle();
@@ -135,6 +138,159 @@ void main() {
     runner = FakeClaudeRunner();
     window = FakeGaiaWindow();
     exits = [];
+  });
+
+  group('scripted replies', () {
+    late GaiaDebug debug;
+
+    setUp(() async {
+      debug = GaiaDebug();
+      await debug.setScriptedReplies(true);
+      await debug.setReplyDelay(Duration.zero);
+      await debug.setStreamSpeed(6400);
+      await startCompanion(debug: debug);
+    });
+
+    test('a command plays its script, with no CLI run or session', () async {
+      await controller.send('/msg1');
+      await settle();
+
+      expect(runner.sent, isEmpty);
+      final chat = await main.chat();
+      expect(chat.agentSessions, isEmpty);
+      final [_, reply] = await main.messages();
+      expect(reply.status, GaiaMessageStatus.complete);
+      expect(reply.model, 'gaia-debug-script');
+      expect(_text(reply), startsWith('# A heading'));
+      expect(_text(reply), endsWith('A closing paragraph after a rule.'));
+    });
+
+    test(
+      'tool steps come out as activity between text blocks',
+      () async {
+        await controller.send('/msg4');
+        await settle();
+
+        final reply = (await main.messages()).last;
+        expect(reply.parts.map((p) => p.runtimeType), [
+          GaiaTextPart,
+          GaiaActivityPart,
+          GaiaTextPart,
+          GaiaActivityPart,
+          GaiaTextPart,
+        ]);
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test('an error script ends the reply as an error', () async {
+      await controller.send('/error');
+      await settle();
+
+      final reply = (await main.messages()).last;
+      expect(reply.status, GaiaMessageStatus.error);
+      expect(reply.error, contains('issue with the selected model'));
+    });
+
+    test('Stop ends a hanging script as stopped', () async {
+      final sent = controller.send('/hang');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(controller.currentRunning, isTrue);
+      await controller.stop(controller.currentChatId!);
+      await sent;
+      await settle();
+
+      expect((await main.messages()).last.status, GaiaMessageStatus.cancelled);
+    });
+
+    test(
+      "on screen, another chat's finished run is Gaia's toast, not Windows'",
+      () async {
+        final toasts = <GaiaRunToast>[];
+        controller.toasts.listen(toasts.add);
+        await controller.openWindow();
+        await debug.setReplyDelay(const Duration(milliseconds: 200));
+        final sent = controller.send('/msg6');
+        await settle();
+        final chatId = controller.currentChatId;
+        controller.newChat();
+        await sent;
+        await settle();
+
+        expect(main.events.where((e) => e.$1 == 'runDone'), isEmpty);
+        final toast = toasts.single;
+        expect(toast.chatId, chatId);
+        expect(toast.title, 'Gaia has a question');
+        expect(toast.body, startsWith('/msg6: '));
+        expect(toast.question, isTrue);
+        expect(toast.error, isFalse);
+      },
+    );
+
+    test('behind other apps, it is the Windows toast after all', () async {
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+      await controller.openWindow();
+      await debug.setReplyDelay(const Duration(milliseconds: 200));
+      final sent = controller.send('/msg6');
+      await settle();
+      controller.newChat();
+      window.behind = true;
+      await sent;
+      await settle();
+
+      expect(toasts, isEmpty);
+      final (_, done) = main.events.singleWhere((e) => e.$1 == 'runDone');
+      expect(done['title'], 'Gaia has a question');
+    });
+
+    test(
+      'the chat in view, behind other apps, raises the Windows toast',
+      () async {
+        await controller.openWindow();
+        window.behind = true;
+        await controller.send('/error');
+        await settle();
+
+        final (_, done) = main.events.singleWhere((e) => e.$1 == 'runDone');
+        expect(done['title'], 'Gaia ran into an error');
+      },
+    );
+
+    test(
+      "a floater out of focus shows Gaia's toast, even for its own chat",
+      () async {
+        final toasts = <GaiaRunToast>[];
+        controller.toasts.listen(toasts.add);
+        await controller.onHotkey('small');
+        window.behind = true;
+        await controller.send('/msg1');
+        await settle();
+
+        expect(main.events.where((e) => e.$1 == 'runDone'), isEmpty);
+        expect(toasts.single.title, 'Gaia is done');
+      },
+    );
+
+    test('no toast at all for the chat in view', () async {
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+      await controller.openWindow();
+      await controller.send('/error');
+      await settle();
+
+      expect(toasts, isEmpty);
+      expect(main.events.where((e) => e.$1 == 'runDone'), isEmpty);
+    });
+
+    test('with scripted replies off, a command goes to the CLI', () async {
+      await debug.setScriptedReplies(false);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('/msg1');
+      await settle();
+
+      expect(runner.sent.single.prompt, '/msg1');
+    });
   });
 
   group('chats', () {
@@ -366,6 +522,21 @@ void main() {
       expect(main.events.where((e) => e.$1 == 'runDone'), isEmpty);
     });
 
+    test("a new chat the main instance can't save is dropped, unrun", () async {
+      final answer = main.pipe.onRequest!;
+      main.pipe.onRequest = (method, params) async {
+        if (method == 'putChat') throw StateError('going away');
+        return answer(method, params);
+      };
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent, isEmpty);
+      expect(controller.chats, isEmpty);
+      expect(controller.currentChatId, isNull);
+      expect(main.requests, isNot(contains('putMessage')));
+    });
+
     test('a chat deleted elsewhere leaves the list and the view', () async {
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
       await controller.send('Hi');
@@ -459,7 +630,6 @@ void main() {
       expect(main.events.map((e) => e.$1), contains('drained'));
     });
   });
-
 
   group('Abort', () {
     test('kills every run and saves streaming replies as aborted', () async {

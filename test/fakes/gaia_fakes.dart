@@ -137,6 +137,12 @@ class FakeGaiaWindow implements GaiaWindow {
   @override
   GaiaMode? shown;
 
+  /// Shown, but with another app in front.
+  var behind = false;
+
+  @override
+  bool get foreground => shown != null && !behind;
+
   @override
   Future<void> init() async {}
 

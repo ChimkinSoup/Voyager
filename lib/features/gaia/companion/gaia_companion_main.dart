@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -7,6 +9,7 @@ import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
@@ -26,7 +29,10 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   WindowsKeyboardReconciler.instance.install();
   final root = await appSupportRoot();
   final pipe = dev ? GaiaDevPipe() : GaiaPipe();
+  final debug = GaiaDebug(file: File(p.join(root.path, 'gaia', 'debug.json')));
+  await debug.load();
   final controller = GaiaController(
+    debug: debug,
     pipe: pipe,
     window: GaiaWindow(),
     // Gaia's own working directory, so the CLI never picks up an unrelated
