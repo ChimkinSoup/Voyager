@@ -9938,6 +9938,11 @@ class DriftGaiaRepository implements GaiaRepository {
             utilityAcknowledged: Value(settings.utilityAcknowledged),
             autoRoute: Value(settings.autoRoute),
             routerRubric: Value(settings.routerRubric),
+            commandsJson: Value(
+              jsonEncode([
+                for (final command in settings.commands) command.toJson(),
+              ]),
+            ),
             createdAt: Value(settings.createdAt),
             updatedAt: Value(settings.updatedAt),
             version: Value(settings.version),
@@ -10029,6 +10034,7 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
   utilityAcknowledged: row.utilityAcknowledged,
   autoRoute: row.autoRoute,
   routerRubric: row.routerRubric,
+  commands: gaiaCommandsFromJson(jsonDecode(row.commandsJson)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

@@ -144,6 +144,7 @@ void main() {
     GaiaDebug? debug,
     GaiaUtility? utility,
     Map<String, FakeClaudeRunner> otherRunners = const {},
+    Future<String> Function()? clipboard,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
@@ -156,6 +157,7 @@ void main() {
       exit: exits.add,
       debug: debug,
       utility: utility,
+      clipboard: clipboard,
     );
     await controller.start();
     await settle();
@@ -485,6 +487,60 @@ void main() {
         ]);
       },
     );
+  });
+
+  group('slash commands', () {
+    setUp(() async {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'commands': [
+          const GaiaCommand(
+            name: 'fix',
+            template: 'Fix this: \$ARGUMENTS\n\$CLIPBOARD',
+          ).toJson(),
+        ],
+      };
+      await startCompanion(clipboard: () async => 'the clipboard');
+    });
+
+    test(
+      'a command expands, and the expansion is what is sent and kept',
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('/fix my code');
+        await settle();
+
+        expect(runner.sent.single.prompt, 'Fix this: my code\nthe clipboard');
+        expect(
+          _text((await main.messages()).first),
+          'Fix this: my code\nthe clipboard',
+        );
+        expect((await main.chat()).title, 'Fix this: my code');
+      },
+    );
+
+    test('/new starts a new chat, and sends nothing', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(controller.currentChatId, isNotNull);
+
+      await controller.send('/new');
+      expect(controller.currentChatId, isNull);
+      expect(runner.sent, hasLength(1));
+    });
+
+    test('/stop stops the reply in progress', () async {
+      runner.turns.add([const ClaudeTextStart()]);
+      final sending = controller.send('Hi');
+      await settle();
+      await controller.send('/stop');
+      await sending;
+      await settle();
+
+      expect(runner.stopped, [controller.currentChatId]);
+      expect((await main.messages()).last.status, GaiaMessageStatus.cancelled);
+    });
   });
 
   group('utility model', () {

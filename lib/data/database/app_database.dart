@@ -2252,6 +2252,9 @@ class GaiaSettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get autoRoute => boolean().withDefault(const Constant(true))();
   TextColumn get routerRubric => text().withDefault(const Constant(''))();
+
+  /// `[GaiaCommand]` as JSON.
+  TextColumn get commandsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2350,7 +2353,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 173;
+  int get schemaVersion => 174;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4277,6 +4280,15 @@ class AppDatabase extends _$AppDatabase {
             column,
           );
         }
+      }
+      if (from >= 169 && from < 174) {
+        // Gaia Phase 2: slash commands (GAIA_HLD.md §9.2).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.commandsJson,
+        );
       }
       if (from >= 169 && from < 173) {
         await _addColumnIfNotExists(

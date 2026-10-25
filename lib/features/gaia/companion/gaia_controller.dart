@@ -6,6 +6,8 @@ import 'package:uuid/uuid.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:flutter/services.dart';
+import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
@@ -43,7 +45,9 @@ class GaiaController extends ChangeNotifier {
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
     GaiaUtility? utility,
-  }) : _cliVersions =
+    Future<String> Function()? clipboard,
+  }) : _clipboard = clipboard ?? _readClipboard,
+       _cliVersions =
            cliVersions ??
            {
              for (final MapEntry(:key, :value) in kGaiaClis.entries)
@@ -68,6 +72,12 @@ class GaiaController extends ChangeNotifier {
 
   /// The router and chat titles (§5.1).
   final GaiaUtility _utility;
+
+  /// The clipboard's text, for `$CLIPBOARD` (§9.2).
+  final Future<String> Function() _clipboard;
+
+  static Future<String> _readClipboard() async =>
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
 
   /// Runs that finished in another chat while Gaia was on screen, for its
   /// own toast.
@@ -104,6 +114,9 @@ class GaiaController extends ChangeNotifier {
 
   /// The tier picked for the next message, over the chat's own (§7.2).
   GaiaTier? pickedTier;
+
+  /// The user's slash commands (§9.2).
+  var commands = const <GaiaCommand>[];
 
   /// Null for a new chat not yet sent.
   String? currentChatId;
@@ -188,6 +201,7 @@ class GaiaController extends ChangeNotifier {
     agents = gaiaAgentsFromJson(settings['agents']);
     tiers = gaiaTiersFromJson(settings['tiers']);
     lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
+    commands = gaiaCommandsFromJson(settings['commands']);
     notifyListeners();
     final instructions = settings['gaiaMd'] as String? ?? '';
     await Future.wait([
@@ -342,8 +356,36 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Runs a built-in command (§9.2).
+  Future<void> runBuiltin(GaiaBuiltin builtin) async {
+    switch (builtin) {
+      case GaiaBuiltin.newChat:
+        newChat();
+      case GaiaBuiltin.stop:
+        if (currentChatId case final chatId?) await stop(chatId);
+    }
+  }
+
+  /// [text] with a user's command expanded (§9.2); [text] itself when it
+  /// doesn't start with one.
+  Future<String> _expand(String text) async {
+    final name = RegExp(r'^/([\w-]+)').firstMatch(text)?.group(1);
+    final command = commands.where((c) => c.name == name).firstOrNull;
+    if (command == null) return text;
+    return expandGaiaCommand(
+          text,
+          commands,
+          clipboard: command.template.contains(r'$CLIPBOARD')
+              ? await _clipboard()
+              : '',
+          now: DateTime.now(),
+        ) ??
+        text;
+  }
+
   Future<void> send(String text) async {
-    final prompt = text.trim();
+    if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
+    final prompt = (await _expand(text.trim())).trim();
     if (prompt.isEmpty || aborted || draining != null) return;
     var chat = currentChat;
     if (chat != null && _running.contains(chat.id)) return;

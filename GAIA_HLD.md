@@ -696,6 +696,11 @@ drops to Normal, and Esc in Normal hides Gaia.
 Built-ins: `/quick /std /deep`, `/new`, `/compact`, `/account`, `/remember`,
 `/queue`, `/queue-pop`, `/stop`, `/this` (§15.5). Typing `/` opens a fuzzy palette.
 
+As built in Phase 2: `/quick /std /deep`, `/new` and `/stop`, which still
+works while a reply is running. The other built-ins arrive with their
+phases, and so does `$SELECTION`, which needs selection capture (Phase 3).
+A message is stored as its expansion, since that's what the agent saw.
+
 ### 9.3 Attachments and the "[image N]" question
 
 **Does placement matter?** Somewhat. The Messages API takes an **ordered**

@@ -415,6 +415,44 @@ bool gaiaEndsWithQuestion(String text) {
   return last.endsWith('?');
 }
 
+/// A slash command (§9.2): `/name args` expands to [template] on send,
+/// with `$ARGUMENTS`, `$1`…`$9`, `$CLIPBOARD` and `$DATE` filled in. A
+/// [standalone] one sends as soon as it's picked from the palette.
+class GaiaCommand {
+  const GaiaCommand({
+    required this.name,
+    required this.template,
+    this.description = '',
+    this.standalone = false,
+  });
+
+  /// Without the slash.
+  final String name;
+  final String template;
+  final String description;
+  final bool standalone;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'template': template,
+    'description': description,
+    'standalone': standalone,
+  };
+
+  factory GaiaCommand.fromJson(Map<String, Object?> json) => GaiaCommand(
+    name: json['name']! as String,
+    template: json['template']! as String,
+    description: json['description'] as String? ?? '',
+    standalone: json['standalone'] == true,
+  );
+}
+
+List<GaiaCommand> gaiaCommandsFromJson(Object? json) => [
+  if (json is List)
+    for (final command in json)
+      GaiaCommand.fromJson((command! as Map).cast<String, Object?>()),
+];
+
 /// Gaia's settings (§8 `gaia_settings`): one record, [singletonId], synced.
 class GaiaSettings extends SoftDeletable {
   const GaiaSettings({
@@ -430,6 +468,7 @@ class GaiaSettings extends SoftDeletable {
     this.utilityAcknowledged = false,
     this.autoRoute = true,
     this.routerRubric = '',
+    this.commands = const [],
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -468,6 +507,9 @@ class GaiaSettings extends SoftDeletable {
   /// The router's rubric; empty for [kGaiaDefaultRouterRubric].
   final String routerRubric;
 
+  /// The user's slash commands (§9.2).
+  final List<GaiaCommand> commands;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -482,6 +524,7 @@ class GaiaSettings extends SoftDeletable {
     bool? utilityAcknowledged,
     bool? autoRoute,
     String? routerRubric,
+    List<GaiaCommand>? commands,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -495,6 +538,7 @@ class GaiaSettings extends SoftDeletable {
     utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
+    commands: commands ?? this.commands,
   );
 
   /// What the companion needs of them.
@@ -508,6 +552,7 @@ class GaiaSettings extends SoftDeletable {
     'utilityAcknowledged': utilityAcknowledged,
     'autoRoute': autoRoute,
     'routerRubric': routerRubric,
+    'commands': [for (final command in commands) command.toJson()],
   };
 }
 

@@ -13,6 +13,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/gaia_secrets.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
@@ -753,6 +754,8 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
         _AgentsSection(settings: settings),
         const SizedBox(height: 24),
         _UtilitySection(settings: settings),
+        const SizedBox(height: 24),
+        _CommandsSection(settings: settings),
         const SizedBox(height: 16),
         if (isWindows) ...[
           SwitchListTile(
@@ -1175,6 +1178,229 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
             label: 'Save',
             dense: true,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Names Gaia's own commands take (§9.2), which a user command can't.
+final _reservedCommandNames = {
+  for (final builtin in GaiaBuiltin.values) builtin.name,
+  for (final tier in GaiaTier.values) tier.command.substring(1),
+};
+
+/// The user's slash commands (§9.2): templates `/name args` expands to on
+/// send.
+class _CommandsSection extends ConsumerWidget {
+  const _CommandsSection({required this.settings});
+
+  final GaiaSettings settings;
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref, [
+    GaiaCommand? command,
+  ]) async {
+    final edited = await showDialog<GaiaCommand>(
+      context: context,
+      builder: (_) => _CommandDialog(
+        command: command,
+        taken: {
+          ..._reservedCommandNames,
+          for (final c in settings.commands)
+            if (c.name != command?.name) c.name,
+        },
+      ),
+    );
+    if (edited == null) return;
+    await ref
+        .read(gaiaRepositoryProvider)
+        .upsertSettings(
+          settings.copyWith(
+            commands: command == null
+                ? [...settings.commands, edited]
+                : [
+                    for (final c in settings.commands)
+                      c.name == command.name ? edited : c,
+                  ],
+          ),
+        );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text('Commands', style: theme.textTheme.titleMedium),
+            const Spacer(),
+            GlassButton(
+              onPressed: () => _edit(context, ref),
+              icon: const Icon(PhosphorIconsRegular.plus, size: 13),
+              label: 'Add command',
+              dense: true,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          r'Type /name in Gaia, then anything after it: it becomes the '
+          r'template, with $ARGUMENTS (what you typed after the name), $1 to '
+          r'$9 (its words), $CLIPBOARD and $DATE filled in.',
+          style: muted,
+        ),
+        for (final command in settings.commands)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text('/${command.name}'),
+            subtitle: Text(
+              command.description.isEmpty
+                  ? command.template.split('\n').first
+                  : command.description,
+              style: muted,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => _edit(context, ref, command),
+            trailing: IconButton(
+              tooltip: 'Remove',
+              icon: const Icon(PhosphorIconsRegular.trash, size: 16),
+              onPressed: () => ref
+                  .read(gaiaRepositoryProvider)
+                  .upsertSettings(
+                    settings.copyWith(
+                      commands: [
+                        for (final c in settings.commands)
+                          if (c.name != command.name) c,
+                      ],
+                    ),
+                  ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CommandDialog extends StatefulWidget {
+  const _CommandDialog({required this.command, required this.taken});
+
+  /// Null for a new one.
+  final GaiaCommand? command;
+
+  /// Names already in use.
+  final Set<String> taken;
+
+  @override
+  State<_CommandDialog> createState() => _CommandDialogState();
+}
+
+class _CommandDialogState extends State<_CommandDialog> {
+  late final _name = TextEditingController(text: widget.command?.name);
+  late final _description = TextEditingController(
+    text: widget.command?.description,
+  );
+  late final _template = TextEditingController(text: widget.command?.template);
+  late var _standalone = widget.command?.standalone ?? false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    _template.dispose();
+    super.dispose();
+  }
+
+  String? get _nameError {
+    final name = _name.text.trim();
+    if (name.isEmpty) return null;
+    if (!RegExp(r'^[\w-]+$').hasMatch(name)) {
+      return 'Letters, digits, - and _ only';
+    }
+    if (widget.taken.contains(name)) return 'Already a command';
+    return null;
+  }
+
+  bool get _valid =>
+      _name.text.trim().isNotEmpty &&
+      _nameError == null &&
+      _template.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.command == null ? 'Add command' : 'Edit command'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            VoyagerTextField(
+              controller: _name,
+              decoration: InputDecoration(
+                labelText: 'Name',
+                prefixText: '/',
+                errorText: _nameError,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            VoyagerTextField(
+              controller: _description,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            VoyagerTextField(
+              controller: _template,
+              minLines: 3,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                labelText: 'Template',
+                hintText: r'e.g. Explain this in plain words: $ARGUMENTS',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _standalone,
+              title: const Text('Send as soon as it is picked'),
+              subtitle: const Text('For a command that takes no arguments.'),
+              onChanged: (value) => setState(() => _standalone = value!),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+          dense: true,
+        ),
+        GlassButton(
+          onPressed: _valid
+              ? () => Navigator.of(context).pop(
+                  GaiaCommand(
+                    name: _name.text.trim(),
+                    template: _template.text,
+                    description: _description.text.trim(),
+                    standalone: _standalone,
+                  ),
+                )
+              : null,
+          label: 'Save',
+          dense: true,
         ),
       ],
     );

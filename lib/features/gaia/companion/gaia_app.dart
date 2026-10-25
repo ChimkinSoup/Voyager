@@ -7,6 +7,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
@@ -618,10 +619,58 @@ class _ComposerState extends State<_Composer> {
   final _focus = FocusNode();
   final _vanish = GlobalKey<GaiaVanishState>();
 
+  /// The `/` palette's highlighted row, and whether Esc closed it for the
+  /// draft as it stands.
+  var _highlight = 0;
+  String? _paletteClosedFor;
+
   @override
   void initState() {
     super.initState();
-    _text.addListener(() => unawaited(_takeTierCommand()));
+    _text.addListener(() {
+      unawaited(_takeTierCommand());
+      // The palette follows the draft.
+      setState(() => _highlight = 0);
+    });
+  }
+
+  /// The palette's rows for the draft; empty when it isn't showing.
+  List<GaiaPaletteItem> get _palette {
+    final query = gaiaPaletteQuery(_text.text);
+    if (query == null || _text.text == _paletteClosedFor) return const [];
+    return filterGaiaPalette(
+      gaiaPaletteItems(widget.controller.commands),
+      query,
+    );
+  }
+
+  /// A palette row picked (§9.2): a built-in runs, a tier switches, a
+  /// standalone command sends, and any other command waits for its
+  /// arguments.
+  Future<void> _pick(GaiaPaletteItem item) async {
+    final controller = widget.controller;
+    if (item.builtin case final builtin?) {
+      _text.clear();
+      await controller.runBuiltin(builtin);
+    } else if (item.tier case final tier?) {
+      _text.clear();
+      await switchGaiaTier(context, controller, tier);
+    } else if (item.command case final command?) {
+      _text.value = TextEditingValue(
+        text: command.standalone ? '/${command.name}' : '/${command.name} ',
+        selection: TextSelection.collapsed(
+          offset: command.name.length + (command.standalone ? 1 : 2),
+        ),
+      );
+      if (command.standalone) await _send();
+    }
+    _focus.requestFocus();
+  }
+
+  void _move(int by) {
+    final rows = _palette.length;
+    if (rows == 0) return;
+    setState(() => _highlight = (_highlight + by) % rows);
   }
 
   @override
@@ -644,6 +693,13 @@ class _ComposerState extends State<_Composer> {
   /// A command ending the message switches before it's sent; turned down,
   /// the message stays in the composer.
   Future<void> _send() async {
+    final palette = _palette;
+    if (palette.isNotEmpty) return _pick(palette[_highlight]);
+    // A built-in runs even mid-reply: /stop is for exactly then.
+    if (gaiaBuiltinIn(_text.text) case final builtin?) {
+      _text.clear();
+      return widget.controller.runBuiltin(builtin);
+    }
     if (!await _takeTierCommand(atEnd: true) || !mounted) return;
     final text = _text.text;
     if (text.trim().isEmpty || widget.controller.currentRunning) return;
@@ -662,6 +718,7 @@ class _ComposerState extends State<_Composer> {
       return _Aborted(controller: controller);
     }
     final running = controller.currentRunning;
+    final palette = _palette;
     return LayoutBuilder(
       builder: (context, constraints) {
         // A little wider than the messages' column, as in Claude's apps.
@@ -669,44 +726,119 @@ class _ComposerState extends State<_Composer> {
         return Padding(
           padding: EdgeInsets.fromLTRB(side, 8, side, 12),
           child: CallbackShortcuts(
-            bindings: {const SingleActivator(LogicalKeyboardKey.enter): _send},
-            child: GaiaVanish(
-              key: _vanish,
-              controller: _text,
-              builder: (context, vanishing) => GaiaTextField(
-                controller: _text,
-                focusNode: _focus,
-                autofocus: true,
-                minLines: vanishing ? null : 1,
-                maxLines: vanishing ? null : 8,
-                expands: vanishing,
-                textAlignVertical: vanishing ? TextAlignVertical.top : null,
-                hintText: vanishing ? null : 'Message Gaia',
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _TierPicker(controller: controller),
-                    const SizedBox(width: 8),
-                    if (running)
-                      GaiaButton(
-                        icon: Icons.stop,
-                        size: 32,
-                        onPressed: () =>
-                            controller.stop(controller.currentChatId!),
-                      )
-                    else
-                      GaiaButton(
-                        icon: Icons.arrow_upward,
-                        size: 32,
-                        onPressed: _send,
-                      ),
-                  ],
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.enter): _send,
+              if (palette.isNotEmpty) ...{
+                const SingleActivator(LogicalKeyboardKey.tab): () =>
+                    _pick(palette[_highlight]),
+                const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+                    _move(1),
+                const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                    _move(-1),
+                const SingleActivator(LogicalKeyboardKey.escape): () =>
+                    setState(() => _paletteClosedFor = _text.text),
+              },
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (palette.isNotEmpty)
+                  _Palette(
+                    items: palette,
+                    highlight: _highlight.clamp(0, palette.length - 1),
+                    onPick: _pick,
+                  ),
+                GaiaVanish(
+                  key: _vanish,
+                  controller: _text,
+                  builder: (context, vanishing) => GaiaTextField(
+                    controller: _text,
+                    focusNode: _focus,
+                    autofocus: true,
+                    minLines: vanishing ? null : 1,
+                    maxLines: vanishing ? null : 8,
+                    expands: vanishing,
+                    textAlignVertical: vanishing ? TextAlignVertical.top : null,
+                    hintText: vanishing ? null : 'Message Gaia',
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _TierPicker(controller: controller),
+                        const SizedBox(width: 8),
+                        if (running)
+                          GaiaButton(
+                            icon: Icons.stop,
+                            size: 32,
+                            onPressed: () =>
+                                controller.stop(controller.currentChatId!),
+                          )
+                        else
+                          GaiaButton(
+                            icon: Icons.arrow_upward,
+                            size: 32,
+                            onPressed: _send,
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// The `/` palette above the composer (§9.2): built-ins, tiers and the
+/// user's commands matching what's typed. Up and Down move, Enter or Tab
+/// picks, Esc closes.
+class _Palette extends StatelessWidget {
+  const _Palette({
+    required this.items,
+    required this.highlight,
+    required this.onPick,
+  });
+
+  final List<GaiaPaletteItem> items;
+  final int highlight;
+  final void Function(GaiaPaletteItem item) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      constraints: const BoxConstraints(maxHeight: 240),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        children: [
+          for (final (index, item) in items.indexed)
+            ListTile(
+              dense: true,
+              selected: index == highlight,
+              title: Text('/${item.name}'),
+              subtitle: Text(
+                item.description,
+                style: muted,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () => onPick(item),
+            ),
+        ],
+      ),
     );
   }
 }
