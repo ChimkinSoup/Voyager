@@ -1,6 +1,6 @@
 // Schema 169 adds Gaia's chats, messages and settings, and the FTS5 table
 // its search reads; 170 moves each search row to its message's rowid; 171
-// adds Phase 2's tiers and agents. The
+// adds Phase 2's tiers and agents; 172 the utility model and router. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -197,4 +197,40 @@ void main() {
       expect(saved.lastTier, GaiaTier.deep);
     },
   );
+
+  test('171→172 adds the utility model settings, off by default', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(
+      seed,
+    ).upsertSettings(GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.'));
+    for (final column in [
+      'utility_model',
+      'utility_acknowledged',
+      'auto_route',
+      'router_rubric',
+    ]) {
+      await seed.customStatement(
+        'ALTER TABLE gaia_settings_table DROP COLUMN $column',
+      );
+    }
+    await seed.customStatement('PRAGMA user_version = 171');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.gaiaMd, 'Be brief.');
+    expect(settings.utilityModel, kGaiaDefaultUtilityModel);
+    expect(settings.utilityAcknowledged, isFalse);
+    expect(settings.autoRoute, isTrue);
+    expect(settings.routerRubric, isEmpty);
+
+    await repo.upsertSettings(
+      settings.copyWith(utilityAcknowledged: true, routerRubric: 'r'),
+    );
+    final saved = await repo.getSettings();
+    expect(saved.utilityAcknowledged, isTrue);
+    expect(saved.routerRubric, 'r');
+  });
 }

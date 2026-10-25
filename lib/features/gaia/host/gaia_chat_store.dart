@@ -7,8 +7,8 @@ import 'package:voyager/domain/repositories/repositories.dart';
 ///
 /// The companion sends whole messages but never whole chats after creating
 /// one: a chat it holds may be stale (pinned, renamed or deleted elsewhere),
-/// so it only ever changes the fields it owns, through [setSession] and
-/// [setTier]. The
+/// so it only ever changes the fields it owns, through [setSession],
+/// [setTier] and [setTitle]. The
 /// sync fields are stamped here, against what's stored.
 class GaiaChatStore {
   GaiaChatStore(this._repository, {required this.deviceId});
@@ -55,6 +55,14 @@ class GaiaChatStore {
     final chat = await _repository.getChat(chatId);
     if (chat == null || chat.tier == tier) return;
     await _repository.upsertChat(chat.copyWith(tier: tier));
+  }
+
+  /// The utility model's title for [chatId], over [from]; a chat renamed
+  /// since keeps its name.
+  Future<void> setTitle(String chatId, String title, String from) async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.title != from) return;
+    await _repository.upsertChat(chat.copyWith(title: title));
   }
 
   /// The tier a new chat starts on (§7.2).

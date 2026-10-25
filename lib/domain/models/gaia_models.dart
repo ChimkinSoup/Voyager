@@ -21,7 +21,17 @@ enum GaiaMessageStatus {
 /// login can't be tested yet.
 const kGaiaClaudeCodeAdapter = 'claude_code';
 const kGaiaCodexAdapter = 'codex';
-const kGaiaGeminiApiAdapter = 'gemini_api';
+
+/// The utility model's default (§5.1): Gemini Flash, the cheapest fast one.
+const kGaiaDefaultUtilityModel = 'gemini-3.6-flash';
+
+/// What the router (§7.2) goes by until the user edits it.
+const kGaiaDefaultRouterRubric =
+    'quick: a short factual question, a quick rewrite or translation, '
+    'small talk.\n'
+    'standard: most writing, explaining, everyday code and planning.\n'
+    'deep: hard reasoning, a large or subtle coding task, careful analysis '
+    'of something long, or anything the user says matters a lot.';
 
 /// The key a chat's native session on [deviceId] is kept under. A session
 /// lives on the machine that ran it, so each device has its own (§7.4).
@@ -407,6 +417,10 @@ class GaiaSettings extends SoftDeletable {
     this.agents = kGaiaDefaultAgents,
     this.tiers = kGaiaDefaultTiers,
     this.lastTier = GaiaTier.standard,
+    this.utilityModel = kGaiaDefaultUtilityModel,
+    this.utilityAcknowledged = false,
+    this.autoRoute = true,
+    this.routerRubric = '',
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -431,6 +445,20 @@ class GaiaSettings extends SoftDeletable {
   /// The tier a new chat starts on while there's no router (§7.2).
   final GaiaTier lastTier;
 
+  /// The utility model (§5.1), on the API key saved on each device.
+  final String utilityModel;
+
+  /// The user accepts the utility slot's terms: their key is on a paid
+  /// tier, or Google may use the prompts (§5.1). Off, there's no utility
+  /// model.
+  final bool utilityAcknowledged;
+
+  /// The router picks a new chat's first tier (§7.2).
+  final bool autoRoute;
+
+  /// The router's rubric; empty for [kGaiaDefaultRouterRubric].
+  final String routerRubric;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -441,6 +469,10 @@ class GaiaSettings extends SoftDeletable {
     List<GaiaAgent>? agents,
     Map<GaiaTier, String>? tiers,
     GaiaTier? lastTier,
+    String? utilityModel,
+    bool? utilityAcknowledged,
+    bool? autoRoute,
+    String? routerRubric,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -450,6 +482,10 @@ class GaiaSettings extends SoftDeletable {
     agents: agents ?? this.agents,
     tiers: tiers ?? this.tiers,
     lastTier: lastTier ?? this.lastTier,
+    utilityModel: utilityModel ?? this.utilityModel,
+    utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
+    autoRoute: autoRoute ?? this.autoRoute,
+    routerRubric: routerRubric ?? this.routerRubric,
   );
 
   /// What the companion needs of them.
@@ -459,6 +495,10 @@ class GaiaSettings extends SoftDeletable {
     'agents': [for (final agent in agents) agent.toJson()],
     'tiers': gaiaTiersToJson(tiers),
     'lastTier': lastTier.name,
+    'utilityModel': utilityModel,
+    'utilityAcknowledged': utilityAcknowledged,
+    'autoRoute': autoRoute,
+    'routerRubric': routerRubric,
   };
 }
 

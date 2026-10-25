@@ -208,7 +208,10 @@ The utility model reads every chat, including Voyager data pulled in by read
 tools. On Gemini's free tier, Google may use prompts to improve its products.
 So the slot takes a paid-tier key or another API provider. A free-tier key
 is allowed only after an explicit "Google may use these prompts"
-acknowledgement in settings. With no utility model configured, Gaia degrades:
+acknowledgement in settings. The key is entered once per desktop on the Gaia page (§18 Secrets), and
+the companion reads it only when a job runs, so it never crosses the pipe.
+The router waits at most 2 s before the last used tier takes the message.
+With no utility model configured, Gaia degrades:
 no auto-router (the last-used tier applies), titles come from the first line
 of the first message, and the curator (§11) is off.
 
@@ -1139,8 +1142,11 @@ Other additions:
   (through a proposal, naturally).
 - **Offline composer:** prompts written while no agent is reachable go to the
   chat's queue, never lost.
-- **Secrets** (API keys) in Voyager's `secure_vault`, never in synced
-  settings.
+- **Secrets** (API keys) stay on each device, never in synced settings. On
+  Windows they're encrypted to the user's account with DPAPI (decided
+  2026-10-25, over the Secure Notes vault, which would leave utility jobs
+  off whenever the vault is locked). Android gets Keystore storage with the
+  phone client (Phase 6).
 
 ---
 

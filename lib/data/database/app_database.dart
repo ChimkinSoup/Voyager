@@ -13,6 +13,8 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/utils/calendar_days.dart'
     show recordedInstant, storedCalendarDay;
 import 'package:voyager/domain/jobs/job_queries.dart';
+import 'package:voyager/domain/models/gaia_models.dart'
+    show kGaiaDefaultUtilityModel;
 import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -2241,6 +2243,12 @@ class GaiaSettingsTable extends Table {
   TextColumn get tiersJson => text().nullable()();
   TextColumn get lastTier =>
       text().withDefault(const Constant('standard'))();
+  TextColumn get utilityModel =>
+      text().withDefault(const Constant(kGaiaDefaultUtilityModel))();
+  BoolColumn get utilityAcknowledged =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get autoRoute => boolean().withDefault(const Constant(true))();
+  TextColumn get routerRubric => text().withDefault(const Constant(''))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2339,7 +2347,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 171;
+  int get schemaVersion => 172;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4258,6 +4266,22 @@ class AppDatabase extends _$AppDatabase {
           gaiaSettingsTable.agentsJson,
           gaiaSettingsTable.tiersJson,
           gaiaSettingsTable.lastTier,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'gaia_settings_table',
+            gaiaSettingsTable,
+            column,
+          );
+        }
+      }
+      if (from >= 169 && from < 172) {
+        // Gaia Phase 2: the utility model and router (GAIA_HLD.md §5.1, §7.2).
+        for (final column in [
+          gaiaSettingsTable.utilityModel,
+          gaiaSettingsTable.utilityAcknowledged,
+          gaiaSettingsTable.autoRoute,
+          gaiaSettingsTable.routerRubric,
         ]) {
           await _addColumnIfNotExists(
             migrator,

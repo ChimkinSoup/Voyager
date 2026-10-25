@@ -59154,6 +59154,59 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('standard'),
   );
+  static const VerificationMeta _utilityModelMeta = const VerificationMeta(
+    'utilityModel',
+  );
+  @override
+  late final GeneratedColumn<String> utilityModel = GeneratedColumn<String>(
+    'utility_model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kGaiaDefaultUtilityModel),
+  );
+  static const VerificationMeta _utilityAcknowledgedMeta =
+      const VerificationMeta('utilityAcknowledged');
+  @override
+  late final GeneratedColumn<bool> utilityAcknowledged = GeneratedColumn<bool>(
+    'utility_acknowledged',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("utility_acknowledged" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _autoRouteMeta = const VerificationMeta(
+    'autoRoute',
+  );
+  @override
+  late final GeneratedColumn<bool> autoRoute = GeneratedColumn<bool>(
+    'auto_route',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_route" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _routerRubricMeta = const VerificationMeta(
+    'routerRubric',
+  );
+  @override
+  late final GeneratedColumn<String> routerRubric = GeneratedColumn<String>(
+    'router_rubric',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -59207,6 +59260,10 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     agentsJson,
     tiersJson,
     lastTier,
+    utilityModel,
+    utilityAcknowledged,
+    autoRoute,
+    routerRubric,
     createdAt,
     updatedAt,
     version,
@@ -59260,6 +59317,39 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
       context.handle(
         _lastTierMeta,
         lastTier.isAcceptableOrUnknown(data['last_tier']!, _lastTierMeta),
+      );
+    }
+    if (data.containsKey('utility_model')) {
+      context.handle(
+        _utilityModelMeta,
+        utilityModel.isAcceptableOrUnknown(
+          data['utility_model']!,
+          _utilityModelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('utility_acknowledged')) {
+      context.handle(
+        _utilityAcknowledgedMeta,
+        utilityAcknowledged.isAcceptableOrUnknown(
+          data['utility_acknowledged']!,
+          _utilityAcknowledgedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auto_route')) {
+      context.handle(
+        _autoRouteMeta,
+        autoRoute.isAcceptableOrUnknown(data['auto_route']!, _autoRouteMeta),
+      );
+    }
+    if (data.containsKey('router_rubric')) {
+      context.handle(
+        _routerRubricMeta,
+        routerRubric.isAcceptableOrUnknown(
+          data['router_rubric']!,
+          _routerRubricMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -59323,6 +59413,22 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_tier'],
       )!,
+      utilityModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}utility_model'],
+      )!,
+      utilityAcknowledged: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}utility_acknowledged'],
+      )!,
+      autoRoute: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_route'],
+      )!,
+      routerRubric: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}router_rubric'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59360,6 +59466,10 @@ class GaiaSettingsTableData extends DataClass
   /// `{tier: agentId}`; null for the defaults.
   final String? tiersJson;
   final String lastTier;
+  final String utilityModel;
+  final bool utilityAcknowledged;
+  final bool autoRoute;
+  final String routerRubric;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59371,6 +59481,10 @@ class GaiaSettingsTableData extends DataClass
     this.agentsJson,
     this.tiersJson,
     required this.lastTier,
+    required this.utilityModel,
+    required this.utilityAcknowledged,
+    required this.autoRoute,
+    required this.routerRubric,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59389,6 +59503,10 @@ class GaiaSettingsTableData extends DataClass
       map['tiers_json'] = Variable<String>(tiersJson);
     }
     map['last_tier'] = Variable<String>(lastTier);
+    map['utility_model'] = Variable<String>(utilityModel);
+    map['utility_acknowledged'] = Variable<bool>(utilityAcknowledged);
+    map['auto_route'] = Variable<bool>(autoRoute);
+    map['router_rubric'] = Variable<String>(routerRubric);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -59410,6 +59528,10 @@ class GaiaSettingsTableData extends DataClass
           ? const Value.absent()
           : Value(tiersJson),
       lastTier: Value(lastTier),
+      utilityModel: Value(utilityModel),
+      utilityAcknowledged: Value(utilityAcknowledged),
+      autoRoute: Value(autoRoute),
+      routerRubric: Value(routerRubric),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59431,6 +59553,12 @@ class GaiaSettingsTableData extends DataClass
       agentsJson: serializer.fromJson<String?>(json['agentsJson']),
       tiersJson: serializer.fromJson<String?>(json['tiersJson']),
       lastTier: serializer.fromJson<String>(json['lastTier']),
+      utilityModel: serializer.fromJson<String>(json['utilityModel']),
+      utilityAcknowledged: serializer.fromJson<bool>(
+        json['utilityAcknowledged'],
+      ),
+      autoRoute: serializer.fromJson<bool>(json['autoRoute']),
+      routerRubric: serializer.fromJson<String>(json['routerRubric']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59447,6 +59575,10 @@ class GaiaSettingsTableData extends DataClass
       'agentsJson': serializer.toJson<String?>(agentsJson),
       'tiersJson': serializer.toJson<String?>(tiersJson),
       'lastTier': serializer.toJson<String>(lastTier),
+      'utilityModel': serializer.toJson<String>(utilityModel),
+      'utilityAcknowledged': serializer.toJson<bool>(utilityAcknowledged),
+      'autoRoute': serializer.toJson<bool>(autoRoute),
+      'routerRubric': serializer.toJson<String>(routerRubric),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59461,6 +59593,10 @@ class GaiaSettingsTableData extends DataClass
     Value<String?> agentsJson = const Value.absent(),
     Value<String?> tiersJson = const Value.absent(),
     String? lastTier,
+    String? utilityModel,
+    bool? utilityAcknowledged,
+    bool? autoRoute,
+    String? routerRubric,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -59472,6 +59608,10 @@ class GaiaSettingsTableData extends DataClass
     agentsJson: agentsJson.present ? agentsJson.value : this.agentsJson,
     tiersJson: tiersJson.present ? tiersJson.value : this.tiersJson,
     lastTier: lastTier ?? this.lastTier,
+    utilityModel: utilityModel ?? this.utilityModel,
+    utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
+    autoRoute: autoRoute ?? this.autoRoute,
+    routerRubric: routerRubric ?? this.routerRubric,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -59489,6 +59629,16 @@ class GaiaSettingsTableData extends DataClass
           : this.agentsJson,
       tiersJson: data.tiersJson.present ? data.tiersJson.value : this.tiersJson,
       lastTier: data.lastTier.present ? data.lastTier.value : this.lastTier,
+      utilityModel: data.utilityModel.present
+          ? data.utilityModel.value
+          : this.utilityModel,
+      utilityAcknowledged: data.utilityAcknowledged.present
+          ? data.utilityAcknowledged.value
+          : this.utilityAcknowledged,
+      autoRoute: data.autoRoute.present ? data.autoRoute.value : this.autoRoute,
+      routerRubric: data.routerRubric.present
+          ? data.routerRubric.value
+          : this.routerRubric,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59505,6 +59655,10 @@ class GaiaSettingsTableData extends DataClass
           ..write('agentsJson: $agentsJson, ')
           ..write('tiersJson: $tiersJson, ')
           ..write('lastTier: $lastTier, ')
+          ..write('utilityModel: $utilityModel, ')
+          ..write('utilityAcknowledged: $utilityAcknowledged, ')
+          ..write('autoRoute: $autoRoute, ')
+          ..write('routerRubric: $routerRubric, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59521,6 +59675,10 @@ class GaiaSettingsTableData extends DataClass
     agentsJson,
     tiersJson,
     lastTier,
+    utilityModel,
+    utilityAcknowledged,
+    autoRoute,
+    routerRubric,
     createdAt,
     updatedAt,
     version,
@@ -59536,6 +59694,10 @@ class GaiaSettingsTableData extends DataClass
           other.agentsJson == this.agentsJson &&
           other.tiersJson == this.tiersJson &&
           other.lastTier == this.lastTier &&
+          other.utilityModel == this.utilityModel &&
+          other.utilityAcknowledged == this.utilityAcknowledged &&
+          other.autoRoute == this.autoRoute &&
+          other.routerRubric == this.routerRubric &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59550,6 +59712,10 @@ class GaiaSettingsTableCompanion
   final Value<String?> agentsJson;
   final Value<String?> tiersJson;
   final Value<String> lastTier;
+  final Value<String> utilityModel;
+  final Value<bool> utilityAcknowledged;
+  final Value<bool> autoRoute;
+  final Value<String> routerRubric;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59562,6 +59728,10 @@ class GaiaSettingsTableCompanion
     this.agentsJson = const Value.absent(),
     this.tiersJson = const Value.absent(),
     this.lastTier = const Value.absent(),
+    this.utilityModel = const Value.absent(),
+    this.utilityAcknowledged = const Value.absent(),
+    this.autoRoute = const Value.absent(),
+    this.routerRubric = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59575,6 +59745,10 @@ class GaiaSettingsTableCompanion
     this.agentsJson = const Value.absent(),
     this.tiersJson = const Value.absent(),
     this.lastTier = const Value.absent(),
+    this.utilityModel = const Value.absent(),
+    this.utilityAcknowledged = const Value.absent(),
+    this.autoRoute = const Value.absent(),
+    this.routerRubric = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59590,6 +59764,10 @@ class GaiaSettingsTableCompanion
     Expression<String>? agentsJson,
     Expression<String>? tiersJson,
     Expression<String>? lastTier,
+    Expression<String>? utilityModel,
+    Expression<bool>? utilityAcknowledged,
+    Expression<bool>? autoRoute,
+    Expression<String>? routerRubric,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59603,6 +59781,11 @@ class GaiaSettingsTableCompanion
       if (agentsJson != null) 'agents_json': agentsJson,
       if (tiersJson != null) 'tiers_json': tiersJson,
       if (lastTier != null) 'last_tier': lastTier,
+      if (utilityModel != null) 'utility_model': utilityModel,
+      if (utilityAcknowledged != null)
+        'utility_acknowledged': utilityAcknowledged,
+      if (autoRoute != null) 'auto_route': autoRoute,
+      if (routerRubric != null) 'router_rubric': routerRubric,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59618,6 +59801,10 @@ class GaiaSettingsTableCompanion
     Value<String?>? agentsJson,
     Value<String?>? tiersJson,
     Value<String>? lastTier,
+    Value<String>? utilityModel,
+    Value<bool>? utilityAcknowledged,
+    Value<bool>? autoRoute,
+    Value<String>? routerRubric,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59631,6 +59818,10 @@ class GaiaSettingsTableCompanion
       agentsJson: agentsJson ?? this.agentsJson,
       tiersJson: tiersJson ?? this.tiersJson,
       lastTier: lastTier ?? this.lastTier,
+      utilityModel: utilityModel ?? this.utilityModel,
+      utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
+      autoRoute: autoRoute ?? this.autoRoute,
+      routerRubric: routerRubric ?? this.routerRubric,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59660,6 +59851,18 @@ class GaiaSettingsTableCompanion
     if (lastTier.present) {
       map['last_tier'] = Variable<String>(lastTier.value);
     }
+    if (utilityModel.present) {
+      map['utility_model'] = Variable<String>(utilityModel.value);
+    }
+    if (utilityAcknowledged.present) {
+      map['utility_acknowledged'] = Variable<bool>(utilityAcknowledged.value);
+    }
+    if (autoRoute.present) {
+      map['auto_route'] = Variable<bool>(autoRoute.value);
+    }
+    if (routerRubric.present) {
+      map['router_rubric'] = Variable<String>(routerRubric.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59687,6 +59890,10 @@ class GaiaSettingsTableCompanion
           ..write('agentsJson: $agentsJson, ')
           ..write('tiersJson: $tiersJson, ')
           ..write('lastTier: $lastTier, ')
+          ..write('utilityModel: $utilityModel, ')
+          ..write('utilityAcknowledged: $utilityAcknowledged, ')
+          ..write('autoRoute: $autoRoute, ')
+          ..write('routerRubric: $routerRubric, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -88202,6 +88409,10 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<String?> agentsJson,
       Value<String?> tiersJson,
       Value<String> lastTier,
+      Value<String> utilityModel,
+      Value<bool> utilityAcknowledged,
+      Value<bool> autoRoute,
+      Value<String> routerRubric,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -88216,6 +88427,10 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String?> agentsJson,
       Value<String?> tiersJson,
       Value<String> lastTier,
+      Value<String> utilityModel,
+      Value<bool> utilityAcknowledged,
+      Value<bool> autoRoute,
+      Value<String> routerRubric,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -88259,6 +88474,26 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<String> get lastTier => $composableBuilder(
     column: $table.lastTier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get utilityModel => $composableBuilder(
+    column: $table.utilityModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get utilityAcknowledged => $composableBuilder(
+    column: $table.utilityAcknowledged,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoRoute => $composableBuilder(
+    column: $table.autoRoute,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get routerRubric => $composableBuilder(
+    column: $table.routerRubric,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88322,6 +88557,26 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get utilityModel => $composableBuilder(
+    column: $table.utilityModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get utilityAcknowledged => $composableBuilder(
+    column: $table.utilityAcknowledged,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get autoRoute => $composableBuilder(
+    column: $table.autoRoute,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get routerRubric => $composableBuilder(
+    column: $table.routerRubric,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88373,6 +88628,24 @@ class $$GaiaSettingsTableTableAnnotationComposer
 
   GeneratedColumn<String> get lastTier =>
       $composableBuilder(column: $table.lastTier, builder: (column) => column);
+
+  GeneratedColumn<String> get utilityModel => $composableBuilder(
+    column: $table.utilityModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get utilityAcknowledged => $composableBuilder(
+    column: $table.utilityAcknowledged,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get autoRoute =>
+      $composableBuilder(column: $table.autoRoute, builder: (column) => column);
+
+  GeneratedColumn<String> get routerRubric => $composableBuilder(
+    column: $table.routerRubric,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -88433,6 +88706,10 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String?> agentsJson = const Value.absent(),
                 Value<String?> tiersJson = const Value.absent(),
                 Value<String> lastTier = const Value.absent(),
+                Value<String> utilityModel = const Value.absent(),
+                Value<bool> utilityAcknowledged = const Value.absent(),
+                Value<bool> autoRoute = const Value.absent(),
+                Value<String> routerRubric = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -88445,6 +88722,10 @@ class $$GaiaSettingsTableTableTableManager
                 agentsJson: agentsJson,
                 tiersJson: tiersJson,
                 lastTier: lastTier,
+                utilityModel: utilityModel,
+                utilityAcknowledged: utilityAcknowledged,
+                autoRoute: autoRoute,
+                routerRubric: routerRubric,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -88459,6 +88740,10 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String?> agentsJson = const Value.absent(),
                 Value<String?> tiersJson = const Value.absent(),
                 Value<String> lastTier = const Value.absent(),
+                Value<String> utilityModel = const Value.absent(),
+                Value<bool> utilityAcknowledged = const Value.absent(),
+                Value<bool> autoRoute = const Value.absent(),
+                Value<String> routerRubric = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -88471,6 +88756,10 @@ class $$GaiaSettingsTableTableTableManager
                 agentsJson: agentsJson,
                 tiersJson: tiersJson,
                 lastTier: lastTier,
+                utilityModel: utilityModel,
+                utilityAcknowledged: utilityAcknowledged,
+                autoRoute: autoRoute,
+                routerRubric: routerRubric,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

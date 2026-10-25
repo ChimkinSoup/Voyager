@@ -11,6 +11,8 @@ import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/gaia_secrets.dart';
+import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 const _uuid = Uuid();
 
@@ -39,6 +41,7 @@ class GaiaController extends ChangeNotifier {
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
+    GaiaUtility? utility,
   }) : _cliVersions =
            cliVersions ??
            {
@@ -46,7 +49,8 @@ class GaiaController extends ChangeNotifier {
                key: value.version,
            },
        debug = debug ?? GaiaDebug(),
-       sidebar = sidebar ?? GaiaSidebar();
+       sidebar = sidebar ?? GaiaSidebar(),
+       _utility = utility ?? GaiaUtility(readKey: GaiaSecrets().readUtilityKey);
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
@@ -60,6 +64,9 @@ class GaiaController extends ChangeNotifier {
 
   /// The Gaia window's sidebar: open or not, and its width.
   final GaiaSidebar sidebar;
+
+  /// The router and chat titles (§5.1).
+  final GaiaUtility _utility;
 
   /// Runs that finished in another chat while Gaia was on screen, for its
   /// own toast.
@@ -176,6 +183,7 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> _applySettings(Map<String, Object?> settings) async {
     _notifyOnDone = settings['notifyOnDone'] != false;
+    _utility.apply(settings);
     agents = gaiaAgentsFromJson(settings['agents']);
     tiers = gaiaTiersFromJson(settings['tiers']);
     lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
@@ -327,7 +335,12 @@ class GaiaController extends ChangeNotifier {
     var chat = currentChat;
     if (chat != null && _running.contains(chat.id)) return;
     final now = utcNow();
-    final tier = nextTier;
+    var tier = nextTier;
+    // The router picks only a new chat's first tier, and never over the
+    // user's own pick (§7.2).
+    if (chat == null && pickedTier == null) {
+      tier = await _utility.route(prompt) ?? tier;
+    }
     pickedTier = null;
     final agent = agentFor(tier);
     if (chat == null) {
@@ -516,6 +529,9 @@ class GaiaController extends ChangeNotifier {
     }
     await _persist(reply);
     _reportDone(chatId, reply);
+    if (reply.seq == 1 && reply.status == GaiaMessageStatus.complete) {
+      unawaited(_retitle(chatId, prompt, reply.text));
+    }
     _settleDrain();
   }
 
@@ -662,6 +678,25 @@ class GaiaController extends ChangeNotifier {
     if (index >= 0) list![index] = updated;
     notifyListeners();
     return updated;
+  }
+
+  /// The utility model's title for a chat's first exchange, over the
+  /// first-line one it started with, unless it was renamed meanwhile.
+  Future<void> _retitle(String chatId, String prompt, String reply) async {
+    final from = _chat(chatId)?.title;
+    if (from == null) return;
+    final title = await _utility.title(prompt, reply);
+    final current = _chat(chatId);
+    if (title == null || current == null || current.title != from) return;
+    chats = [
+      for (final c in chats) c.id == chatId ? c.copyWith(title: title) : c,
+    ];
+    notifyListeners();
+    await _request('setTitle', {
+      'chatId': chatId,
+      'title': title,
+      'from': from,
+    });
   }
 
   /// A write to the main instance the run doesn't wait on: one lost to a

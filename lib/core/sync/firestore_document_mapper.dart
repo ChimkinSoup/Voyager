@@ -4545,6 +4545,10 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'agents': [for (final agent in settings.agents) agent.toJson()],
   'tiers': gaiaTiersToJson(settings.tiers),
   'lastTier': settings.lastTier.name,
+  'utilityModel': settings.utilityModel,
+  'utilityAcknowledged': settings.utilityAcknowledged,
+  'autoRoute': settings.autoRoute,
+  'routerRubric': settings.routerRubric,
   'createdAt': _dateToFirestoreRequired(settings.createdAt),
   'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
   'version': settings.version,
@@ -4576,6 +4580,17 @@ GaiaSettings mergeGaiaSettingsFromRemote(
         gaiaTierFromName(data['lastTier']) ??
         local?.lastTier ??
         GaiaTier.standard,
+    utilityModel:
+        data['utilityModel'] as String? ??
+        local?.utilityModel ??
+        kGaiaDefaultUtilityModel,
+    utilityAcknowledged:
+        data['utilityAcknowledged'] as bool? ??
+        local?.utilityAcknowledged ??
+        false,
+    autoRoute: data['autoRoute'] as bool? ?? local?.autoRoute ?? true,
+    routerRubric:
+        data['routerRubric'] as String? ?? local?.routerRubric ?? '',
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

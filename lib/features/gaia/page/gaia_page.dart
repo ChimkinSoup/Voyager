@@ -13,6 +13,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
+import 'package:voyager/features/gaia/gaia_secrets.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 
@@ -750,6 +751,8 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
         ),
         const SizedBox(height: 24),
         _AgentsSection(settings: settings),
+        const SizedBox(height: 24),
+        _UtilitySection(settings: settings),
         const SizedBox(height: 16),
         if (isWindows) ...[
           SwitchListTile(
@@ -983,6 +986,195 @@ class _AddAgentDialogState extends State<_AddAgentDialog> {
               : null,
           label: 'Add',
           dense: true,
+        ),
+      ],
+    );
+  }
+}
+
+/// The utility model (§5.1): a Gemini API key on this device, the model,
+/// the terms it runs under, and the router (§7.2) it powers.
+class _UtilitySection extends ConsumerStatefulWidget {
+  const _UtilitySection({required this.settings});
+
+  final GaiaSettings settings;
+
+  @override
+  ConsumerState<_UtilitySection> createState() => _UtilitySectionState();
+}
+
+class _UtilitySectionState extends ConsumerState<_UtilitySection> {
+  final _key = TextEditingController();
+  final _model = TextEditingController();
+  final _rubric = TextEditingController();
+  String? _savedModel;
+  String? _savedRubric;
+
+  @override
+  void dispose() {
+    _key.dispose();
+    _model.dispose();
+    _rubric.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(GaiaSettings updated) =>
+      ref.read(gaiaRepositoryProvider).upsertSettings(updated);
+
+  Future<void> _saveKey(String? key) async {
+    await GaiaSecrets().writeUtilityKey(key);
+    _key.clear();
+    ref.invalidate(gaiaUtilityKeySavedProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = widget.settings;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    // As GAIA.md's field: loaded once, and again on a change from another
+    // device while nothing here is unsaved.
+    if (_savedModel == null ||
+        (_model.text == _savedModel && _savedModel != settings.utilityModel)) {
+      _savedModel = settings.utilityModel;
+      _model.text = settings.utilityModel;
+    }
+    if (_savedRubric == null ||
+        (_rubric.text == _savedRubric &&
+            _savedRubric != settings.routerRubric)) {
+      _savedRubric = settings.routerRubric;
+      _rubric.text = settings.routerRubric;
+    }
+    final keySaved = ref.watch(gaiaUtilityKeySavedProvider).valueOrNull;
+    final dirty =
+        _model.text.trim() != _savedModel || _rubric.text != _savedRubric;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Utility model', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'A fast Gemini model on an API key: it picks the tier for a new '
+          "chat and writes chat titles. Without one, a new chat starts on "
+          'the tier you last used and is titled by its first line.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        if (isWindows) ...[
+          Row(
+            children: [
+              Expanded(
+                child: VoyagerTextField(
+                  controller: _key,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Gemini API key',
+                    hintText: keySaved == true
+                        ? 'Saved on this device'
+                        : 'From Google AI Studio',
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GlassButton(
+                onPressed: _key.text.trim().isEmpty
+                    ? null
+                    : () => _saveKey(_key.text),
+                label: 'Save key',
+                dense: true,
+              ),
+              if (keySaved == true) ...[
+                const SizedBox(width: 8),
+                GlassButton(
+                  onPressed: () => _saveKey(null),
+                  label: 'Remove',
+                  dense: true,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Kept on this computer only, encrypted to your Windows account. '
+            'It is never synced.',
+            style: muted,
+          ),
+          const SizedBox(height: 8),
+        ],
+        VoyagerTextField(
+          controller: _model,
+          decoration: const InputDecoration(
+            labelText: 'Model',
+            hintText: kGaiaDefaultUtilityModel,
+            isDense: true,
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: settings.utilityAcknowledged,
+          title: const Text(
+            'My key is on a paid tier, or I accept that Google may use these '
+            'prompts',
+          ),
+          subtitle: const Text(
+            'The utility model reads every chat. On the free tier, Google may '
+            'use what it reads to improve its products.',
+          ),
+          onChanged: (value) =>
+              _save(settings.copyWith(utilityAcknowledged: value)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Pick the tier for a new chat'),
+          subtitle: const Text(
+            "Only a chat's first message. After that, the tier only changes "
+            'when you change it.',
+          ),
+          value: settings.autoRoute,
+          onChanged: (value) => _save(settings.copyWith(autoRoute: value)),
+        ),
+        VoyagerTextField(
+          controller: _rubric,
+          minLines: 3,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            labelText: 'Router rubric',
+            hintText: kGaiaDefaultRouterRubric,
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: GlassButton(
+            onPressed: dirty
+                ? () async {
+                    final model = _model.text.trim().isEmpty
+                        ? kGaiaDefaultUtilityModel
+                        : _model.text.trim();
+                    final rubric = _rubric.text;
+                    await _save(
+                      settings.copyWith(
+                        utilityModel: model,
+                        routerRubric: rubric,
+                      ),
+                    );
+                    setState(() {
+                      _savedModel = model;
+                      _model.text = model;
+                      _savedRubric = rubric;
+                    });
+                  }
+                : null,
+            label: 'Save',
+            dense: true,
+          ),
         ),
       ],
     );

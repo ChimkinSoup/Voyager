@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
@@ -7,6 +11,7 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 import 'fakes/gaia_fakes.dart';
 
@@ -81,6 +86,13 @@ class _Main {
           GaiaTier.values.byName(params['tier']! as String),
         );
         return null;
+      case 'setTitle':
+        await store.setTitle(
+          params['chatId']! as String,
+          params['title']! as String,
+          params['from']! as String,
+        );
+        return null;
       case 'setLastTier':
         await store.setLastTier(
           GaiaTier.values.byName(params['tier']! as String),
@@ -130,6 +142,7 @@ void main() {
   Future<void> startCompanion({
     Future<(int, int, int)?> Function()? cliVersion,
     GaiaDebug? debug,
+    GaiaUtility? utility,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
@@ -141,6 +154,7 @@ void main() {
       },
       exit: exits.add,
       debug: debug,
+      utility: utility,
     );
     await controller.start();
     await settle();
@@ -386,6 +400,95 @@ void main() {
         (await main.messages()).last.error,
         contains('No agent is set for Standard'),
       );
+    });
+  });
+
+  group('utility model', () {
+    /// A utility model that routes to [tier] and titles every chat
+    /// "Generated title", counting its calls.
+    late List<String> calls;
+
+    GaiaUtility utility(String tier) => GaiaUtility(
+      readKey: () async => 'k',
+      client: () => MockClient((request) async {
+        final system = request.body.contains('route') ? 'route' : 'title';
+        calls.add(system);
+        return http.Response(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': system == 'route' ? tier : 'Generated title'},
+                  ],
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+
+    setUp(() {
+      calls = [];
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'utilityAcknowledged': true,
+      };
+    });
+
+    test(
+      "the router picks a new chat's first tier, then never again",
+      () async {
+        await startCompanion(utility: utility('deep'));
+        runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+        await controller.send('Run echo gaia-fixture');
+        await settle();
+        await controller.send('Now say done');
+        await settle();
+
+        expect(runner.sent.map((s) => s.model), [
+          'claude-opus-5-5',
+          'claude-opus-5-5',
+        ]);
+        expect(calls.where((c) => c == 'route'), hasLength(1));
+        expect((await main.chat()).tier, GaiaTier.deep);
+      },
+    );
+
+    test('a picked tier wins over the router, which is not asked', () async {
+      await startCompanion(utility: utility('deep'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      controller.pickTier(GaiaTier.quick);
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent.single.model, 'claude-haiku-5-5');
+      expect(calls, isNot(contains('route')));
+    });
+
+    test('the first reply retitles the chat, once', () async {
+      await startCompanion(utility: utility('standard'));
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      await controller.send('Run echo gaia-fixture');
+      await settle();
+      expect((await main.chat()).title, 'Generated title');
+      expect(controller.currentChat!.title, 'Generated title');
+
+      await controller.send('Now say done');
+      await settle();
+      expect(calls.where((c) => c == 'title'), hasLength(1));
+    });
+
+    test('a chat renamed before its title arrives keeps its name', () async {
+      await startCompanion(utility: utility('standard'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      final chat = await main.chat();
+      await main.repository.upsertChat(chat.copyWith(title: 'Mine'));
+      await main.store.setTitle(chat.id, 'Generated title', 'Hi');
+      expect((await main.chat()).title, 'Mine');
     });
   });
 

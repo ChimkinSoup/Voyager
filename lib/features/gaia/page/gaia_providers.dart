@@ -3,6 +3,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
+import 'package:voyager/features/gaia/gaia_secrets.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 
 /// Live chats, pinned first, then the most recent.
@@ -42,4 +43,10 @@ final gaiaClaudeSetupProvider = FutureProvider.autoDispose<ClaudeCodeSetup>(
 
 final gaiaCodexSetupProvider = FutureProvider.autoDispose<CodexSetup>(
   (ref) => probeCodex(),
+);
+
+/// Whether this device has a utility model key saved; invalidated on a
+/// save or a removal.
+final gaiaUtilityKeySavedProvider = FutureProvider.autoDispose<bool>(
+  (ref) async => await GaiaSecrets().readUtilityKey() != null,
 );
