@@ -8,6 +8,7 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
@@ -48,6 +49,10 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
       kGaiaClaudeCodeAdapter: ClaudeCodeRunner(
         workingDirectory: p.join(root.path, 'gaia', 'ws'),
         instructionsFile: p.join(root.path, 'gaia', 'GAIA.md'),
+      ),
+      kGaiaCodexAdapter: CodexRunner(
+        workingDirectory: p.join(root.path, 'gaia', 'ws'),
+        codexHome: await defaultGaiaCodexHome(),
       ),
     },
   );

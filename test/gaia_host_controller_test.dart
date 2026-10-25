@@ -50,7 +50,7 @@ void main() {
         pipe: end,
         window: window,
         runners: {kGaiaClaudeCodeAdapter: runner},
-        cliVersion: () async => (2, 1, 310),
+        cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
         exit: exits.add,
       );
       launched.add(_Launched(controller, runner, window));

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 
 /// Live chats, pinned first, then the most recent.
@@ -37,4 +38,8 @@ final gaiaRunsProvider = Provider.autoDispose<List<GaiaRun>>((ref) {
 /// The setup checklist's probe; invalidated to re-check.
 final gaiaClaudeSetupProvider = FutureProvider.autoDispose<ClaudeCodeSetup>(
   (ref) => probeClaudeCode(),
+);
+
+final gaiaCodexSetupProvider = FutureProvider.autoDispose<CodexSetup>(
+  (ref) => probeCodex(),
 );

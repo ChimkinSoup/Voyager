@@ -76,6 +76,30 @@ abstract interface class GaiaAgentRunner {
   Future<void> killAll();
 }
 
+typedef GaiaCliVersion = (int, int, int);
+
+/// The first `x.y.z` in a CLI's `--version` output.
+GaiaCliVersion? parseCliVersion(String output) {
+  final match = RegExp(r'(\d+)\.(\d+)\.(\d+)').firstMatch(output);
+  if (match == null) return null;
+  return (
+    int.parse(match.group(1)!),
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  );
+}
+
+/// Whether [version] is at least the range's first and below its second.
+bool isVersionInRange(
+  GaiaCliVersion version,
+  (GaiaCliVersion, GaiaCliVersion) range,
+) {
+  int compare(GaiaCliVersion a, GaiaCliVersion b) =>
+      a.$1 != b.$1 ? a.$1 - b.$1 : (a.$2 != b.$2 ? a.$2 - b.$2 : a.$3 - b.$3);
+  final (low, high) = range;
+  return compare(version, low) >= 0 && compare(version, high) < 0;
+}
+
 /// Builds a reply's parts from a turn's events: text blocks in order, with
 /// each run of tool calls between them collapsed to an activity part (§8.1).
 class GaiaTurnBuilder {

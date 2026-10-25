@@ -4,7 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -213,14 +214,17 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final version = controller.cliVersion;
-    final chip = !controller.cliChecked
+    // The CLI the next message runs on.
+    final adapter = controller.agentFor(controller.nextTier)?.adapter;
+    final cli = kGaiaClis[adapter];
+    final version = controller.cliVersions[adapter];
+    final chip = !controller.cliChecked || cli == null
         ? null
         : version == null
-        ? 'Claude Code not found'
-        : isTestedClaudeVersion(version)
+        ? '${cli.name} not found'
+        : isVersionInRange(version, cli.tested)
         ? null
-        : 'Untested Claude Code ${version.$1}.${version.$2}.${version.$3}';
+        : 'Untested ${cli.name} ${version.$1}.${version.$2}.${version.$3}';
     final floater = controller.layout != GaiaMode.window;
     return DragToMoveArea(
       child: SizedBox(

@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a1746d-ee2c-70a1-a6d6-3ad02d683ffe"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run it now.\n"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'echo hi'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'echo hi'","aggregated_output":"hi\r\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Output: `hi`"}}
+{"type":"turn.completed","usage":{"input_tokens":60146,"cached_input_tokens":56960,"cache_write_input_tokens":0,"output_tokens":99,"reasoning_output_tokens":0}}

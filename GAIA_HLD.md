@@ -194,7 +194,7 @@ streams JSONL, resumes sessions, and speaks MCP:
 | Backend | Auth | Headless invocation | Resume |
 |---|---|---|---|
 | Claude Code | `claude` login (subscription) | `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --model <m>` | `--resume <session>` |
-| Codex | ChatGPT login (`codex login`) or API key | `codex exec --json` (also evaluate `codex app-server`, the JSON-RPC server the IDE extension uses) | `codex exec resume <id>` |
+| Codex | ChatGPT login (`codex login`) or API key | `codex exec --json`, prompt on stdin (`codex app-server` is re-evaluated in Phase 4, for approvals) | `codex exec resume <id>` |
 | Gemini CLI | Google login or API key | `gemini -p --output-format stream-json --model <m>` | `--resume <session>` |
 | Gemini API | AI Studio API key | direct HTTPS streaming | Gaia replays history |
 
@@ -237,6 +237,16 @@ treatment:
 
 Outside the range the chat still runs, with an "untested CLI version" chip. A
 parse failure puts the run into `error` and logs the raw line.
+
+**Codex specifics (as built, 0.164.0).** `codex exec --json` prints each
+agent message whole, not streamed, so Codex replies appear a block at a
+time. Gaia's Codex home carries over one setting from the user's
+config.toml, `[windows] sandbox`. Without it every shell command is refused.
+An elevated sandbox needs a one-time setup per Codex home, behind a Windows
+approval prompt, and a headless run that hits the setup hangs on that
+prompt. So the setup checklist has a **Set up** step that runs one trivial
+sandboxed command while the user is watching. Until that's done, a Codex
+turn fails at once and points there.
 
 **Setup.** The Gaia page has a setup checklist. It runs `<cli> --version` and
 a cheap auth probe for each CLI, then shows installed / logged in / version
@@ -1140,7 +1150,7 @@ Other additions:
 |---|---|
 | 0 | `--companion` launch + mutex, IPC pipe (with DACL and client check), window modes (small/large floater, Gaia window; §3.3), exclude-from-capture, Claude Code adapter (with fixtures and version range), chat via the main instance, Abort (runs) |
 | 1 | Gaia drift tables + sync, Gaia page (chats, settings, setup checklist), GAIA.md, notifications/background runs, update drain |
-| 2 | Agents/tiers/router, Codex + Gemini adapters, Gemini API utility model, cross-vendor handoff, commands, keybinds |
+| 2 | Agents/tiers/router, Codex adapter, Gemini API utility model, cross-vendor handoff, commands, keybinds. **Gemini CLI adapter deferred** (blocker below) |
 | 3 | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
 | 4 | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
 | 5 | Memory + curator + inbox |
@@ -1150,6 +1160,13 @@ Other additions:
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
+
+**Blocker: Gemini CLI adapter (moved out of Phase 2, 2026-10-25).** Neither
+the Google login nor an API key works with the installed Gemini CLI
+(0.65.0), so no real `stream-json` fixtures can be recorded and the adapter
+can't be built to §5.1's standard. It comes back once a login works: record
+fixtures, then add it beside the Codex adapter. Until then Gemini reaches
+Gaia only through the Gemini API adapter.
 
 Phase 1 as built: the drift tables are `gaia_chats`, `gaia_messages` and
 `gaia_settings`, plus an FTS5 table for search. A message uploads once it

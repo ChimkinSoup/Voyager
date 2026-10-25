@@ -136,7 +136,9 @@ void main() {
       pipe: main.companion,
       window: window,
       runners: {kGaiaClaudeCodeAdapter: runner},
-      cliVersion: cliVersion ?? () async => (2, 1, 310),
+      cliVersions: {
+        kGaiaClaudeCodeAdapter: cliVersion ?? () async => (2, 1, 310),
+      },
       exit: exits.add,
       debug: debug,
     );
@@ -792,7 +794,7 @@ void main() {
         pipe: main.companion,
         window: FakeGaiaWindow(),
         runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
-        cliVersion: () async => null,
+        cliVersions: {kGaiaClaudeCodeAdapter: () async => null},
         exit: exits.add,
       );
       await second.start();
@@ -802,7 +804,7 @@ void main() {
     test('no CLI installed is reported', () async {
       await startCompanion(cliVersion: () async => null);
       expect(controller.cliChecked, isTrue);
-      expect(controller.cliVersion, isNull);
+      expect(controller.cliVersions[kGaiaClaudeCodeAdapter], isNull);
     });
   });
 

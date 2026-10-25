@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
@@ -35,11 +35,17 @@ class GaiaController extends ChangeNotifier {
     required this._pipe,
     required this._window,
     required this._runners,
-    this._cliVersion = claudeCodeVersion,
+    Map<String, Future<GaiaCliVersion?> Function()>? cliVersions,
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
-  }) : debug = debug ?? GaiaDebug(),
+  }) : _cliVersions =
+           cliVersions ??
+           {
+             for (final MapEntry(:key, :value) in kGaiaClis.entries)
+               key: value.version,
+           },
+       debug = debug ?? GaiaDebug(),
        sidebar = sidebar ?? GaiaSidebar();
 
   final GaiaPipe _pipe;
@@ -60,8 +66,9 @@ class GaiaController extends ChangeNotifier {
   Stream<GaiaRunToast> get toasts => _toasts.stream;
   final _toasts = StreamController<GaiaRunToast>.broadcast();
 
-  /// `claude --version`, and how the companion ends: parameters for tests.
-  final Future<(int, int, int)?> Function() _cliVersion;
+  /// Each CLI's `--version` by adapter, and how the companion ends:
+  /// parameters for tests.
+  final Map<String, Future<GaiaCliVersion?> Function()> _cliVersions;
   final void Function(int code) _exit;
 
   var aborted = false;
@@ -98,8 +105,8 @@ class GaiaController extends ChangeNotifier {
   /// changes.
   var layout = GaiaMode.small;
 
-  /// `claude --version`, once read; null when not installed.
-  (int, int, int)? cliVersion;
+  /// Each CLI's version by adapter, once read; null when not installed.
+  var cliVersions = <String, GaiaCliVersion?>{};
   var cliChecked = false;
 
   /// Runs still going while an update or quit waits on them (§3.2); null
@@ -159,7 +166,10 @@ class GaiaController extends ChangeNotifier {
   }
 
   Future<void> _checkCli() async {
-    cliVersion = await _cliVersion();
+    cliVersions = {
+      for (final MapEntry(:key, :value) in _cliVersions.entries)
+        key: await value(),
+    };
     cliChecked = true;
     notifyListeners();
   }

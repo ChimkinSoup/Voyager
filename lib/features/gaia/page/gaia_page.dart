@@ -11,6 +11,8 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 
@@ -404,8 +406,20 @@ class _GaiaTranscript extends ConsumerWidget {
 
 /// The CLI checklist (§5.1): installed, version, logged in, each with the
 /// command that fixes it.
-class _SetupTab extends ConsumerWidget {
+class _SetupTab extends StatelessWidget {
   const _SetupTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [_ClaudeSetup(), SizedBox(height: 24), _CodexSetup()],
+    );
+  }
+}
+
+class _ClaudeSetup extends ConsumerWidget {
+  const _ClaudeSetup();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -481,11 +495,106 @@ class _SetupTab extends ConsumerWidget {
   }
 }
 
+class _CodexSetup extends ConsumerWidget {
+  const _CodexSetup();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final setup = ref.watch(gaiaCodexSetupProvider);
+    final (low, high) = kCodexTestedVersions;
+    String v((int, int, int) version) =>
+        '${version.$1}.${version.$2}.${version.$3}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text('Codex', style: theme.textTheme.titleMedium),
+            const Spacer(),
+            GlassButton(
+              onPressed: setup.isLoading
+                  ? null
+                  : () => ref.invalidate(gaiaCodexSetupProvider),
+              icon: const Icon(PhosphorIconsRegular.arrowClockwise, size: 13),
+              label: 'Check again',
+              dense: true,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        switch (setup) {
+          AsyncData(:final value) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _CheckRow(
+                ok: value.installed,
+                label: value.installed
+                    ? 'Installed: ${v(value.version!)}'
+                    : 'Not installed',
+                fix: value.installed ? null : 'npm install -g @openai/codex',
+              ),
+              if (value.installed) ...[
+                _CheckRow(
+                  ok: value.tested,
+                  warnOnly: true,
+                  label: value.tested
+                      ? 'A tested version'
+                      : 'Untested version: Gaia is tested with '
+                            '${v(low)} up to ${v(high)}. Chats still run.',
+                ),
+                _CheckRow(
+                  ok: value.loggedIn == true,
+                  label: switch (value.loggedIn) {
+                    true => 'Logged in',
+                    false => 'Not logged in',
+                    null => "Couldn't read the login status",
+                  },
+                  fix: value.loggedIn == true ? null : 'codex login',
+                ),
+                if (value.sandboxReady case final ready?)
+                  _CheckRow(
+                    ok: ready,
+                    label: ready
+                        ? 'Sandbox set up for Gaia'
+                        : "Codex's Windows sandbox needs setting up once for "
+                              'Gaia. Windows will ask you to approve it.',
+                    action: ready
+                        ? null
+                        : GlassButton(
+                            onPressed: () async {
+                              await setUpCodexSandbox(
+                                codexHome: await defaultGaiaCodexHome(),
+                              );
+                              ref.invalidate(gaiaCodexSetupProvider);
+                            },
+                            label: 'Set up',
+                            dense: true,
+                          ),
+                  ),
+              ],
+            ],
+          ),
+          AsyncError() => const _CheckRow(
+            ok: false,
+            label: "Couldn't run the check",
+          ),
+          _ => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(),
+          ),
+        },
+      ],
+    );
+  }
+}
+
 class _CheckRow extends StatelessWidget {
   const _CheckRow({
     required this.ok,
     required this.label,
     this.fix,
+    this.action,
     this.warnOnly = false,
   });
 
@@ -494,6 +603,9 @@ class _CheckRow extends StatelessWidget {
 
   /// The command that fixes it, shown copyable.
   final String? fix;
+
+  /// A button that fixes it.
+  final Widget? action;
 
   /// Not a blocker: amber rather than red.
   final bool warnOnly;
@@ -526,6 +638,11 @@ class _CheckRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label),
+                if (action case final action?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: action,
+                  ),
                 if (fix case final command?)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),

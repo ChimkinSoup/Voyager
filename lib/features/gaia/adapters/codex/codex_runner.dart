@@ -1,0 +1,356 @@
+// FRAGILE(cli): the Codex invocation (`codex exec --json`, `codex exec resume`)
+// and the layout of a Codex home (`auth.json`, `AGENTS.md`, `config.toml`'s
+// `[windows] sandbox`, and `.sandbox/setup_marker.json`, which Codex writes
+// once the elevated Windows sandbox is set up for that home; observed on
+// 0.164.0). See codex_events.dart.
+
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+
+/// Keys stripped from the CLI's environment, so a stray API key never moves
+/// a ChatGPT login onto API billing.
+const _strippedEnvironment = {'OPENAI_API_KEY', 'CODEX_API_KEY'};
+
+/// Runs chats on the Codex CLI (GAIA_HLD.md §5.1). `codex exec` can't keep
+/// stdin open across turns, so each turn is its own process: a new thread,
+/// or `codex exec resume` on the chat's.
+///
+/// Every process runs with [codexHome], Gaia's own Codex home (§5.2), so
+/// GAIA.md stands in for the user's global AGENTS.md and none of their
+/// config, hooks or skills load. The login is the user's: `auth.json` is
+/// copied from [userCodexHome] whenever theirs is newer, which also picks up
+/// a re-login. The one setting carried over is the Windows sandbox, without
+/// which every shell command is refused.
+///
+/// An elevated sandbox has to be set up once per Codex home, behind a
+/// Windows approval prompt. A headless run that hit it would hang on a
+/// prompt nobody asked for, so until [setUpCodexSandbox] has run (the Gaia
+/// page's Setup tab) a turn fails at once, saying so.
+class CodexRunner implements GaiaAgentRunner {
+  CodexRunner({
+    required this.workingDirectory,
+    required this.codexHome,
+    String? userCodexHome,
+    this.onLine,
+  }) : userCodexHome = userCodexHome ?? defaultUserCodexHome();
+
+  final String workingDirectory;
+  final String codexHome;
+  final String userCodexHome;
+
+  /// Every line the CLI prints, before it's parsed.
+  final void Function(String line)? onLine;
+
+  final _live = <String, _CodexProcess>{};
+
+  @override
+  Future<GaiaTurnResult> send({
+    required String chatId,
+    required String? sessionId,
+    required String model,
+    required String prompt,
+    required void Function(GaiaAgentEvent event) onEvent,
+  }) async {
+    await _prepareCodexHome(codexHome, userCodexHome);
+    final sandbox = await _windowsSandbox(userCodexHome);
+    if (sandbox != null && !await _sandboxSetUp(codexHome)) {
+      return const GaiaTurnResult(
+        sessionId: '',
+        isError: true,
+        text: kCodexSandboxNotSetUp,
+      );
+    }
+    final process = _live[chatId] = await _CodexProcess.start(
+      workingDirectory: workingDirectory,
+      codexHome: codexHome,
+      onLine: onLine,
+      args: [
+        'exec',
+        if (sessionId != null) 'resume',
+        '--json',
+        '--skip-git-repo-check',
+        '-m',
+        model,
+        if (sandbox != null) ...['-c', 'windows.sandbox=$sandbox'],
+        ?sessionId,
+        // The prompt comes on stdin: `cmd /c` would mangle it as an argument.
+        '-',
+      ],
+    );
+    try {
+      return await process.turn(prompt, onEvent);
+    } finally {
+      if (_live[chatId] == process) _live.remove(chatId);
+    }
+  }
+
+  @override
+  bool isRunning(String chatId) => _live.containsKey(chatId);
+
+  /// GAIA.md becomes Gaia's Codex home's AGENTS.md; the next turn reads it.
+  @override
+  Future<void> setInstructions(String text) async {
+    final file = File(p.join(codexHome, 'AGENTS.md'));
+    if (text.trim().isEmpty) {
+      if (await file.exists()) await file.delete();
+      return;
+    }
+    await file.parent.create(recursive: true);
+    await file.writeAsString(text);
+  }
+
+  @override
+  Future<void> stop(String chatId) async => _live.remove(chatId)?.kill();
+
+  @override
+  Future<void> killAll() async {
+    final processes = [..._live.values];
+    _live.clear();
+    await Future.wait([for (final process in processes) process.kill()]);
+  }
+}
+
+const kCodexSandboxNotSetUp =
+    "Codex's sandbox isn't set up for Gaia yet. Set it up on the Gaia page's "
+    'Setup tab.';
+
+/// The user's own Codex home: `CODEX_HOME`, or `~/.codex`.
+String defaultUserCodexHome() =>
+    Platform.environment['CODEX_HOME'] ??
+    p.join(Platform.environment['USERPROFILE'] ?? '', '.codex');
+
+/// Gaia's own Codex home (§5.2). One per account from Phase 7.
+Future<String> defaultGaiaCodexHome() async =>
+    p.join((await appSupportRoot()).path, 'gaia', 'codex', 'default');
+
+/// Copies the user's login in when it's newer than Gaia's copy.
+Future<void> _prepareCodexHome(String codexHome, String userCodexHome) async {
+  await Directory(codexHome).create(recursive: true);
+  final source = File(p.join(userCodexHome, 'auth.json'));
+  final copy = File(p.join(codexHome, 'auth.json'));
+  if (!await source.exists()) return;
+  if (await copy.exists() &&
+      !(await source.lastModified()).isAfter(await copy.lastModified())) {
+    return;
+  }
+  await source.copy(copy.path);
+}
+
+/// `[windows] sandbox` from the user's config.toml, if they set one.
+Future<String?> _windowsSandbox(String userCodexHome) async {
+  final config = File(p.join(userCodexHome, 'config.toml'));
+  if (!await config.exists()) return null;
+  return parseCodexWindowsSandbox(await config.readAsString());
+}
+
+Future<bool> _sandboxSetUp(String codexHome) =>
+    File(p.join(codexHome, '.sandbox', 'setup_marker.json')).exists();
+
+/// Whether Gaia's Codex home needs no sandbox setup: the user runs Codex
+/// without one, or it's done.
+Future<bool> codexSandboxReady({
+  required String codexHome,
+  String? userCodexHome,
+}) async =>
+    await _windowsSandbox(userCodexHome ?? defaultUserCodexHome()) == null ||
+    await _sandboxSetUp(codexHome);
+
+/// Sets up the Windows sandbox for Gaia's Codex home by running one trivial
+/// command in it: Windows shows its approval prompt now, while the user is
+/// looking, rather than in the middle of a chat. True once it's set up.
+Future<bool> setUpCodexSandbox({
+  required String codexHome,
+  String? userCodexHome,
+}) async {
+  final userHome = userCodexHome ?? defaultUserCodexHome();
+  final sandbox = await _windowsSandbox(userHome);
+  if (sandbox == null) return true;
+  await _prepareCodexHome(codexHome, userHome);
+  try {
+    await Process.run(
+      'cmd',
+      [
+        '/c',
+        'codex',
+        'sandbox',
+        '-c',
+        'windows.sandbox=$sandbox',
+        'cmd',
+        '/c',
+        'echo',
+        'gaia-sandbox-ok',
+      ],
+      environment: {'CODEX_HOME': codexHome},
+    );
+  } on ProcessException {
+    return false;
+  }
+  return _sandboxSetUp(codexHome);
+}
+
+/// The `sandbox` key of a config.toml's `[windows]` table.
+@visibleForTesting
+String? parseCodexWindowsSandbox(String toml) {
+  String? table;
+  for (final raw in const LineSplitter().convert(toml)) {
+    final line = raw.trim();
+    if (line.startsWith('[')) {
+      table = line;
+      continue;
+    }
+    if (table != '[windows]') continue;
+    final match = RegExp(r'^sandbox\s*=\s*"([^"]*)"').firstMatch(line);
+    if (match != null) return match.group(1);
+  }
+  return null;
+}
+
+class _CodexProcess {
+  _CodexProcess._(this._process, this._onRawLine) {
+    _process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(_onLine);
+    _process.stderr.transform(utf8.decoder).listen((text) {
+      _stderr.write(text);
+      if (_stderr.length > 4096) {
+        final tail = _stderr.toString();
+        _stderr
+          ..clear()
+          ..write(tail.substring(tail.length - 2048));
+      }
+    });
+    unawaited(
+      _process.exitCode.then((code) {
+        _exited = true;
+        _fail(
+          'Codex exited (code $code)'
+          '${_stderr.isEmpty ? '' : ': ${_lastLine(_stderr.toString())}'}',
+        );
+      }),
+    );
+  }
+
+  static Future<_CodexProcess> start({
+    required String workingDirectory,
+    required String codexHome,
+    required void Function(String line)? onLine,
+    required List<String> args,
+  }) async {
+    await Directory(workingDirectory).create(recursive: true);
+    final environment = {
+      for (final entry in Platform.environment.entries)
+        if (!_strippedEnvironment.contains(entry.key.toUpperCase()) &&
+            entry.key.toUpperCase() != 'CODEX_HOME')
+          entry.key: entry.value,
+      'CODEX_HOME': codexHome,
+    };
+    // Through cmd: an npm install's `codex` is a .cmd shim, which only a
+    // shell can run.
+    return _CodexProcess._(
+      await Process.start(
+        'cmd',
+        ['/c', 'codex', ...args],
+        workingDirectory: workingDirectory,
+        environment: environment,
+        includeParentEnvironment: false,
+      ),
+      onLine,
+    );
+  }
+
+  final Process _process;
+  final void Function(String line)? _onRawLine;
+  final _stderr = StringBuffer();
+  var _exited = false;
+
+  void Function(GaiaAgentEvent event)? _onEvent;
+  Completer<GaiaTurnResult>? _turn;
+  String? _threadId;
+  var _lastText = '';
+
+  Future<GaiaTurnResult> turn(
+    String prompt,
+    void Function(GaiaAgentEvent event) onEvent,
+  ) {
+    final turn = _turn = Completer<GaiaTurnResult>();
+    _onEvent = onEvent;
+    _process.stdin.add(utf8.encode(prompt));
+    unawaited(_process.stdin.close());
+    return turn.future;
+  }
+
+  void _onLine(String line) {
+    _onRawLine?.call(line);
+    if (line.trim().isEmpty) return;
+    final CodexEvent event;
+    try {
+      event = parseCodexLine(line);
+    } on CodexParseException catch (error) {
+      debugPrint('[gaia] $error');
+      _fail('Unreadable output from Codex: ${error.reason}');
+      unawaited(kill());
+      return;
+    }
+    switch (event) {
+      case CodexThreadStarted(:final threadId):
+        _threadId = threadId;
+      case CodexMessage(:final text):
+        _lastText = text;
+      case CodexTurnEnded(:final error):
+        final turn = _turn;
+        final threadId = _threadId;
+        _turn = null;
+        if (turn == null) return;
+        if (threadId == null) {
+          turn.completeError(GaiaRunException('Codex never started a thread'));
+          return;
+        }
+        turn.complete(
+          GaiaTurnResult(
+            sessionId: threadId,
+            isError: error != null,
+            text: error ?? _lastText,
+          ),
+        );
+        return;
+      case CodexTool() || CodexIgnored():
+        break;
+    }
+    gaiaEventsOf(event).forEach(_onEvent ?? (_) {});
+  }
+
+  void _fail(String reason) {
+    final turn = _turn;
+    _turn = null;
+    turn?.completeError(GaiaRunException(reason));
+  }
+
+  static String _lastLine(String text) =>
+      const LineSplitter().convert(text.trim()).lastOrNull ?? '';
+
+  /// Kills the whole tree: cmd, the CLI, and anything the CLI started.
+  Future<void> kill() async {
+    if (_exited) return;
+    await Process.run('taskkill', ['/t', '/f', '/pid', '${_process.pid}']);
+  }
+}
+
+/// `codex --version`, parsed; null when the CLI isn't installed or its
+/// output isn't a version.
+Future<GaiaCliVersion?> codexVersion() async {
+  try {
+    final result = await Process.run('cmd', ['/c', 'codex', '--version']);
+    if (result.exitCode != 0) return null;
+    return parseCliVersion(result.stdout as String);
+  } on ProcessException {
+    return null;
+  }
+}
