@@ -137,7 +137,7 @@ class LocalNotificationsReminderOsNotifier implements ReminderOsNotifier {
       );
       await _plugin.initialize(
         settings: InitializationSettings(
-          android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
+          android: const AndroidInitializationSettings('ic_stat_voyager'),
           windows: WindowsInitializationSettings(
             appName: 'Voyager',
             appUserModelId: 'Voyager.App',

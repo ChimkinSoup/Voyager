@@ -178,7 +178,7 @@ class _DebugMenu extends StatelessWidget {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Slow animations'),
-          subtitle: const Text('Every animation at a fifth of its speed.'),
+          subtitle: const Text('Every animation at a tenth of its speed.'),
           value: debug.slowAnimations,
           onChanged: debug.setSlowAnimations,
         ),

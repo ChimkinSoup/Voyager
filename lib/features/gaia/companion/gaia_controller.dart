@@ -7,6 +7,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
@@ -37,7 +38,9 @@ class GaiaController extends ChangeNotifier {
     this._cliVersion = claudeCodeVersion,
     this._exit = exit,
     GaiaDebug? debug,
-  }) : debug = debug ?? GaiaDebug();
+    GaiaSidebar? sidebar,
+  }) : debug = debug ?? GaiaDebug(),
+       sidebar = sidebar ?? GaiaSidebar();
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
@@ -46,6 +49,9 @@ class GaiaController extends ChangeNotifier {
   /// The debug menu's toggles; scripted replies play on [_scripted].
   final GaiaDebug debug;
   final _scripted = GaiaScriptedRunner();
+
+  /// The Gaia window's sidebar: open or not, and its width.
+  final GaiaSidebar sidebar;
 
   /// Runs that finished in another chat while Gaia was on screen, for its
   /// own toast.
@@ -61,6 +67,10 @@ class GaiaController extends ChangeNotifier {
 
   /// Voyager's accent, as ARGB: the theme follows it.
   final accent = ValueNotifier(0xFF7C9EFF);
+
+  /// On screen and in front, from the window's focus and blur; the
+  /// starfield drifts only then.
+  final focused = ValueNotifier(false);
 
   /// The main instance's device, whose native sessions this companion runs.
   var _deviceId = '';

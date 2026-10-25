@@ -1,10 +1,12 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <shobjidl.h>
 #include <windows.h>
 
 #include <algorithm>
 
 #include "flutter_window.h"
+#include "resource.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -95,6 +97,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // Gaia's taskbar button is its own, not grouped under Voyager's, so it
+  // shows Gaia's icon. Set before any window exists.
+  if (companion || gaia_dev) {
+    ::SetCurrentProcessExplicitAppUserModelID(L"Voyager.Gaia");
+  }
+
   flutter::DartProject project(L"data");
 
   // The login Run entry's launch (see launch_at_login.dart): stays in the tray.
@@ -119,6 +127,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Size size(1280, 720);
   if (!window.Create(companion || gaia_dev ? L"Gaia" : L"voyager", origin, size)) {
     return EXIT_FAILURE;
+  }
+  if (companion || gaia_dev) {
+    // Gaia's own icon on its title bar and Alt+Tab entry; the window class
+    // carries Voyager's.
+    ::SendMessage(window.GetHandle(), WM_SETICON, ICON_BIG,
+                  reinterpret_cast<LPARAM>(::LoadImage(
+                      instance, MAKEINTRESOURCE(IDI_GAIA_ICON), IMAGE_ICON,
+                      ::GetSystemMetrics(SM_CXICON),
+                      ::GetSystemMetrics(SM_CYICON), 0)));
+    ::SendMessage(window.GetHandle(), WM_SETICON, ICON_SMALL,
+                  reinterpret_cast<LPARAM>(::LoadImage(
+                      instance, MAKEINTRESOURCE(IDI_GAIA_ICON), IMAGE_ICON,
+                      ::GetSystemMetrics(SM_CXSMICON),
+                      ::GetSystemMetrics(SM_CYSMICON), 0)));
   }
   window.SetQuitOnClose(true);
 

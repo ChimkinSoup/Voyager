@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +9,10 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
+import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
+import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:window_manager/window_manager.dart';
@@ -111,20 +115,25 @@ class _GaiaShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final floater = controller.layout != GaiaMode.window;
-    final chat = Column(
-      children: [
-        _Header(controller: controller),
-        const Divider(height: 1),
-        Expanded(
-          child: _Messages(
-            messages: controller.layout == GaiaMode.small
-                ? _lastTurns(controller.messages, 3)
-                : controller.messages,
-          ),
-        ),
-        _Composer(controller: controller),
-      ],
-    );
+    Widget chat({bool sidebarShown = false, VoidCallback? toggleSidebar}) =>
+        Column(
+          children: [
+            _Header(
+              controller: controller,
+              sidebarShown: sidebarShown,
+              toggleSidebar: toggleSidebar,
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _Messages(
+                messages: controller.layout == GaiaMode.small
+                    ? _lastTurns(controller.messages, 3)
+                    : controller.messages,
+              ),
+            ),
+            _Composer(controller: controller),
+          ],
+        );
     return CallbackShortcuts(
       bindings: {
         if (floater)
@@ -140,19 +149,25 @@ class _GaiaShell extends StatelessWidget {
       child: Scaffold(
         body: Stack(
           children: [
+            // Behind the whole window, so the sidebar coming, going or
+            // resizing covers stars rather than moving them.
             Positioned.fill(
-              child: floater
-                  ? chat
-                  : Row(
-                      children: [
-                        SizedBox(
-                          width: 260,
+              child: GaiaStarfield(
+                active: controller.focused,
+                child: floater
+                    ? chat()
+                    : GaiaSidebarLayout(
+                        sidebar: controller.sidebar,
+                        // A Material, which the chat list's tiles paint
+                        // their selection and ink on.
+                        side: Material(
+                          color: Theme.of(context).scaffoldBackgroundColor,
                           child: _Sidebar(controller: controller),
                         ),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: chat),
-                      ],
-                    ),
+                        chat: (shown, toggle) =>
+                            chat(sidebarShown: shown, toggleSidebar: toggle),
+                      ),
+              ),
             ),
             if (controller.debug.showFps)
               Positioned(
@@ -182,9 +197,17 @@ class _GaiaShell extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.controller});
+  const _Header({
+    required this.controller,
+    required this.sidebarShown,
+    required this.toggleSidebar,
+  });
 
   final GaiaController controller;
+  final bool sidebarShown;
+
+  /// Null in the floaters, which have no sidebar.
+  final VoidCallback? toggleSidebar;
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +227,16 @@ class _Header extends StatelessWidget {
         height: 52,
         child: Row(
           children: [
-            const SizedBox(width: 16),
+            if (toggleSidebar case final toggle?) ...[
+              const SizedBox(width: 12),
+              GaiaButton(
+                icon: Icons.view_sidebar_outlined,
+                size: 32,
+                onPressed: toggle,
+              ),
+              const SizedBox(width: 10),
+            ] else
+              const SizedBox(width: 16),
             Expanded(
               child: Text(
                 controller.currentChat?.title ?? 'New chat',
@@ -220,13 +252,16 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
-            if (floater) ...[
+            // The sidebar's New chat, when there's no sidebar.
+            if (!sidebarShown) ...[
               GaiaButton(
                 icon: Icons.add,
                 size: 32,
                 onPressed: controller.newChat,
               ),
               const SizedBox(width: 10),
+            ],
+            if (floater) ...[
               GaiaButton(
                 icon: Icons.open_in_full,
                 size: 32,
@@ -234,6 +269,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 10),
             ],
+            if (!floater) const _WindowButtons(),
             GaiaButton(
               icon: Icons.close,
               size: 32,
@@ -243,6 +279,63 @@ class _Header extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The Gaia window's Minimize and Maximize or Restore, beside its close.
+/// The floaters have neither.
+class _WindowButtons extends StatefulWidget {
+  const _WindowButtons();
+
+  @override
+  State<_WindowButtons> createState() => _WindowButtonsState();
+}
+
+class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
+  var _maximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+    windowManager.isMaximized().then((maximized) {
+      if (mounted) setState(() => _maximized = maximized);
+    });
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowMaximize() => setState(() => _maximized = true);
+
+  @override
+  void onWindowUnmaximize() => setState(() => _maximized = false);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GaiaButton(
+          icon: Icons.remove,
+          size: 32,
+          onPressed: windowManager.minimize,
+        ),
+        const SizedBox(width: 10),
+        GaiaButton(
+          icon: _maximized ? Icons.filter_none : Icons.crop_square,
+          size: 32,
+          onPressed: _maximized
+              ? windowManager.unmaximize
+              : windowManager.maximize,
+        ),
+        const SizedBox(width: 10),
+      ],
     );
   }
 }
@@ -322,12 +415,19 @@ class _Messages extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Reversed, so the newest stays in view as a reply streams in.
-    return ListView.builder(
-      reverse: true,
-      padding: const EdgeInsets.all(16),
-      itemCount: messages.length,
-      itemBuilder: (context, index) =>
-          _MessageView(message: messages[messages.length - 1 - index]),
+    return LayoutBuilder(
+      // Messages keep to a middle column of about 115 characters a line, as
+      // in Claude's apps; narrower chats keep only a small gutter.
+      builder: (context, constraints) => ListView.builder(
+        reverse: true,
+        padding: EdgeInsets.symmetric(
+          horizontal: max(16, (constraints.maxWidth - 860) / 2),
+          vertical: 16,
+        ),
+        itemCount: messages.length,
+        itemBuilder: (context, index) =>
+            _MessageView(message: messages[messages.length - 1 - index]),
+      ),
     );
   }
 }
@@ -344,17 +444,10 @@ class _MessageView extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     if (message.role == GaiaMessageRole.user) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 12, left: 48),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: SelectableText(message.text),
-        ),
+      return _bubble(
+        theme.colorScheme.surfaceContainerHighest,
+        Alignment.centerRight,
+        SelectableText(message.text),
       );
     }
     final status = switch (message.status) {
@@ -364,9 +457,12 @@ class _MessageView extends StatelessWidget {
       GaiaMessageStatus.interrupted => 'Interrupted',
       GaiaMessageStatus.aborted => 'Aborted',
     };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
+    // The chat's own background, so Gaia's bubble shows only as the stars
+    // fading behind it.
+    return _bubble(
+      theme.scaffoldBackgroundColor,
+      Alignment.centerLeft,
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final part in message.parts)
@@ -402,6 +498,27 @@ class _MessageView extends StatelessWidget {
     );
   }
 
+  /// A message's rectangle, hugging its text. Nearly opaque, so the
+  /// starfield behind it is almost gone but the stars around it aren't.
+  Widget _bubble(Color color, Alignment alignment, Widget child) {
+    return Align(
+      alignment: alignment,
+      child: Container(
+        // The user's keep clear of the left, so their side stays theirs.
+        margin: EdgeInsets.only(
+          bottom: 12,
+          left: alignment == Alignment.centerRight ? 48 : 0,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      ),
+    );
+  }
+
   static String _detail(String? error) => error == null ? '' : ': $error';
 
   /// "Used Bash ×3, Edit".
@@ -426,6 +543,7 @@ class _Composer extends StatefulWidget {
 class _ComposerState extends State<_Composer> {
   final _text = TextEditingController();
   final _focus = FocusNode();
+  final _vanish = GlobalKey<GaiaVanishState>();
 
   @override
   void dispose() {
@@ -437,6 +555,7 @@ class _ComposerState extends State<_Composer> {
   void _send() {
     final text = _text.text;
     if (text.trim().isEmpty || widget.controller.currentRunning) return;
+    _vanish.currentState!.vanish();
     _text.clear();
     widget.controller.send(text);
   }
@@ -461,16 +580,22 @@ class _ComposerState extends State<_Composer> {
               bindings: {
                 const SingleActivator(LogicalKeyboardKey.enter): _send,
               },
-              child: TextField(
+              child: GaiaVanish(
+                key: _vanish,
                 controller: _text,
-                focusNode: _focus,
-                autofocus: true,
-                minLines: 1,
-                maxLines: 8,
-                decoration: const InputDecoration(
-                  hintText: 'Message Gaia',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                builder: (context, vanishing) => TextField(
+                  controller: _text,
+                  focusNode: _focus,
+                  autofocus: true,
+                  minLines: vanishing ? null : 1,
+                  maxLines: vanishing ? null : 8,
+                  expands: vanishing,
+                  textAlignVertical: vanishing ? TextAlignVertical.top : null,
+                  decoration: InputDecoration(
+                    hintText: vanishing ? null : 'Message Gaia',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
               ),
             ),

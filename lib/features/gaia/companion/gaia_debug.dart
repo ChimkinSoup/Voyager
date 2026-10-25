@@ -32,7 +32,7 @@ class GaiaDebug extends ChangeNotifier {
 
   var showFps = false;
 
-  /// Every animation at a fifth of its speed ([timeDilation]).
+  /// Every animation at a tenth of its speed ([timeDilation]).
   var slowAnimations = false;
 
   /// Runs while [showFps] is on.
@@ -96,7 +96,7 @@ class GaiaDebug extends ChangeNotifier {
   var _saved = Future<void>.value();
 
   void _apply() {
-    timeDilation = slowAnimations ? 5 : 1;
+    timeDilation = slowAnimations ? 10 : 1;
     if (showFps) {
       fps.start();
     } else {

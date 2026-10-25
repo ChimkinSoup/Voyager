@@ -36,7 +36,7 @@ void main() {
     expect(after.streamSpeed, 50);
     expect(after.slowAnimations, isTrue);
     expect(after.showFps, isFalse);
-    expect(timeDilation, 5);
+    expect(timeDilation, 10);
   });
 
   test("a slider's drag is saved only once it's let go", () async {

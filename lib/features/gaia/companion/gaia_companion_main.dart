@@ -11,6 +11,7 @@ import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
+import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:window_manager/window_manager.dart';
@@ -31,8 +32,13 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   final pipe = dev ? GaiaDevPipe() : GaiaPipe();
   final debug = GaiaDebug(file: File(p.join(root.path, 'gaia', 'debug.json')));
   await debug.load();
+  final sidebar = GaiaSidebar(
+    file: File(p.join(root.path, 'gaia', 'sidebar.json')),
+  );
+  await sidebar.load();
   final controller = GaiaController(
     debug: debug,
+    sidebar: sidebar,
     pipe: pipe,
     window: GaiaWindow(),
     // Gaia's own working directory, so the CLI never picks up an unrelated
@@ -43,8 +49,10 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     ),
   );
   runApp(GaiaApp(controller: controller));
-  await controller.start();
+  // Before start, which can already show the window.
   windowManager.addListener(_DismissOnClose(controller));
+  windowManager.addListener(_TrackFocus(controller));
+  await controller.start();
   if (pipe is GaiaDevPipe) {
     await _registerDevHotkeys(pipe);
     pipe.hotkey('window');
@@ -81,4 +89,18 @@ class _DismissOnClose with WindowListener {
 
   @override
   void onWindowClose() => controller.dismiss();
+}
+
+/// Hiding and minimising blur too: window_manager reports focus from
+/// `WM_NCACTIVATE`.
+class _TrackFocus with WindowListener {
+  _TrackFocus(this.controller);
+
+  final GaiaController controller;
+
+  @override
+  void onWindowFocus() => controller.focused.value = true;
+
+  @override
+  void onWindowBlur() => controller.focused.value = false;
 }

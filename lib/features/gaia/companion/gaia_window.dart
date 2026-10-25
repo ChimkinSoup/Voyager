@@ -14,6 +14,10 @@ const _smallSize = Size(560, 460);
 const _largeSize = Size(980, 760);
 const _windowSize = Size(1200, 820);
 
+/// How far the user can shrink any mode: the Gaia window's sidebar plus a
+/// usable chat. No larger than [_smallSize], so it never clamps a mode.
+const _minimumSize = Size(560, 360);
+
 /// The companion's one OS window, in whichever mode it's in. Floaters are
 /// topmost tool windows, out of the taskbar and Alt+Tab; the Gaia window is
 /// an ordinary app window. Raw Win32, like `FloaterWindow`: window_manager
@@ -27,9 +31,12 @@ class GaiaWindow {
   /// On screen and in front: not behind other apps or minimised.
   bool get foreground => shown != null && GetForegroundWindow() == _hwnd;
 
-  /// The Gaia window's frame from when it was last on screen, in physical
-  /// pixels, so a floater opened over it can put it back.
-  ({int left, int top, int width, int height})? _windowFrame;
+  /// Where the Gaia window was when last on screen, so a floater opened
+  /// over it can put it back: its frame when not maximised or minimised (in
+  /// workspace coordinates, as [GetWindowPlacement] gives them) and whether
+  /// it was maximised.
+  ({({int left, int top, int width, int height}) frame, bool maximized})?
+  _windowPlacement;
 
   Future<void> init() async {
     await windowManager.ensureInitialized();
@@ -37,6 +44,7 @@ class GaiaWindow {
     await windowManager.setTitle('Gaia');
     // Closing hides; the companion is resident (§3.2).
     await windowManager.setPreventClose(true);
+    await windowManager.setMinimumSize(_minimumSize);
     _hwnd = _findOwnWindow();
     // Out of its own screenshots — and the user's screen shares (§3.2).
     SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
@@ -48,17 +56,33 @@ class GaiaWindow {
   /// the uncovered area black and a shrink never squeezes the old layout.
   Future<void> show(GaiaMode mode, void Function() layout) async {
     final hwnd = _hwnd;
-    if (shown == GaiaMode.window) _windowFrame = _readFrame(hwnd);
-    final frame = _frameFor(mode);
+    if (shown == GaiaMode.window) _windowPlacement = _readPlacement(hwnd);
+    final placement = mode == GaiaMode.window ? _windowPlacement : null;
+    final frame = placement?.frame ?? _frameFor(mode);
     final old = _readFrame(hwnd);
+    // A maximised window fills the work area: no floater is bigger.
     final grows =
-        shown == null || frame.width * frame.height > old.width * old.height;
+        shown == null ||
+        (placement?.maximized ?? false) ||
+        frame.width * frame.height > old.width * old.height;
     final floater = mode != GaiaMode.window;
 
     while (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
       await Future<void>(() {});
     }
     _cloak(hwnd, true);
+    // SetWindowPos doesn't bring a window out of minimised or maximised; a
+    // window minimised from maximised restores to maximised first.
+    // SetWindowPlacement does, so a placement skips this.
+    for (
+      var i = 0;
+      placement == null &&
+          i < 2 &&
+          (IsIconic(hwnd) != 0 || IsZoomed(hwnd) != 0);
+      i++
+    ) {
+      ShowWindow(hwnd, SW_RESTORE);
+    }
     // The shell only notices a tool-window style change on a window that is
     // shown again after it.
     final exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
@@ -70,6 +94,9 @@ class GaiaWindow {
       SetWindowLongPtr(hwnd, GWL_EXSTYLE, wantStyle);
     }
     if (!grows) layout();
+    if (placement != null) {
+      _setPlacement(hwnd, placement.frame, placement.maximized);
+    }
     SetWindowPos(
       hwnd,
       floater ? HWND_TOPMOST : HWND_NOTOPMOST,
@@ -77,7 +104,9 @@ class GaiaWindow {
       frame.top,
       frame.width,
       frame.height,
-      SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+      SWP_SHOWWINDOW |
+          SWP_FRAMECHANGED |
+          (placement != null ? SWP_NOMOVE | SWP_NOSIZE : 0),
     );
     await _paintedAt();
     if (grows) {
@@ -90,14 +119,12 @@ class GaiaWindow {
   }
 
   void hide() {
-    if (shown == GaiaMode.window) _windowFrame = _readFrame(_hwnd);
+    if (shown == GaiaMode.window) _windowPlacement = _readPlacement(_hwnd);
     ShowWindow(_hwnd, SW_HIDE);
     shown = null;
   }
 
   ({int left, int top, int width, int height}) _frameFor(GaiaMode mode) {
-    final saved = _windowFrame;
-    if (mode == GaiaMode.window && saved != null) return saved;
     final cursor = calloc<POINT>();
     final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
     final dpiX = calloc<Uint32>();
@@ -145,6 +172,50 @@ class GaiaWindow {
       );
     } finally {
       free(rect);
+    }
+  }
+
+  static ({({int left, int top, int width, int height}) frame, bool maximized})
+  _readPlacement(int hwnd) {
+    final placement = calloc<WINDOWPLACEMENT>()
+      ..ref.length = sizeOf<WINDOWPLACEMENT>();
+    try {
+      GetWindowPlacement(hwnd, placement);
+      final normal = placement.ref.rcNormalPosition;
+      return (
+        frame: (
+          left: normal.left,
+          top: normal.top,
+          width: normal.right - normal.left,
+          height: normal.bottom - normal.top,
+        ),
+        maximized:
+            IsZoomed(hwnd) != 0 ||
+            (IsIconic(hwnd) != 0 &&
+                placement.ref.flags & WPF_RESTORETOMAXIMIZED != 0),
+      );
+    } finally {
+      free(placement);
+    }
+  }
+
+  static void _setPlacement(
+    int hwnd,
+    ({int left, int top, int width, int height}) frame,
+    bool maximized,
+  ) {
+    final placement = calloc<WINDOWPLACEMENT>()
+      ..ref.length = sizeOf<WINDOWPLACEMENT>()
+      ..ref.showCmd = maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    placement.ref.rcNormalPosition
+      ..left = frame.left
+      ..top = frame.top
+      ..right = frame.left + frame.width
+      ..bottom = frame.top + frame.height;
+    try {
+      SetWindowPlacement(hwnd, placement);
+    } finally {
+      free(placement);
     }
   }
 
