@@ -11,6 +11,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -407,6 +408,9 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
+/// The width messages keep to: about 115 characters a line.
+const _column = 860.0;
+
 class _Messages extends StatelessWidget {
   const _Messages({required this.messages});
 
@@ -418,15 +422,19 @@ class _Messages extends StatelessWidget {
     return LayoutBuilder(
       // Messages keep to a middle column of about 115 characters a line, as
       // in Claude's apps; narrower chats keep only a small gutter.
-      builder: (context, constraints) => ListView.builder(
-        reverse: true,
-        padding: EdgeInsets.symmetric(
-          horizontal: max(16, (constraints.maxWidth - 860) / 2),
-          vertical: 16,
+      builder: (context, constraints) => ScrollConfiguration(
+        // Scrolls without a bar.
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: ListView.builder(
+          reverse: true,
+          padding: EdgeInsets.symmetric(
+            horizontal: max(16, (constraints.maxWidth - _column) / 2),
+            vertical: 16,
+          ),
+          itemCount: messages.length,
+          itemBuilder: (context, index) =>
+              _MessageView(message: messages[messages.length - 1 - index]),
         ),
-        itemCount: messages.length,
-        itemBuilder: (context, index) =>
-            _MessageView(message: messages[messages.length - 1 - index]),
       ),
     );
   }
@@ -570,50 +578,43 @@ class _ComposerState extends State<_Composer> {
       return _Aborted(controller: controller);
     }
     final running = controller.currentRunning;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.enter): _send,
-              },
-              child: GaiaVanish(
-                key: _vanish,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A little wider than the messages' column, as in Claude's apps.
+        final side = max(12.0, (constraints.maxWidth - _column) / 2 - 12);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(side, 8, side, 12),
+          child: CallbackShortcuts(
+            bindings: {const SingleActivator(LogicalKeyboardKey.enter): _send},
+            child: GaiaVanish(
+              key: _vanish,
+              controller: _text,
+              builder: (context, vanishing) => GaiaTextField(
                 controller: _text,
-                builder: (context, vanishing) => TextField(
-                  controller: _text,
-                  focusNode: _focus,
-                  autofocus: true,
-                  minLines: vanishing ? null : 1,
-                  maxLines: vanishing ? null : 8,
-                  expands: vanishing,
-                  textAlignVertical: vanishing ? TextAlignVertical.top : null,
-                  decoration: InputDecoration(
-                    hintText: vanishing ? null : 'Message Gaia',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
+                focusNode: _focus,
+                autofocus: true,
+                minLines: vanishing ? null : 1,
+                maxLines: vanishing ? null : 8,
+                expands: vanishing,
+                textAlignVertical: vanishing ? TextAlignVertical.top : null,
+                hintText: vanishing ? null : 'Message Gaia',
+                trailing: running
+                    ? GaiaButton(
+                        icon: Icons.stop,
+                        size: 32,
+                        onPressed: () =>
+                            controller.stop(controller.currentChatId!),
+                      )
+                    : GaiaButton(
+                        icon: Icons.arrow_upward,
+                        size: 32,
+                        onPressed: _send,
+                      ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          running
-              ? GaiaButton(
-                  icon: Icons.stop,
-                  size: 40,
-                  onPressed: () => controller.stop(controller.currentChatId!),
-                )
-              : GaiaButton(
-                  icon: Icons.arrow_upward,
-                  size: 40,
-                  onPressed: _send,
-                ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

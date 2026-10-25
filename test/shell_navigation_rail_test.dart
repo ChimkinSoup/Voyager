@@ -255,6 +255,7 @@ void main() {
 
       final db = AppDatabase.inMemory();
       addTearDown(db.close);
+      var probes = 0;
 
       await tester.pumpWidget(
         ProviderScope(
@@ -268,7 +269,10 @@ void main() {
             // the offline verdict inside a handful of pumped frames.
             connectivityStatusProvider.overrideWith(
               (ref) => ConnectivityStatusController(
-                probe: () async => throw StateError('unreachable'),
+                probe: () async {
+                  probes++;
+                  throw StateError('unreachable');
+                },
                 startDelay: const Duration(milliseconds: 10),
                 offlineInterval: const Duration(milliseconds: 10),
               ),
@@ -294,6 +298,18 @@ void main() {
         await tester.pump(const Duration(milliseconds: 16));
       }
       expect(badge, findsOneWidget);
+      expect(
+        tester.getSize(
+          find.ancestor(of: badge, matching: find.byType(InkWell)),
+        ),
+        const Size(48, 48),
+        reason: 'a full target for a finger',
+      );
+
+      // Clicking it runs a probe straight away instead of waiting.
+      final before = probes;
+      await tester.tap(badge);
+      expect(probes, before + 1);
     },
   );
 }

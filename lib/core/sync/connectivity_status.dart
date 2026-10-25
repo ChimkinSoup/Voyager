@@ -69,12 +69,34 @@ class ConnectivityStatusController extends ChangeNotifier
   Timer? _timer;
   bool _disposed = false;
   bool _paused = false;
-  bool _probeInFlight = false;
+  Future<void>? _inFlight;
   bool _probeOwed = false;
+  bool _retrying = false;
 
   /// False only once the backend has failed [_failuresBeforeOffline] probes in
   /// a row. Recovery is immediate on the next success.
   bool get isOnline => _isOnline;
+
+  /// True while a probe asked for by [retryNow] is in the air.
+  bool get isRetrying => _retrying;
+
+  /// Probes now instead of waiting out the interval — the offline badge's tap.
+  ///
+  /// A probe already in flight is as fresh as a new one would be, so that case
+  /// waits on it rather than sending another. Otherwise the pending timer is
+  /// dropped, along with any probe owed from the background, and [_runProbe]
+  /// rearms it when this one lands, exactly as a scheduled probe would.
+  Future<void> retryNow() async {
+    if (_disposed) return;
+    _timer?.cancel();
+    _probeOwed = false;
+    _retrying = true;
+    notifyListeners();
+    await _runProbe();
+    if (_disposed) return;
+    _retrying = false;
+    notifyListeners();
+  }
 
   /// Windows reports [AppLifecycleState.inactive] when the window loses focus
   /// and `hidden` when it is minimised; Android reports `paused` on the way to
@@ -110,7 +132,7 @@ class ConnectivityStatusController extends ChangeNotifier
     _probeOwed = false;
     // A probe still in the air is a live round-trip already: its answer is as
     // fresh as a new one would be, and it rearms the schedule when it lands.
-    if (!owed || _probeInFlight) return;
+    if (!owed || _inFlight != null) return;
     unawaited(_runProbe());
   }
 
@@ -126,8 +148,10 @@ class ConnectivityStatusController extends ChangeNotifier
     unawaited(_runProbe());
   }
 
-  Future<void> _runProbe() async {
-    _probeInFlight = true;
+  /// The probe in the air, or a new one if there is none.
+  Future<void> _runProbe() => _inFlight ??= _probeAndRearm();
+
+  Future<void> _probeAndRearm() async {
     try {
       await probe().timeout(probeTimeout);
       _consecutiveFailures = 0;
@@ -136,7 +160,7 @@ class ConnectivityStatusController extends ChangeNotifier
       _consecutiveFailures++;
       if (_consecutiveFailures >= _failuresBeforeOffline) _set(false);
     } finally {
-      _probeInFlight = false;
+      _inFlight = null;
     }
     // Paced by the last probe's result rather than by the published state:
     // during the failure streak the state still reads online, and waiting a

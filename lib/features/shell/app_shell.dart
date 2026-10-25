@@ -478,25 +478,52 @@ class _ConnectivityIndicator extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final online = ref.watch(connectivityStatusProvider).isOnline;
+    final connectivity = ref.watch(connectivityStatusProvider);
+    final touch = switch (theme.platform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.fuchsia => true,
+      _ => false,
+    };
 
     return AnimatedSwitcher(
       duration: VoyagerMotion.reduced(context)
           ? VoyagerMotion.crossfade
           : const Duration(milliseconds: 220),
-      child: online
+      child: connectivity.isOnline
           ? const SizedBox.shrink()
           : Tooltip(
               message:
                   'Offline — changes are saved on this device and sync when '
-                  'the connection returns.',
-              child: PhosphorIcon(
-                PhosphorIconsDuotone.wifiSlash,
-                size: 20,
-                // The one themed role that reads as "attention" against the
-                // rail in both light and dark, unlike the fixed accent colors
-                // the sync slots below still use.
-                color: theme.colorScheme.error,
+                  'the connection returns. ${touch ? 'Tap' : 'Click'} to '
+                  'check again.',
+              child: Semantics(
+                // The tooltip already reads as its label.
+                button: true,
+                child: InkWell(
+                  onTap: connectivity.isRetrying
+                      ? null
+                      : () => unawaited(connectivity.retryNow()),
+                  customBorder: const CircleBorder(),
+                  child: Padding(
+                    // A full 48 px target for a finger; the same 20 px icon.
+                    padding: EdgeInsets.all(touch ? 14 : 4),
+                    // Dimmed while the check is out, so a click visibly does
+                    // something even when the answer is "still offline".
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 120),
+                      opacity: connectivity.isRetrying ? 0.4 : 1,
+                      child: PhosphorIcon(
+                        PhosphorIconsDuotone.wifiSlash,
+                        size: 20,
+                        // The one themed role that reads as "attention"
+                        // against the rail in both light and dark, unlike the
+                        // fixed accent colors the sync slots below still use.
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
     );

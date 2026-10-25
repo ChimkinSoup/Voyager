@@ -114,6 +114,79 @@ void main() {
     });
   });
 
+  test('retryNow recovers without waiting out the interval', () {
+    var outcome = fails;
+    withController(() => outcome(), (async, controller) {
+      async.elapse(start + offline);
+      expect(controller.isOnline, isFalse);
+
+      outcome = succeeds;
+      unawaited(controller.retryNow());
+      expect(controller.isRetrying, isTrue);
+      async.flushMicrotasks();
+      expect(controller.isOnline, isTrue);
+      expect(controller.isRetrying, isFalse);
+    });
+  });
+
+  test('retryNow replaces the pending probe rather than adding one', () {
+    var probes = 0;
+    withController(
+      () => () async {
+        probes++;
+        throw StateError('unreachable');
+      },
+      (async, controller) {
+        async.elapse(start + offline);
+        expect(probes, 2);
+
+        unawaited(controller.retryNow());
+        async.flushMicrotasks();
+        expect(probes, 3);
+
+        // The old timer is gone; the next probe is one interval after the
+        // retry's answer.
+        async.elapse(offline - const Duration(milliseconds: 1));
+        expect(probes, 3);
+        async.elapse(const Duration(milliseconds: 1));
+        expect(probes, 4);
+      },
+    );
+  });
+
+  test('retryNow during a probe waits on it rather than adding one', () {
+    var probes = 0;
+    final answers = <Completer<void>>[];
+    fakeAsync((async) {
+      final controller = ConnectivityStatusController(
+        probe: () {
+          probes++;
+          final answer = Completer<void>();
+          answers.add(answer);
+          return answer.future;
+        },
+        startDelay: start,
+        onlineInterval: online,
+        probeTimeout: const Duration(minutes: 1),
+      );
+      async.elapse(start);
+      expect(probes, 1);
+
+      unawaited(controller.retryNow());
+      async.flushMicrotasks();
+      expect(probes, 1);
+      expect(controller.isRetrying, isTrue, reason: 'the click shows');
+
+      answers.single.complete();
+      async.flushMicrotasks();
+      expect(controller.isRetrying, isFalse);
+      async.elapse(online);
+      expect(probes, 2);
+
+      controller.dispose();
+    });
+  });
+
   test('stops probing once disposed', () {
     var probes = 0;
     fakeAsync((async) {
@@ -227,6 +300,26 @@ void main() {
           async.flushMicrotasks();
         }
         expect(probes(), greaterThan(1));
+      });
+    });
+
+    test('retryNow pays off a probe owed from the background', () {
+      withProbeCount((async, controller, probes) {
+        async.elapse(start); // probe 1
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        async.elapse(online); // probe 2 comes due, and is owed
+        expect(probes(), 1);
+
+        unawaited(controller.retryNow());
+        async.flushMicrotasks();
+        expect(probes(), 2);
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        async.flushMicrotasks();
+        expect(probes(), 2, reason: 'the retry was the owed probe');
+
+        // One schedule, not two interleaved.
+        async.elapse(online * 3);
+        expect(probes(), 5);
       });
     });
 

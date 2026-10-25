@@ -61,7 +61,7 @@ class GaiaVanishState extends State<GaiaVanish>
   void vanish() {
     if (MediaQuery.disableAnimationsOf(context)) return;
     final box = context.findRenderObject()! as RenderBox;
-    final editable = _findEditable(box)!;
+    final editable = findEditable(box)!;
     _clear();
     final vanishing = _Vanishing.capture(editable, box);
     _height.value = vanishing.fieldHeight;
@@ -104,21 +104,6 @@ class GaiaVanishState extends State<GaiaVanish>
     if (_vanishing != null && !_fading && widget.controller.text.isNotEmpty) {
       setState(() => _fading = true);
     }
-  }
-
-  static RenderEditable? _findEditable(RenderObject root) {
-    RenderEditable? found;
-    void visit(RenderObject node) {
-      if (found != null) return;
-      if (node is RenderEditable) {
-        found = node;
-      } else {
-        node.visitChildren(visit);
-      }
-    }
-
-    root.visitChildren(visit);
-    return found;
   }
 
   @override
@@ -412,4 +397,20 @@ class _VanishPainter extends CustomPainter {
   @override
   bool shouldRepaint(_VanishPainter oldDelegate) =>
       oldDelegate.vanishing != vanishing;
+}
+
+/// The first text under [root], depth first.
+RenderEditable? findEditable(RenderObject root) {
+  RenderEditable? found;
+  void visit(RenderObject node) {
+    if (found != null) return;
+    if (node is RenderEditable) {
+      found = node;
+    } else {
+      node.visitChildren(visit);
+    }
+  }
+
+  root.visitChildren(visit);
+  return found;
 }
