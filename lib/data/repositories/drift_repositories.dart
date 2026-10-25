@@ -9929,6 +9929,11 @@ class DriftGaiaRepository implements GaiaRepository {
             id: Value(settings.id),
             gaiaMd: Value(settings.gaiaMd),
             notifyOnDone: Value(settings.notifyOnDone),
+            agentsJson: Value(
+              jsonEncode([for (final agent in settings.agents) agent.toJson()]),
+            ),
+            tiersJson: Value(jsonEncode(gaiaTiersToJson(settings.tiers))),
+            lastTier: Value(settings.lastTier.name),
             createdAt: Value(settings.createdAt),
             updatedAt: Value(settings.updatedAt),
             version: Value(settings.version),
@@ -9946,6 +9951,7 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   lastMessageAt: row.lastMessageAt,
   pinned: row.pinned,
   agentSessions: gaiaAgentSessionsFromJson(jsonDecode(row.agentSessionsJson)),
+  tier: gaiaTierFromName(row.tier),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -9959,6 +9965,7 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       lastMessageAt: Value(chat.lastMessageAt),
       pinned: Value(chat.pinned),
       agentSessionsJson: Value(jsonEncode(chat.toJson()['agentSessions'])),
+      tier: Value(chat.tier?.name),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),
@@ -9973,6 +9980,7 @@ GaiaMessage _mapGaiaMessage(GaiaMessagesTableData row) => GaiaMessage(
   parts: gaiaPartsFromJson(jsonDecode(row.partsJson) as List),
   status: GaiaMessageStatus.values.byName(row.status),
   model: row.model,
+  adapter: row.adapter,
   error: row.error,
   needsInput: row.needsInput,
   createdAt: row.createdAt,
@@ -9992,6 +10000,7 @@ GaiaMessagesTableCompanion _gaiaMessageCompanion(GaiaMessage message) =>
       ),
       status: Value(message.status.name),
       model: Value(message.model),
+      adapter: Value(message.adapter),
       error: Value(message.error),
       needsInput: Value(message.needsInput),
       createdAt: Value(message.createdAt),
@@ -10003,6 +10012,13 @@ GaiaMessagesTableCompanion _gaiaMessageCompanion(GaiaMessage message) =>
 GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
   gaiaMd: row.gaiaMd,
   notifyOnDone: row.notifyOnDone,
+  agents: row.agentsJson == null
+      ? kGaiaDefaultAgents
+      : gaiaAgentsFromJson(jsonDecode(row.agentsJson!)),
+  tiers: row.tiersJson == null
+      ? kGaiaDefaultTiers
+      : gaiaTiersFromJson(jsonDecode(row.tiersJson!)),
+  lastTier: gaiaTierFromName(row.lastTier) ?? GaiaTier.standard,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

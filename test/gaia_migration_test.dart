@@ -1,5 +1,6 @@
 // Schema 169 adds Gaia's chats, messages and settings, and the FTS5 table
-// its search reads; 170 moves each search row to its message's rowid. The
+// its search reads; 170 moves each search row to its message's rowid; 171
+// adds Phase 2's tiers and agents. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -134,4 +135,66 @@ void main() {
       hasLength(1),
     );
   });
+
+  test(
+    '170→171 adds tiers and agents, with defaults for what was there',
+    () async {
+      final seed = AppDatabase(NativeDatabase(file));
+      final seedRepo = DriftGaiaRepository(seed);
+      await seedRepo.upsertChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Hi',
+          createdAt: now,
+          updatedAt: now,
+          lastMessageAt: now,
+        ),
+      );
+      await seedRepo.upsertSettings(
+        GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.'),
+      );
+      for (final (table, column) in [
+        ('gaia_chats_table', 'tier'),
+        ('gaia_messages_table', 'adapter'),
+        ('gaia_settings_table', 'agents_json'),
+        ('gaia_settings_table', 'tiers_json'),
+        ('gaia_settings_table', 'last_tier'),
+      ]) {
+        await seed.customStatement('ALTER TABLE $table DROP COLUMN $column');
+      }
+      await seed.customStatement('PRAGMA user_version = 170');
+      await seed.close();
+
+      final upgraded = AppDatabase(NativeDatabase(file));
+      addTearDown(upgraded.close);
+      final repo = DriftGaiaRepository(upgraded);
+      final settings = await repo.getSettings();
+      expect(settings.gaiaMd, 'Be brief.');
+      expect(settings.agentFor(GaiaTier.deep)?.model, 'claude-opus-5-5');
+      expect(settings.lastTier, GaiaTier.standard);
+      final chat = (await repo.getChat('c1'))!;
+      expect(chat.tier, isNull);
+
+      await repo.upsertChat(chat.copyWith(tier: GaiaTier.quick));
+      expect((await repo.getChat('c1'))!.tier, GaiaTier.quick);
+      await repo.upsertSettings(
+        settings.copyWith(
+          agents: [
+            ...settings.agents,
+            const GaiaAgent(
+              id: 'sol',
+              label: 'GPT-6.1 Sol',
+              adapter: kGaiaCodexAdapter,
+              model: 'gpt-6.1-sol',
+            ),
+          ],
+          tiers: {...settings.tiers, GaiaTier.deep: 'sol'},
+          lastTier: GaiaTier.deep,
+        ),
+      );
+      final saved = await repo.getSettings();
+      expect(saved.agentFor(GaiaTier.deep)?.adapter, kGaiaCodexAdapter);
+      expect(saved.lastTier, GaiaTier.deep);
+    },
+  );
 }

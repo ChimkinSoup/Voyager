@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -28,13 +28,13 @@ typedef GaiaRunToast = ({
 });
 
 /// The companion's state: chats read from and written to the main instance,
-/// runs on the Claude Code CLI, the window mode, Abort, and the drain before
-/// an update (GAIA_HLD.md §3, §14, §15.7).
+/// runs on each tier's agent, the window mode, Abort, and the drain before
+/// an update (GAIA_HLD.md §3, §7, §14, §15.7).
 class GaiaController extends ChangeNotifier {
   GaiaController({
     required this._pipe,
     required this._window,
-    required this._runner,
+    required this._runners,
     this._cliVersion = claudeCodeVersion,
     this._exit = exit,
     GaiaDebug? debug,
@@ -44,7 +44,9 @@ class GaiaController extends ChangeNotifier {
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
-  final ClaudeCodeRunner _runner;
+
+  /// One per adapter id (`kGaia…Adapter`).
+  final Map<String, GaiaAgentRunner> _runners;
 
   /// The debug menu's toggles; scripted replies play on [_scripted].
   final GaiaDebug debug;
@@ -77,6 +79,16 @@ class GaiaController extends ChangeNotifier {
 
   /// Whether a run that finishes while Gaia is hidden raises a toast (§14).
   var _notifyOnDone = true;
+
+  /// The configured agents and which tier points at which (§7.1).
+  var agents = kGaiaDefaultAgents;
+  var tiers = kGaiaDefaultTiers;
+
+  /// The tier a new chat starts on (§7.2).
+  var lastTier = GaiaTier.standard;
+
+  /// The tier picked for the next message, over the chat's own (§7.2).
+  GaiaTier? pickedTier;
 
   /// Null for a new chat not yet sent.
   String? currentChatId;
@@ -131,7 +143,7 @@ class GaiaController extends ChangeNotifier {
       // answered: a companion never outlives it.
       ..onDisconnected = () {
         _scripted.killAll();
-        unawaited(_runner.killAll().whenComplete(() => _exit(0)));
+        unawaited(_killAll().whenComplete(() => _exit(0)));
       };
     if (!await _pipe.connect()) return _exit(0);
     unawaited(_checkCli());
@@ -154,8 +166,31 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> _applySettings(Map<String, Object?> settings) async {
     _notifyOnDone = settings['notifyOnDone'] != false;
-    await _runner.setInstructions(settings['gaiaMd'] as String? ?? '');
+    agents = gaiaAgentsFromJson(settings['agents']);
+    tiers = gaiaTiersFromJson(settings['tiers']);
+    lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
+    notifyListeners();
+    final instructions = settings['gaiaMd'] as String? ?? '';
+    await Future.wait([
+      for (final runner in _runners.values)
+        runner.setInstructions(instructions),
+    ]);
   }
+
+  /// The tier the next message in the current chat goes to (§7.2).
+  GaiaTier get nextTier => pickedTier ?? currentChat?.tier ?? lastTier;
+
+  GaiaAgent? agentFor(GaiaTier tier) =>
+      agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
+
+  /// The tier picker, for the next message.
+  void pickTier(GaiaTier tier) {
+    pickedTier = tier;
+    notifyListeners();
+  }
+
+  Future<void> _killAll() =>
+      Future.wait([for (final runner in _runners.values) runner.killAll()]);
 
   void _onEvent(String event, Map<String, Object?> params) {
     switch (event) {
@@ -253,10 +288,12 @@ class GaiaController extends ChangeNotifier {
 
   void newChat() {
     currentChatId = null;
+    pickedTier = null;
     notifyListeners();
   }
 
   Future<void> selectChat(String chatId) async {
+    if (chatId != currentChatId) pickedTier = null;
     currentChatId = chatId;
     notifyListeners();
     if (_messages.containsKey(chatId)) return;
@@ -280,6 +317,9 @@ class GaiaController extends ChangeNotifier {
     var chat = currentChat;
     if (chat != null && _running.contains(chat.id)) return;
     final now = utcNow();
+    final tier = nextTier;
+    pickedTier = null;
+    final agent = agentFor(tier);
     if (chat == null) {
       // No utility model yet: the title is the first line (§5.1).
       final firstLine = prompt.split('\n').first;
@@ -291,6 +331,7 @@ class GaiaController extends ChangeNotifier {
         createdAt: now,
         updatedAt: now,
         lastMessageAt: now,
+        tier: tier,
       );
       chats = [chat, ...chats];
       _messages[chat.id] = [];
@@ -311,7 +352,17 @@ class GaiaController extends ChangeNotifier {
       }
     }
     final chatId = chat.id;
+    if (chat.tier != tier) {
+      chat = chat.copyWith(tier: tier);
+      chats = [for (final c in chats) c.id == chatId ? chat : c];
+      unawaited(_request('setTier', {'chatId': chatId, 'tier': tier.name}));
+    }
+    if (tier != lastTier) {
+      lastTier = tier;
+      unawaited(_request('setLastTier', {'tier': tier.name}));
+    }
     final script = debug.scriptFor(prompt);
+    final runner = agent == null ? null : _runners[agent.adapter];
     final list = _messages[chatId] ??= [];
     final seq = list.isEmpty ? 0 : list.last.seq + 1;
     final question = GaiaMessage(
@@ -333,7 +384,8 @@ class GaiaController extends ChangeNotifier {
       status: GaiaMessageStatus.streaming,
       createdAt: now,
       updatedAt: now,
-      model: script == null ? kGaiaClaudeModel : 'gaia-debug-script',
+      model: script == null ? agent?.model : 'gaia-debug-script',
+      adapter: script == null ? agent?.adapter : null,
     );
     list.addAll([question, reply]);
     _running.add(chatId);
@@ -343,9 +395,11 @@ class GaiaController extends ChangeNotifier {
     unawaited(_persist(question));
     unawaited(_persist(reply));
 
-    final builder = ClaudeTurnBuilder();
-    final sessionId = chat.sessionOn(_deviceId);
-    void onEvent(ClaudeEvent event) {
+    final builder = GaiaTurnBuilder();
+    final sessionId = agent == null
+        ? null
+        : chat.sessionOn(_deviceId, adapter: agent.adapter);
+    void onEvent(GaiaAgentEvent event) {
       if (!builder.apply(event)) return;
       reply = _replace(reply, reply.copyWith(parts: builder.parts));
       final last = _lastPersist[reply.id];
@@ -355,29 +409,45 @@ class GaiaController extends ChangeNotifier {
     }
 
     try {
-      final result = script == null
-          ? await _runner.send(
-              chatId: chatId,
-              sessionId: sessionId,
-              newSessionId: sessionId ?? _uuid.v4(),
-              prompt: prompt,
-              onEvent: onEvent,
-            )
-          : await _scripted.send(
+      final result = script != null
+          ? await _scripted.send(
               chatId: chatId,
               script: script,
               replyDelay: debug.replyDelay,
               streamSpeed: debug.streamSpeed,
               onEvent: onEvent,
+            )
+          : agent == null
+          ? GaiaTurnResult(
+              sessionId: '',
+              isError: true,
+              text:
+                  'No agent is set for ${tier.label}. Pick one on the Gaia '
+                  'page.',
+            )
+          : runner == null
+          ? GaiaTurnResult(
+              sessionId: '',
+              isError: true,
+              text: "${agent.label} can't run on this device.",
+            )
+          : await runner.send(
+              chatId: chatId,
+              sessionId: sessionId,
+              model: agent.model,
+              prompt: prompt,
+              onEvent: onEvent,
             );
       // Here at once, so a next message straight away resumes it; the main
-      // instance's copy follows. A scripted reply has no session to resume.
-      if (script == null) {
+      // instance's copy follows. A scripted reply, or one no agent ran, has
+      // no session to resume.
+      if (result.sessionId.isNotEmpty && agent != null) {
+        final key = gaiaSessionKey(_deviceId, adapter: agent.adapter);
         if (_chat(chatId) case final current?) {
           final updated = current.copyWith(
             agentSessions: {
               ...current.agentSessions,
-              gaiaSessionKey(_deviceId): GaiaAgentSession(
+              key: GaiaAgentSession(
                 sessionId: result.sessionId,
                 lastSeq: reply.seq,
               ),
@@ -386,16 +456,12 @@ class GaiaController extends ChangeNotifier {
           chats = [for (final c in chats) c.id == chatId ? updated : c];
         }
         unawaited(
-          _pipe
-              .request('setSession', {
-                'chatId': chatId,
-                'sessionId': result.sessionId,
-                'lastSeq': reply.seq,
-              })
-              .catchError((Object error) {
-                debugPrint('[gaia] session not saved: $error');
-                return null;
-              }),
+          _request('setSession', {
+            'chatId': chatId,
+            'adapter': agent.adapter,
+            'sessionId': result.sessionId,
+            'lastSeq': reply.seq,
+          }),
         );
       }
       final parts = builder.finished;
@@ -447,7 +513,9 @@ class GaiaController extends ChangeNotifier {
     if (!_running.contains(chatId)) return;
     _stopping.add(chatId);
     _scripted.stop(chatId);
-    await _runner.stop(chatId);
+    await Future.wait([
+      for (final runner in _runners.values) runner.stop(chatId),
+    ]);
   }
 
   /// Tells the main instance which chats are running, for the tray and the
@@ -524,7 +592,7 @@ class GaiaController extends ChangeNotifier {
   Future<void> cancelDrain() async {
     _drainCancelled = true;
     _scripted.killAll();
-    await _runner.killAll();
+    await _killAll();
   }
 
   void _settleDrain() {
@@ -557,7 +625,7 @@ class GaiaController extends ChangeNotifier {
     }
     notifyListeners();
     _scripted.killAll();
-    await Future.wait([_runner.killAll(), ...saves]);
+    await Future.wait([_killAll(), ...saves]);
   }
 
   Future<void> rearm() async {
@@ -584,6 +652,16 @@ class GaiaController extends ChangeNotifier {
     if (index >= 0) list![index] = updated;
     notifyListeners();
     return updated;
+  }
+
+  /// A write to the main instance the run doesn't wait on: one lost to a
+  /// main instance going away is only logged.
+  Future<void> _request(String method, Map<String, Object?> params) async {
+    try {
+      await _pipe.request(method, params);
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] $method not saved: $error');
+    }
   }
 
   Future<void> _persist(GaiaMessage message) async {

@@ -339,7 +339,7 @@ void main() {
       run(show: true, (async, _) {
         final hello = connect(async);
         expect(hello['deviceId'], 'laptop');
-        expect(hello['settings'], {'gaiaMd': '', 'notifyOnDone': true});
+        expect(hello['settings'], GaiaSettings.initial().toJson());
       });
     });
 
@@ -350,7 +350,10 @@ void main() {
           db,
         ).upsertSettings(GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.'));
         async.elapse(const Duration(seconds: 1));
-        expect(companions.single.events, contains('settings Be brief. true'));
+        expect(
+          companions.single.events,
+          contains(startsWith('settings Be brief. true')),
+        );
       });
     });
 

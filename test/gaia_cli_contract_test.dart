@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 
 /// FRAGILE(cli): the Claude Code contract (GAIA_HLD.md §5.1) against the
@@ -24,6 +25,9 @@ final _enabled = Platform.environment['GAIA_CLI_CHECK'] == '1';
 const _uuid = Uuid();
 const _timeout = Timeout(Duration(minutes: 5));
 
+/// The model the contract pins, as a tier's agent would.
+const _model = 'claude-opus-5-5';
+
 /// What a line the parser ignores is: its type, and its subtype or event.
 String _shape(String line) {
   final json = jsonDecode(line) as Map;
@@ -37,8 +41,10 @@ String _shape(String line) {
 }
 
 String _text(List<ClaudeEvent> events) {
-  final builder = ClaudeTurnBuilder();
-  events.forEach(builder.apply);
+  final builder = GaiaTurnBuilder();
+  for (final event in events) {
+    if (gaiaEventOf(event) case final event?) builder.apply(event);
+  }
   return [
     for (final part in builder.finished)
       if (part is GaiaTextPart) part.text,
@@ -83,13 +89,12 @@ void main() {
 
   /// A runner whose raw output goes to [scenario]'s transcript, and whose
   /// lines the parser ignores are tallied.
-  ClaudeCodeRunner runner(String scenario, {String model = kGaiaClaudeModel}) {
+  ClaudeCodeRunner runner(String scenario) {
     final transcript = File(p.join(transcripts.path, '$scenario.jsonl'))
       ..writeAsStringSync('');
     return ClaudeCodeRunner(
       workingDirectory: workingDirectory.path,
       instructionsFile: p.join(workingDirectory.path, '..', 'GAIA.md'),
-      model: model,
       onLine: (line) {
         transcript.writeAsStringSync('$line\n', mode: FileMode.append);
         if (line.trim().isEmpty) return;
@@ -109,12 +114,14 @@ void main() {
     required String sessionId,
     required bool resume,
     required String prompt,
+    String model = _model,
   }) async {
     final events = <ClaudeEvent>[];
-    final result = await runner.send(
+    final result = await runner.sendRaw(
       chatId: 'contract',
       sessionId: resume ? sessionId : null,
       newSessionId: sessionId,
+      model: model,
       prompt: prompt,
       onEvent: events.add,
     );
@@ -139,7 +146,7 @@ void main() {
         );
         final init = events.whereType<ClaudeInit>().first;
         expect(init.sessionId, sessionId);
-        expect(init.model, kGaiaClaudeModel, reason: 'the model pin');
+        expect(init.model, _model, reason: 'the model pin');
         expect(events.whereType<ClaudeTextStart>(), isNotEmpty);
         expect(events.whereType<ClaudeTextDelta>(), isNotEmpty);
         expect(result.isError, isFalse, reason: result.text);
@@ -213,13 +220,14 @@ void main() {
     skip: !_enabled,
     timeout: _timeout,
     () async {
-      final cli = runner('unknown_model', model: 'claude-nonexistent-9');
+      final cli = runner('unknown_model');
       try {
         final (result, _) = await turn(
           cli,
           sessionId: _uuid.v4(),
           resume: false,
           prompt: 'Hi',
+          model: 'claude-nonexistent-9',
         );
         expect(result.isError, isTrue);
         expect(result.text, isNotEmpty);

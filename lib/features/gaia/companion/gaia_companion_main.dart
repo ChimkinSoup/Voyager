@@ -6,6 +6,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -43,10 +44,12 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     window: GaiaWindow(),
     // Gaia's own working directory, so the CLI never picks up an unrelated
     // project's instruction files (§5.1).
-    runner: ClaudeCodeRunner(
-      workingDirectory: p.join(root.path, 'gaia', 'ws'),
-      instructionsFile: p.join(root.path, 'gaia', 'GAIA.md'),
-    ),
+    runners: {
+      kGaiaClaudeCodeAdapter: ClaudeCodeRunner(
+        workingDirectory: p.join(root.path, 'gaia', 'ws'),
+        instructionsFile: p.join(root.path, 'gaia', 'GAIA.md'),
+      ),
+    },
   );
   runApp(GaiaApp(controller: controller));
   // Before start, which can already show the window.

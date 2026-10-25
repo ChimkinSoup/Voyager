@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:uuid/uuid.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
@@ -630,6 +631,8 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
             dense: true,
           ),
         ),
+        const SizedBox(height: 24),
+        _AgentsSection(settings: settings),
         const SizedBox(height: 16),
         if (isWindows) ...[
           SwitchListTile(
@@ -652,6 +655,218 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
             style: muted,
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// The adapters an agent can be added on, with their names. The Gemini CLI
+/// is deferred until its login can be tested.
+const _adapterLabels = {
+  kGaiaClaudeCodeAdapter: 'Claude Code',
+  kGaiaCodexAdapter: 'Codex',
+};
+
+/// Tiers and agents (§7.1): which agent each of Quick, Standard and Deep
+/// runs on, and the agents to pick from.
+class _AgentsSection extends ConsumerWidget {
+  const _AgentsSection({required this.settings});
+
+  final GaiaSettings settings;
+
+  Future<void> _save(WidgetRef ref, GaiaSettings updated) =>
+      ref.read(gaiaRepositoryProvider).upsertSettings(updated);
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final agent = await showDialog<GaiaAgent>(
+      context: context,
+      builder: (_) => const _AddAgentDialog(),
+    );
+    if (agent == null) return;
+    await _save(ref, settings.copyWith(agents: [...settings.agents, agent]));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final inUse = settings.tiers.values.toSet();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Tiers', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Each tier runs on an agent. Pick the tier for a message from '
+          "Gaia's composer.",
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        for (final tier in GaiaTier.values)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                SizedBox(width: 96, child: Text(tier.label)),
+                Expanded(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: settings.agentFor(tier)?.id,
+                    hint: const Text('No agent'),
+                    items: [
+                      for (final agent in settings.agents)
+                        DropdownMenuItem(
+                          value: agent.id,
+                          child: Text(
+                            '${agent.label} · '
+                            '${_adapterLabels[agent.adapter] ?? agent.adapter}',
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      if (id == null) return;
+                      _save(
+                        ref,
+                        settings.copyWith(tiers: {...settings.tiers, tier: id}),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text('Agents', style: theme.textTheme.titleMedium),
+            const Spacer(),
+            GlassButton(
+              onPressed: () => _add(context, ref),
+              icon: const Icon(PhosphorIconsRegular.plus, size: 13),
+              label: 'Add agent',
+              dense: true,
+            ),
+          ],
+        ),
+        for (final agent in settings.agents)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(agent.label),
+            subtitle: Text(
+              '${_adapterLabels[agent.adapter] ?? agent.adapter} · '
+              '${agent.model}',
+              style: muted,
+            ),
+            trailing: IconButton(
+              tooltip: inUse.contains(agent.id)
+                  ? 'A tier uses this agent'
+                  : 'Remove',
+              icon: const Icon(PhosphorIconsRegular.trash, size: 16),
+              onPressed: inUse.contains(agent.id)
+                  ? null
+                  : () => _save(
+                      ref,
+                      settings.copyWith(
+                        agents: [
+                          for (final a in settings.agents)
+                            if (a.id != agent.id) a,
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AddAgentDialog extends StatefulWidget {
+  const _AddAgentDialog();
+
+  @override
+  State<_AddAgentDialog> createState() => _AddAgentDialogState();
+}
+
+class _AddAgentDialogState extends State<_AddAgentDialog> {
+  final _label = TextEditingController();
+  final _model = TextEditingController();
+  var _adapter = kGaiaClaudeCodeAdapter;
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _model.dispose();
+    super.dispose();
+  }
+
+  bool get _valid =>
+      _label.text.trim().isNotEmpty && _model.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add agent'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButton<String>(
+              isExpanded: true,
+              value: _adapter,
+              items: [
+                for (final MapEntry(:key, :value) in _adapterLabels.entries)
+                  DropdownMenuItem(value: key, child: Text(value)),
+              ],
+              onChanged: (adapter) => setState(() => _adapter = adapter!),
+            ),
+            const SizedBox(height: 8),
+            VoyagerTextField(
+              controller: _model,
+              decoration: InputDecoration(
+                labelText: 'Model',
+                hintText: _adapter == kGaiaCodexAdapter
+                    ? 'e.g. gpt-6.1-sol'
+                    : 'e.g. claude-sonnet-5-5',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            VoyagerTextField(
+              controller: _label,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'e.g. GPT-6.1 Sol',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+          dense: true,
+        ),
+        GlassButton(
+          onPressed: _valid
+              ? () => Navigator.of(context).pop(
+                  GaiaAgent(
+                    id: const Uuid().v4(),
+                    label: _label.text.trim(),
+                    adapter: _adapter,
+                    model: _model.text.trim(),
+                  ),
+                )
+              : null,
+          label: 'Add',
+          dense: true,
+        ),
       ],
     );
   }

@@ -5,8 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 
 /// The streaming speeds the debug menu offers, in characters a second.
 const kGaiaDebugStreamSpeeds = [25, 50, 100, 200, 400, 800, 1600, 6400];
@@ -180,20 +179,20 @@ class GaiaDebugHang extends GaiaDebugStep {
   const GaiaDebugHang();
 }
 
-/// Plays [GaiaDebugScript]s as `ClaudeCodeRunner` runs turns: the same
-/// events, a [ClaudeResult] at the end, and an error when stopped or
+/// Plays [GaiaDebugScript]s as an agent runner runs turns: the same
+/// events, a [GaiaTurnResult] at the end, and an error when stopped or
 /// killed. No process, no tokens.
 class GaiaScriptedRunner {
-  final _active = <String, Completer<ClaudeResult>>{};
+  final _active = <String, Completer<GaiaTurnResult>>{};
 
-  Future<ClaudeResult> send({
+  Future<GaiaTurnResult> send({
     required String chatId,
     required GaiaDebugScript script,
     required Duration replyDelay,
     required int streamSpeed,
-    required void Function(ClaudeEvent event) onEvent,
+    required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    final turn = _active[chatId] = Completer<ClaudeResult>();
+    final turn = _active[chatId] = Completer<GaiaTurnResult>();
     unawaited(_play(turn, script, replyDelay, streamSpeed, onEvent));
     try {
       return await turn.future;
@@ -205,11 +204,11 @@ class GaiaScriptedRunner {
   static const _tick = Duration(milliseconds: 30);
 
   Future<void> _play(
-    Completer<ClaudeResult> turn,
+    Completer<GaiaTurnResult> turn,
     GaiaDebugScript script,
     Duration replyDelay,
     int streamSpeed,
-    void Function(ClaudeEvent event) onEvent,
+    void Function(GaiaAgentEvent event) onEvent,
   ) async {
     // False once the turn was stopped, or ended.
     Future<bool> wait(Duration duration) async {
@@ -222,7 +221,7 @@ class GaiaScriptedRunner {
     for (final step in script.steps) {
       switch (step) {
         case GaiaDebugText(:final text):
-          onEvent(const ClaudeTextStart());
+          onEvent(const GaiaTextStart());
           // What's due by the clock, so a speed below one character a tick
           // isn't rounded up to one.
           final clock = Stopwatch()..start();
@@ -236,27 +235,27 @@ class GaiaScriptedRunner {
             final chunk = text.substring(sent, due);
             sent = due;
             reply.write(chunk);
-            onEvent(ClaudeTextDelta(chunk));
+            onEvent(GaiaTextDelta(chunk));
           }
         case GaiaDebugTool(:final name, :final duration):
-          onEvent(ClaudeToolUse(name));
+          onEvent(GaiaToolUse(name));
           if (!await wait(duration)) return;
         case GaiaDebugPause(:final duration):
           if (!await wait(duration)) return;
         case GaiaDebugError(:final message):
           turn.complete(
-            ClaudeResult(sessionId: '', isError: true, text: message),
+            GaiaTurnResult(sessionId: '', isError: true, text: message),
           );
           return;
         case GaiaDebugCrash():
-          turn.completeError(ClaudeRunException('Claude Code exited (code 1)'));
+          turn.completeError(GaiaRunException('Claude Code exited (code 1)'));
           return;
         case GaiaDebugHang():
           return;
       }
     }
     turn.complete(
-      ClaudeResult(sessionId: '', isError: false, text: reply.toString()),
+      GaiaTurnResult(sessionId: '', isError: false, text: reply.toString()),
     );
   }
 
@@ -270,9 +269,9 @@ class GaiaScriptedRunner {
     active.forEach(_fail);
   }
 
-  static void _fail(Completer<ClaudeResult>? turn) {
+  static void _fail(Completer<GaiaTurnResult>? turn) {
     if (turn == null || turn.isCompleted) return;
-    turn.completeError(ClaudeRunException('Claude Code exited (code 1)'));
+    turn.completeError(GaiaRunException('Claude Code exited (code 1)'));
   }
 }
 

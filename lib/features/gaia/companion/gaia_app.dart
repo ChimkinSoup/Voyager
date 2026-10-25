@@ -598,23 +598,64 @@ class _ComposerState extends State<_Composer> {
                 expands: vanishing,
                 textAlignVertical: vanishing ? TextAlignVertical.top : null,
                 hintText: vanishing ? null : 'Message Gaia',
-                trailing: running
-                    ? GaiaButton(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _TierPicker(controller: controller),
+                    const SizedBox(width: 8),
+                    if (running)
+                      GaiaButton(
                         icon: Icons.stop,
                         size: 32,
                         onPressed: () =>
                             controller.stop(controller.currentChatId!),
                       )
-                    : GaiaButton(
+                    else
+                      GaiaButton(
                         icon: Icons.arrow_upward,
                         size: 32,
                         onPressed: _send,
                       ),
+                  ],
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// The tier the next message goes to (§7.2), and a menu of all three with
+/// their agents.
+class _TierPicker extends StatelessWidget {
+  const _TierPicker({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = controller.nextTier;
+    return MenuAnchor(
+      menuChildren: [
+        for (final tier in GaiaTier.values)
+          MenuItemButton(
+            onPressed: () => controller.pickTier(tier),
+            leadingIcon: Icon(tier == current ? Icons.check : null, size: 16),
+            child: Text(
+              '${tier.label} · ${controller.agentFor(tier)?.label ?? 'no agent'}',
+            ),
+          ),
+      ],
+      builder: (context, menu, _) => Tooltip(
+        message: controller.agentFor(current)?.label ?? 'No agent',
+        child: GaiaButton(
+          label: current.label,
+          size: 32,
+          onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+        ),
+      ),
     );
   }
 }

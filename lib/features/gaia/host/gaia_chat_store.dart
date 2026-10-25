@@ -7,7 +7,8 @@ import 'package:voyager/domain/repositories/repositories.dart';
 ///
 /// The companion sends whole messages but never whole chats after creating
 /// one: a chat it holds may be stale (pinned, renamed or deleted elsewhere),
-/// so it only ever changes the one field it owns, through [setSession]. The
+/// so it only ever changes the fields it owns, through [setSession] and
+/// [setTier]. The
 /// sync fields are stamped here, against what's stored.
 class GaiaChatStore {
   GaiaChatStore(this._repository, {required this.deviceId});
@@ -26,22 +27,41 @@ class GaiaChatStore {
     await _repository.upsertChat(chat.copyWith(version: 1));
   }
 
-  /// Records the native session [chatId] resumes on this device, and the
-  /// last message it took part in.
-  Future<void> setSession(String chatId, String sessionId, int lastSeq) async {
+  /// Records the native session [chatId] resumes on this device with
+  /// [adapter], and the last message it took part in.
+  Future<void> setSession(
+    String chatId,
+    String sessionId,
+    int lastSeq, {
+    String adapter = kGaiaClaudeCodeAdapter,
+  }) async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
     await _repository.upsertChat(
       chat.copyWith(
         agentSessions: {
           ...chat.agentSessions,
-          gaiaSessionKey(deviceId): GaiaAgentSession(
+          gaiaSessionKey(deviceId, adapter: adapter): GaiaAgentSession(
             sessionId: sessionId,
             lastSeq: lastSeq,
           ),
         },
       ),
     );
+  }
+
+  /// The tier [chatId] now uses (§7.2).
+  Future<void> setTier(String chatId, GaiaTier tier) async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.tier == tier) return;
+    await _repository.upsertChat(chat.copyWith(tier: tier));
+  }
+
+  /// The tier a new chat starts on (§7.2).
+  Future<void> setLastTier(GaiaTier tier) async {
+    final settings = await _repository.getSettings();
+    if (settings.lastTier == tier) return;
+    await _repository.upsertSettings(settings.copyWith(lastTier: tier));
   }
 
   Future<List<GaiaMessage>> messages(String chatId) =>

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 
 /// Contract tests for the Claude Code adapter (GAIA_HLD.md §5.1): every
@@ -25,8 +26,10 @@ List<List<ClaudeEvent>> _turns(List<ClaudeEvent> events) {
 }
 
 List<GaiaPart> _build(List<ClaudeEvent> turn) {
-  final builder = ClaudeTurnBuilder();
-  turn.forEach(builder.apply);
+  final builder = GaiaTurnBuilder();
+  for (final event in turn) {
+    if (gaiaEventOf(event) case final event?) builder.apply(event);
+  }
   return builder.finished;
 }
 

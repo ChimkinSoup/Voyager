@@ -4366,6 +4366,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'lastMessageAt': _dateToFirestoreRequired(chat.lastMessageAt),
   'pinned': chat.pinned,
   'agentSessions': chat.toJson()['agentSessions'],
+  'tier': chat.tier?.name,
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4394,6 +4395,9 @@ GaiaChat mergeGaiaChatFromRemote(
         local?.lastMessageAt ??
         remoteUpdated,
     pinned: data['pinned'] as bool? ?? local?.pinned ?? false,
+    tier: data.containsKey('tier')
+        ? gaiaTierFromName(data['tier'])
+        : local?.tier,
     // Keyed per device, and each device writes only its own key, so a winning
     // copy that lacks a key this device holds kept it from a concurrent edit,
     // not a removal: the local entry stays. An erase takes the remote's.
@@ -4421,6 +4425,7 @@ Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'parts': [for (final part in message.parts) part.toJson()],
   'status': message.status.name,
   'model': message.model,
+  'adapter': message.adapter,
   'error': message.error,
   'needsInput': message.needsInput,
   'createdAt': _dateToFirestoreRequired(message.createdAt),
@@ -4453,6 +4458,7 @@ GaiaMessage mergeGaiaMessageFromRemote(
       data['status'] as String? ?? local?.status.name ?? 'complete',
     ),
     model: data['model'] as String?,
+    adapter: data['adapter'] as String?,
     error: data['error'] as String?,
     needsInput: data['needsInput'] as bool? ?? false,
     createdAt:
@@ -4536,6 +4542,9 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'id': settings.id,
   'gaiaMd': settings.gaiaMd,
   'notifyOnDone': settings.notifyOnDone,
+  'agents': [for (final agent in settings.agents) agent.toJson()],
+  'tiers': gaiaTiersToJson(settings.tiers),
+  'lastTier': settings.lastTier.name,
   'createdAt': _dateToFirestoreRequired(settings.createdAt),
   'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
   'version': settings.version,
@@ -4557,6 +4566,16 @@ GaiaSettings mergeGaiaSettingsFromRemote(
   return GaiaSettings(
     gaiaMd: data['gaiaMd'] as String? ?? local?.gaiaMd ?? '',
     notifyOnDone: data['notifyOnDone'] as bool? ?? local?.notifyOnDone ?? true,
+    agents: data['agents'] is List
+        ? gaiaAgentsFromJson(data['agents'])
+        : local?.agents ?? kGaiaDefaultAgents,
+    tiers: data['tiers'] is Map
+        ? gaiaTiersFromJson(data['tiers'])
+        : local?.tiers ?? kGaiaDefaultTiers,
+    lastTier:
+        gaiaTierFromName(data['lastTier']) ??
+        local?.lastTier ??
+        GaiaTier.standard,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -46,7 +45,7 @@ class _Main {
   late FakeGaiaPipe companion;
   var aborted = false;
   var accent = 0xFF7C9EFF;
-  var settings = <String, Object?>{'gaiaMd': '', 'notifyOnDone': true};
+  var settings = GaiaSettings.initial().toJson();
 
   /// putMessage requests per message id.
   final puts = <String, int>{};
@@ -73,6 +72,18 @@ class _Main {
           params['chatId']! as String,
           params['sessionId']! as String,
           params['lastSeq']! as int,
+          adapter: params['adapter']! as String,
+        );
+        return null;
+      case 'setTier':
+        await store.setTier(
+          params['chatId']! as String,
+          GaiaTier.values.byName(params['tier']! as String),
+        );
+        return null;
+      case 'setLastTier':
+        await store.setLastTier(
+          GaiaTier.values.byName(params['tier']! as String),
         );
         return null;
       case 'messages':
@@ -124,7 +135,7 @@ void main() {
     controller = GaiaController(
       pipe: main.companion,
       window: window,
-      runner: runner,
+      runners: {kGaiaClaudeCodeAdapter: runner},
       cliVersion: cliVersion ?? () async => (2, 1, 310),
       exit: exits.add,
       debug: debug,
@@ -293,6 +304,89 @@ void main() {
     });
   });
 
+  group('tiers', () {
+    setUp(() => startCompanion());
+
+    test('a new chat runs on the last used tier, Standard at first', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent.single.model, 'claude-sonnet-5-5');
+      expect((await main.chat()).tier, GaiaTier.standard);
+    });
+
+    test("a picked tier runs this message, becomes the chat's, and is the next "
+        "new chat's", () async {
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      controller.pickTier(GaiaTier.deep);
+      await controller.send('Run echo gaia-fixture');
+      await settle();
+      expect(controller.pickedTier, isNull);
+      await controller.send('Now say done');
+      await settle();
+
+      expect(runner.sent.map((s) => s.model), [
+        'claude-opus-5-5',
+        'claude-opus-5-5',
+      ]);
+      expect((await main.chat()).tier, GaiaTier.deep);
+      expect((await main.store.chats()).single.tier, GaiaTier.deep);
+      expect((await main.repository.getSettings()).lastTier, GaiaTier.deep);
+      controller.newChat();
+      expect(controller.nextTier, GaiaTier.deep);
+    });
+
+    test('a session is kept per adapter', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+
+      expect((await main.chat()).agentSessions.keys, [
+        gaiaSessionKey('laptop', adapter: kGaiaClaudeCodeAdapter),
+      ]);
+    });
+
+    test("an agent this companion can't run ends in an error", () async {
+      main.companion.onEvent!('settings', {
+        ...GaiaSettings.initial().toJson(),
+        'agents': [
+          const GaiaAgent(
+            id: 'sol',
+            label: 'GPT-6.1 Sol',
+            adapter: kGaiaCodexAdapter,
+            model: 'gpt-6.1-sol',
+          ).toJson(),
+        ],
+        'tiers': {'standard': 'sol'},
+      });
+      await settle();
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent, isEmpty);
+      final reply = (await main.messages()).last;
+      expect(reply.status, GaiaMessageStatus.error);
+      expect(reply.error, contains("GPT-6.1 Sol can't run"));
+    });
+
+    test('a tier with no agent ends in an error naming it', () async {
+      main.companion.onEvent!('settings', {
+        ...GaiaSettings.initial().toJson(),
+        'tiers': <String, Object?>{},
+      });
+      await settle();
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent, isEmpty);
+      expect(
+        (await main.messages()).last.error,
+        contains('No agent is set for Standard'),
+      );
+    });
+  });
+
   group('chats', () {
     setUp(() => startCompanion());
 
@@ -319,7 +413,8 @@ void main() {
         expect(reply.role, GaiaMessageRole.assistant);
         expect(reply.status, GaiaMessageStatus.complete);
         expect(_text(reply), contains('hello there'));
-        expect(reply.model, kGaiaClaudeModel);
+        expect(reply.model, 'claude-sonnet-5-5');
+        expect(reply.adapter, kGaiaClaudeCodeAdapter);
         expect(controller.messages.map((m) => m.status), [
           GaiaMessageStatus.complete,
           GaiaMessageStatus.complete,
@@ -696,7 +791,7 @@ void main() {
       final second = GaiaController(
         pipe: main.companion,
         window: FakeGaiaWindow(),
-        runner: FakeClaudeRunner(),
+        runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
         cliVersion: () async => null,
         exit: exits.add,
       );

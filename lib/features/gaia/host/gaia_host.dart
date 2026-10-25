@@ -52,8 +52,9 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 ///
 /// The pipe protocol, companion to main: `hello` (returns `{aborted, accent,
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
-/// {chatId, sessionId, lastSeq}`, `messages {chatId}`, `putMessage
-/// {message}`, `rearm`, and the `runs {runs}`, `runDone {chatId, title,
+/// {chatId, adapter, sessionId, lastSeq}`, `setTier {chatId, tier}`,
+/// `setLastTier {tier}`, `messages {chatId}`, `putMessage {message}`,
+/// `rearm`, and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId}`, `accent {argb}`, `settings {..}` and `changed` events.
@@ -375,7 +376,18 @@ class GaiaHost {
           params['chatId']! as String,
           params['sessionId']! as String,
           params['lastSeq']! as int,
+          adapter: params['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
         );
+        return null;
+      case 'setTier':
+        if (gaiaTierFromName(params['tier']) case final tier?) {
+          await store.setTier(params['chatId']! as String, tier);
+        }
+        return null;
+      case 'setLastTier':
+        if (gaiaTierFromName(params['tier']) case final tier?) {
+          await store.setLastTier(tier);
+        }
         return null;
       case 'messages':
         return [

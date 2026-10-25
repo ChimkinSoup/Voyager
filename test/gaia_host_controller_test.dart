@@ -49,7 +49,7 @@ void main() {
       final controller = GaiaController(
         pipe: end,
         window: window,
-        runner: runner,
+        runners: {kGaiaClaudeCodeAdapter: runner},
         cliVersion: () async => (2, 1, 310),
         exit: exits.add,
       );

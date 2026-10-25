@@ -7,11 +7,11 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 
-/// Pinned on every call, never the CLI's default (GAIA_HLD.md §5.1). Tiers
-/// choose it from Phase 2.
-const kGaiaClaudeModel = 'claude-opus-5-5';
+const _uuid = Uuid();
 
 /// Keys stripped from the CLI's environment, so a stray API key never moves
 /// a subscription login onto API billing.
@@ -23,17 +23,17 @@ const _maxLive = 4;
 /// Runs chats on the Claude Code CLI: one long-lived process per active chat,
 /// whose stdin stays open across turns. A process idle for 10 minutes is
 /// killed and the next message resumes its session; past four live, the
-/// least recently used goes.
+/// least recently used goes. The model is pinned per process (§5.1): a turn
+/// on another model restarts the process, resuming the same session (§7.4).
 ///
 /// Every process runs in safe mode, which leaves out the user's global
 /// CLAUDE.md, hooks and plugins (§5.2: `--setting-sources` doesn't keep
 /// CLAUDE.md out, checked on 2.1.310), with GAIA.md appended to the system
 /// prompt from [instructionsFile].
-class ClaudeCodeRunner {
+class ClaudeCodeRunner implements GaiaAgentRunner {
   ClaudeCodeRunner({
     required this.workingDirectory,
     required this.instructionsFile,
-    this.model = kGaiaClaudeModel,
     this.onLine,
   });
 
@@ -42,7 +42,6 @@ class ClaudeCodeRunner {
   /// Where GAIA.md is written for `--append-system-prompt-file`: a file
   /// rather than the text itself, which `cmd /c` would mangle.
   final String instructionsFile;
-  final String model;
   var _instructions = '';
 
   /// Every line the CLI prints, before it's parsed: for the CLI contract
@@ -52,18 +51,46 @@ class ClaudeCodeRunner {
   /// Live processes by chat id, least recently used first.
   final _live = <String, _ClaudeProcess>{};
 
-  /// Starts a turn in [chatId]'s session: [sessionId] resumes one, null
-  /// starts one with [newSessionId]. [onEvent] gets each event of the turn;
-  /// the future completes with its result, or throws on a parse failure or a
-  /// process that died first.
-  Future<ClaudeResult> send({
+  @override
+  Future<GaiaTurnResult> send({
+    required String chatId,
+    required String? sessionId,
+    required String model,
+    required String prompt,
+    required void Function(GaiaAgentEvent event) onEvent,
+  }) async {
+    final result = await sendRaw(
+      chatId: chatId,
+      sessionId: sessionId,
+      newSessionId: sessionId ?? _uuid.v4(),
+      model: model,
+      prompt: prompt,
+      onEvent: (event) {
+        if (gaiaEventOf(event) case final event?) onEvent(event);
+      },
+    );
+    return GaiaTurnResult(
+      sessionId: result.sessionId,
+      isError: result.isError,
+      text: result.text,
+    );
+  }
+
+  /// [send] with the CLI's own events, and the id a new session gets: for
+  /// the CLI contract check.
+  Future<ClaudeResult> sendRaw({
     required String chatId,
     required String? sessionId,
     required String newSessionId,
+    required String model,
     required String prompt,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     var process = _live.remove(chatId);
+    if (process != null && process.model != model) {
+      unawaited(process.kill());
+      process = null;
+    }
     if (process == null || process.exited) {
       // Never one mid-turn: past four running at once, there are just more.
       while (_live.length >= _maxLive) {
@@ -100,11 +127,13 @@ class ClaudeCodeRunner {
     }
   }
 
+  @override
   bool isRunning(String chatId) => _live[chatId]?.inTurn ?? false;
 
   /// GAIA.md changed. Processes between turns are let go, so each chat's
   /// next message resumes under the new text; one mid-turn finishes on the
   /// old.
+  @override
   Future<void> setInstructions(String text) async {
     if (text == _instructions) return;
     _instructions = text;
@@ -121,9 +150,11 @@ class ClaudeCodeRunner {
   }
 
   /// Kills [chatId]'s process tree; its turn fails.
+  @override
   Future<void> stop(String chatId) async => _live.remove(chatId)?.kill();
 
   /// Kills every process tree this runner started.
+  @override
   Future<void> killAll() async {
     final processes = [..._live.values];
     _live.clear();
@@ -132,7 +163,7 @@ class ClaudeCodeRunner {
 }
 
 class _ClaudeProcess {
-  _ClaudeProcess._(this._process, this._onRawLine) {
+  _ClaudeProcess._(this._process, this.model, this._onRawLine) {
     _process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
@@ -194,11 +225,13 @@ class _ClaudeProcess {
         environment: environment,
         includeParentEnvironment: false,
       ),
+      model,
       onLine,
     );
   }
 
   final Process _process;
+  final String model;
   final void Function(String line)? _onRawLine;
   final _stderr = StringBuffer();
   var exited = false;
@@ -259,7 +292,7 @@ class _ClaudeProcess {
     final turn = _turn;
     _turn = null;
     _onEvent = null;
-    turn?.completeError(ClaudeRunException(reason));
+    turn?.completeError(GaiaRunException(reason));
   }
 
   /// Kills the whole tree: cmd, the CLI, and anything the CLI started.
@@ -268,15 +301,6 @@ class _ClaudeProcess {
     if (exited) return;
     await Process.run('taskkill', ['/t', '/f', '/pid', '${_process.pid}']);
   }
-}
-
-class ClaudeRunException implements Exception {
-  ClaudeRunException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
 /// `claude --version`, parsed; null when the CLI isn't installed or its

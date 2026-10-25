@@ -10,7 +10,7 @@
 
 import 'dart:convert';
 
-import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 
 /// The Claude Code versions the adapter is tested against: at least the
 /// first, and below the second. Outside it, chats still run, with an
@@ -135,44 +135,13 @@ ClaudeEvent parseClaudeLine(String line) {
   }
 }
 
-/// Builds a reply's parts from a turn's events: text blocks in order, with
-/// each run of tool calls between them collapsed to an activity part.
-class ClaudeTurnBuilder {
-  final _parts = <GaiaPart>[];
-
-  List<GaiaPart> get parts => List.unmodifiable(_parts);
-
-  /// Applies [event]; true when [parts] changed.
-  bool apply(ClaudeEvent event) {
-    switch (event) {
-      case ClaudeTextStart():
-        _parts.add(const GaiaTextPart(''));
-        return true;
-      case ClaudeTextDelta(:final text):
-        if (_parts.lastOrNull case GaiaTextPart(text: final sofar)) {
-          _parts.last = GaiaTextPart(sofar + text);
-        } else {
-          _parts.add(GaiaTextPart(text));
-        }
-        return true;
-      case ClaudeToolUse(:final name):
-        if (_parts.lastOrNull case GaiaActivityPart(:final tools)) {
-          _parts.last = GaiaActivityPart([...tools, name]);
-        } else {
-          _parts.add(GaiaActivityPart([name]));
-        }
-        return true;
-      case ClaudeInit() || ClaudeResult() || ClaudeIgnored():
-        return false;
-    }
-  }
-
-  /// [parts] without text blocks that ended up empty.
-  List<GaiaPart> get finished => [
-    for (final part in _parts)
-      if (part is! GaiaTextPart || part.text.isNotEmpty) part,
-  ];
-}
+/// What Gaia reads of [event]; null for the session's own bookkeeping.
+GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
+  ClaudeTextStart() => const GaiaTextStart(),
+  ClaudeTextDelta(:final text) => GaiaTextDelta(text),
+  ClaudeToolUse(:final name) => GaiaToolUse(name),
+  ClaudeInit() || ClaudeResult() || ClaudeIgnored() => null,
+};
 
 /// Reads `claude --version` output ("2.1.310 (Claude Code)").
 (int, int, int)? parseClaudeVersion(String output) {

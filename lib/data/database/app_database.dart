@@ -2189,6 +2189,9 @@ class GaiaChatsTable extends Table {
   /// and adapter — see `gaiaSessionKey`.
   TextColumn get agentSessionsJson =>
       text().withDefault(const Constant('{}'))();
+
+  /// The tier it last used (`GaiaTier.name`); null before its first message.
+  TextColumn get tier => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2211,6 +2214,9 @@ class GaiaMessagesTable extends Table {
   TextColumn get partsJson => text()();
   TextColumn get status => text()();
   TextColumn get model => text().nullable()();
+
+  /// The adapter that wrote a reply.
+  TextColumn get adapter => text().nullable()();
   TextColumn get error => text().nullable()();
   BoolColumn get needsInput => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
@@ -2227,6 +2233,14 @@ class GaiaSettingsTable extends Table {
   TextColumn get id => text()();
   TextColumn get gaiaMd => text().withDefault(const Constant(''))();
   BoolColumn get notifyOnDone => boolean().withDefault(const Constant(true))();
+
+  /// `[GaiaAgent]` as JSON; null for the defaults.
+  TextColumn get agentsJson => text().nullable()();
+
+  /// `{tier: agentId}`; null for the defaults.
+  TextColumn get tiersJson => text().nullable()();
+  TextColumn get lastTier =>
+      text().withDefault(const Constant('standard'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2325,7 +2339,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 170;
+  int get schemaVersion => 171;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4225,6 +4239,33 @@ class AppDatabase extends _$AppDatabase {
           'SELECT r, body, message_id, chat_id FROM gaia_search_renumber',
         );
         await customStatement('DROP TABLE gaia_search_renumber');
+      }
+      if (from >= 169 && from < 171) {
+        // Gaia Phase 2: agents and tiers (GAIA_HLD.md §7).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.tier,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_messages_table',
+          gaiaMessagesTable,
+          gaiaMessagesTable.adapter,
+        );
+        for (final column in [
+          gaiaSettingsTable.agentsJson,
+          gaiaSettingsTable.tiersJson,
+          gaiaSettingsTable.lastTier,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'gaia_settings_table',
+            gaiaSettingsTable,
+            column,
+          );
+        }
       }
     },
   );

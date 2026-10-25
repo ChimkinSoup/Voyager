@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 
@@ -160,27 +160,16 @@ class FakeGaiaWindow implements GaiaWindow {
 typedef FakeClaudeSend = ({
   String chatId,
   String? sessionId,
-  String newSessionId,
+  String model,
   String prompt,
 });
 
-/// A [ClaudeCodeRunner] that plays scripted turns instead of running the
-/// CLI. Each [send] takes the next of [turns]: its events arrive one by one,
-/// as lines would, and a turn with no [ClaudeResult] hangs after its events
-/// until [stop] or [killAll], which fail it as a killed process does.
-class FakeClaudeRunner implements ClaudeCodeRunner {
-  @override
-  final workingDirectory = 'fake';
-
-  @override
-  final model = kGaiaClaudeModel;
-
-  @override
-  final void Function(String line)? onLine = null;
-
-  @override
-  final instructionsFile = 'fake/GAIA.md';
-
+/// A [GaiaAgentRunner] that plays scripted turns instead of running a CLI.
+/// Each [send] takes the next of [turns], recorded Claude Code events: they
+/// arrive one by one, as lines would, and a turn with no [ClaudeResult]
+/// hangs after its events until [stop] or [killAll], which fail it as a
+/// killed process does.
+class FakeClaudeRunner implements GaiaAgentRunner {
   /// Every GAIA.md the companion set, in order.
   final instructions = <String>[];
 
@@ -192,30 +181,38 @@ class FakeClaudeRunner implements ClaudeCodeRunner {
   var killAllCount = 0;
   final stopped = <String>[];
 
-  final _active = <String, Completer<ClaudeResult>>{};
+  final _active = <String, Completer<GaiaTurnResult>>{};
 
   @override
-  Future<ClaudeResult> send({
+  Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
-    required String newSessionId,
+    required String model,
     required String prompt,
-    required void Function(ClaudeEvent event) onEvent,
+    required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     sent.add((
       chatId: chatId,
       sessionId: sessionId,
-      newSessionId: newSessionId,
+      model: model,
       prompt: prompt,
     ));
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);
-    final turn = _active[chatId] = Completer<ClaudeResult>();
+    final turn = _active[chatId] = Completer<GaiaTurnResult>();
     for (final event in events) {
       await Future<void>.microtask(() {});
       if (turn.isCompleted) break;
-      onEvent(event);
-      if (event is ClaudeResult) turn.complete(event);
+      if (gaiaEventOf(event) case final event?) onEvent(event);
+      if (event is ClaudeResult) {
+        turn.complete(
+          GaiaTurnResult(
+            sessionId: event.sessionId,
+            isError: event.isError,
+            text: event.text,
+          ),
+        );
+      }
     }
     try {
       return await turn.future;
@@ -244,9 +241,9 @@ class FakeClaudeRunner implements ClaudeCodeRunner {
   /// [chatId]'s CLI dies on its own, mid-turn.
   void crash(String chatId) => _fail(_active.remove(chatId));
 
-  static void _fail(Completer<ClaudeResult>? turn) {
+  static void _fail(Completer<GaiaTurnResult>? turn) {
     if (turn == null || turn.isCompleted) return;
-    turn.completeError(ClaudeRunException('Claude Code exited (code 1)'));
+    turn.completeError(GaiaRunException('Claude Code exited (code 1)'));
   }
 }
 

@@ -17,8 +17,11 @@ enum GaiaMessageStatus {
   aborted,
 }
 
-/// The only adapter until Phase 2.
+/// The backends an agent runs on (§5.1). The Gemini CLI is deferred: its
+/// login can't be tested yet.
 const kGaiaClaudeCodeAdapter = 'claude_code';
+const kGaiaCodexAdapter = 'codex';
+const kGaiaGeminiApiAdapter = 'gemini_api';
 
 /// The key a chat's native session on [deviceId] is kept under. A session
 /// lives on the machine that ran it, so each device has its own (§7.4).
@@ -26,6 +29,100 @@ String gaiaSessionKey(
   String deviceId, {
   String adapter = kGaiaClaudeCodeAdapter,
 }) => '$deviceId/$adapter';
+
+/// How much model a message wants (§7.1), each pointing at an agent.
+enum GaiaTier {
+  quick('Quick', '/quick'),
+  standard('Standard', '/std'),
+  deep('Deep', '/deep');
+
+  const GaiaTier(this.label, this.command);
+
+  final String label;
+
+  /// Its inline command (§7.3).
+  final String command;
+}
+
+/// A configured model on an adapter (§2), e.g. "Sonnet 5.5 via Claude Code".
+/// Accounts come in Phase 7.
+class GaiaAgent {
+  const GaiaAgent({
+    required this.id,
+    required this.label,
+    required this.adapter,
+    required this.model,
+  });
+
+  final String id;
+  final String label;
+
+  /// One of the `kGaia…Adapter` ids.
+  final String adapter;
+
+  /// Pinned on every call (§5.1).
+  final String model;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'label': label,
+    'adapter': adapter,
+    'model': model,
+  };
+
+  factory GaiaAgent.fromJson(Map<String, Object?> json) => GaiaAgent(
+    id: json['id']! as String,
+    label: json['label']! as String,
+    adapter: json['adapter']! as String,
+    model: json['model']! as String,
+  );
+}
+
+/// The agents a new install starts with: Claude Code's three models, one
+/// per tier.
+const kGaiaDefaultAgents = [
+  GaiaAgent(
+    id: 'haiku',
+    label: 'Haiku 5.5',
+    adapter: kGaiaClaudeCodeAdapter,
+    model: 'claude-haiku-5-5',
+  ),
+  GaiaAgent(
+    id: 'sonnet',
+    label: 'Sonnet 5.5',
+    adapter: kGaiaClaudeCodeAdapter,
+    model: 'claude-sonnet-5-5',
+  ),
+  GaiaAgent(
+    id: 'opus',
+    label: 'Opus 5.5',
+    adapter: kGaiaClaudeCodeAdapter,
+    model: 'claude-opus-5-5',
+  ),
+];
+
+const kGaiaDefaultTiers = {
+  GaiaTier.quick: 'haiku',
+  GaiaTier.standard: 'sonnet',
+  GaiaTier.deep: 'opus',
+};
+
+List<GaiaAgent> gaiaAgentsFromJson(Object? json) => [
+  if (json is List)
+    for (final agent in json)
+      GaiaAgent.fromJson((agent! as Map).cast<String, Object?>()),
+];
+
+Map<String, Object?> gaiaTiersToJson(Map<GaiaTier, String> tiers) => {
+  for (final MapEntry(:key, :value) in tiers.entries) key.name: value,
+};
+
+/// Tiers this build doesn't know are dropped.
+Map<GaiaTier, String> gaiaTiersFromJson(Object? json) => {
+  if (json is Map)
+    for (final tier in GaiaTier.values)
+      if (json[tier.name] case final String agentId) tier: agentId,
+};
 
 /// One native CLI session of a chat: its id, and the seq of the last message
 /// it took part in.
@@ -55,6 +152,7 @@ class GaiaChat extends SoftDeletable {
     required this.lastMessageAt,
     this.pinned = false,
     this.agentSessions = const {},
+    this.tier,
   });
 
   final String title;
@@ -64,9 +162,15 @@ class GaiaChat extends SoftDeletable {
   /// Keyed by [gaiaSessionKey].
   final Map<String, GaiaAgentSession> agentSessions;
 
-  /// The session this chat resumes on [deviceId], or null to start one.
-  String? sessionOn(String deviceId) =>
-      agentSessions[gaiaSessionKey(deviceId)]?.sessionId;
+  /// The tier the chat last used (§7.2); null before its first message.
+  final GaiaTier? tier;
+
+  /// The session this chat resumes on [deviceId] with [adapter], or null to
+  /// start one.
+  String? sessionOn(
+    String deviceId, {
+    String adapter = kGaiaClaudeCodeAdapter,
+  }) => agentSessions[gaiaSessionKey(deviceId, adapter: adapter)]?.sessionId;
 
   /// [touch] off leaves [updatedAt] where it was; [bumpVersion] off leaves
   /// [version], unless one is given.
@@ -75,6 +179,7 @@ class GaiaChat extends SoftDeletable {
     DateTime? lastMessageAt,
     bool? pinned,
     Map<String, GaiaAgentSession>? agentSessions,
+    GaiaTier? tier,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -90,11 +195,13 @@ class GaiaChat extends SoftDeletable {
     lastMessageAt: lastMessageAt ?? this.lastMessageAt,
     pinned: pinned ?? this.pinned,
     agentSessions: agentSessions ?? this.agentSessions,
+    tier: tier ?? this.tier,
   );
 
   Map<String, Object?> toJson() => {
     'id': id,
     'title': title,
+    'tier': tier?.name,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'version': version,
@@ -119,9 +226,14 @@ class GaiaChat extends SoftDeletable {
       lastMessageAt: DateTime.parse(json['lastMessageAt']! as String),
       pinned: json['pinned'] == true,
       agentSessions: gaiaAgentSessionsFromJson(json['agentSessions']),
+      tier: gaiaTierFromName(json['tier']),
     );
   }
 }
+
+/// Null for no tier, or one this build doesn't know.
+GaiaTier? gaiaTierFromName(Object? name) =>
+    GaiaTier.values.where((tier) => tier.name == name).firstOrNull;
 
 Map<String, GaiaAgentSession> gaiaAgentSessionsFromJson(Object? json) => {
   if (json is Map)
@@ -177,6 +289,7 @@ class GaiaMessage extends SoftDeletable {
     required this.parts,
     required this.status,
     this.model,
+    this.adapter,
     this.error,
     this.needsInput = false,
   });
@@ -187,6 +300,10 @@ class GaiaMessage extends SoftDeletable {
   final List<GaiaPart> parts;
   final GaiaMessageStatus status;
   final String? model;
+
+  /// The adapter that wrote a reply, so a switch to another vendor knows
+  /// which turns its session never saw (§7.4).
+  final String? adapter;
 
   /// What went wrong, for [GaiaMessageStatus.error].
   final String? error;
@@ -220,6 +337,7 @@ class GaiaMessage extends SoftDeletable {
     parts: parts ?? this.parts,
     status: status ?? this.status,
     model: model,
+    adapter: adapter,
     error: error ?? this.error,
     needsInput: needsInput ?? this.needsInput,
   );
@@ -236,6 +354,7 @@ class GaiaMessage extends SoftDeletable {
     'version': version,
     'deletedAt': deletedAt?.toIso8601String(),
     'model': model,
+    'adapter': adapter,
     'error': error,
     'needsInput': needsInput,
   };
@@ -254,6 +373,7 @@ class GaiaMessage extends SoftDeletable {
       version: (json['version'] as num?)?.toInt() ?? 0,
       deletedAt: _date(json['deletedAt']),
       model: json['model'] as String?,
+      adapter: json['adapter'] as String?,
       error: json['error'] as String?,
       needsInput: json['needsInput'] == true,
     );
@@ -284,6 +404,9 @@ class GaiaSettings extends SoftDeletable {
     super.version,
     this.gaiaMd = '',
     this.notifyOnDone = true,
+    this.agents = kGaiaDefaultAgents,
+    this.tiers = kGaiaDefaultTiers,
+    this.lastTier = GaiaTier.standard,
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -300,18 +423,42 @@ class GaiaSettings extends SoftDeletable {
   /// A Windows toast when a run finishes while Gaia is hidden (§14).
   final bool notifyOnDone;
 
-  GaiaSettings copyWith({String? gaiaMd, bool? notifyOnDone}) => GaiaSettings(
+  final List<GaiaAgent> agents;
+
+  /// Each tier's agent id (§7.1).
+  final Map<GaiaTier, String> tiers;
+
+  /// The tier a new chat starts on while there's no router (§7.2).
+  final GaiaTier lastTier;
+
+  /// [tier]'s agent; null when the tier has none, or its agent was removed.
+  GaiaAgent? agentFor(GaiaTier tier) =>
+      agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
+
+  GaiaSettings copyWith({
+    String? gaiaMd,
+    bool? notifyOnDone,
+    List<GaiaAgent>? agents,
+    Map<GaiaTier, String>? tiers,
+    GaiaTier? lastTier,
+  }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
     version: version + 1,
     gaiaMd: gaiaMd ?? this.gaiaMd,
     notifyOnDone: notifyOnDone ?? this.notifyOnDone,
+    agents: agents ?? this.agents,
+    tiers: tiers ?? this.tiers,
+    lastTier: lastTier ?? this.lastTier,
   );
 
   /// What the companion needs of them.
   Map<String, Object?> toJson() => {
     'gaiaMd': gaiaMd,
     'notifyOnDone': notifyOnDone,
+    'agents': [for (final agent in agents) agent.toJson()],
+    'tiers': gaiaTiersToJson(tiers),
+    'lastTier': lastTier.name,
   };
 }
 

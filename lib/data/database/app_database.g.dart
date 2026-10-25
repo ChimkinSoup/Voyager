@@ -57726,6 +57726,15 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         requiredDuringInsert: false,
         defaultValue: const Constant('{}'),
       );
+  static const VerificationMeta _tierMeta = const VerificationMeta('tier');
+  @override
+  late final GeneratedColumn<String> tier = GeneratedColumn<String>(
+    'tier',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -57778,6 +57787,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     lastMessageAt,
     pinned,
     agentSessionsJson,
+    tier,
     createdAt,
     updatedAt,
     version,
@@ -57832,6 +57842,12 @@ class $GaiaChatsTableTable extends GaiaChatsTable
           data['agent_sessions_json']!,
           _agentSessionsJsonMeta,
         ),
+      );
+    }
+    if (data.containsKey('tier')) {
+      context.handle(
+        _tierMeta,
+        tier.isAcceptableOrUnknown(data['tier']!, _tierMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -57891,6 +57907,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.string,
         data['${effectivePrefix}agent_sessions_json'],
       )!,
+      tier: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tier'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -57926,6 +57946,9 @@ class GaiaChatsTableData extends DataClass
   /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device
   /// and adapter — see `gaiaSessionKey`.
   final String agentSessionsJson;
+
+  /// The tier it last used (`GaiaTier.name`); null before its first message.
+  final String? tier;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -57936,6 +57959,7 @@ class GaiaChatsTableData extends DataClass
     required this.lastMessageAt,
     required this.pinned,
     required this.agentSessionsJson,
+    this.tier,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -57949,6 +57973,9 @@ class GaiaChatsTableData extends DataClass
     map['last_message_at'] = Variable<DateTime>(lastMessageAt);
     map['pinned'] = Variable<bool>(pinned);
     map['agent_sessions_json'] = Variable<String>(agentSessionsJson);
+    if (!nullToAbsent || tier != null) {
+      map['tier'] = Variable<String>(tier);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -57965,6 +57992,7 @@ class GaiaChatsTableData extends DataClass
       lastMessageAt: Value(lastMessageAt),
       pinned: Value(pinned),
       agentSessionsJson: Value(agentSessionsJson),
+      tier: tier == null && nullToAbsent ? const Value.absent() : Value(tier),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -57985,6 +58013,7 @@ class GaiaChatsTableData extends DataClass
       lastMessageAt: serializer.fromJson<DateTime>(json['lastMessageAt']),
       pinned: serializer.fromJson<bool>(json['pinned']),
       agentSessionsJson: serializer.fromJson<String>(json['agentSessionsJson']),
+      tier: serializer.fromJson<String?>(json['tier']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58000,6 +58029,7 @@ class GaiaChatsTableData extends DataClass
       'lastMessageAt': serializer.toJson<DateTime>(lastMessageAt),
       'pinned': serializer.toJson<bool>(pinned),
       'agentSessionsJson': serializer.toJson<String>(agentSessionsJson),
+      'tier': serializer.toJson<String?>(tier),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58013,6 +58043,7 @@ class GaiaChatsTableData extends DataClass
     DateTime? lastMessageAt,
     bool? pinned,
     String? agentSessionsJson,
+    Value<String?> tier = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58023,6 +58054,7 @@ class GaiaChatsTableData extends DataClass
     lastMessageAt: lastMessageAt ?? this.lastMessageAt,
     pinned: pinned ?? this.pinned,
     agentSessionsJson: agentSessionsJson ?? this.agentSessionsJson,
+    tier: tier.present ? tier.value : this.tier,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58039,6 +58071,7 @@ class GaiaChatsTableData extends DataClass
       agentSessionsJson: data.agentSessionsJson.present
           ? data.agentSessionsJson.value
           : this.agentSessionsJson,
+      tier: data.tier.present ? data.tier.value : this.tier,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58054,6 +58087,7 @@ class GaiaChatsTableData extends DataClass
           ..write('lastMessageAt: $lastMessageAt, ')
           ..write('pinned: $pinned, ')
           ..write('agentSessionsJson: $agentSessionsJson, ')
+          ..write('tier: $tier, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58069,6 +58103,7 @@ class GaiaChatsTableData extends DataClass
     lastMessageAt,
     pinned,
     agentSessionsJson,
+    tier,
     createdAt,
     updatedAt,
     version,
@@ -58083,6 +58118,7 @@ class GaiaChatsTableData extends DataClass
           other.lastMessageAt == this.lastMessageAt &&
           other.pinned == this.pinned &&
           other.agentSessionsJson == this.agentSessionsJson &&
+          other.tier == this.tier &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58095,6 +58131,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<DateTime> lastMessageAt;
   final Value<bool> pinned;
   final Value<String> agentSessionsJson;
+  final Value<String?> tier;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58106,6 +58143,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.lastMessageAt = const Value.absent(),
     this.pinned = const Value.absent(),
     this.agentSessionsJson = const Value.absent(),
+    this.tier = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58118,6 +58156,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     required DateTime lastMessageAt,
     this.pinned = const Value.absent(),
     this.agentSessionsJson = const Value.absent(),
+    this.tier = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58134,6 +58173,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<DateTime>? lastMessageAt,
     Expression<bool>? pinned,
     Expression<String>? agentSessionsJson,
+    Expression<String>? tier,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58146,6 +58186,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (lastMessageAt != null) 'last_message_at': lastMessageAt,
       if (pinned != null) 'pinned': pinned,
       if (agentSessionsJson != null) 'agent_sessions_json': agentSessionsJson,
+      if (tier != null) 'tier': tier,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58160,6 +58201,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<DateTime>? lastMessageAt,
     Value<bool>? pinned,
     Value<String>? agentSessionsJson,
+    Value<String?>? tier,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58172,6 +58214,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       pinned: pinned ?? this.pinned,
       agentSessionsJson: agentSessionsJson ?? this.agentSessionsJson,
+      tier: tier ?? this.tier,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -58197,6 +58240,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     }
     if (agentSessionsJson.present) {
       map['agent_sessions_json'] = Variable<String>(agentSessionsJson.value);
+    }
+    if (tier.present) {
+      map['tier'] = Variable<String>(tier.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -58224,6 +58270,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('lastMessageAt: $lastMessageAt, ')
           ..write('pinned: $pinned, ')
           ..write('agentSessionsJson: $agentSessionsJson, ')
+          ..write('tier: $tier, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58300,6 +58347,17 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
   @override
   late final GeneratedColumn<String> model = GeneratedColumn<String>(
     'model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _adapterMeta = const VerificationMeta(
+    'adapter',
+  );
+  @override
+  late final GeneratedColumn<String> adapter = GeneratedColumn<String>(
+    'adapter',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -58383,6 +58441,7 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     partsJson,
     status,
     model,
+    adapter,
     error,
     needsInput,
     createdAt,
@@ -58451,6 +58510,12 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
       context.handle(
         _modelMeta,
         model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    }
+    if (data.containsKey('adapter')) {
+      context.handle(
+        _adapterMeta,
+        adapter.isAcceptableOrUnknown(data['adapter']!, _adapterMeta),
       );
     }
     if (data.containsKey('error')) {
@@ -58530,6 +58595,10 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         DriftSqlType.string,
         data['${effectivePrefix}model'],
       ),
+      adapter: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}adapter'],
+      ),
       error: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}error'],
@@ -58574,6 +58643,9 @@ class GaiaMessagesTableData extends DataClass
   final String partsJson;
   final String status;
   final String? model;
+
+  /// The adapter that wrote a reply.
+  final String? adapter;
   final String? error;
   final bool needsInput;
   final DateTime createdAt;
@@ -58588,6 +58660,7 @@ class GaiaMessagesTableData extends DataClass
     required this.partsJson,
     required this.status,
     this.model,
+    this.adapter,
     this.error,
     required this.needsInput,
     required this.createdAt,
@@ -58606,6 +58679,9 @@ class GaiaMessagesTableData extends DataClass
     map['status'] = Variable<String>(status);
     if (!nullToAbsent || model != null) {
       map['model'] = Variable<String>(model);
+    }
+    if (!nullToAbsent || adapter != null) {
+      map['adapter'] = Variable<String>(adapter);
     }
     if (!nullToAbsent || error != null) {
       map['error'] = Variable<String>(error);
@@ -58631,6 +58707,9 @@ class GaiaMessagesTableData extends DataClass
       model: model == null && nullToAbsent
           ? const Value.absent()
           : Value(model),
+      adapter: adapter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(adapter),
       error: error == null && nullToAbsent
           ? const Value.absent()
           : Value(error),
@@ -58657,6 +58736,7 @@ class GaiaMessagesTableData extends DataClass
       partsJson: serializer.fromJson<String>(json['partsJson']),
       status: serializer.fromJson<String>(json['status']),
       model: serializer.fromJson<String?>(json['model']),
+      adapter: serializer.fromJson<String?>(json['adapter']),
       error: serializer.fromJson<String?>(json['error']),
       needsInput: serializer.fromJson<bool>(json['needsInput']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -58676,6 +58756,7 @@ class GaiaMessagesTableData extends DataClass
       'partsJson': serializer.toJson<String>(partsJson),
       'status': serializer.toJson<String>(status),
       'model': serializer.toJson<String?>(model),
+      'adapter': serializer.toJson<String?>(adapter),
       'error': serializer.toJson<String?>(error),
       'needsInput': serializer.toJson<bool>(needsInput),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -58693,6 +58774,7 @@ class GaiaMessagesTableData extends DataClass
     String? partsJson,
     String? status,
     Value<String?> model = const Value.absent(),
+    Value<String?> adapter = const Value.absent(),
     Value<String?> error = const Value.absent(),
     bool? needsInput,
     DateTime? createdAt,
@@ -58707,6 +58789,7 @@ class GaiaMessagesTableData extends DataClass
     partsJson: partsJson ?? this.partsJson,
     status: status ?? this.status,
     model: model.present ? model.value : this.model,
+    adapter: adapter.present ? adapter.value : this.adapter,
     error: error.present ? error.value : this.error,
     needsInput: needsInput ?? this.needsInput,
     createdAt: createdAt ?? this.createdAt,
@@ -58723,6 +58806,7 @@ class GaiaMessagesTableData extends DataClass
       partsJson: data.partsJson.present ? data.partsJson.value : this.partsJson,
       status: data.status.present ? data.status.value : this.status,
       model: data.model.present ? data.model.value : this.model,
+      adapter: data.adapter.present ? data.adapter.value : this.adapter,
       error: data.error.present ? data.error.value : this.error,
       needsInput: data.needsInput.present
           ? data.needsInput.value
@@ -58744,6 +58828,7 @@ class GaiaMessagesTableData extends DataClass
           ..write('partsJson: $partsJson, ')
           ..write('status: $status, ')
           ..write('model: $model, ')
+          ..write('adapter: $adapter, ')
           ..write('error: $error, ')
           ..write('needsInput: $needsInput, ')
           ..write('createdAt: $createdAt, ')
@@ -58763,6 +58848,7 @@ class GaiaMessagesTableData extends DataClass
     partsJson,
     status,
     model,
+    adapter,
     error,
     needsInput,
     createdAt,
@@ -58781,6 +58867,7 @@ class GaiaMessagesTableData extends DataClass
           other.partsJson == this.partsJson &&
           other.status == this.status &&
           other.model == this.model &&
+          other.adapter == this.adapter &&
           other.error == this.error &&
           other.needsInput == this.needsInput &&
           other.createdAt == this.createdAt &&
@@ -58798,6 +58885,7 @@ class GaiaMessagesTableCompanion
   final Value<String> partsJson;
   final Value<String> status;
   final Value<String?> model;
+  final Value<String?> adapter;
   final Value<String?> error;
   final Value<bool> needsInput;
   final Value<DateTime> createdAt;
@@ -58813,6 +58901,7 @@ class GaiaMessagesTableCompanion
     this.partsJson = const Value.absent(),
     this.status = const Value.absent(),
     this.model = const Value.absent(),
+    this.adapter = const Value.absent(),
     this.error = const Value.absent(),
     this.needsInput = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -58829,6 +58918,7 @@ class GaiaMessagesTableCompanion
     required String partsJson,
     required String status,
     this.model = const Value.absent(),
+    this.adapter = const Value.absent(),
     this.error = const Value.absent(),
     this.needsInput = const Value.absent(),
     required DateTime createdAt,
@@ -58852,6 +58942,7 @@ class GaiaMessagesTableCompanion
     Expression<String>? partsJson,
     Expression<String>? status,
     Expression<String>? model,
+    Expression<String>? adapter,
     Expression<String>? error,
     Expression<bool>? needsInput,
     Expression<DateTime>? createdAt,
@@ -58868,6 +58959,7 @@ class GaiaMessagesTableCompanion
       if (partsJson != null) 'parts_json': partsJson,
       if (status != null) 'status': status,
       if (model != null) 'model': model,
+      if (adapter != null) 'adapter': adapter,
       if (error != null) 'error': error,
       if (needsInput != null) 'needs_input': needsInput,
       if (createdAt != null) 'created_at': createdAt,
@@ -58886,6 +58978,7 @@ class GaiaMessagesTableCompanion
     Value<String>? partsJson,
     Value<String>? status,
     Value<String?>? model,
+    Value<String?>? adapter,
     Value<String?>? error,
     Value<bool>? needsInput,
     Value<DateTime>? createdAt,
@@ -58902,6 +58995,7 @@ class GaiaMessagesTableCompanion
       partsJson: partsJson ?? this.partsJson,
       status: status ?? this.status,
       model: model ?? this.model,
+      adapter: adapter ?? this.adapter,
       error: error ?? this.error,
       needsInput: needsInput ?? this.needsInput,
       createdAt: createdAt ?? this.createdAt,
@@ -58935,6 +59029,9 @@ class GaiaMessagesTableCompanion
     }
     if (model.present) {
       map['model'] = Variable<String>(model.value);
+    }
+    if (adapter.present) {
+      map['adapter'] = Variable<String>(adapter.value);
     }
     if (error.present) {
       map['error'] = Variable<String>(error.value);
@@ -58970,6 +59067,7 @@ class GaiaMessagesTableCompanion
           ..write('partsJson: $partsJson, ')
           ..write('status: $status, ')
           ..write('model: $model, ')
+          ..write('adapter: $adapter, ')
           ..write('error: $error, ')
           ..write('needsInput: $needsInput, ')
           ..write('createdAt: $createdAt, ')
@@ -59022,6 +59120,40 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _agentsJsonMeta = const VerificationMeta(
+    'agentsJson',
+  );
+  @override
+  late final GeneratedColumn<String> agentsJson = GeneratedColumn<String>(
+    'agents_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tiersJsonMeta = const VerificationMeta(
+    'tiersJson',
+  );
+  @override
+  late final GeneratedColumn<String> tiersJson = GeneratedColumn<String>(
+    'tiers_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastTierMeta = const VerificationMeta(
+    'lastTier',
+  );
+  @override
+  late final GeneratedColumn<String> lastTier = GeneratedColumn<String>(
+    'last_tier',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('standard'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -59072,6 +59204,9 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     id,
     gaiaMd,
     notifyOnDone,
+    agentsJson,
+    tiersJson,
+    lastTier,
     createdAt,
     updatedAt,
     version,
@@ -59107,6 +59242,24 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
           data['notify_on_done']!,
           _notifyOnDoneMeta,
         ),
+      );
+    }
+    if (data.containsKey('agents_json')) {
+      context.handle(
+        _agentsJsonMeta,
+        agentsJson.isAcceptableOrUnknown(data['agents_json']!, _agentsJsonMeta),
+      );
+    }
+    if (data.containsKey('tiers_json')) {
+      context.handle(
+        _tiersJsonMeta,
+        tiersJson.isAcceptableOrUnknown(data['tiers_json']!, _tiersJsonMeta),
+      );
+    }
+    if (data.containsKey('last_tier')) {
+      context.handle(
+        _lastTierMeta,
+        lastTier.isAcceptableOrUnknown(data['last_tier']!, _lastTierMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -59158,6 +59311,18 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}notify_on_done'],
       )!,
+      agentsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agents_json'],
+      ),
+      tiersJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tiers_json'],
+      ),
+      lastTier: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_tier'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59188,6 +59353,13 @@ class GaiaSettingsTableData extends DataClass
   final String id;
   final String gaiaMd;
   final bool notifyOnDone;
+
+  /// `[GaiaAgent]` as JSON; null for the defaults.
+  final String? agentsJson;
+
+  /// `{tier: agentId}`; null for the defaults.
+  final String? tiersJson;
+  final String lastTier;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59196,6 +59368,9 @@ class GaiaSettingsTableData extends DataClass
     required this.id,
     required this.gaiaMd,
     required this.notifyOnDone,
+    this.agentsJson,
+    this.tiersJson,
+    required this.lastTier,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59207,6 +59382,13 @@ class GaiaSettingsTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['gaia_md'] = Variable<String>(gaiaMd);
     map['notify_on_done'] = Variable<bool>(notifyOnDone);
+    if (!nullToAbsent || agentsJson != null) {
+      map['agents_json'] = Variable<String>(agentsJson);
+    }
+    if (!nullToAbsent || tiersJson != null) {
+      map['tiers_json'] = Variable<String>(tiersJson);
+    }
+    map['last_tier'] = Variable<String>(lastTier);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -59221,6 +59403,13 @@ class GaiaSettingsTableData extends DataClass
       id: Value(id),
       gaiaMd: Value(gaiaMd),
       notifyOnDone: Value(notifyOnDone),
+      agentsJson: agentsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(agentsJson),
+      tiersJson: tiersJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tiersJson),
+      lastTier: Value(lastTier),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59239,6 +59428,9 @@ class GaiaSettingsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       gaiaMd: serializer.fromJson<String>(json['gaiaMd']),
       notifyOnDone: serializer.fromJson<bool>(json['notifyOnDone']),
+      agentsJson: serializer.fromJson<String?>(json['agentsJson']),
+      tiersJson: serializer.fromJson<String?>(json['tiersJson']),
+      lastTier: serializer.fromJson<String>(json['lastTier']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59252,6 +59444,9 @@ class GaiaSettingsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'gaiaMd': serializer.toJson<String>(gaiaMd),
       'notifyOnDone': serializer.toJson<bool>(notifyOnDone),
+      'agentsJson': serializer.toJson<String?>(agentsJson),
+      'tiersJson': serializer.toJson<String?>(tiersJson),
+      'lastTier': serializer.toJson<String>(lastTier),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59263,6 +59458,9 @@ class GaiaSettingsTableData extends DataClass
     String? id,
     String? gaiaMd,
     bool? notifyOnDone,
+    Value<String?> agentsJson = const Value.absent(),
+    Value<String?> tiersJson = const Value.absent(),
+    String? lastTier,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -59271,6 +59469,9 @@ class GaiaSettingsTableData extends DataClass
     id: id ?? this.id,
     gaiaMd: gaiaMd ?? this.gaiaMd,
     notifyOnDone: notifyOnDone ?? this.notifyOnDone,
+    agentsJson: agentsJson.present ? agentsJson.value : this.agentsJson,
+    tiersJson: tiersJson.present ? tiersJson.value : this.tiersJson,
+    lastTier: lastTier ?? this.lastTier,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -59283,6 +59484,11 @@ class GaiaSettingsTableData extends DataClass
       notifyOnDone: data.notifyOnDone.present
           ? data.notifyOnDone.value
           : this.notifyOnDone,
+      agentsJson: data.agentsJson.present
+          ? data.agentsJson.value
+          : this.agentsJson,
+      tiersJson: data.tiersJson.present ? data.tiersJson.value : this.tiersJson,
+      lastTier: data.lastTier.present ? data.lastTier.value : this.lastTier,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59296,6 +59502,9 @@ class GaiaSettingsTableData extends DataClass
           ..write('id: $id, ')
           ..write('gaiaMd: $gaiaMd, ')
           ..write('notifyOnDone: $notifyOnDone, ')
+          ..write('agentsJson: $agentsJson, ')
+          ..write('tiersJson: $tiersJson, ')
+          ..write('lastTier: $lastTier, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59309,6 +59518,9 @@ class GaiaSettingsTableData extends DataClass
     id,
     gaiaMd,
     notifyOnDone,
+    agentsJson,
+    tiersJson,
+    lastTier,
     createdAt,
     updatedAt,
     version,
@@ -59321,6 +59533,9 @@ class GaiaSettingsTableData extends DataClass
           other.id == this.id &&
           other.gaiaMd == this.gaiaMd &&
           other.notifyOnDone == this.notifyOnDone &&
+          other.agentsJson == this.agentsJson &&
+          other.tiersJson == this.tiersJson &&
+          other.lastTier == this.lastTier &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59332,6 +59547,9 @@ class GaiaSettingsTableCompanion
   final Value<String> id;
   final Value<String> gaiaMd;
   final Value<bool> notifyOnDone;
+  final Value<String?> agentsJson;
+  final Value<String?> tiersJson;
+  final Value<String> lastTier;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59341,6 +59559,9 @@ class GaiaSettingsTableCompanion
     this.id = const Value.absent(),
     this.gaiaMd = const Value.absent(),
     this.notifyOnDone = const Value.absent(),
+    this.agentsJson = const Value.absent(),
+    this.tiersJson = const Value.absent(),
+    this.lastTier = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59351,6 +59572,9 @@ class GaiaSettingsTableCompanion
     required String id,
     this.gaiaMd = const Value.absent(),
     this.notifyOnDone = const Value.absent(),
+    this.agentsJson = const Value.absent(),
+    this.tiersJson = const Value.absent(),
+    this.lastTier = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59363,6 +59587,9 @@ class GaiaSettingsTableCompanion
     Expression<String>? id,
     Expression<String>? gaiaMd,
     Expression<bool>? notifyOnDone,
+    Expression<String>? agentsJson,
+    Expression<String>? tiersJson,
+    Expression<String>? lastTier,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59373,6 +59600,9 @@ class GaiaSettingsTableCompanion
       if (id != null) 'id': id,
       if (gaiaMd != null) 'gaia_md': gaiaMd,
       if (notifyOnDone != null) 'notify_on_done': notifyOnDone,
+      if (agentsJson != null) 'agents_json': agentsJson,
+      if (tiersJson != null) 'tiers_json': tiersJson,
+      if (lastTier != null) 'last_tier': lastTier,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59385,6 +59615,9 @@ class GaiaSettingsTableCompanion
     Value<String>? id,
     Value<String>? gaiaMd,
     Value<bool>? notifyOnDone,
+    Value<String?>? agentsJson,
+    Value<String?>? tiersJson,
+    Value<String>? lastTier,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59395,6 +59628,9 @@ class GaiaSettingsTableCompanion
       id: id ?? this.id,
       gaiaMd: gaiaMd ?? this.gaiaMd,
       notifyOnDone: notifyOnDone ?? this.notifyOnDone,
+      agentsJson: agentsJson ?? this.agentsJson,
+      tiersJson: tiersJson ?? this.tiersJson,
+      lastTier: lastTier ?? this.lastTier,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59414,6 +59650,15 @@ class GaiaSettingsTableCompanion
     }
     if (notifyOnDone.present) {
       map['notify_on_done'] = Variable<bool>(notifyOnDone.value);
+    }
+    if (agentsJson.present) {
+      map['agents_json'] = Variable<String>(agentsJson.value);
+    }
+    if (tiersJson.present) {
+      map['tiers_json'] = Variable<String>(tiersJson.value);
+    }
+    if (lastTier.present) {
+      map['last_tier'] = Variable<String>(lastTier.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -59439,6 +59684,9 @@ class GaiaSettingsTableCompanion
           ..write('id: $id, ')
           ..write('gaiaMd: $gaiaMd, ')
           ..write('notifyOnDone: $notifyOnDone, ')
+          ..write('agentsJson: $agentsJson, ')
+          ..write('tiersJson: $tiersJson, ')
+          ..write('lastTier: $lastTier, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -87262,6 +87510,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       required DateTime lastMessageAt,
       Value<bool> pinned,
       Value<String> agentSessionsJson,
+      Value<String?> tier,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -87275,6 +87524,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<DateTime> lastMessageAt,
       Value<bool> pinned,
       Value<String> agentSessionsJson,
+      Value<String?> tier,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -87313,6 +87563,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<String> get agentSessionsJson => $composableBuilder(
     column: $table.agentSessionsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tier => $composableBuilder(
+    column: $table.tier,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -87371,6 +87626,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get tier => $composableBuilder(
+    column: $table.tier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -87419,6 +87679,9 @@ class $$GaiaChatsTableTableAnnotationComposer
     column: $table.agentSessionsJson,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get tier =>
+      $composableBuilder(column: $table.tier, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -87475,6 +87738,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<DateTime> lastMessageAt = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 Value<String> agentSessionsJson = const Value.absent(),
+                Value<String?> tier = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -87486,6 +87750,7 @@ class $$GaiaChatsTableTableTableManager
                 lastMessageAt: lastMessageAt,
                 pinned: pinned,
                 agentSessionsJson: agentSessionsJson,
+                tier: tier,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -87499,6 +87764,7 @@ class $$GaiaChatsTableTableTableManager
                 required DateTime lastMessageAt,
                 Value<bool> pinned = const Value.absent(),
                 Value<String> agentSessionsJson = const Value.absent(),
+                Value<String?> tier = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -87510,6 +87776,7 @@ class $$GaiaChatsTableTableTableManager
                 lastMessageAt: lastMessageAt,
                 pinned: pinned,
                 agentSessionsJson: agentSessionsJson,
+                tier: tier,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -87550,6 +87817,7 @@ typedef $$GaiaMessagesTableTableCreateCompanionBuilder =
       required String partsJson,
       required String status,
       Value<String?> model,
+      Value<String?> adapter,
       Value<String?> error,
       Value<bool> needsInput,
       required DateTime createdAt,
@@ -87567,6 +87835,7 @@ typedef $$GaiaMessagesTableTableUpdateCompanionBuilder =
       Value<String> partsJson,
       Value<String> status,
       Value<String?> model,
+      Value<String?> adapter,
       Value<String?> error,
       Value<bool> needsInput,
       Value<DateTime> createdAt,
@@ -87617,6 +87886,11 @@ class $$GaiaMessagesTableTableFilterComposer
 
   ColumnFilters<String> get model => $composableBuilder(
     column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get adapter => $composableBuilder(
+    column: $table.adapter,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -87695,6 +87969,11 @@ class $$GaiaMessagesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get adapter => $composableBuilder(
+    column: $table.adapter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get error => $composableBuilder(
     column: $table.error,
     builder: (column) => ColumnOrderings(column),
@@ -87755,6 +88034,9 @@ class $$GaiaMessagesTableTableAnnotationComposer
 
   GeneratedColumn<String> get model =>
       $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<String> get adapter =>
+      $composableBuilder(column: $table.adapter, builder: (column) => column);
 
   GeneratedColumn<String> get error =>
       $composableBuilder(column: $table.error, builder: (column) => column);
@@ -87824,6 +88106,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<String> partsJson = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> model = const Value.absent(),
+                Value<String?> adapter = const Value.absent(),
                 Value<String?> error = const Value.absent(),
                 Value<bool> needsInput = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -87839,6 +88122,7 @@ class $$GaiaMessagesTableTableTableManager
                 partsJson: partsJson,
                 status: status,
                 model: model,
+                adapter: adapter,
                 error: error,
                 needsInput: needsInput,
                 createdAt: createdAt,
@@ -87856,6 +88140,7 @@ class $$GaiaMessagesTableTableTableManager
                 required String partsJson,
                 required String status,
                 Value<String?> model = const Value.absent(),
+                Value<String?> adapter = const Value.absent(),
                 Value<String?> error = const Value.absent(),
                 Value<bool> needsInput = const Value.absent(),
                 required DateTime createdAt,
@@ -87871,6 +88156,7 @@ class $$GaiaMessagesTableTableTableManager
                 partsJson: partsJson,
                 status: status,
                 model: model,
+                adapter: adapter,
                 error: error,
                 needsInput: needsInput,
                 createdAt: createdAt,
@@ -87913,6 +88199,9 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       required String id,
       Value<String> gaiaMd,
       Value<bool> notifyOnDone,
+      Value<String?> agentsJson,
+      Value<String?> tiersJson,
+      Value<String> lastTier,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -87924,6 +88213,9 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> gaiaMd,
       Value<bool> notifyOnDone,
+      Value<String?> agentsJson,
+      Value<String?> tiersJson,
+      Value<String> lastTier,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -87952,6 +88244,21 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<bool> get notifyOnDone => $composableBuilder(
     column: $table.notifyOnDone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get agentsJson => $composableBuilder(
+    column: $table.agentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tiersJson => $composableBuilder(
+    column: $table.tiersJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastTier => $composableBuilder(
+    column: $table.lastTier,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88000,6 +88307,21 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get agentsJson => $composableBuilder(
+    column: $table.agentsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tiersJson => $composableBuilder(
+    column: $table.tiersJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastTier => $composableBuilder(
+    column: $table.lastTier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88040,6 +88362,17 @@ class $$GaiaSettingsTableTableAnnotationComposer
     column: $table.notifyOnDone,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get agentsJson => $composableBuilder(
+    column: $table.agentsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tiersJson =>
+      $composableBuilder(column: $table.tiersJson, builder: (column) => column);
+
+  GeneratedColumn<String> get lastTier =>
+      $composableBuilder(column: $table.lastTier, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -88097,6 +88430,9 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> gaiaMd = const Value.absent(),
                 Value<bool> notifyOnDone = const Value.absent(),
+                Value<String?> agentsJson = const Value.absent(),
+                Value<String?> tiersJson = const Value.absent(),
+                Value<String> lastTier = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -88106,6 +88442,9 @@ class $$GaiaSettingsTableTableTableManager
                 id: id,
                 gaiaMd: gaiaMd,
                 notifyOnDone: notifyOnDone,
+                agentsJson: agentsJson,
+                tiersJson: tiersJson,
+                lastTier: lastTier,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -88117,6 +88456,9 @@ class $$GaiaSettingsTableTableTableManager
                 required String id,
                 Value<String> gaiaMd = const Value.absent(),
                 Value<bool> notifyOnDone = const Value.absent(),
+                Value<String?> agentsJson = const Value.absent(),
+                Value<String?> tiersJson = const Value.absent(),
+                Value<String> lastTier = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -88126,6 +88468,9 @@ class $$GaiaSettingsTableTableTableManager
                 id: id,
                 gaiaMd: gaiaMd,
                 notifyOnDone: notifyOnDone,
+                agentsJson: agentsJson,
+                tiersJson: tiersJson,
+                lastTier: lastTier,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
