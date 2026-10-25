@@ -1,6 +1,6 @@
 # Voyager and Gaia icon assets
 
-Approved matching spacecraft artwork, exported for Windows and Android. Assets only: no application code, manifests or existing icons were replaced. Gaia's textured surfaces and Voyager's approved front-facing view are preserved in the large icons.
+Approved spacecraft artwork with white stars, a blue gradient for Voyager and a red gradient for textured Gaia, exported for Windows and Android. Assets only: no application code, manifests or installed application icons were replaced. Gaia's textured surfaces and Voyager's approved front-facing view are preserved in the large icons.
 
 Open [preview.png](preview.png) to compare the apps, Windows sizes, Android masks, themed icons and notification silhouettes.
 
@@ -18,7 +18,7 @@ Open [preview.png](preview.png) to compare the apps, Windows sizes, Android mask
 | Square opaque store artwork | 512 | `<app>/store/icon-512.png` |
 | Full-size square icon, foreground and background masters | 1024 | `<app>/masters/` |
 
-Density order is mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi. Round icons are extra convenience assets. Android applies the mask to adaptive icons; the full-bleed adaptive background has no baked-in rounded corners. The full foreground, including the gold star and Voyager booms, fits inside a **64dp diameter circle on a 108dp canvas**, leaving a guard inside the official 66dp safe circle.
+Density order is mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi. Round icons are extra convenience assets. Android applies the mask to adaptive icons; the full-bleed adaptive background has no baked-in rounded corners. The full foreground, including the white star and Voyager booms, fits inside a **64dp diameter circle on a 108dp canvas**, leaving a guard inside the official 66dp safe circle.
 
 The 16, 20 and 24px Windows icons use separately drawn, simplified spacecraft with thicker details. They are intentionally less detailed than the large artwork. Notification and themed monochrome layers are separately drawn silhouettes with transparent cutouts, not color-to-white conversions of a square launcher. The notification mark omits the decorative star to give the spacecraft the space available in the status bar.
 
@@ -38,12 +38,12 @@ Gaia's in-app nav entry still uses its existing glyph. Image registration, Flutt
 
 ## Sources and reproducibility
 
-The original approved presentations from the built-in imagegen tool are preserved under `source/`:
+The approved reference from the built-in imagegen tool is preserved under `source/`:
 
-- `approved-voyager-pair.png`: source for the unchanged Voyager illustration.
-- `approved-textured-gaia-pair.png`: source for the final textured Gaia illustration.
+- `approved-white-stars-red-gaia-pair.png`: approved reference and source for both illustrations, with white stars, blue Voyager and red textured Gaia.
+- `white-stars-red-gaia-reference-prompt.txt`: generation tool and original edit prompt, retained for provenance. Its named input was superseded by the approved reference above and removed as requested.
 
-These were not regenerated during export. The exporter separates their foregrounds, creates matching square navy gradient backgrounds, and packages the platform assets. The large spacecraft artwork is raster-based; there is no claim that these are editable vector masters. The simplified small-size drawings are defined in the exporter.
+The reference is not regenerated during export. The exporter separates its foregrounds, creates square blue and red gradient backgrounds, and packages the platform assets. The large spacecraft artwork is raster-based; there is no claim that these are editable vector masters. The simplified small-size drawings with white stars are defined in the exporter. Superseded reference images have been removed.
 
 Regenerate from the repository root with Windows PowerShell and System.Drawing, with no third-party packages:
 

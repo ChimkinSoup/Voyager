@@ -123,7 +123,6 @@ class _PhotoSeriesDialogState extends State<_PhotoSeriesDialog> {
       context: context,
       buttonContext: buttonContext,
       width: 240,
-      height: 300,
       builder: (_) => TimeSelectorPopover(
         initialTime: atLocalMinutes(DateTime.now(), _minutes),
       ),

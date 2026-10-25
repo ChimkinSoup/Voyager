@@ -157,7 +157,8 @@ class TodoSortDebugLogger extends ChangeNotifier {
       final tasks = await repo.listTasks(list.id, topLevelOnly: false);
       final topLevel = tasks.where((t) => !t.isSubtask).toList();
       final active = sortTodoTasks(topLevel.where((t) => !t.completed));
-      final completed = sortTodoTasks(topLevel.where((t) => t.completed));
+      final completed = topLevel.where((t) => t.completed).toList()
+        ..sort(compareCompletedTasks);
       final subtasks = tasks.where((t) => t.isSubtask).toList()
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 

@@ -64,6 +64,15 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
   List<String> _suggestions = const [];
   var _selected = 0;
 
+  /// Whether the arrow keys or the pointer have moved [_selected] since the
+  /// list last refreshed, which makes the highlight a choice even in an empty
+  /// box.
+  var _navigated = false;
+
+  /// Whether there is a highlight to show, and for Enter and Tab to take. The
+  /// list opens on focus alone, so an untouched empty box has none.
+  bool get _picked => _controller.text.trim().isNotEmpty || _navigated;
+
   /// The list last handed to [RankingTagsField.onChanged], shown until
   /// [widget.tags] reads the same.
   ///
@@ -137,6 +146,7 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
       limit: _maxSuggestions,
     );
     _selected = 0;
+    _navigated = false;
     if (_suggestions.isEmpty ||
         current.length >= maxRankingParentTags ||
         !_focusNode.hasFocus) {
@@ -196,23 +206,26 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
         (key == LogicalKeyboardKey.arrowDown ||
             key == LogicalKeyboardKey.arrowUp)) {
       final delta = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
-      setState(
-        () => _selected =
-            (_selected + delta + _suggestions.length) % _suggestions.length,
-      );
+      setState(() {
+        // With nothing highlighted yet, the first press lands on an end row
+        // rather than stepping past the top one.
+        _selected = _picked
+            ? (_selected + delta + _suggestions.length) % _suggestions.length
+            : (delta == 1 ? 0 : _suggestions.length - 1);
+        _navigated = true;
+      });
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.enter) {
-      _commit(listOpen ? _suggestions[_selected] : _controller.text);
+      _commit(listOpen && _picked ? _suggestions[_selected] : _controller.text);
       return KeyEventResult.handled;
     }
     // Tab takes the highlighted suggestion too, as it does in the `#` popup.
     // Left alone it moves focus, and blur commits the half-typed text instead.
-    // An empty box (where the list opens on focus alone) and Shift+Tab still
-    // just move focus.
+    // Shift+Tab still just moves focus.
     if (key == LogicalKeyboardKey.tab &&
         listOpen &&
-        _controller.text.trim().isNotEmpty &&
+        _picked &&
         !HardwareKeyboard.instance.isShiftPressed) {
       _commit(_suggestions[_selected]);
       return KeyEventResult.handled;
@@ -341,10 +354,13 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
           child: SuggestionList<String>(
             items: _suggestions,
             labelOf: (tag) => tag,
-            selectedIndex: _selected,
+            selectedIndex: _picked ? _selected : -1,
             accentColor: widget.accentColor,
             textStyle: Theme.of(context).textTheme.bodySmall,
-            onHighlight: (i) => setState(() => _selected = i),
+            onHighlight: (i) => setState(() {
+              _selected = i;
+              _navigated = true;
+            }),
             onSelect: _commit,
           ),
         ),

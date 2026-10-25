@@ -661,4 +661,122 @@ void main() {
       ]);
     });
   });
+
+  group('compareCompletedTasks', () {
+    TodoTask done(
+      String id, {
+      DateTime? completedAt,
+      required DateTime updatedAt,
+      bool starred = false,
+      int sortOrder = 0,
+    }) => TodoTask(
+      id: id,
+      listId: 'list-1',
+      title: id,
+      completed: true,
+      completedAt: completedAt,
+      starred: starred,
+      sortOrder: sortOrder,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: updatedAt,
+    );
+
+    List<String> order(List<TodoTask> tasks) =>
+        (tasks.toList()..sort(compareCompletedTasks)).map((t) => t.id).toList();
+
+    test('most recently completed first, ignoring star and sort order', () {
+      final tasks = [
+        done(
+          'old',
+          completedAt: DateTime.utc(2026, 10, 1),
+          updatedAt: DateTime.utc(2026, 10, 1),
+          starred: true,
+          sortOrder: -5,
+        ),
+        done(
+          'new',
+          completedAt: DateTime.utc(2026, 10, 20),
+          updatedAt: DateTime.utc(2026, 10, 20),
+          sortOrder: 9000,
+        ),
+      ];
+
+      expect(order(tasks), ['new', 'old']);
+    });
+
+    test('tasks without completedAt sit below stamped ones, newest updatedAt '
+        'first, even when edited after a stamped completion', () {
+      final tasks = [
+        done('legacy-old', updatedAt: DateTime.utc(2026, 9, 15)),
+        done(
+          'stamped',
+          completedAt: DateTime.utc(2026, 9, 30),
+          updatedAt: DateTime.utc(2026, 9, 30),
+        ),
+        // Edited long after it was completed.
+        done('legacy-edited', updatedAt: DateTime.utc(2026, 10, 24)),
+      ];
+
+      expect(order(tasks), ['stamped', 'legacy-edited', 'legacy-old']);
+    });
+
+    test('ties break on id so the order is stable', () {
+      final at = DateTime.utc(2026, 10, 1);
+      final tasks = [
+        done('b', completedAt: at, updatedAt: at),
+        done('a', completedAt: at, updatedAt: at),
+      ];
+
+      expect(order(tasks), ['a', 'b']);
+      expect(order(tasks.reversed.toList()), ['a', 'b']);
+    });
+
+    test('ticking a task through copyWith puts it at the top', () {
+      final earlier = done(
+        'earlier',
+        completedAt: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+        updatedAt: DateTime.utc(2026, 10, 1),
+      );
+      final open = TodoTask(
+        id: 'just-done',
+        listId: 'list-1',
+        title: 'just-done',
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1),
+      );
+
+      expect(order([earlier, open.copyWith(completed: true)]), [
+        'just-done',
+        'earlier',
+      ]);
+    });
+
+    // The todo page stamps a tick at the tap and writes it ~900 ms later; the
+    // write has to reuse that stamp or the completed order shifts as it lands.
+    test('a tick applied later keeps the stamp it was recorded with', () {
+      final open = TodoTask(
+        id: 'a',
+        listId: 'list-1',
+        title: 'a',
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1),
+      );
+      final tapped = DateTime.utc(2026, 10, 25, 9);
+
+      final ticked = open.copyWith(
+        completed: true,
+        completedAt: tapped,
+        completedUtcOffsetMinutes: -360,
+      );
+      expect(ticked.completedAt, tapped);
+      expect(ticked.completedUtcOffsetMinutes, -360);
+
+      // Already completed: an existing stamp is left alone.
+      final again = ticked.copyWith(
+        completed: true,
+        completedAt: DateTime.utc(2026, 10, 26),
+      );
+      expect(again.completedAt, tapped);
+    });
+  });
 }

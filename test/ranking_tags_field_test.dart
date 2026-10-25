@@ -73,6 +73,7 @@ void main() {
     await _pumpField(tester, suggestions: ['test', 'arst']);
 
     await tester.showKeyboard(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), 'te');
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
@@ -111,6 +112,39 @@ void main() {
 
     expect(_chips('test'), 0);
   });
+
+  // Enter used to take the first suggestion here while Tab did not.
+  testWidgets('Enter from an empty box adds nothing', (tester) async {
+    await _pumpField(tester, suggestions: ['test', 'arst']);
+
+    await tester.showKeyboard(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(_chips('test'), 0);
+  });
+
+  // Arrowing to a suggestion is a choice, so the empty-box guard lets it
+  // through. Nothing is highlighted before the first press, so it lands on the
+  // top row rather than stepping past it.
+  for (final key in [LogicalKeyboardKey.enter, LogicalKeyboardKey.tab]) {
+    testWidgets('${key.keyLabel} after ArrowDown from an empty box adds it', (
+      tester,
+    ) async {
+      await _pumpField(tester, suggestions: ['test', 'arst']);
+
+      await tester.showKeyboard(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+
+      expect(_chips('test'), 1);
+      expect(_chips('arst'), 0);
+    });
+  }
 
   testWidgets('Shift+Tab does not take the highlighted suggestion', (
     tester,

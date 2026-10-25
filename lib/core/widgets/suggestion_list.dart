@@ -40,6 +40,8 @@ class SuggestionList<T> extends StatefulWidget {
 
   final List<T> items;
   final String Function(T item) labelOf;
+
+  /// The highlighted row, or -1 for none.
   final int selectedIndex;
   final Color accentColor;
 
@@ -110,7 +112,7 @@ class _SuggestionListState<T> extends State<SuggestionList<T>> {
   void _reveal() {
     if (!mounted || !_scrollController.hasClients) return;
     final index = widget.selectedIndex;
-    if (index >= _rowKeys.length) return;
+    if (index < 0 || index >= _rowKeys.length) return;
     final row = _rowKeys[index].currentContext?.findRenderObject();
     if (row == null) return;
     final viewport = RenderAbstractViewport.of(row);

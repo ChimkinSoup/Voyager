@@ -326,7 +326,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // lets a plain SliverList do (see the "show all tasks" list above, which
   // doesn't need any of this). Cleared one frame later in _toggleTask.
   final _lingeringActiveIds = <String>{};
-  final _completionOverrides = <String, bool>{};
+  /// The toggled task per id, carrying the tap's completedAt so the completed
+  /// section holds its order while the write, which reuses that stamp, lands.
+  final _completionOverrides = <String, TodoTask>{};
 
   /// Pending roll-forwards, keyed by task id.
   ///
@@ -1054,9 +1056,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
     _reconcileCompletionOverrides(ownTasks);
     _reconcileTaskOverrides(ownTasks);
     final task = _taskOverrides[persisted.id] ?? persisted;
-    final completed = _completionOverrides[persisted.id];
-    return completed == null ? task : task.copyWith(completed: completed);
+    final toggled = _completionOverrides[persisted.id];
+    return toggled == null ? task : _withCompletion(task, toggled);
   }
+
+  /// [task] with [toggled]'s completion, stamp and all.
+  TodoTask _withCompletion(TodoTask task, TodoTask toggled) => task.copyWith(
+    completed: toggled.completed,
+    completedAt: toggled.completedAt,
+    completedUtcOffsetMinutes: toggled.completedUtcOffsetMinutes,
+  );
 
   // Read live (not cached at construction) so toggling the dev flag takes
   // effect on the very next open/close, without needing to leave and
@@ -1346,9 +1355,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final placement = value
         ? null
         : applyTaskUncomplete(task.copyWith(completed: false), activeInList);
+    final toggled = task.copyWith(completed: value);
     setState(() {
       _enteringTaskId = task.id;
-      _completionOverrides[task.id] = value;
+      _completionOverrides[task.id] = toggled;
       if (value) {
         // See _lingeringActiveIds: keeps this id counted in the active
         // section's rendering for one more frame than the data otherwise
@@ -1367,7 +1377,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         // with the completion so it reconciles cleanly instead.
         final lingering = _taskOverrides[task.id];
         if (lingering != null) {
-          _taskOverrides[task.id] = lingering.copyWith(completed: true);
+          _taskOverrides[task.id] = _withCompletion(lingering, toggled);
         }
       } else if (placement != null) {
         _applySortBatchOptimistic(placement, activeInList);
@@ -1411,7 +1421,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       _scheduleRecurringRollForward(task.id);
     } else {
       _rollForwardTimers.remove(task.id)?.cancel();
-      _schedulePersistTaskCompletion(task.copyWith(completed: value));
+      _schedulePersistTaskCompletion(toggled);
     }
   }
 
@@ -1553,7 +1563,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       final latest = await repo.getTask(task.id);
       if (latest == null) continue;
       onDisk[latest.id] = latest;
-      resolved.add(latest.copyWith(completed: task.completed));
+      resolved.add(_withCompletion(latest, task));
     }
     if (resolved.isEmpty) return const {};
 
@@ -1727,7 +1737,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       for (final task in byId.values)
         switch (_completionOverrides[task.id]) {
           null => task,
-          final completed => task.copyWith(completed: completed),
+          final toggled => _withCompletion(task, toggled),
         },
     ];
   }
@@ -1767,7 +1777,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     if (_completionOverrides.isEmpty) return;
     final resolvedIds = <String>[
       for (final task in tasks)
-        if (_completionOverrides[task.id] == task.completed) task.id,
+        if (_completionOverrides[task.id]?.completed == task.completed) task.id,
     ];
     if (resolvedIds.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3149,7 +3159,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
                           !active.any((a) => a.id == t.id))
                         t,
                   ];
-            final completed = sorted.where((t) => t.completed).toList();
+            final completed = sorted.where((t) => t.completed).toList()
+              ..sort(compareCompletedTasks);
             // A toggled task's row has already fully played its exit
             // collapse by the time it moves between sections (see
             // _TaskRowState._handleToggle), so there's no leftover row to

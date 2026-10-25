@@ -1,0 +1,13 @@
+final tr = c.read(todoRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final now = DateTime.now().toUtc(); final made = DateTime.utc(2026, 9, 10);
+final l = TodoListModel(id: 'co-list', createdAt: now, updatedAt: now, version: 1, name: 'Completed Order');
+await tr.upsertList(l); r.pushTodoList(l);
+final tasks = [
+  TodoTask(id: 'co-open', createdAt: made, updatedAt: now, version: 1, listId: 'co-list', title: 'Open task to tick', sortOrder: 1000),
+  TodoTask(id: 'co-legacy-old', createdAt: made, updatedAt: DateTime.utc(2026, 9, 20), version: 1, listId: 'co-list', title: 'Legacy done Sep 20 (no completedAt)', completed: true, sortOrder: 100),
+  TodoTask(id: 'co-oct10', createdAt: made, updatedAt: DateTime.utc(2026, 10, 10), version: 1, listId: 'co-list', title: 'Done Oct 10 (starred)', completed: true, completedAt: DateTime.utc(2026, 10, 10), starred: true, sortOrder: 0),
+  TodoTask(id: 'co-oct20', createdAt: made, updatedAt: DateTime.utc(2026, 10, 20), version: 1, listId: 'co-list', title: 'Done Oct 20', completed: true, completedAt: DateTime.utc(2026, 10, 20), sortOrder: 5000),
+  TodoTask(id: 'co-legacy-edited', createdAt: made, updatedAt: DateTime.utc(2026, 10, 24), version: 1, listId: 'co-list', title: 'Legacy done, edited Oct 24 (no completedAt)', completed: true, sortOrder: 200),
+];
+for (final t in tasks) { await tr.upsertTask(t); r.pushTodoTaskInBackground(t); }
+invalidateAllDataProvidersIn(c);

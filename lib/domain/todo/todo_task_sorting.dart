@@ -82,6 +82,28 @@ int compareGlobalTasks(TodoTask a, TodoTask b) {
   return a.id.compareTo(b.id);
 }
 
+/// The completed section's order: most recently completed first.
+///
+/// Tasks completed before [TodoTask.completedAt] existed carry none, and nearly
+/// all of them were completed before any task that does, so they all sit below
+/// the stamped ones, newest [TodoTask.updatedAt] first as the nearest stand-in.
+/// The exception is a tick synced from a client too old to send
+/// `completedAt`, which also lands unstamped and so sorts down here.
+/// Keeping them a separate group means a later edit to one, which bumps
+/// `updatedAt`, can't lift it above a task actually completed after it.
+int compareCompletedTasks(TodoTask a, TodoTask b) {
+  final aDone = a.completedAt;
+  final bDone = b.completedAt;
+  if ((aDone == null) != (bDone == null)) return aDone == null ? 1 : -1;
+
+  final byTime = aDone != null
+      ? bDone!.compareTo(aDone)
+      : b.updatedAt.compareTo(a.updatedAt);
+  if (byTime != 0) return byTime;
+
+  return a.id.compareTo(b.id);
+}
+
 List<TodoTask> activeTopLevelTasks(Iterable<TodoTask> tasks) {
   return tasks.where((t) => !t.completed && !t.isSubtask).toList();
 }

@@ -117,6 +117,8 @@ class TodoTask extends SoftDeletable {
     bool clearDueDate = false,
     bool clearNotes = false,
     bool? completed,
+    DateTime? completedAt,
+    int? completedUtcOffsetMinutes,
     bool? starred,
     int? sortOrder,
     DateTime? dueDateSetAt,
@@ -144,14 +146,18 @@ class TodoTask extends SoftDeletable {
       completed: completed ?? this.completed,
       // Follows [completed]: stamped when it turns true, cleared when it turns
       // false, and left alone otherwise — so every path that ticks a task
-      // records the moment without having to remember to.
+      // records the moment without having to remember to. A stamp passed in
+      // is used in place of now, for a tick recorded earlier than it's applied.
       completedAt: completed == null || completed == this.completed
-          ? completedAt
-          : (completed ? DateTime.now().toUtc() : null),
+          ? this.completedAt
+          : (completed ? completedAt ?? DateTime.now().toUtc() : null),
       completedUtcOffsetMinutes:
           completed == null || completed == this.completed
-          ? completedUtcOffsetMinutes
-          : (completed ? DateTime.now().timeZoneOffset.inMinutes : null),
+          ? this.completedUtcOffsetMinutes
+          : (completed
+                ? completedUtcOffsetMinutes ??
+                      DateTime.now().timeZoneOffset.inMinutes
+                : null),
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       dueDateSetAt: clearDueDateSetAt

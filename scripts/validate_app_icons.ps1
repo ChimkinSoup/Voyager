@@ -158,7 +158,24 @@ foreach ($app in @('voyager', 'gaia')) {
 for ($d = 0; $d -lt 5; $d++) {
     $v = Get-FileHash (Join-Path $IconDirectory "voyager/android/res/mipmap-$($densities[$d])/ic_launcher_background.png")
     $g = Get-FileHash (Join-Path $IconDirectory "gaia/android/res/mipmap-$($densities[$d])/ic_gaia_background.png")
-    Assert ($v.Hash -eq $g.Hash) 'Voyager and Gaia backgrounds must match byte for byte'
+    Assert ($v.Hash -ne $g.Hash) 'Voyager and Gaia backgrounds must have distinct colors'
+}
+
+foreach ($app in @('voyager', 'gaia')) {
+    $background = [Drawing.Bitmap]::new((Join-Path $IconDirectory "$app/masters/background-1024.png"))
+    $master = [Drawing.Bitmap]::new((Join-Path $IconDirectory "$app/masters/icon-1024.png"))
+    try {
+        $top = $background.GetPixel(512, 0)
+        $bottom = $background.GetPixel(512, 1023)
+        if ($app -eq 'gaia') {
+            Assert ($top.R -gt $top.B * 3 -and $bottom.R -gt $bottom.B * 3) 'Gaia background must be red'
+        } else {
+            Assert ($top.B -gt $top.R * 2 -and $bottom.B -gt $bottom.R * 2) 'Voyager background must be blue'
+        }
+        Assert ($top.GetBrightness() -gt $bottom.GetBrightness()) "$app gradient must darken toward the bottom"
+        $star = $master.GetPixel(510, 188)
+        Assert ($star.R -ge 245 -and $star.G -ge 245 -and $star.B -ge 245) "$app star must be white"
+    } finally { $background.Dispose(); $master.Dispose() }
 }
 
 $report = [ordered]@{
@@ -167,10 +184,11 @@ $report = [ordered]@{
     windowsIcoSizes = $sizes
     notificationRgb = 'white only; transparent background'
     adaptiveSafeCircleDp = 66
-    matchingBackgrounds = $true
+    backgroundColors = 'Voyager blue; Gaia red; both darken toward the bottom'
+    stars = 'white; sampled in both full-size masters'
     resourceXml = 'v26, v33 and background aliases validated'
     deviceOrBuildTest = 'not run; assets have not been integrated'
     files = @($checks.ToArray())
 }
 $report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $IconDirectory 'validation.json') -Encoding UTF8
-Write-Output "PASS: $($checks.Count) assets verified; both 8-frame ICO files decoded; adaptive safe zones, white notification alpha and matching backgrounds verified."
+Write-Output "PASS: $($checks.Count) assets verified; both 8-frame ICO files decoded; adaptive safe zones, white notification alpha, white stars and distinct blue/red gradients verified."

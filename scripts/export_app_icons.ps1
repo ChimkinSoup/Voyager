@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Drawing
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 
 # Deterministic export/packaging of approved artwork. No generative redraws.
-# The two original imagegen sheets live in output/app-icons/source.
+# The approved imagegen reference lives in output/app-icons/source.
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 using System;
 using System.IO;
@@ -48,10 +48,10 @@ public static class AppIconExport {
         }
         return r;
     }
-    static Bitmap Background(int n) {
+    static Bitmap Background(int n,bool gaia) {
         Bitmap b=Canvas(n);
         using(Graphics g=Context(b))
-        using(LinearGradientBrush brush=new LinearGradientBrush(new Point(0,0),new Point(0,n-1),Color.FromArgb(20,46,68),Color.FromArgb(4,18,35)))
+        using(LinearGradientBrush brush=new LinearGradientBrush(new Point(0,0),new Point(0,n),gaia?Color.FromArgb(132,12,23):Color.FromArgb(20,46,68),gaia?Color.FromArgb(37,1,6):Color.FromArgb(4,18,35)))
             g.FillRectangle(brush,0,0,n,n);
         return b;
     }
@@ -79,10 +79,14 @@ public static class AppIconExport {
             int left=gaia?950:130, right=gaia?1620:780;
             for(int y=120;y<662;y++) for(int x=left;x<right;x++) {
                 Color c=sheet.GetPixel(x,y);
-                if(c.R<43) continue;
+                if((gaia?c.G:c.R)<43) continue;
                 double t=(y-45)/728.0;
                 double br=20-16*t, bg=46-28*t, bb=68-33*t;
-                double a=Math.Max(0,Math.Min(1,(c.R-br)/(110-br)));
+                if(gaia) {
+                    Color backdrop=sheet.GetPixel(935,y);
+                    br=backdrop.R; bg=backdrop.G; bb=backdrop.B;
+                }
+                double a=Math.Max(0,Math.Min(1,gaia?(c.G-bg)/(110-bg):(c.R-br)/(110-br)));
                 if(a<0.025) continue;
                 int rr=(int)Math.Round((c.R-(1-a)*br)/a);
                 int gg=(int)Math.Round((c.G-(1-a)*bg)/a);
@@ -131,7 +135,7 @@ public static class AppIconExport {
             Color fill=mono?Color.White:Ivory, accent=mono?Color.White:Gold;
             Color cut=mono?Color.Transparent:Navy;
             if(mono) g.CompositingMode=CompositingMode.SourceCopy;
-            if(star) Polygon(g,accent,128,25,132,36,143,40,132,44,128,55,124,44,113,40,124,36);
+            if(star) Polygon(g,Color.White,128,25,132,36,143,40,132,44,128,55,124,44,113,40,124,36);
             if(!gaia) {
                 // Deliberately thicker booms and feed supports for tiny sizes.
                 Line(g,fill,6,110,171,36,212); Line(g,accent,7,149,171,211,202);
@@ -169,8 +173,8 @@ public static class AppIconExport {
             b.SetPixel(x,y,Color.FromArgb(a,255,255,255));
         }
     }
-    static Bitmap Composite(Bitmap foreground,int n) {
-        Bitmap result=Background(n);
+    static Bitmap Composite(Bitmap foreground,int n,bool gaia) {
+        Bitmap result=Background(n,gaia);
         using(Graphics g=Context(result)) g.DrawImage(foreground,0,0,n,n);
         return result;
     }
@@ -196,14 +200,14 @@ public static class AppIconExport {
         string app=gaia?"gaia":"voyager", name=gaia?"ic_gaia":"ic_launcher";
         string dir=Path.Combine(Root,app), res=Path.Combine(dir,"android/res");
         Directory.CreateDirectory(Path.Combine(dir,"windows/png"));
-        string source=Path.Combine(Root,"source",gaia?"approved-textured-gaia-pair.png":"approved-voyager-pair.png");
+        string source=Path.Combine(Root,"source","approved-white-stars-red-gaia-pair.png");
         using(Bitmap art=Extract(source,gaia))
-        using(Bitmap full=Composite(art,1024))
+        using(Bitmap full=Composite(art,1024,gaia))
         using(Bitmap simple=SimpleArt(gaia,false,true,1024))
         using(Bitmap monoArt=SimpleArt(gaia,true,true,768))
         using(Bitmap notifyArt=SimpleArt(gaia,true,false,768)) {
             using(Bitmap f=Resize(art,1024)) Save(f,Path.Combine(dir,"masters/foreground-1024.png"));
-            using(Bitmap bg=Background(1024)) Save(bg,Path.Combine(dir,"masters/background-1024.png"));
+            using(Bitmap bg=Background(1024,gaia)) Save(bg,Path.Combine(dir,"masters/background-1024.png"));
             Save(full,Path.Combine(dir,"masters/icon-1024.png"));
             using(Bitmap store=Resize(full,512)) Save(store,Path.Combine(dir,"store/icon-512.png"));
             using(Bitmap adaptive=SafeLayer(art,432)) Save(adaptive,Path.Combine(dir,"masters/adaptive-foreground-432.png"));
@@ -211,7 +215,7 @@ public static class AppIconExport {
             foreach(int n in Sizes) {
                 // Dedicated simplified drawing at 16,20,24 instead of shrinking
                 // thin mechanical details from the large illustration.
-                using(Bitmap tile=n<=24?Composite(simple,1024):(Bitmap)full.Clone())
+                using(Bitmap tile=n<=24?Composite(simple,1024,gaia):(Bitmap)full.Clone())
                 using(Bitmap rounded=RoundedTile(tile)) {
                     Bitmap frame=Resize(rounded,n);
                     // Remove the faint bicubic alpha fringe at tiny tile corners.
@@ -227,7 +231,7 @@ public static class AppIconExport {
                 string mip=Path.Combine(res,"mipmap-"+Density[d]);
                 using(Bitmap legacy=Resize(full,Legacy[d])) Save(legacy,Path.Combine(mip,name+".png"));
                 using(Bitmap foreground=SafeLayer(art,Adaptive[d])) Save(foreground,Path.Combine(mip,name+"_foreground.png"));
-                using(Bitmap bg=Background(Adaptive[d])) Save(bg,Path.Combine(mip,name+"_background.png"));
+                using(Bitmap bg=Background(Adaptive[d],gaia)) Save(bg,Path.Combine(mip,name+"_background.png"));
                 using(Bitmap mono=SafeLayer(monoArt,Adaptive[d])) {
                     Whiten(mono);Save(mono,Path.Combine(mip,name+"_monochrome.png"));
                 }
@@ -245,7 +249,7 @@ public static class AppIconExport {
             Text(Path.Combine(res,"mipmap-anydpi-v33/"+name+"_round.xml"),AdaptiveXml(name,true));
             for(int d=0;d<Density.Length;d++) {
                 using(Bitmap safeForeground=SafeLayer(art,432))
-                using(Bitmap safeBackground=Background(432))
+                using(Bitmap safeBackground=Background(432,gaia))
                 using(Bitmap circle=Canvas(Legacy[d])) {
                     using(Graphics sg=Context(safeBackground)) sg.DrawImageUnscaled(safeForeground,0,0);
                     using(Bitmap viewport=safeBackground.Clone(new Rectangle(72,72,288,288),PixelFormat.Format32bppArgb))
@@ -287,7 +291,7 @@ public static class AppIconExport {
                 }
                 g.DrawString("Android adaptive: circle / rounded / themed",label,ink,x,742);
                 using(Bitmap fg=new Bitmap(Path.Combine(Root,name,"masters/adaptive-foreground-432.png")))
-                using(Bitmap bg=Background(432)) {
+                using(Bitmap bg=Background(432,app==1)) {
                     using(Graphics cg=Context(bg)) cg.DrawImageUnscaled(fg,0,0);
                     // Launcher viewport is central 72dp of the 108dp layers.
                     using(Bitmap viewport=bg.Clone(new Rectangle(72,72,288,288),PixelFormat.Format32bppArgb))

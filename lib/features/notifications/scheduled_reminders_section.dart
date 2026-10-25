@@ -860,7 +860,6 @@ class _ScheduledReminderEditorState
       context: context,
       buttonContext: buttonContext,
       width: 240,
-      height: 300,
       builder: (_) => TimeSelectorPopover(initialTime: _timeAsDateTime),
     );
     if (picked == null || !mounted) return;
