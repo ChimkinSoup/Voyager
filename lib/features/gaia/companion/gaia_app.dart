@@ -1,0 +1,489 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_window.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:window_manager/window_manager.dart';
+
+/// The companion's UI (GAIA_HLD.md §3.3): the small floater shows the last
+/// few turns, the large one the whole chat, and the Gaia window adds a chat
+/// sidebar.
+class GaiaApp extends StatelessWidget {
+  const GaiaApp({super.key, required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: controller.accent,
+      builder: (context, accent, _) => MaterialApp(
+        title: 'Gaia',
+        debugShowCheckedModeBanner: false,
+        theme: _onGaiaSurface(Color(accent)),
+        home: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => _GaiaShell(controller: controller),
+        ),
+      ),
+    );
+  }
+
+  /// Voyager's dark theme with [accent], on Gaia's own surface tinted by it.
+  static ThemeData _onGaiaSurface(Color accent) {
+    final theme = VoyagerTheme.dark(accent: accent);
+    final surface = gaiaSurface(accent);
+    return theme.copyWith(
+      scaffoldBackgroundColor: surface,
+      canvasColor: surface,
+      colorScheme: theme.colorScheme.copyWith(surface: surface),
+      dialogTheme: theme.dialogTheme.copyWith(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+      ),
+    );
+  }
+}
+
+class _GaiaShell extends StatelessWidget {
+  const _GaiaShell({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final floater = controller.layout != GaiaMode.window;
+    final chat = Column(
+      children: [
+        _Header(controller: controller),
+        const Divider(height: 1),
+        Expanded(
+          child: _Messages(
+            messages: controller.layout == GaiaMode.small
+                ? _lastTurns(controller.messages, 3)
+                : controller.messages,
+          ),
+        ),
+        _Composer(controller: controller),
+      ],
+    );
+    return CallbackShortcuts(
+      bindings: {
+        if (floater)
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              controller.dismiss(),
+      },
+      child: Scaffold(
+        body: floater
+            ? chat
+            : Row(
+                children: [
+                  SizedBox(width: 260, child: _Sidebar(controller: controller)),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: chat),
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// The messages from the [turns]th-last user message on.
+  static List<GaiaMessage> _lastTurns(List<GaiaMessage> messages, int turns) {
+    var seen = 0;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role == GaiaMessageRole.user && ++seen == turns) {
+        return messages.sublist(i);
+      }
+    }
+    return messages;
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final version = controller.cliVersion;
+    final chip = !controller.cliChecked
+        ? null
+        : version == null
+        ? 'Claude Code not found'
+        : isTestedClaudeVersion(version)
+        ? null
+        : 'Untested Claude Code ${version.$1}.${version.$2}.${version.$3}';
+    final floater = controller.layout != GaiaMode.window;
+    return DragToMoveArea(
+      child: SizedBox(
+        // Room for the round buttons' shadows.
+        height: 52,
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                controller.currentChat?.title ?? 'New chat',
+                style: theme.textTheme.titleSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (chip != null) ...[
+              Chip(
+                label: Text(chip),
+                visualDensity: VisualDensity.compact,
+                labelStyle: theme.textTheme.labelSmall,
+              ),
+              const SizedBox(width: 4),
+            ],
+            if (floater) ...[
+              GaiaButton(
+                icon: Icons.add,
+                size: 32,
+                onPressed: controller.newChat,
+              ),
+              const SizedBox(width: 10),
+              GaiaButton(
+                icon: Icons.open_in_full,
+                size: 32,
+                onPressed: controller.openWindow,
+              ),
+              const SizedBox(width: 10),
+            ],
+            GaiaButton(
+              icon: Icons.close,
+              size: 32,
+              onPressed: controller.dismiss,
+            ),
+            const SizedBox(width: 12),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DragToMoveArea(
+          child: SizedBox(
+            height: 52,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Gaia', style: theme.textTheme.titleMedium),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: GaiaButton(
+            icon: Icons.add,
+            label: 'New chat',
+            onPressed: controller.newChat,
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              for (final chat in controller.chats)
+                ListTile(
+                  dense: true,
+                  selected: chat.id == controller.currentChatId,
+                  title: Text(chat.title, overflow: TextOverflow.ellipsis),
+                  trailing: controller.isRunning(chat.id)
+                      ? const SizedBox.square(
+                          dimension: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                  onTap: () => controller.selectChat(chat.id),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Messages extends StatelessWidget {
+  const _Messages({required this.messages});
+
+  final List<GaiaMessage> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    // Reversed, so the newest stays in view as a reply streams in.
+    return ListView.builder(
+      reverse: true,
+      padding: const EdgeInsets.all(16),
+      itemCount: messages.length,
+      itemBuilder: (context, index) =>
+          _MessageView(message: messages[messages.length - 1 - index]),
+    );
+  }
+}
+
+class _MessageView extends StatelessWidget {
+  const _MessageView({required this.message});
+
+  final GaiaMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    if (message.role == GaiaMessageRole.user) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12, left: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: SelectableText(message.text),
+        ),
+      );
+    }
+    final status = switch (message.status) {
+      GaiaMessageStatus.streaming || GaiaMessageStatus.complete => null,
+      GaiaMessageStatus.error => 'Error${_detail(message.error)}',
+      GaiaMessageStatus.cancelled => 'Stopped',
+      GaiaMessageStatus.interrupted => 'Interrupted',
+      GaiaMessageStatus.aborted => 'Aborted',
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final part in message.parts)
+            switch (part) {
+              GaiaTextPart(:final text) => SelectableText(text),
+              GaiaActivityPart(:final tools) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(_activity(tools), style: muted),
+              ),
+            },
+          if (message.status == GaiaMessageStatus.streaming)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: SizedBox.square(
+                dimension: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          if (status != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                status,
+                style: muted?.copyWith(
+                  color: message.status == GaiaMessageStatus.error
+                      ? theme.colorScheme.error
+                      : null,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _detail(String? error) => error == null ? '' : ': $error';
+
+  /// "Used Bash ×3, Edit".
+  static String _activity(List<String> tools) {
+    final counts = <String, int>{};
+    for (final tool in tools) {
+      counts[tool] = (counts[tool] ?? 0) + 1;
+    }
+    return 'Used ${[for (final MapEntry(:key, :value) in counts.entries) value > 1 ? '$key ×$value' : key].join(', ')}';
+  }
+}
+
+class _Composer extends StatefulWidget {
+  const _Composer({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  State<_Composer> createState() => _ComposerState();
+}
+
+class _ComposerState extends State<_Composer> {
+  final _text = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final text = _text.text;
+    if (text.trim().isEmpty || widget.controller.currentRunning) return;
+    _text.clear();
+    widget.controller.send(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    if (controller.draining != null) {
+      return _Draining(controller: controller);
+    }
+    if (controller.aborted) {
+      return _Aborted(controller: controller);
+    }
+    final running = controller.currentRunning;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.enter): _send,
+              },
+              child: TextField(
+                controller: _text,
+                focusNode: _focus,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  hintText: 'Message Gaia',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          running
+              ? GaiaButton(
+                  icon: Icons.stop,
+                  size: 40,
+                  onPressed: () => controller.stop(controller.currentChatId!),
+                )
+              : GaiaButton(
+                  icon: Icons.arrow_upward,
+                  size: 40,
+                  onPressed: _send,
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+/// In place of the composer while Voyager waits to quit or update (§3.2):
+/// wait for the runs, or cancel them and keep what they wrote.
+class _Draining extends StatelessWidget {
+  const _Draining({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = controller.draining!;
+    final runs = count == 1 ? '1 run' : '$count runs';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              controller.drainWaiting
+                  ? 'Voyager will quit once $runs finish${count == 1 ? 'es' : ''}'
+                  : 'Gaia has $runs in progress',
+            ),
+          ),
+          if (!controller.drainWaiting) ...[
+            GaiaButton(label: 'Wait', onPressed: controller.waitForDrain),
+            const SizedBox(width: 8),
+          ],
+          GaiaButton(label: 'Cancel', onPressed: controller.cancelDrain),
+        ],
+      ),
+    );
+  }
+}
+
+/// In place of the composer while Abort is engaged (§15.7). Re-arming is
+/// deliberate: confirmed with Ctrl+Enter.
+class _Aborted extends StatelessWidget {
+  const _Aborted({required this.controller});
+
+  final GaiaController controller;
+
+  Future<void> _confirm(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
+              Navigator.of(context).pop(true),
+        },
+        child: Focus(
+          autofocus: true,
+          child: AlertDialog(
+            title: const Text('Re-arm Gaia?'),
+            content: const Text(
+              'Chats and runs work again. Press Ctrl+Enter to confirm.',
+            ),
+            actions: [
+              GaiaButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed == true) await controller.rearm();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        children: [
+          Icon(Icons.block, size: 18, color: theme.colorScheme.error),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Gaia is aborted')),
+          GaiaButton(label: 'Re-arm', onPressed: () => _confirm(context)),
+        ],
+      ),
+    );
+  }
+}

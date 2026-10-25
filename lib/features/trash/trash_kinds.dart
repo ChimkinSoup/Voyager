@@ -25,7 +25,8 @@ enum TrashFeature {
   analytics('Analytics'),
   workout('Workout'),
   life('Life'),
-  photoSeries('Photos');
+  photoSeries('Photos'),
+  gaia('Gaia');
 
   const TrashFeature(this.label);
 
@@ -775,5 +776,25 @@ final _kinds = <TrashKind>[
     noun: 'bucket-list item',
     title: (data) => _field(data, 'title'),
     wipe: const ['title', 'note'],
+  ),
+  // A chat's delete leaves its messages as they are; they're read only
+  // through a live chat, and go when the chat is erased.
+  TrashKind(
+    collection: FirestoreCollections.gaiaChats,
+    feature: TrashFeature.gaia,
+    noun: 'chat',
+    containerLabel: 'Chat',
+    title: (data) => _field(data, 'title'),
+    wipe: const ['title'],
+    erasedWith: const [
+      TrashChild(FirestoreCollections.gaiaMessages, ['chatId']),
+    ],
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.gaiaMessages,
+    feature: TrashFeature.gaia,
+    noun: 'message',
+    wipe: ['parts', 'error'],
+    listed: false,
   ),
 ];

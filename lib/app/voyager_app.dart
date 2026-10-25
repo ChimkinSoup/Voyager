@@ -15,6 +15,7 @@ import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
+import 'package:voyager/core/reminders/reminder_os_notifier.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
@@ -33,6 +34,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
+import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
@@ -75,6 +77,14 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Gaia's theme follows the accent. On the change itself, not in build:
+    // in the tray this window draws no frames, and the companion shouldn't
+    // wait for it to be shown.
+    ref.listenManual(
+      settingsProvider.select((s) => s.value?.accentColor ?? 0xFF7C9EFF),
+      (_, argb) => GaiaHost.instance.accent = argb,
+      fireImmediately: true,
+    );
     // A reminder notification brings its sticky forward — tapped while the
     // app runs, or the tap that launched it.
     final reminderOs = ref.read(reminderOsNotifierProvider);
@@ -84,6 +94,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         if (key != null && mounted) _focusReminder(key);
       }),
     );
+    if (isWindows) unawaited(_attachGaia(reminderOs));
     // For as long as the app runs: an image attach can outlive the editor it
     // was started from.
     final rankings = RankingsActions.detached(
@@ -106,6 +117,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       final tray = AppTray(
         onOpen: () => ref.read(floaterControllerProvider).showMainWindow(),
         onQuit: _quit,
+        onOpenGaia: isWindows
+            ? () async => GaiaHost.instance.onHotkey(GaiaHotkey.window)
+            : null,
+        gaiaRuns: isWindows ? GaiaHost.instance.runs : null,
+        onStopGaiaRun: GaiaHost.instance.stop,
       );
       _tray = tray;
       quitApp = _quit;
@@ -117,6 +133,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
           await ref.read(floaterControllerProvider).showMainWindow();
         } else if (call.method == 'quit') {
           await _quit();
+        } else if (call.method == 'showGaia') {
+          GaiaHost.instance.onHotkey(GaiaHotkey.window);
         }
       });
       unawaited(_warmUpFinanceSheet());
@@ -148,7 +166,44 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     }
   }
 
+  /// Gaia's chats live in this instance's database (GAIA_HLD.md §3.2), and
+  /// its notifications go through the reminders' notifier.
+  Future<void> _attachGaia(ReminderOsNotifier os) async {
+    final deviceId = await ensureDeviceId(ref.read(settingsRepositoryProvider));
+    if (!mounted) return;
+    GaiaHost.instance.attach(
+      repository: ref.read(gaiaRepositoryProvider),
+      deviceId: deviceId,
+      toast: (chatId, title, body) => unawaited(
+        os
+            .showNow(
+              PlannedReminderAlert(
+                sourceKey: '$kGaiaNotificationKeyPrefix$chatId',
+                title: title,
+                body: body,
+                fireAt: DateTime.now(),
+              ),
+            )
+            .then((shown) {
+              if (!shown) return;
+              NotificationHistory.instance.record(
+                title,
+                origin: 'Gaia',
+                detail: body,
+              );
+            }),
+      ),
+    );
+  }
+
   void _focusReminder(String sourceKey) {
+    // A Gaia notification opens its chat in Gaia, not Voyager (§14).
+    if (sourceKey.startsWith(kGaiaNotificationKeyPrefix)) {
+      GaiaHost.instance.openChat(
+        sourceKey.substring(kGaiaNotificationKeyPrefix.length),
+      );
+      return;
+    }
     if (desktopWindowChromeActive) {
       unawaited(ref.read(floaterControllerProvider).showMainWindow());
     }
@@ -230,6 +285,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   }
 
   Future<void> _quit() async {
+    // Gaia's runs first (GAIA_HLD.md §3.2): with any going, the companion
+    // asks whether to wait for them or cancel them.
+    try {
+      await GaiaHost.instance.drain();
+    } catch (_) {}
     // Never let the flush decide whether the app quits. Each stage of it
     // ends in a Firestore write that, with an unreachable server, either hangs
     // until the device is back online or throws once SyncRetryPolicy gives up —
@@ -242,6 +302,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     try {
       await hotKeyManager.unregisterAll();
       await _tray?.dispose();
+      await GaiaHost.instance.shutdown();
     } catch (_) {}
     await windowManager.destroy();
   }

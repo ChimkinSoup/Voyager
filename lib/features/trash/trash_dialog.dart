@@ -36,7 +36,7 @@ class _TrashDialog extends ConsumerStatefulWidget {
 class _TrashDialogState extends ConsumerState<_TrashDialog> {
   /// Without a dwell (or an icon) a toast stays up until its owner takes it
   /// away, and nothing here ever does.
-  static const _restoreToastDwell = Duration(seconds: 4);
+  static const _toastDwell = Duration(seconds: 4);
 
   late TrashFeature? _feature = widget.initialFeature;
 
@@ -68,7 +68,7 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
             ? 'Restored $label'
             : 'Restored $label to $movedTo',
         icon: PhosphorIconsRegular.arrowCounterClockwise,
-        dwell: _restoreToastDwell,
+        dwell: _toastDwell,
       );
     } on RestoreSuperseded {
       if (!mounted) return;
@@ -76,7 +76,7 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
         context,
         message: 'Already restored',
         icon: PhosphorIconsRegular.arrowCounterClockwise,
-        dwell: _restoreToastDwell,
+        dwell: _toastDwell,
       );
     } on TrashRestoreBlocked catch (blocked) {
       if (!mounted) return;
@@ -89,7 +89,7 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
             : 'Restore ${blocked.parentNoun} "${cappedTrashTitle(parentTitle)}" '
                   'first',
         icon: PhosphorIconsRegular.warning,
-        dwell: _restoreToastDwell,
+        dwell: _toastDwell,
       );
     }
   });
@@ -107,7 +107,12 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
       confirmLabel: 'Delete forever',
     );
     if (!confirmed || !mounted) return;
-    await _run(() => ref.read(trashServiceProvider).erase([item]));
+    final label = trashItemLabel(item);
+    await _eraseShowingProgress(
+      [item],
+      working: 'Deleting $label forever…',
+      done: 'Deleted $label forever',
+    );
   }
 
   Future<void> _empty(List<TrashItem> items) async {
@@ -122,8 +127,39 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
       confirmLabel: 'Empty trash',
     );
     if (!confirmed || !mounted) return;
-    await _run(() => ref.read(trashServiceProvider).erase(items));
+    final trash = feature == null ? 'trash' : '${feature.label} trash';
+    await _eraseShowingProgress(
+      items,
+      working: 'Emptying $trash…',
+      done: 'Emptied $trash',
+    );
   }
+
+  /// An erase first reads every row the trash knows of, which can take a
+  /// moment with a lot in it: a working toast says it's under way, then
+  /// settles into what happened.
+  Future<void> _eraseShowingProgress(
+    List<TrashItem> items, {
+    required String working,
+    required String done,
+  }) => _run(() async {
+    final toast = showVoyagerToast(context, message: working);
+    try {
+      await ref.read(trashServiceProvider).erase(items);
+    } catch (_) {
+      toast.update(
+        message: "Couldn't delete: something went wrong",
+        icon: PhosphorIconsRegular.warning,
+        dwell: _toastDwell,
+      );
+      rethrow;
+    }
+    toast.update(
+      message: done,
+      icon: PhosphorIconsRegular.trash,
+      dwell: _toastDwell,
+    );
+  });
 
   @override
   Widget build(BuildContext context) {

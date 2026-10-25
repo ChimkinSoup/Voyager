@@ -60,6 +60,7 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       photoSeriesRepository: DriftPhotoSeriesRepository(db),
+      gaiaRepository: DriftGaiaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: engineA,
       uploadDebounceDelay: Duration.zero,
@@ -82,6 +83,7 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       photoSeriesRepository: DriftPhotoSeriesRepository(db),
+      gaiaRepository: DriftGaiaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
@@ -362,6 +364,7 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       photoSeriesRepository: DriftPhotoSeriesRepository(db),
+      gaiaRepository: DriftGaiaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: debouncedEngine,
       uploadDebounceDelay: const Duration(milliseconds: 80),

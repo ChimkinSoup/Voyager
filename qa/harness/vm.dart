@@ -61,6 +61,10 @@ Future<Map<String, dynamic>> evalIn(String libSuffix, String expr) async {
 
 /// Writes one line per Text / Tooltip / ValueKey on screen:
 /// kind \t label \t cx \t cy \t w \t h \t clickable(1/0), physical px.
+/// A box under a singular transform maps to a NaN rect (seen after visiting
+/// Settings > Data), which overlaps() lets through and round() throws on, so
+/// non-finite rects are skipped. The expression is sent as one line: no `//`
+/// comments inside it.
 String _dumpExpr(String path) => '''(() {
   final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
   final dpr = view.devicePixelRatio;
@@ -71,7 +75,7 @@ String _dumpExpr(String path) => '''(() {
     final ro = x.findRenderObject();
     if (ro is! RenderBox || !ro.attached || !ro.hasSize || ro.size.isEmpty) return;
     final rect = ro.localToGlobal(Offset.zero) & ro.size;
-    if (!rect.overlaps(bounds)) return;
+    if (!rect.isFinite || !rect.overlaps(bounds)) return;
     final hr = HitTestResult();
     WidgetsBinding.instance.hitTestInView(hr, rect.center, view.viewId);
     bool under(RenderObject? a, RenderObject b) {

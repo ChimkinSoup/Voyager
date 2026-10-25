@@ -24,6 +24,8 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
+import 'package:voyager/features/gaia/page/gaia_providers.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 
@@ -76,6 +78,14 @@ Future<(AppDatabase, ProviderContainer)> openHarnessContainer({
       authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      // A real `claude --version` never finishes under the test clock.
+      gaiaClaudeSetupProvider.overrideWith(
+        (ref) async => const ClaudeCodeSetup(
+          version: (2, 1, 310),
+          loggedIn: true,
+          email: 'probe@example.com',
+        ),
+      ),
     ],
   );
   await container.read(settingsProvider.future);

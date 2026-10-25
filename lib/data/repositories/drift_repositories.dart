@@ -20,6 +20,7 @@ import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -9691,3 +9692,318 @@ PhotoCheckInImage _mapPhotoImage(PhotoCheckInImagesTableData row) =>
       version: row.version,
       deletedAt: row.deletedAt,
     );
+
+class DriftGaiaRepository implements GaiaRepository {
+  DriftGaiaRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
+
+  final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
+
+  SimpleSelectStatement<$GaiaChatsTableTable, GaiaChatsTableData> _chats({
+    bool includeDeleted = false,
+  }) => _db.select(_db.gaiaChatsTable)
+    ..where((t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull())
+    ..orderBy([
+      (t) => OrderingTerm.desc(t.pinned),
+      (t) => OrderingTerm.desc(t.lastMessageAt),
+      (t) => OrderingTerm.asc(t.id),
+    ]);
+
+  @override
+  Stream<List<GaiaChat>> watchChats() =>
+      _chats().watch().map((rows) => rows.map(_mapGaiaChat).toList());
+
+  @override
+  Future<List<GaiaChat>> listChats({bool includeDeleted = false}) async =>
+      (await _chats(
+        includeDeleted: includeDeleted,
+      ).get()).map(_mapGaiaChat).toList();
+
+  @override
+  Future<GaiaChat?> getChat(String id) async {
+    final row = await (_db.select(
+      _db.gaiaChatsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaChat(row);
+  }
+
+  @override
+  Future<void> upsertChat(
+    GaiaChat chat, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaChatsTable)
+        .insertOnConflictUpdate(_gaiaChatCompanion(chat));
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaChats, chat);
+    }
+  }
+
+  @override
+  Future<GaiaChat> softDeleteChat(String id) async {
+    final existing = await getChat(id);
+    if (existing == null) throw StateError('no Gaia chat $id');
+    if (existing.isDeleted) throw StateError('Gaia chat $id is deleted');
+    final chat = existing.copyWith(deletedAt: utcNow());
+    await upsertChat(chat);
+    return chat;
+  }
+
+  @override
+  Future<GaiaChat> restoreChat(String id) async {
+    final existing = await getChat(id);
+    abortIfAlreadyRestored(
+      found: existing != null,
+      deletedAt: existing?.deletedAt,
+    );
+    if (existing == null) throw StateError('no deleted Gaia chat $id');
+    final chat = existing.copyWith(
+      clearDeletedAt: true,
+      version: restoreVersionFrom(
+        preDeleteVersion: existing.version,
+        currentVersion: existing.version,
+      ),
+    );
+    await upsertChat(chat);
+    return chat;
+  }
+
+  SimpleSelectStatement<$GaiaMessagesTableTable, GaiaMessagesTableData>
+  _messages(String chatId) => _db.select(_db.gaiaMessagesTable)
+    ..where((t) => t.chatId.equals(chatId) & t.deletedAt.isNull())
+    ..orderBy([(t) => OrderingTerm.asc(t.seq)]);
+
+  @override
+  Stream<List<GaiaMessage>> watchMessages(String chatId) => _messages(
+    chatId,
+  ).watch().map((rows) => rows.map(_mapGaiaMessage).toList());
+
+  @override
+  Future<List<GaiaMessage>> listMessages(String chatId) async =>
+      (await _messages(chatId).get()).map(_mapGaiaMessage).toList();
+
+  @override
+  Future<GaiaMessage?> getMessage(String id) async {
+    final row = await (_db.select(
+      _db.gaiaMessagesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaMessage(row);
+  }
+
+  @override
+  Future<List<GaiaMessage>> getAllMessages() async =>
+      (await _db.select(_db.gaiaMessagesTable).get())
+          .map(_mapGaiaMessage)
+          .toList();
+
+  @override
+  Future<void> upsertMessage(
+    GaiaMessage message, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db.transaction(() async {
+      await _db
+          .into(_db.gaiaMessagesTable)
+          .insertOnConflictUpdate(_gaiaMessageCompanion(message));
+      // The search row follows the message: rewritten with its text, gone
+      // with its tombstone or an erase. Not while it streams, written every
+      // second: the write that ends the run indexes it.
+      if (message.status == GaiaMessageStatus.streaming && !message.isDeleted) {
+        return;
+      }
+      // Under the message row's own rowid, which the upsert above keeps, so
+      // finding it is a rowid lookup rather than a scan of the UNINDEXED
+      // message_id.
+      final rowId =
+          (await _db
+                  .customSelect(
+                    'SELECT rowid AS r FROM gaia_messages_table WHERE id = ?',
+                    variables: [Variable.withString(message.id)],
+                    readsFrom: {_db.gaiaMessagesTable},
+                  )
+                  .getSingle())
+              .read<int>('r');
+      await _db.customUpdate(
+        'DELETE FROM gaia_message_search WHERE rowid = ?',
+        variables: [Variable.withInt(rowId)],
+        updates: {_db.gaiaMessageSearch},
+        updateKind: UpdateKind.delete,
+      );
+      final text = message.text;
+      if (!message.isDeleted && text.trim().isNotEmpty) {
+        await _db.customInsert(
+          'INSERT INTO gaia_message_search (rowid, body, message_id, chat_id) '
+          'VALUES (?, ?, ?, ?)',
+          variables: [
+            Variable.withInt(rowId),
+            Variable.withString(text),
+            Variable.withString(message.id),
+            Variable.withString(message.chatId),
+          ],
+          updates: {_db.gaiaMessageSearch},
+        );
+      }
+    });
+    if (recordLocalActivity && message.status != GaiaMessageStatus.streaming) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaMessages, message);
+    }
+  }
+
+  @override
+  Future<List<GaiaMessage>> endStreaming(GaiaMessageStatus status) async {
+    final rows = await (_db.select(
+      _db.gaiaMessagesTable,
+    )..where((t) => t.status.equals(GaiaMessageStatus.streaming.name))).get();
+    final ended = [
+      for (final row in rows) _mapGaiaMessage(row).copyWith(status: status),
+    ];
+    for (final message in ended) {
+      await upsertMessage(message);
+    }
+    return ended;
+  }
+
+  @override
+  Future<Set<String>> searchChatIds(String query) async {
+    final words = query.trim().split(RegExp(r'\s+'))
+      ..removeWhere((word) => word.isEmpty);
+    if (words.isEmpty) return {};
+    // Each word quoted, so FTS5's own syntax in it is plain text.
+    final match = words
+        .map((word) => '"${word.replaceAll('"', '""')}"*')
+        .join(' ');
+    final rows = await _db
+        .customSelect(
+          'SELECT DISTINCT s.chat_id AS chat_id '
+          'FROM gaia_message_search s '
+          'JOIN gaia_chats_table c ON c.id = s.chat_id '
+          'WHERE gaia_message_search MATCH ? AND c.deleted_at IS NULL',
+          variables: [Variable.withString(match)],
+          readsFrom: {_db.gaiaMessageSearch, _db.gaiaChatsTable},
+        )
+        .get();
+    return {for (final row in rows) row.read<String>('chat_id')};
+  }
+
+  @override
+  Stream<void> watchChanges() => _db
+      .tableUpdates(
+        TableUpdateQuery.onAllTables([
+          _db.gaiaChatsTable,
+          _db.gaiaMessagesTable,
+        ]),
+      )
+      .map((_) {});
+
+  @override
+  Future<GaiaSettings> getSettings() async =>
+      await getSettingsRecord() ?? GaiaSettings.initial();
+
+  @override
+  Stream<GaiaSettings> watchSettings() => _settings().watchSingleOrNull().map(
+    (row) => row == null ? GaiaSettings.initial() : _mapGaiaSettings(row),
+  );
+
+  @override
+  Future<GaiaSettings?> getSettingsRecord() async {
+    final row = await _settings().getSingleOrNull();
+    return row == null ? null : _mapGaiaSettings(row);
+  }
+
+  SimpleSelectStatement<$GaiaSettingsTableTable, GaiaSettingsTableData>
+  _settings() =>
+      _db.select(_db.gaiaSettingsTable)
+        ..where((t) => t.id.equals(GaiaSettings.singletonId));
+
+  @override
+  Future<void> upsertSettings(
+    GaiaSettings settings, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaSettingsTable)
+        .insertOnConflictUpdate(
+          GaiaSettingsTableCompanion(
+            id: Value(settings.id),
+            gaiaMd: Value(settings.gaiaMd),
+            notifyOnDone: Value(settings.notifyOnDone),
+            createdAt: Value(settings.createdAt),
+            updatedAt: Value(settings.updatedAt),
+            version: Value(settings.version),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaSettings, settings);
+    }
+  }
+}
+
+GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
+  id: row.id,
+  title: row.title,
+  lastMessageAt: row.lastMessageAt,
+  pinned: row.pinned,
+  agentSessions: gaiaAgentSessionsFromJson(jsonDecode(row.agentSessionsJson)),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
+GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
+    GaiaChatsTableCompanion(
+      id: Value(chat.id),
+      title: Value(chat.title),
+      lastMessageAt: Value(chat.lastMessageAt),
+      pinned: Value(chat.pinned),
+      agentSessionsJson: Value(jsonEncode(chat.toJson()['agentSessions'])),
+      createdAt: Value(chat.createdAt),
+      updatedAt: Value(chat.updatedAt),
+      version: Value(chat.version),
+      deletedAt: Value(chat.deletedAt),
+    );
+
+GaiaMessage _mapGaiaMessage(GaiaMessagesTableData row) => GaiaMessage(
+  id: row.id,
+  chatId: row.chatId,
+  seq: row.seq,
+  role: GaiaMessageRole.values.byName(row.role),
+  parts: gaiaPartsFromJson(jsonDecode(row.partsJson) as List),
+  status: GaiaMessageStatus.values.byName(row.status),
+  model: row.model,
+  error: row.error,
+  needsInput: row.needsInput,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
+GaiaMessagesTableCompanion _gaiaMessageCompanion(GaiaMessage message) =>
+    GaiaMessagesTableCompanion(
+      id: Value(message.id),
+      chatId: Value(message.chatId),
+      seq: Value(message.seq),
+      role: Value(message.role.name),
+      partsJson: Value(
+        jsonEncode([for (final part in message.parts) part.toJson()]),
+      ),
+      status: Value(message.status.name),
+      model: Value(message.model),
+      error: Value(message.error),
+      needsInput: Value(message.needsInput),
+      createdAt: Value(message.createdAt),
+      updatedAt: Value(message.updatedAt),
+      version: Value(message.version),
+      deletedAt: Value(message.deletedAt),
+    );
+
+GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
+  gaiaMd: row.gaiaMd,
+  notifyOnDone: row.notifyOnDone,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+);

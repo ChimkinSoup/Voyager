@@ -16,8 +16,9 @@
 # run-<name>-*.exe.log (the app's own output: debugPrint, evalc's SEED-OK),
 # run-<name>-*.log (attach), vm_uri_<name>.txt, pid_<name>.txt.
 # -Build builds that exe first (needs every debug voyager.exe stopped: the
-# build replaces the exe they run from).
-param([int]$TimeoutSec = 900, [switch]$NoMapKey, [string]$Profile, [switch]$Build)
+# build replaces the exe they run from). -ExePath runs a profile from another
+# debug build instead (gaia.ps1 passes it through).
+param([int]$TimeoutSec = 900, [switch]$NoMapKey, [string]$Profile, [switch]$Build, [string]$ExePath)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'instance.ps1')
 $inst = Get-QaInstance $Profile
@@ -39,6 +40,10 @@ if (-not $NoMapKey -and (Test-Path -LiteralPath $definesFile)) {
 }
 
 $exe = Join-Path $repo 'build\windows\x64\runner\Debug\voyager.exe'
+if ($ExePath) {
+  if (-not $inst.Profile -or $Build) { throw '-ExePath is for a profile launch of an existing build' }
+  $exe = (Resolve-Path -LiteralPath $ExePath).Path
+}
 # Both `flutter run` and -Build rebuild the exe every debug instance runs
 # from, which fails (or swaps files under a live app) while one is running.
 if (-not $inst.Profile -or $Build) {

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_firestore_platform_interface/cloud_firestore_platform_interface.dart';
 // ignore: implementation_imports, not exported; see the dev-profile note in main().
 import 'package:cloud_firestore_platform_interface/src/method_channel/method_channel_firestore.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -16,6 +17,7 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/launch_at_login.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/reminders/device_registration.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
@@ -28,6 +30,8 @@ import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
+import 'package:voyager/features/gaia/companion/gaia_companion_main.dart';
+import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
@@ -38,6 +42,11 @@ import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/firebase_options.dart';
 
 Future<void> main([List<String> args = const []]) async {
+  // Gaia's companion process (GAIA_HLD.md §3.2): none of the app's startup.
+  if (args.contains('--companion')) return gaiaCompanionMain();
+  if (kDebugMode && args.contains('--gaia-dev')) {
+    return gaiaCompanionMain(dev: true);
+  }
   WidgetsFlutterBinding.ensureInitialized();
   // Before the keyboard workaround, which wraps it and so keeps the known
   // debug-only desync out of the log.
@@ -74,6 +83,14 @@ Future<void> main([List<String> args = const []]) async {
     } catch (_) {
       // Ignore if another instance owns global hotkeys.
     }
+  }
+  if (isWindows) {
+    unawaited(
+      GaiaHost.instance.start(
+        registerHotkeys: devProfile == null,
+        show: args.contains('--show-gaia'),
+      ),
+    );
   }
   // The bootstrap initializes the outbox a frame after launch; an upload that
   // fails before then is held for it rather than forgotten.

@@ -215,6 +215,7 @@ void main() {
               bucketListRepository: DriftBucketListRepository(db),
               mediaRepository: DriftMediaRepository(db),
               photoSeriesRepository: DriftPhotoSeriesRepository(db),
+              gaiaRepository: DriftGaiaRepository(db),
               settingsRepository: DriftSettingsRepository(db),
             ),
             push: (_, _) async {},

@@ -37,6 +37,34 @@ bool FlutterWindow::OnCreate() {
       ProfileScopedName(kShowMainWindowMessage).c_str());
   quit_message_ =
       ::RegisterWindowMessage(ProfileScopedName(kQuitMessage).c_str());
+  show_gaia_message_ =
+      ::RegisterWindowMessage(ProfileScopedName(kShowGaiaMessage).c_str());
+  gaia_pipe_ = std::make_unique<GaiaPipe>(GetHandle());
+  gaia_pipe_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "voyager/gaia_pipe",
+          &flutter::StandardMethodCodec::GetInstance());
+  gaia_pipe_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const std::string& method = call.method_name();
+        if (method == "startCompanion") {
+          result->Success(flutter::EncodableValue(
+              static_cast<int64_t>(gaia_pipe_->StartCompanion())));
+        } else if (method == "connect") {
+          result->Success(flutter::EncodableValue(gaia_pipe_->Connect()));
+        } else if (method == "send") {
+          const auto* frame = std::get_if<std::string>(call.arguments());
+          if (frame) gaia_pipe_->Send(*frame);
+          result->Success();
+        } else if (method == "close") {
+          gaia_pipe_->Close();
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   if (start_hidden_) {
@@ -57,6 +85,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   instance_channel_ = nullptr;
+  gaia_pipe_channel_ = nullptr;
+  gaia_pipe_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -84,6 +114,28 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
   if (message == quit_message_ && instance_channel_) {
     instance_channel_->InvokeMethod("quit", nullptr);
+    return 0;
+  }
+  if (message == show_gaia_message_ && instance_channel_) {
+    instance_channel_->InvokeMethod("showGaia", nullptr);
+    return 0;
+  }
+  if (message == kGaiaPipeEventMessage && gaia_pipe_ && gaia_pipe_channel_) {
+    for (auto& event : gaia_pipe_->TakeEvents()) {
+      switch (event.kind) {
+        case GaiaPipe::Event::Kind::kConnected:
+          gaia_pipe_channel_->InvokeMethod("connected", nullptr);
+          break;
+        case GaiaPipe::Event::Kind::kMessage:
+          gaia_pipe_channel_->InvokeMethod(
+              "message", std::make_unique<flutter::EncodableValue>(
+                             std::move(event.data)));
+          break;
+        case GaiaPipe::Event::Kind::kDisconnected:
+          gaia_pipe_channel_->InvokeMethod("disconnected", nullptr);
+          break;
+      }
+    }
     return 0;
   }
 

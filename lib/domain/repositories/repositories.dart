@@ -3,6 +3,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_cheat_models.dart';
@@ -850,6 +851,58 @@ abstract class PhotoSeriesRepository {
   /// user's prefix (`vault_media/{id}`, `vault_media/{id}.thumb`).
   Future<List<String>> listPendingRemoteDeletes();
   Future<void> removePendingRemoteDelete(String path);
+}
+
+/// Gaia's chats, messages and settings (GAIA_HLD.md §8). The main instance
+/// owns them; the companion reads and writes them over the pipe.
+///
+/// A message uploads only once it stops streaming: a reply is written here
+/// every second while it streams, and other devices see it when it's done
+/// (live streaming is §8.1, a later phase).
+abstract class GaiaRepository {
+  /// Live chats, pinned first, then the most recent.
+  Stream<List<GaiaChat>> watchChats();
+  Future<List<GaiaChat>> listChats({bool includeDeleted = false});
+  Future<GaiaChat?> getChat(String id);
+  Future<void> upsertChat(GaiaChat chat, {bool recordLocalActivity = true});
+
+  /// Tombstones the chat alone: its messages stay as they are, and are read
+  /// only through a live chat.
+  Future<GaiaChat> softDeleteChat(String id);
+  Future<GaiaChat> restoreChat(String id);
+
+  /// [chatId]'s live messages, in `seq` order.
+  Stream<List<GaiaMessage>> watchMessages(String chatId);
+  Future<List<GaiaMessage>> listMessages(String chatId);
+  Future<GaiaMessage?> getMessage(String id);
+
+  /// Tombstones included — the backup registry wants them.
+  Future<List<GaiaMessage>> getAllMessages();
+  Future<void> upsertMessage(
+    GaiaMessage message, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Marks every message left streaming as [status]: the companion that
+  /// streamed them is gone, and their runs with it. Returns them as written.
+  Future<List<GaiaMessage>> endStreaming(GaiaMessageStatus status);
+
+  /// Live chats with a message matching every word of [query], as a prefix.
+  Future<Set<String>> searchChatIds(String query);
+
+  /// Fires after any write to the chats or messages.
+  Stream<void> watchChanges();
+
+  /// The settings, or [GaiaSettings.initial] before any are saved.
+  Future<GaiaSettings> getSettings();
+  Stream<GaiaSettings> watchSettings();
+
+  /// Null until saved — what the outbox and backup read.
+  Future<GaiaSettings?> getSettingsRecord();
+  Future<void> upsertSettings(
+    GaiaSettings settings, {
+    bool recordLocalActivity = true,
+  });
 }
 
 /// Metadata half of the media module: asset rows and the references that

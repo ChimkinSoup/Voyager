@@ -8,7 +8,7 @@ keeps one synced chat history across desktop and phone.
 Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
-in. Nothing is implemented. The windowing and process decision is in
+in. Phases 0 and 1 are implemented (§19). The windowing and process decision is in
 `docs/adr/004-floater-windows-and-companion-process.md`, amended 2026-10-24 for
 Gaia's data ownership (§3.2). Decisions and remaining questions are in §20.
 
@@ -155,6 +155,12 @@ Gaia is floater-first. Its window has three modes:
   option 3). Not worth it for v1.
 - Changing between tool-window and app-window styles needs a hide and re-show
   so the shell picks it up. That happens during the mode transition.
+- **Grow first, then lay out.** While a resize call holds the engine's
+  thread, the area a grow uncovers shows black until the next frame paints
+  it. A transition to a larger mode resizes the window, waits for the frame
+  at the new size, and only then builds the bigger layout. Building it in the
+  same frame makes that frame slow enough for the black to show. Voyager's
+  floaters already do this (`FloaterWindow.resize`, `todo_floater.dart`).
 - Floaters open on the monitor under the cursor. Their stored size is in
   logical pixels, and they are re-clamped to the monitor's work area when the
   DPI changes (`WM_DPICHANGED`).
@@ -247,7 +253,12 @@ should replace those with its own synced `GAIA.md`, edited on the Gaia page:
   `--system-prompt`, which replaces Claude Code's own system prompt and loses
   its tool guidance. Limit setting sources so the user's global CLAUDE.md
   isn't loaded.
-  *Verify which flag controls CLAUDE.md loading in the current CLI version.*
+  *Verified on 2.1.310:* `--setting-sources` does not keep the global
+  CLAUDE.md out; `--safe-mode` does (it also drops hooks and plugins), and
+  keeps the subscription login, unlike `--bare`. GAIA.md goes in with
+  `--append-system-prompt-file`, since `cmd /c` would mangle multi-line text.
+  Safe mode also disables MCP servers; Phase 4 has to check `--mcp-config`
+  still works under it.
 - **Codex:** one Gaia-owned `CODEX_HOME` per account
   (`%APPDATA%\Voyager\gaia\codex\<account>`, §6.1) with its own `AGENTS.md`
   and `config.toml`. `auth.json` is **copied**, not symlinked (symlinks need
@@ -1140,6 +1151,16 @@ Other additions:
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
 
+Phase 1 as built: the drift tables are `gaia_chats`, `gaia_messages` and
+`gaia_settings`, plus an FTS5 table for search. A message uploads once it
+stops streaming. A chat continued on another device starts a new native
+session there without the earlier turns, until session catch-up (Phase 6).
+A message whose parts encode to over 800 KB uploads them as JSON pieces in
+`gaia_message_chunks` (`{messageId}_{n}`), written before the message, which
+keeps only `partChunks`. An erase deletes the chunks. The update drain runs
+on every quit, and `scripts/build_release.ps1` waits while the companion
+drains. Hotkeys stay fixed until Phase 2.
+
 ---
 
 ## 20. Decisions and open questions
@@ -1188,7 +1209,7 @@ Decided in the second review (2026-10-24):
 No open questions remain.
 
 To verify against current CLI versions at the start of the phase that needs
-them: the flag that suppresses Claude Code's global CLAUDE.md, Claude Code's
+them: Claude Code's
 auto-compact override, Codex `app-server` vs `exec` (including approval
 requests), `--disallowedTools AskUserQuestion` in headless mode, and the usage calls for
 Codex idle accounts and Gemini CLI (§6.2).

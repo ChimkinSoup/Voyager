@@ -1,0 +1,7 @@
+-- One row per live Gaia message: its text parts, joined. Kept by
+-- DriftGaiaRepository on every message write.
+CREATE VIRTUAL TABLE gaia_message_search USING fts5(
+  body,
+  message_id UNINDEXED,
+  chat_id UNINDEXED
+);

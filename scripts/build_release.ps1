@@ -35,6 +35,14 @@ if ($running) {
 '@
     [void][Win32.User32]::PostMessage([IntPtr]0xffff, [Win32.User32]::RegisterWindowMessage("Voyager.Quit"), [IntPtr]::Zero, [IntPtr]::Zero)
     $running | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
+    # Gaia drains first (GAIA_HLD.md §3.2): while its companion is still up,
+    # the quit is waiting on runs the user chose to wait for, or on the user.
+    $companion = { Get-CimInstance Win32_Process -Filter "Name = 'voyager.exe'" | Where-Object { $_.ExecutablePath -eq $exe -and $_.CommandLine -like '*--companion*' } }
+    if (($running | Where-Object { -not $_.HasExited }) -and (& $companion)) {
+        Write-Host "Waiting for Gaia's runs to finish or be cancelled (see the Gaia window)"
+        while (($running | Where-Object { -not $_.HasExited }) -and (& $companion)) { Start-Sleep -Seconds 2 }
+        $running | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
+    }
     # Builds from before the quit message, or a flush that hangs.
     $running | Where-Object { -not $_.HasExited } | Stop-Process -Force
     $running | Wait-Process

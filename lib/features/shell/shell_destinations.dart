@@ -8,6 +8,7 @@ import 'package:voyager/features/demo/demo_page.dart';
 import 'package:voyager/features/dev/dev_page.dart';
 import 'package:voyager/features/dream_journal/dream_journal_page.dart';
 import 'package:voyager/features/finance/finance_page.dart';
+import 'package:voyager/features/gaia/page/gaia_page.dart';
 import 'package:voyager/features/jobs/jobs_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
@@ -140,6 +141,12 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.images,
     label: 'Photos',
     page: PhotoSeriesPage(),
+  ),
+  ShellDestination(
+    path: '/gaia',
+    icon: PhosphorIconsRegular.planet,
+    label: 'Gaia',
+    page: GaiaPage(),
   ),
   // A playground, so release builds leave it out altogether.
   if (!kReleaseMode)

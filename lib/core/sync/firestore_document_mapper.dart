@@ -16,6 +16,7 @@ import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_cheat_models.dart';
@@ -4352,6 +4353,216 @@ FlaggedWord mergeFlaggedWordFromRemote(
     // Re-flagging a word whose flag was lifted clears its tombstone, so the
     // remote value wins here too.
     deletedAt: parseFirestoreDate(data['deletedAt']),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gaia (GAIA_HLD.md §8). Plain records, version-then-updatedAt like every
+// snapshot-only collection.
+
+Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
+  'id': chat.id,
+  'title': chat.title,
+  'lastMessageAt': _dateToFirestoreRequired(chat.lastMessageAt),
+  'pinned': chat.pinned,
+  'agentSessions': chat.toJson()['agentSessions'],
+  'createdAt': _dateToFirestoreRequired(chat.createdAt),
+  'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
+  'version': chat.version,
+  'deletedAt': _dateToFirestore(chat.deletedAt),
+};
+
+GaiaChat mergeGaiaChatFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaChat? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaChat(
+    id: id,
+    title: data['title'] as String? ?? local?.title ?? '',
+    lastMessageAt:
+        parseFirestoreDate(data['lastMessageAt']) ??
+        local?.lastMessageAt ??
+        remoteUpdated,
+    pinned: data['pinned'] as bool? ?? local?.pinned ?? false,
+    // Keyed per device, and each device writes only its own key, so a winning
+    // copy that lacks a key this device holds kept it from a concurrent edit,
+    // not a removal: the local entry stays. An erase takes the remote's.
+    agentSessions: data.containsKey('agentSessions')
+        ? {
+            if (!isErasedPayload(data)) ...?local?.agentSessions,
+            ...gaiaAgentSessionsFromJson(data['agentSessions']),
+          }
+        : local?.agentSessions ?? const {},
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
+  'id': message.id,
+  'chatId': message.chatId,
+  'seq': message.seq,
+  'role': message.role.name,
+  'parts': [for (final part in message.parts) part.toJson()],
+  'status': message.status.name,
+  'model': message.model,
+  'error': message.error,
+  'needsInput': message.needsInput,
+  'createdAt': _dateToFirestoreRequired(message.createdAt),
+  'updatedAt': _dateToFirestoreRequired(message.updatedAt),
+  'version': message.version,
+  'deletedAt': _dateToFirestore(message.deletedAt),
+};
+
+/// [mergeGaiaChatFromRemote] for a message. A part or status this build
+/// doesn't know is a schema failure, not a guess: [GaiaPart.fromJson] and
+/// `byName` throw, and the pull reports the document.
+GaiaMessage mergeGaiaMessageFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaMessage? local,
+}) {
+  if (!gaiaMessageRemoteWins(data, local)) return local!;
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaMessage(
+    id: id,
+    chatId: data['chatId'] as String? ?? local?.chatId ?? '',
+    seq: (data['seq'] as num?)?.toInt() ?? local?.seq ?? 0,
+    role: GaiaMessageRole.values.byName(
+      data['role'] as String? ?? local?.role.name ?? 'assistant',
+    ),
+    parts: data['parts'] is List
+        ? gaiaPartsFromJson(data['parts'] as List)
+        : local?.parts ?? const [],
+    status: GaiaMessageStatus.values.byName(
+      data['status'] as String? ?? local?.status.name ?? 'complete',
+    ),
+    model: data['model'] as String?,
+    error: data['error'] as String?,
+    needsInput: data['needsInput'] as bool? ?? false,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+/// Whether [mergeGaiaMessageFromRemote] takes [data] over [local], so a pull
+/// fetches a message's chunks only when it will use them.
+bool gaiaMessageRemoteWins(Map<String, dynamic> data, GaiaMessage? local) =>
+    _remoteRecordWins(
+      data,
+      localVersion: local?.version,
+      localUpdatedAt: local?.updatedAt,
+      localDeletedAt: local?.deletedAt,
+    );
+
+/// The most UTF-8 bytes of encoded parts a message document carries (§8).
+/// Past it they go to [FirestoreCollections.gaiaMessageChunks], so the
+/// document stays under Firestore's 1 MiB.
+const gaiaMessageChunkBytes = 800 * 1024;
+
+String gaiaMessageChunkId(String messageId, int n) => '${messageId}_$n';
+
+/// How many chunks a message document's parts are in; 0 when they're in the
+/// document itself.
+int gaiaMessagePartChunks(Map<String, dynamic> data) =>
+    (data['partChunks'] as num?)?.toInt() ?? 0;
+
+/// Splits a [gaiaMessageToFirestore] payload for upload. Parts that fit stay
+/// in the document. Otherwise their JSON goes out as chunks, keyed by chunk
+/// document id, and the document keeps only how many there are.
+///
+/// Uploads only: a backup or the trash keeps the whole payload.
+({Map<String, dynamic> document, Map<String, Map<String, dynamic>> chunks})
+splitGaiaMessagePayload(Map<String, dynamic> payload) {
+  final json = jsonEncode(payload['parts']);
+  if (utf8.encode(json).length <= gaiaMessageChunkBytes) {
+    return (document: {...payload, 'partChunks': 0}, chunks: const {});
+  }
+  final id = payload['id'] as String;
+  // A UTF-16 code unit is at most three UTF-8 bytes.
+  const step = gaiaMessageChunkBytes ~/ 3;
+  final chunks = <String, Map<String, dynamic>>{};
+  for (var start = 0; start < json.length;) {
+    var end = start + step < json.length ? start + step : json.length;
+    // Each chunk is stored as UTF-8 on its own, so a surrogate pair can't be
+    // split between two.
+    final last = json.codeUnitAt(end - 1);
+    if (end < json.length && last >= 0xD800 && last <= 0xDBFF) end--;
+    final n = chunks.length;
+    chunks[gaiaMessageChunkId(id, n)] = {
+      'messageId': id,
+      'n': n,
+      'text': json.substring(start, end),
+    };
+    start = end;
+  }
+  return (
+    document: {...payload, 'parts': const [], 'partChunks': chunks.length},
+    chunks: chunks,
+  );
+}
+
+/// A pulled message document with its parts put back from [chunks], which
+/// are in order.
+Map<String, dynamic> joinGaiaMessageChunks(
+  Map<String, dynamic> data,
+  List<Map<String, dynamic>> chunks,
+) => {
+  ...data,
+  'parts': jsonDecode(chunks.map((chunk) => chunk['text'] as String).join()),
+};
+
+Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
+  'id': settings.id,
+  'gaiaMd': settings.gaiaMd,
+  'notifyOnDone': settings.notifyOnDone,
+  'createdAt': _dateToFirestoreRequired(settings.createdAt),
+  'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
+  'version': settings.version,
+};
+
+GaiaSettings mergeGaiaSettingsFromRemote(
+  Map<String, dynamic> data, {
+  GaiaSettings? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: null,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaSettings(
+    gaiaMd: data['gaiaMd'] as String? ?? local?.gaiaMd ?? '',
+    notifyOnDone: data['notifyOnDone'] as bool? ?? local?.notifyOnDone ?? true,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
   );
 }
 

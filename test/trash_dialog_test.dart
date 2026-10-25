@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,8 +34,23 @@ List<BackupCollection> _collectionsFor(AppDatabase db) =>
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       photoSeriesRepository: DriftPhotoSeriesRepository(db),
+      gaiaRepository: DriftGaiaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
     );
+
+/// Holds an erase until [gate] completes, so a test can see it under way.
+class _GatedTrashService extends TrashService {
+  _GatedTrashService(AppDatabase db, List<BackupCollection> collections)
+    : super(db: db, collections: collections, push: (_, _) async {});
+
+  final gate = Completer<void>();
+
+  @override
+  Future<void> erase(List<TrashItem> items) async {
+    await gate.future;
+    await super.erase(items);
+  }
+}
 
 void main() {
   late AppDatabase db;
@@ -157,6 +174,35 @@ void main() {
     await tester.pump(const Duration(seconds: 10));
     await tester.pumpAndSettle();
     expect(find.text('Restored Journal "Work"'), findsNothing);
+  });
+
+  testWidgets('emptying the trash says it is working, then that it is done', (
+    tester,
+  ) async {
+    final gated = _GatedTrashService(db, _collectionsFor(db));
+    service = gated;
+    await openTrash(tester, feature: TrashFeature.journal);
+
+    await tester.tap(find.text('Empty Journal trash'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Empty trash'));
+    // Not settled: the working toast spins until the erase is done.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Emptying Journal trash…'), findsOneWidget);
+
+    gated.gate.complete();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Emptying Journal trash…'), findsNothing);
+    expect(find.text('Emptied Journal trash'), findsOneWidget);
+    expect(find.text('Journal "Work"'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(find.text('Emptied Journal trash'), findsNothing);
   });
 
   testWidgets('clicking a row shows the deleted item in full', (tester) async {

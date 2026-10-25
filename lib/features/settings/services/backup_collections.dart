@@ -168,6 +168,7 @@ List<BackupCollection> buildBackupCollections({
   required RankingRepository rankingRepository,
   required MediaRepository mediaRepository,
   required PhotoSeriesRepository photoSeriesRepository,
+  required GaiaRepository gaiaRepository,
 }) {
   // The live calendars in the backup being restored, so a restored calendar's
   // overlay list keeps only ids that point at one of them.
@@ -1470,6 +1471,54 @@ List<BackupCollection> buildBackupCollections({
           recordLocalActivity: false,
         );
         return word;
+      },
+    ),
+    // Gaia, chats before their messages.
+    BackupCollection(
+      name: FirestoreCollections.gaiaSettings,
+      read: () async => [
+        if (await gaiaRepository.getSettingsRecord() case final settings?)
+          BackupRecord(
+            id: settings.id,
+            data: gaiaSettingsToFirestore(settings),
+          ),
+      ],
+      restore: (id, data) async {
+        final settings = mergeGaiaSettingsFromRemote(data);
+        await gaiaRepository.upsertSettings(
+          settings,
+          recordLocalActivity: false,
+        );
+        return settings;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.gaiaChats,
+      read: () async => [
+        for (final chat in await gaiaRepository.listChats(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: chat.id, data: gaiaChatToFirestore(chat)),
+      ],
+      restore: (id, data) async {
+        final chat = mergeGaiaChatFromRemote(data, id);
+        await gaiaRepository.upsertChat(chat, recordLocalActivity: false);
+        return chat;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.gaiaMessages,
+      read: () async => [
+        for (final message in await gaiaRepository.getAllMessages())
+          BackupRecord(id: message.id, data: gaiaMessageToFirestore(message)),
+      ],
+      restore: (id, data) async {
+        final message = mergeGaiaMessageFromRemote(data, id);
+        await gaiaRepository.upsertMessage(
+          message,
+          recordLocalActivity: false,
+        );
+        return message;
       },
     ),
   ];

@@ -192,6 +192,7 @@ void main() {
         bucketListRepository: DriftBucketListRepository(db),
         mediaRepository: DriftMediaRepository(db),
         photoSeriesRepository: DriftPhotoSeriesRepository(db),
+        gaiaRepository: DriftGaiaRepository(db),
         settingsRepository: DriftSettingsRepository(db),
         syncConflictRepository: DriftSyncConflictRepository(db),
         syncEngine: engine,

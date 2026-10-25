@@ -364,6 +364,13 @@ final photoSeriesRepositoryProvider = Provider<PhotoSeriesRepository>((ref) {
   );
 });
 
+final gaiaRepositoryProvider = Provider<GaiaRepository>((ref) {
+  return DriftGaiaRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
+});
+
 /// The Secure Vault's images and their transfers — see [VaultMediaService].
 final vaultMediaServiceProvider = ChangeNotifierProvider<VaultMediaService>((
   ref,
@@ -400,6 +407,7 @@ final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
     rankingRepository: ref.watch(rankingRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     photoSeriesRepository: ref.watch(photoSeriesRepositoryProvider),
+    gaiaRepository: ref.watch(gaiaRepositoryProvider),
   );
 });
 
@@ -729,6 +737,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     photoSeriesRepository: ref.watch(photoSeriesRepositoryProvider),
+    gaiaRepository: ref.watch(gaiaRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     syncEngine: ref.watch(syncEngineProvider),
     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
@@ -939,7 +948,17 @@ final quotesLoadedProvider = FutureProvider<void>((ref) async {
   );
 });
 
-Future<String> ensureDeviceId(SettingsRepository settingsRepository) async {
+/// The call in progress. On a fresh install the bootstrap and Gaia ask at
+/// once, and each minting its own id left Gaia keyed to one that was never
+/// saved.
+Future<String>? _ensuringDeviceId;
+
+Future<String> ensureDeviceId(SettingsRepository settingsRepository) =>
+    _ensuringDeviceId ??= _ensureDeviceId(
+      settingsRepository,
+    ).whenComplete(() => _ensuringDeviceId = null);
+
+Future<String> _ensureDeviceId(SettingsRepository settingsRepository) async {
   final settings = await settingsRepository.getSettings();
   if (settings.deviceId != null && settings.deviceId!.isNotEmpty) {
     return settings.deviceId!;
@@ -2038,6 +2057,12 @@ void invalidateProvidersForRemoteChange(Ref ref, String collection) {
       container.invalidate(syncConflictsProvider);
       container.invalidate(trashItemsProvider);
       container.invalidate(secureVaultHeaderProvider);
+    // Gaia's page and the companion read streams of the database too.
+    case FirestoreCollections.gaiaChats ||
+        FirestoreCollections.gaiaMessages ||
+        FirestoreCollections.gaiaSettings:
+      container.invalidate(syncConflictsProvider);
+      container.invalidate(trashItemsProvider);
     default:
       invalidateAllDataProviders(ref);
   }

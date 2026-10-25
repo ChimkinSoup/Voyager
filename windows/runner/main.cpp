@@ -23,9 +23,60 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::MessageBoxW(nullptr, text.c_str(), L"Voyager", MB_OK | MB_ICONERROR);
     return EXIT_FAILURE;
   }
-  ::CreateMutex(nullptr, FALSE,
-                ProfileScopedName(L"Local\\Voyager.SingleInstance").c_str());
-  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+  // Gaia's companion (GAIA_HLD.md §3.2): the same exe in its own process,
+  // single instance through its own mutex. Only the main instance launches
+  // the real one, marked by kGaiaParentEnv, and accepts only that PID on its
+  // pipe. Launched any other way, this asks the main instance to show Gaia,
+  // starting it first in the tray if it isn't running, and exits.
+  std::vector<std::string> command_line_arguments =
+      GetCommandLineArguments();
+  const bool companion =
+      std::find(command_line_arguments.begin(), command_line_arguments.end(),
+                "--companion") != command_line_arguments.end();
+  const std::wstring main_mutex =
+      ProfileScopedName(L"Local\\Voyager.SingleInstance");
+  if (companion && ::GetEnvironmentVariableW(kGaiaParentEnv, nullptr, 0) == 0) {
+    HANDLE running = ::OpenMutexW(SYNCHRONIZE, FALSE, main_mutex.c_str());
+    if (running) {
+      ::CloseHandle(running);
+      ::AllowSetForegroundWindow(ASFW_ANY);
+      ::PostMessage(HWND_BROADCAST,
+                    ::RegisterWindowMessage(
+                        ProfileScopedName(kShowGaiaMessage).c_str()),
+                    0, 0);
+      return EXIT_SUCCESS;
+    }
+    std::wstring exe(32768, L'\0');
+    exe.resize(::GetModuleFileNameW(nullptr, exe.data(),
+                                    static_cast<DWORD>(exe.size())));
+    std::wstring launch = L"\"" + exe + L"\" --hidden --show-gaia";
+    STARTUPINFOW startup{sizeof(startup)};
+    PROCESS_INFORMATION process{};
+    if (::CreateProcessW(exe.c_str(), launch.data(), nullptr, nullptr, FALSE,
+                         0, nullptr, nullptr, &startup, &process)) {
+      ::AllowSetForegroundWindow(process.dwProcessId);
+      ::CloseHandle(process.hThread);
+      ::CloseHandle(process.hProcess);
+    }
+    return EXIT_SUCCESS;
+  }
+  if (companion) {
+    ::CreateMutex(nullptr, FALSE,
+                  ProfileScopedName(L"Local\\Voyager.Companion").c_str());
+    if (::GetLastError() == ERROR_ALREADY_EXISTS) return EXIT_SUCCESS;
+  }
+  // `flutter run -a --gaia-dev`, debug builds only: the companion on its
+  // own, with a stand-in for the main instance, so Gaia's UI hot reloads.
+  // No mutex, no pipe: it shares nothing with a running Voyager.
+  bool gaia_dev = false;
+#ifndef NDEBUG
+  gaia_dev =
+      std::find(command_line_arguments.begin(), command_line_arguments.end(),
+                "--gaia-dev") != command_line_arguments.end();
+#endif
+
+  if (!companion && !gaia_dev) ::CreateMutex(nullptr, FALSE, main_mutex.c_str());
+  if (!companion && !gaia_dev && ::GetLastError() == ERROR_ALREADY_EXISTS) {
     ::AllowSetForegroundWindow(ASFW_ANY);
     ::PostMessage(HWND_BROADCAST,
                   ::RegisterWindowMessage(
@@ -46,10 +97,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   flutter::DartProject project(L"data");
 
-  std::vector<std::string> command_line_arguments =
-      GetCommandLineArguments();
   // The login Run entry's launch (see launch_at_login.dart): stays in the tray.
+  // The companion starts hidden too; it shows itself when asked.
   const bool start_hidden =
+      companion || gaia_dev ||
       std::find(command_line_arguments.begin(), command_line_arguments.end(),
                 "--hidden") != command_line_arguments.end();
 
@@ -66,7 +117,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project, start_hidden);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"voyager", origin, size)) {
+  if (!window.Create(companion || gaia_dev ? L"Gaia" : L"voyager", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

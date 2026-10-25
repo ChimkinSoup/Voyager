@@ -2177,7 +2177,70 @@ class LeetCodeCheatEntriesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A Gaia chat (GAIA_HLD.md §8). Its messages are their own records, so a
+/// chat document stays small however long the conversation runs.
+class GaiaChatsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  DateTimeColumn get lastMessageAt => dateTime()();
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+
+  /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device
+  /// and adapter — see `gaiaSessionKey`.
+  TextColumn get agentSessionsJson =>
+      text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One message of a Gaia chat, in `seq` order. Immutable once it stops
+/// streaming, apart from soft delete.
+@TableIndex(name: 'idx_gaia_messages_chat', columns: {#chatId, #seq})
+class GaiaMessagesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get chatId => text()();
+  IntColumn get seq => integer()();
+  TextColumn get role => text()();
+
+  /// The ordered `parts[]` as JSON.
+  TextColumn get partsJson => text()();
+  TextColumn get status => text()();
+  TextColumn get model => text().nullable()();
+  TextColumn get error => text().nullable()();
+  BoolColumn get needsInput => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Gaia's settings: one row, `GaiaSettings.singletonId`.
+class GaiaSettingsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get gaiaMd => text().withDefault(const Constant(''))();
+  BoolColumn get notifyOnDone => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
+  // Gaia's message search (GAIA_HLD.md §17), an FTS5 table. Declared to drift
+  // rather than created by hand, so it is in `allTables` and an account
+  // wipe empties it with everything else.
+  include: {'gaia_search.drift'},
   tables: [
     JournalsTable,
     JournalEntriesTable,
@@ -2253,13 +2316,16 @@ class LeetCodeCheatEntriesTable extends Table {
     LeetCodeCheatSectionsTable,
     LeetCodeCheatEntriesTable,
     SyncWatermarksTable,
+    GaiaChatsTable,
+    GaiaMessagesTable,
+    GaiaSettingsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 168;
+  int get schemaVersion => 170;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4138,6 +4204,28 @@ class AppDatabase extends _$AppDatabase {
           trackersTable.fitAxisToData,
         );
       }
+      if (from < 169) {
+        await migrator.createTable(gaiaChatsTable);
+        await migrator.createTable(gaiaMessagesTable);
+        await migrator.createTable(gaiaSettingsTable);
+        await migrator.create(gaiaMessageSearch);
+      }
+      if (from == 169) {
+        // Search rows now sit at their message's rowid
+        // (`DriftGaiaRepository.upsertMessage`); renumber those written before.
+        await customStatement(
+          'CREATE TEMP TABLE gaia_search_renumber AS '
+          'SELECT m.rowid AS r, s.body, s.message_id, s.chat_id '
+          'FROM gaia_message_search s '
+          'JOIN gaia_messages_table m ON m.id = s.message_id',
+        );
+        await customStatement('DELETE FROM gaia_message_search');
+        await customStatement(
+          'INSERT INTO gaia_message_search (rowid, body, message_id, chat_id) '
+          'SELECT r, body, message_id, chat_id FROM gaia_search_renumber',
+        );
+        await customStatement('DROP TABLE gaia_search_renumber');
+      }
     },
   );
 
@@ -5190,8 +5278,16 @@ class AppDatabase extends _$AppDatabase {
     return AppDatabase(_openConnection());
   }
 
+  /// Streams close synchronously: a widget test's fake clock never fires the
+  /// timer drift otherwise waits on, and [close] then hangs once any query
+  /// stream (Gaia's page watches several) has been listened to.
   static AppDatabase inMemory() {
-    return AppDatabase(NativeDatabase.memory());
+    return AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
   }
 }
 

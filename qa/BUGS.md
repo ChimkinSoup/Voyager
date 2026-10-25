@@ -3476,4 +3476,20 @@ Entry format:
 - Notes (2026-10-20, verified in the running app, FV-51; build of the working tree on `0ba6eef`, qa-107 on `qa` + `qb`): A: full check `safe=true gaps={}`; one blob parked `failed` (`fv51-park.dart.txt`, library `features/settings/media_storage_dialog.dart`): `safe=false gaps={vault_blobs: 1}`; requeued and uploaded (`fv51-unpark.dart.txt`). Both devices `safe=true` at the end.
 - Notes (2026-10-20, follow-up, uncommitted): images (`media_assets`) now count the same way: with the media repository, each live asset this device holds (`download_state present`) in `localOnly`, `pending`, `uploading` or `failed` is a `media_assets` gap ("file not in Storage (…)"). Another device's unsent image is not, as in sign-out's count. These two tables are the only files that go to Storage. Test: `full_sync_check_test.dart` "an image whose file never reached Storage is a gap". Not yet run in the app.
 
-<!-- Last ID: BUG-313. -->
+### BUG-314 [GAIA-P1] A fresh install's first-run Gaia chats lose their context after a restart
+- Severity: Major
+- Found: 2026-10-25, Gaia Phase 1 in-app pass, qa-110 on `qa` + `qb`, build of the working tree on `62ccb40`
+- Steps to reproduce: on a profile with no data, launch, sign in, send a Gaia chat. Compare the chat's `agent_sessions_json` key with `settings_table.device_id`. Restart, continue the chat and ask about the first turn.
+- Expected: the session is keyed by this device's id and resumes after the restart.
+- Actual: the key's device id (`d9c9b509…` on A, `f05aa3d1…` on B) matches no device (`810b54f6…`, `014fa714…`). After the restart Gaia starts a new native session and Claude has no earlier turns ("NONE. This is my first reply…"). `main.dart`'s bootstrap and `VoyagerApp._attachGaia` both call `ensureDeviceId` while no id is saved; each mints one, the save keeps one, and `GaiaHost` keeps the other for the whole run. A chat started once the id is saved resumes fine (codeword recalled after a restart).
+- Notes (2026-10-25, fixed in the working tree, uncommitted): `ensureDeviceId` shares one call in progress. Test: `ensure_device_id_test.dart` (fails without the fix: two different ids). Verified in the running app on fresh profile `qc`: the session key equals `device_id` (`2e969115…`).
+
+### BUG-315 [GAIA-P1] Gaia's notifications are missing from Notification history
+- Severity: Minor
+- Found: 2026-10-25, Gaia Phase 1 in-app pass, qa-110, build of the working tree on `62ccb40`
+- Steps to reproduce: hide Gaia, let a run finish (its "Gaia is done" toast is raised), open Settings → Data → Notification history.
+- Expected: the toast is listed: the screen promises "Every notification shown on this device in the last 30 days".
+- Actual: not listed. The toast goes straight to `ReminderOsNotifier.showNow`, which records nothing; only the reminder engine and in-app toasts write the history.
+- Notes (2026-10-25, fixed in the working tree, uncommitted): a shown Gaia toast is recorded with origin "Gaia", its title as the message and its body as the detail. Verified on `qc`: both runs listed (`qa/shots/p1fix-history-qc.png`).
+
+<!-- Last ID: BUG-315. -->

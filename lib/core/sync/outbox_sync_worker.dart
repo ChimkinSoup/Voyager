@@ -253,10 +253,12 @@ class OutboxSyncWorker {
 
           // Documents with a character-operation log go back out through the
           // app's own save path rather than as a bare mirror write — see
-          // [pushDocument].
+          // [pushDocument]. So do Gaia messages, whose chunks must land
+          // before the message.
           final pusher = pushDocument;
           if (pusher != null &&
-              FirestoreCollections.crdtBacked.contains(collection)) {
+              (FirestoreCollections.crdtBacked.contains(collection) ||
+                  collection == FirestoreCollections.gaiaMessages)) {
             for (final pending in entry.value) {
               // Same stand-down as the top of the round: every push below is
               // a write through the gate.
@@ -869,6 +871,18 @@ class OutboxSyncWorker {
         return byId(
           DriftSettingsRepository(_db).getFlaggedWordRecord,
           flaggedWordToFirestore,
+        );
+      case FirestoreCollections.gaiaChats:
+        return byId(DriftGaiaRepository(_db).getChat, gaiaChatToFirestore);
+      case FirestoreCollections.gaiaMessages:
+        return byId(
+          DriftGaiaRepository(_db).getMessage,
+          gaiaMessageToFirestore,
+        );
+      case FirestoreCollections.gaiaSettings:
+        return byId(
+          (_) => DriftGaiaRepository(_db).getSettingsRecord(),
+          gaiaSettingsToFirestore,
         );
       case FirestoreCollections.snippets:
         return byId(

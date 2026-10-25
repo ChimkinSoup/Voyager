@@ -54,6 +54,7 @@ class _Device {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       photoSeriesRepository: photos,
+      gaiaRepository: DriftGaiaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       syncEngine: SyncEngine(
         syncRepository: server,

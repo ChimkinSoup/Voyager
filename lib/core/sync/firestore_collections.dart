@@ -115,6 +115,17 @@ abstract final class FirestoreCollections {
   /// Separate from [customWords]: a row there means "allow", and there is no
   /// way to say "deny a bundled word" in that vocabulary.
   static const flaggedWords = 'flagged_words';
+
+  /// Gaia (GAIA_HLD.md §8): one record per chat and per message, and the
+  /// settings as one record, `GaiaSettings.singletonId`.
+  static const gaiaChats = 'gaia_chats';
+  static const gaiaMessages = 'gaia_messages';
+  static const gaiaSettings = 'gaia_settings';
+
+  /// A message's parts when they're too big for its own document (§8), as
+  /// pieces of their JSON at `{messageId}_{n}`. Read with the message, never
+  /// pulled on their own.
+  static const gaiaMessageChunks = 'gaia_message_chunks';
   static const syncOperations = 'sync_operations';
 
   /// One record per document `permanentlyDeleteFromRemote` purged, written
@@ -206,6 +217,9 @@ abstract final class FirestoreCollections {
     tagColors,
     customWords,
     flaggedWords,
+    gaiaChats,
+    gaiaMessages,
+    gaiaSettings,
   };
 
   /// The only collections whose documents carry text two devices can edit at

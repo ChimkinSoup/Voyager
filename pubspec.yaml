@@ -78,6 +78,9 @@ dev_dependencies:
   # Already present transitively via flutter_test; declared so the
   # connectivity probe's timer schedule can be tested in fake time.
   fake_async: any
+  # Already present transitively; declared so GaiaHost's Abort flag file can
+  # live in memory while its relaunch timers run in fake time.
+  file: any
 
 # firebase_auth's stock Windows plugin sends IdTokenListener/AuthStateListener
 # callbacks to the Flutter engine from whatever thread the Firebase Auth SDK

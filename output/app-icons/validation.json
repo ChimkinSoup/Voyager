@@ -1,0 +1,737 @@
+﻿{
+    "status":  "passed",
+    "checkedAssets":  88,
+    "windowsIcoSizes":  [
+                            16,
+                            20,
+                            24,
+                            32,
+                            40,
+                            48,
+                            64,
+                            256
+                        ],
+    "notificationRgb":  "white only; transparent background",
+    "adaptiveSafeCircleDp":  66,
+    "matchingBackgrounds":  true,
+    "resourceXml":  "v26, v33 and background aliases validated",
+    "deviceOrBuildTest":  "not run; assets have not been integrated",
+    "files":  [
+                  {
+                      "file":  "voyager/windows/png/icon-16.png",
+                      "width":  16,
+                      "height":  16,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "f833417db32b6da4d0ed97cdfdb3029b9b05c3d3ff75e6449bb93cbcb3cc019f"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-20.png",
+                      "width":  20,
+                      "height":  20,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "f1a51c3144fc007a41e64f108425d06353dc253063ecf5531855dd3a37b74a33"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-24.png",
+                      "width":  24,
+                      "height":  24,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "d801b6c0407daee75cb030fb7e534e08e3c64edad6d6b1ae1cd185ee1562c765"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-32.png",
+                      "width":  32,
+                      "height":  32,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "553c244f77b5e9e882edcd87295decc076223fde26e93393645552a6dc76e1a0"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-40.png",
+                      "width":  40,
+                      "height":  40,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "71fd23fa4365e0420ad130e72da94f0f133a86a1973250e5c196a1fecca9d44d"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-48.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "5a35e23e4eab1d5b0b37a6788c836e7098731628dea83dfe14bdbf1c94976ce9"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-64.png",
+                      "width":  64,
+                      "height":  64,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "1bb93ea0f49dd7c66f7ccf21f41386fb59b3c53423963c32815ef5c6a7487c4b"
+                  },
+                  {
+                      "file":  "voyager/windows/png/icon-256.png",
+                      "width":  256,
+                      "height":  256,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "b7a6e4c87b2c4aec373a5cd119e663c7a22ba7636b6539a8d75cc707bd4da766"
+                  },
+                  {
+                      "file":  "voyager/windows/voyager.ico",
+                      "frames":  [
+                                     16,
+                                     20,
+                                     24,
+                                     32,
+                                     40,
+                                     48,
+                                     64,
+                                     256
+                                 ],
+                      "sha256":  "8d7ebe8d584cee9d4336ff3b4463be0ea32ef95328ba955b2f5e1f7056bfcacd"
+                  },
+                  {
+                      "file":  "voyager/masters/icon-1024.png",
+                      "width":  1024,
+                      "height":  1024,
+                      "kind":  "",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "45b9cd47a74aa192e371ed3d7c066d99a568faf4e4ac4f5a977a95779af50853"
+                  },
+                  {
+                      "file":  "voyager/masters/foreground-1024.png",
+                      "width":  1024,
+                      "height":  1024,
+                      "kind":  "",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "a444cda717b551700a034edb3771c5ff921331ad1d951a0ce1950b5b2116009a"
+                  },
+                  {
+                      "file":  "voyager/masters/background-1024.png",
+                      "width":  1024,
+                      "height":  1024,
+                      "kind":  "",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "9a33f0ccfc876974c305516369ea812c679375c148fbaabdce7b9b2fa37ee0b3"
+                  },
+                  {
+                      "file":  "voyager/masters/adaptive-foreground-432.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.86,
+                      "sha256":  "4f82094220baa4f5fbc8e51c1031017cbcc40bb4dbe5aea5742a3f94e5aa8f90"
+                  },
+                  {
+                      "file":  "voyager/store/icon-512.png",
+                      "width":  512,
+                      "height":  512,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "1d0c795730dc631d238f2733f3704136309525bfac4d986460fcc7139c7c6548"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-mdpi/ic_launcher.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "e243bd0b6da67ed3b43e8cee89949a51afc2efc9f2030b04af8b39cdb47f6c0a"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-mdpi/ic_launcher_round.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "db95ed6ed4d6db3356bec4523df1504461942fe8ffd13bd9c2d43af4d5b87d17"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-mdpi/ic_launcher_foreground.png",
+                      "width":  108,
+                      "height":  108,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  32.016,
+                      "sha256":  "1ad12dac25ccf4f80eef08f3d08a3efa3bce9fd2442ba72af300c4a0daafb3f4"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-mdpi/ic_launcher_background.png",
+                      "width":  108,
+                      "height":  108,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "12e8109a098cf2912b37cb094e8f5b9562ed27070bd470209de322f9ffe87add"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-mdpi/ic_launcher_monochrome.png",
+                      "width":  108,
+                      "height":  108,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  32.558,
+                      "sha256":  "6ccdc59508722b154f465f2210a1fe225f0572e0fd60f4de7dd25c47698577e3"
+                  },
+                  {
+                      "file":  "voyager/android/res/drawable-mdpi/ic_stat_voyager.png",
+                      "width":  24,
+                      "height":  24,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "3c9e0ffc2ceac42520431c06034562844124d474ed8c738ef12877965da996b2"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-hdpi/ic_launcher.png",
+                      "width":  72,
+                      "height":  72,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "ab3c15693f5887126a04fc5f0a942df058abad8f211b77ad97b8c74c8d9152c7"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-hdpi/ic_launcher_round.png",
+                      "width":  72,
+                      "height":  72,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "c9dc3efa8cb4f9a05379deda43e72c736657356622124ffc3ebfada67ba7e2a2"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-hdpi/ic_launcher_foreground.png",
+                      "width":  162,
+                      "height":  162,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  32.277,
+                      "sha256":  "3a3ed13375161ab8bccfe66d2cf5f17d1b4248235a9bf71299a7a2b8e26a950c"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-hdpi/ic_launcher_background.png",
+                      "width":  162,
+                      "height":  162,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "648714524478a3619fa7dfd7dd9de397e578386abf40f4db8cc7c87f2f6dc4cf"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-hdpi/ic_launcher_monochrome.png",
+                      "width":  162,
+                      "height":  162,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  32.056,
+                      "sha256":  "df845e3f390c3f61cac7f71b61641215a0cfb31f3f74b0093fc0ef1ac69d9358"
+                  },
+                  {
+                      "file":  "voyager/android/res/drawable-hdpi/ic_stat_voyager.png",
+                      "width":  36,
+                      "height":  36,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "1a7696882dd95ddb9063ec1ebeedac343080962411a5e401c3817dd640081f35"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xhdpi/ic_launcher.png",
+                      "width":  96,
+                      "height":  96,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "140779c0c15acdd20c087f47272482560e16f4a52a6d0d86853c15f25c1e5d14"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xhdpi/ic_launcher_round.png",
+                      "width":  96,
+                      "height":  96,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "2bacdb0247d1bbadf29477a54606a5600271bf2bcd906861a06c011339dd6fa0"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xhdpi/ic_launcher_foreground.png",
+                      "width":  216,
+                      "height":  216,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  32.408,
+                      "sha256":  "14eadceccf5e4742fb67747a1bbc2d9d7e3f261058eb34a406c9831e60ba2c76"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xhdpi/ic_launcher_background.png",
+                      "width":  216,
+                      "height":  216,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "b410ac97ed62aabe04f7ba689330f0cec1188213566cacee93b44b2bedde1045"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xhdpi/ic_launcher_monochrome.png",
+                      "width":  216,
+                      "height":  216,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  32.535,
+                      "sha256":  "00b9ca01e7ff243928ddffeb9b2a473cb53ca74a4b00926e22b606bd0e7f335c"
+                  },
+                  {
+                      "file":  "voyager/android/res/drawable-xhdpi/ic_stat_voyager.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "9643c727272cea81af0609b7050f22742311b1f8c4dcbf2c2f3d1b42fd6bb681"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxhdpi/ic_launcher.png",
+                      "width":  144,
+                      "height":  144,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "f4d1cc107a82b98ab6d17ecc369cb4e679128b3ec6c1f041db8d711f736f8098"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxhdpi/ic_launcher_round.png",
+                      "width":  144,
+                      "height":  144,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "dc5205fe84b4270e43cb8c29b3ae4b6df94d5793bc6fd7b5dc11c37a19a3cd19"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+                      "width":  324,
+                      "height":  324,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  32.071,
+                      "sha256":  "5830ba983b7e8694870e22a640de70ad997be7a36a04d3ab1de83e02796ed985"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxhdpi/ic_launcher_background.png",
+                      "width":  324,
+                      "height":  324,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "5799939c2aa462234ba0a3d03c5f3ed9a3b8c8dc1d78d38c7da5bedf15be7077"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxhdpi/ic_launcher_monochrome.png",
+                      "width":  324,
+                      "height":  324,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  31.821,
+                      "sha256":  "7d88167380a54a1cf21f1a77c2859a3a469cb40e32467a87635f6fe48a629477"
+                  },
+                  {
+                      "file":  "voyager/android/res/drawable-xxhdpi/ic_stat_voyager.png",
+                      "width":  72,
+                      "height":  72,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "d9da22f630028f2fd3df97d57c15fce5f77e1eee1b2b02aed76696ee4bcf17e6"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxxhdpi/ic_launcher.png",
+                      "width":  192,
+                      "height":  192,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "9ccc55d8c207e5f436d7c5d10d24b7d650ea0efc55526e4bbb234aa0e4b2e37d"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxxhdpi/ic_launcher_round.png",
+                      "width":  192,
+                      "height":  192,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "251d11270045a27584e187cd1e0e3a32c23beb7a48d2a2d52a0d4ccdbec31a56"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.86,
+                      "sha256":  "4f82094220baa4f5fbc8e51c1031017cbcc40bb4dbe5aea5742a3f94e5aa8f90"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxxhdpi/ic_launcher_background.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "d8ef022849582d214af9d525c4feb9ad8556e56b5e893eaedb19781f0131de3b"
+                  },
+                  {
+                      "file":  "voyager/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  31.997,
+                      "sha256":  "0b84bc6794415c1d5d3fa476feac0f8387efe6ac64745d32621c1bc52ba1101c"
+                  },
+                  {
+                      "file":  "voyager/android/res/drawable-xxxhdpi/ic_stat_voyager.png",
+                      "width":  96,
+                      "height":  96,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "c9cc8d1fee5e768c04bd6127a150359df94631fc9aa56feb1a75b17d08a5bf6f"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-16.png",
+                      "width":  16,
+                      "height":  16,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "94032a5bd549ab3c61def97f72e23e396d174b57f56ab1824d945973635afd97"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-20.png",
+                      "width":  20,
+                      "height":  20,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "2e280197799dd44647326f103beb385a139d7f6490f7ab49e54a47f6a4f969e1"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-24.png",
+                      "width":  24,
+                      "height":  24,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "ff87f13403df03e147502a0a93a06f8c9e2a915d30cf50b46c99b4fff95b29d0"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-32.png",
+                      "width":  32,
+                      "height":  32,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "141554093bc8181856eeabb59df2f363282bd3d8339d232fcca3b837817b76ef"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-40.png",
+                      "width":  40,
+                      "height":  40,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "010da9c7b48d36e2a3a40325bdb26530438e8c92c9722bf8cbb5b800ac8f5b84"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-48.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "533e305e4d1a6679b4aff2bf0d3ded9d95693b87e92a35f5ac12a2462a55a9db"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-64.png",
+                      "width":  64,
+                      "height":  64,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "abb6221766966b63f7c6df3836aa575c8ad7a57b7ac3b038892ff4ad80ba010e"
+                  },
+                  {
+                      "file":  "gaia/windows/png/icon-256.png",
+                      "width":  256,
+                      "height":  256,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "11e593f900085ad46e2d4298b15ae2abd7a90e9aa85c06f2137f5b03917fe541"
+                  },
+                  {
+                      "file":  "gaia/windows/gaia.ico",
+                      "frames":  [
+                                     16,
+                                     20,
+                                     24,
+                                     32,
+                                     40,
+                                     48,
+                                     64,
+                                     256
+                                 ],
+                      "sha256":  "d6b99cfef971b514b6abe9b6ff3f2059915e8390e7b2479a067fe5d3037dfa12"
+                  },
+                  {
+                      "file":  "gaia/masters/icon-1024.png",
+                      "width":  1024,
+                      "height":  1024,
+                      "kind":  "",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "0eb2a8718f8ec8fc6040aa49196c8d37be911e492c708d9545b7a1eca832a6c2"
+                  },
+                  {
+                      "file":  "gaia/masters/foreground-1024.png",
+                      "width":  1024,
+                      "height":  1024,
+                      "kind":  "",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "7e38288fd5c068d18102a27685b57945895c71053856c3f1184d79cd07942433"
+                  },
+                  {
+                      "file":  "gaia/masters/background-1024.png",
+                      "width":  1024,
+                      "height":  1024,
+                      "kind":  "",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "9a33f0ccfc876974c305516369ea812c679375c148fbaabdce7b9b2fa37ee0b3"
+                  },
+                  {
+                      "file":  "gaia/masters/adaptive-foreground-432.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.895,
+                      "sha256":  "22438789ffbe180d181ea64b846cf976bbcd29666e30b5db254e3252cdaf037b"
+                  },
+                  {
+                      "file":  "gaia/store/icon-512.png",
+                      "width":  512,
+                      "height":  512,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "09197f0b938f0454895911b1126edef83951769cd85234a2728c81f5c23946a7"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-mdpi/ic_gaia.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "10986e5fbf184a9b03f305a4ddfc4320c8d638af85dae361f2ae276d74349825"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-mdpi/ic_gaia_round.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "a07a0e4f5f3745f2656d76048a4b12488346555cc1f9d54ef8c18c7877cbf9b2"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-mdpi/ic_gaia_foreground.png",
+                      "width":  108,
+                      "height":  108,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.623,
+                      "sha256":  "b217a0a4314c4d3a6a7867613b234316416a74f95a270837be9a845a934fcf9d"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-mdpi/ic_gaia_background.png",
+                      "width":  108,
+                      "height":  108,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "12e8109a098cf2912b37cb094e8f5b9562ed27070bd470209de322f9ffe87add"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-mdpi/ic_gaia_monochrome.png",
+                      "width":  108,
+                      "height":  108,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  31.241,
+                      "sha256":  "8c335b5114e51ba32518c0bff97d7607f0339cf5f89f13d0d6c13d0c471d0d85"
+                  },
+                  {
+                      "file":  "gaia/android/res/drawable-mdpi/ic_stat_gaia.png",
+                      "width":  24,
+                      "height":  24,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "4066deb7861b64fdca042bb558011e682a1748417a915d159397e9865d63dcd8"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-hdpi/ic_gaia.png",
+                      "width":  72,
+                      "height":  72,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "4cb956f9a8443b7b0eeff066e595d80ea4a30375985d849db4d5da920a7ba8b8"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-hdpi/ic_gaia_round.png",
+                      "width":  72,
+                      "height":  72,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "3b0a1c4aca9339759b7e6690b7bcb7072f0371898f7e99c3c39d668df47ed8f2"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-hdpi/ic_gaia_foreground.png",
+                      "width":  162,
+                      "height":  162,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.805,
+                      "sha256":  "0ad30d961d5400e90175d46ec51589b09691136a65096ec2136c56d2e6097a64"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-hdpi/ic_gaia_background.png",
+                      "width":  162,
+                      "height":  162,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "648714524478a3619fa7dfd7dd9de397e578386abf40f4db8cc7c87f2f6dc4cf"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-hdpi/ic_gaia_monochrome.png",
+                      "width":  162,
+                      "height":  162,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  31.868,
+                      "sha256":  "90a9f1f03fe7fd4f20aea33b32efdecfa5d6b8860eac8f9d6cba15405ad48580"
+                  },
+                  {
+                      "file":  "gaia/android/res/drawable-hdpi/ic_stat_gaia.png",
+                      "width":  36,
+                      "height":  36,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "96072b1c128e2891b6cf3e8fde356f395ec0dfc91ac8f681ef13a490bac4a000"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xhdpi/ic_gaia.png",
+                      "width":  96,
+                      "height":  96,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "faa1d1d90f7f32e292990997a46d294e71c95543fa23e3f453ae612d70d463a8"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xhdpi/ic_gaia_round.png",
+                      "width":  96,
+                      "height":  96,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "37bb82c32b23a5140ede46ac3a5231627765a00fdf620735fc361ee7c9b99d62"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xhdpi/ic_gaia_foreground.png",
+                      "width":  216,
+                      "height":  216,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.757,
+                      "sha256":  "592ab280f3e32d41dafa5926a5c646ae3d30d6be16c56869d832e2dd385a6016"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xhdpi/ic_gaia_background.png",
+                      "width":  216,
+                      "height":  216,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "b410ac97ed62aabe04f7ba689330f0cec1188213566cacee93b44b2bedde1045"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xhdpi/ic_gaia_monochrome.png",
+                      "width":  216,
+                      "height":  216,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  31.563,
+                      "sha256":  "f00a4fa6ff60e4434cb92b2253ff8f9f23ca9897d75dc625c9bf1e3ade31add9"
+                  },
+                  {
+                      "file":  "gaia/android/res/drawable-xhdpi/ic_stat_gaia.png",
+                      "width":  48,
+                      "height":  48,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "e366d7dde8be6b6b01b218b43dc682733a41649262bc950cd2b22144b967fc41"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxhdpi/ic_gaia.png",
+                      "width":  144,
+                      "height":  144,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "4a7f4172368bb43429e366adde1c321529e9f2216482e146f9f01c2c7898fee7"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxhdpi/ic_gaia_round.png",
+                      "width":  144,
+                      "height":  144,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "135e5df80baee34b31a8b1b2c3a8a0b0dc7c51e686727dca1ea892fd6dfa8fd8"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxhdpi/ic_gaia_foreground.png",
+                      "width":  324,
+                      "height":  324,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.897,
+                      "sha256":  "b7479cc44a6a13e8a72d83c14675df8f2c85f56887ae4eeae45aad7d33aa1807"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxhdpi/ic_gaia_background.png",
+                      "width":  324,
+                      "height":  324,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "5799939c2aa462234ba0a3d03c5f3ed9a3b8c8dc1d78d38c7da5bedf15be7077"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxhdpi/ic_gaia_monochrome.png",
+                      "width":  324,
+                      "height":  324,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  32.071,
+                      "sha256":  "5cfd15af13c6d45f3ca356352ae8cbdf6137cb83bb0a02a89265095ac74a2326"
+                  },
+                  {
+                      "file":  "gaia/android/res/drawable-xxhdpi/ic_stat_gaia.png",
+                      "width":  72,
+                      "height":  72,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "bd944c582b6f9c75ee19092129c9710d125156568670115211d79918ac68c4b4"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxxhdpi/ic_gaia.png",
+                      "width":  192,
+                      "height":  192,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "4852e68e7277ef52b3f3a0d1c9d0b5ee2c85dd1d136ef00d9c4da8d3a34115fb"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxxhdpi/ic_gaia_round.png",
+                      "width":  192,
+                      "height":  192,
+                      "kind":  "transparent",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "a6940e183f1e99a941d6c728dad8fc32f521caadeee9ac29b8429bc760f2c3ab"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxxhdpi/ic_gaia_foreground.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "foreground",
+                      "maxVisibleRadiusDp":  31.895,
+                      "sha256":  "22438789ffbe180d181ea64b846cf976bbcd29666e30b5db254e3252cdaf037b"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxxhdpi/ic_gaia_background.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "opaque",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "d8ef022849582d214af9d525c4feb9ad8556e56b5e893eaedb19781f0131de3b"
+                  },
+                  {
+                      "file":  "gaia/android/res/mipmap-xxxhdpi/ic_gaia_monochrome.png",
+                      "width":  432,
+                      "height":  432,
+                      "kind":  "monochrome",
+                      "maxVisibleRadiusDp":  32.016,
+                      "sha256":  "78eff6f8cd1ebdc1a0fab1a09d784d84303248509cb1ea6322734f877e9a75c2"
+                  },
+                  {
+                      "file":  "gaia/android/res/drawable-xxxhdpi/ic_stat_gaia.png",
+                      "width":  96,
+                      "height":  96,
+                      "kind":  "white",
+                      "maxVisibleRadiusDp":  null,
+                      "sha256":  "37c3d43493c93cfa310a51618f1db2380e485f112ab2059fb61a0138205e02e2"
+                  }
+              ]
+}

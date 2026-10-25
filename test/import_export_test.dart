@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
@@ -168,6 +169,7 @@ List<BackupCollection> collectionsFor(AppDatabase db) => buildBackupCollections(
   bucketListRepository: DriftBucketListRepository(db),
   mediaRepository: DriftMediaRepository(db),
   photoSeriesRepository: DriftPhotoSeriesRepository(db),
+  gaiaRepository: DriftGaiaRepository(db),
   settingsRepository: DriftSettingsRepository(db),
 );
 
@@ -991,6 +993,33 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
   await settingsRepo.setTagColor('food', 0xFF00FF00);
   await settingsRepo.addCustomWord('voyagerish');
   await settingsRepo.flagWord('neve', replacement: 'never');
+  final gaiaRepo = DriftGaiaRepository(db);
+  await gaiaRepo.upsertSettings(
+    GaiaSettings(createdAt: now, updatedAt: now, version: 1, gaiaMd: 'Hi'),
+  );
+  await gaiaRepo.upsertChat(
+    GaiaChat(
+      id: 'gaia-chat-1',
+      title: 'Hello',
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+      version: 1,
+    ),
+  );
+  await gaiaRepo.upsertMessage(
+    GaiaMessage(
+      id: 'gaia-message-1',
+      chatId: 'gaia-chat-1',
+      seq: 0,
+      role: GaiaMessageRole.user,
+      parts: const [GaiaTextPart('Hello')],
+      status: GaiaMessageStatus.complete,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1363,6 +1392,9 @@ void main() {
         'tag_colors_table',
         'custom_words_table',
         'flagged_words_table',
+        'gaia_chats_table',
+        'gaia_messages_table',
+        'gaia_settings_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };
@@ -1376,6 +1408,9 @@ void main() {
         // How far this device's pulls have got. A restore pushes what it
         // restores, so the marks never need to travel with the data.
         'sync_watermarks_table',
+        // Gaia's message search, rebuilt from the messages as they are
+        // written, a restore included.
+        'gaia_message_search',
       };
 
       expect(
@@ -1803,6 +1838,7 @@ void main() {
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           photoSeriesRepository: DriftPhotoSeriesRepository(db),
+          gaiaRepository: DriftGaiaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
         ),
         settingsRepository: DriftSettingsRepository(db),
@@ -2076,6 +2112,7 @@ void main() {
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           photoSeriesRepository: DriftPhotoSeriesRepository(db),
+          gaiaRepository: DriftGaiaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
           syncEngine: syncEngine,
           uploadDebounceDelay: Duration.zero,
@@ -2163,6 +2200,7 @@ void main() {
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           photoSeriesRepository: DriftPhotoSeriesRepository(db),
+          gaiaRepository: DriftGaiaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
           syncEngine: syncEngine,
           uploadDebounceDelay: Duration.zero,

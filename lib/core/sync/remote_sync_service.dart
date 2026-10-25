@@ -38,6 +38,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
@@ -83,6 +84,7 @@ class RemoteSyncService {
     required BucketListRepository bucketListRepository,
     required MediaRepository mediaRepository,
     required PhotoSeriesRepository photoSeriesRepository,
+    required GaiaRepository gaiaRepository,
     required SettingsRepository settingsRepository,
     required SyncEngine syncEngine,
     SyncConflictRepository? syncConflictRepository,
@@ -111,6 +113,7 @@ class RemoteSyncService {
        _bucketListRepository = bucketListRepository,
        _mediaRepository = mediaRepository,
        _photoSeriesRepository = photoSeriesRepository,
+       _gaiaRepository = gaiaRepository,
        _settingsRepository = settingsRepository,
        _syncEngine = syncEngine,
        _syncConflictRepository = syncConflictRepository,
@@ -140,6 +143,7 @@ class RemoteSyncService {
   final BucketListRepository _bucketListRepository;
   final MediaRepository _mediaRepository;
   final PhotoSeriesRepository _photoSeriesRepository;
+  final GaiaRepository _gaiaRepository;
   final SettingsRepository _settingsRepository;
   final SyncEngine _syncEngine;
   final SyncConflictRepository? _syncConflictRepository;
@@ -890,7 +894,20 @@ class RemoteSyncService {
           'deviceId': deviceId,
         },
       );
+      // A chunked Gaia message's chunks hold its text, out of the document.
+      final gaiaChunks = collection == FirestoreCollections.gaiaMessages
+          ? gaiaMessagePartChunks(
+              await _syncRepository.getDocument(collection, firestoreDocId) ??
+                  const {},
+            )
+          : 0;
       await _syncRepository.deleteDocument(collection, firestoreDocId);
+      for (var n = 0; n < gaiaChunks; n++) {
+        await _syncRepository.deleteDocument(
+          FirestoreCollections.gaiaMessageChunks,
+          gaiaMessageChunkId(firestoreDocId, n),
+        );
+      }
       // The Firestore id, not the local one: the uploads store operations
       // under whatever id the document itself lives at, and for a legacy-id
       // journal or todo list the two differ. Passing the local id there
@@ -2273,6 +2290,21 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.gaiaChats:
+        return pullGaiaChats(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.gaiaMessages:
+        return pullGaiaMessages(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.gaiaSettings:
+        return pullGaiaSettings(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -3102,6 +3134,86 @@ class RemoteSyncService {
         clearFailureReason: merged.failureReason == null,
       );
     }
+  }
+
+  Future<bool> pullGaiaChats({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaChats,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getChat(id);
+        await _gaiaRepository.upsertChat(
+          mergeGaiaChatFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullGaiaMessages({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaMessages,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getMessage(id);
+        final chunks = gaiaMessagePartChunks(data);
+        final full = chunks > 0 && gaiaMessageRemoteWins(data, local)
+            ? joinGaiaMessageChunks(data, await _gaiaMessageChunks(id, chunks))
+            : data;
+        await _gaiaRepository.upsertMessage(
+          mergeGaiaMessageFromRemote(full, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  /// A message's [count] chunks, in order. One missing fails the message's
+  /// pull rather than applying it without its parts.
+  Future<List<Map<String, dynamic>>> _gaiaMessageChunks(String id, int count) {
+    return Future.wait([
+      for (var n = 0; n < count; n++)
+        _syncRepository
+            .getDocument(
+              FirestoreCollections.gaiaMessageChunks,
+              gaiaMessageChunkId(id, n),
+            )
+            .then(
+              (chunk) =>
+                  chunk ??
+                  (throw StateError('Gaia message $id is missing chunk $n')),
+            ),
+    ]);
+  }
+
+  Future<bool> pullGaiaSettings({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaSettings,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        if (id != GaiaSettings.singletonId) return;
+        final local = await _gaiaRepository.getSettingsRecord();
+        await _gaiaRepository.upsertSettings(
+          mergeGaiaSettingsFromRemote(data, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
   }
 
   Future<bool> pullPhotoSeries({
@@ -5398,6 +5510,10 @@ class RemoteSyncService {
   /// gets them an operation-log entry at the current sequence, so the log is
   /// never left describing an older text than the document beside it.
   ///
+  /// Gaia messages come through here too, so their chunks go up before the
+  /// message (see [_putGaiaMessageChunks]), which a batched mirror write
+  /// can't order.
+  ///
   /// A document that no longer exists locally is a no-op: the queued row has
   /// nothing left to stand for.
   Future<void> pushOutboxDocument(
@@ -5486,6 +5602,25 @@ class RemoteSyncService {
           return;
         }
         await _uploadTodoTaskNow(task);
+      case FirestoreCollections.gaiaMessages:
+        final message = await _gaiaRepository.getMessage(documentId);
+        if (message == null) return;
+        final split = splitGaiaMessagePayload(gaiaMessageToFirestore(message));
+        await _putGaiaMessageChunks(
+          split.chunks,
+          erased: [if (isErasedAt(message.deletedAt)) documentId],
+        );
+        _markSelfEcho(collection, documentId, split.document);
+        await _settleEchoesAfter(
+          collection,
+          [documentId],
+          () => _syncEngine.syncDocumentImmediately(
+            collection: collection,
+            documentId: documentId,
+            payload: split.document,
+            logOperation: false,
+          ),
+        );
     }
   }
 
@@ -6270,13 +6405,21 @@ class RemoteSyncService {
     // collections (tag colors, custom words, dismissed notifications) with rows
     // that could never be matched, and so never cleared.
     final localIds = <String>[];
+    final gaiaChunks = <String, Map<String, dynamic>>{};
+    final erasedGaiaMessages = <String>[];
     for (final record in records) {
       final document = _recordDocument(collection, record);
       if (document == null) continue;
-      payloads[_firestoreDocumentId(collection, document.id)] =
-          document.payload;
+      var payload = document.payload;
+      if (collection == FirestoreCollections.gaiaMessages) {
+        final split = splitGaiaMessagePayload(payload);
+        payload = split.document;
+        gaiaChunks.addAll(split.chunks);
+        if (isErasedPayload(payload)) erasedGaiaMessages.add(document.id);
+      }
+      payloads[_firestoreDocumentId(collection, document.id)] = payload;
       localIds.add(document.id);
-      _markSelfEcho(collection, document.id, document.payload);
+      _markSelfEcho(collection, document.id, payload);
     }
     if (payloads.isEmpty) return;
 
@@ -6285,8 +6428,51 @@ class RemoteSyncService {
     await _runInDocumentChains(
       collection,
       localIds,
-      () => _pushRecordsNow(collection, payloads, localIds, echoes),
+      () => _pushRecordsNow(
+        collection,
+        payloads,
+        localIds,
+        echoes,
+        before: gaiaChunks.isEmpty && erasedGaiaMessages.isEmpty
+            ? null
+            : () => _putGaiaMessageChunks(
+                gaiaChunks,
+                erased: erasedGaiaMessages,
+              ),
+      ),
     );
+  }
+
+  /// Writes Gaia message chunks ([splitGaiaMessagePayload]) ahead of their
+  /// messages, so a device that pulls a message finds them. An erased
+  /// message's chunks are deleted instead: the erase empties the message
+  /// document, and the chunks would still hold its text.
+  Future<void> _putGaiaMessageChunks(
+    Map<String, Map<String, dynamic>> chunks, {
+    Iterable<String> erased = const [],
+  }) async {
+    // One write each: a batch of ~800 KB chunks would pass Firestore's 10 MiB
+    // request limit.
+    for (final MapEntry(:key, :value) in chunks.entries) {
+      await _syncRepository.upsertDocument(
+        FirestoreCollections.gaiaMessageChunks,
+        key,
+        value,
+      );
+    }
+    for (final id in erased) {
+      final remote = await _syncRepository.getDocument(
+        FirestoreCollections.gaiaMessages,
+        id,
+      );
+      final count = remote == null ? 0 : gaiaMessagePartChunks(remote);
+      for (var n = 0; n < count; n++) {
+        await _syncRepository.deleteDocument(
+          FirestoreCollections.gaiaMessageChunks,
+          gaiaMessageChunkId(id, n),
+        );
+      }
+    }
   }
 
   /// Puts a vault header a backup restored back on an account that has none.
@@ -6391,9 +6577,11 @@ class RemoteSyncService {
     String collection,
     Map<String, Map<String, dynamic>> payloads,
     List<String> localIds,
-    List<_SelfEcho> echoes,
-  ) async {
+    List<_SelfEcho> echoes, {
+    Future<void> Function()? before,
+  }) async {
     try {
+      await before?.call();
       await _syncEngine.syncDocumentsImmediately(
         collection: collection,
         payloadsByDocumentId: payloads,
@@ -6877,6 +7065,15 @@ class RemoteSyncService {
       case FirestoreCollections.photoCheckInImages:
         if (record is! PhotoCheckInImage) return null;
         return (id: record.id, payload: photoCheckInImageToFirestore(record));
+      case FirestoreCollections.gaiaChats:
+        if (record is! GaiaChat) return null;
+        return (id: record.id, payload: gaiaChatToFirestore(record));
+      case FirestoreCollections.gaiaMessages:
+        if (record is! GaiaMessage) return null;
+        return (id: record.id, payload: gaiaMessageToFirestore(record));
+      case FirestoreCollections.gaiaSettings:
+        if (record is! GaiaSettings) return null;
+        return (id: record.id, payload: gaiaSettingsToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -7909,6 +8106,7 @@ class RemoteSyncService {
         pullJobStatusEvents,
       ]),
       _inOrder([pullMediaAssets, pullMediaReferences]),
+      _inOrder([pullGaiaSettings, pullGaiaChats, pullGaiaMessages]),
     ]);
   }
 
@@ -8246,6 +8444,9 @@ class LiveSyncController {
     FirestoreCollections.flaggedWords,
     FirestoreCollections.snippets,
     FirestoreCollections.jobExperienceSnippets,
+    FirestoreCollections.gaiaChats,
+    FirestoreCollections.gaiaMessages,
+    FirestoreCollections.gaiaSettings,
     FirestoreCollections.settings,
   ];
 
