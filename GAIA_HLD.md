@@ -684,6 +684,12 @@ customizable on the Gaia page. Defaults: Ctrl+Enter sends, Enter/Shift+Enter
 make a newline (matching `CTRL_ENTER_SUBMIT_HLD.md`), Esc in Vim insert mode
 drops to Normal, and Esc in Normal hides Gaia.
 
+As built in Phase 2: Send (Ctrl+Enter by default, decided 2026-10-25 over
+Phase 1's Enter) and the A, B, G and Abort hotkeys are rebindable on the
+Gaia page and sync with Gaia's settings. A global hotkey needs Ctrl, Alt or
+Win, so it never takes over plain typing, and two keys can't share a combo.
+The main instance re-registers a hotkey as soon as it changes.
+
 ### 9.2 Custom commands — two kinds
 
 - **Snippets** (expand instantly as you type). These are already built
@@ -1198,7 +1204,7 @@ A message whose parts encode to over 800 KB uploads them as JSON pieces in
 `gaia_message_chunks` (`{messageId}_{n}`), written before the message, which
 keeps only `partChunks`. An erase deletes the chunks. The update drain runs
 on every quit, and `scripts/build_release.ps1` waits while the companion
-drains. Hotkeys stay fixed until Phase 2.
+drains. Hotkeys were fixed until Phase 2 made them rebindable.
 
 ---
 

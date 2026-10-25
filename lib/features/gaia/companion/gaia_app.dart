@@ -18,6 +18,7 @@ import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
+import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -719,6 +720,10 @@ class _ComposerState extends State<_Composer> {
     }
     final running = controller.currentRunning;
     final palette = _palette;
+    // Ctrl+Enter by default (§9.1): Enter and Shift+Enter are newlines.
+    final send =
+        parseGaiaCombo(gaiaComboFor(GaiaKeybind.send, controller.keybinds)) ??
+        parseGaiaCombo(GaiaKeybind.send.defaultCombo)!;
     return LayoutBuilder(
       builder: (context, constraints) {
         // A little wider than the messages' column, as in Claude's apps.
@@ -727,8 +732,10 @@ class _ComposerState extends State<_Composer> {
           padding: EdgeInsets.fromLTRB(side, 8, side, 12),
           child: CallbackShortcuts(
             bindings: {
-              const SingleActivator(LogicalKeyboardKey.enter): _send,
+              send.activator: _send,
               if (palette.isNotEmpty) ...{
+                // Enter picks from the palette, whatever sends.
+                const SingleActivator(LogicalKeyboardKey.enter): _send,
                 const SingleActivator(LogicalKeyboardKey.tab): () =>
                     _pick(palette[_highlight]),
                 const SingleActivator(LogicalKeyboardKey.arrowDown): () =>

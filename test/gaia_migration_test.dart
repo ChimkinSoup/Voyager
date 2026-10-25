@@ -1,7 +1,7 @@
 // Schema 169 adds Gaia's chats, messages and settings, and the FTS5 table
 // its search reads; 170 moves each search row to its message's rowid; 171
 // adds Phase 2's tiers and agents; 172 the utility model and router; 173
-// each reply's context size; 174 slash commands. The
+// each reply's context size; 174 slash commands; 175 rebound keys. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -296,5 +296,29 @@ void main() {
       ),
     );
     expect((await repo.getSettings()).commands.single.template, 'Fix: x');
+  });
+
+  test('174→175 adds rebound keys, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(
+      seed,
+    ).upsertSettings(GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.'));
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN keybinds_json',
+    );
+    await seed.customStatement('PRAGMA user_version = 174');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.gaiaMd, 'Be brief.');
+    expect(settings.keybinds, isEmpty);
+
+    await repo.upsertSettings(
+      settings.copyWith(keybinds: {'window': 'Ctrl+Alt+G'}),
+    );
+    expect((await repo.getSettings()).keybinds, {'window': 'Ctrl+Alt+G'});
   });
 }

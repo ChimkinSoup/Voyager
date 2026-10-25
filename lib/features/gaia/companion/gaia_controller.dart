@@ -118,6 +118,9 @@ class GaiaController extends ChangeNotifier {
   /// The user's slash commands (§9.2).
   var commands = const <GaiaCommand>[];
 
+  /// Rebound keys (§9.1), by `GaiaKeybind` name.
+  var keybinds = const <String, String>{};
+
   /// Null for a new chat not yet sent.
   String? currentChatId;
   final _messages = <String, List<GaiaMessage>>{};
@@ -202,6 +205,7 @@ class GaiaController extends ChangeNotifier {
     tiers = gaiaTiersFromJson(settings['tiers']);
     lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
     commands = gaiaCommandsFromJson(settings['commands']);
+    keybinds = gaiaKeybindsFromJson(settings['keybinds']);
     notifyListeners();
     final instructions = settings['gaiaMd'] as String? ?? '';
     await Future.wait([

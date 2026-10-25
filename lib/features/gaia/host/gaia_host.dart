@@ -2,42 +2,19 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:win32/win32.dart';
 
-/// Gaia's hotkeys (GAIA_HLD.md §15.1, §15.7). Fixed combos until the Gaia
-/// page makes them rebindable (Phase 2).
+/// Gaia's hotkeys (GAIA_HLD.md §15.1, §15.7), rebindable on the Gaia page:
+/// each is the [GaiaKeybind] of the same name.
 enum GaiaHotkey { small, large, window, abort }
-
-final _hotkeys = {
-  GaiaHotkey.small: HotKey(
-    key: PhysicalKeyboardKey.space,
-    modifiers: [HotKeyModifier.control, HotKeyModifier.alt],
-    scope: HotKeyScope.system,
-  ),
-  GaiaHotkey.large: HotKey(
-    key: PhysicalKeyboardKey.space,
-    modifiers: [
-      HotKeyModifier.control,
-      HotKeyModifier.alt,
-      HotKeyModifier.shift,
-    ],
-    scope: HotKeyScope.system,
-  ),
-  // G, the Gaia window, is unbound by default.
-  GaiaHotkey.abort: HotKey(
-    key: PhysicalKeyboardKey.backspace,
-    modifiers: [HotKeyModifier.control, HotKeyModifier.alt],
-    scope: HotKeyScope.system,
-  ),
-};
 
 /// A chat with a run in progress, as the companion reports it (§14).
 typedef GaiaRun = ({String chatId, String title});
@@ -87,6 +64,10 @@ class GaiaHost {
   var _settings = GaiaSettings.initial();
 
   var _started = false;
+  var _ownsHotkeys = false;
+
+  /// Each hotkey's registered combo, as stored.
+  final _registered = <GaiaHotkey, String>{};
   var _quitting = false;
   var _companionPid = 0;
   var _aborted = false;
@@ -129,14 +110,8 @@ class GaiaHost {
       ..onEvent = _onEvent
       ..onConnected = _onConnected
       ..onDisconnected = _onDisconnected;
-    if (registerHotkeys) {
-      for (final MapEntry(key: action, value: hotkey) in _hotkeys.entries) {
-        await hotKeyManager.register(
-          hotkey,
-          keyDownHandler: (_) => onHotkey(action),
-        );
-      }
-    }
+    _ownsHotkeys = registerHotkeys;
+    await _applyHotkeys(_settings.keybinds);
     // Resident, but not on the startup path: a hotkey before then launches
     // it straight away.
     if (show) {
@@ -164,8 +139,41 @@ class GaiaHost {
     });
     _settingsChanges = repository.watchSettings().listen((settings) {
       _settings = settings;
+      unawaited(_applyHotkeys(settings.keybinds));
       if (_pipe.connected) _pipe.notify('settings', settings.toJson());
     });
+  }
+
+  /// Registers each hotkey's combo under [keybinds], replacing one that
+  /// changed. A combo with no Ctrl, Alt or Win would take over plain typing
+  /// everywhere, so it's left unregistered, as is one Windows refuses.
+  Future<void> _applyHotkeys(Map<String, String> keybinds) async {
+    if (!_ownsHotkeys) return;
+    for (final hotkey in GaiaHotkey.values) {
+      final combo = gaiaComboFor(
+        GaiaKeybind.values.byName(hotkey.name),
+        keybinds,
+      );
+      final registered = _registered[hotkey];
+      if (combo == registered) continue;
+      if (registered != null) {
+        _registered.remove(hotkey);
+        if (parseGaiaCombo(registered) case final old?) {
+          await hotKeyManager.unregister(old.hotKey);
+        }
+      }
+      final parsed = parseGaiaCombo(combo);
+      if (parsed == null || !parsed.hasModifier) continue;
+      try {
+        await hotKeyManager.register(
+          parsed.hotKey,
+          keyDownHandler: (_) => onHotkey(hotkey),
+        );
+        _registered[hotkey] = combo;
+      } catch (error) {
+        debugPrint('[gaia] hotkey $combo not registered: $error');
+      }
+    }
   }
 
   /// Lets the companion go: it exits once the pipe closes.

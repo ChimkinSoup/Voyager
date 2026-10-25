@@ -59277,6 +59277,18 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _keybindsJsonMeta = const VerificationMeta(
+    'keybindsJson',
+  );
+  @override
+  late final GeneratedColumn<String> keybindsJson = GeneratedColumn<String>(
+    'keybinds_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -59335,6 +59347,7 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     autoRoute,
     routerRubric,
     commandsJson,
+    keybindsJson,
     createdAt,
     updatedAt,
     version,
@@ -59432,6 +59445,15 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         ),
       );
     }
+    if (data.containsKey('keybinds_json')) {
+      context.handle(
+        _keybindsJsonMeta,
+        keybindsJson.isAcceptableOrUnknown(
+          data['keybinds_json']!,
+          _keybindsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -59513,6 +59535,10 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}commands_json'],
       )!,
+      keybindsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}keybinds_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59557,6 +59583,9 @@ class GaiaSettingsTableData extends DataClass
 
   /// `[GaiaCommand]` as JSON.
   final String commandsJson;
+
+  /// `{keybind: combo}` as JSON.
+  final String keybindsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59573,6 +59602,7 @@ class GaiaSettingsTableData extends DataClass
     required this.autoRoute,
     required this.routerRubric,
     required this.commandsJson,
+    required this.keybindsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59596,6 +59626,7 @@ class GaiaSettingsTableData extends DataClass
     map['auto_route'] = Variable<bool>(autoRoute);
     map['router_rubric'] = Variable<String>(routerRubric);
     map['commands_json'] = Variable<String>(commandsJson);
+    map['keybinds_json'] = Variable<String>(keybindsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -59622,6 +59653,7 @@ class GaiaSettingsTableData extends DataClass
       autoRoute: Value(autoRoute),
       routerRubric: Value(routerRubric),
       commandsJson: Value(commandsJson),
+      keybindsJson: Value(keybindsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59650,6 +59682,7 @@ class GaiaSettingsTableData extends DataClass
       autoRoute: serializer.fromJson<bool>(json['autoRoute']),
       routerRubric: serializer.fromJson<String>(json['routerRubric']),
       commandsJson: serializer.fromJson<String>(json['commandsJson']),
+      keybindsJson: serializer.fromJson<String>(json['keybindsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59671,6 +59704,7 @@ class GaiaSettingsTableData extends DataClass
       'autoRoute': serializer.toJson<bool>(autoRoute),
       'routerRubric': serializer.toJson<String>(routerRubric),
       'commandsJson': serializer.toJson<String>(commandsJson),
+      'keybindsJson': serializer.toJson<String>(keybindsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59690,6 +59724,7 @@ class GaiaSettingsTableData extends DataClass
     bool? autoRoute,
     String? routerRubric,
     String? commandsJson,
+    String? keybindsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -59706,6 +59741,7 @@ class GaiaSettingsTableData extends DataClass
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
     commandsJson: commandsJson ?? this.commandsJson,
+    keybindsJson: keybindsJson ?? this.keybindsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -59736,6 +59772,9 @@ class GaiaSettingsTableData extends DataClass
       commandsJson: data.commandsJson.present
           ? data.commandsJson.value
           : this.commandsJson,
+      keybindsJson: data.keybindsJson.present
+          ? data.keybindsJson.value
+          : this.keybindsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59757,6 +59796,7 @@ class GaiaSettingsTableData extends DataClass
           ..write('autoRoute: $autoRoute, ')
           ..write('routerRubric: $routerRubric, ')
           ..write('commandsJson: $commandsJson, ')
+          ..write('keybindsJson: $keybindsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59778,6 +59818,7 @@ class GaiaSettingsTableData extends DataClass
     autoRoute,
     routerRubric,
     commandsJson,
+    keybindsJson,
     createdAt,
     updatedAt,
     version,
@@ -59798,6 +59839,7 @@ class GaiaSettingsTableData extends DataClass
           other.autoRoute == this.autoRoute &&
           other.routerRubric == this.routerRubric &&
           other.commandsJson == this.commandsJson &&
+          other.keybindsJson == this.keybindsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59817,6 +59859,7 @@ class GaiaSettingsTableCompanion
   final Value<bool> autoRoute;
   final Value<String> routerRubric;
   final Value<String> commandsJson;
+  final Value<String> keybindsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59834,6 +59877,7 @@ class GaiaSettingsTableCompanion
     this.autoRoute = const Value.absent(),
     this.routerRubric = const Value.absent(),
     this.commandsJson = const Value.absent(),
+    this.keybindsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59852,6 +59896,7 @@ class GaiaSettingsTableCompanion
     this.autoRoute = const Value.absent(),
     this.routerRubric = const Value.absent(),
     this.commandsJson = const Value.absent(),
+    this.keybindsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59872,6 +59917,7 @@ class GaiaSettingsTableCompanion
     Expression<bool>? autoRoute,
     Expression<String>? routerRubric,
     Expression<String>? commandsJson,
+    Expression<String>? keybindsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59891,6 +59937,7 @@ class GaiaSettingsTableCompanion
       if (autoRoute != null) 'auto_route': autoRoute,
       if (routerRubric != null) 'router_rubric': routerRubric,
       if (commandsJson != null) 'commands_json': commandsJson,
+      if (keybindsJson != null) 'keybinds_json': keybindsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59911,6 +59958,7 @@ class GaiaSettingsTableCompanion
     Value<bool>? autoRoute,
     Value<String>? routerRubric,
     Value<String>? commandsJson,
+    Value<String>? keybindsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59929,6 +59977,7 @@ class GaiaSettingsTableCompanion
       autoRoute: autoRoute ?? this.autoRoute,
       routerRubric: routerRubric ?? this.routerRubric,
       commandsJson: commandsJson ?? this.commandsJson,
+      keybindsJson: keybindsJson ?? this.keybindsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59973,6 +60022,9 @@ class GaiaSettingsTableCompanion
     if (commandsJson.present) {
       map['commands_json'] = Variable<String>(commandsJson.value);
     }
+    if (keybindsJson.present) {
+      map['keybinds_json'] = Variable<String>(keybindsJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -60005,6 +60057,7 @@ class GaiaSettingsTableCompanion
           ..write('autoRoute: $autoRoute, ')
           ..write('routerRubric: $routerRubric, ')
           ..write('commandsJson: $commandsJson, ')
+          ..write('keybindsJson: $keybindsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -88546,6 +88599,7 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<bool> autoRoute,
       Value<String> routerRubric,
       Value<String> commandsJson,
+      Value<String> keybindsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -88565,6 +88619,7 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<bool> autoRoute,
       Value<String> routerRubric,
       Value<String> commandsJson,
+      Value<String> keybindsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -88633,6 +88688,11 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<String> get commandsJson => $composableBuilder(
     column: $table.commandsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get keybindsJson => $composableBuilder(
+    column: $table.keybindsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88721,6 +88781,11 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get keybindsJson => $composableBuilder(
+    column: $table.keybindsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88796,6 +88861,11 @@ class $$GaiaSettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get keybindsJson => $composableBuilder(
+    column: $table.keybindsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -88860,6 +88930,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<bool> autoRoute = const Value.absent(),
                 Value<String> routerRubric = const Value.absent(),
                 Value<String> commandsJson = const Value.absent(),
+                Value<String> keybindsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -88877,6 +88948,7 @@ class $$GaiaSettingsTableTableTableManager
                 autoRoute: autoRoute,
                 routerRubric: routerRubric,
                 commandsJson: commandsJson,
+                keybindsJson: keybindsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -88896,6 +88968,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<bool> autoRoute = const Value.absent(),
                 Value<String> routerRubric = const Value.absent(),
                 Value<String> commandsJson = const Value.absent(),
+                Value<String> keybindsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -88913,6 +88986,7 @@ class $$GaiaSettingsTableTableTableManager
                 autoRoute: autoRoute,
                 routerRubric: routerRubric,
                 commandsJson: commandsJson,
+                keybindsJson: keybindsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

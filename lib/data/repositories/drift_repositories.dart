@@ -9938,6 +9938,7 @@ class DriftGaiaRepository implements GaiaRepository {
             utilityAcknowledged: Value(settings.utilityAcknowledged),
             autoRoute: Value(settings.autoRoute),
             routerRubric: Value(settings.routerRubric),
+            keybindsJson: Value(jsonEncode(settings.keybinds)),
             commandsJson: Value(
               jsonEncode([
                 for (final command in settings.commands) command.toJson(),
@@ -10035,6 +10036,7 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
   autoRoute: row.autoRoute,
   routerRubric: row.routerRubric,
   commands: gaiaCommandsFromJson(jsonDecode(row.commandsJson)),
+  keybinds: gaiaKeybindsFromJson(jsonDecode(row.keybindsJson)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

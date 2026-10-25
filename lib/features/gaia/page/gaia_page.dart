@@ -9,11 +9,13 @@ import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_secrets.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
@@ -756,6 +758,10 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
         _UtilitySection(settings: settings),
         const SizedBox(height: 24),
         _CommandsSection(settings: settings),
+        if (isWindows) ...[
+          const SizedBox(height: 24),
+          _KeysSection(settings: settings),
+        ],
         const SizedBox(height: 16),
         if (isWindows) ...[
           SwitchListTile(
@@ -1403,6 +1409,158 @@ class _CommandDialogState extends State<_CommandDialog> {
           dense: true,
         ),
       ],
+    );
+  }
+}
+
+/// Gaia's rebindable keys (§9.1, §15.1): send, and the global hotkeys.
+class _KeysSection extends ConsumerWidget {
+  const _KeysSection({required this.settings});
+
+  final GaiaSettings settings;
+
+  Future<void> _save(WidgetRef ref, Map<String, String> keybinds) => ref
+      .read(gaiaRepositoryProvider)
+      .upsertSettings(settings.copyWith(keybinds: keybinds));
+
+  Future<void> _change(
+    BuildContext context,
+    WidgetRef ref,
+    GaiaKeybind keybind,
+  ) async {
+    final combo = await showDialog<GaiaCombo>(
+      context: context,
+      builder: (_) => _ComboDialog(keybind: keybind),
+    );
+    if (combo == null || !context.mounted) return;
+    final stored = '$combo';
+    final clash = GaiaKeybind.values
+        .where(
+          (other) =>
+              other != keybind &&
+              other.global == keybind.global &&
+              gaiaComboFor(other, settings.keybinds) == stored,
+        )
+        .firstOrNull;
+    if (clash != null) {
+      showVoyagerToast(context, message: '$stored is already ${clash.label}');
+      return;
+    }
+    await _save(ref, {...settings.keybinds, keybind.name: stored});
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Keys', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Send works in Gaia. The others work from any app; they need Ctrl, '
+          'Alt or Win so they never take over plain typing.',
+          style: muted,
+        ),
+        for (final keybind in GaiaKeybind.values)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(keybind.label),
+            subtitle: Text(switch (gaiaComboFor(keybind, settings.keybinds)) {
+              '' => 'Not set',
+              final combo => combo,
+            }, style: muted),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (settings.keybinds.containsKey(keybind.name))
+                  IconButton(
+                    tooltip: keybind.defaultCombo.isEmpty
+                        ? 'Clear'
+                        : 'Reset to ${keybind.defaultCombo}',
+                    icon: const Icon(
+                      PhosphorIconsRegular.arrowCounterClockwise,
+                      size: 16,
+                    ),
+                    onPressed: () => _save(ref, {
+                      for (final MapEntry(:key, :value)
+                          in settings.keybinds.entries)
+                        if (key != keybind.name) key: value,
+                    }),
+                  ),
+                GlassButton(
+                  onPressed: () => _change(context, ref, keybind),
+                  label: 'Change',
+                  dense: true,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Waits for a key combo: the key pressed with the modifiers held. Esc on
+/// its own cancels.
+class _ComboDialog extends StatefulWidget {
+  const _ComboDialog({required this.keybind});
+
+  final GaiaKeybind keybind;
+
+  @override
+  State<_ComboDialog> createState() => _ComboDialogState();
+}
+
+class _ComboDialogState extends State<_ComboDialog> {
+  String? _refused;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.escape &&
+        !keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed) {
+      Navigator.of(context).pop();
+      return true;
+    }
+    final combo = gaiaComboFromEvent(event);
+    if (combo == null) return false;
+    if (widget.keybind.global && !combo.hasModifier) {
+      setState(() => _refused = '$combo needs Ctrl, Alt or Win with it.');
+      return true;
+    }
+    Navigator.of(context).pop(combo);
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.keybind.label),
+      content: Text(
+        _refused ??
+            'Press the keys for ${widget.keybind.label}: a letter, digit, '
+                'F-key, Space, Enter or Backspace, with any modifiers.\n'
+                'Esc to cancel.',
+      ),
     );
   }
 }

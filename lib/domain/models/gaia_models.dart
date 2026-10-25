@@ -447,6 +447,12 @@ class GaiaCommand {
   );
 }
 
+Map<String, String> gaiaKeybindsFromJson(Object? json) => {
+  if (json is Map)
+    for (final MapEntry(:key, :value) in json.entries)
+      if (key is String && value is String) key: value,
+};
+
 List<GaiaCommand> gaiaCommandsFromJson(Object? json) => [
   if (json is List)
     for (final command in json)
@@ -469,6 +475,7 @@ class GaiaSettings extends SoftDeletable {
     this.autoRoute = true,
     this.routerRubric = '',
     this.commands = const [],
+    this.keybinds = const {},
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -510,6 +517,11 @@ class GaiaSettings extends SoftDeletable {
   /// The user's slash commands (§9.2).
   final List<GaiaCommand> commands;
 
+  /// Rebound keys (§9.1, §15.1), by `GaiaKeybind` name: a combo such as
+  /// `Ctrl+Alt+Space`, or empty for unbound. Keys not here keep their
+  /// defaults.
+  final Map<String, String> keybinds;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -525,6 +537,7 @@ class GaiaSettings extends SoftDeletable {
     bool? autoRoute,
     String? routerRubric,
     List<GaiaCommand>? commands,
+    Map<String, String>? keybinds,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -539,6 +552,7 @@ class GaiaSettings extends SoftDeletable {
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
     commands: commands ?? this.commands,
+    keybinds: keybinds ?? this.keybinds,
   );
 
   /// What the companion needs of them.
@@ -553,6 +567,7 @@ class GaiaSettings extends SoftDeletable {
     'autoRoute': autoRoute,
     'routerRubric': routerRubric,
     'commands': [for (final command in commands) command.toJson()],
+    'keybinds': keybinds,
   };
 }
 
