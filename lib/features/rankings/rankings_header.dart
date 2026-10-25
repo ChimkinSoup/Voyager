@@ -18,7 +18,8 @@ import 'package:voyager/features/rankings/rankings_icons.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 
 /// The page's top tier (§2.1): which category is open, how much of it is
-/// ranked, and the two status chips that narrow the queue.
+/// ranked, the two status chips that narrow the queue, and the way into
+/// Manage in the corner.
 ///
 /// Every number here is measured against the *scoped* pool — the search box
 /// and the filter popover already applied — so the band answers a question
@@ -32,6 +33,7 @@ class RankingsStatsBand extends StatelessWidget {
     required this.activeStatuses,
     required this.onStatusTapped,
     required this.onSelectCategory,
+    required this.onManage,
     this.offerAllCategories = false,
   });
 
@@ -49,6 +51,7 @@ class RankingsStatsBand extends StatelessWidget {
   final Set<RankingStatus> activeStatuses;
   final ValueChanged<RankingStatus> onStatusTapped;
   final ValueChanged<String> onSelectCategory;
+  final VoidCallback onManage;
 
   @override
   Widget build(BuildContext context) {
@@ -60,26 +63,44 @@ class RankingsStatsBand extends StatelessWidget {
         height: 76,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _CategoryTrigger(
-              category: category,
-              categories: categories,
-              offerAllCategories: offerAllCategories,
-              onSelect: onSelectCategory,
+            // Only the category's name gives way when the band runs short;
+            // the numbers and the chips keep their width, and Manage keeps
+            // the corner.
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: _CategoryTrigger(
+                      category: category,
+                      categories: categories,
+                      offerAllCategories: offerAllCategories,
+                      onSelect: onSelectCategory,
+                    ),
+                  ),
+                  const SizedBox(width: 22),
+                  _HeroStats(stats: stats, category: category),
+                  const SizedBox(width: 22),
+                  _StatusChips(
+                    accent: accent,
+                    inProgress: stats.inProgress,
+                    queued: stats.queued,
+                    activeStatuses: activeStatuses,
+                    onStatusTapped: onStatusTapped,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 22),
-            _HeroStats(stats: stats, category: category),
-            const SizedBox(width: 22),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _StatusChips(
-                  accent: accent,
-                  inProgress: stats.inProgress,
-                  queued: stats.queued,
-                  activeStatuses: activeStatuses,
-                  onStatusTapped: onStatusTapped,
-                ),
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                tooltip: 'Manage categories and templates',
+                iconSize: 16,
+                visualDensity: VisualDensity.compact,
+                onPressed: onManage,
+                icon: const Icon(PhosphorIconsRegular.slidersHorizontal),
               ),
             ),
           ],
@@ -124,6 +145,7 @@ class _CategoryTrigger extends StatelessWidget {
     final accent = _accentOf(category, context);
 
     return Center(
+      widthFactor: 1,
       child: Builder(
         builder: (buttonContext) => Material(
           type: MaterialType.transparency,
@@ -154,15 +176,17 @@ class _CategoryTrigger extends StatelessWidget {
                     color: accent,
                   ),
                   const SizedBox(width: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 160),
-                    child: Text(
-                      category?.name ?? _allCategoriesLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: accent,
-                        fontWeight: FontWeight.w700,
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      child: Text(
+                        category?.name ?? _allCategoriesLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -491,8 +515,7 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-/// The second tier (§4): the search box, the two menus and the way into
-/// Manage.
+/// The second tier (§4): the search box and the two menus.
 ///
 /// Nothing here appears or disappears as the page is narrowed — no Clear
 /// button that shows up the moment a filter is on and takes the pills with it
@@ -508,7 +531,6 @@ class RankingsToolbar extends StatelessWidget {
     required this.onFiltersChanged,
     required this.onSortChanged,
     required this.tags,
-    required this.onManage,
     this.isMapView = false,
     this.onViewChanged,
   });
@@ -532,7 +554,6 @@ class RankingsToolbar extends StatelessWidget {
   onSortChanged;
 
   final List<String> tags;
-  final VoidCallback onManage;
 
   @override
   Widget build(BuildContext context) {
@@ -655,14 +676,6 @@ class RankingsToolbar extends StatelessWidget {
                     _FilterMenu(tags: tags, onChanged: onFiltersChanged),
               ),
             ),
-          ),
-          const SizedBox(width: 2),
-          IconButton(
-            tooltip: 'Manage categories and templates',
-            iconSize: 16,
-            visualDensity: VisualDensity.compact,
-            onPressed: onManage,
-            icon: const Icon(PhosphorIconsRegular.slidersHorizontal),
           ),
         ],
       ),

@@ -87,7 +87,8 @@ final _panelSeeds = <String, Future<void> Function(AppDatabase db)>{
     await repo.upsertCategory(
       RankingCategory(
         id: 'overflow-probe',
-        name: 'Overflow probe',
+        // Past the switcher's 160pt cap, the widest the band's name gets.
+        name: 'Overflow probe with a long category name',
         colorValue: 0xFF7C9EFF,
         createdAt: now,
         updatedAt: now,

@@ -403,6 +403,11 @@ class _CategoryBody extends ConsumerWidget {
           },
           onSelectCategory: (id) =>
               ref.read(rankingSelectedCategoryProvider.notifier).state = id,
+          onManage: () => showRankingsManageSheet(
+            context,
+            ref,
+            initialCategoryId: category.id,
+          ),
         ),
         RankingsToolbar(
           category: category,
@@ -422,11 +427,6 @@ class _CategoryBody extends ConsumerWidget {
                 ),
               ),
           tags: rankingTags(parents),
-          onManage: () => showRankingsManageSheet(
-            context,
-            ref,
-            initialCategoryId: category.id,
-          ),
           isMapView: mapView,
           onViewChanged: category.locationEnabled
               ? (map) => _setMapView(ref, settings, map)
@@ -717,6 +717,7 @@ class _AllCategoriesBody extends ConsumerWidget {
           },
           onSelectCategory: (id) =>
               ref.read(rankingSelectedCategoryProvider.notifier).state = id,
+          onManage: () => showRankingsManageSheet(context, ref),
         ),
         RankingsToolbar(
           category: null,
@@ -730,7 +731,6 @@ class _AllCategoriesBody extends ConsumerWidget {
           // The union of the visible categories' tags; one shared by two of
           // them matches in both.
           tags: rankingTags(scope.map((entry) => entry.parent)),
-          onManage: () => showRankingsManageSheet(context, ref),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
