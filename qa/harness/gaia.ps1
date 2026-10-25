@@ -347,10 +347,13 @@ function Invoke-Checks {
     $original = Invoke-MEval $lib "(() { $containerExpr return c.read(settingsProvider).value!.accentColor; })()"
     $read = "(() { $containerExpr return c.read(settingsProvider).value!.accentColor; })()"
     $green = '4283220874'
-    $null = Invoke-MEval $lib "(() { $containerExpr return c.read(settingsProvider.notifier).saveSettings(c.read(settingsProvider).value!.copyWith(accentColor: $green)); })()"
+    # Each save in an event of its own: an evaluate can run in the middle of a
+    # frame's build, where Riverpod throws after taking the new state and
+    # before notifying anyone or writing it (BUG-319).
+    $null = Invoke-MEval $lib "Future(() { $containerExpr return c.read(settingsProvider.notifier).saveSettings(c.read(settingsProvider).value!.copyWith(accentColor: $green)); })"
     $saved = Wait-Until { (Invoke-MEval $lib $read) -eq $green } 15
     $followed = Wait-Until { (Invoke-CEval 'GAIA.accent.value') -eq $green } 15
-    $null = Invoke-MEval $lib "(() { $containerExpr return c.read(settingsProvider.notifier).saveSettings(c.read(settingsProvider).value!.copyWith(accentColor: $original)); })()"
+    $null = Invoke-MEval $lib "Future(() { $containerExpr return c.read(settingsProvider.notifier).saveSettings(c.read(settingsProvider).value!.copyWith(accentColor: $original)); })"
     $putBack = Wait-Until { (Invoke-MEval $lib $read) -eq $original } 15
     $restored = Wait-Until { (Invoke-CEval 'GAIA.accent.value') -eq $original } 15
     Report "the companion follows Voyager's accent" ($saved -and $followed -and $putBack -and $restored) "saved: $saved, followed: $followed; put back to $($original): $putBack, followed: $restored"

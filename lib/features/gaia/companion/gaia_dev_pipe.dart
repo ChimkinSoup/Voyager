@@ -51,8 +51,9 @@ class GaiaDevPipe extends GaiaPipe {
       case 'setSession':
         await _store.setSession(
           p['chatId']! as String,
-          p['sessionId']! as String,
+          p['sessionId'] as String?,
           p['lastSeq']! as int,
+          adapter: p['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
         );
         return null;
       case 'messages':

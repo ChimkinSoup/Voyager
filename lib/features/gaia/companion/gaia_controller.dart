@@ -484,28 +484,60 @@ class GaiaController extends ChangeNotifier {
     unawaited(_persist(reply));
 
     final builder = GaiaTurnBuilder();
-    final session = agent == null
+    var session = agent == null
         ? null
         : chat.agentSessions[gaiaSessionKey(_deviceId, adapter: agent.adapter)];
-    final sessionId = session?.sessionId;
+    // Here at once, so a next message straight away resumes it; the main
+    // instance's copy follows. A null [sessionId] drops the chat's.
+    void recordSession(String adapter, String? sessionId) {
+      final key = gaiaSessionKey(_deviceId, adapter: adapter);
+      if (_chat(chatId) case final current?) {
+        final updated = current.copyWith(
+          agentSessions: sessionId == null
+              ? ({...current.agentSessions}..remove(key))
+              : {
+                  ...current.agentSessions,
+                  key: GaiaAgentSession(
+                    sessionId: sessionId,
+                    lastSeq: reply.seq,
+                  ),
+                },
+        );
+        chats = [for (final c in chats) c.id == chatId ? updated : c];
+      }
+      unawaited(
+        _request('setSession', {
+          'chatId': chatId,
+          'adapter': adapter,
+          'sessionId': sessionId,
+          'lastSeq': reply.seq,
+        }),
+      );
+    }
+
     // What the session didn't see: the whole chat for a new session, or
     // the turns another agent or device took since (§7.4).
-    var sent = prompt;
-    if (script == null && agent != null && runner != null) {
+    Future<String> handedOver() async {
+      if (script != null || agent == null || runner == null) return prompt;
       final unseen = gaiaUnseenTurns(
         list,
         lastSeq: session?.lastSeq ?? -1,
         beforeSeq: seq,
       );
-      if (unseen.isNotEmpty) {
-        final (older, recent) = gaiaSplitHandoff(unseen);
-        final summary = older.isEmpty
-            ? null
-            : await _utility?.summarize(gaiaTranscriptText(older));
-        sent =
-            '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$prompt';
-      }
+      if (unseen.isEmpty) return prompt;
+      final (older, recent) = gaiaSplitHandoff(unseen);
+      final summary = older.isEmpty
+          ? null
+          : await _utility?.summarize(gaiaTranscriptText(older));
+      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$prompt';
     }
+
+    final sent = await handedOver();
+    var retried = false;
+    String failed(Object error) => retried
+        ? "This chat's earlier session wasn't found, and starting a new one "
+              'failed too: $error'
+        : '$error';
     void onEvent(GaiaAgentEvent event) {
       if (!builder.apply(event)) return;
       reply = _replace(reply, reply.copyWith(parts: builder.parts));
@@ -516,7 +548,7 @@ class GaiaController extends ChangeNotifier {
     }
 
     try {
-      final result = script != null
+      var result = script != null
           ? await _scripted.send(
               chatId: chatId,
               script: script,
@@ -540,36 +572,40 @@ class GaiaController extends ChangeNotifier {
             )
           : await runner.send(
               chatId: chatId,
-              sessionId: sessionId,
+              sessionId: session?.sessionId,
               model: agent.model,
               prompt: sent,
               onEvent: onEvent,
             );
-      // Here at once, so a next message straight away resumes it; the main
-      // instance's copy follows. A scripted reply, or one no agent ran, has
-      // no session to resume.
-      if (result.sessionId.isNotEmpty && agent != null) {
-        final key = gaiaSessionKey(_deviceId, adapter: agent.adapter);
-        if (_chat(chatId) case final current?) {
-          final updated = current.copyWith(
-            agentSessions: {
-              ...current.agentSessions,
-              key: GaiaAgentSession(
-                sessionId: result.sessionId,
-                lastSeq: reply.seq,
-              ),
-            },
-          );
-          chats = [for (final c in chats) c.id == chatId ? updated : c];
-        }
-        unawaited(
-          _request('setSession', {
-            'chatId': chatId,
-            'adapter': agent.adapter,
-            'sessionId': result.sessionId,
-            'lastSeq': reply.seq,
-          }),
+      // A resume that found no session, say one under another Claude config
+      // folder: once more as a new session with the chat handed over.
+      if (session != null &&
+          !result.sessionFound &&
+          !_stopping.contains(chatId)) {
+        // Dropped first: a retry that dies still leaves it gone.
+        session = null;
+        retried = true;
+        recordSession(agent!.adapter, null);
+        result = await runner!.send(
+          chatId: chatId,
+          sessionId: null,
+          model: agent.model,
+          prompt: await handedOver(),
+          onEvent: onEvent,
         );
+      }
+      // A scripted reply, or one no agent ran, has no session to resume. A failed turn's is kept when it was already
+      // the chat's, or the agent got as far as replying or a tool; a
+      // new one that failed straight away, like "Not logged in", exists
+      // only where the login wasn't (BUG-317). One a resume didn't find
+      // is dropped.
+      final keep =
+          result.sessionFound &&
+          (!result.isError || session != null || builder.finished.isNotEmpty);
+      if (result.sessionId.isNotEmpty &&
+          agent != null &&
+          (keep || session != null)) {
+        recordSession(agent.adapter, keep ? result.sessionId : null);
       }
       final parts = builder.finished;
       reply = _replace(
@@ -578,7 +614,7 @@ class GaiaController extends ChangeNotifier {
             ? reply.copyWith(
                 parts: parts,
                 status: GaiaMessageStatus.error,
-                error: result.text,
+                error: failed(result.text),
               )
             : reply.copyWith(
                 parts: parts,
@@ -602,7 +638,7 @@ class GaiaController extends ChangeNotifier {
               : stopped
               ? GaiaMessageStatus.cancelled
               : GaiaMessageStatus.error,
-          error: aborted || _drainCancelled || stopped ? null : '$error',
+          error: aborted || _drainCancelled || stopped ? null : failed(error),
         ),
       );
     } finally {

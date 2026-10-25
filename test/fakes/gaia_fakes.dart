@@ -182,6 +182,10 @@ class FakeClaudeRunner implements GaiaAgentRunner {
   var killAllCount = 0;
   final stopped = <String>[];
 
+  /// Sessions a resume doesn't find, as when they belong to another
+  /// Claude config folder.
+  final missingSessions = <String>{};
+
   final _active = <String, Completer<GaiaTurnResult>>{};
 
   @override
@@ -212,6 +216,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
             isError: event.isError,
             text: event.text,
             contextTokens: event.contextTokens,
+            sessionFound: !missingSessions.contains(sessionId),
           ),
         );
       }

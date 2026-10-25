@@ -657,13 +657,18 @@ class _ComposerState extends State<_Composer> {
       _text.clear();
       await switchGaiaTier(context, controller, tier);
     } else if (item.command case final command?) {
+      // Closed over a standalone command left unsent mid-reply, so it
+      // waits like any other draft.
+      if (command.standalone) _paletteClosedFor = '/${command.name}';
       _text.value = TextEditingValue(
         text: command.standalone ? '/${command.name}' : '/${command.name} ',
         selection: TextSelection.collapsed(
           offset: command.name.length + (command.standalone ? 1 : 2),
         ),
       );
-      if (command.standalone) await _send();
+      // Straight to sending: the palette still matches `/name`, and
+      // through [_send] it picked the row again instead (BUG-316).
+      if (command.standalone) await _submit();
     }
     _focus.requestFocus();
   }
@@ -696,6 +701,11 @@ class _ComposerState extends State<_Composer> {
   Future<void> _send() async {
     final palette = _palette;
     if (palette.isNotEmpty) return _pick(palette[_highlight]);
+    return _submit();
+  }
+
+  /// [_send] without the palette.
+  Future<void> _submit() async {
     // A built-in runs even mid-reply: /stop is for exactly then.
     if (gaiaBuiltinIn(_text.text) case final builtin?) {
       _text.clear();
@@ -827,24 +837,29 @@ class _Palette extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        children: [
-          for (final (index, item) in items.indexed)
-            ListTile(
-              dense: true,
-              selected: index == highlight,
-              title: Text('/${item.name}'),
-              subtitle: Text(
-                item.description,
-                style: muted,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      // The tiles' highlight and splash paint on this, above the
+      // decoration's colour (BUG-318).
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          children: [
+            for (final (index, item) in items.indexed)
+              ListTile(
+                dense: true,
+                selected: index == highlight,
+                title: Text('/${item.name}'),
+                subtitle: Text(
+                  item.description,
+                  style: muted,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => onPick(item),
               ),
-              onTap: () => onPick(item),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

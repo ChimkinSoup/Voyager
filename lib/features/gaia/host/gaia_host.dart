@@ -382,7 +382,7 @@ class GaiaHost {
       case 'setSession':
         await store.setSession(
           params['chatId']! as String,
-          params['sessionId']! as String,
+          params['sessionId'] as String?,
           params['lastSeq']! as int,
           adapter: params['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
         );

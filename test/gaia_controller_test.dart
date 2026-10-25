@@ -71,7 +71,7 @@ class _Main {
       case 'setSession':
         await store.setSession(
           params['chatId']! as String,
-          params['sessionId']! as String,
+          params['sessionId'] as String?,
           params['lastSeq']! as int,
           adapter: params['adapter']! as String,
         );
@@ -682,6 +682,121 @@ void main() {
       final reply = (await main.messages()).last;
       expect(reply.status, GaiaMessageStatus.error);
       expect(reply.error, contains('issue with the selected model'));
+    });
+
+    test('BUG-317: a failed turn leaves no session to resume', () async {
+      runner.turns
+        ..addAll(claudeFixtureTurns('unknown_model.jsonl'))
+        ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      await controller.send('Hi again');
+      await settle();
+
+      expect(runner.sent[1].sessionId, isNull);
+    });
+
+    group('a resume that finds no session', () {
+      const id = '80a82cab-3135-41d0-806c-e0b1fd2eb5df';
+      const notFound = [
+        ClaudeResult(
+          sessionId: id,
+          isError: true,
+          text: 'error_during_execution',
+        ),
+      ];
+
+      test('runs once more as a new session, handed the chat', () async {
+        runner.missingSessions.add(id);
+        runner.turns
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+          ..add(notFound)
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        await controller.send('Hi again');
+        await settle();
+
+        expect(runner.sent.map((s) => s.sessionId), [null, id, null]);
+        expect(runner.sent[1].prompt, 'Hi again');
+        // A handoff preamble before the message.
+        expect(runner.sent[2].prompt, endsWith('\nHi again'));
+        final reply = (await main.messages()).last;
+        expect(reply.status, GaiaMessageStatus.complete);
+        expect((await main.chat()).agentSessions.values.single.lastSeq, 3);
+      });
+
+      test('warns and stops when the new session fails too', () async {
+        runner.missingSessions.add(id);
+        runner.turns
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+          ..add(notFound)
+          ..addAll(claudeFixtureTurns('unknown_model.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        await controller.send('Hi again');
+        await settle();
+
+        expect(runner.sent, hasLength(3));
+        final reply = (await main.messages()).last;
+        expect(reply.status, GaiaMessageStatus.error);
+        expect(
+          reply.error,
+          allOf(
+            startsWith("This chat's earlier session wasn't found"),
+            contains('issue with the selected model'),
+          ),
+        );
+        expect((await main.chat()).agentSessions, isEmpty);
+      });
+
+      test('is dropped even when the new session dies', () async {
+        runner.missingSessions.add(id);
+        runner.turns
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+          ..add(notFound)
+          ..add([const ClaudeTextStart()]);
+        await controller.send('Hi');
+        await settle();
+        final sending = controller.send('Hi again');
+        await settle();
+        runner.crash(controller.currentChatId!);
+        await sending;
+        await settle();
+
+        final reply = (await main.messages()).last;
+        expect(reply.error, startsWith("This chat's earlier session"));
+        expect(controller.currentChat!.agentSessions, isEmpty);
+        expect((await main.chat()).agentSessions, isEmpty);
+      });
+    });
+
+    test('a resumed session that fails a turn is kept, past it', () async {
+      const id = '80a82cab-3135-41d0-806c-e0b1fd2eb5df';
+      runner.turns
+        ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+        ..add([
+          const ClaudeResult(sessionId: id, isError: true, text: 'Overloaded'),
+        ]);
+      await controller.send('Hi');
+      await settle();
+      await controller.send('Hi again');
+      await settle();
+
+      final session = (await main.chat()).agentSessions.values.single;
+      expect(session.sessionId, id);
+      expect(session.lastSeq, 3);
+    });
+
+    test('a new session that fails after doing work is kept', () async {
+      runner.turns.add([
+        const ClaudeToolUse('Bash'),
+        const ClaudeResult(sessionId: 's', isError: true, text: 'Max turns'),
+      ]);
+      await controller.send('Hi');
+      await settle();
+
+      expect((await main.chat()).sessionOn('laptop'), 's');
     });
 
     test(

@@ -32,10 +32,15 @@ class GaiaTurnResult {
     required this.isError,
     required this.text,
     this.contextTokens,
+    this.sessionFound = true,
   });
 
   /// The native session to resume next time.
   final String sessionId;
+
+  /// False when a resume found no session: [sessionId] is then only the one
+  /// asked for, and resuming it again fails the same way.
+  final bool sessionFound;
   final bool isError;
   final String text;
 

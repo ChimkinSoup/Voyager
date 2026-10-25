@@ -28,24 +28,25 @@ class GaiaChatStore {
   }
 
   /// Records the native session [chatId] resumes on this device with
-  /// [adapter], and the last message it took part in.
+  /// [adapter], and the last message it took part in; a null [sessionId]
+  /// forgets it.
   Future<void> setSession(
     String chatId,
-    String sessionId,
+    String? sessionId,
     int lastSeq, {
     String adapter = kGaiaClaudeCodeAdapter,
   }) async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
+    final key = gaiaSessionKey(deviceId, adapter: adapter);
     await _repository.upsertChat(
       chat.copyWith(
-        agentSessions: {
-          ...chat.agentSessions,
-          gaiaSessionKey(deviceId, adapter: adapter): GaiaAgentSession(
-            sessionId: sessionId,
-            lastSeq: lastSeq,
-          ),
-        },
+        agentSessions: sessionId == null
+            ? ({...chat.agentSessions}..remove(key))
+            : {
+                ...chat.agentSessions,
+                key: GaiaAgentSession(sessionId: sessionId, lastSeq: lastSeq),
+              },
       ),
     );
   }

@@ -48,8 +48,9 @@ $fs = $inst.FirestoreDir
 # approval, and it belongs to Juno's Codex login, not the QA account.
 $codex = Join-Path $data 'gaia\codex'
 $kept = "$data.gaia-codex"
-if (Test-Path -LiteralPath $kept) { Remove-Item -LiteralPath $kept -Recurse -Force }
-if (Test-Path -LiteralPath $codex) { Move-Item -LiteralPath $codex -Destination $kept }
+# One already there is from a reset that failed partway: it's the real one,
+# and any gaia\codex since is a fresh home without the login.
+if (-not (Test-Path -LiteralPath $kept) -and (Test-Path -LiteralPath $codex)) { Move-Item -LiteralPath $codex -Destination $kept }
 if (Test-Path -LiteralPath $data) { Remove-Item -LiteralPath $data -Recurse -Force }
 if (Test-Path -LiteralPath $fs) { Remove-Item -LiteralPath $fs -Recurse -Force }
 if ((Test-Path -LiteralPath $data) -or (Test-Path -LiteralPath $fs)) { throw 'local data still present' }

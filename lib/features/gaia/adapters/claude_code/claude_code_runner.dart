@@ -75,7 +75,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String prompt,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    final result = await sendRaw(
+    final (result, started) = await _send(
       chatId: chatId,
       sessionId: sessionId,
       newSessionId: sessionId ?? _uuid.v4(),
@@ -90,6 +90,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       isError: result.isError,
       text: result.text,
       contextTokens: result.contextTokens,
+      sessionFound: started,
     );
   }
 
@@ -102,9 +103,29 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String model,
     required String prompt,
     required void Function(ClaudeEvent event) onEvent,
+  }) async => (await _send(
+    chatId: chatId,
+    sessionId: sessionId,
+    newSessionId: newSessionId,
+    model: model,
+    prompt: prompt,
+    onEvent: onEvent,
+  )).$1;
+
+  /// [sendRaw], and whether the process got as far as a session: a resume
+  /// that finds none ends in an error result without an `init`.
+  Future<(ClaudeResult, bool)> _send({
+    required String chatId,
+    required String? sessionId,
+    required String newSessionId,
+    required String model,
+    required String prompt,
+    required void Function(ClaudeEvent event) onEvent,
   }) async {
     var process = _live.remove(chatId);
-    if (process != null && process.model != model) {
+    // One that never started a session (a resume that found none) is on
+    // its way out.
+    if (process != null && (process.model != model || !process.started)) {
       unawaited(process.kill());
       process = null;
     }
@@ -133,7 +154,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     }
     _live[chatId] = process;
     try {
-      return await process.turn(prompt, onEvent);
+      return (await process.turn(prompt, onEvent), process.started);
     } finally {
       if (process.exited) {
         _live.remove(chatId);
@@ -261,6 +282,9 @@ class _ClaudeProcess {
   final void Function(String line)? _onRawLine;
   final _stderr = StringBuffer();
   var exited = false;
+
+  /// An `init` came: the CLI started or resumed a session. Once a process.
+  var started = false;
   Timer? _idle;
 
   void Function(ClaudeEvent event)? _onEvent;
@@ -304,6 +328,7 @@ class _ClaudeProcess {
       unawaited(kill());
       return;
     }
+    if (event is ClaudeInit) started = true;
     // Between turns there's nothing to report to.
     _onEvent?.call(event);
     if (event is ClaudeResult) {
