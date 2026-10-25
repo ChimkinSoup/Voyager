@@ -3492,4 +3492,33 @@ Entry format:
 - Actual: not listed. The toast goes straight to `ReminderOsNotifier.showNow`, which records nothing; only the reminder engine and in-app toasts write the history.
 - Notes (2026-10-25, fixed in the working tree, uncommitted): a shown Gaia toast is recorded with origin "Gaia", its title as the message and its body as the detail. Verified on `qc`: both runs listed (`qa/shots/p1fix-history-qc.png`).
 
-<!-- Last ID: BUG-315. -->
+### BUG-316 [GAIA-P2] A standalone command picked from the `/` palette is never sent
+- Severity: Major
+- Found: 2026-10-25, Gaia Phase 2 in-app pass, qa-121 on `qa`, build `f1af1ae`
+- Steps to reproduce: on the Gaia page add a command `ping` (template "Reply only with the word PONG.", "Send as soon as it is picked" on). In Gaia type `/pi`, press Enter (or click the row).
+- Expected: the command's expansion is sent at once (§9.2).
+- Actual: the composer is left holding `/ping` with the palette still open over it, and nothing is sent; Ctrl+Enter and the send button do the same. Reproduced on a fresh companion in the foreground (`qa/shots/p2-fg-ping.png`). `_ComposerState._pick` sets the draft to `/ping` and calls `_send`, which sees the palette still matching `/ping` and calls `_pick` again instead of sending. After the first attempt (in bg mode) the composer no longer took focus, even in the foreground, until the companion was restarted; the window had also been minimized meanwhile, so the link to this bug isn't proven.
+- Notes: a command with arguments (`/shout hello brave world`) expands and sends correctly; it's stored as the expansion.
+
+### BUG-317 [GAIA-P2] A chat whose first turn failed on "Not logged in" can never be continued
+- Severity: Minor
+- Found: 2026-10-25, Gaia Phase 2 in-app pass, qa-121 on `qa`, build `f1af1ae`
+- Steps to reproduce: set the Claude config folder (Setup tab) to an empty folder, start a chat (error "Not logged in · Please run /login"), clear the folder, send again in the same chat.
+- Expected: the second turn runs on the working login.
+- Actual: every later turn fails with `error_during_execution`. The failed turn's session id (`1a6ac3b6…`, which exists only under the empty folder's `projects/`) was saved to the chat's `agentSessions`, and each turn tries `--resume` on it. `GaiaController.send` records `result.sessionId` whether or not `result.isError`. A new chat works. The same applies to a first turn made before `claude /login`.
+
+### BUG-318 [GAIA-P2] The `/` palette throws a ListTile assertion on every build
+- Severity: Cosmetic
+- Found: 2026-10-25, Gaia Phase 2 in-app pass, build `f1af1ae`
+- Steps to reproduce: in Gaia, type `/`.
+- Expected: no framework errors.
+- Actual: the companion's log fills with "ListTile background color or ink splashes may be invisible": `_Palette` puts its ListTiles straight inside a coloured DecoratedBox, so their selected highlight and ink splash paint on the Material behind it and are hidden.
+
+### BUG-319 [GAIA-P0] A second settings save within about a second doesn't notify settings listeners (Gaia keeps the old accent)
+- Severity: Minor
+- Found: 2026-10-25, `gaia.ps1 checks` during the Gaia Phase 2 pass, qa-121 on `qa`, build `f1af1ae`
+- Steps to reproduce: two `settingsProvider.notifier.saveSettings` calls about 1 s apart with different `accentColor`s (two separate `gaia.ps1 meval` calls), with a probe `c.listen(settingsProvider.select((s) => s.value?.accentColor), …)` attached.
+- Expected: listeners see both changes; the companion ends on the second accent.
+- Actual: `settingsProvider` holds the second value, but neither the probe nor `VoyagerApp`'s listener sees it: `GaiaHost._accent` and the companion stay on the first. With 3 s or more between saves, or both saves in one eval, both changes are seen. Fails `gaia.ps1`'s "the companion follows Voyager's accent" about 1 run in 2 (it saves, waits for the companion, then saves again). Cause not found; it isn't `SettingsNotifier._quiet`.
+
+<!-- Last ID: BUG-319. -->

@@ -7,6 +7,7 @@
 # see instance.ps1):
 #   %APPDATA%\Voyager\voyager            SQLite DB, media, drafts, prefs, auto-backups, session checkpoints
 #                                        (profile: %APPDATA%\Voyager\voyager-profile-<name>, logs included)
+#                                        except gaia\codex, Gaia's Codex home and its sandbox setup
 #   %LOCALAPPDATA%\firestore\[DEFAULT]\voyager-db9de   Firestore SDK offline cache
 #                                        (profile: firestore\voyager-<name>\voyager-db9de)
 #   Credential Manager voyager-db9de.firebase.auth/[DEFAULT][n]   the persisted sign-in
@@ -43,7 +44,19 @@ $left = cmdkey /list | Select-String -SimpleMatch "$($inst.CredPrefix)["
 if ($left) { throw "sign-in credentials still present: $left" }
 
 $fs = $inst.FirestoreDir
+# Gaia's Codex home survives: its Windows sandbox setup needs Juno's UAC
+# approval, and it belongs to Juno's Codex login, not the QA account.
+$codex = Join-Path $data 'gaia\codex'
+$kept = "$data.gaia-codex"
+if (Test-Path -LiteralPath $kept) { Remove-Item -LiteralPath $kept -Recurse -Force }
+if (Test-Path -LiteralPath $codex) { Move-Item -LiteralPath $codex -Destination $kept }
 if (Test-Path -LiteralPath $data) { Remove-Item -LiteralPath $data -Recurse -Force }
 if (Test-Path -LiteralPath $fs) { Remove-Item -LiteralPath $fs -Recurse -Force }
 if ((Test-Path -LiteralPath $data) -or (Test-Path -LiteralPath $fs)) { throw 'local data still present' }
-"reset ($($inst.Label)): app stopped, signed out, local data wiped"
+$note = ''
+if (Test-Path -LiteralPath $kept) {
+  New-Item -ItemType Directory -Path (Join-Path $data 'gaia') | Out-Null
+  Move-Item -LiteralPath $kept -Destination $codex
+  $note = " (Gaia's Codex home kept)"
+}
+"reset ($($inst.Label)): app stopped, signed out, local data wiped$note"

@@ -8,7 +8,7 @@ keeps one synced chat history across desktop and phone.
 Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
-in. Phases 0, 1 and 2 are implemented (§19). **Gemini is skipped
+in. Phases 0 and 1 are done, and Phase 2 is implemented (§19). **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
 back (§19). The windowing and process decision is in
@@ -1175,17 +1175,17 @@ Other additions:
 
 ## 19. Phasing
 
-| Phase | Scope |
-|---|---|
-| 0 | `--companion` launch + mutex, IPC pipe (with DACL and client check), window modes (small/large floater, Gaia window; §3.3), exclude-from-capture, Claude Code adapter (with fixtures and version range), chat via the main instance, Abort (runs) |
-| 1 | Gaia drift tables + sync, Gaia page (chats, settings, setup checklist), GAIA.md, notifications/background runs, update drain |
-| 2 | Agents/tiers/router, Codex adapter, Haiku utility model on Claude Code, cross-vendor handoff, commands, keybinds. **Gemini skipped** (below) |
-| 3 | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
-| 4 | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
-| 5 | Memory + curator + inbox |
-| 6 | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
-| 7 | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy |
-| 8 | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
+| Phase | Status | Scope |
+|---|---|---|
+| 0 | Done | `--companion` launch + mutex, IPC pipe (with DACL and client check), window modes (small/large floater, Gaia window; §3.3), exclude-from-capture, Claude Code adapter (with fixtures and version range), chat via the main instance, Abort (runs) |
+| 1 | Done | Gaia drift tables + sync, Gaia page (chats, settings, setup checklist), GAIA.md, notifications/background runs, update drain |
+| 2 | Implemented | Agents/tiers/router, Codex adapter, Haiku utility model on Claude Code, cross-vendor handoff, commands, keybinds. **Gemini skipped** (below) |
+| 3 | | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
+| 4 | | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
+| 5 | | Memory + curator + inbox |
+| 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
+| 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy |
+| 8 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
