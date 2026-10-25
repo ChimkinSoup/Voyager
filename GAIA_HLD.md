@@ -8,7 +8,8 @@ keeps one synced chat history across desktop and phone.
 Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
-in. Phases 0 and 1 are implemented (§19). The windowing and process decision is in
+in. Phases 0, 1 and 2 are implemented (§19); Phase 2's Gemini CLI adapter
+is deferred until a Gemini login works. The windowing and process decision is in
 `docs/adr/004-floater-windows-and-companion-process.md`, amended 2026-10-24 for
 Gaia's data ownership (§3.2). Decisions and remaining questions are in §20.
 
