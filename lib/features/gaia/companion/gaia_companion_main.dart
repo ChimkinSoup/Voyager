@@ -16,6 +16,8 @@ import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
+import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// `voyager.exe --companion`, launched by the main instance (GAIA_HLD.md
@@ -55,6 +57,11 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
         codexHome: await defaultGaiaCodexHome(),
       ),
     },
+    utility: GaiaUtility(
+      ClaudeUtilityRunner(
+        workingDirectory: p.join(root.path, 'gaia', 'utility'),
+      ),
+    ),
   );
   runApp(GaiaApp(controller: controller));
   // Before start, which can already show the window.

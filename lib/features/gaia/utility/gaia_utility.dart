@@ -1,89 +1,82 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:voyager/domain/models/gaia_models.dart';
-import 'package:voyager/features/gaia/utility/gemini_api.dart';
+import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
 /// How long the router may hold up a new chat's first message before the
-/// last used tier takes it (§7.2: it aims for about 300 ms).
+/// last used tier takes it (§7.2). Haiku answers in under a second from a
+/// process started ahead ([warm]); a cold start can take longer.
 const _routeTimeout = Duration(seconds: 2);
 const _titleTimeout = Duration(seconds: 15);
 const _summaryTimeout = Duration(seconds: 30);
 
 /// Gaia's small internal jobs on the utility model (GAIA_HLD.md §5.1): the
-/// tier router and chat titles. Gemini on an API key, for sub-second
-/// answers a CLI's cold start can't give.
+/// tier router, chat titles and handoff summaries. Haiku on Claude Code, on
+/// the account Gaia's chats use.
 ///
-/// Off, and every job a null, until the user has saved a key on this device
-/// and acknowledged the slot's terms (a paid-tier key, or Google may use
-/// the prompts). Any failure is a null too: the caller falls back to what
-/// Gaia does with no utility model.
+/// Any failure is a null: the caller falls back to what Gaia does with no
+/// utility model.
 class GaiaUtility {
-  GaiaUtility({required this._readKey, this._client});
+  GaiaUtility(this._runner);
 
-  final Future<String?> Function() _readKey;
-  final http.Client Function()? _client;
+  final ClaudeUtilityRunner _runner;
 
-  var model = kGaiaDefaultUtilityModel;
-  var acknowledged = false;
   var autoRoute = true;
 
   /// The router's rubric; empty for [kGaiaDefaultRouterRubric].
   var rubric = '';
 
   void apply(Map<String, Object?> settings) {
-    model = settings['utilityModel'] as String? ?? kGaiaDefaultUtilityModel;
-    acknowledged = settings['utilityAcknowledged'] == true;
+    final model = (settings['utilityModel'] as String? ?? '').trim();
+    _runner.configure(
+      model: model.isEmpty ? kGaiaDefaultUtilityModel : model,
+      configDir: settings['claudeConfigDir'] as String? ?? '',
+    );
     autoRoute = settings['autoRoute'] != false;
     rubric = settings['routerRubric'] as String? ?? '';
   }
 
-  Future<GeminiApi?> _api() async {
-    if (!acknowledged || model.trim().isEmpty) return null;
-    final key = await _readKey();
-    if (key == null) return null;
-    return GeminiApi(key: key, model: model.trim(), client: _client?.call());
+  /// A new chat is being written: the router will be asked soon.
+  void warm() {
+    if (!autoRoute) return;
+    unawaited(
+      _runner.warm().catchError((Object error) {
+        debugPrint('[gaia] utility: $error');
+      }),
+    );
   }
 
   /// The tier for a new chat's first message (§7.2), or null to use the
   /// last used one.
   Future<GaiaTier?> route(String prompt) async {
     if (!autoRoute) return null;
-    final api = await _api();
-    if (api == null) return null;
     try {
-      final answer = await api
+      final answer = await _runner
           .generate(
-            system:
-                "You route a user's message to one of three model tiers.\n\n"
-                '${rubric.trim().isEmpty ? kGaiaDefaultRouterRubric : rubric}'
-                '\n\nReply with exactly one word: quick, standard or deep.',
-            prompt: _clip(prompt, 4000),
+            "Route the user's message in <input> to one of three model "
+            'tiers.\n\n'
+            '${rubric.trim().isEmpty ? kGaiaDefaultRouterRubric : rubric}'
+            '\n\nReply with exactly one word: quick, standard or deep.',
+            _clip(prompt, 4000),
           )
           .timeout(_routeTimeout);
       return parseRoute(answer);
     } catch (error) {
       debugPrint('[gaia] router: $error');
       return null;
-    } finally {
-      api.close();
     }
   }
 
   /// A title for a chat from its first exchange, or null to keep the
   /// first-line one.
   Future<String?> title(String question, String reply) async {
-    final api = await _api();
-    if (api == null) return null;
     try {
-      final answer = await api
+      final answer = await _runner
           .generate(
-            system:
-                'Write a title of at most six words for a chat that starts '
-                'with this exchange. Reply with the title only.',
-            prompt:
-                'User: ${_clip(question, 2000)}\n\n'
+            'Write a title of at most six words for a chat that starts '
+                'with the exchange in <input>. Reply with the title only.',
+            'User: ${_clip(question, 2000)}\n\n'
                 'Assistant: ${_clip(reply, 2000)}',
           )
           .timeout(_titleTimeout);
@@ -91,32 +84,25 @@ class GaiaUtility {
     } catch (error) {
       debugPrint('[gaia] title: $error');
       return null;
-    } finally {
-      api.close();
     }
   }
 
   /// A summary of [transcript] for an agent taking the chat over (§7.4),
   /// or null to leave the older turns out.
   Future<String?> summarize(String transcript) async {
-    final api = await _api();
-    if (api == null) return null;
     try {
-      final answer = await api
+      final answer = await _runner
           .generate(
-            system:
-                'Summarise this conversation in under 300 words for an '
-                'assistant taking it over. Keep the facts, decisions and '
-                'open questions; leave out pleasantries.',
-            prompt: _clip(transcript, 200000),
+            'Summarise the conversation in <input> in under 300 words for '
+            'an assistant taking it over. Keep the facts, decisions and '
+            'open questions; leave out pleasantries.',
+            _clip(transcript, 200000),
           )
           .timeout(_summaryTimeout);
       return answer.trim().isEmpty ? null : answer.trim();
     } catch (error) {
       debugPrint('[gaia] summary: $error');
       return null;
-    } finally {
-      api.close();
     }
   }
 

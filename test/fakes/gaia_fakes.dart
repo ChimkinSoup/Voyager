@@ -6,6 +6,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
 /// An in-memory [GaiaPipe]. The main instance's end is [FakeGaiaPipe.main];
 /// each [startCompanion] on it makes a companion's end and hands it to
@@ -260,4 +261,34 @@ List<List<ClaudeEvent>> claudeFixtureTurns(String fixture) {
     if (event is ClaudeResult) turns.add([]);
   }
   return turns..removeWhere((turn) => turn.isEmpty);
+}
+
+/// A utility model whose jobs [answer] answers from their instructions,
+/// recording each.
+class FakeUtilityRunner implements ClaudeUtilityRunner {
+  FakeUtilityRunner(this.answer);
+
+  final String Function(String job) answer;
+  final jobs = <String>[];
+  var warmed = 0;
+  var model = '';
+  var configDir = '';
+
+  @override
+  String get workingDirectory => '';
+
+  @override
+  void configure({required String model, required String configDir}) {
+    this.model = model;
+    this.configDir = configDir;
+  }
+
+  @override
+  Future<void> warm() async => warmed++;
+
+  @override
+  Future<String> generate(String job, String input) async {
+    jobs.add(job);
+    return answer(job);
+  }
 }

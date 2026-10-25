@@ -59212,6 +59212,18 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('standard'),
   );
+  static const VerificationMeta _claudeConfigDirMeta = const VerificationMeta(
+    'claudeConfigDir',
+  );
+  @override
+  late final GeneratedColumn<String> claudeConfigDir = GeneratedColumn<String>(
+    'claude_config_dir',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _utilityModelMeta = const VerificationMeta(
     'utilityModel',
   );
@@ -59223,20 +59235,6 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultValue: const Constant(kGaiaDefaultUtilityModel),
-  );
-  static const VerificationMeta _utilityAcknowledgedMeta =
-      const VerificationMeta('utilityAcknowledged');
-  @override
-  late final GeneratedColumn<bool> utilityAcknowledged = GeneratedColumn<bool>(
-    'utility_acknowledged',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("utility_acknowledged" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
   );
   static const VerificationMeta _autoRouteMeta = const VerificationMeta(
     'autoRoute',
@@ -59342,8 +59340,8 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     agentsJson,
     tiersJson,
     lastTier,
+    claudeConfigDir,
     utilityModel,
-    utilityAcknowledged,
     autoRoute,
     routerRubric,
     commandsJson,
@@ -59403,21 +59401,21 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         lastTier.isAcceptableOrUnknown(data['last_tier']!, _lastTierMeta),
       );
     }
+    if (data.containsKey('claude_config_dir')) {
+      context.handle(
+        _claudeConfigDirMeta,
+        claudeConfigDir.isAcceptableOrUnknown(
+          data['claude_config_dir']!,
+          _claudeConfigDirMeta,
+        ),
+      );
+    }
     if (data.containsKey('utility_model')) {
       context.handle(
         _utilityModelMeta,
         utilityModel.isAcceptableOrUnknown(
           data['utility_model']!,
           _utilityModelMeta,
-        ),
-      );
-    }
-    if (data.containsKey('utility_acknowledged')) {
-      context.handle(
-        _utilityAcknowledgedMeta,
-        utilityAcknowledged.isAcceptableOrUnknown(
-          data['utility_acknowledged']!,
-          _utilityAcknowledgedMeta,
         ),
       );
     }
@@ -59515,13 +59513,13 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_tier'],
       )!,
+      claudeConfigDir: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}claude_config_dir'],
+      )!,
       utilityModel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}utility_model'],
-      )!,
-      utilityAcknowledged: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}utility_acknowledged'],
       )!,
       autoRoute: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
@@ -59576,8 +59574,8 @@ class GaiaSettingsTableData extends DataClass
   /// `{tier: agentId}`; null for the defaults.
   final String? tiersJson;
   final String lastTier;
+  final String claudeConfigDir;
   final String utilityModel;
-  final bool utilityAcknowledged;
   final bool autoRoute;
   final String routerRubric;
 
@@ -59597,8 +59595,8 @@ class GaiaSettingsTableData extends DataClass
     this.agentsJson,
     this.tiersJson,
     required this.lastTier,
+    required this.claudeConfigDir,
     required this.utilityModel,
-    required this.utilityAcknowledged,
     required this.autoRoute,
     required this.routerRubric,
     required this.commandsJson,
@@ -59621,8 +59619,8 @@ class GaiaSettingsTableData extends DataClass
       map['tiers_json'] = Variable<String>(tiersJson);
     }
     map['last_tier'] = Variable<String>(lastTier);
+    map['claude_config_dir'] = Variable<String>(claudeConfigDir);
     map['utility_model'] = Variable<String>(utilityModel);
-    map['utility_acknowledged'] = Variable<bool>(utilityAcknowledged);
     map['auto_route'] = Variable<bool>(autoRoute);
     map['router_rubric'] = Variable<String>(routerRubric);
     map['commands_json'] = Variable<String>(commandsJson);
@@ -59648,8 +59646,8 @@ class GaiaSettingsTableData extends DataClass
           ? const Value.absent()
           : Value(tiersJson),
       lastTier: Value(lastTier),
+      claudeConfigDir: Value(claudeConfigDir),
       utilityModel: Value(utilityModel),
-      utilityAcknowledged: Value(utilityAcknowledged),
       autoRoute: Value(autoRoute),
       routerRubric: Value(routerRubric),
       commandsJson: Value(commandsJson),
@@ -59675,10 +59673,8 @@ class GaiaSettingsTableData extends DataClass
       agentsJson: serializer.fromJson<String?>(json['agentsJson']),
       tiersJson: serializer.fromJson<String?>(json['tiersJson']),
       lastTier: serializer.fromJson<String>(json['lastTier']),
+      claudeConfigDir: serializer.fromJson<String>(json['claudeConfigDir']),
       utilityModel: serializer.fromJson<String>(json['utilityModel']),
-      utilityAcknowledged: serializer.fromJson<bool>(
-        json['utilityAcknowledged'],
-      ),
       autoRoute: serializer.fromJson<bool>(json['autoRoute']),
       routerRubric: serializer.fromJson<String>(json['routerRubric']),
       commandsJson: serializer.fromJson<String>(json['commandsJson']),
@@ -59699,8 +59695,8 @@ class GaiaSettingsTableData extends DataClass
       'agentsJson': serializer.toJson<String?>(agentsJson),
       'tiersJson': serializer.toJson<String?>(tiersJson),
       'lastTier': serializer.toJson<String>(lastTier),
+      'claudeConfigDir': serializer.toJson<String>(claudeConfigDir),
       'utilityModel': serializer.toJson<String>(utilityModel),
-      'utilityAcknowledged': serializer.toJson<bool>(utilityAcknowledged),
       'autoRoute': serializer.toJson<bool>(autoRoute),
       'routerRubric': serializer.toJson<String>(routerRubric),
       'commandsJson': serializer.toJson<String>(commandsJson),
@@ -59719,8 +59715,8 @@ class GaiaSettingsTableData extends DataClass
     Value<String?> agentsJson = const Value.absent(),
     Value<String?> tiersJson = const Value.absent(),
     String? lastTier,
+    String? claudeConfigDir,
     String? utilityModel,
-    bool? utilityAcknowledged,
     bool? autoRoute,
     String? routerRubric,
     String? commandsJson,
@@ -59736,8 +59732,8 @@ class GaiaSettingsTableData extends DataClass
     agentsJson: agentsJson.present ? agentsJson.value : this.agentsJson,
     tiersJson: tiersJson.present ? tiersJson.value : this.tiersJson,
     lastTier: lastTier ?? this.lastTier,
+    claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
     utilityModel: utilityModel ?? this.utilityModel,
-    utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
     commandsJson: commandsJson ?? this.commandsJson,
@@ -59759,12 +59755,12 @@ class GaiaSettingsTableData extends DataClass
           : this.agentsJson,
       tiersJson: data.tiersJson.present ? data.tiersJson.value : this.tiersJson,
       lastTier: data.lastTier.present ? data.lastTier.value : this.lastTier,
+      claudeConfigDir: data.claudeConfigDir.present
+          ? data.claudeConfigDir.value
+          : this.claudeConfigDir,
       utilityModel: data.utilityModel.present
           ? data.utilityModel.value
           : this.utilityModel,
-      utilityAcknowledged: data.utilityAcknowledged.present
-          ? data.utilityAcknowledged.value
-          : this.utilityAcknowledged,
       autoRoute: data.autoRoute.present ? data.autoRoute.value : this.autoRoute,
       routerRubric: data.routerRubric.present
           ? data.routerRubric.value
@@ -59791,8 +59787,8 @@ class GaiaSettingsTableData extends DataClass
           ..write('agentsJson: $agentsJson, ')
           ..write('tiersJson: $tiersJson, ')
           ..write('lastTier: $lastTier, ')
+          ..write('claudeConfigDir: $claudeConfigDir, ')
           ..write('utilityModel: $utilityModel, ')
-          ..write('utilityAcknowledged: $utilityAcknowledged, ')
           ..write('autoRoute: $autoRoute, ')
           ..write('routerRubric: $routerRubric, ')
           ..write('commandsJson: $commandsJson, ')
@@ -59813,8 +59809,8 @@ class GaiaSettingsTableData extends DataClass
     agentsJson,
     tiersJson,
     lastTier,
+    claudeConfigDir,
     utilityModel,
-    utilityAcknowledged,
     autoRoute,
     routerRubric,
     commandsJson,
@@ -59834,8 +59830,8 @@ class GaiaSettingsTableData extends DataClass
           other.agentsJson == this.agentsJson &&
           other.tiersJson == this.tiersJson &&
           other.lastTier == this.lastTier &&
+          other.claudeConfigDir == this.claudeConfigDir &&
           other.utilityModel == this.utilityModel &&
-          other.utilityAcknowledged == this.utilityAcknowledged &&
           other.autoRoute == this.autoRoute &&
           other.routerRubric == this.routerRubric &&
           other.commandsJson == this.commandsJson &&
@@ -59854,8 +59850,8 @@ class GaiaSettingsTableCompanion
   final Value<String?> agentsJson;
   final Value<String?> tiersJson;
   final Value<String> lastTier;
+  final Value<String> claudeConfigDir;
   final Value<String> utilityModel;
-  final Value<bool> utilityAcknowledged;
   final Value<bool> autoRoute;
   final Value<String> routerRubric;
   final Value<String> commandsJson;
@@ -59872,8 +59868,8 @@ class GaiaSettingsTableCompanion
     this.agentsJson = const Value.absent(),
     this.tiersJson = const Value.absent(),
     this.lastTier = const Value.absent(),
+    this.claudeConfigDir = const Value.absent(),
     this.utilityModel = const Value.absent(),
-    this.utilityAcknowledged = const Value.absent(),
     this.autoRoute = const Value.absent(),
     this.routerRubric = const Value.absent(),
     this.commandsJson = const Value.absent(),
@@ -59891,8 +59887,8 @@ class GaiaSettingsTableCompanion
     this.agentsJson = const Value.absent(),
     this.tiersJson = const Value.absent(),
     this.lastTier = const Value.absent(),
+    this.claudeConfigDir = const Value.absent(),
     this.utilityModel = const Value.absent(),
-    this.utilityAcknowledged = const Value.absent(),
     this.autoRoute = const Value.absent(),
     this.routerRubric = const Value.absent(),
     this.commandsJson = const Value.absent(),
@@ -59912,8 +59908,8 @@ class GaiaSettingsTableCompanion
     Expression<String>? agentsJson,
     Expression<String>? tiersJson,
     Expression<String>? lastTier,
+    Expression<String>? claudeConfigDir,
     Expression<String>? utilityModel,
-    Expression<bool>? utilityAcknowledged,
     Expression<bool>? autoRoute,
     Expression<String>? routerRubric,
     Expression<String>? commandsJson,
@@ -59931,9 +59927,8 @@ class GaiaSettingsTableCompanion
       if (agentsJson != null) 'agents_json': agentsJson,
       if (tiersJson != null) 'tiers_json': tiersJson,
       if (lastTier != null) 'last_tier': lastTier,
+      if (claudeConfigDir != null) 'claude_config_dir': claudeConfigDir,
       if (utilityModel != null) 'utility_model': utilityModel,
-      if (utilityAcknowledged != null)
-        'utility_acknowledged': utilityAcknowledged,
       if (autoRoute != null) 'auto_route': autoRoute,
       if (routerRubric != null) 'router_rubric': routerRubric,
       if (commandsJson != null) 'commands_json': commandsJson,
@@ -59953,8 +59948,8 @@ class GaiaSettingsTableCompanion
     Value<String?>? agentsJson,
     Value<String?>? tiersJson,
     Value<String>? lastTier,
+    Value<String>? claudeConfigDir,
     Value<String>? utilityModel,
-    Value<bool>? utilityAcknowledged,
     Value<bool>? autoRoute,
     Value<String>? routerRubric,
     Value<String>? commandsJson,
@@ -59972,8 +59967,8 @@ class GaiaSettingsTableCompanion
       agentsJson: agentsJson ?? this.agentsJson,
       tiersJson: tiersJson ?? this.tiersJson,
       lastTier: lastTier ?? this.lastTier,
+      claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
       utilityModel: utilityModel ?? this.utilityModel,
-      utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
       autoRoute: autoRoute ?? this.autoRoute,
       routerRubric: routerRubric ?? this.routerRubric,
       commandsJson: commandsJson ?? this.commandsJson,
@@ -60007,11 +60002,11 @@ class GaiaSettingsTableCompanion
     if (lastTier.present) {
       map['last_tier'] = Variable<String>(lastTier.value);
     }
+    if (claudeConfigDir.present) {
+      map['claude_config_dir'] = Variable<String>(claudeConfigDir.value);
+    }
     if (utilityModel.present) {
       map['utility_model'] = Variable<String>(utilityModel.value);
-    }
-    if (utilityAcknowledged.present) {
-      map['utility_acknowledged'] = Variable<bool>(utilityAcknowledged.value);
     }
     if (autoRoute.present) {
       map['auto_route'] = Variable<bool>(autoRoute.value);
@@ -60052,8 +60047,8 @@ class GaiaSettingsTableCompanion
           ..write('agentsJson: $agentsJson, ')
           ..write('tiersJson: $tiersJson, ')
           ..write('lastTier: $lastTier, ')
+          ..write('claudeConfigDir: $claudeConfigDir, ')
           ..write('utilityModel: $utilityModel, ')
-          ..write('utilityAcknowledged: $utilityAcknowledged, ')
           ..write('autoRoute: $autoRoute, ')
           ..write('routerRubric: $routerRubric, ')
           ..write('commandsJson: $commandsJson, ')
@@ -88594,8 +88589,8 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<String?> agentsJson,
       Value<String?> tiersJson,
       Value<String> lastTier,
+      Value<String> claudeConfigDir,
       Value<String> utilityModel,
-      Value<bool> utilityAcknowledged,
       Value<bool> autoRoute,
       Value<String> routerRubric,
       Value<String> commandsJson,
@@ -88614,8 +88609,8 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String?> agentsJson,
       Value<String?> tiersJson,
       Value<String> lastTier,
+      Value<String> claudeConfigDir,
       Value<String> utilityModel,
-      Value<bool> utilityAcknowledged,
       Value<bool> autoRoute,
       Value<String> routerRubric,
       Value<String> commandsJson,
@@ -88666,13 +88661,13 @@ class $$GaiaSettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get utilityModel => $composableBuilder(
-    column: $table.utilityModel,
+  ColumnFilters<String> get claudeConfigDir => $composableBuilder(
+    column: $table.claudeConfigDir,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<bool> get utilityAcknowledged => $composableBuilder(
-    column: $table.utilityAcknowledged,
+  ColumnFilters<String> get utilityModel => $composableBuilder(
+    column: $table.utilityModel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88756,13 +88751,13 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get utilityModel => $composableBuilder(
-    column: $table.utilityModel,
+  ColumnOrderings<String> get claudeConfigDir => $composableBuilder(
+    column: $table.claudeConfigDir,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get utilityAcknowledged => $composableBuilder(
-    column: $table.utilityAcknowledged,
+  ColumnOrderings<String> get utilityModel => $composableBuilder(
+    column: $table.utilityModel,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -88838,13 +88833,13 @@ class $$GaiaSettingsTableTableAnnotationComposer
   GeneratedColumn<String> get lastTier =>
       $composableBuilder(column: $table.lastTier, builder: (column) => column);
 
-  GeneratedColumn<String> get utilityModel => $composableBuilder(
-    column: $table.utilityModel,
+  GeneratedColumn<String> get claudeConfigDir => $composableBuilder(
+    column: $table.claudeConfigDir,
     builder: (column) => column,
   );
 
-  GeneratedColumn<bool> get utilityAcknowledged => $composableBuilder(
-    column: $table.utilityAcknowledged,
+  GeneratedColumn<String> get utilityModel => $composableBuilder(
+    column: $table.utilityModel,
     builder: (column) => column,
   );
 
@@ -88925,8 +88920,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String?> agentsJson = const Value.absent(),
                 Value<String?> tiersJson = const Value.absent(),
                 Value<String> lastTier = const Value.absent(),
+                Value<String> claudeConfigDir = const Value.absent(),
                 Value<String> utilityModel = const Value.absent(),
-                Value<bool> utilityAcknowledged = const Value.absent(),
                 Value<bool> autoRoute = const Value.absent(),
                 Value<String> routerRubric = const Value.absent(),
                 Value<String> commandsJson = const Value.absent(),
@@ -88943,8 +88938,8 @@ class $$GaiaSettingsTableTableTableManager
                 agentsJson: agentsJson,
                 tiersJson: tiersJson,
                 lastTier: lastTier,
+                claudeConfigDir: claudeConfigDir,
                 utilityModel: utilityModel,
-                utilityAcknowledged: utilityAcknowledged,
                 autoRoute: autoRoute,
                 routerRubric: routerRubric,
                 commandsJson: commandsJson,
@@ -88963,8 +88958,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String?> agentsJson = const Value.absent(),
                 Value<String?> tiersJson = const Value.absent(),
                 Value<String> lastTier = const Value.absent(),
+                Value<String> claudeConfigDir = const Value.absent(),
                 Value<String> utilityModel = const Value.absent(),
-                Value<bool> utilityAcknowledged = const Value.absent(),
                 Value<bool> autoRoute = const Value.absent(),
                 Value<String> routerRubric = const Value.absent(),
                 Value<String> commandsJson = const Value.absent(),
@@ -88981,8 +88976,8 @@ class $$GaiaSettingsTableTableTableManager
                 agentsJson: agentsJson,
                 tiersJson: tiersJson,
                 lastTier: lastTier,
+                claudeConfigDir: claudeConfigDir,
                 utilityModel: utilityModel,
-                utilityAcknowledged: utilityAcknowledged,
                 autoRoute: autoRoute,
                 routerRubric: routerRubric,
                 commandsJson: commandsJson,

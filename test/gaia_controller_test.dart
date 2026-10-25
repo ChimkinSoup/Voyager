@@ -1,8 +1,4 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
@@ -549,34 +545,14 @@ void main() {
     late List<String> calls;
 
     GaiaUtility utility(String tier) => GaiaUtility(
-      readKey: () async => 'k',
-      client: () => MockClient((request) async {
-        final system = request.body.contains('route') ? 'route' : 'title';
-        calls.add(system);
-        return http.Response(
-          jsonEncode({
-            'candidates': [
-              {
-                'content': {
-                  'parts': [
-                    {'text': system == 'route' ? tier : 'Generated title'},
-                  ],
-                },
-              },
-            ],
-          }),
-          200,
-        );
+      FakeUtilityRunner((job) {
+        final kind = job.startsWith('Route') ? 'route' : 'title';
+        calls.add(kind);
+        return kind == 'route' ? tier : 'Generated title';
       }),
     );
 
-    setUp(() {
-      calls = [];
-      main.settings = {
-        ...GaiaSettings.initial().toJson(),
-        'utilityAcknowledged': true,
-      };
-    });
+    setUp(() => calls = []);
 
     test(
       "the router picks a new chat's first tier, then never again",
@@ -596,6 +572,14 @@ void main() {
         expect((await main.chat()).tier, GaiaTier.deep);
       },
     );
+
+    test('a new chat starts the router ahead of its first message', () async {
+      final runner = FakeUtilityRunner((_) => 'quick');
+      await startCompanion(utility: GaiaUtility(runner));
+      final before = runner.warmed;
+      controller.newChat();
+      expect(runner.warmed, before + 1);
+    });
 
     test('a picked tier wins over the router, which is not asked', () async {
       await startCompanion(utility: utility('deep'));
@@ -625,6 +609,7 @@ void main() {
       await startCompanion(utility: utility('standard'));
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
       await controller.send('Hi');
+      await settle();
       final chat = await main.chat();
       await main.repository.upsertChat(chat.copyWith(title: 'Mine'));
       await main.store.setTitle(chat.id, 'Generated title', 'Hi');

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,6 @@ import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
-import 'package:voyager/features/gaia/gaia_secrets.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 const _uuid = Uuid();
@@ -44,7 +44,7 @@ class GaiaController extends ChangeNotifier {
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
-    GaiaUtility? utility,
+    this._utility,
     Future<String> Function()? clipboard,
   }) : _clipboard = clipboard ?? _readClipboard,
        _cliVersions =
@@ -54,8 +54,7 @@ class GaiaController extends ChangeNotifier {
                key: value.version,
            },
        debug = debug ?? GaiaDebug(),
-       sidebar = sidebar ?? GaiaSidebar(),
-       _utility = utility ?? GaiaUtility(readKey: GaiaSecrets().readUtilityKey);
+       sidebar = sidebar ?? GaiaSidebar();
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
@@ -70,8 +69,8 @@ class GaiaController extends ChangeNotifier {
   /// The Gaia window's sidebar: open or not, and its width.
   final GaiaSidebar sidebar;
 
-  /// The router and chat titles (§5.1).
-  final GaiaUtility _utility;
+  /// The router and chat titles (§5.1); null for none.
+  final GaiaUtility? _utility;
 
   /// The clipboard's text, for `$CLIPBOARD` (§9.2).
   final Future<String> Function() _clipboard;
@@ -200,13 +199,16 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> _applySettings(Map<String, Object?> settings) async {
     _notifyOnDone = settings['notifyOnDone'] != false;
-    _utility.apply(settings);
+    _utility?.apply(settings);
     agents = gaiaAgentsFromJson(settings['agents']);
     tiers = gaiaTiersFromJson(settings['tiers']);
     lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
     commands = gaiaCommandsFromJson(settings['commands']);
     keybinds = gaiaKeybindsFromJson(settings['keybinds']);
     notifyListeners();
+    if (_runners[kGaiaClaudeCodeAdapter] case final ClaudeCodeRunner claude) {
+      claude.setConfigDir(settings['claudeConfigDir'] as String? ?? '');
+    }
     final instructions = settings['gaiaMd'] as String? ?? '';
     await Future.wait([
       for (final runner in _runners.values)
@@ -330,14 +332,18 @@ class GaiaController extends ChangeNotifier {
     _window.hide();
   }
 
-  Future<void> _show(GaiaMode mode) => _window.show(mode, () {
-    layout = mode;
-    notifyListeners();
-  });
+  Future<void> _show(GaiaMode mode) {
+    if (currentChatId == null) _utility?.warm();
+    return _window.show(mode, () {
+      layout = mode;
+      notifyListeners();
+    });
+  }
 
   void newChat() {
     currentChatId = null;
     pickedTier = null;
+    _utility?.warm();
     notifyListeners();
   }
 
@@ -398,7 +404,7 @@ class GaiaController extends ChangeNotifier {
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
     if (chat == null && pickedTier == null) {
-      tier = await _utility.route(prompt) ?? tier;
+      tier = await _utility?.route(prompt) ?? tier;
     }
     pickedTier = null;
     final agent = agentFor(tier);
@@ -495,7 +501,7 @@ class GaiaController extends ChangeNotifier {
         final (older, recent) = gaiaSplitHandoff(unseen);
         final summary = older.isEmpty
             ? null
-            : await _utility.summarize(gaiaTranscriptText(older));
+            : await _utility?.summarize(gaiaTranscriptText(older));
         sent =
             '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$prompt';
       }
@@ -764,7 +770,7 @@ class GaiaController extends ChangeNotifier {
   Future<void> _retitle(String chatId, String prompt, String reply) async {
     final from = _chat(chatId)?.title;
     if (from == null) return;
-    final title = await _utility.title(prompt, reply);
+    final title = await _utility?.title(prompt, reply);
     final current = _chat(chatId);
     if (title == null || current == null || current.title != from) return;
     chats = [

@@ -2246,10 +2246,9 @@ class GaiaSettingsTable extends Table {
   TextColumn get tiersJson => text().nullable()();
   TextColumn get lastTier =>
       text().withDefault(const Constant('standard'))();
+  TextColumn get claudeConfigDir => text().withDefault(const Constant(''))();
   TextColumn get utilityModel =>
       text().withDefault(const Constant(kGaiaDefaultUtilityModel))();
-  BoolColumn get utilityAcknowledged =>
-      boolean().withDefault(const Constant(false))();
   BoolColumn get autoRoute => boolean().withDefault(const Constant(true))();
   TextColumn get routerRubric => text().withDefault(const Constant(''))();
 
@@ -2356,7 +2355,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 175;
+  int get schemaVersion => 176;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4284,6 +4283,22 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from >= 169 && from < 176) {
+        // The Claude account Gaia runs on (GAIA_HLD.md §6.1).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.claudeConfigDir,
+        );
+      }
+      if (from >= 172 && from < 176) {
+        // The utility model moved from Gemini to Claude Code (§5.1).
+        await customStatement(
+          "UPDATE gaia_settings_table SET utility_model = 'claude-haiku-5-5' "
+          "WHERE utility_model LIKE 'gemini%'",
+        );
+      }
       if (from >= 169 && from < 175) {
         // Gaia Phase 2: rebindable keys (GAIA_HLD.md §9.1, §15.1).
         await _addColumnIfNotExists(
@@ -4314,7 +4329,6 @@ class AppDatabase extends _$AppDatabase {
         // Gaia Phase 2: the utility model and router (GAIA_HLD.md §5.1, §7.2).
         for (final column in [
           gaiaSettingsTable.utilityModel,
-          gaiaSettingsTable.utilityAcknowledged,
           gaiaSettingsTable.autoRoute,
           gaiaSettingsTable.routerRubric,
         ]) {

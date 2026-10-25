@@ -16,7 +16,6 @@ import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
-import 'package:voyager/features/gaia/gaia_secrets.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 
@@ -429,6 +428,7 @@ class _ClaudeSetup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final setup = ref.watch(gaiaClaudeSetupProvider);
+    final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
     final (low, high) = kClaudeCodeTestedVersions;
     String v((int, int, int) version) =>
         '${version.$1}.${version.$2}.${version.$3}';
@@ -494,6 +494,93 @@ class _ClaudeSetup extends ConsumerWidget {
             child: LinearProgressIndicator(),
           ),
         },
+        if (settings != null) ...[
+          const SizedBox(height: 8),
+          _ClaudeConfigDir(settings: settings),
+        ],
+      ],
+    );
+  }
+}
+
+/// Which Claude account Gaia runs on (§6.1): a `CLAUDE_CONFIG_DIR`, until
+/// accounts can be switched in Gaia itself.
+class _ClaudeConfigDir extends ConsumerStatefulWidget {
+  const _ClaudeConfigDir({required this.settings});
+
+  final GaiaSettings settings;
+
+  @override
+  ConsumerState<_ClaudeConfigDir> createState() => _ClaudeConfigDirState();
+}
+
+class _ClaudeConfigDirState extends ConsumerState<_ClaudeConfigDir> {
+  final _dir = TextEditingController();
+  String? _saved;
+
+  @override
+  void dispose() {
+    _dir.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = widget.settings;
+    // As GAIA.md's field: loaded once, and again on a change from another
+    // device while nothing here is unsaved.
+    if (_saved == null ||
+        (_dir.text == _saved && _saved != settings.claudeConfigDir)) {
+      _saved = settings.claudeConfigDir;
+      _dir.text = settings.claudeConfigDir;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: VoyagerTextField(
+                controller: _dir,
+                decoration: const InputDecoration(
+                  labelText: 'Config folder',
+                  hintText: r'e.g. C:\Users\you\.claude-1',
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GlassButton(
+              onPressed: _dir.text.trim() == _saved
+                  ? null
+                  : () async {
+                      final dir = _dir.text.trim();
+                      await ref
+                          .read(gaiaRepositoryProvider)
+                          .upsertSettings(
+                            settings.copyWith(claudeConfigDir: dir),
+                          );
+                      setState(() {
+                        _saved = dir;
+                        _dir.text = dir;
+                      });
+                    },
+              label: 'Save',
+              dense: true,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "The CLAUDE_CONFIG_DIR of the login Gaia uses, for Gaia's runs "
+          'only. Empty for the one Voyager was started with. Chats started '
+          "on another folder can't be continued. Synced to all your devices.",
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
@@ -1001,8 +1088,7 @@ class _AddAgentDialogState extends State<_AddAgentDialog> {
   }
 }
 
-/// The utility model (§5.1): a Gemini API key on this device, the model,
-/// the terms it runs under, and the router (§7.2) it powers.
+/// The utility model (§5.1): the model, and the router (§7.2) it powers.
 class _UtilitySection extends ConsumerStatefulWidget {
   const _UtilitySection({required this.settings});
 
@@ -1013,7 +1099,6 @@ class _UtilitySection extends ConsumerStatefulWidget {
 }
 
 class _UtilitySectionState extends ConsumerState<_UtilitySection> {
-  final _key = TextEditingController();
   final _model = TextEditingController();
   final _rubric = TextEditingController();
   String? _savedModel;
@@ -1021,7 +1106,6 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
 
   @override
   void dispose() {
-    _key.dispose();
     _model.dispose();
     _rubric.dispose();
     super.dispose();
@@ -1029,12 +1113,6 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
 
   Future<void> _save(GaiaSettings updated) =>
       ref.read(gaiaRepositoryProvider).upsertSettings(updated);
-
-  Future<void> _saveKey(String? key) async {
-    await GaiaSecrets().writeUtilityKey(key);
-    _key.clear();
-    ref.invalidate(gaiaUtilityKeySavedProvider);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1056,7 +1134,6 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
       _savedRubric = settings.routerRubric;
       _rubric.text = settings.routerRubric;
     }
-    final keySaved = ref.watch(gaiaUtilityKeySavedProvider).valueOrNull;
     final dirty =
         _model.text.trim() != _savedModel || _rubric.text != _savedRubric;
     return Column(
@@ -1065,55 +1142,12 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
         Text('Utility model', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
-          'A fast Gemini model on an API key: it picks the tier for a new '
-          "chat and writes chat titles. Without one, a new chat starts on "
-          'the tier you last used and is titled by its first line.',
+          'A fast Claude model on Claude Code, on the same login as your '
+          'chats: it picks the tier for a new chat, writes chat titles and '
+          'sums up a chat for another agent. No API key needed.',
           style: muted,
         ),
         const SizedBox(height: 8),
-        if (isWindows) ...[
-          Row(
-            children: [
-              Expanded(
-                child: VoyagerTextField(
-                  controller: _key,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Gemini API key',
-                    hintText: keySaved == true
-                        ? 'Saved on this device'
-                        : 'From Google AI Studio',
-                    isDense: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              const SizedBox(width: 8),
-              GlassButton(
-                onPressed: _key.text.trim().isEmpty
-                    ? null
-                    : () => _saveKey(_key.text),
-                label: 'Save key',
-                dense: true,
-              ),
-              if (keySaved == true) ...[
-                const SizedBox(width: 8),
-                GlassButton(
-                  onPressed: () => _saveKey(null),
-                  label: 'Remove',
-                  dense: true,
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Kept on this computer only, encrypted to your Windows account. '
-            'It is never synced.',
-            style: muted,
-          ),
-          const SizedBox(height: 8),
-        ],
         VoyagerTextField(
           controller: _model,
           decoration: const InputDecoration(
@@ -1122,21 +1156,6 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
             isDense: true,
           ),
           onChanged: (_) => setState(() {}),
-        ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: settings.utilityAcknowledged,
-          title: const Text(
-            'My key is on a paid tier, or I accept that Google may use these '
-            'prompts',
-          ),
-          subtitle: const Text(
-            'The utility model reads every chat. On the free tier, Google may '
-            'use what it reads to improve its products.',
-          ),
-          onChanged: (value) =>
-              _save(settings.copyWith(utilityAcknowledged: value)),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

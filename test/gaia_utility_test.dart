@@ -1,167 +1,60 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
-import 'package:voyager/features/gaia/gaia_secrets.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
-import 'package:voyager/features/gaia/utility/gemini_api.dart';
 
-/// The utility model (GAIA_HLD.md §5.1): the Gemini API's documented
-/// `generateContent` shapes, the router and titles on top of it, and the
-/// device-only key store.
+import 'fakes/gaia_fakes.dart';
 
-/// A `generateContent` reply with [text], as the API documents it.
-String _reply(String text, {bool withThought = false}) => jsonEncode({
-  'candidates': [
-    {
-      'content': {
-        'role': 'model',
-        'parts': [
-          if (withThought) {'text': 'Let me think.', 'thought': true},
-          {'text': text},
-        ],
-      },
-      'finishReason': 'STOP',
-    },
-  ],
-  'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 1},
-});
-
-String _error(int code, String status, String message) => jsonEncode({
-  'error': {'code': code, 'message': message, 'status': status},
-});
-
+/// The utility model (GAIA_HLD.md §5.1): the router, titles and summaries
+/// on Haiku through Claude Code.
+///
+/// The last test runs the real CLI, skipped unless GAIA_CLI_CHECK=1 (as
+/// test/gaia_cli_contract_test.dart); GAIA_CLAUDE_CONFIG_DIR picks the
+/// account. It makes two tiny Haiku calls.
 void main() {
-  group('generateContent', () {
-    test("a reply's text, past thought parts", () {
-      expect(
-        parseGeminiResponse(200, _reply('deep', withThought: true)),
-        'deep',
-      );
-    });
-
-    test('errors by status', () {
-      GeminiFailure failure(int status, String body) {
-        try {
-          parseGeminiResponse(status, body);
-        } on GeminiApiException catch (error) {
-          return error.failure;
-        }
-        fail('no failure');
-      }
-
-      expect(
-        failure(400, _error(400, 'INVALID_ARGUMENT', 'API key not valid.')),
-        GeminiFailure.badKey,
-      );
-      expect(
-        failure(429, _error(429, 'RESOURCE_EXHAUSTED', 'Quota exceeded.')),
-        GeminiFailure.exhausted,
-      );
-      expect(failure(503, 'Service Unavailable'), GeminiFailure.other);
-      expect(failure(200, '{"candidates":[]}'), GeminiFailure.other);
-    });
-
-    test(
-      'the request: model in the path, key in a header, never the URL',
-      () async {
-        late http.Request sent;
-        final api = GeminiApi(
-          key: 'k-123',
-          model: 'gemini-3.6-flash',
-          client: MockClient((request) async {
-            sent = request;
-            return http.Response(_reply('ok'), 200);
-          }),
-        );
-        expect(await api.generate(system: 'Be brief.', prompt: 'Hi'), 'ok');
-        expect(
-          sent.url.path,
-          endsWith('/models/gemini-3.6-flash:generateContent'),
-        );
-        expect(sent.url.query, isEmpty);
-        expect(sent.headers['x-goog-api-key'], 'k-123');
-        final body = jsonDecode(sent.body) as Map;
-        expect(body['systemInstruction'], {
-          'parts': [
-            {'text': 'Be brief.'},
-          ],
-        });
-      },
-    );
-  });
-
   group('router and titles', () {
-    GaiaUtility utility({
-      String? key = 'k',
-      bool acknowledged = true,
-      required String Function(String system) answer,
+    late FakeUtilityRunner runner;
+
+    GaiaUtility utility(
+      String Function(String job) answer, {
+      Map<String, Object?> settings = const {},
     }) {
-      final utility = GaiaUtility(
-        readKey: () async => key,
-        client: () => MockClient((request) async {
-          final body = jsonDecode(request.body) as Map;
-          final system =
-              ((body['systemInstruction'] as Map)['parts'] as List).single
-                  as Map;
-          return http.Response(_reply(answer(system['text'] as String)), 200);
-        }),
-      );
-      utility.apply({
-        ...GaiaSettings.initial().toJson(),
-        'utilityAcknowledged': acknowledged,
-      });
-      return utility;
+      runner = FakeUtilityRunner(answer);
+      return GaiaUtility(runner)
+        ..apply({...GaiaSettings.initial().toJson(), ...settings});
     }
 
     test('the router names a tier, with the default rubric', () async {
-      String? system;
-      final tier = await utility(
-        answer: (s) {
-          system = s;
-          return 'Deep.';
-        },
-      ).route('Prove this theorem');
+      final tier = await utility((_) => 'Deep.').route('Prove this theorem');
       expect(tier, GaiaTier.deep);
-      expect(system, contains(kGaiaDefaultRouterRubric));
+      expect(runner.jobs.single, contains(kGaiaDefaultRouterRubric));
     });
 
-    test('off without the terms acknowledged, or a key', () async {
-      expect(
-        await utility(acknowledged: false, answer: (_) => 'quick').route('x'),
-        isNull,
+    test('the model and account come from the settings', () {
+      utility(
+        (_) => '',
+        settings: {'utilityModel': ' ', 'claudeConfigDir': r'C:\c1'},
       );
-      expect(
-        await utility(key: null, answer: (_) => 'quick').route('x'),
-        isNull,
-      );
+      expect(runner.model, kGaiaDefaultUtilityModel);
+      expect(runner.configDir, r'C:\c1');
     });
 
-    test('auto-route off leaves the router out, titles on', () async {
-      final u = utility(answer: (_) => 'quick')
-        ..apply({
-          ...GaiaSettings.initial().toJson(),
-          'utilityAcknowledged': true,
-          'autoRoute': false,
-        });
+    test('auto-route off leaves the router out, and unwarmed', () async {
+      final u = utility((_) => 'quick', settings: {'autoRoute': false});
+      u.warm();
       expect(await u.route('x'), isNull);
+      expect(runner.warmed, 0);
       expect(await u.title('x', 'y'), 'quick');
     });
 
     test('a failed call is a null, never an error', () async {
-      final u =
-          GaiaUtility(
-            readKey: () async => 'k',
-            client: () => MockClient((_) async => http.Response('nope', 500)),
-          )..apply({
-            ...GaiaSettings.initial().toJson(),
-            'utilityAcknowledged': true,
-          });
+      final u = utility((_) => throw GaiaRunException('Not logged in'));
       expect(await u.route('x'), isNull);
       expect(await u.title('x', 'y'), isNull);
+      expect(await u.summarize('x'), isNull);
     });
 
     test('answers', () {
@@ -175,23 +68,37 @@ void main() {
   });
 
   test(
-    'the key round-trips through DPAPI and is not stored in the clear',
-    skip: !Platform.isWindows,
+    'FRAGILE(cli): Haiku answers through Claude Code, warm and cold',
+    skip: Platform.environment['GAIA_CLI_CHECK'] != '1',
+    timeout: const Timeout(Duration(minutes: 2)),
     () async {
-      final dir = Directory.systemTemp.createTempSync('gaia_secrets_');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final file = File('${dir.path}/key.bin');
-      final secrets = GaiaSecrets(file: () async => file);
+      // Kept between runs: the CLI may still be exiting when the test ends.
+      final dir = Directory('${Directory.systemTemp.path}/gaia_utility_check');
+      final runner = ClaudeUtilityRunner(workingDirectory: dir.path)
+        ..configure(
+          model: kGaiaDefaultUtilityModel,
+          configDir: Platform.environment['GAIA_CLAUDE_CONFIG_DIR'] ?? '',
+        );
+      final utility = GaiaUtility(runner);
 
-      expect(await secrets.readUtilityKey(), isNull);
-      await secrets.writeUtilityKey('  AIza-secret  ');
-      expect(await secrets.readUtilityKey(), 'AIza-secret');
+      await runner.warm();
+      // Long enough for the CLI to start.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      final watch = Stopwatch()..start();
       expect(
-        utf8.decode(file.readAsBytesSync(), allowMalformed: true),
-        isNot(contains('AIza-secret')),
+        await utility.route('What is the capital of France?'),
+        GaiaTier.quick,
       );
-      await secrets.writeUtilityKey(null);
-      expect(file.existsSync(), isFalse);
+      // ignore: avoid_print
+      print('GAIA-CLI utility warm route: ${watch.elapsedMilliseconds} ms');
+
+      expect(
+        await runner.generate(
+          'Reply with the word in <input>, in capitals.',
+          'gaia',
+        ),
+        'GAIA',
+      );
     },
   );
 }

@@ -41,13 +41,19 @@ class ClaudeCodeSetup {
   return null;
 }
 
-/// Runs `claude --version`, then `claude auth status`. Neither costs tokens.
-Future<ClaudeCodeSetup> probeClaudeCode() async {
+/// Runs `claude --version`, then `claude auth status` on [configDir]'s
+/// account (§6.1). Neither costs tokens.
+Future<ClaudeCodeSetup> probeClaudeCode({String configDir = ''}) async {
   final version = await claudeCodeVersion();
   if (version == null) return const ClaudeCodeSetup();
   try {
     // Through cmd, as the runner: an npm install's `claude` is a .cmd shim.
-    final result = await Process.run('cmd', ['/c', 'claude', 'auth', 'status']);
+    final result = await Process.run(
+      'cmd',
+      ['/c', 'claude', 'auth', 'status'],
+      environment: claudeEnvironment(configDir),
+      includeParentEnvironment: false,
+    );
     final status = parseClaudeAuthStatus(result.stdout as String);
     return ClaudeCodeSetup(
       version: version,

@@ -8,8 +8,10 @@ keeps one synced chat history across desktop and phone.
 Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
-in. Phases 0, 1 and 2 are implemented (§19); Phase 2's Gemini CLI adapter
-is deferred until a Gemini login works. The windowing and process decision is in
+in. Phases 0, 1 and 2 are implemented (§19). **Gemini is skipped
+completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
+utility model; the Gemini mentions below are the design for when it comes
+back (§19). The windowing and process decision is in
 `docs/adr/004-floater-windows-and-companion-process.md`, amended 2026-10-24 for
 Gaia's data ownership (§3.2). Decisions and remaining questions are in §20.
 
@@ -196,23 +198,23 @@ streams JSONL, resumes sessions, and speaks MCP:
 |---|---|---|---|
 | Claude Code | `claude` login (subscription) | `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --model <m>` | `--resume <session>` |
 | Codex | ChatGPT login (`codex login`) or API key | `codex exec --json`, prompt on stdin (`codex app-server` is re-evaluated in Phase 4, for approvals) | `codex exec resume <id>` |
-| Gemini CLI | Google login or API key | `gemini -p --output-format stream-json --model <m>` | `--resume <session>` |
-| Gemini API | AI Studio API key | direct HTTPS streaming | Gaia replays history |
+| Gemini CLI (skipped for now) | Google login or API key | `gemini -p --output-format stream-json --model <m>` | `--resume <session>` |
+| Gemini API (skipped for now) | AI Studio API key | direct HTTPS streaming | Gaia replays history |
 
-The **direct Gemini API adapter** exists because a CLI cold start takes
-seconds. Gaia's small internal jobs need sub-second answers: the tier router
-(§7.2), chat titles, the memory curator (§11) and compaction summaries. Gemini
-Flash on an API key is the cheapest fast option. Any API-key provider can fill
-this "utility model" slot.
+Gaia's small internal jobs need fast answers: the tier router (§7.2), chat
+titles, the memory curator (§11) and compaction summaries. This **utility
+model** is Haiku on the Claude Code CLI, on the same login as Gaia's Claude
+chats, so it needs no API key (decided 2026-10-25, replacing the Gemini API
+adapter first built for it). Each job is a fresh `claude -p --safe-mode
+--tools "" --no-session-persistence` with a fixed system prompt, the job's
+instructions and its input in the one message, so no job sees another's.
 
-The utility model reads every chat, including Voyager data pulled in by read
-tools. On Gemini's free tier, Google may use prompts to improve its products.
-So the slot takes a paid-tier key or another API provider. A free-tier key
-is allowed only after an explicit "Google may use these prompts"
-acknowledgement in settings. The key is entered once per desktop on the Gaia page (§18 Secrets), and
-the companion reads it only when a job runs, so it never crosses the pipe.
-The router waits at most 2 s before the last used tier takes the message.
-With no utility model configured, Gaia degrades:
+A CLI cold start takes about a second before the model is asked, so Gaia
+starts the next job's process ahead of time when a new chat is opened (and
+drops it after 5 idle minutes). A warm route measured 0.65–1.1 s on 2.1.310.
+The router waits at most 2 s before the last used tier takes the message;
+titles and summaries run after a reply, where a cold start doesn't matter.
+With no utility model (Claude Code missing or logged out), Gaia degrades:
 no auto-router (the last-used tier applies), titles come from the first line
 of the first message, and the curator (§11) is off.
 
@@ -353,6 +355,13 @@ existing `CLAUDE_CONFIG_DIR`, with setting sources limited as in §5.2. Codex
 gets a Gaia-owned `CODEX_HOME` per account (§5.2), and Gemini works the same
 way.
 
+Until Phase 7, one synced setting stands in: the **Claude config folder** on
+the Setup tab, the `CLAUDE_CONFIG_DIR` every Gaia Claude run gets (chats,
+the setup check, the utility model). Empty, Gaia uses whatever Voyager was
+started with. The user's terminal setup is untouched, since it is set only
+on Gaia's own spawns. A chat started under one folder can't be resumed
+under another until Phase 7's session copy.
+
 ### 6.2 Usage sources
 
 No vendor documents an API for subscription usage. Each provider gets a
@@ -482,7 +491,7 @@ Precedence, highest first:
 2. **Tier picker** clicked for this message.
 3. **The chat's current tier.** A chat keeps the tier it last used.
 4. **Auto-router**, only for the first message of a new chat when auto is on.
-   The utility model classifies the prompt in about 300 ms, using a GAIA-owned
+   The utility model classifies the prompt in about a second, using a GAIA-owned
    rubric the user can edit.
 5. **Last used tier globally** (new chat, auto off).
 
@@ -1158,7 +1167,9 @@ Other additions:
   Windows they're encrypted to the user's account with DPAPI (decided
   2026-10-25, over the Secure Notes vault, which would leave utility jobs
   off whenever the vault is locked). Android gets Keystore storage with the
-  phone client (Phase 6).
+  phone client (Phase 6). No API key is used yet: the DPAPI store was built
+  for the Gemini key and removed with it, to come back with the first
+  API-key provider.
 
 ---
 
@@ -1168,7 +1179,7 @@ Other additions:
 |---|---|
 | 0 | `--companion` launch + mutex, IPC pipe (with DACL and client check), window modes (small/large floater, Gaia window; §3.3), exclude-from-capture, Claude Code adapter (with fixtures and version range), chat via the main instance, Abort (runs) |
 | 1 | Gaia drift tables + sync, Gaia page (chats, settings, setup checklist), GAIA.md, notifications/background runs, update drain |
-| 2 | Agents/tiers/router, Codex adapter, Gemini API utility model, cross-vendor handoff, commands, keybinds. **Gemini CLI adapter deferred** (blocker below) |
+| 2 | Agents/tiers/router, Codex adapter, Haiku utility model on Claude Code, cross-vendor handoff, commands, keybinds. **Gemini skipped** (below) |
 | 3 | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
 | 4 | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
 | 5 | Memory + curator + inbox |
@@ -1179,12 +1190,13 @@ Other additions:
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
 
-**Blocker: Gemini CLI adapter (moved out of Phase 2, 2026-10-25).** Neither
-the Google login nor an API key works with the installed Gemini CLI
-(0.65.0), so no real `stream-json` fixtures can be recorded and the adapter
-can't be built to §5.1's standard. It comes back once a login works: record
-fixtures, then add it beside the Codex adapter. Until then Gemini reaches
-Gaia only through the Gemini API adapter.
+**Gemini skipped completely for now (2026-10-25).** Neither the Google
+login nor an API key works with the installed Gemini CLI (0.65.0), so no
+real `stream-json` fixtures can be recorded and the CLI adapter can't be
+built to §5.1's standard. The Gemini API utility model was built, then
+removed for Haiku on Claude Code (§5.1), which needs no key. Gemini comes
+back once a login works: record fixtures, then add the CLI adapter beside
+the Codex one.
 
 Phase 2 as built: a native session that missed turns gets them as a
 Gaia-rendered transcript before the user's message, newest 60k characters
@@ -1244,8 +1256,9 @@ Decided in the second review (2026-10-24):
 - Remote commands come only from paired devices and are signed (§12.2).
 - Gaia tools are served over a stdio MCP shim, with no localhost port (§5.3).
   The pipe is restricted to the user and checked by PID (§3.2).
-- The utility model needs a paid-tier key, or an acknowledged free-tier one
-  (§5.1).
+- The utility model is Haiku on Claude Code, on the user's own login, so
+  no API key or third-party data terms are involved (§5.1, revised
+  2026-10-25).
 - `voyager.*` reads are off by default in workspace chats. Vault content is
   never returned (§5.3).
 - Native sessions are tracked per device and caught up with a delta preamble

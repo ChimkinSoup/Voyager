@@ -17,6 +17,19 @@ const _uuid = Uuid();
 /// a subscription login onto API billing.
 const _strippedEnvironment = {'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'};
 
+/// The CLI's environment: Voyager's own less [_strippedEnvironment], with
+/// [configDir] as `CLAUDE_CONFIG_DIR` (the account, §6.1) when it's set.
+Map<String, String> claudeEnvironment(String configDir) {
+  final dir = configDir.trim();
+  return {
+    for (final MapEntry(:key, :value) in Platform.environment.entries)
+      if (!_strippedEnvironment.contains(key.toUpperCase()) &&
+          !(dir.isNotEmpty && key.toUpperCase() == 'CLAUDE_CONFIG_DIR'))
+        key: value,
+    if (dir.isNotEmpty) 'CLAUDE_CONFIG_DIR': dir,
+  };
+}
+
 const _idleTimeout = Duration(minutes: 10);
 const _maxLive = 4;
 
@@ -43,6 +56,9 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
   /// rather than the text itself, which `cmd /c` would mangle.
   final String instructionsFile;
   var _instructions = '';
+
+  /// The account's `CLAUDE_CONFIG_DIR` (§6.1); empty for Voyager's own.
+  var _configDir = '';
 
   /// Every line the CLI prints, before it's parsed: for the CLI contract
   /// check (`qa/harness/gaia_cli_check.ps1`).
@@ -102,6 +118,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       process = await _ClaudeProcess.start(
         workingDirectory: workingDirectory,
         model: model,
+        configDir: _configDir,
         onLine: onLine,
         sessionArgs: [
           if (_instructions.trim().isNotEmpty) ...[
@@ -145,6 +162,18 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       await file.parent.create(recursive: true);
       await file.writeAsString(text);
     }
+    _releaseIdle();
+  }
+
+  /// Another account (§6.1): as for GAIA.md, processes between turns are
+  /// let go. A chat started on the old one can't be resumed on the new.
+  void setConfigDir(String dir) {
+    if (dir == _configDir) return;
+    _configDir = dir;
+    _releaseIdle();
+  }
+
+  void _releaseIdle() {
     for (final chatId in [..._live.keys]) {
       if (!_live[chatId]!.inTurn) unawaited(_live.remove(chatId)!.kill());
     }
@@ -193,15 +222,11 @@ class _ClaudeProcess {
   static Future<_ClaudeProcess> start({
     required String workingDirectory,
     required String model,
+    required String configDir,
     required void Function(String line)? onLine,
     required List<String> sessionArgs,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
-    final environment = {
-      for (final entry in Platform.environment.entries)
-        if (!_strippedEnvironment.contains(entry.key.toUpperCase()))
-          entry.key: entry.value,
-    };
     // Through cmd: an npm install's `claude` is a .cmd shim, which only a
     // shell can run.
     return _ClaudeProcess._(
@@ -223,7 +248,7 @@ class _ClaudeProcess {
           ...sessionArgs,
         ],
         workingDirectory: workingDirectory,
-        environment: environment,
+        environment: claudeEnvironment(configDir),
         includeParentEnvironment: false,
       ),
       model,

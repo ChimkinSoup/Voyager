@@ -22,8 +22,8 @@ enum GaiaMessageStatus {
 const kGaiaClaudeCodeAdapter = 'claude_code';
 const kGaiaCodexAdapter = 'codex';
 
-/// The utility model's default (§5.1): Gemini Flash, the cheapest fast one.
-const kGaiaDefaultUtilityModel = 'gemini-3.6-flash';
+/// The utility model's default (§5.1): Haiku, the fastest Claude.
+const kGaiaDefaultUtilityModel = 'claude-haiku-5-5';
 
 /// What the router (§7.2) goes by until the user edits it.
 const kGaiaDefaultRouterRubric =
@@ -470,8 +470,8 @@ class GaiaSettings extends SoftDeletable {
     this.agents = kGaiaDefaultAgents,
     this.tiers = kGaiaDefaultTiers,
     this.lastTier = GaiaTier.standard,
+    this.claudeConfigDir = '',
     this.utilityModel = kGaiaDefaultUtilityModel,
-    this.utilityAcknowledged = false,
     this.autoRoute = true,
     this.routerRubric = '',
     this.commands = const [],
@@ -500,13 +500,12 @@ class GaiaSettings extends SoftDeletable {
   /// The tier a new chat starts on while there's no router (§7.2).
   final GaiaTier lastTier;
 
-  /// The utility model (§5.1), on the API key saved on each device.
-  final String utilityModel;
+  /// The `CLAUDE_CONFIG_DIR` Gaia's Claude Code runs use, which picks the
+  /// account (§6.1); empty for the one Voyager was started with.
+  final String claudeConfigDir;
 
-  /// The user accepts the utility slot's terms: their key is on a paid
-  /// tier, or Google may use the prompts (§5.1). Off, there's no utility
-  /// model.
-  final bool utilityAcknowledged;
+  /// The utility model (§5.1), on Claude Code.
+  final String utilityModel;
 
   /// The router picks a new chat's first tier (§7.2).
   final bool autoRoute;
@@ -532,8 +531,8 @@ class GaiaSettings extends SoftDeletable {
     List<GaiaAgent>? agents,
     Map<GaiaTier, String>? tiers,
     GaiaTier? lastTier,
+    String? claudeConfigDir,
     String? utilityModel,
-    bool? utilityAcknowledged,
     bool? autoRoute,
     String? routerRubric,
     List<GaiaCommand>? commands,
@@ -547,8 +546,8 @@ class GaiaSettings extends SoftDeletable {
     agents: agents ?? this.agents,
     tiers: tiers ?? this.tiers,
     lastTier: lastTier ?? this.lastTier,
+    claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
     utilityModel: utilityModel ?? this.utilityModel,
-    utilityAcknowledged: utilityAcknowledged ?? this.utilityAcknowledged,
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
     commands: commands ?? this.commands,
@@ -562,8 +561,8 @@ class GaiaSettings extends SoftDeletable {
     'agents': [for (final agent in agents) agent.toJson()],
     'tiers': gaiaTiersToJson(tiers),
     'lastTier': lastTier.name,
+    'claudeConfigDir': claudeConfigDir,
     'utilityModel': utilityModel,
-    'utilityAcknowledged': utilityAcknowledged,
     'autoRoute': autoRoute,
     'routerRubric': routerRubric,
     'commands': [for (final command in commands) command.toJson()],
