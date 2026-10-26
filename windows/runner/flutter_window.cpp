@@ -196,13 +196,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
     case WM_SYSCOMMAND:
-      // A lone Alt press-and-release (lparam 0; Alt+Space carries ' ') would
-      // enter keyboard menu mode, which this frameless window has no menu to
-      // show for. The mode is invisible but holds mouse capture on this
-      // window, so the Flutter view gets no hover until the next click or
-      // key. The global hotkeys are all Ctrl+Alt+<key>: their letter goes to
-      // the hotkey, and the floater they open sees only Alt coming up.
-      if ((wparam & 0xFFF0) == SC_KEYMENU && lparam == 0) {
+      // A lone Alt press-and-release (lparam 0) would enter keyboard menu
+      // mode, which this frameless window has no menu to show for. The mode
+      // is invisible but holds mouse capture on this window, so the Flutter
+      // view gets no hover until the next click or key. The global hotkeys
+      // are all Ctrl+Alt+<key>: their letter goes to the hotkey, and the
+      // floater they open sees only Alt coming up. Alt+Space (lparam ' ')
+      // would pop the Restore/Move/Size/Close system menu, which this
+      // window's own chrome replaces. The taskbar's right-click menu comes
+      // by another route and is unaffected.
+      if ((wparam & 0xFFF0) == SC_KEYMENU) {
         return 0;
       }
       break;
