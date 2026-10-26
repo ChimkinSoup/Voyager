@@ -1170,6 +1170,14 @@ void main() {
       },
     );
 
+    test('tickers run only while the window is on screen', () async {
+      expect(controller.onScreen.value, isFalse);
+      await press('small');
+      expect(controller.onScreen.value, isTrue);
+      await press('small');
+      expect(controller.onScreen.value, isFalse);
+    });
+
     test('A switches the large floater to small', () async {
       await press('large');
       await press('small');

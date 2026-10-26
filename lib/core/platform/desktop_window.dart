@@ -19,6 +19,11 @@ const kMainWindowMinimumSize = Size(720, 520);
 /// both — a hidden window reports no lifecycle change on Windows.
 final mainContentOnScreen = ValueNotifier<bool>(true);
 
+/// True while one other app's window covers all of the main window, as an
+/// app maximised over it does. Windows reports no lifecycle change for that
+/// either. Kept by the hotkeys feature's `MainWindowCoverWatch`.
+final mainWindowCovered = ValueNotifier<bool>(false);
+
 /// Set by a start hidden in the tray, where the window has never been shown:
 /// its first reveal maximizes it, as a normal launch does.
 var maximizeOnFirstShow = false;

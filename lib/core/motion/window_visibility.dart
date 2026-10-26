@@ -28,6 +28,11 @@ import 'package:window_manager/window_manager.dart';
 /// desktop it means only that the window lost focus, and a background that
 /// froze the moment another window was clicked would sit visibly stuck beside
 /// it. Only the states where there is nothing to look at stop the clock.
+///
+/// Covered counts as not on screen: neither signal says when another app is
+/// maximised over the window, and the background drew a full window of
+/// shader at 60fps behind it (~12% of the GPU, measured). Windows sends
+/// nothing for that either; see [mainWindowCovered].
 mixin WindowVisibility<T extends StatefulWidget> on State<T>
     implements WindowListener {
   AppLifecycleListener? _lifecycle;
@@ -37,7 +42,10 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
 
   /// Whether the window is on screen. Gate the animation's timer on this.
   bool get windowVisible =>
-      _lifecycleVisible && !_minimized && mainContentOnScreen.value;
+      _lifecycleVisible &&
+      !_minimized &&
+      !mainWindowCovered.value &&
+      mainContentOnScreen.value;
 
   /// Called when [windowVisible] flips. Start or stop the timer here.
   @protected
@@ -53,6 +61,7 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
     super.initState();
     _lifecycle = AppLifecycleListener(onStateChange: _handleLifecycleState);
     mainContentOnScreen.addListener(_handleContentOnScreen);
+    mainWindowCovered.addListener(_handleContentOnScreen);
     if (desktopWindowChromeActive) {
       windowManager.addListener(this);
     }
@@ -62,8 +71,9 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
     _update(() => _lifecycleVisible = _isVisible(state));
   }
 
-  // Hidden to the tray or lent to a floater: [windowVisible] reads the value
-  // itself, so there is nothing to record — only the edge to report.
+  // Hidden to the tray, lent to a floater or covered: [windowVisible] reads
+  // the value itself, so there is nothing to record — only the edge to
+  // report.
   void _handleContentOnScreen() => onWindowVisibilityChanged();
 
   @override
@@ -97,6 +107,7 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
     _lifecycle?.dispose();
     _lifecycle = null;
     mainContentOnScreen.removeListener(_handleContentOnScreen);
+    mainWindowCovered.removeListener(_handleContentOnScreen);
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
     }

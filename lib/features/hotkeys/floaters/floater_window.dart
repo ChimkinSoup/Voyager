@@ -1,4 +1,5 @@
 import 'dart:ffi' hide Size;
+import 'dart:math' as math;
 
 import 'dart:ui' show Size;
 
@@ -500,6 +501,73 @@ class FloaterWindow {
       if (_isOnScreenOrdinary(w)) return w;
     }
     return 0;
+  }
+
+  /// Whether one ordinary window on screen above the main window covers all
+  /// of it, as an app maximised over it does. Two that only cover it between
+  /// them don't count, nor do topmost ones: overlays are often transparent.
+  bool get mainWindowCoveredNow {
+    if (isBorrowed) return false;
+    final hwnd = _window;
+    if (hwnd == 0 || IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0) {
+      return false;
+    }
+    var main = _drawnFrame(hwnd);
+    // Maximised, this frameless window overhangs its work area by the resize
+    // border it doesn't draw, so an app maximised over it would never cover
+    // all of it.
+    if (IsZoomed(hwnd) != 0) {
+      final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
+      try {
+        GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), info);
+        final work = info.ref.rcWork;
+        main = (
+          left: math.max(main.left, work.left),
+          top: math.max(main.top, work.top),
+          right: math.min(main.right, work.right),
+          bottom: math.min(main.bottom, work.bottom),
+        );
+      } finally {
+        free(info);
+      }
+    }
+    for (
+      var w = GetWindow(hwnd, GW_HWNDPREV);
+      w != 0;
+      w = GetWindow(w, GW_HWNDPREV)
+    ) {
+      if (!_isOnScreenOrdinary(w)) continue;
+      final over = _drawnFrame(w);
+      if (over.left <= main.left &&
+          over.top <= main.top &&
+          over.right >= main.right &&
+          over.bottom >= main.bottom) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// [hwnd]'s frame as drawn: without the invisible resize borders that
+  /// [GetWindowRect] counts on most windows but not on this frameless one.
+  static ({int left, int top, int right, int bottom}) _drawnFrame(int hwnd) {
+    final rect = calloc<RECT>();
+    try {
+      DwmGetWindowAttribute(
+        hwnd,
+        DWMWA_EXTENDED_FRAME_BOUNDS,
+        rect,
+        sizeOf<RECT>(),
+      );
+      return (
+        left: rect.ref.left,
+        top: rect.ref.top,
+        right: rect.ref.right,
+        bottom: rect.ref.bottom,
+      );
+    } finally {
+      free(rect);
+    }
   }
 
   static bool _isOnScreenOrdinary(int hwnd) {

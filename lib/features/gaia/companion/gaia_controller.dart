@@ -98,6 +98,11 @@ class GaiaController extends ChangeNotifier {
   /// starfield drifts only then.
   final focused = ValueNotifier(false);
 
+  /// Whether the window is shown at all, in any mode. Off, every ticker
+  /// is muted: a hidden window's tree stays alive, and the buttons' glow
+  /// rings would otherwise keep asking for frames at the display's rate.
+  final onScreen = ValueNotifier(false);
+
   /// The main instance's device, whose native sessions this companion runs.
   var _deviceId = '';
 
@@ -330,10 +335,12 @@ class GaiaController extends ChangeNotifier {
     _returnTo = null;
     if (back != null && _window.shown != back) return _show(back);
     _window.hide();
+    onScreen.value = false;
   }
 
   Future<void> _show(GaiaMode mode) {
     if (currentChatId == null) _utility?.warm();
+    onScreen.value = true;
     return _window.show(mode, () {
       layout = mode;
       notifyListeners();

@@ -11,6 +11,8 @@ import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
@@ -33,16 +35,24 @@ class GaiaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-      valueListenable: controller.accent,
-      builder: (context, accent, _) => MaterialApp(
-        title: 'Gaia',
-        debugShowCheckedModeBanner: false,
-        theme: _onGaiaSurface(Color(accent)),
-        home: _RunToasts(
-          controller: controller,
-          child: ListenableBuilder(
-            listenable: Listenable.merge([controller, controller.debug]),
-            builder: (context, _) => _GaiaShell(controller: controller),
+      valueListenable: controller.onScreen,
+      builder: (context, onScreen, child) =>
+          TickerMode(enabled: onScreen, child: child!),
+      child: _Ambient(
+        focused: controller.focused,
+        child: ValueListenableBuilder(
+          valueListenable: controller.accent,
+          builder: (context, accent, _) => MaterialApp(
+            title: 'Gaia',
+            debugShowCheckedModeBanner: false,
+            theme: _onGaiaSurface(Color(accent)),
+            home: _RunToasts(
+              controller: controller,
+              child: ListenableBuilder(
+                listenable: Listenable.merge([controller, controller.debug]),
+                builder: (context, _) => _GaiaShell(controller: controller),
+              ),
+            ),
           ),
         ),
       ),
@@ -60,6 +70,41 @@ class GaiaApp extends StatelessWidget {
       dialogTheme: theme.dialogTheme.copyWith(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
+      ),
+    );
+  }
+}
+
+/// Provides [GaiaAmbient]: running while Gaia is [focused] and the cursor is
+/// in its window. Above the app, so dialogs and toasts count as in it.
+class _Ambient extends StatefulWidget {
+  const _Ambient({required this.focused, required this.child});
+
+  final ValueNotifier<bool> focused;
+  final Widget child;
+
+  @override
+  State<_Ambient> createState() => _AmbientState();
+}
+
+class _AmbientState extends State<_Ambient> {
+  var _pointerIn = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _pointerIn = true),
+      onExit: (_) => setState(() => _pointerIn = false),
+      child: ValueListenableBuilder(
+        valueListenable: widget.focused,
+        builder: (context, focused, child) => GaiaAmbient(
+          running:
+              focused &&
+              _pointerIn &&
+              !(MediaQuery.maybeDisableAnimationsOf(context) ?? false),
+          child: child!,
+        ),
+        child: widget.child,
       ),
     );
   }
@@ -865,8 +910,8 @@ class _Palette extends StatelessWidget {
   }
 }
 
-/// The tier the next message goes to (§7.2), and a menu of all three with
-/// their agents.
+/// The tier the next message goes to (§7.2) and its agent, a notch that
+/// opens onto all three.
 class _TierPicker extends StatelessWidget {
   const _TierPicker({required this.controller});
 
@@ -874,26 +919,23 @@ class _TierPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final current = controller.nextTier;
-    return MenuAnchor(
-      menuChildren: [
-        for (final tier in GaiaTier.values)
-          MenuItemButton(
-            onPressed: () => switchGaiaTier(context, controller, tier),
-            leadingIcon: Icon(tier == current ? Icons.check : null, size: 16),
-            child: Text(
-              '${tier.label} · ${controller.agentFor(tier)?.label ?? 'no agent'}',
-            ),
-          ),
-      ],
-      builder: (context, menu, _) => Tooltip(
-        message: controller.agentFor(current)?.label ?? 'No agent',
-        child: GaiaButton(
-          label: current.label,
-          size: 32,
-          onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+    return GaiaNotch(
+      items: [
+        GaiaNotchItem<GaiaTier>(
+          options: [
+            for (final tier in GaiaTier.values)
+              GaiaNotchOption(
+                value: tier,
+                label: tier.label,
+                detail: controller.agentFor(tier)?.label ?? 'No agent',
+                icon: (color, {required lit}) =>
+                    GaiaTierGlyph(level: tier.index, color: color, lit: lit),
+              ),
+          ],
+          value: controller.nextTier,
+          onChanged: (tier) => switchGaiaTier(context, controller, tier),
         ),
-      ),
+      ],
     );
   }
 }

@@ -118,4 +118,15 @@ class _TrackFocus with WindowListener {
 
   @override
   void onWindowBlur() => controller.focused.value = false;
+
+  // Minimised in window mode is still shown as far as the controller knows,
+  // so muting the tickers is up to this.
+  @override
+  void onWindowMinimize() => controller.onScreen.value = false;
+
+  @override
+  void onWindowRestore() => controller.onScreen.value = true;
+
+  @override
+  void onWindowMaximize() => controller.onScreen.value = true;
 }

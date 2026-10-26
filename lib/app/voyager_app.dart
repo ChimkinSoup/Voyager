@@ -37,6 +37,7 @@ import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
+import 'package:voyager/features/hotkeys/floaters/main_window_cover.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
@@ -114,6 +115,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {
       windowManager.addListener(this);
+      MainWindowCoverWatch.install();
       final tray = AppTray(
         onOpen: () => ref.read(floaterControllerProvider).showMainWindow(),
         onQuit: _quit,

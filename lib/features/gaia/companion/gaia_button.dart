@@ -9,8 +9,25 @@ import 'package:flutter/scheduler.dart';
 Color gaiaSurface(Color accent) =>
     Color.lerp(const Color(0xFF15181B), accent, 0.1)!;
 
+/// Whether Gaia's idle motion runs, the glow rings' circling light and the
+/// tier glyphs' turning rings: while Gaia is in front with the cursor in its
+/// window, as the starfield does, so a window left alone costs nothing.
+/// Without one above them, they run.
+class GaiaAmbient extends InheritedWidget {
+  const GaiaAmbient({super.key, required this.running, required super.child});
+
+  final bool running;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GaiaAmbient>()?.running ??
+      true;
+
+  @override
+  bool updateShouldNotify(GaiaAmbient old) => old.running != running;
+}
+
 /// Gaia's button (after Aceternity UI's hover border gradient): a dark fill
-/// in a thin ring, lit by a soft light that circles the ring. Once the
+/// in a [GaiaGlowRing], lit by a soft light that circles the ring. Once the
 /// cursor comes within [_reach] of the button, the light swings round to
 /// face it and follows it, a tint of the accent; over the button, it centres
 /// on the cursor, widens, and turns the accent at full saturation. Squared
@@ -50,13 +67,105 @@ const _follow = 2.5;
 /// The light's strength, at rest and on hover.
 const _glow = 0.6;
 
-class _GaiaButtonState extends State<GaiaButton> with TickerProviderStateMixin {
-  /// The cursor in this button's coordinates; null when it's out of the
+class _GaiaButtonState extends State<GaiaButton> {
+  var _hovered = false;
+  var _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final round = widget.label == null;
+    final outer = round ? widget.size / 2 : 6.0;
+    final iconSize = widget.size * 0.45;
+    final content = round
+        ? Icon(widget.icon, size: iconSize, color: Colors.white)
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(widget.icon, size: iconSize, color: Colors.white),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                widget.label!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          );
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.5,
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 100),
+            scale: _pressed ? 0.98 : 1,
+            child: SizedBox(
+              height: widget.size,
+              width: round ? widget.size : null,
+              child: GaiaGlowRing(
+                radius: outer,
+                hovered: _hovered,
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: round
+                      ? null
+                      : const EdgeInsets.symmetric(horizontal: 16),
+                  child: content,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The ring of light round Gaia's buttons and its notch: a dark fill in a
+/// thin ring that the light circles. Near the cursor the light swings round
+/// to face it; while [hovered], it centres on the cursor, widens, and turns
+/// the accent at full saturation.
+class GaiaGlowRing extends StatefulWidget {
+  const GaiaGlowRing({
+    super.key,
+    required this.radius,
+    required this.hovered,
+    required this.child,
+  });
+
+  /// The outer corner radius.
+  final double radius;
+  final bool hovered;
+
+  /// Clipped to the fill.
+  final Widget child;
+
+  @override
+  State<GaiaGlowRing> createState() => _GaiaGlowRingState();
+}
+
+class _GaiaGlowRingState extends State<GaiaGlowRing>
+    with TickerProviderStateMixin {
+  /// The cursor in this ring's coordinates; null when it's out of the
   /// window or hasn't moved yet.
   Offset? _cursor;
 
   /// Where the light is around the ring: the angle from the centre, in a
-  /// space where the button is a circle, clockwise from the right. Starts
+  /// space where the ring is a circle, clockwise from the right. Starts
   /// at the top.
   final _angle = ValueNotifier(-math.pi / 2);
   late final Ticker _ticker;
@@ -65,15 +174,46 @@ class _GaiaButtonState extends State<GaiaButton> with TickerProviderStateMixin {
   late final _hover = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 500),
+    value: widget.hovered ? 1 : 0,
   );
-  var _pressed = false;
 
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker(_tick)..start();
-    // The cursor anywhere in the window, not only over the button.
+    _ticker = createTicker(_tick);
+    // The cursor anywhere in the window, not only over the ring.
     GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  // Hovered, it runs regardless, so the light follows the cursor over a
+  // floater left in front of another app.
+  void _sync() {
+    final run = GaiaAmbient.of(context) || widget.hovered;
+    if (run == _ticker.isActive) return;
+    if (run) {
+      _lastTick = Duration.zero;
+      _ticker.start();
+    } else {
+      _ticker.stop();
+    }
+  }
+
+  @override
+  void didUpdateWidget(GaiaGlowRing old) {
+    super.didUpdateWidget(old);
+    if (widget.hovered == old.hovered) return;
+    _sync();
+    if (widget.hovered) {
+      _hover.forward();
+    } else {
+      _hover.reverse();
+    }
   }
 
   @override
@@ -118,109 +258,49 @@ class _GaiaButtonState extends State<GaiaButton> with TickerProviderStateMixin {
     _angle.value += turn * (1 - math.exp(-dt * _follow));
   }
 
-  void _setHovered(bool hovered) {
-    if (hovered) {
-      _hover.forward();
-    } else {
-      _hover.reverse();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final enabled = widget.onPressed != null;
-    final round = widget.label == null;
-    final outer = round ? widget.size / 2 : 6.0;
-    final iconSize = widget.size * 0.45;
-    final content = round
-        ? Icon(widget.icon, size: iconSize, color: Colors.white)
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.icon != null) ...[
-                Icon(widget.icon, size: iconSize, color: Colors.white),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                widget.label!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+    final outer = widget.radius;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(outer),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(outer),
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+                child: CustomPaint(
+                  painter: GaiaGlowPainter(
+                    angle: _angle,
+                    hover: _hover,
+                    cursor: () => _cursor,
+                    idle: Color.lerp(colors.primary, Colors.white, 0.5)!,
+                    lit: HSLColor.fromColor(
+                      colors.primary,
+                    ).withSaturation(1).toColor(),
+                  ),
                 ),
-              ),
-            ],
-          );
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: enabled ? (_) => _setHovered(true) : null,
-      onExit: (_) {
-        _setHovered(false);
-        setState(() => _pressed = false);
-      },
-      child: GestureDetector(
-        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-        onTapCancel: () => setState(() => _pressed = false),
-        onTap: widget.onPressed,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.5,
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 100),
-            scale: _pressed ? 0.98 : 1,
-            child: Container(
-              height: widget.size,
-              width: round ? widget.size : null,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(outer),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(outer),
-                      child: ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                        child: CustomPaint(
-                          painter: GaiaGlowPainter(
-                            angle: _angle,
-                            hover: _hover,
-                            cursor: () => _cursor,
-                            idle: Color.lerp(
-                              colors.primary,
-                              Colors.white,
-                              0.5,
-                            )!,
-                            lit: HSLColor.fromColor(
-                              colors.primary,
-                            ).withSaturation(1).toColor(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Covers all but the ring of the light.
-                  Padding(
-                    padding: const EdgeInsets.all(1),
-                    child: Container(
-                      alignment: Alignment.center,
-                      padding: round
-                          ? null
-                          : const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Color.lerp(colors.surface, Colors.black, 0.5),
-                        borderRadius: BorderRadius.circular(outer - 1),
-                      ),
-                      child: content,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
-        ),
+          // Covers all but the ring of the light.
+          Padding(
+            padding: const EdgeInsets.all(1),
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: Color.lerp(colors.surface, Colors.black, 0.5),
+                borderRadius: BorderRadius.circular(outer - 1),
+              ),
+              child: widget.child,
+            ),
+          ),
+        ],
       ),
     );
   }

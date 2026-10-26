@@ -3,9 +3,35 @@
 #include <flutter/standard_method_codec.h>
 
 #include <optional>
+#include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "utils.h"
+
+namespace {
+
+// Posted to the main window when another window was shown, hidden, moved,
+// minimised or brought to the front, for Dart to recheck whether one now
+// covers it. One at a time: a drag moves a window many times between pumps.
+constexpr UINT kCoverEventMessage = WM_APP + 0x48;
+
+HWND g_cover_window = nullptr;
+bool g_cover_pending = false;
+
+void CALLBACK OnWindowEvent(HWINEVENTHOOK, DWORD, HWND hwnd, LONG object,
+                            LONG child, DWORD, DWORD) {
+  // Top-level windows only: the cursor, carets and controls move far more
+  // often, and can't cover anything.
+  if (object != OBJID_WINDOW || child != CHILDID_SELF || !hwnd ||
+      ::GetAncestor(hwnd, GA_ROOT) != hwnd) {
+    return;
+  }
+  if (g_cover_pending || !g_cover_window) return;
+  g_cover_pending = true;
+  ::PostMessage(g_cover_window, kCoverEventMessage, 0, 0);
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project,
                              bool start_hidden)
@@ -65,6 +91,23 @@ bool FlutterWindow::OnCreate() {
           result->NotImplemented();
         }
       });
+  g_cover_window = GetHandle();
+  cover_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "voyager/cover",
+          &flutter::StandardMethodCodec::GetInstance());
+  cover_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const auto* watch = std::get_if<bool>(call.arguments());
+        if (call.method_name() == "watch" && watch) {
+          WatchCover(*watch);
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   if (start_hidden_) {
@@ -84,6 +127,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  WatchCover(false);
+  g_cover_window = nullptr;
+  cover_channel_ = nullptr;
   instance_channel_ = nullptr;
   gaia_pipe_channel_ = nullptr;
   gaia_pipe_ = nullptr;
@@ -139,6 +185,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
+  if (message == kCoverEventMessage) {
+    g_cover_pending = false;
+    if (cover_channel_) cover_channel_->InvokeMethod("changed", nullptr);
+    return 0;
+  }
+
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
@@ -157,4 +209,23 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+void FlutterWindow::WatchCover(bool watch) {
+  for (HWINEVENTHOOK hook : cover_hooks_) ::UnhookWinEvent(hook);
+  cover_hooks_.clear();
+  if (!watch) return;
+  // Out of context, so the events arrive through this thread's message loop.
+  constexpr std::pair<DWORD, DWORD> kEvents[] = {
+      {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
+      {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
+      {EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE},
+      {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE},
+      {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
+  };
+  for (const auto& [first, last] : kEvents) {
+    HWINEVENTHOOK hook = ::SetWinEventHook(first, last, nullptr, OnWindowEvent,
+                                          0, 0, WINEVENT_OUTOFCONTEXT);
+    if (hook) cover_hooks_.push_back(hook);
+  }
 }

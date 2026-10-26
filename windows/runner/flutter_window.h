@@ -7,6 +7,7 @@
 #include <flutter/encodable_value.h>
 
 #include <memory>
+#include <vector>
 
 #include "gaia_pipe.h"
 #include "win32_window.h"
@@ -40,6 +41,10 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  // Hooks window events system-wide while |watch|, and tells Dart over
+  // |cover_channel_| when another window may have come to cover this one.
+  void WatchCover(bool watch);
+
   // The project to run.
   flutter::DartProject project_;
 
@@ -56,6 +61,11 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<GaiaPipe> gaia_pipe_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       gaia_pipe_channel_;
+
+  // Whether another window covers this one, for Dart to recheck.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      cover_channel_;
+  std::vector<HWINEVENTHOOK> cover_hooks_;
 
   UINT show_main_window_message_ = 0;
   UINT quit_message_ = 0;
