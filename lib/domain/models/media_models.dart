@@ -49,6 +49,14 @@ enum MediaImageFormat {
     }
     return null;
   }
+
+  /// The format a file is named by, as the media store keeps every file.
+  static MediaImageFormat? fromPath(String path) {
+    for (final format in values) {
+      if (path.endsWith('.${format.extension}')) return format;
+    }
+    return null;
+  }
 }
 
 /// One unique blob of image bytes, deduplicated by [contentHash].

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
 /// How long the router may hold up a new chat's first message before the
@@ -10,9 +11,10 @@ import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 const _routeTimeout = Duration(seconds: 5);
 const _titleTimeout = Duration(seconds: 15);
 const _summaryTimeout = Duration(seconds: 30);
+const _captionTimeout = Duration(seconds: 30);
 
 /// Gaia's small internal jobs on the utility model (GAIA_HLD.md §5.1): the
-/// tier router, chat titles and handoff summaries. Haiku on Claude Code, on
+/// tier router, chat titles, and handoff summaries and image captions. Haiku on Claude Code, on
 /// the account Gaia's chats use.
 ///
 /// Any failure is a null: the caller falls back to what Gaia does with no
@@ -118,6 +120,27 @@ class GaiaUtility {
       return answer.trim().isEmpty ? null : answer.trim();
     } catch (error) {
       debugPrint('[gaia] summary: $error');
+      return null;
+    }
+  }
+
+  /// A description of [image] for an agent that can't see it (§7.4), or
+  /// null to go without one.
+  Future<String?> caption(GaiaImageInput image) async {
+    try {
+      final answer = await _runner
+          .generate(
+            'Describe the image in <input> in under 80 words for an '
+            "assistant that can't see it. Copy out any text in it that "
+            'matters, and say what any arrows, circles, highlights or other '
+            'marks point at. Reply with the description only.',
+            gaiaImageToken(image.label),
+            images: [image],
+          )
+          .timeout(_captionTimeout);
+      return answer.trim().isEmpty ? null : _clip(answer.trim(), 1000);
+    } catch (error) {
+      debugPrint('[gaia] caption: $error');
       return null;
     }
   }

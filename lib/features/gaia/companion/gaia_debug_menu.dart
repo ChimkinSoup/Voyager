@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
-/// replies, toast previews and display toggles, kept on this desktop only.
+/// replies, toast and loading-animation previews and display toggles, kept
+/// on this desktop only.
 Future<void> showGaiaDebugMenu(
   BuildContext context,
   GaiaController controller,
@@ -164,6 +166,13 @@ class _DebugMenu extends StatelessWidget {
             ),
           ],
         ),
+        heading('Loading animation'),
+        Text(
+          'What a reply shows while it streams in. Switch states to see the '
+          'blend between them.',
+          style: muted,
+        ),
+        const _OrbPreview(),
         heading('Display'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -182,6 +191,16 @@ class _DebugMenu extends StatelessWidget {
           value: debug.slowAnimations,
           onChanged: debug.setSlowAnimations,
         ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Allow screenshots'),
+          subtitle: const Text(
+            "Gaia shows in screenshots, screen recordings and screen shares, "
+            "which it's hidden from otherwise.",
+          ),
+          value: debug.allowScreenshots,
+          onChanged: debug.setAllowScreenshots,
+        ),
       ],
     );
   }
@@ -191,6 +210,7 @@ class _SliderRow extends StatelessWidget {
   const _SliderRow({
     required this.label,
     required this.value,
+    this.min = 0,
     required this.max,
     required this.divisions,
     required this.display,
@@ -199,6 +219,7 @@ class _SliderRow extends StatelessWidget {
 
   final String label;
   final double value;
+  final double min;
   final double max;
   final int divisions;
   final String display;
@@ -213,7 +234,8 @@ class _SliderRow extends StatelessWidget {
         SizedBox(width: 150, child: Text(label)),
         Expanded(
           child: Slider(
-            value: value.clamp(0, max),
+            value: value.clamp(min, max),
+            min: min,
             max: max,
             divisions: divisions,
             onChanged: (value) => onChanged(value, save: false),
@@ -221,6 +243,56 @@ class _SliderRow extends StatelessWidget {
           ),
         ),
         SizedBox(width: 90, child: Text(display, textAlign: TextAlign.end)),
+      ],
+    );
+  }
+}
+
+/// A live [GaiaOrb] on the chat's own background.
+class _OrbPreview extends StatefulWidget {
+  const _OrbPreview();
+
+  @override
+  State<_OrbPreview> createState() => _OrbPreviewState();
+}
+
+class _OrbPreviewState extends State<_OrbPreview> {
+  var _speaking = false;
+  var _size = 40.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          height: 184,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: GaiaOrb(speaking: _speaking, size: _size),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('Thinking')),
+            ButtonSegment(value: true, label: Text('Speaking')),
+          ],
+          selected: {_speaking},
+          onSelectionChanged: (selected) =>
+              setState(() => _speaking = selected.single),
+        ),
+        _SliderRow(
+          label: 'Size',
+          value: _size,
+          min: 24,
+          max: 168,
+          divisions: 18,
+          display: '${_size.round()} px',
+          onChanged: (size, {required save}) => setState(() => _size = size),
+        ),
       ],
     );
   }

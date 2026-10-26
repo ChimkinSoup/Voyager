@@ -456,6 +456,8 @@ void main() {
       main.companion.onEvent!('capture', capture('region', 'two.bmp'));
       await settle();
       expect(window.shown, GaiaMode.overlay);
+      // C again on the same monitor keeps the crop it's in.
+      expect(controller.cropping?.path, 'one.bmp');
 
       await controller.dismiss();
       await settle();
@@ -489,6 +491,23 @@ void main() {
       await controller.onHotkey('small');
       expect(window.shown, GaiaMode.window);
       expect(controller.cropping, isNull);
+    });
+
+    test('a cancelled C over a Gaia window behind other apps puts it back '
+        'there, not in front', () async {
+      await controller.onHotkey('window');
+      window.behind = true;
+      main.companion.onEvent!('capture', capture('region', 'one.bmp'));
+      await settle();
+      // A second C on another monitor still knows where it came from.
+      main.companion.onEvent!('capture', {
+        ...capture('region', 'two.bmp'),
+        'left': 0,
+      });
+      await settle();
+      await controller.dismiss();
+      expect(window.shown, GaiaMode.window);
+      expect(window.behind, isTrue);
     });
 
     test('removing an image takes its token out of the draft', () async {
@@ -657,6 +676,20 @@ void main() {
       await settle();
       expect(window.shown, isNull);
       expect(main.events.map((e) => e.$1), contains('pickUpCancelled'));
+    });
+
+    test("a summon over the pill gives the foreground back to the app it's "
+        'from, not the one pick-up was armed in', () async {
+      main.companion.onEvent!('summon', {'returnTo': 1});
+      main.companion.onEvent!('pickUp', {'armed': true});
+      await settle();
+
+      // Another hotkey ends pick-up and takes the summon from hidden.
+      main.companion.onEvent!('summon', {'returnTo': 2});
+      await controller.onHotkey('small');
+      await settle();
+      expect(window.shown, GaiaMode.small);
+      expect(window.returnTo, 2);
     });
 
     test('nothing selected still opens Gaia, saying so', () async {
@@ -876,6 +909,115 @@ void main() {
         ]);
       },
     );
+  });
+
+  group('images in a handoff', () {
+    late FakeClaudeRunner codex;
+    late FakeUtilityRunner utility;
+    late Directory drafts;
+
+    /// Captions that fail before one is written.
+    var captionFailures = 0;
+
+    setUp(() async {
+      codex = FakeClaudeRunner();
+      captionFailures = 0;
+      utility = FakeUtilityRunner((job) {
+        if (!job.startsWith('Describe')) return 'Generated title';
+        if (captionFailures-- > 0) throw GaiaRunException('Not logged in');
+        return 'A dialog with Save circled.';
+      });
+      drafts = await Directory.systemTemp.createTemp('gaia_drafts');
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'agents': [
+          ...kGaiaDefaultAgents.map((agent) => agent.toJson()),
+          const GaiaAgent(
+            id: 'sol',
+            label: 'GPT-6.1 Sol',
+            adapter: kGaiaCodexAdapter,
+            model: 'gpt-6.1-sol',
+          ).toJson(),
+        ],
+        'tiers': {'quick': 'haiku', 'standard': 'sonnet', 'deep': 'sol'},
+        'autoRoute': false,
+      };
+      await main.pipe.startCompanion();
+      controller = GaiaController(
+        pipe: main.companion,
+        window: window,
+        runners: {kGaiaClaudeCodeAdapter: runner, kGaiaCodexAdapter: codex},
+        cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
+        exit: exits.add,
+        utility: GaiaUtility(utility),
+        draftDirectory: drafts.path,
+      );
+      await controller.start();
+      await settle();
+    });
+
+    tearDown(() => drafts.delete(recursive: true));
+
+    test('a sent image is captioned once, and handed over as its caption '
+        'and file', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      codex.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      controller.draft.text = 'Click what';
+      await controller.attachImage(Uint8List.fromList([1, 2, 3]));
+      await controller.send(
+        controller.draft.text,
+        images: controller.takeDraftImages(),
+      );
+      await settle();
+
+      final image = (await main.messages()).first.parts
+          .whereType<GaiaImagePart>()
+          .single;
+      expect(image.caption, 'A dialog with Save circled.');
+      expect(utility.images.expand((i) => i).single.path, 'stored-1.jpg');
+
+      controller.pickTier(GaiaTier.deep);
+      await controller.send('Now do it');
+      await settle();
+      expect(
+        codex.sent.single.prompt,
+        contains(
+          'User:\nClick what [image 1]\n'
+          '[image 1] (stored-1.jpg): A dialog with Save circled.\n',
+        ),
+      );
+      // Not captioned again.
+      expect(
+        utility.jobs.where((job) => job.startsWith('Describe')),
+        hasLength(1),
+      );
+    });
+
+    test("an image whose caption failed goes by its file alone, and isn't "
+        'tried again', () async {
+      captionFailures = 1;
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      codex.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.attachImage(Uint8List.fromList([1, 2, 3]));
+      await controller.send(
+        controller.draft.text,
+        images: controller.takeDraftImages(),
+      );
+      await settle();
+      final unwritten = (await main.messages()).first.parts
+          .whereType<GaiaImagePart>()
+          .single;
+      expect(unwritten.caption, isNull);
+
+      controller.pickTier(GaiaTier.deep);
+      await controller.send('Now do it');
+      await settle();
+      expect(codex.sent.single.prompt, contains('[image 1] (stored-1.jpg)\n'));
+      expect(
+        utility.jobs.where((job) => job.startsWith('Describe')),
+        hasLength(1),
+      );
+    });
   });
 
   group('slash commands', () {

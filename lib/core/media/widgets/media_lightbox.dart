@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -37,10 +39,100 @@ Future<void> showMediaLightbox(
   double viewportFraction = 1.0,
   List<String>? captions,
 }) {
-  if (assets.isEmpty) return Future<void>.value();
+  final service = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(mediaServiceProvider);
+  LightboxImage wrap(MediaAsset asset) => _AssetImage(asset, service);
+  return showLightbox(
+    context,
+    images: [for (final asset in assets) wrap(asset)],
+    initialIndex: initialIndex,
+    onRemove: onRemove == null
+        ? null
+        : (image) => onRemove((image as _AssetImage).asset),
+    reload: reload == null
+        ? null
+        : () async => [for (final asset in await reload()) wrap(asset)],
+    changes: service,
+    viewportFraction: viewportFraction,
+    captions: captions,
+  );
+}
+
+/// One picture in the viewer, from wherever it comes from: a [MediaAsset]
+/// in [showMediaLightbox], one of Gaia's attachments in its chat.
+abstract class LightboxImage {
+  /// Tells the pictures apart: each keeps its own zoom under it, and a
+  /// reload stays on the picture with the same id.
+  String get id;
+
+  /// Decoded before the picture is swiped to; null to skip it.
+  ImageProvider? get precache;
+
+  /// The picture at full resolution, as the viewer's page shows it.
+  Widget build(BuildContext context);
+
+  /// Its bytes and format, for Copy and Save as…; null while they aren't on
+  /// this device.
+  Future<({Uint8List bytes, MediaImageFormat? format})?> read();
+
+  /// The file name Save as… suggests, without its extension.
+  String get saveName;
+}
+
+class _AssetImage implements LightboxImage {
+  _AssetImage(this.asset, this.service);
+
+  final MediaAsset asset;
+  final MediaService service;
+
+  @override
+  String get id => asset.id;
+
+  // Local bytes only: images the user may never swipe to are not worth a
+  // download, and each queued one notifies every listening surface.
+  @override
+  ImageProvider get precache =>
+      MediaAssetImage(asset.contentHash, () => service.localBytesFor(asset));
+
+  @override
+  Widget build(BuildContext context) => MediaImage(
+    asset: asset,
+    fit: BoxFit.contain,
+    borderRadius: BorderRadius.zero,
+    // The viewer zooms to 8x, so this is the one place that needs every
+    // ingest pixel.
+    decodeFullResolution: true,
+  );
+
+  @override
+  Future<({Uint8List bytes, MediaImageFormat? format})?> read() async {
+    final bytes = await service.bytesFor(asset);
+    if (bytes == null) return null;
+    return (bytes: bytes, format: MediaImageFormat.fromMimeType(asset.mimeType));
+  }
+
+  @override
+  String get saveName => 'voyager_image_${asset.contentHash.substring(0, 8)}';
+}
+
+/// Opens the full-screen viewer on [images]; [showMediaLightbox] says what
+/// the rest mean. [reload] runs whenever [changes] notifies.
+Future<void> showLightbox(
+  BuildContext context, {
+  required List<LightboxImage> images,
+  int initialIndex = 0,
+  Future<void> Function(LightboxImage image)? onRemove,
+  Future<List<LightboxImage>> Function()? reload,
+  Listenable? changes,
+  double viewportFraction = 1.0,
+  List<String>? captions,
+}) {
+  if (images.isEmpty) return Future<void>.value();
   assert(
-    captions == null || captions.length == assets.length,
-    'captions must line up one-for-one with assets',
+    captions == null || captions.length == images.length,
+    'captions must line up one-for-one with images',
   );
   assert(
     captions == null || reload == null,
@@ -55,10 +147,11 @@ Future<void> showMediaLightbox(
           barrierDismissible: true,
           barrierLabel: 'Close image',
           pageBuilder: (_, _, _) => _MediaLightbox(
-            assets: assets,
+            assets: images,
             initialIndex: initialIndex,
             onRemove: onRemove,
             reload: reload,
+            changes: changes,
             viewportFraction: viewportFraction,
             captions: captions,
           ),
@@ -84,20 +177,22 @@ int _openLightboxes = 0;
 /// study card, say — consult this as well.
 bool get mediaLightboxIsOpen => _openLightboxes > 0;
 
-class _MediaLightbox extends ConsumerStatefulWidget {
+class _MediaLightbox extends StatefulWidget {
   const _MediaLightbox({
     required this.assets,
     required this.initialIndex,
     this.onRemove,
     this.reload,
+    this.changes,
     this.viewportFraction = 1.0,
     this.captions,
   });
 
-  final List<MediaAsset> assets;
+  final List<LightboxImage> assets;
   final int initialIndex;
-  final Future<void> Function(MediaAsset asset)? onRemove;
-  final Future<List<MediaAsset>> Function()? reload;
+  final Future<void> Function(LightboxImage asset)? onRemove;
+  final Future<List<LightboxImage>> Function()? reload;
+  final Listenable? changes;
 
   /// One line under each image, in step with [assets] — where a picture came
   /// from, for the surfaces that gather several owners' galleries into one
@@ -112,17 +207,17 @@ class _MediaLightbox extends ConsumerStatefulWidget {
   final double viewportFraction;
 
   @override
-  ConsumerState<_MediaLightbox> createState() => _MediaLightboxState();
+  State<_MediaLightbox> createState() => _MediaLightboxState();
 }
 
-class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
+class _MediaLightboxState extends State<_MediaLightbox> {
   late final PageController _pageController;
   late int _index;
 
   /// The viewer's own copy of the list, so a removal can drop the image and
   /// leave the viewer standing on the next one. The parent reloads its own
   /// rows off the media service's notification.
-  late List<MediaAsset> _assets;
+  late List<LightboxImage> _assets;
 
   /// Kept in step with [_assets] index for index, so a removal takes the
   /// caption with the picture it belonged to.
@@ -166,7 +261,10 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _precacheNeighbours();
     });
+    if (widget.reload != null) widget.changes?.addListener(_onChanged);
   }
+
+  void _onChanged() => unawaited(_refresh());
 
   /// Decodes the images two pages either side of this one into the cache.
   ///
@@ -175,14 +273,12 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
   /// their picture. The decodes are keyed by hash, so the page that mounts
   /// later picks them straight up — see [MediaAssetImage].
   void _precacheNeighbours() {
-    final service = ref.read(mediaServiceProvider);
     for (var i = _index - 2; i <= _index + 2; i++) {
       if (i == _index || i < 0 || i >= _assets.length) continue;
-      final asset = _assets[i];
+      final image = _assets[i].precache;
+      if (image == null) continue;
       precacheImage(
-        // Local bytes only: images the user may never swipe to are not worth
-        // a download, and each queued one notifies every listening surface.
-        MediaAssetImage(asset.contentHash, () => service.localBytesFor(asset)),
+        image,
         context,
         // Not on this device: the page fetches it, and shows that state
         // itself, when it is reached.
@@ -193,6 +289,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
 
   @override
   void dispose() {
+    widget.changes?.removeListener(_onChanged);
     _pageDrag?.cancel();
     _pageController.dispose();
     for (final controller in _transformControllers.values) {
@@ -201,7 +298,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     super.dispose();
   }
 
-  MediaAsset get _current => _assets[_index];
+  LightboxImage get _current => _assets[_index];
 
   TransformationController _controllerFor(int index) {
     return _transformControllers.putIfAbsent(
@@ -338,14 +435,10 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     _keepPagesTouchable();
   }
 
-  Future<Uint8List?> _currentBytes() {
-    return ref.read(mediaServiceProvider).bytesFor(_current);
-  }
-
   Future<void> _copyImage() async {
     final messenger = ScaffoldMessenger.of(context);
-    final bytes = await _currentBytes();
-    if (bytes == null) {
+    final file = await _current.read();
+    if (file == null) {
       messenger.showSnackBar(
         const SnackBar(content: Text('This image is not on this device yet.')),
       );
@@ -361,10 +454,10 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     final item = DataWriterItem();
     // Written in the asset's own format rather than converted: the receiving
     // application gets exactly the bytes on disk.
-    if (_current.mimeType == MediaImageFormat.png.mimeType) {
-      item.add(Formats.png(bytes));
+    if (file.format == MediaImageFormat.png) {
+      item.add(Formats.png(file.bytes));
     } else {
-      item.add(Formats.jpeg(bytes));
+      item.add(Formats.jpeg(file.bytes));
     }
     await clipboard.write([item]);
     messenger.showSnackBar(const SnackBar(content: Text('Image copied.')));
@@ -372,27 +465,24 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
 
   Future<void> _saveAs() async {
     final messenger = ScaffoldMessenger.of(context);
-    final bytes = await _currentBytes();
-    if (bytes == null) {
+    final file = await _current.read();
+    if (file == null) {
       messenger.showSnackBar(
         const SnackBar(content: Text('This image is not on this device yet.')),
       );
       return;
     }
-    final format = MediaImageFormat.fromMimeType(_current.mimeType);
-    final extension = format?.extension ?? 'jpg';
+    final extension = file.format?.extension ?? 'jpg';
     // saveFile rather than getDirectoryPath — see the export tile in
     // settings_page.dart for why the latter takes the process down on Windows.
     final targetPath = await FilePicker.platform.saveFile(
       dialogTitle: 'Save image',
-      fileName:
-          'voyager_image_${_current.contentHash.substring(0, 8)}'
-          '.$extension',
+      fileName: '${_current.saveName}.$extension',
       type: FileType.custom,
       allowedExtensions: [extension],
     );
     if (targetPath == null) return;
-    await File(targetPath).writeAsBytes(bytes);
+    await File(targetPath).writeAsBytes(file.bytes);
     messenger.showSnackBar(SnackBar(content: Text('Saved to $targetPath')));
   }
 
@@ -444,7 +534,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
       return;
     }
     _reloading = true;
-    List<MediaAsset> assets;
+    List<LightboxImage> assets;
     try {
       do {
         _reloadAgain = false;
@@ -473,9 +563,6 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.reload != null) {
-      ref.listen(mediaServiceProvider, (_, _) => _refresh());
-    }
     final assets = _assets;
     return CallbackShortcuts(
       bindings: {
@@ -539,14 +626,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
                           // moment the pointer moves.
                           child: GestureDetector(
                             onTap: () {},
-                            child: MediaImage(
-                              asset: assets[index],
-                              fit: BoxFit.contain,
-                              borderRadius: BorderRadius.zero,
-                              // The viewer above zooms to 8x, so this is the
-                              // one place that needs every ingest pixel.
-                              decodeFullResolution: true,
-                            ),
+                            child: assets[index].build(context),
                           ),
                         ),
                       ),

@@ -52,12 +52,20 @@ class ClaudeUtilityRunner {
     });
   }
 
-  /// [job]'s instructions on [input]; the reply's text. Throws a
-  /// [GaiaRunException].
-  Future<String> generate(String job, String input) async {
+  /// [job]'s instructions on [input], with [images] where their `[image N]`
+  /// tokens are in it; the reply's text. Throws a [GaiaRunException].
+  Future<String> generate(
+    String job,
+    String input, {
+    List<GaiaImageInput> images = const [],
+  }) async {
     debugPrint(
       '[gaia] utility: ${_spare != null ? 'process started ahead' : 'cold start'}'
       ', $_model, config dir "$_configDir"',
+    );
+    final content = await claudeUserContent(
+      '$job\n\n<input>\n$input\n</input>',
+      images,
     );
     final process = _spare ?? await _start();
     _spare = null;
@@ -70,10 +78,7 @@ class ClaudeUtilityRunner {
       process.stdin.writeln(
         jsonEncode({
           'type': 'user',
-          'message': {
-            'role': 'user',
-            'content': '$job\n\n<input>\n$input\n</input>',
-          },
+          'message': {'role': 'user', 'content': content},
         }),
       );
       await process.stdin.close();

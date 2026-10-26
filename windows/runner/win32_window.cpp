@@ -214,7 +214,12 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_ACTIVATE:
-      if (child_content_ != nullptr) {
+      // Only on activation. SetFocus activates the top-level window, so on
+      // WA_INACTIVE (this window hidden or closed while in front, as Gaia's
+      // and the floaters' are) it took the foreground straight back from
+      // the app Windows had just activated, leaving an invisible window in
+      // front.
+      if (child_content_ != nullptr && LOWORD(wparam) != WA_INACTIVE) {
         SetFocus(child_content_);
       }
       return 0;

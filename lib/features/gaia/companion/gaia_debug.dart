@@ -34,6 +34,10 @@ class GaiaDebug extends ChangeNotifier {
   /// Every animation at a tenth of its speed ([timeDilation]).
   var slowAnimations = false;
 
+  /// Gaia's window shows in screenshots and screen shares, which it's
+  /// otherwise excluded from (GAIA_HLD.md §3.2).
+  var allowScreenshots = false;
+
   /// Runs while [showFps] is on.
   final fps = FpsMonitorController();
 
@@ -53,6 +57,7 @@ class GaiaDebug extends ChangeNotifier {
       }
       showFps = json['showFps'] == true;
       slowAnimations = json['slowAnimations'] == true;
+      allowScreenshots = json['allowScreenshots'] == true;
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
     }
@@ -76,6 +81,9 @@ class GaiaDebug extends ChangeNotifier {
 
   Future<void> setSlowAnimations(bool value) =>
       _set(() => slowAnimations = value);
+
+  Future<void> setAllowScreenshots(bool value) =>
+      _set(() => allowScreenshots = value);
 
   /// The script [prompt] calls for, while [scriptedReplies] is on.
   GaiaDebugScript? scriptFor(String prompt) {
@@ -115,6 +123,7 @@ class GaiaDebug extends ChangeNotifier {
           'streamSpeed': streamSpeed,
           'showFps': showFps,
           'slowAnimations': slowAnimations,
+          'allowScreenshots': allowScreenshots,
         }),
       );
     } catch (error) {

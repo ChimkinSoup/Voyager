@@ -145,6 +145,62 @@ void main() {
         contains('Summary of the earlier conversation:\nThey talked maths.'),
       );
     });
+
+    test('images go as their files and captions', () {
+      GaiaMessage withImages(int seq, String text, List<GaiaImagePart> images) {
+        final message = _message(seq, text);
+        return message.copyWith(parts: [...message.parts, ...images]);
+      }
+
+      const shot = GaiaImagePart(
+        mediaId: 'a',
+        label: 1,
+        width: 1,
+        height: 1,
+        caption: 'A settings dialog; "Sync" is circled.',
+      );
+      const later = GaiaImagePart(mediaId: 'b', label: 2, width: 1, height: 1);
+      const away = GaiaImagePart(mediaId: 'c', label: 3, width: 1, height: 1);
+      final older = [
+        withImages(0, 'Do [image 1]', [shot]),
+      ];
+      final preamble = gaiaHandoffPreamble(
+        recent: [
+          withImages(2, 'Now [image 2] and [image 3]', [later, away]),
+        ],
+        older: older,
+        joining: true,
+        summary: 'They set up sync.',
+        files: {'a': r'C:\media\a.jpg', 'b': r'C:\media\b.png'},
+      );
+      expect(preamble, contains('Open the file'));
+      expect(
+        preamble,
+        contains(
+          'Images from the earlier conversation:\n'
+          r'[image 1] (C:\media\a.jpg): A settings dialog; "Sync" is circled.',
+        ),
+      );
+      expect(
+        preamble,
+        contains(
+          'User:\nNow [image 2] and [image 3]\n'
+          '[image 2] (C:\\media\\b.png)\n'
+          '[image 3] (file not on this device)\n',
+        ),
+      );
+      // The summary is asked for with the captions.
+      expect(
+        gaiaTranscriptText(older),
+        'User: Do [image 1]\n[image 1]: A settings dialog; "Sync" is circled.',
+      );
+
+      // No images, no word of them.
+      expect(
+        gaiaHandoffPreamble(recent: [_message(0, 'x')], joining: true),
+        isNot(contains('Images')),
+      );
+    });
   });
 
   test("Claude's context: the turn's last model call", () {

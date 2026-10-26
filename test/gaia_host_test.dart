@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:file/memory.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,9 +76,13 @@ void main() {
   /// Each Ctrl+C fallback, by the exe it was sent to, and what it got.
   late List<String> copies;
   String? copied;
+
+  /// Holds each copy until completed, when set.
+  Completer<void>? copyGate;
   setUp(() {
     copies = [];
     copied = null;
+    copyGate = null;
   });
 
   GaiaHost newHost() => GaiaHost(
@@ -92,6 +98,7 @@ void main() {
     readUia: (window, {required selection}) async => uia,
     copySelection: (window) async {
       copies.add(window.exe);
+      await copyGate?.future;
       return copied;
     },
   );
@@ -606,7 +613,7 @@ void main() {
         uia = (url: 'github.com/pulls', selection: 'some code');
         host.onHotkey(GaiaHotkey.small);
         async.flushMicrotasks();
-        expect(companions.single.events[1], 'hotkey small');
+        expect(companions.single.events, contains('hotkey small'));
         expect(lastContext, {
           'window': {
             'type': 'context',
@@ -670,6 +677,26 @@ void main() {
       });
     });
 
+    test('a summon says where to give the foreground back to', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = (
+          hwnd: 42,
+          pid: 90,
+          exe: 'Code',
+          app: 'Visual Studio Code',
+          title: 'main.dart',
+          console: false,
+        );
+        host.onHotkey(GaiaHotkey.small);
+        async.flushMicrotasks();
+        expect(
+          companions.single.events,
+          containsAllInOrder(['summon 42', 'hotkey small']),
+        );
+      });
+    });
+
     test("a summon from Gaia's own window leaves its context be", () {
       run(show: true, (async, host) {
         connect(async);
@@ -730,6 +757,43 @@ void main() {
         );
       });
     });
+
+    test(
+      'E again over Gaia, or while the last E still reads, does nothing',
+      () {
+        run(show: true, (async, host) {
+          connect(async);
+          foreground = (
+            hwnd: 3,
+            pid: companions.single.pid,
+            exe: 'voyager',
+            app: 'Voyager',
+            title: 'Gaia',
+            console: false,
+          );
+          host.onHotkey(GaiaHotkey.selection);
+          async.flushMicrotasks();
+          expect(
+            companions.single.events.where((e) => e.startsWith('selection')),
+            isEmpty,
+          );
+
+          foreground = editor;
+          copied = 'copied text';
+          copyGate = Completer<void>();
+          host.onHotkey(GaiaHotkey.selection);
+          host.onHotkey(GaiaHotkey.selection);
+          async.flushMicrotasks();
+          copyGate!.complete();
+          async.flushMicrotasks();
+          expect(copies, ['Code']);
+          expect(
+            companions.single.events.where((e) => e.startsWith('selection')),
+            ['selection copied text Visual Studio Code — main.dart - Voyager'],
+          );
+        });
+      },
+    );
 
     test('F arms pick-up; F again takes the selection without another '
         'pick-up event', () {

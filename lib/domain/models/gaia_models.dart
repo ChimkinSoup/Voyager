@@ -269,6 +269,7 @@ sealed class GaiaPart {
           label: (json['label']! as num).toInt(),
           width: (json['width']! as num).toInt(),
           height: (json['height']! as num).toInt(),
+          caption: json['caption'] as String?,
         ),
         'context' => GaiaContextPart(
           app: json['app']! as String,
@@ -308,6 +309,7 @@ class GaiaImagePart extends GaiaPart {
     required this.label,
     required this.width,
     required this.height,
+    this.caption,
   });
 
   final String mediaId;
@@ -318,6 +320,18 @@ class GaiaImagePart extends GaiaPart {
   final int width;
   final int height;
 
+  /// The utility model's description, for a handoff (§7.4); null until one
+  /// is written.
+  final String? caption;
+
+  GaiaImagePart withCaption(String caption) => GaiaImagePart(
+    mediaId: mediaId,
+    label: label,
+    width: width,
+    height: height,
+    caption: caption,
+  );
+
   @override
   Map<String, Object?> toJson() => {
     'type': 'image',
@@ -325,6 +339,7 @@ class GaiaImagePart extends GaiaPart {
     'label': label,
     'width': width,
     'height': height,
+    'caption': ?caption,
   };
 }
 

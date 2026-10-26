@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -88,6 +89,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   // Before start, which can already show the window.
   windowManager.addListener(_DismissOnClose(controller));
   windowManager.addListener(_TrackFocus(controller));
+  _escapeCancelsCrop(controller);
   await controller.start();
   if (pipe is GaiaDevPipe) {
     await _registerDevHotkeys(pipe);
@@ -122,6 +124,39 @@ Future<void> _registerDevHotkeys(GaiaDevPipe pipe) async {
     '[gaia] dev mode: Ctrl+Alt+1 small, 2 large, 3 window, 4 abort, '
     '5 region, 6 screen',
   );
+}
+
+/// Esc is system-wide while the crop overlay is up, so it cancels the crop
+/// even when the overlay's own Esc can't: the overlay never got the focus,
+/// or the keyboard state holds a modifier whose release went elsewhere, as
+/// spamming the capture hotkey leaves it.
+void _escapeCancelsCrop(GaiaController controller) {
+  final escape = HotKey(
+    key: PhysicalKeyboardKey.escape,
+    // Never null: the Windows plugin reads the list unchecked and aborts.
+    modifiers: [],
+    scope: HotKeyScope.system,
+  );
+  var registered = false;
+  controller.addListener(() async {
+    final cropping = controller.cropping != null;
+    if (cropping == registered) return;
+    registered = cropping;
+    try {
+      if (cropping) {
+        await hotKeyManager.register(
+          escape,
+          keyDownHandler: (_) => unawaited(controller.finishCrop(null)),
+        );
+      } else {
+        await hotKeyManager.unregister(escape);
+      }
+    } catch (error) {
+      debugPrint(
+        '[gaia] crop Esc not ${cropping ? '' : 'un'}registered: $error',
+      );
+    }
+  });
 }
 
 class _DismissOnClose with WindowListener {

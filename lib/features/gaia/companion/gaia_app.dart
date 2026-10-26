@@ -18,7 +18,9 @@ import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
+import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
@@ -543,6 +545,20 @@ class _Messages extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A clicked image opens among every image in the chat so far.
+    void open(GaiaImagePart image) {
+      final images = [
+        for (final message in messages)
+          ...message.parts.whereType<GaiaImagePart>(),
+      ];
+      showGaiaLightbox(
+        context,
+        images: images,
+        initial: images.indexOf(image),
+        imageFile: imageFile,
+      );
+    }
+
     // Reversed, so the newest stays in view as a reply streams in.
     return LayoutBuilder(
       // Messages keep to a middle column of about 115 characters a line, as
@@ -561,7 +577,11 @@ class _Messages extends StatelessWidget {
             final i = messages.length - 1 - index;
             final message = messages[i];
             final switched = _switchedFrom(messages, i);
-            final view = _MessageView(message: message, imageFile: imageFile);
+            final view = _MessageView(
+              message: message,
+              imageFile: imageFile,
+              onOpen: open,
+            );
             if (switched == null) return view;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -626,10 +646,15 @@ class _VendorDivider extends StatelessWidget {
 }
 
 class _MessageView extends StatelessWidget {
-  const _MessageView({required this.message, required this.imageFile});
+  const _MessageView({
+    required this.message,
+    required this.imageFile,
+    required this.onOpen,
+  });
 
   final GaiaMessage message;
   final Future<String?> Function(String mediaId) imageFile;
+  final void Function(GaiaImagePart image) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -640,20 +665,16 @@ class _MessageView extends StatelessWidget {
     if (message.role == GaiaMessageRole.user) {
       final images = message.parts.whereType<GaiaImagePart>();
       final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
-      return _bubble(
-        theme.colorScheme.surfaceContainerHighest,
-        Alignment.centerRight,
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (window != null) ...[
-              _ContextChip(label: window.label),
-              const SizedBox(height: 6),
-            ],
-            SelectableText(message.text),
-            if (images.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
+      // Images float on their own above the prompt's bubble; a message of
+      // only images has no bubble.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (images.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 48, bottom: 8),
+              child: Wrap(
+                alignment: WrapAlignment.end,
                 spacing: 8,
                 runSpacing: 8,
                 children: [
@@ -662,12 +683,29 @@ class _MessageView extends StatelessWidget {
                       file: imageFile(image.mediaId),
                       label: image.label,
                       height: 96,
+                      onTap: () => onOpen(image),
                     ),
                 ],
               ),
-            ],
-          ],
-        ),
+            ),
+          if (window != null || message.text.isNotEmpty)
+            _bubble(
+              theme.colorScheme.surfaceContainerHighest,
+              Alignment.centerRight,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (window != null) ...[
+                    _ContextChip(label: window.label),
+                    const SizedBox(height: 6),
+                  ],
+                  if (message.text.isNotEmpty) SelectableText(message.text),
+                ],
+              ),
+            )
+          else
+            const SizedBox(height: 4),
+        ],
       );
     }
     final status = switch (message.status) {
@@ -696,11 +734,10 @@ class _MessageView extends StatelessWidget {
               GaiaImagePart() || GaiaContextPart() => const SizedBox.shrink(),
             },
           if (message.status == GaiaMessageStatus.streaming)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: SizedBox.square(
-                dimension: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: GaiaOrb(
+                speaking: message.parts.lastOrNull is GaiaTextPart,
               ),
             ),
           if (status != null)
@@ -1044,43 +1081,32 @@ class _ContextChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return Container(
+    final accent = theme.colorScheme.primary;
+    final style = theme.textTheme.labelSmall?.copyWith(color: accent);
+    final chip = Container(
       constraints: const BoxConstraints(maxWidth: 420),
-      padding: EdgeInsets.fromLTRB(8, 3, onRemove == null ? 8 : 2, 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(8),
+        color: accent.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.web_asset,
-            size: 14,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 6),
+          Icon(Icons.web_asset, size: 12, color: accent),
+          const SizedBox(width: 4),
           Flexible(
-            child: Text(label, style: muted, overflow: TextOverflow.ellipsis),
+            child: Text(label, style: style, overflow: TextOverflow.ellipsis),
           ),
-          if (onRemove case final remove?)
-            InkWell(
-              customBorder: const CircleBorder(),
-              onTap: remove,
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(
-                  Icons.close,
-                  size: 14,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
         ],
       ),
+    );
+    if (onRemove == null) return chip;
+    // Clicking it removes it.
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: onRemove,
+      child: chip,
     );
   }
 }

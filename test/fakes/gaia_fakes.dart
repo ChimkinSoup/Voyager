@@ -155,14 +155,28 @@ class FakeGaiaWindow implements GaiaWindow {
     GaiaMode mode,
     void Function() layout, {
     GaiaFrame? frame,
+    bool behind = false,
   }) async {
     shown = mode;
     this.frame = frame;
+    this.behind = behind;
     layout();
   }
 
   @override
-  void hide() => shown = null;
+  void hide({bool between = false}) {
+    shown = null;
+    if (!between) returnTo = 0;
+  }
+
+  /// What the debug menu last set.
+  var capturable = false;
+
+  @override
+  var returnTo = 0;
+
+  @override
+  void setCapturable(bool capturable) => this.capturable = capturable;
 }
 
 /// One [FakeClaudeRunner.send] call.
@@ -286,6 +300,9 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
 
   final String Function(String job) answer;
   final jobs = <String>[];
+
+  /// Each job's images, in order.
+  final images = <List<GaiaImageInput>>[];
   var warmed = 0;
   var model = '';
   var configDir = '';
@@ -303,8 +320,13 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
   Future<void> warm() async => warmed++;
 
   @override
-  Future<String> generate(String job, String input) async {
+  Future<String> generate(
+    String job,
+    String input, {
+    List<GaiaImageInput> images = const [],
+  }) async {
     jobs.add(job);
+    this.images.add(images);
     return answer(job);
   }
 }

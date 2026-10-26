@@ -35,7 +35,6 @@ Map<String, String> claudeEnvironment(String configDir) {
 /// content blocks interleaved where their `[image N]` tokens are, each after
 /// the text that ends in its token. An image whose token isn't in [prompt]
 /// goes at the end, after its token.
-@visibleForTesting
 Future<Object> claudeUserContent(
   String prompt,
   List<GaiaImageInput> images,

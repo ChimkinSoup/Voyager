@@ -55,6 +55,18 @@ void main() {
       expect(await u.route('x'), isNull);
       expect(await u.title('x', 'y'), isNull);
       expect(await u.summarize('x'), isNull);
+      expect(
+        await u.caption((label: 1, path: 'a.jpg', mimeType: 'image/jpeg')),
+        isNull,
+      );
+    });
+
+    test('a caption is asked for with the image', () async {
+      const image = (label: 4, path: 'a.jpg', mimeType: 'image/jpeg');
+      final u = utility((_) => ' A red arrow points at Save. ');
+      expect(await u.caption(image), 'A red arrow points at Save.');
+      expect(runner.jobs.single, startsWith('Describe the image'));
+      expect(runner.images.single, [image]);
     });
 
     test('answers', () {

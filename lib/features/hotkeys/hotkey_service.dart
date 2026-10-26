@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/hotkey_parser.dart';
+import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:win32/win32.dart';
 
@@ -62,7 +63,10 @@ class WindowsHotkeyService implements HotkeyService {
         _taken[kind] = key;
         continue;
       }
-      await hotKeyManager.register(key, keyDownHandler: (_) => onHotkey(kind));
+      await hotKeyManager.register(
+        key,
+        keyDownHandler: onPressOnly((_) => onHotkey(kind)),
+      );
       _keys.add(key);
     }
     return {..._taken.keys};
@@ -75,7 +79,10 @@ class WindowsHotkeyService implements HotkeyService {
     for (final MapEntry(key: kind, value: key) in [..._taken.entries]) {
       if (_isTaken(key)) continue;
       _taken.remove(kind);
-      await hotKeyManager.register(key, keyDownHandler: (_) => onHotkey(kind));
+      await hotKeyManager.register(
+        key,
+        keyDownHandler: onPressOnly((_) => onHotkey(kind)),
+      );
       _keys.add(key);
     }
     return {..._taken.keys};

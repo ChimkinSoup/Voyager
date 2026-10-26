@@ -56,6 +56,10 @@ class FloaterWindow {
 
   bool get isBorrowed => _saved != null;
 
+  /// While [isBorrowed], the window that was in front when the floater
+  /// opened.
+  int get previousForeground => _previousForeground;
+
   /// Whether the window has the main window's own placement: not lent to a
   /// floater, and not hidden still at a floater's size.
   bool get atMainPlacement =>

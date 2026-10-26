@@ -27,6 +27,7 @@ void main() {
     await before.setReplyDelay(const Duration(milliseconds: 3500));
     await before.setStreamSpeed(50);
     await before.setSlowAnimations(true);
+    await before.setAllowScreenshots(true);
     timeDilation = 1;
 
     final after = GaiaDebug(file: file);
@@ -36,6 +37,7 @@ void main() {
     expect(after.streamSpeed, 50);
     expect(after.slowAnimations, isTrue);
     expect(after.showFps, isFalse);
+    expect(after.allowScreenshots, isTrue);
     expect(timeDilation, 10);
   });
 

@@ -37,6 +37,10 @@ class GaiaWindow {
   /// On screen and in front: not behind other apps or minimised.
   bool get foreground => shown != null && GetForegroundWindow() == _hwnd;
 
+  /// The window [hide] gives the foreground back to: the app Gaia was
+  /// summoned from. 0 for none, which leaves it to Windows.
+  int returnTo = 0;
+
   /// Where the Gaia window was when last on screen, so a floater opened
   /// over it can put it back: its frame when not maximised or minimised (in
   /// workspace coordinates, as [GetWindowPlacement] gives them) and whether
@@ -52,9 +56,25 @@ class GaiaWindow {
     await windowManager.setPreventClose(true);
     await windowManager.setMinimumSize(_minimumSize);
     _hwnd = _findOwnWindow();
-    // Out of its own screenshots — and the user's screen shares (§3.2).
-    SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
+    setCapturable(false);
+    // Hidden until shown; see [hide].
+    EnableWindow(_hwnd, FALSE);
   }
+
+  /// Out of its own screenshots — and the user's screen shares (§3.2) —
+  /// unless the debug menu lets them in.
+  void setCapturable(bool capturable) {
+    _capturable = capturable;
+    _applyCapturable();
+  }
+
+  var _capturable = false;
+
+  /// Again on every show: hiding the window clears its affinity.
+  void _applyCapturable() => SetWindowDisplayAffinity(
+    _hwnd,
+    _capturable ? WDA_NONE : WDA_EXCLUDEFROMCAPTURE,
+  );
 
   /// Puts the window on screen in [mode]. [layout] swaps the content to
   /// [mode]'s layout; it runs before the resize when the window shrinks, and
@@ -62,13 +82,27 @@ class GaiaWindow {
   /// the uncovered area black and a shrink never squeezes the old layout.
   /// [GaiaMode.overlay] takes the monitor's [frame]. [GaiaMode.pickUp]
   /// shows without taking the focus, which the user is selecting in.
+  /// [behind] puts it back behind the app that was in front when Gaia last
+  /// came up, which gets the foreground back: a crop cancelled over a Gaia
+  /// window the user wasn't in.
   Future<void> show(
     GaiaMode mode,
     void Function() layout, {
     GaiaFrame? frame,
+    bool behind = false,
   }) async {
     final hwnd = _hwnd;
     final pill = mode == GaiaMode.pickUp;
+    // Already up in this mode, as a hotkey pressed again finds it: only
+    // brought to the front. Going through the hide and re-show would flash.
+    if (mode == shown && mode != GaiaMode.overlay && IsIconic(hwnd) == 0) {
+      if (!pill) SetForegroundWindow(hwnd);
+      return;
+    }
+    final front = GetForegroundWindow();
+    if (front != hwnd) _cameFrom = front;
+    final back = _cameFrom;
+    behind = behind && IsWindowVisible(back) != 0 && IsIconic(back) == 0;
     // The chat's minimum size would hold the pill at the size of one.
     if (pill != _minimumOff) {
       _minimumOff = pill;
@@ -90,6 +124,8 @@ class GaiaWindow {
     while (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
       await Future<void>(() {});
     }
+    EnableWindow(hwnd, TRUE);
+    _applyCapturable();
     _cloak(hwnd, true);
     // SetWindowPos doesn't bring a window out of minimised or maximised; a
     // window minimised from maximised restores to maximised first.
@@ -150,17 +186,53 @@ class GaiaWindow {
       layout();
       await _paintedAt();
     }
+    if (behind) {
+      // Still cloaked, so it never shows in front on the way.
+      SetForegroundWindow(back);
+      if (!floater) {
+        SetWindowPos(
+          hwnd,
+          back,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+      }
+    }
     _cloak(hwnd, false);
-    if (!pill) SetForegroundWindow(hwnd);
+    if (!pill && !behind) SetForegroundWindow(hwnd);
     shown = mode;
   }
+
+  /// The app in front when Gaia last came up; see [show]'s `behind`.
+  int _cameFrom = 0;
 
   /// The minimum size is lifted for the pick-up pill.
   var _minimumOff = false;
 
-  void hide() {
+  /// [between] hides it on the way to showing it again, as a crop does
+  /// while it renders: [returnTo] isn't used up, and keeps the foreground.
+  void hide({bool between = false}) {
     if (shown == GaiaMode.window) _windowPlacement = _readPlacement(_hwnd);
+    // Windows would activate whichever window was active before Gaia. Over
+    // a Voyager floater that's Voyager's main window, which has gone back
+    // behind the app the user was in by now, and would come up over it.
+    final back = between ? 0 : returnTo;
+    if (!between) returnTo = 0;
+    if (GetForegroundWindow() == _hwnd &&
+        back != 0 &&
+        IsWindowVisible(back) != 0 &&
+        IsIconic(back) == 0) {
+      SetForegroundWindow(back);
+    }
     ShowWindow(_hwnd, SW_HIDE);
+    // Content that takes the focus while hidden, as the composer does when
+    // a crop ends, asks for the window's focus, which would activate it
+    // unseen, in front of the app the user went back to. A disabled window
+    // can't be activated.
+    EnableWindow(_hwnd, FALSE);
     shown = null;
   }
 

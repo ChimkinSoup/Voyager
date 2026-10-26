@@ -15,6 +15,8 @@ import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
+import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
+import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
 import 'package:win32/win32.dart';
 
 /// Gaia's hotkeys (GAIA_HLD.md §15.1, §15.7), rebindable on the Gaia page:
@@ -210,7 +212,7 @@ class GaiaHost {
       try {
         await hotKeyManager.register(
           parsed.hotKey,
-          keyDownHandler: (_) => onHotkey(hotkey),
+          keyDownHandler: onPressOnly((_) => onHotkey(hotkey)),
         );
         _registered[hotkey] = combo;
       } catch (error) {
@@ -280,6 +282,16 @@ class GaiaHost {
     }
     // Now, while the app the user summoned Gaia from is still in front.
     final window = _foregroundWindow();
+    if (window != null && window.pid != _companionPid) {
+      final summon = {'returnTo': _returnTo(window)};
+      // Ahead of the hotkey's own event, which launches a companion that
+      // isn't up.
+      if (_pipe.connected) {
+        _send('summon', summon);
+      } else {
+        _pendingEvents.add(('summon', summon));
+      }
+    }
     switch (hotkey) {
       case GaiaHotkey.region || GaiaHotkey.screen:
         unawaited(_captureScreen(hotkey));
@@ -294,6 +306,14 @@ class GaiaHost {
     }
     unawaited(_sendContext(window));
   }
+
+  /// Where Gaia gives the foreground back to when it hides, for a summon
+  /// from [window]. A floater closes as Gaia takes the focus, so for one,
+  /// that's the app it was opened over.
+  static int _returnTo(GaiaForegroundWindow window) =>
+      window.pid == pid && FloaterWindow.instance.isBorrowed
+      ? FloaterWindow.instance.previousForeground
+      : window.hwnd;
 
   /// The summon's context (§15.4), after the summon itself, which never
   /// waits on UI Automation: the window, unless that's off or excluded,
@@ -374,12 +394,32 @@ class GaiaHost {
     GaiaForegroundWindow? window,
   ) async {
     if (_aborted) return _sendOrLaunch('refused', {'reason': 'aborted'});
+    if (hotkey == GaiaHotkey.selection) {
+      // Pressed again: over Gaia, which is already up, or while the last
+      // press is still reading the selection.
+      if (_selecting || (window != null && window.pid == _companionPid)) {
+        return;
+      }
+      _selecting = true;
+      try {
+        return await _readSelection(window);
+      } finally {
+        _selecting = false;
+      }
+    }
     if (hotkey == GaiaHotkey.pickUp) {
       final arming = !_pickingUp;
       // Disarmed, the selection that follows takes the pill down.
       await _armPickUp(arming, tell: arming);
       if (arming) return;
     }
+    await _readSelection(window);
+  }
+
+  /// E's read is in progress.
+  var _selecting = false;
+
+  Future<void> _readSelection(GaiaForegroundWindow? window) async {
     // Nothing to read in Gaia itself, or in an app on the exclusion list
     // (§15.4), which the user said is never read.
     bool excluded(String? url) => gaiaContextExcluded(

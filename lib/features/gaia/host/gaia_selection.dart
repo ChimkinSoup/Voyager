@@ -16,16 +16,18 @@ import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 Future<String?> gaiaCopySelection(GaiaForegroundWindow window) async {
   if (window.console) return null;
   // The hotkey's own keys are still down: Ctrl+C sent with Alt held is
-  // Ctrl+Alt+C to the app.
+  // Ctrl+Alt+C to the app. Those still held after a moment are let go of
+  // for the user, however long they hold them.
   final released = Stopwatch()..start();
-  while (_modifierDown() && released.elapsed < const Duration(seconds: 1)) {
+  while (_heldModifiers().isNotEmpty &&
+      released.elapsed < const Duration(milliseconds: 250)) {
     await Future<void>.delayed(const Duration(milliseconds: 15));
   }
-  if (_modifierDown() || GetForegroundWindow() != window.hwnd) return null;
+  if (GetForegroundWindow() != window.hwnd) return null;
   final saved = _readClipboard();
   if (saved == null) return null;
   final before = GetClipboardSequenceNumber();
-  _sendCtrlC();
+  _sendCtrlC(release: _heldModifiers());
   final waited = Stopwatch()..start();
   while (GetClipboardSequenceNumber() == before &&
       waited.elapsed < const Duration(milliseconds: 500)) {
@@ -39,13 +41,39 @@ Future<String?> gaiaCopySelection(GaiaForegroundWindow window) async {
   return copied == null || copied.trim().isEmpty ? null : copied;
 }
 
-const _modifiers = [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN];
+/// Each side's own key, for a release that matches the press.
+const _modifiers = [
+  VK_LCONTROL,
+  VK_RCONTROL,
+  VK_LMENU,
+  VK_RMENU,
+  VK_LSHIFT,
+  VK_RSHIFT,
+  VK_LWIN,
+  VK_RWIN,
+];
 
-bool _modifierDown() =>
-    _modifiers.any((key) => GetAsyncKeyState(key) & 0x8000 != 0);
+/// The right-hand Ctrl and Alt, and the Win keys, are extended keys.
+const _extended = {VK_RCONTROL, VK_RMENU, VK_LWIN, VK_RWIN};
 
-void _sendCtrlC() {
-  const keys = [
+List<int> _heldModifiers() => [
+  for (final key in _modifiers)
+    if (GetAsyncKeyState(key) & 0x8000 != 0) key,
+];
+
+/// Ctrl+C, after letting go of the modifiers in [release]. Alt or Win let go
+/// of alone would open the app's menu bar or Start, so an unassigned key is
+/// pressed under them first, as AutoHotkey's menu mask does. One
+/// [SendInput], so none of the user's own keys land in between.
+void _sendCtrlC({List<int> release = const []}) {
+  const mask = 0xE8;
+  final keys = [
+    if (release.isNotEmpty) ...[(mask, 0), (mask, KEYEVENTF_KEYUP)],
+    for (final key in release)
+      (
+        key,
+        KEYEVENTF_KEYUP | (_extended.contains(key) ? KEYEVENTF_EXTENDEDKEY : 0),
+      ),
     (VK_CONTROL, 0),
     (0x43, 0), // C
     (0x43, KEYEVENTF_KEYUP),

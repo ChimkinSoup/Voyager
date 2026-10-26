@@ -203,7 +203,8 @@ streams JSONL, resumes sessions, and speaks MCP:
 | Gemini API (skipped for now) | AI Studio API key | direct HTTPS streaming | Gaia replays history |
 
 Gaia's small internal jobs need fast answers: the tier router (§7.2), chat
-titles, the memory curator (§11) and compaction summaries. This **utility
+titles, image captions for handoffs (§7.4), the memory curator (§11) and
+compaction summaries. This **utility
 model** is Haiku on the Claude Code CLI, on the same login as Gaia's Claude
 chats, so it needs no API key (decided 2026-10-25, replacing the Gemini API
 adapter first built for it). Each job is a fresh `claude -p --safe-mode
@@ -547,6 +548,9 @@ through the confirmation in §7.5. The command works at any point in the chat.
   preamble**. That's a Gaia-rendered transcript of recent turns plus a
   utility-model summary of older ones. Tool-call internals of the other vendor
   don't carry over, which is lossy but honest, and Gaia shows a divider.
+  Images don't go in as images. Each goes as a utility-model caption plus
+  the path of its local file, which the agent opens with its own file or
+  image tool when the caption isn't enough (Phase 3 as built, §19).
   Each chat tracks native sessions per device, adapter and account
   (`agentSessions` in §8), so switching back resumes the original session.
 - **Catching a session up.** A native session lives on the machine that ran
@@ -1239,8 +1243,26 @@ Phase 3 as built:
   transparent), and that stored file is what the agent gets. Claude Code
   takes base64 image blocks over stream-json and Codex takes
   `--image=<path>` per image plus a line naming the labels in order; both
-  verified on 2.1.310 and 0.164.0. A handoff transcript says images
-  weren't carried over.
+  verified on 2.1.310 and 0.164.0.
+- **Images in a handoff** (added 2026-10-26). A transcript lists each
+  image under its message as `[image N] (<local file>): <caption>`.
+  Images from summarised turns are listed after the summary, and the
+  summariser gets the captions too. An image whose bytes aren't on this
+  device says "file not on this device". The caption is the utility
+  model's description (under 80 words), covering text in the image and
+  what any marks point at. It's written when the message is sent, in the
+  background, and stored on the image part (`caption`), so it syncs and
+  is written once. A handoff waits up to 20 s for captions it still lacks,
+  three messages at a time; that covers images sent before captions
+  existed. Past that it goes with paths alone, and the captions keep going
+  for the next handoff. An image whose captioning failed isn't tried again
+  until Gaia restarts, so a broken utility model holds up one handoff, not
+  every one. Neither CLI
+  needed new permissions for the paths: Claude Code in safe mode reads an
+  image outside its working directory with Read, and Codex opens one with
+  its image viewer (both checked on 2.1.310 / 0.164.0, 2026-10-26).
+  Re-sending the images themselves was rejected, because it costs about
+  1.5k tokens per image on every handoff.
 - **Captures.** The main instance grabs the monitor under the cursor with
   GDI (BitBlt with CAPTUREBLT) on a worker isolate, as a 32-bit BMP in
   `gaia/captures`, swept after an hour, and sends the companion its path

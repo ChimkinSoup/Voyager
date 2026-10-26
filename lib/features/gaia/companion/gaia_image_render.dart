@@ -45,6 +45,13 @@ class GaiaMark {
     color: color,
     width: width,
   );
+
+  GaiaMark movedBy(Offset by) => GaiaMark(
+    tool: tool,
+    points: [for (final point in points) point + by],
+    color: color,
+    width: width,
+  );
 }
 
 /// What the editor did to an image: its marks, oldest first, and a crop in

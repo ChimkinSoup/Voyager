@@ -20,6 +20,7 @@ import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
@@ -28,6 +29,13 @@ const _uuid = Uuid();
 /// How often a streaming reply is written through to the main instance. The
 /// companion's own view updates on every delta.
 const _persistEvery = Duration(seconds: 1);
+
+/// How long a handoff waits for its images' captions before it goes with
+/// the files alone; the captions carry on, for the next one.
+const _captionWait = Duration(seconds: 20);
+
+/// How many messages' images are captioned at once: each is a CLI process.
+const _captionsAtOnce = 3;
 
 /// A finished run, as Gaia's own toast shows it.
 typedef GaiaRunToast = ({
@@ -123,11 +131,25 @@ class GaiaController extends ChangeNotifier {
   /// hidden.
   GaiaMode? _beforeCrop;
 
+  /// Up but behind other apps before the overlay: a cancel puts it back
+  /// there rather than in front.
+  var _cropBehind = false;
+
   /// A capture from the main instance (§15.1): C crops it on the overlay,
   /// D attaches it whole. Either way Gaia ends up on screen with it in the
   /// draft.
   Future<void> _onCapture(Map<String, Object?> params) async {
     final path = params['path']! as String;
+    final GaiaFrame frame = (
+      left: params['left']! as int,
+      top: params['top']! as int,
+      width: params['width']! as int,
+      height: params['height']! as int,
+    );
+    // C again over its own crop, on the same monitor: the crop stays.
+    if (params['kind'] == 'region' && cropping?.frame == frame) {
+      return _deleteQuietly(path);
+    }
     // Over a crop's overlay, what the window was is still what was before it.
     final overCrop = cropping != null;
     _discardCrop();
@@ -138,15 +160,8 @@ class GaiaController extends ChangeNotifier {
       return _show(shown ?? GaiaMode.small);
     }
     _beforeCrop = shown;
-    cropping = (
-      path: path,
-      frame: (
-        left: params['left']! as int,
-        top: params['top']! as int,
-        width: params['width']! as int,
-        height: params['height']! as int,
-      ),
-    );
+    if (!overCrop) _cropBehind = shown != null && !_window.foreground;
+    cropping = (path: path, frame: frame);
     onScreen.value = true;
     await _window.show(GaiaMode.overlay, () {
       layout = GaiaMode.overlay;
@@ -165,7 +180,7 @@ class GaiaController extends ChangeNotifier {
       if (region != null) {
         // Off screen while it renders, not the chat stretched over the
         // monitor.
-        _window.hide();
+        _window.hide(between: true);
         final png = await gaiaRenderPng(capture.path, crop: region);
         await attachImage(png);
       }
@@ -173,7 +188,7 @@ class GaiaController extends ChangeNotifier {
       unawaited(_deleteQuietly(capture.path));
     }
     final back = _beforeCrop ?? (region == null ? null : GaiaMode.small);
-    if (back != null) return _show(back);
+    if (back != null) return _show(back, behind: region == null && _cropBehind);
     _window.hide();
     onScreen.value = false;
     layout = GaiaMode.small;
@@ -308,6 +323,14 @@ class GaiaController extends ChangeNotifier {
   /// The [_imageFiles] the main instance said aren't here, to ask again.
   final _missingImages = <String>{};
 
+  /// Captions being written, by message id ([_caption]).
+  final _captioning = <String, Future<void>>{};
+
+  /// Images whose captioning failed, by media id: not tried again until
+  /// Gaia restarts, so a broken utility model holds up one handoff, not
+  /// every one.
+  final _captionFailed = <String>{};
+
   /// The file holding a message's image; null while it isn't on this
   /// device. Asked once, and again after the next change the main instance
   /// reports, which may be the download that brought it.
@@ -414,6 +437,9 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> start() async {
     await _window.init();
+    void applyCapturable() => _window.setCapturable(debug.allowScreenshots);
+    applyCapturable();
+    debug.addListener(applyCapturable);
     _pipe
       ..onEvent = _onEvent
       ..onRequest = _onRequest
@@ -505,6 +531,10 @@ class GaiaController extends ChangeNotifier {
 
   void _onEvent(String event, Map<String, Object?> params) {
     switch (event) {
+      case 'summon':
+        // Never sent from Gaia itself: whether it was hidden, behind, or
+        // the pick-up pill, the user was last in the summoning app.
+        _window.returnTo = params['returnTo']! as int;
       case 'hotkey':
         unawaited(onHotkey(params['key']! as String));
       case 'capture':
@@ -611,7 +641,7 @@ class GaiaController extends ChangeNotifier {
     if (!_pickingUp) return;
     _pickingUp = false;
     _beforePickUp = null;
-    _window.hide();
+    _window.hide(between: true);
   }
 
   /// Out of the pill: back to how Gaia was, or with a selection to show,
@@ -708,13 +738,13 @@ class GaiaController extends ChangeNotifier {
     onScreen.value = false;
   }
 
-  Future<void> _show(GaiaMode mode) {
+  Future<void> _show(GaiaMode mode, {bool behind = false}) {
     if (currentChatId == null) _utility?.warm();
     onScreen.value = true;
     return _window.show(mode, () {
       layout = mode;
       notifyListeners();
-    });
+    }, behind: behind);
   }
 
   void newChat() {
@@ -961,6 +991,8 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
     unawaited(_persist(question));
     unawaited(_persist(reply));
+    // Ready for a later handoff; this turn's agent sees the images.
+    if (script == null) unawaited(_caption([question]));
 
     final builder = GaiaTurnBuilder();
     var session = agent == null
@@ -1000,17 +1032,29 @@ class GaiaController extends ChangeNotifier {
     final asked = context == null ? prompt : '${context.preamble}\n\n$prompt';
     Future<String> handedOver() async {
       if (script != null || agent == null || runner == null) return asked;
-      final unseen = gaiaUnseenTurns(
-        list,
+      List<GaiaMessage> unseen() => gaiaUnseenTurns(
+        _messages[chatId] ?? list,
         lastSeq: session?.lastSeq ?? -1,
         beforeSeq: seq,
       );
-      if (unseen.isEmpty) return asked;
-      final (older, recent) = gaiaSplitHandoff(unseen);
+      final captioning = unseen();
+      if (captioning.isEmpty) return asked;
+      // Images go as captions and files (§7.4): the captions first, for a
+      // while, read back from the messages they were written to.
+      await _caption(captioning).timeout(_captionWait, onTimeout: () {});
+      final turns = unseen();
+      final (older, recent) = gaiaSplitHandoff(turns);
       final summary = older.isEmpty
           ? null
           : await _utility?.summarize(gaiaTranscriptText(older));
-      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$asked';
+      final ids = {
+        for (final message in turns)
+          for (final image in message.parts.whereType<GaiaImagePart>())
+            image.mediaId,
+      };
+      final paths = await Future.wait(ids.map(imageFile));
+      final files = Map.fromIterables(ids, paths);
+      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: files)}\n$asked';
     }
 
     final sent = await handedOver();
@@ -1302,6 +1346,74 @@ class GaiaController extends ChangeNotifier {
     if (index >= 0) list![index] = updated;
     notifyListeners();
     return updated;
+  }
+
+  /// Captions [messages]' images that have none (§7.4), a few at a time,
+  /// and saves each message they're written to. A message already being
+  /// captioned is waited on, not done again; an image that failed isn't
+  /// tried again ([_captionFailed]).
+  Future<void> _caption(List<GaiaMessage> messages) async {
+    final utility = _utility;
+    if (utility == null) return;
+    final pending = [
+      for (final message in messages)
+        if (message.parts.any(
+          (p) =>
+              p is GaiaImagePart &&
+              p.caption == null &&
+              !_captionFailed.contains(p.mediaId),
+        ))
+          message,
+    ];
+    for (var i = 0; i < pending.length; i += _captionsAtOnce) {
+      await Future.wait([
+        for (final message in pending.skip(i).take(_captionsAtOnce))
+          _captioning[message.id] ??= _captionOne(
+            utility,
+            message,
+          ).whenComplete(() => _captioning.remove(message.id)),
+      ]);
+    }
+  }
+
+  Future<void> _captionOne(GaiaUtility utility, GaiaMessage message) async {
+    final captions = <int, String>{};
+    for (final image in message.parts.whereType<GaiaImagePart>()) {
+      if (image.caption != null || _captionFailed.contains(image.mediaId)) {
+        continue;
+      }
+      final path = await imageFile(image.mediaId);
+      if (path == null) continue;
+      final format = MediaImageFormat.fromPath(path);
+      final caption = await utility.caption((
+        label: image.label,
+        path: path,
+        mimeType: (format ?? MediaImageFormat.jpeg).mimeType,
+      ));
+      if (caption == null) {
+        _captionFailed.add(image.mediaId);
+      } else {
+        captions[image.label] = caption;
+      }
+    }
+    final current = _messages[message.chatId]
+        ?.where((m) => m.id == message.id)
+        .firstOrNull;
+    if (captions.isEmpty || current == null) return;
+    final updated = _replace(
+      current,
+      current.copyWith(
+        parts: [
+          for (final part in current.parts)
+            switch (part) {
+              GaiaImagePart(:final label) when captions.containsKey(label) =>
+                part.withCaption(captions[label]!),
+              _ => part,
+            },
+        ],
+      ),
+    );
+    await _persist(updated);
   }
 
   /// The utility model's title for a chat's first exchange, over the
