@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
@@ -222,7 +223,7 @@ class _GaiaShell extends StatelessWidget {
             if (controller.debug.showFps)
               Positioned(
                 // Above the composer, clear of the toasts below the header.
-                bottom: 76,
+                bottom: 102,
                 right: 12,
                 child: IgnorePointer(
                   child: FpsCounterCard(monitor: controller.debug.fps),
@@ -784,7 +785,7 @@ class _ComposerState extends State<_Composer> {
         // A little wider than the messages' column, as in Claude's apps.
         final side = max(12.0, (constraints.maxWidth - _column) / 2 - 12);
         return Padding(
-          padding: EdgeInsets.fromLTRB(side, 8, side, 12),
+          padding: EdgeInsets.fromLTRB(side, 8, side, 8),
           child: CallbackShortcuts(
             bindings: {
               send.activator: _send,
@@ -823,28 +824,22 @@ class _ComposerState extends State<_Composer> {
                     expands: vanishing,
                     textAlignVertical: vanishing ? TextAlignVertical.top : null,
                     hintText: vanishing ? null : 'Message Gaia',
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _TierPicker(controller: controller),
-                        const SizedBox(width: 8),
-                        if (running)
-                          GaiaButton(
+                    trailing: running
+                        ? GaiaButton(
                             icon: Icons.stop,
                             size: 32,
                             onPressed: () =>
                                 controller.stop(controller.currentChatId!),
                           )
-                        else
-                          GaiaButton(
+                        : GaiaButton(
                             icon: Icons.arrow_upward,
                             size: 32,
                             onPressed: _send,
                           ),
-                      ],
-                    ),
                   ),
                 ),
+                const SizedBox(height: 6),
+                _ComposerStatus(controller: controller),
               ],
             ),
           ),
@@ -908,6 +903,175 @@ class _Palette extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Under the composer: the current chat's context, the next message's
+/// account usage, and the tier picker.
+class _ComposerStatus extends StatelessWidget {
+  const _ComposerStatus({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = controller.contextTokens;
+    final usage =
+        controller.usage[controller.agentFor(controller.nextTier)?.adapter];
+    return Row(
+      children: [
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            tokens == null ? '' : '${(tokens / 1000).round()}k context',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (usage != null) ...[
+          _UsageRing(usage: usage),
+          const SizedBox(width: 8),
+        ],
+        // The notch opens up and to the left, so it ends the row.
+        _TierPicker(controller: controller),
+      ],
+    );
+  }
+}
+
+/// An account's five-hour usage as a ring filling clockwise from the top,
+/// with a bar for every window in its tooltip.
+class _UsageRing extends StatelessWidget {
+  const _UsageRing({required this.usage});
+
+  final GaiaUsage usage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      richMessage: WidgetSpan(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _UsageBar(name: '5-hour', window: usage.fiveHour),
+            const SizedBox(height: 10),
+            _UsageBar(name: 'Weekly', window: usage.weekly),
+          ],
+        ),
+      ),
+      padding: const EdgeInsets.all(10),
+      child: CustomPaint(
+        size: const Size.square(14),
+        painter: _RingPainter(
+          used: _usedNow(usage.fiveHour),
+          track: Colors.white.withValues(alpha: 0.15),
+          fill: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+}
+
+/// [window]'s share used, 0 once it has reset since it was read.
+double _usedNow(GaiaUsageWindow? window) =>
+    window == null || !window.resetsAt.isAfter(DateTime.now())
+    ? 0
+    : window.used.clamp(0.0, 1.0);
+
+/// One usage window in the ring's tooltip: its name and share used over a
+/// bar, and when it resets.
+class _UsageBar extends StatelessWidget {
+  const _UsageBar({required this.name, required this.window});
+
+  final String name;
+  final GaiaUsageWindow? window;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final window = this.window;
+    final used = _usedNow(window);
+    final String detail;
+    if (window == null) {
+      detail = 'Unknown';
+    } else {
+      final resets = window.resetsAt;
+      final at = DateUtils.isSameDay(resets, DateTime.now())
+          ? DateFormat.jm().format(resets)
+          : DateFormat.E().add_jm().format(resets);
+      // Its next reset isn't known until the account runs again.
+      detail = resets.isAfter(DateTime.now()) ? 'Resets $at' : 'Reset at $at';
+    }
+    return SizedBox(
+      width: 180,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(name, style: theme.textTheme.bodySmall)),
+              if (window != null)
+                Text(
+                  '${(used * 100).round()}%',
+                  style: theme.textTheme.bodySmall,
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: used,
+            minHeight: 4,
+            borderRadius: BorderRadius.circular(2),
+            backgroundColor: Colors.white.withValues(alpha: 0.15),
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 4),
+          Text(detail, style: muted),
+        ],
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  const _RingPainter({
+    required this.used,
+    required this.track,
+    required this.fill,
+  });
+
+  final double used;
+  final Color track;
+  final Color fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 2.0;
+    final rect = (Offset.zero & size).deflate(stroke / 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+    canvas
+      ..drawOval(rect, paint..color = track)
+      ..drawArc(
+        rect,
+        -pi / 2,
+        2 * pi * used.clamp(0.0, 1.0),
+        false,
+        paint
+          ..color = fill
+          ..strokeCap = StrokeCap.round,
+      );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.used != used || old.track != track || old.fill != fill;
 }
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that

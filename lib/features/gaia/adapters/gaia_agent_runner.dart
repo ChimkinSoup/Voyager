@@ -24,6 +24,13 @@ class GaiaToolUse extends GaiaAgentEvent {
   final String name;
 }
 
+/// The account's usage, as the backend reported it mid-turn.
+class GaiaUsageUpdate extends GaiaAgentEvent {
+  const GaiaUsageUpdate(this.usage);
+
+  final GaiaUsage usage;
+}
+
 /// The end of a turn. [isError] covers failures the backend reports as a
 /// reply, such as an unknown model, with [text] saying what went wrong.
 class GaiaTurnResult {
@@ -47,6 +54,18 @@ class GaiaTurnResult {
   /// How many tokens the session's context held at the turn's last model
   /// call; null when the backend doesn't say.
   final int? contextTokens;
+}
+
+/// One usage window (§6.2): the share of its limit used, 0 to 1, and when
+/// it resets.
+typedef GaiaUsageWindow = ({double used, DateTime resetsAt});
+
+/// An account's usage, by window.
+class GaiaUsage {
+  const GaiaUsage({this.fiveHour, this.weekly});
+
+  final GaiaUsageWindow? fiveHour;
+  final GaiaUsageWindow? weekly;
 }
 
 /// A turn that ended without a result: the process died, or its output
@@ -134,6 +153,8 @@ class GaiaTurnBuilder {
         } else {
           _parts.add(GaiaActivityPart([name]));
         }
+      case GaiaUsageUpdate():
+        return false;
     }
     return true;
   }

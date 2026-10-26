@@ -210,9 +210,13 @@ class GaiaController extends ChangeNotifier {
     lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
     commands = gaiaCommandsFromJson(settings['commands']);
     keybinds = gaiaKeybindsFromJson(settings['keybinds']);
+    final configDir = settings['claudeConfigDir'] as String? ?? '';
+    // Another account's usage is unknown until it runs.
+    if (configDir != _claudeConfigDir) usage.remove(kGaiaClaudeCodeAdapter);
+    _claudeConfigDir = configDir;
     notifyListeners();
     if (_runners[kGaiaClaudeCodeAdapter] case final ClaudeCodeRunner claude) {
-      claude.setConfigDir(settings['claudeConfigDir'] as String? ?? '');
+      claude.setConfigDir(configDir);
     }
     final instructions = settings['gaiaMd'] as String? ?? '';
     await Future.wait([
@@ -220,6 +224,11 @@ class GaiaController extends ChangeNotifier {
         runner.setInstructions(instructions),
     ]);
   }
+
+  /// Each adapter's account usage as its last run that said left it (§6.2);
+  /// one account per adapter until accounts come in Phase 7.
+  final usage = <String, GaiaUsage>{};
+  var _claudeConfigDir = '';
 
   /// The current chat's context at its last reply that said (§7.5).
   int? get contextTokens => messages.reversed
@@ -545,7 +554,16 @@ class GaiaController extends ChangeNotifier {
         ? "This chat's earlier session wasn't found, and starting a new one "
               'failed too: $error'
         : '$error';
+    final configDir = _claudeConfigDir;
     void onEvent(GaiaAgentEvent event) {
+      // Kept as it comes, so a turn stopped later still counts. One from a
+      // run on the account before a config dir change isn't this one's.
+      if (event case GaiaUsageUpdate(
+        usage: final turnUsage,
+      ) when agent != null && configDir == _claudeConfigDir) {
+        usage[agent.adapter] = turnUsage;
+        notifyListeners();
+      }
       if (!builder.apply(event)) return;
       reply = _replace(reply, reply.copyWith(parts: builder.parts));
       final last = _lastPersist[reply.id];

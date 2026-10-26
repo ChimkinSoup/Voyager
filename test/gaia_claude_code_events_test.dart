@@ -116,6 +116,23 @@ void main() {
     );
   });
 
+  test('a rate limit event reads its five-hour and weekly windows', () {
+    final usage = _events(
+      'single_turn.jsonl',
+    ).whereType<ClaudeRateLimit>().single.usage;
+    expect(usage.fiveHour!.used, 0.09);
+    expect(usage.weekly!.used, 0.57);
+    expect(
+      usage.weekly!.resetsAt,
+      DateTime.fromMillisecondsSinceEpoch(1793160000 * 1000),
+    );
+    // Leniently: an unknown shape is only not shown.
+    expect(
+      parseClaudeLine('{"type":"rate_limit_event","rate_limit_info":{}}'),
+      isA<ClaudeIgnored>(),
+    );
+  });
+
   test('versions outside the tested range are flagged', () {
     expect(parseClaudeVersion('2.1.310 (Claude Code)'), (2, 1, 310));
     expect(isTestedClaudeVersion((2, 1, 299)), isFalse);

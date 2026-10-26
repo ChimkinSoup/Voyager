@@ -89,8 +89,8 @@ void main() {
   testWidgets('morphs into the options and back on a pick', (tester) async {
     await pump(tester);
     final closed = shell(tester);
-    // 32 with its 1px border, as tall as the buttons beside it.
-    expect(closed.height, 30);
+    // 24 with its 1px border, compact in the row under the composer.
+    expect(closed.height, 24);
 
     await tester.tap(find.textContaining('standard', findRichText: true).last);
     await settle(tester);
@@ -108,7 +108,7 @@ void main() {
     await tester.tap(find.textContaining('deep', findRichText: true));
     await settle(tester);
     expect(asked, [_Tier.deep]);
-    expect(shell(tester).height, 30);
+    expect(shell(tester).height, 24);
     expect(find.textContaining('deep', findRichText: true), findsWidgets);
     expect(field.hasPrimaryFocus, isTrue);
   });
@@ -141,7 +141,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);
     expect(asked, [_Tier.quick]);
-    expect(shell(tester).height, 30);
+    expect(shell(tester).height, 24);
     expect(field.hasPrimaryFocus, isTrue);
   });
 
@@ -152,7 +152,7 @@ void main() {
     await tester.tapAt(const Offset(20, 300));
     await settle(tester);
     expect(asked, isEmpty);
-    expect(shell(tester).height, 30);
+    expect(shell(tester).height, 24);
   });
 
   testWidgets('a pick answered later shows until answered', (tester) async {

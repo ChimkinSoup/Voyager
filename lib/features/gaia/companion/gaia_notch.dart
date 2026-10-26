@@ -117,6 +117,9 @@ const _bright = Color(0xFFF5F5F5);
 const _muted = Color(0xFFA3A3A3);
 const _dim = Color(0xFFD4D4D4);
 const _textStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+
+/// The closed bar's, smaller than the open options'.
+const _triggerStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w500);
 const _radius = 12.0;
 
 /// An option on its way between item [item]'s trigger and its row: up
@@ -564,7 +567,7 @@ class _Bar extends StatelessWidget {
             ),
         ],
       ),
-      style: _textStyle.copyWith(
+      style: _triggerStyle.copyWith(
         color: flight == null ? _bright : Color.lerp(flight.label, _bright, t),
       ),
       maxLines: 1,
@@ -590,8 +593,8 @@ class _Bar extends StatelessWidget {
     Widget trigger = AnimatedContainer(
       key: triggers?.putIfAbsent(index, GlobalKey.new),
       duration: _fade,
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
       child: text,
     );
@@ -724,7 +727,7 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 2),
-      child: CustomPaint(size: Size(1, 20), painter: _DottedLine()),
+      child: CustomPaint(size: Size(1, 16), painter: _DottedLine()),
     );
   }
 }

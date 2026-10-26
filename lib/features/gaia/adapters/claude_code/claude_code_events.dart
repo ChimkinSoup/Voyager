@@ -67,8 +67,16 @@ class ClaudeResult extends ClaudeEvent {
   final int? contextTokens;
 }
 
-/// Anything the adapter doesn't read: hooks, status, rate limits, subagent
-/// output, whole-message echoes of what streamed, tool results.
+/// `rate_limit_event`: the account's usage windows, mid-turn. Not every turn
+/// has one.
+class ClaudeRateLimit extends ClaudeEvent {
+  const ClaudeRateLimit(this.usage);
+
+  final GaiaUsage usage;
+}
+
+/// Anything the adapter doesn't read: hooks, status, subagent output,
+/// whole-message echoes of what streamed, tool results.
 class ClaudeIgnored extends ClaudeEvent {
   const ClaudeIgnored();
 }
@@ -137,9 +145,40 @@ ClaudeEvent parseClaudeLine(String line) {
         text: decoded['result'] as String? ?? field<String>(decoded, 'subtype'),
         contextTokens: claudeContextTokens(decoded['usage']),
       );
+    case 'rate_limit_event':
+      final usage = claudeUsage(decoded['rate_limit_info']);
+      return usage == null ? const ClaudeIgnored() : ClaudeRateLimit(usage);
     default:
       return const ClaudeIgnored();
   }
+}
+
+/// `rate_limit_info.unifiedWindows`' five-hour and weekly windows (observed
+/// on 2.1.310). Read leniently, since it's only shown: null when neither is
+/// the shape below.
+GaiaUsage? claudeUsage(Object? info) {
+  if (info is! Map || info['unifiedWindows'] is! Map) return null;
+  final windows = info['unifiedWindows'] as Map;
+  GaiaUsageWindow? window(String key) {
+    final window = windows[key];
+    if (window is! Map) return null;
+    if (window['utilization'] case final num used) {
+      if (window['resetsAt'] case final num resetsAt) {
+        return (
+          used: used.toDouble(),
+          resetsAt: DateTime.fromMillisecondsSinceEpoch(
+            resetsAt.toInt() * 1000,
+          ),
+        );
+      }
+    }
+    return null;
+  }
+
+  final fiveHour = window('five_hour');
+  final weekly = window('seven_day');
+  if (fiveHour == null && weekly == null) return null;
+  return GaiaUsage(fiveHour: fiveHour, weekly: weekly);
 }
 
 /// `usage.iterations`' last entry (one per model call in the turn; observed
@@ -162,6 +201,7 @@ GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
   ClaudeTextStart() => const GaiaTextStart(),
   ClaudeTextDelta(:final text) => GaiaTextDelta(text),
   ClaudeToolUse(:final name) => GaiaToolUse(name),
+  ClaudeRateLimit(:final usage) => GaiaUsageUpdate(usage),
   ClaudeInit() || ClaudeResult() || ClaudeIgnored() => null,
 };
 

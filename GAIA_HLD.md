@@ -384,6 +384,30 @@ None of these costs tokens. Polling: Claude every 10 minutes per account and
 after each run. Codex per run, and idle accounts every 10 minutes. Gemini
 after each run.
 
+**Usage rings under the composer.** The row under the composer shows the
+chat's context, then a small usage ring per account, then the tier picker.
+Each ring fills to the account's 5-hour window, and its tooltip lists every
+window with its reset. The rings are for the next message's agent: one per
+account that agent's adapter has, in account order. The account the next
+message runs on is drawn at full strength; the others are dulled, so a
+glance shows which account is in use and whether another has headroom.
+Clicking a dulled ring is not an account switch: switching stays explicit
+(§6.5).
+
+As of Phase 2 there is one account per adapter, so there is one ring, for
+Claude only. It reads the `rate_limit_event` Claude Code prints during a
+run (`unifiedWindows.five_hour` / `seven_day`, observed on 2.1.310), kept in
+memory per adapter and cleared when the config dir changes. Phase 7 adds a
+ring per account, the dulled inactive ones fed by the polled sources above
+(a passive source only covers the account that just ran), and a Codex ring
+from its `token_count` `rate_limits` once a fixture is recorded.
+
+Because the Phase 2 ring only fills from a run, it's missing until the first
+message after the companion starts. **Phase 7 must fix this:** the Claude
+`oauth/usage` source above is read when the companion starts and every 10
+minutes, so the ring shows from launch. It follows §6.3 (fixtures, strict
+parsing) and §6.4 (endpoint broken vs. signed out) like any other source.
+
 ### 6.3 Fragile endpoints in code
 
 - Every undocumented source lives in one folder,
@@ -1184,7 +1208,7 @@ Other additions:
 | 4 | | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
 | 5 | | Memory + curator + inbox |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
-| 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy |
+| 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
 | 8 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -438,6 +439,48 @@ void main() {
       await settle();
       expect((await main.messages()).last.contextTokens, 26642);
       expect(controller.contextTokens, 26642);
+    });
+
+    test(
+      "a run keeps its account's usage, until the account changes",
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        final usage = controller.usage[kGaiaClaudeCodeAdapter]!;
+        expect(usage.fiveHour!.used, 0.09);
+        expect(usage.weekly!.used, 0.57);
+        expect(
+          usage.fiveHour!.resetsAt,
+          DateTime.fromMillisecondsSinceEpoch(1792896600 * 1000),
+        );
+        // Gone by the time the composer hears of the change.
+        final heard = <GaiaUsage?>[];
+        void listener() => heard.add(controller.usage[kGaiaClaudeCodeAdapter]);
+        controller.addListener(listener);
+        main.companion.onEvent!('settings', {
+          ...main.settings,
+          'claudeConfigDir': r'C:\other',
+        });
+        await settle();
+        controller.removeListener(listener);
+        expect(controller.usage[kGaiaClaudeCodeAdapter], isNull);
+        expect(heard, isNotEmpty);
+        expect(heard.first, isNull);
+      },
+    );
+
+    test('a stopped turn keeps the usage it reported', () async {
+      final at = DateTime(2026, 10, 25, 16);
+      runner.turns.add([
+        ClaudeRateLimit(GaiaUsage(fiveHour: (used: 0.95, resetsAt: at))),
+        const ClaudeTextStart(),
+      ]);
+      final sending = controller.send('Hi');
+      await settle();
+      await controller.stop(controller.currentChatId!);
+      await sending;
+      expect(controller.usage[kGaiaClaudeCodeAdapter]!.fiveHour!.used, 0.95);
     });
 
     test(
