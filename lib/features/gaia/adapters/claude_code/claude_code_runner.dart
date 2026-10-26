@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 
@@ -28,6 +29,47 @@ Map<String, String> claudeEnvironment(String configDir) {
         key: value,
     if (dir.isNotEmpty) 'CLAUDE_CONFIG_DIR': dir,
   };
+}
+
+/// A user message's `content` (§9.3): [prompt] alone, or with [images] as
+/// content blocks interleaved where their `[image N]` tokens are, each after
+/// the text that ends in its token. An image whose token isn't in [prompt]
+/// goes at the end, after its token.
+@visibleForTesting
+Future<Object> claudeUserContent(
+  String prompt,
+  List<GaiaImageInput> images,
+) async {
+  if (images.isEmpty) return prompt;
+  final byLabel = {for (final image in images) image.label: image};
+  final blocks = <Map<String, Object?>>[];
+  void text(String text) {
+    if (text.trim().isNotEmpty) blocks.add({'type': 'text', 'text': text});
+  }
+
+  Future<void> image(GaiaImageInput image) async => blocks.add({
+    'type': 'image',
+    'source': {
+      'type': 'base64',
+      'media_type': image.mimeType,
+      'data': base64Encode(await File(image.path).readAsBytes()),
+    },
+  });
+
+  var from = 0;
+  for (final match in gaiaImageTokenPattern.allMatches(prompt)) {
+    final input = byLabel.remove(int.parse(match.group(1)!));
+    if (input == null) continue;
+    text(prompt.substring(from, match.end));
+    from = match.end;
+    await image(input);
+  }
+  text(prompt.substring(from));
+  for (final input in byLabel.values) {
+    text(gaiaImageToken(input.label));
+    await image(input);
+  }
+  return blocks;
 }
 
 const _idleTimeout = Duration(minutes: 10);
@@ -73,6 +115,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String? sessionId,
     required String model,
     required String prompt,
+    List<GaiaImageInput> images = const [],
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (result, started) = await _send(
@@ -81,6 +124,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       newSessionId: sessionId ?? _uuid.v4(),
       model: model,
       prompt: prompt,
+      images: images,
       onEvent: (event) {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
@@ -102,6 +146,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String newSessionId,
     required String model,
     required String prompt,
+    List<GaiaImageInput> images = const [],
     required void Function(ClaudeEvent event) onEvent,
   }) async => (await _send(
     chatId: chatId,
@@ -109,6 +154,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     newSessionId: newSessionId,
     model: model,
     prompt: prompt,
+    images: images,
     onEvent: onEvent,
   )).$1;
 
@@ -120,8 +166,10 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String newSessionId,
     required String model,
     required String prompt,
+    required List<GaiaImageInput> images,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
+    final content = await claudeUserContent(prompt, images);
     var process = _live.remove(chatId);
     // One that never started a session (a resume that found none) is on
     // its way out.
@@ -154,7 +202,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     }
     _live[chatId] = process;
     try {
-      return (await process.turn(prompt, onEvent), process.started);
+      return (await process.turn(content, onEvent), process.started);
     } finally {
       if (process.exited) {
         _live.remove(chatId);
@@ -292,8 +340,9 @@ class _ClaudeProcess {
 
   bool get inTurn => _turn != null;
 
+  /// [content] is text, or content blocks ([claudeUserContent]).
   Future<ClaudeResult> turn(
-    String prompt,
+    Object content,
     void Function(ClaudeEvent event) onEvent,
   ) {
     _idle?.cancel();
@@ -302,7 +351,7 @@ class _ClaudeProcess {
     _process.stdin.writeln(
       jsonEncode({
         'type': 'user',
-        'message': {'role': 'user', 'content': prompt},
+        'message': {'role': 'user', 'content': content},
       }),
     );
     return turn.future;

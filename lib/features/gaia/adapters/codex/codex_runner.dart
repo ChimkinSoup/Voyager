@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 
@@ -56,6 +57,7 @@ class CodexRunner implements GaiaAgentRunner {
     required String? sessionId,
     required String model,
     required String prompt,
+    List<GaiaImageInput> images = const [],
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     await _prepareCodexHome(codexHome, userCodexHome);
@@ -79,13 +81,24 @@ class CodexRunner implements GaiaAgentRunner {
         '-m',
         model,
         if (sandbox != null) ...['-c', 'windows.sandbox=$sandbox'],
+        // Attached apart from the text, which keeps their `[image N]`
+        // labels (§9.3). One value per flag: `--image a b` would take the
+        // `-` below as an image too.
+        for (final image in images) '--image=${image.path}',
         ?sessionId,
         // The prompt comes on stdin: `cmd /c` would mangle it as an argument.
         '-',
       ],
     );
     try {
-      return await process.turn(prompt, onEvent);
+      return await process.turn(
+        images.isEmpty
+            ? prompt
+            // Nothing else says which attachment a label means.
+            : '$prompt\n\n(Attached images, in order: '
+                  '${images.map((image) => gaiaImageToken(image.label)).join(', ')}.)',
+        onEvent,
+      );
     } finally {
       if (_live[chatId] == process) _live.remove(chatId);
     }

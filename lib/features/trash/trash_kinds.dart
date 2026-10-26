@@ -789,6 +789,8 @@ final _kinds = <TrashKind>[
     erasedWith: const [
       TrashChild(FirestoreCollections.gaiaMessages, ['chatId']),
     ],
+    // Attached images hang off the chat, not the message (GAIA_HLD.md §8).
+    mediaOwner: FirestoreCollections.gaiaChats,
   ),
   const TrashKind(
     collection: FirestoreCollections.gaiaMessages,

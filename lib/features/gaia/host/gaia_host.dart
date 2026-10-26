@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
@@ -9,12 +10,25 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/host/gaia_media.dart';
+import 'package:voyager/features/gaia/host/gaia_selection.dart';
+import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
 
 /// Gaia's hotkeys (GAIA_HLD.md §15.1, §15.7), rebindable on the Gaia page:
 /// each is the [GaiaKeybind] of the same name.
-enum GaiaHotkey { small, large, window, abort }
+enum GaiaHotkey {
+  small,
+  large,
+  window,
+  region,
+  screen,
+  selection,
+  pickUp,
+  abort,
+}
 
 /// A chat with a run in progress, as the companion reports it (§14).
 typedef GaiaRun = ({String chatId, String title});
@@ -31,7 +45,8 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, sessionId, lastSeq}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `messages {chatId}`, `putMessage {message}`,
-/// `rearm`, and the `runs {runs}`, `runDone {chatId, title,
+/// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
+/// height}`), `mediaFile {mediaId}` (a path, or null), `rearm`, and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId}`, `accent {argb}`, `settings {..}` and `changed` events.
@@ -43,21 +58,47 @@ class GaiaHost {
     GaiaPipe? pipe,
     Future<File> Function()? abortFlag,
     Future<void> Function(int pid)? killCompanion,
+    Future<Directory> Function()? captureDirectory,
+    Future<GaiaScreenCapture?> Function(String path)? captureScreen,
+    GaiaForegroundWindow? Function()? foregroundWindow,
+    Future<GaiaWindowUia> Function(
+      GaiaForegroundWindow window, {
+      required bool selection,
+    })?
+    readUia,
+    Future<String?> Function(GaiaForegroundWindow window)? copySelection,
   }) : _pipe = pipe ?? GaiaPipe(),
+       _copySelection = copySelection ?? gaiaCopySelection,
        _abortFlag = abortFlag ?? _defaultAbortFlag,
-       _killCompanion = killCompanion ?? _killTree;
+       _killCompanion = killCompanion ?? _killTree,
+       _captureDirectory = captureDirectory ?? _defaultCaptureDirectory,
+       _captureScreenTo = captureScreen ?? gaiaCaptureScreen,
+       _foregroundWindow = foregroundWindow ?? gaiaForegroundWindow,
+       _readUia = readUia ?? gaiaReadUia;
 
   static final instance = GaiaHost();
 
   final GaiaPipe _pipe;
   final Future<File> Function() _abortFlag;
   final Future<void> Function(int pid) _killCompanion;
+  final Future<Directory> Function() _captureDirectory;
+  final Future<GaiaScreenCapture?> Function(String path) _captureScreenTo;
+  final GaiaForegroundWindow? Function() _foregroundWindow;
+  final Future<String?> Function(GaiaForegroundWindow window) _copySelection;
+  final Future<GaiaWindowUia> Function(
+    GaiaForegroundWindow window, {
+    required bool selection,
+  })
+  _readUia;
 
   /// Chats in progress, for the tray and the Gaia page.
   final runs = ValueNotifier<List<GaiaRun>>(const []);
 
   final _attached = Completer<GaiaChatStore>();
   void Function(String chatId, String title, String body)? _toast;
+
+  /// Where attached images go; null for none, where attaching fails.
+  GaiaMedia? _media;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   Timer? _changedSoon;
@@ -127,9 +168,11 @@ class GaiaHost {
     required GaiaRepository repository,
     required String deviceId,
     required void Function(String chatId, String title, String body) toast,
+    GaiaMedia? media,
   }) {
     if (_attached.isCompleted) return;
     _toast = toast;
+    _media = media;
     _attached.complete(GaiaChatStore(repository, deviceId: deviceId));
     _changes = repository.watchChanges().listen((_) {
       _changedSoon ??= Timer(_changedDelay, () {
@@ -230,7 +273,177 @@ class GaiaHost {
       unawaited(_abort());
       return;
     }
-    _sendOrLaunch('hotkey', {'key': hotkey.name});
+    // Any other summon ends pick-up mode; the companion drops its pill
+    // when the summon arrives.
+    if (_pickingUp && hotkey != GaiaHotkey.pickUp) {
+      unawaited(_armPickUp(false, tell: false));
+    }
+    // Now, while the app the user summoned Gaia from is still in front.
+    final window = _foregroundWindow();
+    switch (hotkey) {
+      case GaiaHotkey.region || GaiaHotkey.screen:
+        unawaited(_captureScreen(hotkey));
+      case GaiaHotkey.selection || GaiaHotkey.pickUp:
+        // Which reads the window itself.
+        unawaited(_captureSelection(hotkey, window));
+        return;
+      case GaiaHotkey.small || GaiaHotkey.large || GaiaHotkey.window:
+        _sendOrLaunch('hotkey', {'key': hotkey.name});
+      case GaiaHotkey.abort:
+        break;
+    }
+    unawaited(_sendContext(window));
+  }
+
+  /// The summon's context (§15.4), after the summon itself, which never
+  /// waits on UI Automation: the window, unless that's off or excluded,
+  /// and its selection, for `$SELECTION` (§9.2). A summon from Gaia's own
+  /// window keeps what the companion has. [uia] is a read already made.
+  Future<void> _sendContext(
+    GaiaForegroundWindow? window, {
+    GaiaWindowUia? uia,
+  }) async {
+    // No window in front, as on a locked session, says nothing either.
+    if (window == null || window.pid == _companionPid) return;
+    bool excluded(GaiaForegroundWindow window, String? url) =>
+        gaiaContextExcluded(
+          _settings.contextExclusions,
+          exe: window.exe,
+          app: window.app,
+          url: url,
+        );
+    if (excluded(window, null)) {
+      return _sendOrLaunch('context', {'window': null, 'selection': null});
+    }
+    uia ??= await _readUia(window, selection: true);
+    if (excluded(window, uia.url)) {
+      return _sendOrLaunch('context', {'window': null, 'selection': null});
+    }
+    _sendOrLaunch('context', {
+      'window': _settings.windowContext
+          ? GaiaContextPart(
+              app: window.app,
+              title: window.title,
+              url: uia.url,
+            ).toJson()
+          : null,
+      'selection': uia.selection,
+    });
+  }
+
+  /// C and D (§15.1): the monitor under the cursor, captured here and now,
+  /// while whatever the user wanted in the shot is still on screen; the
+  /// companion crops (C) or attaches (D) it. Aborted, nothing is captured
+  /// (§15.7).
+  Future<void> _captureScreen(GaiaHotkey hotkey) async {
+    if (_aborted) return _sendOrLaunch('refused', {'reason': 'aborted'});
+    final dir = await _captureDirectory();
+    final capture = await _captureScreenTo(
+      p.join(dir.path, 'capture-${DateTime.now().microsecondsSinceEpoch}.bmp'),
+    );
+    if (capture == null) {
+      debugPrint('[gaia] the screen could not be captured');
+      return;
+    }
+    _sendOrLaunch('capture', {
+      'kind': hotkey.name,
+      'path': capture.path,
+      'left': capture.left,
+      'top': capture.top,
+      'width': capture.width,
+      'height': capture.height,
+    });
+    unawaited(_sweepCaptures(dir));
+  }
+
+  /// Pick-up mode is armed (§15.3): the next F takes the selection, and
+  /// Esc cancels.
+  var _pickingUp = false;
+  static final _escape = HotKey(
+    key: PhysicalKeyboardKey.escape,
+    // Never null: the Windows plugin reads the list unchecked and aborts.
+    modifiers: [],
+    scope: HotKeyScope.system,
+  );
+
+  /// E (§15.2): the selection in the app the user is in, read through UI
+  /// Automation, or else copied, for the companion to quote. F (§15.3)
+  /// arms that for later, so the user can go and select something first.
+  Future<void> _captureSelection(
+    GaiaHotkey hotkey,
+    GaiaForegroundWindow? window,
+  ) async {
+    if (_aborted) return _sendOrLaunch('refused', {'reason': 'aborted'});
+    if (hotkey == GaiaHotkey.pickUp) {
+      final arming = !_pickingUp;
+      // Disarmed, the selection that follows takes the pill down.
+      await _armPickUp(arming, tell: arming);
+      if (arming) return;
+    }
+    // Nothing to read in Gaia itself, or in an app on the exclusion list
+    // (§15.4), which the user said is never read.
+    bool excluded(String? url) => gaiaContextExcluded(
+      _settings.contextExclusions,
+      exe: window!.exe,
+      app: window.app,
+      url: url,
+    );
+    final ours =
+        window == null || window.pid == _companionPid || excluded(null);
+    final uia = ours
+        ? (url: null, selection: null)
+        : await _readUia(window, selection: true);
+    final text = ours || excluded(uia.url)
+        ? null
+        : uia.selection ?? await _copySelection(window);
+    _sendOrLaunch('selection', {
+      'text': text,
+      'source': ours ? null : gaiaSelectionSource(window),
+    });
+    // Which says nothing for Gaia itself, and clears it for an excluded app.
+    await _sendContext(window, uia: uia);
+  }
+
+  /// Arms or disarms pick-up mode: the companion shows or drops its
+  /// "selecting" indicator, unless [tell] is off, and Esc is Gaia's while
+  /// it's armed.
+  Future<void> _armPickUp(bool armed, {bool tell = true}) async {
+    if (armed == _pickingUp) return;
+    _pickingUp = armed;
+    if (_ownsHotkeys) {
+      try {
+        if (armed) {
+          await hotKeyManager.register(
+            _escape,
+            keyDownHandler: (_) => unawaited(_armPickUp(false)),
+          );
+        } else {
+          await hotKeyManager.unregister(_escape);
+        }
+      } catch (error) {
+        debugPrint(
+          '[gaia] pick-up Esc not ${armed ? '' : 'un'}registered: '
+          '$error',
+        );
+      }
+    }
+    if (tell) _sendOrLaunch('pickUp', {'armed': armed});
+  }
+
+  /// Captures the companion never took: one whose launch failed, or that
+  /// it was killed before reading. A crop or attach reads its capture
+  /// within seconds.
+  static Future<void> _sweepCaptures(Directory dir) async {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 1));
+    await for (final entity in dir.list()) {
+      try {
+        if (entity is File && (await entity.lastModified()).isBefore(cutoff)) {
+          await entity.delete();
+        }
+      } on FileSystemException {
+        // Being read, or gone already.
+      }
+    }
   }
 
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
@@ -312,6 +525,8 @@ class GaiaHost {
   /// killed with its whole tree and relaunched aborted.
   Future<void> _abort() async {
     _aborted = true;
+    // Capture stops too (§15.7).
+    unawaited(_armPickUp(false));
     try {
       await (await _abortFlag()).writeAsString(
         DateTime.now().toIso8601String(),
@@ -349,6 +564,8 @@ class GaiaHost {
       case 'drained':
         _drained?.complete();
         _drained = null;
+      case 'pickUpCancelled':
+        unawaited(_armPickUp(false, tell: false));
     }
   }
 
@@ -414,6 +631,26 @@ class GaiaHost {
       case 'putMessage':
         await store.putMessage(GaiaMessage.fromJson(_map(params['message'])));
         return null;
+      case 'attachImage':
+        final media = _media;
+        if (media == null) throw GaiaPipeException('no media store');
+        final image = await media.attach(
+          params['chatId']! as String,
+          params['path']! as String,
+        );
+        return {
+          'mediaId': image.mediaId,
+          'referenceId': image.referenceId,
+          'path': image.path,
+          'mimeType': image.mimeType,
+          'width': image.width,
+          'height': image.height,
+        };
+      case 'detachImage':
+        await _media?.detach(params['referenceId']! as String);
+        return null;
+      case 'mediaFile':
+        return _media?.file(params['mediaId']! as String);
       case 'rearm':
         _aborted = false;
         final flag = await _abortFlag();
@@ -432,4 +669,8 @@ class GaiaHost {
 
   static Future<File> _defaultAbortFlag() async =>
       File(p.join((await appDataDirectory()).path, 'gaia_aborted'));
+
+  static Future<Directory> _defaultCaptureDirectory() async => Directory(
+    p.join((await appSupportRoot()).path, 'gaia', 'captures'),
+  ).create(recursive: true);
 }

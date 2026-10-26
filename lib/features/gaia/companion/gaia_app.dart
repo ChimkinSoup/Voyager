@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:voyager/core/media/media_clipboard.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
@@ -11,7 +13,11 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
+import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
+import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
+import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
@@ -150,7 +156,9 @@ class _RunToastsState extends State<_RunToasts> {
       iconColor: toast.error ? Theme.of(context).colorScheme.error : null,
       title: toast.title,
       body: toast.body,
-      onTap: () => widget.controller.selectChat(toast.chatId),
+      onTap: toast.chatId.isEmpty
+          ? null
+          : () => widget.controller.selectChat(toast.chatId),
     );
   }
 
@@ -165,6 +173,22 @@ class _GaiaShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (controller.cropping case final capture?
+        when controller.layout == GaiaMode.overlay) {
+      // A Material for its hint's text style, as the chat's Scaffold gives.
+      return Material(
+        type: MaterialType.transparency,
+        child: GaiaCropOverlay(
+          key: ValueKey(capture.path),
+          path: capture.path,
+          pixelWidth: capture.frame.width,
+          onDone: controller.finishCrop,
+        ),
+      );
+    }
+    if (controller.layout == GaiaMode.pickUp) {
+      return _PickUpPill(controller: controller);
+    }
     final floater = controller.layout != GaiaMode.window;
     Widget chat({bool sidebarShown = false, VoidCallback? toggleSidebar}) =>
         Column(
@@ -180,6 +204,7 @@ class _GaiaShell extends StatelessWidget {
                 messages: controller.layout == GaiaMode.small
                     ? _lastTurns(controller.messages, 3)
                     : controller.messages,
+                imageFile: controller.imageFile,
               ),
             ),
             _Composer(controller: controller),
@@ -244,6 +269,52 @@ class _GaiaShell extends StatelessWidget {
       }
     }
     return messages;
+  }
+}
+
+/// Pick-up mode's indicator (§15.3), at the top of the screen while the
+/// user selects something: F again takes it, Esc or the button cancels.
+class _PickUpPill extends StatelessWidget {
+  const _PickUpPill({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final combo = gaiaComboFor(GaiaKeybind.pickUp, controller.keybinds);
+    return Scaffold(
+      body: DragToMoveArea(
+        child: Row(
+          children: [
+            const SizedBox(width: 14),
+            SizedBox.square(
+              dimension: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                combo.isEmpty
+                    ? 'Selecting… press pick-up again, or Esc'
+                    : 'Selecting… press $combo to bring it to Gaia',
+                style: theme.textTheme.bodySmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Cancel (Esc)',
+              icon: const Icon(Icons.close, size: 16),
+              onPressed: controller.cancelPickUp,
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -465,9 +536,10 @@ class _Sidebar extends StatelessWidget {
 const _column = 860.0;
 
 class _Messages extends StatelessWidget {
-  const _Messages({required this.messages});
+  const _Messages({required this.messages, required this.imageFile});
 
   final List<GaiaMessage> messages;
+  final Future<String?> Function(String mediaId) imageFile;
 
   @override
   Widget build(BuildContext context) {
@@ -489,7 +561,7 @@ class _Messages extends StatelessWidget {
             final i = messages.length - 1 - index;
             final message = messages[i];
             final switched = _switchedFrom(messages, i);
-            final view = _MessageView(message: message);
+            final view = _MessageView(message: message, imageFile: imageFile);
             if (switched == null) return view;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -554,9 +626,10 @@ class _VendorDivider extends StatelessWidget {
 }
 
 class _MessageView extends StatelessWidget {
-  const _MessageView({required this.message});
+  const _MessageView({required this.message, required this.imageFile});
 
   final GaiaMessage message;
+  final Future<String?> Function(String mediaId) imageFile;
 
   @override
   Widget build(BuildContext context) {
@@ -565,10 +638,36 @@ class _MessageView extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     if (message.role == GaiaMessageRole.user) {
+      final images = message.parts.whereType<GaiaImagePart>();
+      final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
       return _bubble(
         theme.colorScheme.surfaceContainerHighest,
         Alignment.centerRight,
-        SelectableText(message.text),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (window != null) ...[
+              _ContextChip(label: window.label),
+              const SizedBox(height: 6),
+            ],
+            SelectableText(message.text),
+            if (images.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final image in images)
+                    GaiaImageThumb(
+                      file: imageFile(image.mediaId),
+                      label: image.label,
+                      height: 96,
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
       );
     }
     final status = switch (message.status) {
@@ -593,6 +692,8 @@ class _MessageView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(_activity(tools), style: muted),
               ),
+              // Only the user's messages carry images and context.
+              GaiaImagePart() || GaiaContextPart() => const SizedBox.shrink(),
             },
           if (message.status == GaiaMessageStatus.streaming)
             const Padding(
@@ -662,7 +763,7 @@ class _Composer extends StatefulWidget {
 }
 
 class _ComposerState extends State<_Composer> {
-  final _text = TextEditingController();
+  TextEditingController get _text => widget.controller.draft;
   final _focus = FocusNode();
   final _vanish = GlobalKey<GaiaVanishState>();
 
@@ -674,11 +775,55 @@ class _ComposerState extends State<_Composer> {
   @override
   void initState() {
     super.initState();
-    _text.addListener(() {
-      unawaited(_takeTierCommand());
-      // The palette follows the draft.
-      setState(() => _highlight = 0);
-    });
+    _text.addListener(_onDraft);
+  }
+
+  void _onDraft() {
+    unawaited(_takeTierCommand());
+    // The palette follows the draft.
+    setState(() => _highlight = 0);
+  }
+
+  /// A draft image clicked: the annotation editor (§9.4).
+  Future<void> _edit(GaiaDraftImage image) async {
+    final controller = widget.controller;
+    final grew = await controller.enlargeForEditor();
+    if (!mounted) return;
+    final edits = await showGaiaImageEditor(
+      context,
+      path: image.path,
+      label: image.label,
+      edits: image.edits,
+    );
+    if (grew) await controller.restoreSmall();
+    if (edits != null) await controller.editDraftImage(image.label, edits);
+    _focus.requestFocus();
+  }
+
+  /// Ctrl+V: an image on the clipboard joins the draft (§9.3), unless it
+  /// comes with text, which pastes as usual.
+  Future<void> _paste() async {
+    const clipboard = MediaClipboard();
+    final offer = await clipboard.peek();
+    if (!mounted) return;
+    switch (routeMediaPaste(
+      hasImage: offer.hasImage,
+      hasText: offer.hasText,
+      intoTextField: true,
+    )) {
+      case MediaPasteRoute.attach || MediaPasteRoute.both:
+        final bytes = (await clipboard.read()).imageBytes;
+        if (bytes != null) await widget.controller.attachImage(bytes);
+      case MediaPasteRoute.text:
+        if (_focus.context case final field? when field.mounted) {
+          Actions.maybeInvoke(
+            field,
+            const PasteTextIntent(SelectionChangedCause.keyboard),
+          );
+        }
+      case MediaPasteRoute.ignore:
+        break;
+    }
   }
 
   /// The palette's rows for the draft; empty when it isn't showing.
@@ -727,7 +872,7 @@ class _ComposerState extends State<_Composer> {
 
   @override
   void dispose() {
-    _text.dispose();
+    _text.removeListener(_onDraft);
     _focus.dispose();
     super.dispose();
   }
@@ -758,11 +903,15 @@ class _ComposerState extends State<_Composer> {
       return widget.controller.runBuiltin(builtin);
     }
     if (!await _takeTierCommand(atEnd: true) || !mounted) return;
+    final controller = widget.controller;
     final text = _text.text;
-    if (text.trim().isEmpty || widget.controller.currentRunning) return;
+    if ((text.trim().isEmpty && controller.draftImages.isEmpty) ||
+        controller.currentRunning) {
+      return;
+    }
     _vanish.currentState!.vanish();
     _text.clear();
-    widget.controller.send(text);
+    controller.send(text, images: controller.takeDraftImages());
   }
 
   @override
@@ -789,6 +938,8 @@ class _ComposerState extends State<_Composer> {
           child: CallbackShortcuts(
             bindings: {
               send.activator: _send,
+              const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                  _paste,
               if (palette.isNotEmpty) ...{
                 // Enter picks from the palette, whatever sends.
                 const SingleActivator(LogicalKeyboardKey.enter): _send,
@@ -811,6 +962,39 @@ class _ComposerState extends State<_Composer> {
                     items: palette,
                     highlight: _highlight.clamp(0, palette.length - 1),
                     onPick: _pick,
+                  ),
+                if (controller.windowContext case final window?)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _ContextChip(
+                        label: window.label,
+                        onRemove: controller.dropWindowContext,
+                      ),
+                    ),
+                  ),
+                if (controller.draftImages.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final image in controller.draftImages)
+                          GaiaImageThumb(
+                            // The preview's path too: the thumbnail reads its
+                            // path only once.
+                            key: ValueKey(image.preview ?? image.path),
+                            path: image.preview ?? image.path,
+                            label: image.label,
+                            height: 56,
+                            onTap: () => _edit(image),
+                            onRemove: () =>
+                                controller.removeDraftImage(image.label),
+                          ),
+                      ],
+                    ),
                   ),
                 GaiaVanish(
                   key: _vanish,
@@ -845,6 +1029,58 @@ class _ComposerState extends State<_Composer> {
           ),
         );
       },
+    );
+  }
+}
+
+/// The window the next message says it was asked from (§15.4), which the
+/// user can take off it.
+class _ContextChip extends StatelessWidget {
+  const _ContextChip({required this.label, this.onRemove});
+
+  final String label;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 420),
+      padding: EdgeInsets.fromLTRB(8, 3, onRemove == null ? 8 : 2, 3),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.web_asset,
+            size: 14,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(label, style: muted, overflow: TextOverflow.ellipsis),
+          ),
+          if (onRemove case final remove?)
+            InkWell(
+              customBorder: const CircleBorder(),
+              onTap: remove,
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  Icons.close,
+                  size: 14,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -3,14 +3,17 @@ import 'package:flutter/widgets.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 /// Gaia's rebindable keys (GAIA_HLD.md §9.1, §15.1): the composer's send,
-/// and the global hotkeys the main instance registers. The rest of §15.1's
-/// hotkeys come with their phases.
+/// and the global hotkeys the main instance registers.
 enum GaiaKeybind {
   send('Send', 'Ctrl+Enter', global: false),
   small('Small floater', 'Ctrl+Alt+Space'),
   large('Large floater', 'Ctrl+Alt+Shift+Space'),
   // Unbound by default (§15.1).
   window('Gaia window', ''),
+  region('Screenshot a region', 'Ctrl+Alt+S'),
+  screen('Screenshot the screen', 'Ctrl+Alt+Shift+S'),
+  selection('Quote the selection', 'Ctrl+Alt+Q'),
+  pickUp('Pick up a selection', 'Ctrl+Alt+Shift+Q'),
   abort('Abort', 'Ctrl+Alt+Backspace');
 
   const GaiaKeybind(this.label, this.defaultCombo, {this.global = true});

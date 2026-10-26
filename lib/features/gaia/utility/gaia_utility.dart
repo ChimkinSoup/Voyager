@@ -5,9 +5,9 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
 /// How long the router may hold up a new chat's first message before the
-/// last used tier takes it (§7.2). Haiku answers in under a second from a
-/// process started ahead ([warm]); a cold start can take longer.
-const _routeTimeout = Duration(seconds: 2);
+/// last used tier takes it (§7.2). Haiku answers in about a second from a
+/// process started ahead ([warm]); a cold start took 2.6–4.2 s.
+const _routeTimeout = Duration(seconds: 5);
 const _titleTimeout = Duration(seconds: 15);
 const _summaryTimeout = Duration(seconds: 30);
 
@@ -50,7 +50,15 @@ class GaiaUtility {
   /// The tier for a new chat's first message (§7.2), or null to use the
   /// last used one.
   Future<GaiaTier?> route(String prompt) async {
-    if (!autoRoute) return null;
+    if (!autoRoute) {
+      debugPrint('[gaia] router: off, using the last used tier');
+      return null;
+    }
+    final elapsed = Stopwatch()..start();
+    debugPrint(
+      '[gaia] router: asking, rubric '
+      '${rubric.trim().isEmpty ? 'default' : 'custom'}',
+    );
     try {
       final answer = await _runner
           .generate(
@@ -61,9 +69,17 @@ class GaiaUtility {
             _clip(prompt, 4000),
           )
           .timeout(_routeTimeout);
-      return parseRoute(answer);
+      final tier = parseRoute(answer);
+      debugPrint(
+        '[gaia] router: answered "$answer" in ${elapsed.elapsedMilliseconds} '
+        'ms -> ${tier?.name ?? 'no tier, using the last used one'}',
+      );
+      return tier;
     } catch (error) {
-      debugPrint('[gaia] router: $error');
+      debugPrint(
+        '[gaia] router: failed after ${elapsed.elapsedMilliseconds} ms, '
+        'using the last used tier: $error',
+      );
       return null;
     }
   }

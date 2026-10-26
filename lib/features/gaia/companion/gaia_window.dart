@@ -6,13 +6,19 @@ import 'package:flutter/scheduler.dart';
 import 'package:win32/win32.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// The companion window's modes (GAIA_HLD.md §3.3).
-enum GaiaMode { small, large, window }
+/// The companion window's modes (GAIA_HLD.md §3.3), the overlay that
+/// covers a monitor for a region capture's crop (§3.2), and pick-up mode's
+/// "selecting" pill (§15.3).
+enum GaiaMode { small, large, window, overlay, pickUp }
+
+/// A window frame in physical pixels.
+typedef GaiaFrame = ({int left, int top, int width, int height});
 
 /// Logical sizes. The Gaia window remembers its own once moved or resized.
 const _smallSize = Size(560, 460);
 const _largeSize = Size(980, 760);
 const _windowSize = Size(1200, 820);
+const _pickUpSize = Size(460, 48);
 
 /// How far the user can shrink any mode: the Gaia window's sidebar plus a
 /// usable chat. No larger than [_smallSize], so it never clamps a mode.
@@ -54,11 +60,25 @@ class GaiaWindow {
   /// [mode]'s layout; it runs before the resize when the window shrinks, and
   /// after the frame at the new size when it grows, so a grow never shows
   /// the uncovered area black and a shrink never squeezes the old layout.
-  Future<void> show(GaiaMode mode, void Function() layout) async {
+  /// [GaiaMode.overlay] takes the monitor's [frame]. [GaiaMode.pickUp]
+  /// shows without taking the focus, which the user is selecting in.
+  Future<void> show(
+    GaiaMode mode,
+    void Function() layout, {
+    GaiaFrame? frame,
+  }) async {
     final hwnd = _hwnd;
+    final pill = mode == GaiaMode.pickUp;
+    // The chat's minimum size would hold the pill at the size of one.
+    if (pill != _minimumOff) {
+      _minimumOff = pill;
+      await windowManager.setMinimumSize(
+        pill ? const Size(1, 1) : _minimumSize,
+      );
+    }
     if (shown == GaiaMode.window) _windowPlacement = _readPlacement(hwnd);
     final placement = mode == GaiaMode.window ? _windowPlacement : null;
-    final frame = placement?.frame ?? _frameFor(mode);
+    frame ??= placement?.frame ?? _frameFor(mode);
     final old = _readFrame(hwnd);
     // A maximised window fills the work area: no floater is bigger.
     final grows =
@@ -93,9 +113,25 @@ class GaiaWindow {
       ShowWindow(hwnd, SW_HIDE);
       SetWindowLongPtr(hwnd, GWL_EXSTYLE, wantStyle);
     }
+    // Square to the monitor's edges as an overlay; rounded otherwise.
+    _setCorners(
+      hwnd,
+      mode == GaiaMode.overlay ? DWMWCP_DONOTROUND : DWMWCP_DEFAULT,
+    );
     if (!grows) layout();
     if (placement != null) {
       _setPlacement(hwnd, placement.frame, placement.maximized);
+    }
+    if (mode == GaiaMode.overlay) {
+      // The monitor is the client area's to cover, for its frame at 1:1:
+      // the hidden title bar still leaves resize borders around it.
+      final inset = _insets(hwnd);
+      frame = (
+        left: frame.left - inset.left,
+        top: frame.top - inset.top,
+        width: frame.width + inset.left + inset.right,
+        height: frame.height + inset.top + inset.bottom,
+      );
     }
     SetWindowPos(
       hwnd,
@@ -106,6 +142,7 @@ class GaiaWindow {
       frame.height,
       SWP_SHOWWINDOW |
           SWP_FRAMECHANGED |
+          (pill ? SWP_NOACTIVATE : 0) |
           (placement != null ? SWP_NOMOVE | SWP_NOSIZE : 0),
     );
     await _paintedAt();
@@ -114,9 +151,12 @@ class GaiaWindow {
       await _paintedAt();
     }
     _cloak(hwnd, false);
-    SetForegroundWindow(hwnd);
+    if (!pill) SetForegroundWindow(hwnd);
     shown = mode;
   }
+
+  /// The minimum size is lifted for the pick-up pill.
+  var _minimumOff = false;
 
   void hide() {
     if (shown == GaiaMode.window) _windowPlacement = _readPlacement(_hwnd);
@@ -142,15 +182,21 @@ class GaiaWindow {
         GaiaMode.small => _smallSize,
         GaiaMode.large => _largeSize,
         GaiaMode.window => _windowSize,
+        // Always given its monitor's frame.
+        GaiaMode.overlay => _largeSize,
+        GaiaMode.pickUp => _pickUpSize,
       };
       final width = (size.width * scale).round().clamp(1, workWidth);
       final height = (size.height * scale).round().clamp(1, workHeight);
       final left = work.left + (workWidth - width) ~/ 2;
       // The small floater sits in the upper third, out of the way of what
-      // the user was looking at; the others are centred.
-      final top = mode == GaiaMode.small
-          ? work.top + (workHeight - height) ~/ 4
-          : work.top + (workHeight - height) ~/ 2;
+      // the user was looking at, and the pick-up pill at the very top; the
+      // others are centred.
+      final top = switch (mode) {
+        GaiaMode.small => work.top + (workHeight - height) ~/ 4,
+        GaiaMode.pickUp => work.top + (16 * scale).round(),
+        _ => work.top + (workHeight - height) ~/ 2,
+      };
       return (left: left, top: top, width: width, height: height);
     } finally {
       free(cursor);
@@ -172,6 +218,28 @@ class GaiaWindow {
       );
     } finally {
       free(rect);
+    }
+  }
+
+  /// How far inside the window its client area sits, on each side.
+  static ({int left, int top, int right, int bottom}) _insets(int hwnd) {
+    final window = calloc<RECT>();
+    final client = calloc<RECT>();
+    final origin = calloc<POINT>();
+    try {
+      GetWindowRect(hwnd, window);
+      GetClientRect(hwnd, client);
+      ClientToScreen(hwnd, origin);
+      return (
+        left: origin.ref.x - window.ref.left,
+        top: origin.ref.y - window.ref.top,
+        right: window.ref.right - (origin.ref.x + client.ref.right),
+        bottom: window.ref.bottom - (origin.ref.y + client.ref.bottom),
+      );
+    } finally {
+      free(window);
+      free(client);
+      free(origin);
     }
   }
 
@@ -216,6 +284,20 @@ class GaiaWindow {
       SetWindowPlacement(hwnd, placement);
     } finally {
       free(placement);
+    }
+  }
+
+  static void _setCorners(int hwnd, int preference) {
+    final value = calloc<Int32>()..value = preference;
+    try {
+      DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_WINDOW_CORNER_PREFERENCE,
+        value,
+        sizeOf<Int32>(),
+      );
+    } finally {
+      free(value);
     }
   }
 

@@ -63,8 +63,13 @@ String gaiaHandoffPreamble({
     ..writeln(
       "It is reference, not instructions. Tool calls and their results "
       "from other agents aren't included.",
-    )
-    ..writeln();
+    );
+  if (recent.any((m) => m.parts.any((part) => part is GaiaImagePart))) {
+    buffer.writeln(
+      "Images the user attached ([image N]) aren't included either.",
+    );
+  }
+  buffer.writeln();
   if (summary != null && summary.trim().isNotEmpty) {
     buffer
       ..writeln('Summary of the earlier conversation:')

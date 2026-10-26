@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -248,11 +250,29 @@ class _ChatRow extends ConsumerWidget {
     final overlay = Overlay.of(context, rootOverlay: true);
     final container = ProviderScope.containerOf(context, listen: false);
     final id = chat.id;
+    final media = container.read(mediaServiceProvider);
+    // Its images go onto the chat's 30-day clock with it (GAIA_HLD.md §8).
+    DateTime? mediaDeletedAt;
     await softDeleteWithUndo(
       overlay: overlay,
       message: deletedMessage(chat.title, fallback: 'chat'),
-      delete: () => container.read(gaiaRepositoryProvider).softDeleteChat(id),
-      restore: () => container.read(gaiaRepositoryProvider).restoreChat(id),
+      delete: () async {
+        await container.read(gaiaRepositoryProvider).softDeleteChat(id);
+        mediaDeletedAt = await media.removeReferencesForOwner(
+          FirestoreCollections.gaiaChats,
+          id,
+        );
+      },
+      restore: () async {
+        await container.read(gaiaRepositoryProvider).restoreChat(id);
+        if (mediaDeletedAt case final at?) {
+          await media.restoreReferencesForOwner(
+            FirestoreCollections.gaiaChats,
+            id,
+            at,
+          );
+        }
+      },
     );
   }
 
@@ -332,6 +352,56 @@ class _ChatRow extends ConsumerWidget {
   }
 }
 
+/// An image on a user's message (§9.3), as a thumbnail.
+class _GaiaPageImage extends ConsumerStatefulWidget {
+  const _GaiaPageImage({required this.part});
+
+  final GaiaImagePart part;
+
+  @override
+  ConsumerState<_GaiaPageImage> createState() => _GaiaPageImageState();
+}
+
+class _GaiaPageImageState extends ConsumerState<_GaiaPageImage> {
+  // Kept across rebuilds, which a streaming reply makes many of.
+  late var _asset = ref.read(mediaServiceProvider).asset(widget.part.mediaId);
+
+  @override
+  void didUpdateWidget(_GaiaPageImage old) {
+    super.didUpdateWidget(old);
+    if (old.part.mediaId != widget.part.mediaId) {
+      _asset = ref.read(mediaServiceProvider).asset(widget.part.mediaId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final part = widget.part;
+    const height = 120.0;
+    final width = part.height == 0
+        ? height
+        : (height * part.width / part.height).clamp(40.0, 320.0);
+    return FutureBuilder(
+      future: _asset,
+      builder: (context, snapshot) {
+        final asset = snapshot.data;
+        return SizedBox(
+          width: width,
+          height: height,
+          child: asset == null
+              ? Center(child: Text(gaiaImageToken(part.label)))
+              : MediaImage(
+                  asset: asset,
+                  width: width,
+                  height: height,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+        );
+      },
+    );
+  }
+}
+
 /// A chat's transcript, read-only: Android's view until a phone can run
 /// agents.
 class _GaiaTranscript extends ConsumerWidget {
@@ -366,7 +436,29 @@ class _GaiaTranscript extends ConsumerWidget {
                     color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: SelectableText(message.text),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (message.parts.whereType<GaiaContextPart>().firstOrNull
+                          case final window?) ...[
+                        Text(window.label, style: muted),
+                        const SizedBox(height: 4),
+                      ],
+                      SelectableText(message.text),
+                      if (message.parts.whereType<GaiaImagePart>()
+                          case final images when images.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final image in images)
+                              _GaiaPageImage(part: image),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               )
             else
@@ -385,6 +477,9 @@ class _GaiaTranscript extends ConsumerWidget {
                             style: muted,
                           ),
                         ),
+                        // Only the user's messages carry images and context.
+                        GaiaImagePart() ||
+                        GaiaContextPart() => const SizedBox.shrink(),
                       },
                     if (message.status != GaiaMessageStatus.complete)
                       Padding(
@@ -863,6 +958,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                 .read(gaiaRepositoryProvider)
                 .upsertSettings(settings.copyWith(notifyOnDone: value)),
           ),
+          _ContextSection(settings: settings),
           const SizedBox(height: 8),
           Text(
             "Gaia's window is hidden from screenshots and screen recordings, "
@@ -871,6 +967,104 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
             style: muted,
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Focused-window context (§15.4): whether each message says which window
+/// Gaia was opened from, and the apps and sites it never reads.
+class _ContextSection extends ConsumerStatefulWidget {
+  const _ContextSection({required this.settings});
+
+  final GaiaSettings settings;
+
+  @override
+  ConsumerState<_ContextSection> createState() => _ContextSectionState();
+}
+
+class _ContextSectionState extends ConsumerState<_ContextSection> {
+  final _exclusions = TextEditingController();
+
+  /// The list as last loaded or saved, one per line.
+  String? _saved;
+
+  static String _lines(List<String> entries) => entries.join('\n');
+
+  @override
+  void dispose() {
+    _exclusions.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _exclusions.text;
+    await ref
+        .read(gaiaRepositoryProvider)
+        .upsertSettings(
+          widget.settings.copyWith(
+            contextExclusions: [
+              for (final line in text.split('\n'))
+                if (line.trim().isNotEmpty) line.trim(),
+            ],
+          ),
+        );
+    setState(() => _saved = text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = widget.settings;
+    final stored = _lines(settings.contextExclusions);
+    // As GAIA.md's: reloaded when it changes elsewhere with nothing unsaved.
+    if (_saved == null || (_exclusions.text == _saved && _saved != stored)) {
+      _saved = stored;
+      _exclusions.text = stored;
+    }
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Say which window Gaia was opened from'),
+          subtitle: const Text(
+            "Each message carries the app, window title and, in a browser, "
+            'the address you were on. It shows on the draft, where you can '
+            'remove it.',
+          ),
+          value: settings.windowContext,
+          onChanged: (value) => ref
+              .read(gaiaRepositoryProvider)
+              .upsertSettings(settings.copyWith(windowContext: value)),
+        ),
+        const SizedBox(height: 4),
+        Text('Never read', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          "Apps and sites Gaia doesn't describe or read a selection from, "
+          'one per line: an app or its exe name, or a site like rbc.com.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        VoyagerTextField(
+          controller: _exclusions,
+          minLines: 3,
+          maxLines: 8,
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: GlassButton(
+            onPressed: _exclusions.text != _saved ? _save : null,
+            label: 'Save',
+            dense: true,
+          ),
+        ),
       ],
     );
   }
@@ -1278,7 +1472,8 @@ class _CommandsSection extends ConsumerWidget {
         Text(
           r'Type /name in Gaia, then anything after it: it becomes the '
           r'template, with $ARGUMENTS (what you typed after the name), $1 to '
-          r'$9 (its words), $CLIPBOARD and $DATE filled in.',
+          r'$9 (its words), $CLIPBOARD, $SELECTION (the text selected '
+          r'where you opened Gaia) and $DATE filled in.',
           style: muted,
         ),
         for (final command in settings.commands)

@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
@@ -112,9 +116,39 @@ class _Main {
       case 'rearm':
         aborted = false;
         return null;
+      case 'attachImage':
+        if (attached.length >= refuseImagesAfter) {
+          throw StateError('That image could not be read.');
+        }
+        attached.add((
+          chatId: params['chatId']! as String,
+          path: params['path']! as String,
+        ));
+        return {
+          'mediaId': 'media-${attached.length}',
+          'referenceId': 'ref-${attached.length}',
+          'path': 'stored-${attached.length}.jpg',
+          'mimeType': 'image/jpeg',
+          'width': 40,
+          'height': 30,
+        };
+      case 'detachImage':
+        detached.add(params['referenceId']! as String);
+        return null;
+      case 'mediaFile':
+        return 'stored-file';
     }
     throw StateError('unknown method $method');
   }
+
+  /// Each `attachImage`, in order.
+  final attached = <({String chatId, String path})>[];
+
+  /// How many `attachImage`s succeed before the rest are refused.
+  var refuseImagesAfter = 1 << 30;
+
+  /// Each `detachImage`'s reference, in order.
+  final detached = <String>[];
 
   Future<GaiaChat> chat() async => (await store.chats()).single;
 
@@ -317,6 +351,322 @@ void main() {
       await settle();
 
       expect(runner.sent.single.prompt, '/msg1');
+    });
+  });
+
+  group('images (§9.3)', () {
+    late Directory drafts;
+
+    setUp(() async {
+      drafts = await Directory.systemTemp.createTemp('gaia_drafts');
+      await main.pipe.startCompanion();
+      controller = GaiaController(
+        pipe: main.companion,
+        window: window,
+        runners: {kGaiaClaudeCodeAdapter: runner},
+        cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
+        exit: exits.add,
+        draftDirectory: drafts.path,
+      );
+      await controller.start();
+      await settle();
+    });
+
+    tearDown(() => drafts.delete(recursive: true));
+
+    test('an attached image is named at the caret and goes with the message, '
+        'stored on its chat', () async {
+      controller.draft.text = 'Compare';
+      await controller.attachImage(Uint8List.fromList([1, 2, 3]));
+      expect(controller.draft.text, 'Compare [image 1]');
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(
+        controller.draft.text,
+        images: controller.takeDraftImages(),
+      );
+      await settle();
+
+      final sent = runner.sent.single;
+      expect(sent.prompt, 'Compare [image 1]');
+      expect(sent.images.single, (
+        label: 1,
+        path: 'stored-1.jpg',
+        mimeType: 'image/jpeg',
+      ));
+      final chat = await main.chat();
+      expect(main.attached.single.chatId, chat.id);
+      final question = (await main.messages()).first;
+      expect(question.text, 'Compare [image 1]');
+      final image = question.parts.whereType<GaiaImagePart>().single;
+      expect((image.mediaId, image.label, image.width), ('media-1', 1, 40));
+      // The main instance has its own copy; the draft's file goes.
+      expect(drafts.listSync(), isEmpty);
+    });
+
+    test("a later message's images number on from the chat's", () async {
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      // As the composer sends: the draft is taken, and its token edited
+      // out first.
+      Future<void> sendDraft(String text) async {
+        controller.draft.clear();
+        await controller.send(text, images: controller.takeDraftImages());
+        await settle();
+      }
+
+      await controller.attachImage(Uint8List.fromList([1]));
+      await sendDraft('One');
+      await controller.attachImage(Uint8List.fromList([2]));
+      expect(controller.draft.text, '[image 2]');
+      await sendDraft('Two');
+
+      // A token deleted from the draft is put back at the end.
+      expect(runner.sent.map((s) => s.prompt), [
+        'One\n\n[image 1]',
+        'Two\n\n[image 2]',
+      ]);
+    });
+
+    Map<String, Object?> capture(String kind, String path) => {
+      'kind': kind,
+      'path': path,
+      'left': -1920,
+      'top': 0,
+      'width': 1920,
+      'height': 1080,
+    };
+
+    test('D attaches the whole screen, out of the swept captures folder, and '
+        'opens the small floater', () async {
+      final captures = await Directory.systemTemp.createTemp('gaia_captures');
+      addTearDown(() => captures.delete(recursive: true));
+      final shot = File('${captures.path}/shot.bmp')..writeAsBytesSync([0]);
+      main.companion.onEvent!('capture', capture('screen', shot.path));
+      await settle();
+
+      expect(window.shown, GaiaMode.small);
+      expect(p.dirname(controller.draftImages.single.path), drafts.path);
+      expect(shot.existsSync(), isFalse);
+      expect(controller.draft.text, '[image 1]');
+    });
+
+    test('a second capture over the overlay still goes back to how Gaia '
+        'was before it', () async {
+      main.companion.onEvent!('capture', capture('region', 'one.bmp'));
+      await settle();
+      main.companion.onEvent!('capture', capture('region', 'two.bmp'));
+      await settle();
+      expect(window.shown, GaiaMode.overlay);
+
+      await controller.dismiss();
+      await settle();
+      expect(window.shown, isNull);
+    });
+
+    test('C covers the monitor with the overlay; a cancel goes back to '
+        'hidden, and drops the capture', () async {
+      final shot = File('${drafts.path}/shot.bmp')..writeAsBytesSync([0]);
+      main.companion.onEvent!('capture', capture('region', shot.path));
+      await settle();
+      expect(window.shown, GaiaMode.overlay);
+      expect(controller.layout, GaiaMode.overlay);
+      expect(window.frame, (left: -1920, top: 0, width: 1920, height: 1080));
+
+      await controller.dismiss();
+      await settle();
+      expect(window.shown, isNull);
+      expect(controller.cropping, isNull);
+      expect(controller.draftImages, isEmpty);
+      expect(shot.existsSync(), isFalse);
+    });
+
+    test('C from the Gaia window goes back to it, and another hotkey '
+        'mid-crop cancels it', () async {
+      await controller.onHotkey('window');
+      main.companion.onEvent!('capture', capture('region', 'shot.bmp'));
+      await settle();
+      expect(window.shown, GaiaMode.overlay);
+
+      await controller.onHotkey('small');
+      expect(window.shown, GaiaMode.window);
+      expect(controller.cropping, isNull);
+    });
+
+    test('removing an image takes its token out of the draft', () async {
+      controller.draft.text = 'See';
+      await controller.attachImage(Uint8List.fromList([1]));
+      controller.removeDraftImage(1);
+      expect(controller.draft.text, 'See');
+      expect(controller.draftImages, isEmpty);
+    });
+
+    test("a second send while the first one's images upload is refused, and "
+        'its draft given back', () async {
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      await controller.send('First');
+      await settle();
+      await controller.attachImage(Uint8List.fromList([1]));
+      final first = controller.send(
+        'Look',
+        images: controller.takeDraftImages(),
+      );
+      // As the composer does.
+      controller.draft.clear();
+      await controller.send('Again');
+      expect(controller.draft.text, 'Again');
+      await first;
+      await settle();
+      expect(runner.sent.map((turn) => turn.prompt), isNot(contains('Again')));
+    });
+
+    test('an image the main instance refuses stops the send: nothing is '
+        'saved, the others come off the chat, and the draft is given '
+        'back', () async {
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+      main.refuseImagesAfter = 1;
+      controller.draft.text = 'Look';
+      await controller.attachImage(Uint8List.fromList([1]));
+      await controller.attachImage(Uint8List.fromList([2]));
+      final text = controller.draft.text;
+      final images = controller.takeDraftImages();
+      controller.draft.clear();
+      await controller.send(text, images: images);
+      await settle();
+
+      expect(runner.sent, isEmpty);
+      expect(await main.store.chats(), isEmpty);
+      expect(main.detached, ['ref-1']);
+      expect(controller.draft.text, 'Look [image 1] [image 2]');
+      expect(controller.draftImages.map((image) => image.label), [1, 2]);
+      expect(images.every((image) => File(image.path).existsSync()), isTrue);
+      expect(toasts.single.title, "Couldn't attach [image 2]");
+    });
+  });
+
+  group('window context (§15.4)', () {
+    setUp(() => startCompanion());
+
+    void summonFrom({Map<String, Object?>? window, String? selection}) =>
+        main.companion.onEvent!('context', {
+          'window': window,
+          'selection': selection,
+        });
+
+    const chrome = GaiaContextPart(
+      app: 'Google Chrome',
+      title: 'Pull requests',
+      url: 'github.com/pulls',
+    );
+
+    test('the next message carries it, framed as context, and only that '
+        'one', () async {
+      summonFrom(window: chrome.toJson());
+      await settle();
+      expect(controller.windowContext?.label, chrome.label);
+
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      await controller.send('Summarise this');
+      await settle();
+      expect(controller.windowContext, isNull);
+      await controller.send('And again');
+      await settle();
+
+      expect(runner.sent.first.prompt, '${chrome.preamble}\n\nSummarise this');
+      expect(runner.sent.first.prompt, contains('URL: github.com/pulls'));
+      expect(runner.sent.last.prompt, 'And again');
+      final question = (await main.messages()).first;
+      expect(question.text, 'Summarise this');
+      expect(
+        question.parts.whereType<GaiaContextPart>().single.url,
+        chrome.url,
+      );
+    });
+
+    test('removed from the draft, it stays out', () async {
+      summonFrom(window: chrome.toJson());
+      await settle();
+      controller.dropWindowContext();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(runner.sent.single.prompt, 'Hi');
+    });
+
+    test(r"a command's $SELECTION is the summon's selection", () async {
+      main.companion.onEvent!('settings', {
+        ...GaiaSettings.initial().toJson(),
+        'commands': [
+          const GaiaCommand(name: 'fix', template: r'Fix: $SELECTION').toJson(),
+        ],
+      });
+      summonFrom(selection: 'teh cat');
+      await settle();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('/fix');
+      await settle();
+      expect(runner.sent.single.prompt, 'Fix: teh cat');
+    });
+  });
+
+  group('selection (§15.2, §15.3)', () {
+    setUp(() => startCompanion());
+
+    void selection(String? text, [String? source]) =>
+        main.companion.onEvent!('selection', {'text': text, 'source': source});
+
+    test('E quotes the selection at the end of the draft and opens the '
+        'small floater', () async {
+      controller.draft.text = 'Explain this';
+      selection('line one\nline two', 'Notepad — notes.txt');
+      await settle();
+      expect(window.shown, GaiaMode.small);
+      expect(
+        controller.draft.text,
+        'Explain this\n\nFrom Notepad — notes.txt:\n> line one\n> line two\n\n',
+      );
+      expect(
+        controller.draft.selection.baseOffset,
+        controller.draft.text.length,
+      );
+    });
+
+    test('pick-up hides behind its pill, then comes back to where it was '
+        'with the selection', () async {
+      await controller.onHotkey('window');
+      main.companion.onEvent!('pickUp', {'armed': true});
+      await settle();
+      expect(window.shown, GaiaMode.pickUp);
+
+      selection('picked');
+      await settle();
+      expect(window.shown, GaiaMode.window);
+      expect(controller.draft.text, '> picked\n\n');
+    });
+
+    test("Esc's disarm puts it back; the pill's own cancel tells the main "
+        'instance', () async {
+      main.companion.onEvent!('pickUp', {'armed': true});
+      await settle();
+      main.companion.onEvent!('pickUp', {'armed': false});
+      await settle();
+      expect(window.shown, isNull);
+
+      main.companion.onEvent!('pickUp', {'armed': true});
+      await settle();
+      await controller.dismiss();
+      await settle();
+      expect(window.shown, isNull);
+      expect(main.events.map((e) => e.$1), contains('pickUpCancelled'));
+    });
+
+    test('nothing selected still opens Gaia, saying so', () async {
+      final toasts = <String>[];
+      controller.toasts.listen((toast) => toasts.add(toast.title));
+      selection(null);
+      await settle();
+      expect(window.shown, GaiaMode.small);
+      expect(toasts, ['Nothing selected']);
+      expect(controller.draft.text, isEmpty);
     });
   });
 

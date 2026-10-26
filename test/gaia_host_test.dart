@@ -6,6 +6,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
+import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
 import 'fakes/gaia_fakes.dart';
 
@@ -57,10 +58,42 @@ void main() {
     pipe.onLaunch = (end, pid) => companions.add(_Companion(end, pid));
   });
 
+  /// Every screen capture the host took, by path.
+  late List<String> captured;
+  setUp(() => captured = []);
+
+  /// The window in front when a hotkey comes, and what UI Automation reads
+  /// of it.
+  GaiaForegroundWindow? foreground;
+  GaiaWindowUia uia = (url: null, selection: null);
+  setUp(() {
+    foreground = null;
+    uia = (url: null, selection: null);
+  });
+
+  /// Each Ctrl+C fallback, by the exe it was sent to, and what it got.
+  late List<String> copies;
+  String? copied;
+  setUp(() {
+    copies = [];
+    copied = null;
+  });
+
   GaiaHost newHost() => GaiaHost(
     pipe: pipe,
     abortFlag: () async => fs.file('gaia_aborted'),
     killCompanion: (pid) async => killed.add(pid),
+    captureDirectory: () => fs.directory('captures').create(),
+    captureScreen: (path) async {
+      captured.add(path);
+      return (path: path, left: -1920, top: 0, width: 1920, height: 1080);
+    },
+    foregroundWindow: () => foreground,
+    readUia: (window, {required selection}) async => uia,
+    copySelection: (window) async {
+      copies.add(window.exe);
+      return copied;
+    },
   );
 
   /// Starts a host and runs [body] in fake time.
@@ -481,6 +514,292 @@ void main() {
         async.elapse(const Duration(seconds: 3));
         expect(done, isTrue);
         expect(killed, [companions.single.pid]);
+      });
+    });
+  });
+
+  group('screenshots (§15.1)', () {
+    test('C and D capture the screen, then hand the companion the capture', () {
+      run(show: true, (async, host) {
+        connect(async);
+        host
+          ..onHotkey(GaiaHotkey.region)
+          ..onHotkey(GaiaHotkey.screen);
+        async.flushMicrotasks();
+        expect(captured, hasLength(2));
+        expect(companions.single.events.skip(1), [
+          'capture region ${captured[0]} -1920 0 1920 1080',
+          'capture screen ${captured[1]} -1920 0 1920 1080',
+        ]);
+      });
+    });
+
+    test('a capture launches a companion that is not running, which gets '
+        'it on connecting', () {
+      run((async, host) {
+        host.onHotkey(GaiaHotkey.screen);
+        async.flushMicrotasks();
+        expect(pipe.launches, hasLength(1));
+        connect(async);
+        expect(companions.single.events, [
+          'capture screen ${captured.single} -1920 0 1920 1080',
+        ]);
+      });
+    });
+
+    test('aborted, nothing is captured and the companion says why', () {
+      run(show: true, (async, host) {
+        connect(async);
+        host.onHotkey(GaiaHotkey.abort);
+        async.flushMicrotasks();
+        host.onHotkey(GaiaHotkey.region);
+        async.flushMicrotasks();
+        expect(captured, isEmpty);
+        expect(companions.single.events.last, 'refused aborted');
+      });
+    });
+
+    test('captures older than an hour are swept', () {
+      run(show: true, (async, host) {
+        connect(async);
+        final old = fs.file('captures/old.bmp')
+          ..createSync(recursive: true)
+          ..setLastModifiedSync(
+            DateTime.now().subtract(const Duration(hours: 2)),
+          );
+        host.onHotkey(GaiaHotkey.region);
+        async.flushMicrotasks();
+        expect(old.existsSync(), isFalse);
+      });
+    });
+  });
+
+  group('window context (§15.4)', () {
+    const chrome = (
+      hwnd: 1,
+      pid: 77,
+      exe: 'chrome',
+      app: 'Google Chrome',
+      title: 'Pull requests',
+      console: false,
+    );
+
+    /// The companion's last `context` event's params.
+    Map<String, Object?>? lastContext;
+
+    void listen() {
+      final pipeEnd = companions.single.pipe;
+      final onEvent = pipeEnd.onEvent!;
+      pipeEnd.onEvent = (event, params) {
+        if (event == 'context') lastContext = params;
+        onEvent(event, params);
+      };
+    }
+
+    setUp(() => lastContext = null);
+
+    test('follows the summon with the window and its selection', () {
+      run(show: true, (async, host) {
+        connect(async);
+        listen();
+        foreground = chrome;
+        uia = (url: 'github.com/pulls', selection: 'some code');
+        host.onHotkey(GaiaHotkey.small);
+        async.flushMicrotasks();
+        expect(companions.single.events[1], 'hotkey small');
+        expect(lastContext, {
+          'window': {
+            'type': 'context',
+            'app': 'Google Chrome',
+            'title': 'Pull requests',
+            'url': 'github.com/pulls',
+          },
+          'selection': 'some code',
+        });
+      });
+    });
+
+    test('an excluded app or site sends nothing of it', () {
+      run(show: true, (async, host) {
+        connect(async);
+        listen();
+        foreground = chrome;
+        uia = (url: 'https://www.rbc.com/login', selection: 'account');
+        host.onHotkey(GaiaHotkey.small);
+        async.flushMicrotasks();
+        expect(lastContext!['window'], isNotNull);
+
+        DriftGaiaRepository(db).upsertSettings(
+          GaiaSettings.initial().copyWith(contextExclusions: ['rbc.com']),
+        );
+        async.flushMicrotasks();
+        host.onHotkey(GaiaHotkey.large);
+        async.flushMicrotasks();
+        expect(lastContext, {'window': null, 'selection': null});
+
+        foreground = (
+          hwnd: 2,
+          pid: 78,
+          exe: '1Password',
+          app: '1Password',
+          title: 'Vault',
+          console: false,
+        );
+        uia = (url: null, selection: 'hunter2');
+        DriftGaiaRepository(db).upsertSettings(GaiaSettings.initial());
+        async.flushMicrotasks();
+        host.onHotkey(GaiaHotkey.large);
+        async.flushMicrotasks();
+        expect(lastContext, {'window': null, 'selection': null});
+      });
+    });
+
+    test('turned off, the window stays out but the selection still comes', () {
+      run(show: true, (async, host) {
+        connect(async);
+        listen();
+        DriftGaiaRepository(
+          db,
+        ).upsertSettings(GaiaSettings.initial().copyWith(windowContext: false));
+        async.flushMicrotasks();
+        foreground = chrome;
+        uia = (url: 'github.com', selection: 'x');
+        host.onHotkey(GaiaHotkey.small);
+        async.flushMicrotasks();
+        expect(lastContext, {'window': null, 'selection': 'x'});
+      });
+    });
+
+    test("a summon from Gaia's own window leaves its context be", () {
+      run(show: true, (async, host) {
+        connect(async);
+        listen();
+        foreground = (
+          hwnd: 3,
+          pid: companions.single.pid,
+          exe: 'voyager',
+          app: 'Voyager',
+          title: 'Gaia',
+          console: false,
+        );
+        host.onHotkey(GaiaHotkey.small);
+        async.flushMicrotasks();
+        expect(lastContext, isNull);
+      });
+    });
+  });
+
+  group('selection (§15.2, §15.3)', () {
+    const editor = (
+      hwnd: 5,
+      pid: 90,
+      exe: 'Code',
+      app: 'Visual Studio Code',
+      title: 'main.dart - Voyager - Visual Studio Code',
+      console: false,
+    );
+
+    test('E sends what UI Automation found, with its source', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = editor;
+        uia = (url: null, selection: 'final x = 1;');
+        host.onHotkey(GaiaHotkey.selection);
+        async.flushMicrotasks();
+        expect(copies, isEmpty);
+        expect(
+          companions.single.events,
+          contains(
+            'selection final x = 1; Visual Studio Code — main.dart - Voyager',
+          ),
+        );
+      });
+    });
+
+    test('E falls back to a copy when UI Automation finds nothing', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = editor;
+        copied = 'copied text';
+        host.onHotkey(GaiaHotkey.selection);
+        async.flushMicrotasks();
+        expect(copies, ['Code']);
+        expect(
+          companions.single.events.where((e) => e.startsWith('selection')),
+          ['selection copied text Visual Studio Code — main.dart - Voyager'],
+        );
+      });
+    });
+
+    test('F arms pick-up; F again takes the selection without another '
+        'pick-up event', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = editor;
+        uia = (url: null, selection: 'picked');
+        host.onHotkey(GaiaHotkey.pickUp);
+        async.flushMicrotasks();
+        expect(companions.single.events.last, 'pickUp true');
+        host.onHotkey(GaiaHotkey.pickUp);
+        async.flushMicrotasks();
+        final events = companions.single.events;
+        expect(events.where((e) => e.startsWith('pickUp')), ['pickUp true']);
+        expect(events, contains(startsWith('selection picked')));
+      });
+    });
+
+    test('a cancel from the pill disarms it', () {
+      run(show: true, (async, host) {
+        connect(async);
+        host.onHotkey(GaiaHotkey.pickUp);
+        async.flushMicrotasks();
+        companions.single.pipe.notify('pickUpCancelled');
+        async.flushMicrotasks();
+        host.onHotkey(GaiaHotkey.pickUp);
+        async.flushMicrotasks();
+        expect(companions.single.events.where((e) => e.startsWith('pickUp')), [
+          'pickUp true',
+          'pickUp true',
+        ]);
+      });
+    });
+
+    test('E reads nothing from an excluded app', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = (
+          hwnd: 6,
+          pid: 91,
+          exe: 'KeePassXC',
+          app: 'KeePassXC',
+          title: 'Passwords',
+          console: false,
+        );
+        uia = (url: null, selection: 'hunter2');
+        copied = 'hunter2';
+        host.onHotkey(GaiaHotkey.selection);
+        async.flushMicrotasks();
+        expect(copies, isEmpty);
+        expect(
+          companions.single.events.where((e) => e.startsWith('selection')),
+          ['selection null null'],
+        );
+        // An earlier summon's window doesn't stay in the draft.
+        expect(companions.single.events.last, 'context null null');
+      });
+    });
+
+    test('aborted, E reads nothing', () {
+      run(show: true, (async, host) {
+        connect(async);
+        host.onHotkey(GaiaHotkey.abort);
+        async.flushMicrotasks();
+        foreground = editor;
+        copied = 'x';
+        host.onHotkey(GaiaHotkey.selection);
+        async.flushMicrotasks();
+        expect(copies, isEmpty);
+        expect(companions.single.events.last, 'refused aborted');
       });
     });
   });

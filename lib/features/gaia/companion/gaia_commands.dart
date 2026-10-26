@@ -85,13 +85,15 @@ String? gaiaPaletteQuery(String draft) {
 
 /// What a user command in [draft] expands to on send, or null when the
 /// draft doesn't start with one. `/name the rest`: `$ARGUMENTS` is the rest,
-/// `$1`…`$9` its words, `$CLIPBOARD` the clipboard's text and `$DATE`
-/// today's date.
+/// `$1`…`$9` its words, `$CLIPBOARD` the clipboard's text, `$SELECTION`
+/// the text selected where Gaia was summoned from, and `$DATE` today's
+/// date.
 String? expandGaiaCommand(
   String draft,
   List<GaiaCommand> commands, {
   required String clipboard,
   required DateTime now,
+  String selection = '',
 }) {
   final match = RegExp(
     r'^/([\w-]+)(?:\s+([\s\S]*))?$',
@@ -104,10 +106,11 @@ String? expandGaiaCommand(
       ? const <String>[]
       : arguments.split(RegExp(r'\s+'));
   return command.template.replaceAllMapped(
-    RegExp(r'\$(ARGUMENTS|CLIPBOARD|DATE|[1-9])'),
+    RegExp(r'\$(ARGUMENTS|CLIPBOARD|SELECTION|DATE|[1-9])'),
     (m) => switch (m.group(1)!) {
       'ARGUMENTS' => arguments,
       'CLIPBOARD' => clipboard,
+      'SELECTION' => selection,
       'DATE' => DateFormat('yyyy-MM-dd').format(now),
       final n => int.parse(n) <= words.length ? words[int.parse(n) - 1] : '',
     },

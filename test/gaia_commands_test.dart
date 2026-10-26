@@ -22,6 +22,19 @@ void main() {
   String? expand(String draft) =>
       expandGaiaCommand(draft, commands, clipboard: 'copied', now: now);
 
+  test(r'$SELECTION is the text selected where Gaia was summoned', () {
+    expect(
+      expandGaiaCommand(
+        '/fix',
+        const [GaiaCommand(name: 'fix', template: r'Fix: $SELECTION')],
+        clipboard: '',
+        now: now,
+        selection: 'teh cat',
+      ),
+      'Fix: teh cat',
+    );
+  });
+
   test('a command expands with its arguments', () {
     expect(expand('/explain how tides work'), 'Explain simply: how tides work');
     expect(expand('/explain'), 'Explain simply: ');

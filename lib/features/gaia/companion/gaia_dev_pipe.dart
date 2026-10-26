@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 
 /// `--gaia-dev` only: stands in for the main instance, so the companion runs
@@ -67,6 +70,24 @@ class GaiaDevPipe extends GaiaPipe {
       case 'rearm':
         _aborted = false;
         return null;
+      case 'attachImage':
+        // No media module: a copy stands in for the stored image, and its
+        // path for its id.
+        final copy = await File(
+          p['path']! as String,
+        ).copy('${p['path']}.stored');
+        final image = await gaiaDecodeImage(copy.path);
+        final size = (image.width, image.height);
+        image.dispose();
+        return {
+          'mediaId': copy.path,
+          'path': copy.path,
+          'mimeType': 'image/png',
+          'width': size.$1,
+          'height': size.$2,
+        };
+      case 'mediaFile':
+        return p['mediaId'];
       default:
         throw GaiaPipeException('unknown method $method');
     }
@@ -74,6 +95,22 @@ class GaiaDevPipe extends GaiaPipe {
 
   /// As the main instance's hotkey A (`small`), B (`large`) or G (`window`).
   void hotkey(String key) => onEvent?.call('hotkey', {'key': key});
+
+  /// As the main instance's hotkey C (`region`) or D (`screen`).
+  Future<void> capture(String kind) async {
+    final capture = await gaiaCaptureScreen(
+      '${Directory.systemTemp.path}\\gaia-dev-${DateTime.now().microsecondsSinceEpoch}.bmp',
+    );
+    if (capture == null) return;
+    onEvent?.call('capture', {
+      'kind': kind,
+      'path': capture.path,
+      'left': capture.left,
+      'top': capture.top,
+      'width': capture.width,
+      'height': capture.height,
+    });
+  }
 
   /// As the main instance's Abort hotkey.
   Future<void> abort() async {

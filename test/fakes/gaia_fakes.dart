@@ -141,6 +141,9 @@ class FakeGaiaWindow implements GaiaWindow {
   /// Shown, but with another app in front.
   var behind = false;
 
+  /// The frame the last [show] was given.
+  GaiaFrame? frame;
+
   @override
   bool get foreground => shown != null && !behind;
 
@@ -148,8 +151,13 @@ class FakeGaiaWindow implements GaiaWindow {
   Future<void> init() async {}
 
   @override
-  Future<void> show(GaiaMode mode, void Function() layout) async {
+  Future<void> show(
+    GaiaMode mode,
+    void Function() layout, {
+    GaiaFrame? frame,
+  }) async {
     shown = mode;
+    this.frame = frame;
     layout();
   }
 
@@ -163,6 +171,7 @@ typedef FakeClaudeSend = ({
   String? sessionId,
   String model,
   String prompt,
+  List<GaiaImageInput> images,
 });
 
 /// A [GaiaAgentRunner] that plays scripted turns instead of running a CLI.
@@ -194,6 +203,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
     required String? sessionId,
     required String model,
     required String prompt,
+    List<GaiaImageInput> images = const [],
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     sent.add((
@@ -201,6 +211,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
       sessionId: sessionId,
       model: model,
       prompt: prompt,
+      images: images,
     ));
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);

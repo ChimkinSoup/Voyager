@@ -8,7 +8,8 @@ keeps one synced chat history across desktop and phone.
 Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
-in. Phases 0, 1 and 2 are done (§19). **Gemini is skipped
+in. Phases 0 to 3 are done (Phase 3 checked live 2026-10-26, §19).
+**Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
 back (§19). The windowing and process decision is in
@@ -212,7 +213,7 @@ instructions and its input in the one message, so no job sees another's.
 A CLI cold start takes about a second before the model is asked, so Gaia
 starts the next job's process ahead of time when a new chat is opened (and
 drops it after 5 idle minutes). A warm route measured 0.65–1.1 s on 2.1.310.
-The router waits at most 2 s before the last used tier takes the message;
+The router waits at most 5 s before the last used tier takes the message;
 titles and summaries run after a reply, where a cold start doesn't matter.
 With no utility model (Claude Code missing or logged out), Gaia degrades:
 no auto-router (the last-used tier applies), titles come from the first line
@@ -738,8 +739,9 @@ Built-ins: `/quick /std /deep`, `/new`, `/compact`, `/account`, `/remember`,
 
 As built in Phase 2: `/quick /std /deep`, `/new` and `/stop`, which still
 works while a reply is running. The other built-ins arrive with their
-phases, and so does `$SELECTION`, which needs selection capture (Phase 3).
-A message is stored as its expansion, since that's what the agent saw.
+phases. A message is stored as its expansion, since that's what the agent
+saw. Phase 3 added `$SELECTION`: the text selected where Gaia was last
+summoned from, read through UI Automation at the summon (§15.2).
 
 ### 9.3 Attachments and the "[image N]" question
 
@@ -1204,7 +1206,7 @@ Other additions:
 | 0 | Done | `--companion` launch + mutex, IPC pipe (with DACL and client check), window modes (small/large floater, Gaia window; §3.3), exclude-from-capture, Claude Code adapter (with fixtures and version range), chat via the main instance, Abort (runs) |
 | 1 | Done | Gaia drift tables + sync, Gaia page (chats, settings, setup checklist), GAIA.md, notifications/background runs, update drain |
 | 2 | Done | Agents/tiers/router, Codex adapter, Haiku utility model on Claude Code, cross-vendor handoff, commands, keybinds. **Gemini skipped** (below) |
-| 3 | | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
+| 3 | Done | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
 | 4 | | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
 | 5 | | Memory + curator + inbox |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
@@ -1221,6 +1223,71 @@ built to §5.1's standard. The Gemini API utility model was built, then
 removed for Haiku on Claude Code (§5.1), which needs no key. Gemini comes
 back once a login works: record fixtures, then add the CLI adapter beside
 the Codex one.
+
+Phase 3 as built:
+- **Images.** A user message keeps its whole text, `[image N]` tokens
+  included, in one text part, with an image part per attachment after it
+  (media id, label, size). The tokens say where each image goes, so search,
+  titles and handoffs read the text as it was written. Labels count across
+  the chat, so a later message's image 1 never means an earlier one's; a
+  draft's images are renumbered from the chat's on send, and a token the
+  user deleted goes back at the end. Paste (Ctrl+V with an image and no
+  text) adds one. Each image is one media reference owned by its **chat**,
+  not its message, so a chat's delete puts its images on the chat's 30-day
+  clock and Undo or a trash restore brings them back. Ingest stores them
+  as it stores every image (2048 px on the long edge, JPEG unless
+  transparent), and that stored file is what the agent gets. Claude Code
+  takes base64 image blocks over stream-json and Codex takes
+  `--image=<path>` per image plus a line naming the labels in order; both
+  verified on 2.1.310 and 0.164.0. A handoff transcript says images
+  weren't carried over.
+- **Captures.** The main instance grabs the monitor under the cursor with
+  GDI (BitBlt with CAPTUREBLT) on a worker isolate, as a 32-bit BMP in
+  `gaia/captures`, swept after an hour, and sends the companion its path
+  and the monitor's frame. D attaches it whole. C turns the window into a
+  borderless overlay over that monitor showing the frame at 1:1: drag
+  crops, Enter takes the whole screen, Esc or any Gaia hotkey cancels. A
+  BMP or an edited image is rendered to PNG by the companion on send,
+  since the media module takes only PNG, JPEG, WebP and HEIC.
+- **Annotation.** Clicking a draft thumbnail opens the editor (on the
+  large floater when it was the small one): pen, highlighter (multiply),
+  line, arrow, rectangle, ellipse, blur, redact (a solid box, since a blur
+  can leak what's under it), crop, three widths, six colours, undo and
+  redo. Marks are kept in image pixels over the untouched original and
+  flattened on send.
+- **Window context.** Every summon reads the foreground window with Win32
+  at once (app name from the exe's version resource, title), then the
+  browser address bar (first edit control) and the focused control's
+  selection through UI Automation within 250 ms, and sends them after the
+  summon as a removable chip. The chip goes with the next message only, as
+  a context part and a framed `<focused_window>` block ahead of the prompt.
+  Settings: on by default, and an exclusion list matching an app name, exe
+  name or site host (password managers by default). An excluded window
+  sends neither context nor selection.
+- **Selection.** E reads the selection through UI Automation and falls
+  back to Ctrl+C once the hotkey's modifiers are released, never into a
+  console and never from an excluded app or site. The copy is the source app's, so it still lands in Win+V
+  history; only the restore of the user's clipboard carries the exclusion
+  marker. The quote goes at the end of the draft as `From App — Title:`
+  and `>` lines. F hides Gaia behind a non-activating "selecting" pill at
+  the top of the screen; F again quotes the selection and puts Gaia back
+  where it was, and Esc (a global hotkey only while armed) or the pill's
+  button cancels. Default keys: C Ctrl+Alt+S, D Ctrl+Alt+Shift+S, E
+  Ctrl+Alt+Q, F Ctrl+Alt+Shift+Q. Aborted, all four refuse.
+- **Checked live (2026-10-26)** on one 2880×1800 monitor, over Notepad and
+  Chrome: the GDI capture, the crop overlay at 1:1, annotation, a send with
+  an edited image to Claude Code, window context with a browser's URL,
+  E through UI Automation (Notepad) and through Ctrl+C (Chrome, which
+  exposes no TextPattern) with the clipboard put back, F and its Esc,
+  paste (PNG and bare CF_DIB), and the aborted refusals. That check found
+  and fixed: F crashing the main instance (the Esc hotkey's null modifier
+  list aborts the Windows hotkey plugin), the address-bar read crashing it
+  on any browser (the UIA condition passed by its slot, not itself), the
+  overlay's frame scaled by its window's resize borders, bare-`\r` line
+  breaks in quotes (RichEdit's), a draft thumbnail ignoring its edits, and
+  a blur over a small box letting the sharp image show through. Not
+  checked live: Win+V history around the clipboard restore, the exclusion
+  list, several monitors, the capture sweep and images on Codex.
 
 Phase 2 as built: a native session that missed turns gets them as a
 Gaia-rendered transcript before the user's message, newest 60k characters

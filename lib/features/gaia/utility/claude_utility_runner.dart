@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
@@ -54,6 +55,10 @@ class ClaudeUtilityRunner {
   /// [job]'s instructions on [input]; the reply's text. Throws a
   /// [GaiaRunException].
   Future<String> generate(String job, String input) async {
+    debugPrint(
+      '[gaia] utility: ${_spare != null ? 'process started ahead' : 'cold start'}'
+      ', $_model, config dir "$_configDir"',
+    );
     final process = _spare ?? await _start();
     _spare = null;
     _spareIdle?.cancel();

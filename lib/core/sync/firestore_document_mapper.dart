@@ -4553,6 +4553,8 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'routerRubric': settings.routerRubric,
   'commands': [for (final command in settings.commands) command.toJson()],
   'keybinds': settings.keybinds,
+  'windowContext': settings.windowContext,
+  'contextExclusions': settings.contextExclusions,
   'createdAt': _dateToFirestoreRequired(settings.createdAt),
   'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
   'version': settings.version,
@@ -4599,6 +4601,11 @@ GaiaSettings mergeGaiaSettingsFromRemote(
     keybinds: data['keybinds'] is Map
         ? gaiaKeybindsFromJson(data['keybinds'])
         : local?.keybinds ?? const {},
+    windowContext:
+        data['windowContext'] as bool? ?? local?.windowContext ?? true,
+    contextExclusions: data['contextExclusions'] is List
+        ? gaiaContextExclusionsFromJson(data['contextExclusions'])
+        : local?.contextExclusions ?? kGaiaDefaultContextExclusions,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

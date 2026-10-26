@@ -1,0 +1,115 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
+
+/// An attached image as a thumbnail [height] tall, its `[image N]` over its
+/// corner (GAIA_HLD.md §9.3): the file at [path], or the one [file]
+/// resolves to, which is null while the image isn't on this device and
+/// shows a placeholder. [onRemove] adds a close button; [onTap] makes it
+/// clickable.
+class GaiaImageThumb extends StatelessWidget {
+  const GaiaImageThumb({
+    super.key,
+    this.file,
+    this.path,
+    required this.label,
+    required this.height,
+    this.onTap,
+    this.onRemove,
+  });
+
+  final Future<String?>? file;
+  final String? path;
+  final int label;
+  final double height;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    final caption = theme.textTheme.labelSmall?.copyWith(color: Colors.white);
+    return FutureBuilder(
+      future: file,
+      initialData: path,
+      builder: (context, snapshot) {
+        final path = snapshot.data;
+        final Widget image = path == null
+            ? Container(
+                width: height,
+                color: theme.colorScheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.image_outlined,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            : Image.file(
+                File(path),
+                height: height,
+                fit: BoxFit.contain,
+                cacheHeight: (height * ratio).round(),
+                errorBuilder: (context, _, _) => SizedBox.square(
+                  dimension: height,
+                  child: const Icon(Icons.broken_image_outlined),
+                ),
+              );
+        return MouseRegion(
+          cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: onTap,
+            child: SizedBox(
+              height: height,
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: image,
+                  ),
+                  Positioned(
+                    left: 4,
+                    bottom: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(gaiaImageToken(label), style: caption),
+                    ),
+                  ),
+                  if (onRemove case final remove?)
+                    Positioned(
+                      right: 2,
+                      top: 2,
+                      child: Material(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: remove,
+                          child: const Padding(
+                            padding: EdgeInsets.all(2),
+                            child: Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

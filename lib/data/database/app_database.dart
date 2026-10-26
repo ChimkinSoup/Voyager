@@ -2257,6 +2257,11 @@ class GaiaSettingsTable extends Table {
 
   /// `{keybind: combo}` as JSON.
   TextColumn get keybindsJson => text().withDefault(const Constant('{}'))();
+  BoolColumn get windowContext =>
+      boolean().withDefault(const Constant(true))();
+
+  /// A JSON list of names and hosts; null for the defaults.
+  TextColumn get contextExclusionsJson => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2355,7 +2360,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 176;
+  int get schemaVersion => 177;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4274,6 +4279,20 @@ class AppDatabase extends _$AppDatabase {
           gaiaSettingsTable.agentsJson,
           gaiaSettingsTable.tiersJson,
           gaiaSettingsTable.lastTier,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'gaia_settings_table',
+            gaiaSettingsTable,
+            column,
+          );
+        }
+      }
+      if (from >= 169 && from < 177) {
+        // Gaia Phase 3: focused-window context (GAIA_HLD.md §15.4).
+        for (final column in [
+          gaiaSettingsTable.windowContext,
+          gaiaSettingsTable.contextExclusionsJson,
         ]) {
           await _addColumnIfNotExists(
             migrator,

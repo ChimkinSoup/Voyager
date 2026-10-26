@@ -59287,6 +59287,32 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('{}'),
   );
+  static const VerificationMeta _windowContextMeta = const VerificationMeta(
+    'windowContext',
+  );
+  @override
+  late final GeneratedColumn<bool> windowContext = GeneratedColumn<bool>(
+    'window_context',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("window_context" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _contextExclusionsJsonMeta =
+      const VerificationMeta('contextExclusionsJson');
+  @override
+  late final GeneratedColumn<String> contextExclusionsJson =
+      GeneratedColumn<String>(
+        'context_exclusions_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -59346,6 +59372,8 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     routerRubric,
     commandsJson,
     keybindsJson,
+    windowContext,
+    contextExclusionsJson,
     createdAt,
     updatedAt,
     version,
@@ -59452,6 +59480,24 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         ),
       );
     }
+    if (data.containsKey('window_context')) {
+      context.handle(
+        _windowContextMeta,
+        windowContext.isAcceptableOrUnknown(
+          data['window_context']!,
+          _windowContextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('context_exclusions_json')) {
+      context.handle(
+        _contextExclusionsJsonMeta,
+        contextExclusionsJson.isAcceptableOrUnknown(
+          data['context_exclusions_json']!,
+          _contextExclusionsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -59537,6 +59583,14 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}keybinds_json'],
       )!,
+      windowContext: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}window_context'],
+      )!,
+      contextExclusionsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}context_exclusions_json'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59584,6 +59638,10 @@ class GaiaSettingsTableData extends DataClass
 
   /// `{keybind: combo}` as JSON.
   final String keybindsJson;
+  final bool windowContext;
+
+  /// A JSON list of names and hosts; null for the defaults.
+  final String? contextExclusionsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59601,6 +59659,8 @@ class GaiaSettingsTableData extends DataClass
     required this.routerRubric,
     required this.commandsJson,
     required this.keybindsJson,
+    required this.windowContext,
+    this.contextExclusionsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59625,6 +59685,10 @@ class GaiaSettingsTableData extends DataClass
     map['router_rubric'] = Variable<String>(routerRubric);
     map['commands_json'] = Variable<String>(commandsJson);
     map['keybinds_json'] = Variable<String>(keybindsJson);
+    map['window_context'] = Variable<bool>(windowContext);
+    if (!nullToAbsent || contextExclusionsJson != null) {
+      map['context_exclusions_json'] = Variable<String>(contextExclusionsJson);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -59652,6 +59716,10 @@ class GaiaSettingsTableData extends DataClass
       routerRubric: Value(routerRubric),
       commandsJson: Value(commandsJson),
       keybindsJson: Value(keybindsJson),
+      windowContext: Value(windowContext),
+      contextExclusionsJson: contextExclusionsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contextExclusionsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59679,6 +59747,10 @@ class GaiaSettingsTableData extends DataClass
       routerRubric: serializer.fromJson<String>(json['routerRubric']),
       commandsJson: serializer.fromJson<String>(json['commandsJson']),
       keybindsJson: serializer.fromJson<String>(json['keybindsJson']),
+      windowContext: serializer.fromJson<bool>(json['windowContext']),
+      contextExclusionsJson: serializer.fromJson<String?>(
+        json['contextExclusionsJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59701,6 +59773,10 @@ class GaiaSettingsTableData extends DataClass
       'routerRubric': serializer.toJson<String>(routerRubric),
       'commandsJson': serializer.toJson<String>(commandsJson),
       'keybindsJson': serializer.toJson<String>(keybindsJson),
+      'windowContext': serializer.toJson<bool>(windowContext),
+      'contextExclusionsJson': serializer.toJson<String?>(
+        contextExclusionsJson,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59721,6 +59797,8 @@ class GaiaSettingsTableData extends DataClass
     String? routerRubric,
     String? commandsJson,
     String? keybindsJson,
+    bool? windowContext,
+    Value<String?> contextExclusionsJson = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -59738,6 +59816,10 @@ class GaiaSettingsTableData extends DataClass
     routerRubric: routerRubric ?? this.routerRubric,
     commandsJson: commandsJson ?? this.commandsJson,
     keybindsJson: keybindsJson ?? this.keybindsJson,
+    windowContext: windowContext ?? this.windowContext,
+    contextExclusionsJson: contextExclusionsJson.present
+        ? contextExclusionsJson.value
+        : this.contextExclusionsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -59771,6 +59853,12 @@ class GaiaSettingsTableData extends DataClass
       keybindsJson: data.keybindsJson.present
           ? data.keybindsJson.value
           : this.keybindsJson,
+      windowContext: data.windowContext.present
+          ? data.windowContext.value
+          : this.windowContext,
+      contextExclusionsJson: data.contextExclusionsJson.present
+          ? data.contextExclusionsJson.value
+          : this.contextExclusionsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59793,6 +59881,8 @@ class GaiaSettingsTableData extends DataClass
           ..write('routerRubric: $routerRubric, ')
           ..write('commandsJson: $commandsJson, ')
           ..write('keybindsJson: $keybindsJson, ')
+          ..write('windowContext: $windowContext, ')
+          ..write('contextExclusionsJson: $contextExclusionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59815,6 +59905,8 @@ class GaiaSettingsTableData extends DataClass
     routerRubric,
     commandsJson,
     keybindsJson,
+    windowContext,
+    contextExclusionsJson,
     createdAt,
     updatedAt,
     version,
@@ -59836,6 +59928,8 @@ class GaiaSettingsTableData extends DataClass
           other.routerRubric == this.routerRubric &&
           other.commandsJson == this.commandsJson &&
           other.keybindsJson == this.keybindsJson &&
+          other.windowContext == this.windowContext &&
+          other.contextExclusionsJson == this.contextExclusionsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59856,6 +59950,8 @@ class GaiaSettingsTableCompanion
   final Value<String> routerRubric;
   final Value<String> commandsJson;
   final Value<String> keybindsJson;
+  final Value<bool> windowContext;
+  final Value<String?> contextExclusionsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59874,6 +59970,8 @@ class GaiaSettingsTableCompanion
     this.routerRubric = const Value.absent(),
     this.commandsJson = const Value.absent(),
     this.keybindsJson = const Value.absent(),
+    this.windowContext = const Value.absent(),
+    this.contextExclusionsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59893,6 +59991,8 @@ class GaiaSettingsTableCompanion
     this.routerRubric = const Value.absent(),
     this.commandsJson = const Value.absent(),
     this.keybindsJson = const Value.absent(),
+    this.windowContext = const Value.absent(),
+    this.contextExclusionsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59914,6 +60014,8 @@ class GaiaSettingsTableCompanion
     Expression<String>? routerRubric,
     Expression<String>? commandsJson,
     Expression<String>? keybindsJson,
+    Expression<bool>? windowContext,
+    Expression<String>? contextExclusionsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59933,6 +60035,9 @@ class GaiaSettingsTableCompanion
       if (routerRubric != null) 'router_rubric': routerRubric,
       if (commandsJson != null) 'commands_json': commandsJson,
       if (keybindsJson != null) 'keybinds_json': keybindsJson,
+      if (windowContext != null) 'window_context': windowContext,
+      if (contextExclusionsJson != null)
+        'context_exclusions_json': contextExclusionsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59954,6 +60059,8 @@ class GaiaSettingsTableCompanion
     Value<String>? routerRubric,
     Value<String>? commandsJson,
     Value<String>? keybindsJson,
+    Value<bool>? windowContext,
+    Value<String?>? contextExclusionsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59973,6 +60080,9 @@ class GaiaSettingsTableCompanion
       routerRubric: routerRubric ?? this.routerRubric,
       commandsJson: commandsJson ?? this.commandsJson,
       keybindsJson: keybindsJson ?? this.keybindsJson,
+      windowContext: windowContext ?? this.windowContext,
+      contextExclusionsJson:
+          contextExclusionsJson ?? this.contextExclusionsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -60020,6 +60130,14 @@ class GaiaSettingsTableCompanion
     if (keybindsJson.present) {
       map['keybinds_json'] = Variable<String>(keybindsJson.value);
     }
+    if (windowContext.present) {
+      map['window_context'] = Variable<bool>(windowContext.value);
+    }
+    if (contextExclusionsJson.present) {
+      map['context_exclusions_json'] = Variable<String>(
+        contextExclusionsJson.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -60053,6 +60171,8 @@ class GaiaSettingsTableCompanion
           ..write('routerRubric: $routerRubric, ')
           ..write('commandsJson: $commandsJson, ')
           ..write('keybindsJson: $keybindsJson, ')
+          ..write('windowContext: $windowContext, ')
+          ..write('contextExclusionsJson: $contextExclusionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -88595,6 +88715,8 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<String> routerRubric,
       Value<String> commandsJson,
       Value<String> keybindsJson,
+      Value<bool> windowContext,
+      Value<String?> contextExclusionsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -88615,6 +88737,8 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String> routerRubric,
       Value<String> commandsJson,
       Value<String> keybindsJson,
+      Value<bool> windowContext,
+      Value<String?> contextExclusionsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -88688,6 +88812,16 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<String> get keybindsJson => $composableBuilder(
     column: $table.keybindsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get windowContext => $composableBuilder(
+    column: $table.windowContext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contextExclusionsJson => $composableBuilder(
+    column: $table.contextExclusionsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88781,6 +88915,16 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get windowContext => $composableBuilder(
+    column: $table.windowContext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contextExclusionsJson => $composableBuilder(
+    column: $table.contextExclusionsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88861,6 +89005,16 @@ class $$GaiaSettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get windowContext => $composableBuilder(
+    column: $table.windowContext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get contextExclusionsJson => $composableBuilder(
+    column: $table.contextExclusionsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -88926,6 +89080,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> routerRubric = const Value.absent(),
                 Value<String> commandsJson = const Value.absent(),
                 Value<String> keybindsJson = const Value.absent(),
+                Value<bool> windowContext = const Value.absent(),
+                Value<String?> contextExclusionsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -88944,6 +89100,8 @@ class $$GaiaSettingsTableTableTableManager
                 routerRubric: routerRubric,
                 commandsJson: commandsJson,
                 keybindsJson: keybindsJson,
+                windowContext: windowContext,
+                contextExclusionsJson: contextExclusionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -88964,6 +89122,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> routerRubric = const Value.absent(),
                 Value<String> commandsJson = const Value.absent(),
                 Value<String> keybindsJson = const Value.absent(),
+                Value<bool> windowContext = const Value.absent(),
+                Value<String?> contextExclusionsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -88982,6 +89142,8 @@ class $$GaiaSettingsTableTableTableManager
                 routerRubric: routerRubric,
                 commandsJson: commandsJson,
                 keybindsJson: keybindsJson,
+                windowContext: windowContext,
+                contextExclusionsJson: contextExclusionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

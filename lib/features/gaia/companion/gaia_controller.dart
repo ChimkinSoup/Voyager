@@ -1,16 +1,22 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart'
+    show TextEditingController, TextEditingValue, TextSelection;
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
+import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -46,7 +52,9 @@ class GaiaController extends ChangeNotifier {
     GaiaSidebar? sidebar,
     this._utility,
     Future<String> Function()? clipboard,
+    String? draftDirectory,
   }) : _clipboard = clipboard ?? _readClipboard,
+       _draftDirectory = draftDirectory ?? Directory.systemTemp.path,
        _cliVersions =
            cliVersions ??
            {
@@ -77,6 +85,244 @@ class GaiaController extends ChangeNotifier {
 
   static Future<String> _readClipboard() async =>
       (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
+
+  /// Where the draft's images wait until they're sent.
+  final String _draftDirectory;
+
+  /// The composer's text. Here rather than in the composer, so it outlives
+  /// a mode change and a capture can add to it (§15.1).
+  final draft = TextEditingController();
+
+  /// The draft's images (§9.3), each named in [draft] by its `[image N]`.
+  final draftImages = <GaiaDraftImage>[];
+
+  /// Adds [bytes] to the draft as the next image, its token at the caret.
+  Future<void> attachImage(Uint8List bytes) async {
+    final file = File(p.join(_draftDirectory, '${_uuid.v4()}.img'));
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes);
+    _attachFile(file.path);
+  }
+
+  /// [attachImage] for an image already in a file the draft can own.
+  void _attachFile(String path) {
+    final label = [
+      gaiaNextImageLabel(messages),
+      for (final image in draftImages) image.label + 1,
+    ].reduce(max);
+    draftImages.add(GaiaDraftImage(label: label, path: path));
+    _insertInDraft(gaiaImageToken(label));
+    notifyListeners();
+  }
+
+  /// The region capture being cropped on the overlay (§3.2): its file and
+  /// its monitor's frame. Null when there's none.
+  ({String path, GaiaFrame frame})? cropping;
+
+  /// What the window was before the overlay, to go back to; null for
+  /// hidden.
+  GaiaMode? _beforeCrop;
+
+  /// A capture from the main instance (§15.1): C crops it on the overlay,
+  /// D attaches it whole. Either way Gaia ends up on screen with it in the
+  /// draft.
+  Future<void> _onCapture(Map<String, Object?> params) async {
+    final path = params['path']! as String;
+    // Over a crop's overlay, what the window was is still what was before it.
+    final overCrop = cropping != null;
+    _discardCrop();
+    _dropPickUp();
+    final shown = overCrop ? _beforeCrop : _window.shown;
+    if (params['kind'] == 'screen') {
+      _attachFile(await _intoDrafts(path));
+      return _show(shown ?? GaiaMode.small);
+    }
+    _beforeCrop = shown;
+    cropping = (
+      path: path,
+      frame: (
+        left: params['left']! as int,
+        top: params['top']! as int,
+        width: params['width']! as int,
+        height: params['height']! as int,
+      ),
+    );
+    onScreen.value = true;
+    await _window.show(GaiaMode.overlay, () {
+      layout = GaiaMode.overlay;
+      notifyListeners();
+    }, frame: cropping!.frame);
+  }
+
+  /// The overlay's crop is done: [region], in the capture's pixels, joins
+  /// the draft; null cancels. The window goes back to how it was, and a
+  /// crop begun from hidden opens the small floater with it.
+  Future<void> finishCrop(Rect? region) async {
+    final capture = cropping;
+    if (capture == null) return;
+    cropping = null;
+    try {
+      if (region != null) {
+        // Off screen while it renders, not the chat stretched over the
+        // monitor.
+        _window.hide();
+        final png = await gaiaRenderPng(capture.path, crop: region);
+        await attachImage(png);
+      }
+    } finally {
+      unawaited(_deleteQuietly(capture.path));
+    }
+    final back = _beforeCrop ?? (region == null ? null : GaiaMode.small);
+    if (back != null) return _show(back);
+    _window.hide();
+    onScreen.value = false;
+    layout = GaiaMode.small;
+    notifyListeners();
+  }
+
+  /// A crop left behind by another hotkey: its capture isn't wanted.
+  void _discardCrop() {
+    final capture = cropping;
+    if (capture == null) return;
+    cropping = null;
+    unawaited(_deleteQuietly(capture.path));
+  }
+
+  /// [path] moved into the draft's own folder: the main instance sweeps
+  /// its captures folder (§15.1).
+  Future<String> _intoDrafts(String path) async {
+    final target = p.join(_draftDirectory, '${_uuid.v4()}.img');
+    await Directory(_draftDirectory).create(recursive: true);
+    try {
+      await File(path).rename(target);
+    } on FileSystemException {
+      // Another volume.
+      await File(path).copy(target);
+      unawaited(_deleteQuietly(path));
+    }
+    return target;
+  }
+
+  static Future<void> _deleteQuietly(String path) =>
+      File(path).delete().then((_) {}, onError: (_) {});
+
+  /// The small floater is too small to draw in: the annotation editor opens
+  /// on the large one. True when it grew, for [restoreSmall] after.
+  Future<bool> enlargeForEditor() async {
+    if (_window.shown != GaiaMode.small) return false;
+    await _show(GaiaMode.large);
+    return true;
+  }
+
+  Future<void> restoreSmall() => _show(GaiaMode.small);
+
+  /// The annotation editor's [edits] (§9.4) for the draft's [label],
+  /// rendered for its thumbnail.
+  Future<void> editDraftImage(int label, GaiaImageEdits edits) async {
+    final index = draftImages.indexWhere((image) => image.label == label);
+    if (index < 0) return;
+    final image = draftImages[index];
+    String? preview;
+    if (!edits.isEmpty) {
+      // A new name each time, so the thumbnail isn't the cached old one.
+      preview = p.join(_draftDirectory, '${_uuid.v4()}-preview.png');
+      await File(
+        preview,
+      ).writeAsBytes(await gaiaRenderPng(image.path, edits: edits));
+    }
+    if (image.preview case final old?) unawaited(_deleteQuietly(old));
+    // Removed while it rendered.
+    final at = draftImages.indexOf(image);
+    if (at < 0) {
+      if (preview != null) unawaited(_deleteQuietly(preview));
+      return;
+    }
+    draftImages[at] = image.copyWith(edits: edits, preview: preview);
+    notifyListeners();
+  }
+
+  /// Takes [label] out of the draft, and its token with it.
+  void removeDraftImage(int label) {
+    for (final image in draftImages.where((image) => image.label == label)) {
+      unawaited(_deleteQuietly(image.path));
+      if (image.preview case final preview?) {
+        unawaited(_deleteQuietly(preview));
+      }
+    }
+    draftImages.removeWhere((image) => image.label == label);
+    final token = gaiaImageToken(label);
+    final text = draft.text;
+    final at = text.indexOf(token);
+    if (at >= 0) {
+      // The space the insert put before it goes too.
+      final start = at > 0 && text[at - 1] == ' ' ? at - 1 : at;
+      draft.value = TextEditingValue(
+        text: text.replaceRange(start, at + token.length, ''),
+        selection: TextSelection.collapsed(offset: start),
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Hands the draft's images to a send, which owns them from then on.
+  List<GaiaDraftImage> takeDraftImages() {
+    final images = [...draftImages];
+    draftImages.clear();
+    notifyListeners();
+    return images;
+  }
+
+  /// [text] at the draft's caret, or at its end when it has none, set off
+  /// from the text before it by a space.
+  void _insertInDraft(String text) {
+    final value = draft.value;
+    final at = value.selection.isValid
+        ? value.selection.end
+        : value.text.length;
+    final before = value.text.substring(0, at);
+    final insert = before.isEmpty || before.trimRight() != before
+        ? text
+        : ' $text';
+    draft.value = TextEditingValue(
+      text: value.text.replaceRange(at, at, insert),
+      selection: TextSelection.collapsed(offset: at + insert.length),
+    );
+  }
+
+  /// The window Gaia was last summoned from (§15.4): a chip on the draft,
+  /// which the next message takes with it unless the user removes it.
+  GaiaContextPart? windowContext;
+
+  void dropWindowContext() {
+    windowContext = null;
+    notifyListeners();
+  }
+
+  /// The text selected where Gaia was last summoned from, for `$SELECTION`
+  /// (§9.2).
+  var _summonSelection = '';
+
+  /// Each sent image's local file, by media id, as the main instance says.
+  final _imageFiles = <String, Future<String?>>{};
+
+  /// The [_imageFiles] the main instance said aren't here, to ask again.
+  final _missingImages = <String>{};
+
+  /// The file holding a message's image; null while it isn't on this
+  /// device. Asked once, and again after the next change the main instance
+  /// reports, which may be the download that brought it.
+  Future<String?> imageFile(String mediaId) =>
+      _imageFiles[mediaId] ??= () async {
+        try {
+          final path =
+              await _pipe.request('mediaFile', {'mediaId': mediaId}) as String?;
+          if (path == null) _missingImages.add(mediaId);
+          return path;
+        } on GaiaPipeException {
+          _missingImages.add(mediaId);
+          return null;
+        }
+      }();
 
   /// Runs that finished in another chat while Gaia was on screen, for its
   /// own toast.
@@ -261,6 +507,24 @@ class GaiaController extends ChangeNotifier {
     switch (event) {
       case 'hotkey':
         unawaited(onHotkey(params['key']! as String));
+      case 'capture':
+        unawaited(_onCapture(params));
+      case 'context':
+        windowContext = switch (params['window']) {
+          final Map<Object?, Object?> json =>
+            GaiaPart.fromJson(json.cast()) as GaiaContextPart,
+          _ => null,
+        };
+        _summonSelection = params['selection'] as String? ?? '';
+        notifyListeners();
+      case 'refused':
+        unawaited(_onRefused());
+      case 'selection':
+        unawaited(
+          _onSelection(params['text'] as String?, params['source'] as String?),
+        );
+      case 'pickUp':
+        unawaited(_onPickUp(armed: params['armed'] == true));
       case 'openChat':
         unawaited(openChat(params['chatId']! as String));
       case 'accent':
@@ -291,6 +555,11 @@ class GaiaController extends ChangeNotifier {
   /// from another device, or pinned, renamed or deleted on the Gaia page.
   /// A chat running here keeps the messages it is writing.
   Future<void> _refresh() async {
+    // An image that wasn't here may be now. One still being asked about
+    // isn't waited on.
+    _missingImages
+      ..forEach(_imageFiles.remove)
+      ..clear();
     final list = (await _pipe.request('chats'))! as List;
     chats = [
       for (final chat in list)
@@ -310,8 +579,98 @@ class GaiaController extends ChangeNotifier {
     if (shown != null && !_running.contains(shown)) await _load(shown);
   }
 
+  /// What the window was before pick-up mode's pill (§15.3), to go back
+  /// to; null for hidden.
+  GaiaMode? _beforePickUp;
+  var _pickingUp = false;
+
+  /// Pick-up mode armed: Gaia hides behind its "selecting" pill while the
+  /// user selects something. Disarmed by Esc, it goes back to how it was.
+  Future<void> _onPickUp({required bool armed}) async {
+    if (armed == _pickingUp) return;
+    _pickingUp = armed;
+    if (armed) {
+      if (cropping != null) await finishCrop(null);
+      _beforePickUp = _window.shown;
+      return _show(GaiaMode.pickUp);
+    }
+    await _leavePickUp(selected: false);
+  }
+
+  /// The pill's own cancel: the main instance stops waiting for F.
+  Future<void> cancelPickUp() async {
+    if (!_pickingUp) return;
+    _pickingUp = false;
+    _pipe.notify('pickUpCancelled');
+    await _leavePickUp(selected: false);
+  }
+
+  /// Another summon in pick-up mode, which the main instance ended: the
+  /// pill goes, and the summon is taken from hidden.
+  void _dropPickUp() {
+    if (!_pickingUp) return;
+    _pickingUp = false;
+    _beforePickUp = null;
+    _window.hide();
+  }
+
+  /// Out of the pill: back to how Gaia was, or with a selection to show,
+  /// the small floater when it was hidden.
+  Future<void> _leavePickUp({required bool selected}) async {
+    final back = _beforePickUp ?? (selected ? GaiaMode.small : null);
+    _beforePickUp = null;
+    if (back != null) return _show(back);
+    _window.hide();
+    onScreen.value = false;
+    layout = GaiaMode.small;
+    notifyListeners();
+  }
+
+  /// E, or F's second press (§15.2, §15.3): [text], quoted with its
+  /// [source], goes at the end of the draft, and Gaia comes up with it.
+  Future<void> _onSelection(String? text, String? source) async {
+    if (text != null) {
+      final quote = gaiaQuoteSelection(text, source);
+      final draftText = draft.text.trimRight();
+      final joined = draftText.isEmpty ? quote : '$draftText\n\n$quote';
+      draft.value = TextEditingValue(
+        text: '$joined\n\n',
+        selection: TextSelection.collapsed(offset: joined.length + 2),
+      );
+    } else {
+      _toasts.add((
+        chatId: '',
+        title: 'Nothing selected',
+        body: "Gaia couldn't find selected text there.",
+        error: false,
+        question: false,
+      ));
+    }
+    if (_pickingUp) {
+      _pickingUp = false;
+      return _leavePickUp(selected: true);
+    }
+    if (cropping != null) await finishCrop(null);
+    await _show(_window.shown ?? GaiaMode.small);
+  }
+
+  /// A capture hotkey while aborted (§15.7): Gaia comes up saying so.
+  Future<void> _onRefused() async {
+    _toasts.add((
+      chatId: '',
+      title: 'Gaia is aborted',
+      body: 'Re-arm it to capture again.',
+      error: true,
+      question: false,
+    ));
+    if (_window.shown == null) await _show(GaiaMode.small);
+  }
+
   /// The hotkey table in §15.1.
   Future<void> onHotkey(String key) async {
+    // Mid-crop, any of them cancels it.
+    if (cropping != null) return finishCrop(null);
+    _dropPickUp();
     final shown = _window.shown;
     switch (key) {
       case 'small':
@@ -340,6 +699,8 @@ class GaiaController extends ChangeNotifier {
   /// Escape or close: a floater opened over the Gaia window turns back into
   /// it; anything else hides. Runs carry on (§14).
   Future<void> dismiss() async {
+    if (cropping != null) return finishCrop(null);
+    if (_pickingUp) return cancelPickUp();
     final back = _returnTo;
     _returnTo = null;
     if (back != null && _window.shown != back) return _show(back);
@@ -405,30 +766,124 @@ class GaiaController extends ChangeNotifier {
               ? await _clipboard()
               : '',
           now: DateTime.now(),
+          selection: _summonSelection,
         ) ??
         text;
   }
 
-  Future<void> send(String text) async {
+  /// Sends [text] with [images] (§9.3), which this send now owns.
+  Future<void> send(
+    String text, {
+    List<GaiaDraftImage> images = const [],
+  }) async {
     if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
-    final prompt = (await _expand(text.trim())).trim();
-    if (prompt.isEmpty || aborted || draining != null) return;
+    var prompt = (await _expand(text.trim())).trim();
+    if (prompt.isEmpty && images.isEmpty) return;
     var chat = currentChat;
-    if (chat != null && _running.contains(chat.id)) return;
+    if (aborted ||
+        draining != null ||
+        _startingChat ||
+        chat != null && _running.contains(chat.id)) {
+      return _giveBack(text, images);
+    }
+    // Claimed now, so a second send can't start while this one's images
+    // upload or its tier is picked.
+    final chatId = chat?.id ?? _uuid.v4();
+    if (chat != null) {
+      _running.add(chatId);
+    } else {
+      _startingChat = true;
+    }
+    // Numbered on from the chat's images, so no two of its messages have
+    // the same [image N].
+    final (relabeled, labeled) = gaiaRelabelDraft(
+      prompt,
+      images,
+      gaiaNextImageLabel(_messages[chatId] ?? const []),
+    );
+    final imageParts = <GaiaImagePart>[];
+    final imageInputs = <GaiaImageInput>[];
+    final referenceIds = <String>[];
+    final uploads = <String>[];
+    // Taken off the chat again when the send doesn't happen.
+    void detach() {
+      for (final referenceId in referenceIds) {
+        unawaited(_request('detachImage', {'referenceId': referenceId}));
+      }
+    }
+
+    // Before anything is saved: an image that can't be attached stops the
+    // send, and it all goes back in the draft.
+    for (final image in labeled) {
+      try {
+        // Edits are flattened now (§9.4), and a capture is a BMP, which the
+        // media module doesn't take.
+        final upload = await gaiaUploadablePath(image.path, edits: image.edits);
+        if (upload != image.path) uploads.add(upload);
+        final stored =
+            (await _pipe.request('attachImage', {
+                  'chatId': chatId,
+                  'path': upload,
+                }))!
+                as Map;
+        final mediaId = stored['mediaId']! as String;
+        final path = stored['path']! as String;
+        _imageFiles[mediaId] = Future.value(path);
+        referenceIds.add(stored['referenceId']! as String);
+        imageParts.add(
+          GaiaImagePart(
+            mediaId: mediaId,
+            label: image.label,
+            width: stored['width']! as int,
+            height: stored['height']! as int,
+          ),
+        );
+        imageInputs.add((
+          label: image.label,
+          path: path,
+          mimeType: stored['mimeType']! as String,
+        ));
+      } catch (error) {
+        uploads.forEach(_deleteQuietly);
+        detach();
+        _running.remove(chatId);
+        _startingChat = false;
+        _toasts.add((
+          chatId: '',
+          title: "Couldn't attach ${gaiaImageToken(image.label)}",
+          body: error is GaiaPipeException ? error.message : '$error',
+          error: true,
+          question: false,
+        ));
+        return _giveBack(text, images);
+      }
+    }
+    uploads.forEach(_deleteQuietly);
+    prompt = relabeled;
+    // The summon's window goes with this message only.
+    final context = windowContext;
+    windowContext = null;
     final now = utcNow();
     var tier = nextTier;
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
     if (chat == null && pickedTier == null) {
+      if (_utility == null) debugPrint('[gaia] router: no utility model');
       tier = await _utility?.route(prompt) ?? tier;
+    } else {
+      debugPrint(
+        '[gaia] router: skipped, '
+        '${chat != null ? 'not a new chat' : 'tier picked: ${pickedTier!.name}'}',
+      );
     }
+    debugPrint('[gaia] router: sending on ${tier.name}');
     pickedTier = null;
     final agent = agentFor(tier);
     if (chat == null) {
       // No utility model yet: the title is the first line (§5.1).
-      final firstLine = prompt.split('\n').first;
+      final firstLine = prompt.isEmpty ? 'Image' : prompt.split('\n').first;
       chat = GaiaChat(
-        id: _uuid.v4(),
+        id: chatId,
         title: firstLine.length > 60
             ? '${firstLine.substring(0, 60)}…'
             : firstLine,
@@ -438,8 +893,10 @@ class GaiaController extends ChangeNotifier {
         tier: tier,
       );
       chats = [chat, ...chats];
-      _messages[chat.id] = [];
-      currentChatId = chat.id;
+      _messages[chatId] = [];
+      currentChatId = chatId;
+      _running.add(chatId);
+      _startingChat = false;
       try {
         await _pipe.request('putChat', {'chat': chat.toJson()});
       } on GaiaPipeException catch (error) {
@@ -447,15 +904,22 @@ class GaiaController extends ChangeNotifier {
         debugPrint('[gaia] chat not saved, not sending: $error');
         chats = [
           for (final c in chats)
-            if (c.id != chat.id) c,
+            if (c.id != chatId) c,
         ];
-        _messages.remove(chat.id);
-        if (currentChatId == chat.id) currentChatId = null;
-        notifyListeners();
-        return;
+        _messages.remove(chatId);
+        _running.remove(chatId);
+        if (currentChatId == chatId) currentChatId = null;
+        detach();
+        windowContext = context;
+        return _giveBack(text, images);
       }
     }
-    final chatId = chat.id;
+    // Sent: the main instance keeps its own copies.
+    for (final image in images) {
+      for (final path in {image.path, ?image.preview}) {
+        unawaited(_deleteQuietly(path));
+      }
+    }
     if (chat.tier != tier) {
       chat = chat.copyWith(tier: tier);
       chats = [for (final c in chats) c.id == chatId ? chat : c];
@@ -465,16 +929,16 @@ class GaiaController extends ChangeNotifier {
       lastTier = tier;
       unawaited(_request('setLastTier', {'tier': tier.name}));
     }
+    final list = _messages[chatId] ??= [];
     final script = debug.scriptFor(prompt);
     final runner = agent == null ? null : _runners[agent.adapter];
-    final list = _messages[chatId] ??= [];
     final seq = list.isEmpty ? 0 : list.last.seq + 1;
     final question = GaiaMessage(
       id: _uuid.v4(),
       chatId: chatId,
       seq: seq,
       role: GaiaMessageRole.user,
-      parts: [GaiaTextPart(prompt)],
+      parts: [GaiaTextPart(prompt), ...imageParts, ?context],
       status: GaiaMessageStatus.complete,
       createdAt: now,
       updatedAt: now,
@@ -492,7 +956,6 @@ class GaiaController extends ChangeNotifier {
       adapter: script == null ? agent?.adapter : null,
     );
     list.addAll([question, reply]);
-    _running.add(chatId);
     _moveToTop(chatId, now);
     _reportRuns();
     notifyListeners();
@@ -533,19 +996,21 @@ class GaiaController extends ChangeNotifier {
 
     // What the session didn't see: the whole chat for a new session, or
     // the turns another agent or device took since (§7.4).
+    // The window it was asked from goes ahead of it (§15.4).
+    final asked = context == null ? prompt : '${context.preamble}\n\n$prompt';
     Future<String> handedOver() async {
-      if (script != null || agent == null || runner == null) return prompt;
+      if (script != null || agent == null || runner == null) return asked;
       final unseen = gaiaUnseenTurns(
         list,
         lastSeq: session?.lastSeq ?? -1,
         beforeSeq: seq,
       );
-      if (unseen.isEmpty) return prompt;
+      if (unseen.isEmpty) return asked;
       final (older, recent) = gaiaSplitHandoff(unseen);
       final summary = older.isEmpty
           ? null
           : await _utility?.summarize(gaiaTranscriptText(older));
-      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$prompt';
+      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label})}\n$asked';
     }
 
     final sent = await handedOver();
@@ -600,6 +1065,7 @@ class GaiaController extends ChangeNotifier {
               sessionId: session?.sessionId,
               model: agent.model,
               prompt: sent,
+              images: imageInputs,
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
@@ -616,6 +1082,7 @@ class GaiaController extends ChangeNotifier {
           sessionId: null,
           model: agent.model,
           prompt: await handedOver(),
+          images: imageInputs,
           onEvent: onEvent,
         );
       }
@@ -679,6 +1146,17 @@ class GaiaController extends ChangeNotifier {
       unawaited(_retitle(chatId, prompt, reply.text));
     }
     _settleDrain();
+  }
+
+  /// A new chat's first send is under way, before the chat exists.
+  var _startingChat = false;
+
+  /// A send that didn't happen: its [text] and [images] go back in the
+  /// draft, the text unless the user has typed again.
+  void _giveBack(String text, List<GaiaDraftImage> images) {
+    if (draft.text.isEmpty) draft.text = text;
+    draftImages.addAll(images);
+    notifyListeners();
   }
 
   Future<void> stop(String chatId) async {

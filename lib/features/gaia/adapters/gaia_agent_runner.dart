@@ -79,17 +79,23 @@ class GaiaRunException implements Exception {
   String toString() => message;
 }
 
+/// An image going with a turn (§9.3): the `[image N]` it's referred to by,
+/// and the file holding it.
+typedef GaiaImageInput = ({int label, String path, String mimeType});
+
 /// Runs chats on one backend. One runner per adapter; the model is chosen
 /// per turn, since a chat's tier can change between turns (§7.4).
 abstract interface class GaiaAgentRunner {
   /// Starts a turn in [chatId]'s session: [sessionId] resumes one, null
-  /// starts one. [onEvent] gets each event of the turn; the future completes
-  /// with its result, or throws a [GaiaRunException].
+  /// starts one. [images] go with [prompt], which names them by their
+  /// `[image N]` tokens. [onEvent] gets each event of the turn; the future
+  /// completes with its result, or throws a [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
     required String model,
     required String prompt,
+    List<GaiaImageInput> images = const [],
     required void Function(GaiaAgentEvent event) onEvent,
   });
 

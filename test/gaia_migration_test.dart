@@ -2,7 +2,8 @@
 // its search reads; 170 moves each search row to its message's rowid; 171
 // adds Phase 2's tiers and agents; 172 the utility model and router; 173
 // each reply's context size; 174 slash commands; 175 rebound keys; 176
-// the Claude config folder, and the utility model off Gemini. The
+// the Claude config folder, and the utility model off Gemini; 177 the
+// focused-window context settings. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -256,6 +257,32 @@ void main() {
       (await repo.getSettings()).claudeConfigDir,
       r'C:\Users\me\.claude-1',
     );
+  });
+
+  test('176→177 adds the window context settings', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());
+    for (final column in ['window_context', 'context_exclusions_json']) {
+      await seed.customStatement(
+        'ALTER TABLE gaia_settings_table DROP COLUMN $column',
+      );
+    }
+    await seed.customStatement('PRAGMA user_version = 176');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.windowContext, isTrue);
+    expect(settings.contextExclusions, kGaiaDefaultContextExclusions);
+
+    await repo.upsertSettings(
+      settings.copyWith(windowContext: false, contextExclusions: ['rbc.com']),
+    );
+    final saved = await repo.getSettings();
+    expect(saved.windowContext, isFalse);
+    expect(saved.contextExclusions, ['rbc.com']);
   });
 
   test("172→173 adds a reply's context size", () async {

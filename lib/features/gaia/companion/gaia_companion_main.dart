@@ -33,6 +33,26 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   // The hotkeys that open it arrive with Ctrl and Alt still held.
   WindowsKeyboardReconciler.instance.install();
   final root = await appSupportRoot();
+  // The companion's console isn't shown anywhere, so its debug output also
+  // goes to a file, started afresh by each companion.
+  final log = File(p.join(root.path, 'gaia', 'companion.log'));
+  await log.parent.create(recursive: true);
+  await log.writeAsString('');
+  final console = debugPrint;
+  debugPrint = (message, {wrapWidth}) {
+    console(message, wrapWidth: wrapWidth);
+    try {
+      log.writeAsStringSync(
+        '${DateTime.now().toIso8601String()} $message\n',
+        mode: FileMode.append,
+      );
+    } on FileSystemException {
+      // The console still has it.
+    }
+  };
+  // A draft lives only as long as its companion.
+  final drafts = Directory(p.join(root.path, 'gaia', 'drafts'));
+  if (await drafts.exists()) await drafts.delete(recursive: true);
   final pipe = dev ? GaiaDevPipe() : GaiaPipe();
   final debug = GaiaDebug(file: File(p.join(root.path, 'gaia', 'debug.json')));
   await debug.load();
@@ -45,6 +65,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     sidebar: sidebar,
     pipe: pipe,
     window: GaiaWindow(),
+    draftDirectory: drafts.path,
     // Gaia's own working directory, so the CLI never picks up an unrelated
     // project's instruction files (§5.1).
     runners: {
@@ -75,14 +96,17 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
 }
 
 /// Global, so they reach Gaia while it's hidden: Ctrl+Alt+1 small floater,
-/// 2 large floater, 3 Gaia window, 4 Abort. Only in `--gaia-dev`, where no
-/// main instance owns Gaia's real hotkeys.
+/// 2 large floater, 3 Gaia window, 4 Abort, 5 region screenshot, 6 screen
+/// screenshot. Only in `--gaia-dev`, where no main instance owns Gaia's
+/// real hotkeys.
 Future<void> _registerDevHotkeys(GaiaDevPipe pipe) async {
   final actions = {
     PhysicalKeyboardKey.digit1: () => pipe.hotkey('small'),
     PhysicalKeyboardKey.digit2: () => pipe.hotkey('large'),
     PhysicalKeyboardKey.digit3: () => pipe.hotkey('window'),
     PhysicalKeyboardKey.digit4: pipe.abort,
+    PhysicalKeyboardKey.digit5: () => pipe.capture('region'),
+    PhysicalKeyboardKey.digit6: () => pipe.capture('screen'),
   };
   for (final MapEntry(key: key, value: action) in actions.entries) {
     await hotKeyManager.register(
@@ -94,7 +118,10 @@ Future<void> _registerDevHotkeys(GaiaDevPipe pipe) async {
       keyDownHandler: (_) => action(),
     );
   }
-  debugPrint('[gaia] dev mode: Ctrl+Alt+1 small, 2 large, 3 window, 4 abort');
+  debugPrint(
+    '[gaia] dev mode: Ctrl+Alt+1 small, 2 large, 3 window, 4 abort, '
+    '5 region, 6 screen',
+  );
 }
 
 class _DismissOnClose with WindowListener {
