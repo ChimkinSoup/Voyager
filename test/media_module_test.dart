@@ -83,6 +83,115 @@ void main() {
       );
     });
 
+    test('does not count a JPEG motion photo\'s video against the limit', () {
+      final still = img.encodeJpg(
+        img.Image(width: 64, height: 64),
+        quality: ingestJpegQuality,
+      );
+      final motion = Uint8List(still.length + maxIngestInputBytes)
+        ..setRange(0, still.length, still)
+        // An MP4 header where the video starts, as the phone writes it.
+        ..setRange(still.length, still.length + 8, [
+          0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, //
+        ]);
+      expect(validateIngestInput(motion), SniffedImageFormat.jpeg);
+      final result = ingestImageIsolate(MediaIngestRequest.encoded(motion));
+      expect(result.width, 64);
+      expect(result.height, 64);
+    });
+
+    test('does not count a HEIC motion photo\'s video against the limit', () {
+      Uint8List box(String type, int size) {
+        final bytes = Uint8List(size);
+        ByteData.sublistView(bytes).setUint32(0, size);
+        bytes.setRange(4, 8, type.codeUnits);
+        return bytes;
+      }
+
+      final ftyp = box('ftyp', 16)..setRange(8, 12, 'heic'.codeUnits);
+      final heic = [
+        ...ftyp,
+        ...box('meta', 64),
+        ...box('mdat', 1024),
+        ...box('mpvd', maxIngestInputBytes),
+      ];
+      expect(
+        validateIngestInput(Uint8List.fromList(heic)),
+        SniffedImageFormat.heic,
+      );
+    });
+
+    test('refuses a JPEG whose still is over the limit, video or not', () {
+      // SOI, then comment segments past 20 MB, then EOI and a video: a
+      // well-formed still that is itself too big.
+      final still = BytesBuilder()..add([0xFF, 0xD8]);
+      final comment = Uint8List(0xFFFF + 2)
+        ..setRange(0, 4, [0xFF, 0xFE, 0xFF, 0xFF]);
+      while (still.length <= maxIngestInputBytes) {
+        still.add(comment);
+      }
+      still.add([0xFF, 0xD9]);
+      final file = Uint8List(still.length + 1024)
+        ..setRange(0, still.length, still.takeBytes());
+      expect(
+        () => validateIngestInput(file),
+        throwsA(
+          isA<MediaIngestException>().having(
+            (e) => e.message,
+            'message',
+            contains('too large'),
+          ),
+        ),
+      );
+    });
+
+    test('refuses a HEIC whose still is over the limit beside its video', () {
+      Uint8List box(String type, int size) {
+        final bytes = Uint8List(size);
+        ByteData.sublistView(bytes).setUint32(0, size);
+        bytes.setRange(4, 8, type.codeUnits);
+        return bytes;
+      }
+
+      final ftyp = box('ftyp', 16)..setRange(8, 12, 'heic'.codeUnits);
+      final heic = [
+        ...ftyp,
+        ...box('mdat', maxIngestInputBytes),
+        ...box('mpvd', 1024),
+      ];
+      expect(
+        () => validateIngestInput(Uint8List.fromList(heic)),
+        throwsA(isA<MediaIngestException>()),
+      );
+    });
+
+    test('refuses a file over 100 MB even when its still is small', () {
+      final still = img.encodeJpg(img.Image(width: 4, height: 4));
+      final file = Uint8List(maxIngestFileBytes + 1)
+        ..setRange(0, still.length, still);
+      expect(
+        () => validateIngestInput(file),
+        throwsA(
+          isA<MediaIngestException>().having(
+            (e) => e.message,
+            'message',
+            contains('100 MB'),
+          ),
+        ),
+      );
+    });
+
+    test('still refuses an oversized still with no video', () {
+      final still = img.encodeJpg(img.Image(width: 4, height: 4));
+      // Junk past SOI with no EOI, so the whole file counts.
+      final huge = Uint8List(maxIngestInputBytes + 1)
+        ..setRange(0, 4, still.sublist(0, 4));
+      expect(
+        () => validateIngestInput(huge),
+        throwsA(isA<MediaIngestException>()),
+      );
+    });
+
     test('refuses a GIF by name', () {
       expect(
         () => validateIngestInput(

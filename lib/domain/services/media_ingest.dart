@@ -9,7 +9,13 @@ import 'package:voyager/domain/models/media_models.dart';
 /// The check is on the input rather than the output so that a rejection can
 /// be reported immediately, without spending seconds decoding a 200 MB file
 /// only to refuse it.
+///
+/// Only the still counts: a motion photo's video is never decoded, so it is
+/// held to the looser [maxIngestFileBytes] instead.
 const int maxIngestInputBytes = 20 * 1024 * 1024;
+
+/// Largest file an attach will accept at all, video included.
+const int maxIngestFileBytes = 100 * 1024 * 1024;
 
 /// Longest edge kept after downscaling.
 ///
@@ -150,11 +156,22 @@ bool _matchesAscii(Uint8List bytes, int offset, String ascii) {
 /// Returns the sniffed format so the caller knows whether the platform
 /// decoder is needed. Throws [MediaIngestException] with the message to show.
 SniffedImageFormat validateIngestInput(Uint8List bytes) {
-  if (bytes.length > maxIngestInputBytes) {
+  // The still is measured only for a file over the limit, as finding it
+  // walks the image's bytes.
+  if (bytes.length > maxIngestFileBytes) {
     final mb = (bytes.length / (1024 * 1024)).toStringAsFixed(1);
     throw MediaIngestException(
-      'Image is too large ($mb MB). The limit is 20 MB.',
+      'File is too large ($mb MB). The limit is 100 MB.',
     );
+  }
+  if (bytes.length > maxIngestInputBytes) {
+    final still = _stillImageLength(bytes);
+    if (still > maxIngestInputBytes) {
+      final mb = (still / (1024 * 1024)).toStringAsFixed(1);
+      throw MediaIngestException(
+        'Image is too large ($mb MB). The limit is 20 MB.',
+      );
+    }
   }
   final format = sniffImageFormat(bytes);
   switch (format) {
@@ -172,6 +189,71 @@ SniffedImageFormat validateIngestInput(Uint8List bytes) {
         'That does not look like a PNG, JPEG, WebP or HEIC image.',
       );
   }
+}
+
+/// Bytes of [bytes] that make up the still image, leaving out the video a
+/// motion photo (Google's or Samsung's) carries in the same file.
+///
+/// The video never survives ingest — only the still is decoded and
+/// re-encoded — so it should not count against the input limit either.
+/// Anything this cannot make sense of counts in full.
+int _stillImageLength(Uint8List bytes) => switch (sniffImageFormat(bytes)) {
+  SniffedImageFormat.jpeg => _jpegLength(bytes),
+  SniffedImageFormat.heic => _heicLengthWithoutVideo(bytes),
+  _ => bytes.length,
+};
+
+/// Up to and including the primary image's end-of-image marker. A motion
+/// photo's video (and an Ultra HDR gain map) is appended after it.
+int _jpegLength(Uint8List b) {
+  var i = 2; // Past SOI.
+  while (i + 1 < b.length) {
+    if (b[i] != 0xFF) return b.length;
+    final marker = b[i + 1];
+    if (marker == 0xFF) {
+      i++; // Fill byte.
+      continue;
+    }
+    if (marker == 0xD9) return i + 2; // EOI.
+    if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+      i += 2; // Standalone marker, no length.
+      continue;
+    }
+    if (i + 3 >= b.length) return b.length;
+    i += 2 + (b[i + 2] << 8 | b[i + 3]);
+    if (marker == 0xDA) {
+      // Entropy-coded data, where 0xFF only appears stuffed (FF 00) or as a
+      // restart marker, so the next other marker ends the scan.
+      while (i + 1 < b.length &&
+          !(b[i] == 0xFF &&
+              b[i + 1] != 0x00 &&
+              (b[i + 1] < 0xD0 || b[i + 1] > 0xD7))) {
+        i++;
+      }
+    }
+  }
+  return b.length;
+}
+
+/// Every top-level box but `mpvd`, the one both formats keep a HEIC motion
+/// photo's video in.
+int _heicLengthWithoutVideo(Uint8List b) {
+  final data = ByteData.sublistView(b);
+  var total = 0;
+  var i = 0;
+  while (i + 8 <= b.length) {
+    var size = data.getUint32(i);
+    if (size == 1) {
+      if (i + 16 > b.length) return b.length;
+      size = data.getUint64(i + 8);
+    } else if (size == 0) {
+      size = b.length - i; // Runs to the end of the file.
+    }
+    if (size < 8) return b.length;
+    if (!_matchesAscii(b, i + 4, 'mpvd')) total += size;
+    i += size;
+  }
+  return total;
 }
 
 /// Decode, downscale and re-encode, off the UI isolate.
