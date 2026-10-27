@@ -207,6 +207,8 @@ class _GaiaShell extends StatelessWidget {
                     ? _lastTurns(controller.messages, 3)
                     : controller.messages,
                 imageFile: controller.imageFile,
+                tier: controller.currentChat?.tier ?? GaiaTier.standard,
+                running: controller.currentRunning,
               ),
             ),
             _Composer(controller: controller),
@@ -537,14 +539,94 @@ class _Sidebar extends StatelessWidget {
 /// The width messages keep to: about 115 characters a line.
 const _column = 860.0;
 
-class _Messages extends StatelessWidget {
-  const _Messages({required this.messages, required this.imageFile});
+class _Messages extends StatefulWidget {
+  const _Messages({
+    required this.messages,
+    required this.imageFile,
+    required this.tier,
+    required this.running,
+  });
 
   final List<GaiaMessage> messages;
   final Future<String?> Function(String mediaId) imageFile;
 
+  /// The chat's, which its latest reply's orb compacts into.
+  final GaiaTier tier;
+
+  /// The chat has a reply running from this window.
+  final bool running;
+
+  @override
+  State<_Messages> createState() => _MessagesState();
+}
+
+GaiaMessage? _latestReply(List<GaiaMessage> messages) => messages
+    .where((message) => message.role == GaiaMessageRole.assistant)
+    .lastOrNull;
+
+class _MessagesState extends State<_Messages> {
+  final _scroll = ScrollController();
+
+  /// One per chat, so its orb is carried on from one reply to the next: the
+  /// last one's glyph flies to the new one, rather than a new orb blooming.
+  /// This list's own, so a list built afresh (the window switching to or
+  /// from a floater) starts its orbs where they are rather than flying them
+  /// in from the old layout.
+  final _orbKeys = <String, GlobalKey>{};
+
+  /// The reply that keeps the orb while the chat scrolls down to a new one,
+  /// so its glyph can fly there once the new reply's in view.
+  String? _held;
+
+  /// The tier [_held]'s reply came from: sending on another tier changes
+  /// the chat's before the orb moves on.
+  GaiaTier? _heldTier;
+
+  @override
+  void didUpdateWidget(_Messages old) {
+    super.didUpdateWidget(old);
+    final was = _latestReply(old.messages);
+    final now = _latestReply(widget.messages);
+    // A new reply in the same chat, running here: a message was sent from
+    // this window, so down to it. One synced in from elsewhere leaves the
+    // chat where it is.
+    if (!widget.running ||
+        was == null ||
+        now == null ||
+        was.id == now.id ||
+        was.chatId != now.chatId ||
+        !_scroll.hasClients ||
+        _scroll.offset == 0) {
+      return;
+    }
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    final held = _held = reduced ? null : was.id;
+    _heldTier = old.tier;
+    // Not mid-build, as scrolling notifies.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      if (reduced) return _scroll.jumpTo(0);
+      _scroll
+          .animateTo(
+            0,
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeInOutCubic,
+          )
+          .then((_) {
+            if (mounted && _held == held) setState(() => _held = null);
+          });
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final _Messages(:messages, :imageFile, :tier) = widget;
     // A clicked image opens among every image in the chat so far.
     void open(GaiaImagePart image) {
       final images = [
@@ -559,41 +641,92 @@ class _Messages extends StatelessWidget {
       );
     }
 
+    final held = messages.indexWhere((message) => message.id == _held);
+    final latest = held >= 0
+        ? held
+        : messages.lastIndexWhere(
+            (message) => message.role == GaiaMessageRole.assistant,
+          );
     // Reversed, so the newest stays in view as a reply streams in.
     return LayoutBuilder(
       // Messages keep to a middle column of about 115 characters a line, as
       // in Claude's apps; narrower chats keep only a small gutter.
-      builder: (context, constraints) => ScrollConfiguration(
-        // Scrolls without a bar.
-        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-        child: ListView.builder(
-          reverse: true,
-          padding: EdgeInsets.symmetric(
-            horizontal: max(16, (constraints.maxWidth - _column) / 2),
-            vertical: 16,
+      builder: (context, constraints) {
+        final gutter = max(16.0, (constraints.maxWidth - _column) / 2);
+        return ScrollConfiguration(
+          // Scrolls without a bar.
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: ListView.builder(
+            controller: _scroll,
+            reverse: true,
+            padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 16),
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              final i = messages.length - 1 - index;
+              final message = messages[i];
+              final switched = _switchedFrom(messages, i);
+              final view = _MessageView(
+                message: message,
+                imageFile: imageFile,
+                onOpen: open,
+                gutter: gutter,
+                orbTier: i != latest
+                    ? null
+                    : held >= 0
+                    ? _heldTier
+                    : tier,
+                orbKey: i == latest
+                    ? _orbKeys.putIfAbsent(message.chatId, GlobalKey.new)
+                    : null,
+              );
+              // The orb's reply is kept when scrolled out of the list, so
+              // its orb doesn't bloom again on coming back.
+              return _KeepAlive(
+                keep: i == latest,
+                child: switched == null
+                    ? view
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _VendorDivider(to: message.adapter!),
+                          view,
+                        ],
+                      ),
+              );
+            },
           ),
-          itemCount: messages.length,
-          itemBuilder: (context, index) {
-            final i = messages.length - 1 - index;
-            final message = messages[i];
-            final switched = _switchedFrom(messages, i);
-            final view = _MessageView(
-              message: message,
-              imageFile: imageFile,
-              onOpen: open,
-            );
-            if (switched == null) return view;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _VendorDivider(to: message.adapter!),
-                view,
-              ],
-            );
-          },
-        ),
-      ),
+        );
+      },
     );
+  }
+}
+
+/// Keeps [child] built while scrolled out of its list, when [keep].
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.keep, required this.child});
+
+  final bool keep;
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => widget.keep;
+
+  @override
+  void didUpdateWidget(_KeepAlive old) {
+    super.didUpdateWidget(old);
+    if (old.keep != widget.keep) updateKeepAlive();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 
@@ -650,11 +783,24 @@ class _MessageView extends StatelessWidget {
     required this.message,
     required this.imageFile,
     required this.onOpen,
+    required this.gutter,
+    required this.orbTier,
+    required this.orbKey,
   });
 
   final GaiaMessage message;
   final Future<String?> Function(String mediaId) imageFile;
   final void Function(GaiaImagePart image) onOpen;
+
+  /// The list's margin either side of the messages.
+  final double gutter;
+
+  /// For the chat's latest reply, the tier its orb compacts into once it's
+  /// done; null for the rest, which have no orb.
+  final GaiaTier? orbTier;
+
+  /// The chat's orb's, which carries it on from one reply to the next.
+  final GlobalKey? orbKey;
 
   @override
   Widget build(BuildContext context) {
@@ -715,9 +861,16 @@ class _MessageView extends StatelessWidget {
       GaiaMessageStatus.interrupted => 'Interrupted',
       GaiaMessageStatus.aborted => 'Aborted',
     };
+    final streaming = message.status == GaiaMessageStatus.streaming;
+    // The orb sits just left of Gaia's text, in the gutter and the bubble's
+    // padding. Where those are narrower than the orb, every reply of hers is
+    // indented to make room, so none of them moves when one starts or
+    // finishes.
+    final indent = max(0.0, kGaiaOrbSize - gutter - _bubblePadding.left);
     // The chat's own background, so Gaia's bubble shows only as the stars
     // fading behind it.
-    return _bubble(
+    final bubble = _bubble(
+      indent: indent,
       theme.scaffoldBackgroundColor,
       Alignment.centerLeft,
       Column(
@@ -733,13 +886,6 @@ class _MessageView extends StatelessWidget {
               // Only the user's messages carry images and context.
               GaiaImagePart() || GaiaContextPart() => const SizedBox.shrink(),
             },
-          if (message.status == GaiaMessageStatus.streaming)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: GaiaOrb(
-                speaking: message.parts.lastOrNull is GaiaTextPart,
-              ),
-            ),
           if (status != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -755,20 +901,51 @@ class _MessageView extends StatelessWidget {
         ],
       ),
     );
+    final tier = orbTier;
+    // Right up against the text, however wide the gutter, and level with
+    // the newest line: the bubble's margin and padding below it, then half a
+    // line. A Stack with or without the orb, so the bubble isn't built
+    // afresh as the orb comes and goes.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        bubble,
+        if (tier != null)
+          Positioned(
+            left: indent + _bubblePadding.left - kGaiaOrbSize,
+            bottom:
+                _bubbleMargin + _bubblePadding.bottom + 10 - kGaiaOrbSize / 2,
+            child: GaiaOrb(
+              key: orbKey,
+              tier: tier.index,
+              state: !streaming
+                  ? GaiaOrbState.glyph
+                  : message.parts.lastOrNull is GaiaTextPart
+                  ? GaiaOrbState.speaking
+                  : GaiaOrbState.thinking,
+            ),
+          ),
+      ],
+    );
   }
 
   /// A message's rectangle, hugging its text. Nearly opaque, so the
   /// starfield behind it is almost gone but the stars around it aren't.
-  Widget _bubble(Color color, Alignment alignment, Widget child) {
+  Widget _bubble(
+    Color color,
+    Alignment alignment,
+    Widget child, {
+    double indent = 0,
+  }) {
     return Align(
       alignment: alignment,
       child: Container(
         // The user's keep clear of the left, so their side stays theirs.
         margin: EdgeInsets.only(
-          bottom: 12,
-          left: alignment == Alignment.centerRight ? 48 : 0,
+          bottom: _bubbleMargin,
+          left: alignment == Alignment.centerRight ? 48 : indent,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: _bubblePadding,
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.92),
           borderRadius: BorderRadius.circular(12),
@@ -777,6 +954,14 @@ class _MessageView extends StatelessWidget {
       ),
     );
   }
+
+  /// Below each bubble.
+  static const _bubbleMargin = 12.0;
+
+  static const _bubblePadding = EdgeInsets.symmetric(
+    horizontal: 12,
+    vertical: 8,
+  );
 
   static String _detail(String? error) => error == null ? '' : ': $error';
 

@@ -65,12 +65,14 @@ class GaiaWindow {
   /// unless the debug menu lets them in.
   void setCapturable(bool capturable) {
     _capturable = capturable;
-    _applyCapturable();
+    if (shown != null) _applyCapturable();
   }
 
   var _capturable = false;
 
-  /// Again on every show: hiding the window clears its affinity.
+  /// Again on every show: hiding the window clears its affinity. Never on
+  /// the hidden window: setting it on one that hasn't been shown leaves a
+  /// blank white frame on screen at the window's startup rect.
   void _applyCapturable() => SetWindowDisplayAffinity(
     _hwnd,
     _capturable ? WDA_NONE : WDA_EXCLUDEFROMCAPTURE,
@@ -125,8 +127,9 @@ class GaiaWindow {
       await Future<void>(() {});
     }
     EnableWindow(hwnd, TRUE);
-    _applyCapturable();
+    // Cloaked first, so it's never set on the bare hidden window.
     _cloak(hwnd, true);
+    _applyCapturable();
     // SetWindowPos doesn't bring a window out of minimised or maximised; a
     // window minimised from maximised restores to maximised first.
     // SetWindowPlacement does, so a placement skips this.

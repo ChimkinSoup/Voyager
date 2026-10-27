@@ -30,6 +30,31 @@ class GaiaTierGlyph extends StatefulWidget {
 /// between its row and its trigger) carries on rather than jumping.
 final _turned = <int, ({double phase, Duration at})>{};
 
+/// How far [level]'s rings have turned, for drawing them in step elsewhere.
+double gaiaTierGlyphPhase(int level) => _turned[level]?.phase ?? 0;
+
+/// A glyph's side, in logical pixels.
+const kGaiaTierGlyphSize = 14.0;
+
+/// The middle dot's radius at [level].
+double gaiaTierDotRadius(int level) => level == 0 ? 2.4 : 1.7;
+
+/// The rings, inner first: inner one way, outer the other and slower.
+const kGaiaTierRings = [(radius: 4.0, speed: 1.4), (radius: 6.4, speed: -0.8)];
+
+/// How much of its circle a ring covers, the rest its gap.
+const kGaiaTierRingSweep = 2 * math.pi * 0.78;
+
+const kGaiaTierRingStroke = 1.1;
+
+/// Where a [ring] starts, after the level has turned by [phase].
+double gaiaTierRingStart(({double radius, double speed}) ring, double phase) =>
+    phase * ring.speed + (ring.speed < 0 ? math.pi : 0);
+
+/// A ring's opacity [t] of the way along its sweep: it fades towards its tail.
+double gaiaTierRingAlpha(({double radius, double speed}) ring, double t) =>
+    ring.speed > 0 ? 0.15 + 0.85 * t : 1 - 0.85 * t;
+
 class _GaiaTierGlyphState extends State<GaiaTierGlyph>
     with TickerProviderStateMixin {
   final _phase = ValueNotifier(0.0);
@@ -51,7 +76,10 @@ class _GaiaTierGlyphState extends State<GaiaTierGlyph>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final run = GaiaAmbient.of(context);
+    final run =
+        GaiaAmbient.of(context) &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
     if (run == _ticker.isActive) return;
     if (run) {
       _resumed = true;
@@ -105,7 +133,7 @@ class _GaiaTierGlyphState extends State<GaiaTierGlyph>
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size.square(14),
+      size: const Size.square(kGaiaTierGlyphSize),
       painter: _OrbitPainter(
         level: widget.level,
         color: widget.color,
@@ -131,51 +159,71 @@ class _OrbitPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final centre = size.center(Offset.zero);
-    final lit = Curves.easeOut.transform(this.lit.value);
-    // The rings spread a little when lit.
-    final spread = 1 + 0.1 * lit;
-    canvas.drawCircle(
-      centre,
-      (level == 0 ? 2.4 : 1.7) * (1 + 0.15 * lit),
-      Paint()..color = color,
+    paintGaiaTierGlyph(
+      canvas,
+      size.center(Offset.zero),
+      level: level,
+      color: color,
+      phase: phase.value,
+      lit: Curves.easeOut.transform(lit.value),
     );
-    // Inner one way, outer the other and slower.
-    const rings = [(radius: 4.0, speed: 1.4), (radius: 6.4, speed: -0.8)];
-    for (final ring in rings.take(level)) {
-      final radius = ring.radius * spread;
-      final start = phase.value * ring.speed + (ring.speed < 0 ? math.pi : 0);
-      // A ring with a gap, fading towards its tail like the light round
-      // Gaia's buttons.
-      const sweep = 2 * math.pi * 0.78;
-      final rect = Rect.fromCircle(center: centre, radius: radius);
-      final forward = ring.speed > 0;
-      canvas.save();
-      canvas.translate(centre.dx, centre.dy);
-      canvas.rotate(start);
-      canvas.translate(-centre.dx, -centre.dy);
-      canvas.drawArc(
-        rect,
-        0,
-        sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.1
-          ..strokeCap = StrokeCap.round
-          ..shader = SweepGradient(
-            center: Alignment.center,
-            endAngle: sweep,
-            colors: forward
-                ? [color.withValues(alpha: 0.15), color]
-                : [color, color.withValues(alpha: 0.15)],
-          ).createShader(rect),
-      );
-      canvas.restore();
-    }
   }
 
   @override
   bool shouldRepaint(_OrbitPainter old) =>
       old.level != level || old.color != color;
+}
+
+/// The same mark used during an orb's handoff and by the model selector.
+void paintGaiaTierGlyph(
+  Canvas canvas,
+  Offset centre, {
+  required int level,
+  required Color color,
+  required double phase,
+  double lit = 0,
+  double scale = 1,
+}) {
+  // The rings spread a little when lit.
+  final spread = scale * (1 + 0.1 * lit);
+  canvas.drawCircle(
+    centre,
+    gaiaTierDotRadius(level) * scale * (1 + 0.15 * lit),
+    Paint()..color = color,
+  );
+  for (final ring in kGaiaTierRings.take(level)) {
+    final radius = ring.radius * spread;
+    final start = gaiaTierRingStart(ring, phase);
+    // A ring with a gap, fading towards its tail like the light round
+    // Gaia's buttons.
+    const sweep = kGaiaTierRingSweep;
+    final rect = Rect.fromCircle(center: centre, radius: radius);
+    final forward = ring.speed > 0;
+    // Drawn from halfway into the gap, so the gradient's seam at angle 0
+    // sits in the gap and each round cap clamps to its own end's colour.
+    const lead = (2 * math.pi - sweep) / 2;
+    canvas.save();
+    canvas.translate(centre.dx, centre.dy);
+    canvas.rotate(start - lead);
+    canvas.translate(-centre.dx, -centre.dy);
+    canvas.drawArc(
+      rect,
+      lead,
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = kGaiaTierRingStroke * scale
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          center: Alignment.center,
+          startAngle: lead,
+          endAngle: lead + sweep,
+          colors: forward
+              ? [color.withValues(alpha: color.a * 0.15), color]
+              : [color, color.withValues(alpha: color.a * 0.15)],
+        ).createShader(rect),
+    );
+    canvas.restore();
+  }
 }

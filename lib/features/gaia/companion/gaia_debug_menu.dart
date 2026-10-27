@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
+import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
@@ -58,6 +63,17 @@ class _DebugMenu extends StatelessWidget {
           ],
         ),
         Text('Kept on this desktop, never synced.', style: muted),
+        heading('Orb studio'),
+        const GaiaOrbStudio(),
+        heading('Thinking and replying studies'),
+        const GaiaOrbMotionStudies(),
+        heading('Astral message animations'),
+        Text(
+          'The live chat orb. Its white orbits become the model arcs while '
+          'gold beads spiral into the centre. A new message opens them again.',
+          style: muted,
+        ),
+        const GaiaOrbMessagePreview(),
         heading('Replies'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -166,13 +182,6 @@ class _DebugMenu extends StatelessWidget {
             ),
           ],
         ),
-        heading('Loading animation'),
-        Text(
-          'What a reply shows while it streams in. Switch states to see the '
-          'blend between them.',
-          style: muted,
-        ),
-        const _OrbPreview(),
         heading('Display'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -248,41 +257,164 @@ class _SliderRow extends StatelessWidget {
   }
 }
 
-/// A live [GaiaOrb] on the chat's own background.
-class _OrbPreview extends StatefulWidget {
-  const _OrbPreview();
+/// A live [GaiaOrb] on the chat's own background, then a reply ending in
+/// each tier's glyph.
+class GaiaOrbMessagePreview extends StatefulWidget {
+  const GaiaOrbMessagePreview({super.key});
 
   @override
-  State<_OrbPreview> createState() => _OrbPreviewState();
+  State<GaiaOrbMessagePreview> createState() => _GaiaOrbMessagePreviewState();
 }
 
-class _OrbPreviewState extends State<_OrbPreview> {
-  var _speaking = false;
-  var _size = 40.0;
+/// Sizes worth a look: the smallest gap a chat leaves, the chat's orb and
+/// the reference's.
+const _orbPresets = {
+  'Smallest gap': 28.0,
+  'Chat': kGaiaOrbSize,
+  'Large': 168.0,
+};
+
+class _GaiaOrbMessagePreviewState extends State<GaiaOrbMessagePreview> {
+  var _state = GaiaOrbState.thinking;
+  var _tier = GaiaTier.standard;
+  var _size = kGaiaOrbSize;
+
+  /// The tier demos are showing a reply, until [_replay]'s timer ends it.
+  var _replying = false;
+  Timer? _end;
+
+  /// The chat demo's orb, which reply it's on (0 the last, 1 the new one,
+  /// null neither) and what it's showing.
+  var _turnKey = GlobalKey();
+  int? _turnAt;
+  var _turnState = GaiaOrbState.glyph;
+  final _turnTimers = <Timer>[];
+  var _turnGeneration = 0;
+
+  @override
+  void dispose() {
+    _end?.cancel();
+    for (final timer in _turnTimers) {
+      timer.cancel();
+    }
+    super.dispose();
+  }
+
+  /// A first message: a new orb on the new reply.
+  void _appear() => _turn(() {
+    _turnKey = GlobalKey();
+    _turnAt = 1;
+  });
+
+  /// A next message: the last reply's glyph carried on to the new one.
+  void _send() {
+    _turn(() {
+      _turnKey = GlobalKey();
+      _turnAt = 0;
+      _turnState = GaiaOrbState.glyph;
+    }, start: false);
+    final generation = _turnGeneration;
+    // Once it's shown as the last reply's glyph.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && generation == _turnGeneration) _turn(() => _turnAt = 1);
+    });
+  }
+
+  /// [change]s the chat demo, then, unless not to [start], plays a reply on
+  /// its new reply.
+  void _turn(VoidCallback change, {bool start = true}) {
+    _turnGeneration++;
+    for (final timer in _turnTimers) {
+      timer.cancel();
+    }
+    _turnTimers.clear();
+    setState(() {
+      change();
+      if (start) _turnState = GaiaOrbState.thinking;
+    });
+    if (!start) return;
+    // Scaled by [timeDilation] so slow animations get the whole reply.
+    void at(int ms, GaiaOrbState state) => _turnTimers.add(
+      Timer(Duration(milliseconds: ms) * timeDilation, () {
+        if (mounted) setState(() => _turnState = state);
+      }),
+    );
+    at(1500, GaiaOrbState.speaking);
+    at(3500, GaiaOrbState.glyph);
+  }
+
+  void _setTurnState(GaiaOrbState state) =>
+      _turn(() => _turnState = state, start: false);
+
+  void _replay() {
+    _end?.cancel();
+    setState(() => _replying = true);
+    _end = Timer(const Duration(milliseconds: 2500) * timeDilation, () {
+      if (mounted) setState(() => _replying = false);
+    });
+  }
+
+  Widget _stage({required double height, required Widget child}) => Container(
+    height: height,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: child,
+  );
+
+  Wrap _chips<T>(Map<String, T> options, T selected, ValueChanged<T> onPick) =>
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final MapEntry(key: name, :value) in options.entries)
+            ChoiceChip(
+              label: Text(name),
+              selected: value == selected,
+              onSelected: (_) => setState(() => onPick(value)),
+            ),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
+    final muted = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
-        Container(
+        _stage(
           height: 184,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: GaiaOrb(speaking: _speaking, size: _size),
+          child: GaiaOrb(state: _state, tier: _tier.index, size: _size),
         ),
         const SizedBox(height: 8),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Thinking')),
-            ButtonSegment(value: true, label: Text('Speaking')),
-          ],
-          selected: {_speaking},
-          onSelectionChanged: (selected) =>
-              setState(() => _speaking = selected.single),
+        _chips(
+          {
+            'Thinking': GaiaOrbState.thinking,
+            'Replying': GaiaOrbState.speaking,
+            'Model mark': GaiaOrbState.glyph,
+          },
+          _state,
+          (state) => _state = state,
+        ),
+        const SizedBox(height: 6),
+        _chips(
+          {for (final tier in GaiaTier.values) tier.label: tier},
+          _tier,
+          (tier) => _tier = tier,
+        ),
+        const SizedBox(height: 6),
+        _chips(
+          {
+            for (final MapEntry(key: name, value: size) in _orbPresets.entries)
+              '$name (${size.round()} px)': size,
+          },
+          _size,
+          (size) => _size = size,
         ),
         _SliderRow(
           label: 'Size',
@@ -293,7 +425,134 @@ class _OrbPreviewState extends State<_OrbPreview> {
           display: '${_size.round()} px',
           onChanged: (size, {required save}) => setState(() => _size = size),
         ),
+        const SizedBox(height: 8),
+        Text(
+          'Finish a reply to fold the orb into its model mark.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            icon: Icons.replay,
+            label: 'Replay reply',
+            onPressed: _replay,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final tier in GaiaTier.values) ...[
+              if (tier.index > 0) const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  children: [
+                    _stage(
+                      height: 72,
+                      child: GaiaOrb(
+                        state: _replying
+                            ? GaiaOrbState.speaking
+                            : GaiaOrbState.glyph,
+                        tier: tier.index,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tier.label,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'A first message opens from light. A new message carries the '
+          'previous model mark to the next reply and opens its rings again.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            GaiaButton(
+              icon: Icons.auto_awesome,
+              label: 'First message',
+              onPressed: _appear,
+            ),
+            GaiaButton(
+              icon: Icons.send,
+              label: 'New message',
+              onPressed: _send,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            GaiaButton(
+              icon: Icons.chat_bubble_outline,
+              label: 'Start reply',
+              onPressed: _turnAt == null
+                  ? null
+                  : () => _setTurnState(GaiaOrbState.speaking),
+            ),
+            GaiaButton(
+              icon: Icons.check,
+              label: 'Finish reply',
+              onPressed: _turnAt == null
+                  ? null
+                  : () => _setTurnState(GaiaOrbState.glyph),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _stage(
+          height: 168,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _turnRow(0),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _line(width: 120, height: 26),
+                ),
+                _turnRow(1),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
+
+  /// A reply's slot in the chat demo, with the orb when it's [_turnAt].
+  Widget _turnRow(int slot) => Row(
+    children: [
+      SizedBox.square(
+        dimension: kGaiaOrbSize,
+        child: _turnAt == slot
+            ? GaiaOrb(key: _turnKey, state: _turnState, tier: _tier.index)
+            : null,
+      ),
+      Flexible(child: _line(width: 180, height: 10)),
+    ],
+  );
+
+  /// A message stood in for by a bar.
+  Widget _line({required double width, required double height}) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(height / 2),
+    ),
+  );
 }
