@@ -29,6 +29,22 @@ class GaiaImageThumb extends StatelessWidget {
   final VoidCallback? onRemove;
   final bool uploading;
 
+  /// One function, so the switcher doesn't rebuild its transitions on every
+  /// build; and driven, so it adds no listeners to dispose.
+  static Widget _spinnerTransition(Widget child, Animation<double> animation) =>
+      FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: animation.drive(
+            Tween(
+              begin: 0.6,
+              end: 1.0,
+            ).chain(CurveTween(curve: Curves.easeOut)),
+          ),
+          child: child,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -78,16 +94,23 @@ class GaiaImageThumb extends StatelessWidget {
                       child: image,
                     ),
                   ),
-                  if (uploading)
-                    const Positioned.fill(
-                      child: Center(
-                        child: GaiaSpinner(
-                          size: 32,
-                          color: Colors.white,
-                          label: 'Uploading',
-                        ),
+                  Positioned.fill(
+                    child: Center(
+                      // Fades and shrinks away once attached, in step with
+                      // the image brightening.
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: _spinnerTransition,
+                        child: uploading
+                            ? const GaiaSpinner(
+                                size: 32,
+                                color: Colors.white,
+                                label: 'Uploading',
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ),
+                  ),
                   Positioned(
                     left: 4,
                     bottom: 4,

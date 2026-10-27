@@ -10,18 +10,27 @@ import 'package:flutter/scheduler.dart';
 /// right to left (after Aceternity UI's "placeholders and vanish input").
 /// The field is already empty underneath, so the next prompt can be typed
 /// straight away; typing fades the effect out early.
+///
+/// Without a [controller], it dissolves everything [builder] painted
+/// instead, such as a draft's images, and closes away entirely.
 class GaiaVanish extends StatefulWidget {
   const GaiaVanish({
     super.key,
-    required this.controller,
+    this.controller,
+    this.refilled = false,
     required this.builder,
   });
 
-  final TextEditingController controller;
+  final TextEditingController? controller;
+
+  /// Without a [controller]: turning true fades the effect out early, as
+  /// typing does, once there's something new to show.
+  final bool refilled;
 
   /// Builds the text field. While [vanishing], the field should expand to
   /// the height it's given (it closes smoothly once the text has been
-  /// swept), align its text to the top and hide its hint.
+  /// swept), align its text to the top and hide its hint. Without a
+  /// [controller], what's built is held at its height until it closes.
   final Widget Function(BuildContext context, bool vanishing) builder;
 
   @override
@@ -40,44 +49,105 @@ class GaiaVanishState extends State<GaiaVanish>
   final _height = ValueNotifier<double?>(null);
   Duration? _closingFrom;
 
+  /// Around what's built, without a [GaiaVanish.controller].
+  final _snapshot = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_tick);
-    widget.controller.addListener(_onEdit);
+    widget.controller?.addListener(_onEdit);
+  }
+
+  @override
+  void didUpdateWidget(GaiaVanish oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_onEdit);
+      widget.controller?.addListener(_onEdit);
+    }
+    if (widget.refilled && !oldWidget.refilled) _fadeOut();
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onEdit);
+    widget.controller?.removeListener(_onEdit);
     _ticker.dispose();
     _vanishing?.dispose();
     _height.dispose();
     super.dispose();
   }
 
-  /// Snapshots the field's text as laid out on screen. Call just before
-  /// clearing the field.
-  void vanish() {
-    if (MediaQuery.disableAnimationsOf(context)) return;
+  /// Snapshots the field's text as laid out on screen, or without a
+  /// controller, all that's built. Call just before clearing it.
+  void vanish() => vanishTogether([this]);
+
+  /// Vanishes each of [states] as [vanish] does, under one sweep, like a
+  /// single line drawn across the screen: it starts at the rightmost ink of
+  /// any of them and crosses them all at one speed, so each starts to
+  /// dissolve only once the line reaches it.
+  static void vanishTogether(List<GaiaVanishState> states) {
+    final captured = [
+      for (final state in states)
+        if (state._capture() case final vanishing?) (state, vanishing),
+    ];
+    Future.wait([
+      for (final (_, vanishing) in captured) vanishing.sample(),
+    ]).then((_) {
+      final live = [
+        for (final (state, vanishing) in captured)
+          if (state.mounted &&
+              identical(state._vanishing, vanishing) &&
+              !state._fading)
+            (state, vanishing),
+      ];
+      final inked = [
+        for (final (_, vanishing) in live)
+          if (vanishing.inked) vanishing,
+      ];
+      final right = inked.isEmpty
+          ? 0.0
+          : inked.map((v) => v.left + v.right).reduce(math.max);
+      final left = inked.isEmpty
+          ? 0.0
+          : inked.map((v) => v.left).reduce(math.min);
+      // 8px a step like the original, but never longer than ~0.75s a sweep.
+      final speed = math.max(8.0, (right - left) / 45);
+      // Started together, the tickers step in lockstep from the same frame.
+      for (final (state, vanishing) in live) {
+        vanishing.begin(right - vanishing.left, speed);
+        state._ticker.start();
+      }
+    });
+  }
+
+  _Vanishing? _capture() {
+    if (MediaQuery.disableAnimationsOf(context)) return null;
     final box = context.findRenderObject()! as RenderBox;
-    final editable = findEditable(box)!;
+    final editable = widget.controller == null ? null : findEditable(box)!;
     _clear();
-    final vanishing = _Vanishing.capture(editable, box);
+    final vanishing = editable == null
+        ? _Vanishing.snapshot(
+            _snapshot.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary,
+            MediaQuery.devicePixelRatioOf(context),
+          )
+        : _Vanishing.capture(editable, box);
+    vanishing.left = box.localToGlobal(vanishing.origin).dx;
     _height.value = vanishing.fieldHeight;
     setState(() {
       _vanishing = vanishing;
       _fading = false;
     });
-    vanishing.sample().then((_) {
-      if (mounted && identical(_vanishing, vanishing)) _ticker.start();
-    });
+    return vanishing;
   }
 
   void _tick(Duration elapsed) {
     final vanishing = _vanishing!;
     final particles = vanishing.advance(elapsed);
-    if (!vanishing.swept) return;
+    // What was built only closes once its particles are gone: they leave
+    // sideways, rather than being swallowed by its top edge coming down.
+    if (!vanishing.swept || (particles && widget.controller == null)) return;
     // Close the field to one line while the last particles settle.
     _closingFrom ??= elapsed;
     final t = math.min(
@@ -86,7 +156,7 @@ class GaiaVanishState extends State<GaiaVanish>
     );
     _height.value = ui.lerpDouble(
       vanishing.fieldHeight,
-      vanishing.oneLineHeight,
+      vanishing.closedHeight,
       Curves.easeInOut.transform(t),
     );
     if (!particles && t == 1) setState(_clear);
@@ -101,21 +171,33 @@ class GaiaVanishState extends State<GaiaVanish>
   }
 
   void _onEdit() {
-    if (_vanishing != null && !_fading && widget.controller.text.isNotEmpty) {
-      setState(() => _fading = true);
+    if (widget.controller!.text.isNotEmpty) _fadeOut();
+  }
+
+  void _fadeOut() {
+    if (_vanishing == null || _fading) return;
+    // What's new to show takes its own height straight away, rather than
+    // the closing one's while the effect fades.
+    if (widget.controller == null) {
+      _ticker.stop();
+      _height.value = null;
     }
+    setState(() => _fading = true);
   }
 
   @override
   Widget build(BuildContext context) {
     final vanishing = _vanishing;
+    final built = widget.builder(context, vanishing != null);
     return Stack(
       children: [
         ValueListenableBuilder(
           valueListenable: _height,
           builder: (context, height, field) =>
               SizedBox(height: height, child: field),
-          child: widget.builder(context, vanishing != null),
+          child: widget.controller == null
+              ? RepaintBoundary(key: _snapshot, child: built)
+              : built,
         ),
         if (vanishing != null)
           Positioned.fill(
@@ -145,7 +227,7 @@ class _Vanishing extends ChangeNotifier {
     this.size,
     this.picture,
     this.fieldHeight,
-    this.oneLineHeight,
+    this.closedHeight,
   );
 
   /// Lays the text out again the way [editable] did and records it, shifted
@@ -202,19 +284,55 @@ class _Vanishing extends ChangeNotifier {
     );
   }
 
+  /// Records what [boundary] painted, at [pixelRatio], to close away
+  /// entirely.
+  factory _Vanishing.snapshot(
+    RenderRepaintBoundary boundary,
+    double pixelRatio,
+  ) {
+    final size = boundary.size;
+    final image = boundary.toImageSync(pixelRatio: pixelRatio);
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawImageRect(
+      image,
+      Offset.zero & Size(image.width.toDouble(), image.height.toDouble()),
+      Offset.zero & size,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+    // The picture holds on to the image itself.
+    image.dispose();
+    return _Vanishing._(
+      Offset.zero,
+      size,
+      recorder.endRecording(),
+      size.height,
+      0,
+    );
+  }
+
   /// Where the text's viewport sat in the field when sent.
   final Offset origin;
   final Size size;
 
-  /// The text as it looked, drawn left of the sweep until it dissolves.
+  /// [origin] across the screen, where vanishings share their sweep.
+  late final double left;
+
+  /// The text (or snapshot) as it looked, drawn left of the sweep until it
+  /// dissolves.
   final ui.Picture picture;
 
-  /// The field's height when sent, and when holding a single empty line.
+  /// The field's height when sent, and once closed: holding a single empty
+  /// line, or nothing at all for a snapshot.
   final double fieldHeight;
-  final double oneLineHeight;
+  final double closedHeight;
 
   /// Whether the sweep has released every particle.
   bool get swept => _next == _count;
+
+  /// Once sampled: whether there's any ink, and just right of the
+  /// rightmost.
+  bool get inked => _count > 0;
+  double get right => _sourceX[0] + 1;
 
   // Pixels below this alpha are anti-aliasing fringe, not worth a particle.
   static const _minAlpha = 48;
@@ -293,11 +411,12 @@ class _Vanishing extends ChangeNotifier {
     _alpha = Float32List(count);
     _rgb = Int32List(count);
     _colors = Int32List(count);
+  }
 
-    final right = count == 0 ? 0.0 : _sourceX[0] + 1;
-    _sweep = right;
-    // 8px a step like the original, but never longer than ~0.75s a sweep.
-    _speed = math.max(8, right / 45);
+  /// Starts the sweep at [sweep] across the text, moving [speed] a step.
+  void begin(double sweep, double speed) {
+    _sweep = sweep;
+    _speed = speed;
   }
 
   /// Runs the fixed-rate steps due by [elapsed]. False once all are gone.
@@ -317,29 +436,35 @@ class _Vanishing extends ChangeNotifier {
 
   void _step() {
     _sweep -= _speed;
+    // Released before the walk, so they take this step too: an unmoved
+    // block beside one that had moved left a thin seam between them.
+    for (; _next < _count && _sourceX[_next] >= _sweep; _next++) {
+      final to = _live * 4;
+      _transforms[to + 2] = _sourceX[_next];
+      _transforms[to + 3] = _sourceY[_next];
+      _radius[_live] = 1;
+      _alpha[_live] = _sourceAlpha[_next];
+      _rgb[_live] = _sourceRgb[_next];
+      _live++;
+    }
     var kept = 0;
     for (var i = 0; i < _live; i++) {
-      final bits = _random.nextInt(1 << 20);
-      final radius = _radius[i] - 0.05 * (bits >> 2) / (1 << 18);
+      // Two moves of -1, 0 or 1 each way, and how much it shrinks, from one
+      // draw. Always moving would split blocks released a step apart onto
+      // alternate columns, which don't mesh.
+      final bits = _random.nextInt(81 << 18);
+      final radius = _radius[i] - 0.07 * (bits ~/ 81) / (1 << 18);
       if (radius <= 0) continue;
+      final first = bits % 81 % 9, second = bits % 81 ~/ 9;
       final from = i * 4;
       final to = kept * 4;
-      _transforms[to + 2] = _transforms[from + 2] + (bits & 1) * 2 - 1;
-      _transforms[to + 3] = _transforms[from + 3] + (bits & 2) - 1;
+      _transforms[to + 2] = _transforms[from + 2] + first % 3 + second % 3 - 2;
+      _transforms[to + 3] =
+          _transforms[from + 3] + first ~/ 3 + second ~/ 3 - 2;
       _radius[kept] = radius;
       _alpha[kept] = _alpha[i];
       _rgb[kept] = _rgb[i];
       _colors[kept] = (_alpha[i] * radius * 255).round() << 24 | _rgb[i];
-      kept++;
-    }
-    for (; _next < _count && _sourceX[_next] >= _sweep; _next++) {
-      final to = kept * 4;
-      _transforms[to + 2] = _sourceX[_next];
-      _transforms[to + 3] = _sourceY[_next];
-      _radius[kept] = 1;
-      _alpha[kept] = _sourceAlpha[_next];
-      _rgb[kept] = _sourceRgb[_next];
-      _colors[kept] = (_alpha[kept] * 255).round() << 24 | _rgb[kept];
       kept++;
     }
     _live = kept;
@@ -361,7 +486,16 @@ class _Vanishing extends ChangeNotifier {
       )
       ..translate(origin.dx, top)
       ..save()
-      ..clipRect(Rect.fromLTRB(0, 0, math.min(_sweep, size.width), size.height))
+      // Whole columns, through the first released: its particles thin as
+      // some wander left over the picture.
+      ..clipRect(
+        Rect.fromLTRB(
+          0,
+          0,
+          math.min(_sweep.ceilToDouble() + 1, size.width),
+          size.height,
+        ),
+      )
       ..drawPicture(picture)
       ..restore();
     if (_live > 0) {

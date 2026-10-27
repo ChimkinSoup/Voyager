@@ -987,6 +987,7 @@ class _ComposerState extends State<_Composer> {
   TextEditingController get _text => widget.controller.draft;
   final _focus = FocusNode();
   final _vanish = GlobalKey<GaiaVanishState>();
+  final _imagesVanish = GlobalKey<GaiaVanishState>();
 
   /// The `/` palette's highlighted row, and whether Esc closed it for the
   /// draft as it stands.
@@ -1130,7 +1131,10 @@ class _ComposerState extends State<_Composer> {
         controller.currentRunning) {
       return;
     }
-    _vanish.currentState!.vanish();
+    GaiaVanishState.vanishTogether([
+      if (controller.draftImages.isNotEmpty) _imagesVanish.currentState!,
+      _vanish.currentState!,
+    ]);
     _text.clear();
     controller.send(text, images: controller.takeDraftImages());
   }
@@ -1195,28 +1199,35 @@ class _ComposerState extends State<_Composer> {
                       ),
                     ),
                   ),
-                if (controller.draftImages.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final image in controller.draftImages)
-                          GaiaImageThumb(
-                            // The preview's path too: the thumbnail reads its
-                            // path only once.
-                            key: ValueKey(image.preview ?? image.path),
-                            path: image.preview ?? image.path,
-                            label: image.label,
-                            height: 56,
-                            onTap: () => _edit(image),
-                            onRemove: () =>
-                                controller.removeDraftImage(image.label),
+                // Sent, the images dissolve like the text, and their row
+                // closes behind them.
+                GaiaVanish(
+                  key: _imagesVanish,
+                  refilled: controller.draftImages.isNotEmpty,
+                  builder: (context, _) => controller.draftImages.isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final image in controller.draftImages)
+                                GaiaImageThumb(
+                                  // The preview's path too: the thumbnail
+                                  // reads its path only once.
+                                  key: ValueKey(image.preview ?? image.path),
+                                  path: image.preview ?? image.path,
+                                  label: image.label,
+                                  height: 56,
+                                  onTap: () => _edit(image),
+                                  onRemove: () =>
+                                      controller.removeDraftImage(image.label),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                  ),
+                        ),
+                ),
                 GaiaVanish(
                   key: _vanish,
                   controller: _text,

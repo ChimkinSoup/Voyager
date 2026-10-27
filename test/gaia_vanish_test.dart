@@ -208,6 +208,299 @@ void main() {
   );
 
   testWidgets(
+    'without a controller, what was built dissolves and closes away',
+    (tester) async {
+      final images = GlobalKey<GaiaVanishState>();
+      var drafted = true;
+      late StateSetter setOuter;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 360,
+                child: RepaintBoundary(
+                  key: boundary,
+                  child: StatefulBuilder(
+                    builder: (context, setState) {
+                      setOuter = setState;
+                      return GaiaVanish(
+                        key: images,
+                        refilled: drafted,
+                        builder: (context, _) => drafted
+                            ? Wrap(
+                                spacing: 8,
+                                children: [
+                                  for (var i = 0; i < 3; i++)
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      color: const Color(0xFFE39A5B),
+                                    ),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final before = await snapshot(tester);
+
+      images.currentState!.vanish();
+      setOuter(() => drafted = false);
+      await tester.pump();
+      expect(tester.getSize(find.byType(GaiaVanish)).height, 56);
+      expect(differing(before, await snapshot(tester)), 0);
+
+      // It holds its height until the last particle has gone sideways.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      var closed = false;
+      while (overlay().evaluate().isNotEmpty) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final height = tester.getSize(find.byType(GaiaVanish)).height;
+        if (height < 56 && !closed) {
+          closed = true;
+          final pixels = await snapshot(tester);
+          for (var i = 0; i < pixels.length; i += 4) {
+            expect(pixels[i + 3], 0, reason: 'a particle as it closes');
+          }
+        }
+      }
+      expect(closed, isTrue);
+      expect(tester.getSize(find.byType(GaiaVanish)).height, 0);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'vanishing together, one sweep reaches the text only after the images',
+    (tester) async {
+      await loadRealFonts(tester);
+      final images = GlobalKey<GaiaVanishState>();
+      text = TextEditingController(text: 'Hi');
+      addTearDown(text.dispose);
+      var drafted = true;
+      late StateSetter setOuter;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: VoyagerTheme.dark(),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 360,
+                child: RepaintBoundary(
+                  key: boundary,
+                  child: StatefulBuilder(
+                    builder: (context, setState) {
+                      setOuter = setState;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          GaiaVanish(
+                            key: images,
+                            refilled: drafted,
+                            builder: (context, _) => drafted
+                                ? Container(
+                                    height: 40,
+                                    color: const Color(0xFFE39A5B),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          GaiaVanish(
+                            key: vanish,
+                            controller: text,
+                            builder: (context, vanishing) =>
+                                TextField(controller: text),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final before = await snapshot(tester);
+      final field = tester.getRect(find.byType(TextField));
+      final fieldRows = (field.top.round(), field.bottom.round());
+
+      /// Pixels differing from [before] within [rows] (top, bottom) and
+      /// [columns] (left, right).
+      int changedIn(Uint8List now, (int, int) rows, (int, int) columns) {
+        var count = 0;
+        for (var y = rows.$1; y < rows.$2; y++) {
+          for (var x = columns.$1; x < columns.$2; x++) {
+            final i = (y * 360 + x) * 4;
+            for (var c = 0; c < 4; c++) {
+              if ((before[i + c] - now[i + c]).abs() > 8) {
+                count++;
+                break;
+              }
+            }
+          }
+        }
+        return count;
+      }
+
+      GaiaVanishState.vanishTogether([
+        images.currentState!,
+        vanish.currentState!,
+      ]);
+      text.clear();
+      setOuter(() => drafted = false);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      // A few steps in: the images' right end is going, the text untouched.
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 100));
+      final early = await snapshot(tester);
+      expect(changedIn(early, (0, 40), (300, 360)), greaterThan(0));
+      // Where "Hi" is (the images' particles wander a little past them).
+      expect(changedIn(early, fieldRows, (0, 120)), 0);
+
+      await sampleAndRun(tester);
+      expect(overlay(), findsNothing);
+      expect(tester.getSize(find.byType(GaiaVanish).first).height, 0);
+      expect(text.text, isEmpty);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'behind the sweep, no column of a solid snapshot thins into a seam',
+    (tester) async {
+      final block = GlobalKey<GaiaVanishState>();
+      var drafted = true;
+      late StateSetter setOuter;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              child: RepaintBoundary(
+                key: boundary,
+                child: StatefulBuilder(
+                  builder: (context, setState) {
+                    setOuter = setState;
+                    return GaiaVanish(
+                      key: block,
+                      refilled: drafted,
+                      builder: (context, _) => drafted
+                          ? Container(
+                              height: 200,
+                              color: const Color(0xFFE39A5B),
+                            )
+                          : const SizedBox.shrink(),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      block.currentState!.vanish();
+      setOuter(() => drafted = false);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 100));
+      final pixels = await snapshot(tester);
+
+      // Each column's share of rows a particle (or the picture) covers.
+      // Particles wander, so the walk leaves gaps everywhere; a seam is a
+      // column with markedly fewer than its neighbours.
+      final shares = [
+        for (var x = 0; x < 352; x++)
+          [
+                for (var y = 2; y < 198; y++)
+                  if (pixels[(y * 360 + x) * 4 + 3] > 64) y,
+              ].length /
+              196,
+      ];
+      // From where the picture stops.
+      final from = shares.indexWhere((share) => share < 1);
+      expect(from, greaterThan(0));
+      final behind = shares.sublist(from);
+      final mean = behind.reduce((a, b) => a + b) / behind.length;
+      for (final (x, share) in behind.indexed) {
+        expect(share, greaterThan(mean - 0.15), reason: 'column ${from + x}');
+      }
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'refilled mid-effect, the new content takes its own height at once',
+    (tester) async {
+      final images = GlobalKey<GaiaVanishState>();
+      var rows = 1;
+      late StateSetter setOuter;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  setOuter = setState;
+                  return GaiaVanish(
+                    key: images,
+                    refilled: rows > 0,
+                    builder: (context, _) => rows == 0
+                        ? const SizedBox.shrink()
+                        : Container(
+                            height: 56.0 * rows,
+                            color: const Color(0xFFE39A5B),
+                          ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Sent, then two rows attached while the first still vanishes.
+      images.currentState!.vanish();
+      setOuter(() => rows = 0);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      setOuter(() => rows = 2);
+      await tester.pump();
+      expect(tester.getSize(find.byType(GaiaVanish)).height, 112);
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(tester.getSize(find.byType(GaiaVanish)).height, 112);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(overlay(), findsNothing);
+      expect(tester.getSize(find.byType(GaiaVanish)).height, 112);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
     'reduced motion skips the effect',
     (tester) async {
       await pumpField(tester);

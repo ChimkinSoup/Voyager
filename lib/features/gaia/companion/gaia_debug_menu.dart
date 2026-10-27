@@ -12,8 +12,10 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast_icon_studio.dart';
+import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
 /// replies, toast and loading-animation previews and display toggles, kept
@@ -157,6 +159,14 @@ class _DebugMenu extends StatelessWidget {
           'watch it upload in the chat.',
           style: muted,
         ),
+        heading('Images vanishing'),
+        Text(
+          "Sent, a draft's images dissolve from right to left like its text, "
+          'and their row closes behind them. Pick a count to draft that many '
+          'again.',
+          style: muted,
+        ),
+        const _ImageVanishPreview(),
         heading('Toast icon studies'),
         const GaiaToastIconStudio(),
         heading('Toasts'),
@@ -371,6 +381,133 @@ class _UploadPreviewState extends State<_UploadPreview> {
             label: 'Send again',
             onPressed: _send,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The composer's draft images, as many as picked, vanishing as they're
+/// sent.
+class _ImageVanishPreview extends StatefulWidget {
+  const _ImageVanishPreview();
+
+  @override
+  State<_ImageVanishPreview> createState() => _ImageVanishPreviewState();
+}
+
+class _ImageVanishPreviewState extends State<_ImageVanishPreview> {
+  static const _counts = [1, 2, 5, 10];
+
+  static const _prompt = "What's different between these?";
+
+  late final Future<String?> _image = _UploadPreviewState._paintImage();
+  final _vanish = GlobalKey<GaiaVanishState>();
+  final _textVanish = GlobalKey<GaiaVanishState>();
+  final _text = TextEditingController(text: _prompt);
+  final _focus = FocusNode();
+  var _count = 1;
+  var _drafted = true;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _focus.dispose();
+    unawaited(
+      _image.then((path) => File(path!).delete()).then((_) {}, onError: (_) {}),
+    );
+    super.dispose();
+  }
+
+  /// Like the composer: the images and the text vanish under one sweep.
+  void _send() {
+    GaiaVanishState.vanishTogether([
+      if (_drafted) _vanish.currentState!,
+      if (_text.text.isNotEmpty) _textVanish.currentState!,
+    ]);
+    _text.clear();
+    setState(() => _drafted = false);
+  }
+
+  void _draft(int count) {
+    setState(() {
+      _count = count;
+      _drafted = true;
+    });
+    if (_text.text.isEmpty) _text.text = _prompt;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        // Tall enough for two rows, the composer's bottom at the bottom.
+        Container(
+          height: 216,
+          padding: const EdgeInsets.all(16),
+          alignment: Alignment.bottomCenter,
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GaiaVanish(
+                key: _vanish,
+                refilled: _drafted,
+                builder: (context, _) => !_drafted
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (var label = 1; label <= _count; label++)
+                              GaiaImageThumb(
+                                file: _image,
+                                label: label,
+                                height: 56,
+                              ),
+                          ],
+                        ),
+                      ),
+              ),
+              GaiaVanish(
+                key: _textVanish,
+                controller: _text,
+                builder: (context, vanishing) => GaiaTextField(
+                  controller: _text,
+                  focusNode: _focus,
+                  minLines: vanishing ? null : 1,
+                  maxLines: vanishing ? null : 3,
+                  expands: vanishing,
+                  textAlignVertical: vanishing ? TextAlignVertical.top : null,
+                  hintText: vanishing ? null : 'Message Gaia',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final count in _counts)
+              ChoiceChip(
+                label: Text(count == 1 ? '1 image' : '$count images'),
+                selected: _drafted && count == _count,
+                onSelected: (_) => _draft(count),
+              ),
+            GaiaButton(icon: Icons.send, label: 'Send', onPressed: _send),
+          ],
         ),
       ],
     );
