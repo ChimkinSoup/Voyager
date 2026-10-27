@@ -893,7 +893,6 @@ class GaiaController extends ChangeNotifier {
     // The summon's window goes with this message only.
     final context = windowContext;
     windowContext = null;
-    final now = utcNow();
     var tier = nextTier;
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
@@ -907,6 +906,8 @@ class GaiaController extends ChangeNotifier {
       );
     }
     debugPrint('[gaia] router: sending on ${tier.name}');
+    // After the router, so the reply's orb doesn't count it as bloom time.
+    final now = utcNow();
     pickedTier = null;
     final agent = agentFor(tier);
     if (chat == null) {

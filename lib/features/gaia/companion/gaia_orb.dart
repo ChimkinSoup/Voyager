@@ -8,7 +8,7 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 
 /// [GaiaOrb]'s size in a chat.
-const kGaiaOrbSize = 48.0;
+const kGaiaOrbSize = 36.0;
 
 /// What [GaiaOrb] is showing.
 enum GaiaOrbState {
@@ -34,7 +34,8 @@ enum GaiaOrbState {
 /// screen ([TickerMode]) and while there's movement to show, and holds still
 /// under reduced motion.
 ///
-/// A new orb that isn't done yet blooms out of nothing. One a [GlobalKey]
+/// A new orb that isn't done yet blooms out of nothing, or out of what's left
+/// of its bloom since [startedAt]. One a [GlobalKey]
 /// carries elsewhere (the chat's glyph moving on to the next reply) flies
 /// there from where it was, opening back out into the sphere on the way.
 class GaiaOrb extends StatefulWidget {
@@ -43,6 +44,7 @@ class GaiaOrb extends StatefulWidget {
     required this.state,
     required this.tier,
     this.size = kGaiaOrbSize,
+    this.startedAt,
   });
 
   final GaiaOrbState state;
@@ -51,6 +53,11 @@ class GaiaOrb extends StatefulWidget {
   final int tier;
 
   final double size;
+
+  /// When its reply started, so one built again partway through (another
+  /// window's layout, or back on its chat) doesn't bloom again; null for
+  /// now.
+  final DateTime? startedAt;
 
   @override
   State<GaiaOrb> createState() => _GaiaOrbState();
@@ -64,7 +71,7 @@ const _bloomTime = kGaiaAstralArrivalTime;
 
 class _GaiaOrbState extends State<GaiaOrb> with TickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
-  late final _orb = _Orb(widget.state, widget.tier);
+  late final _orb = _Orb(widget.state, widget.tier, widget.startedAt);
   var _lastTick = Duration.zero;
 
   /// Its flight from where it was, once carried elsewhere.
@@ -98,12 +105,20 @@ class _GaiaOrbState extends State<GaiaOrb> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Whether Gaia's ambient motion runs, as of the last [_sync].
+  var _ambient = true;
+
   void _sync() {
+    _ambient = GaiaAmbient.of(context);
+    // Blooming in, folding into or out of the glyph, and easing between
+    // thinking and speaking run to the end even with ambient motion paused,
+    // or the orb would hold invisible, as the glyph, or showing the wrong
+    // state.
     final run =
         !_orb.reduced &&
         !_orb.settled &&
         TickerMode.valuesOf(context).enabled &&
-        GaiaAmbient.of(context);
+        (_ambient || _orb.changing);
     if (run == _ticker.isActive) return;
     if (run) {
       _lastTick = Duration.zero;
@@ -122,6 +137,8 @@ class _GaiaOrbState extends State<GaiaOrb> with TickerProviderStateMixin {
       _ticker.stop();
       // Hands over to the glyph.
       setState(() {});
+    } else if (!_ambient && !_orb.changing) {
+      _ticker.stop();
     }
   }
 
@@ -146,6 +163,7 @@ class _GaiaOrbState extends State<GaiaOrb> with TickerProviderStateMixin {
                   child: GaiaTierGlyph(
                     level: widget.tier,
                     color: Theme.of(context).colorScheme.primary,
+                    morphs: true,
                   ),
                 )
               : RepaintBoundary(
@@ -267,10 +285,14 @@ class _RenderFlight extends RenderProxyBox {
 /// Finite arrival and glyph transitions share one reversible progress value.
 /// A new message can interrupt gathering without restarting the orb's clock.
 class _Orb extends GaiaOrbMotion {
-  _Orb(this._state, this.tier) {
+  _Orb(this._state, this.tier, DateTime? startedAt) {
     if (_state == GaiaOrbState.glyph) gather = bloom = 1;
-    thinking = _state == GaiaOrbState.thinking ? 1 : 0;
-    speaking = _state == GaiaOrbState.speaking ? 1 : 0;
+    if (startedAt != null) {
+      final age = DateTime.now().difference(startedAt).inMicroseconds / 1e6;
+      bloom = max(bloom, min(1, age / _bloomTime));
+    }
+    thinking = thinkingLead = _state == GaiaOrbState.thinking ? 1 : 0;
+    speaking = speakingLead = _state == GaiaOrbState.speaking ? 1 : 0;
   }
 
   GaiaOrbState _state;
@@ -284,6 +306,14 @@ class _Orb extends GaiaOrbMotion {
   }
 
   bool get settled => _state == GaiaOrbState.glyph && gather == 1;
+
+  /// Blooming in, folding into or out of the glyph, or easing between
+  /// thinking and speaking.
+  bool get changing =>
+      bloom < 1 ||
+      gather != (_state == GaiaOrbState.glyph ? 1 : 0) ||
+      (thinking - (_state == GaiaOrbState.thinking ? 1 : 0)).abs() > 0.01 ||
+      (speaking - (_state == GaiaOrbState.speaking ? 1 : 0)).abs() > 0.01;
 
   void snap() {
     snapTo(

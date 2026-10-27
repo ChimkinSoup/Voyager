@@ -160,14 +160,18 @@ class GaiaOrbMotion extends ChangeNotifier {
   final clock = GaiaOrbClock();
   double thinking = 0, speaking = 0, gather = 0, bloom = 0;
 
+  /// What [thinking] and [speaking] ease toward, themselves easing toward
+  /// the targets.
+  double thinkingLead = 0, speakingLead = 0;
+
   /// Straight to the targets, as under reduced motion.
   void snapTo({
     required bool thinks,
     required bool speaks,
     required bool gathers,
   }) {
-    thinking = thinks ? 1 : 0;
-    speaking = speaks ? 1 : 0;
+    thinking = thinkingLead = thinks ? 1 : 0;
+    speaking = speakingLead = speaks ? 1 : 0;
     gather = gathers ? 1 : 0;
     bloom = 1;
   }
@@ -185,9 +189,13 @@ class GaiaOrbMotion extends ChangeNotifier {
         ? math.min(1, gather + dt / kGaiaAstralGatherTime)
         : math.max(0, gather - dt / kGaiaAstralUnfurlTime);
     bloom = math.min(1, bloom + dt / kGaiaAstralArrivalTime);
-    final ease = 1 - math.exp(-14 * dt);
-    thinking += ((thinks ? 1 : 0) - thinking) * ease;
-    speaking += ((speaks ? 1 : 0) - speaking) * ease;
+    // Two eases in series: one alone sets off at full speed, jolting the
+    // rings' size and tilt as thinking hands over to replying.
+    final ease = 1 - math.exp(-5 * dt);
+    thinkingLead += ((thinks ? 1 : 0) - thinkingLead) * ease;
+    speakingLead += ((speaks ? 1 : 0) - speakingLead) * ease;
+    thinking += (thinkingLead - thinking) * ease;
+    speaking += (speakingLead - speaking) * ease;
     clock.advance(
       dt,
       thinking: thinking,

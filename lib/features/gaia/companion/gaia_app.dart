@@ -207,7 +207,7 @@ class _GaiaShell extends StatelessWidget {
                     ? _lastTurns(controller.messages, 3)
                     : controller.messages,
                 imageFile: controller.imageFile,
-                tier: controller.currentChat?.tier ?? GaiaTier.standard,
+                tier: controller.nextTier,
                 running: controller.currentRunning,
               ),
             ),
@@ -550,7 +550,8 @@ class _Messages extends StatefulWidget {
   final List<GaiaMessage> messages;
   final Future<String?> Function(String mediaId) imageFile;
 
-  /// The chat's, which its latest reply's orb compacts into.
+  /// The one the next message goes on, which the latest reply's orb
+  /// compacts into.
   final GaiaTier tier;
 
   /// The chat has a reply running from this window.
@@ -578,10 +579,6 @@ class _MessagesState extends State<_Messages> {
   /// so its glyph can fly there once the new reply's in view.
   String? _held;
 
-  /// The tier [_held]'s reply came from: sending on another tier changes
-  /// the chat's before the orb moves on.
-  GaiaTier? _heldTier;
-
   @override
   void didUpdateWidget(_Messages old) {
     super.didUpdateWidget(old);
@@ -601,7 +598,6 @@ class _MessagesState extends State<_Messages> {
     }
     final reduced = MediaQuery.disableAnimationsOf(context);
     final held = _held = reduced ? null : was.id;
-    _heldTier = old.tier;
     // Not mid-build, as scrolling notifies.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -670,11 +666,7 @@ class _MessagesState extends State<_Messages> {
                 imageFile: imageFile,
                 onOpen: open,
                 gutter: gutter,
-                orbTier: i != latest
-                    ? null
-                    : held >= 0
-                    ? _heldTier
-                    : tier,
+                orbTier: i == latest ? tier : null,
                 orbKey: i == latest
                     ? _orbKeys.putIfAbsent(message.chatId, GlobalKey.new)
                     : null,
@@ -796,7 +788,7 @@ class _MessageView extends StatelessWidget {
   final double gutter;
 
   /// For the chat's latest reply, the tier its orb compacts into once it's
-  /// done; null for the rest, which have no orb.
+  /// done: the next message's; null for the rest, which have no orb.
   final GaiaTier? orbTier;
 
   /// The chat's orb's, which carries it on from one reply to the next.
@@ -866,7 +858,10 @@ class _MessageView extends StatelessWidget {
     // padding. Where those are narrower than the orb, every reply of hers is
     // indented to make room, so none of them moves when one starts or
     // finishes.
-    final indent = max(0.0, kGaiaOrbSize - gutter - _bubblePadding.left);
+    final indent = max(
+      0.0,
+      kGaiaOrbSize + _orbGap - gutter - _bubblePadding.left,
+    );
     // The chat's own background, so Gaia's bubble shows only as the stars
     // fading behind it.
     final bubble = _bubble(
@@ -902,7 +897,7 @@ class _MessageView extends StatelessWidget {
       ),
     );
     final tier = orbTier;
-    // Right up against the text, however wide the gutter, and level with
+    // Just off the text, however wide the gutter, and level with
     // the newest line: the bubble's margin and padding below it, then half a
     // line. A Stack with or without the orb, so the bubble isn't built
     // afresh as the orb comes and goes.
@@ -912,12 +907,13 @@ class _MessageView extends StatelessWidget {
         bubble,
         if (tier != null)
           Positioned(
-            left: indent + _bubblePadding.left - kGaiaOrbSize,
+            left: indent + _bubblePadding.left - kGaiaOrbSize - _orbGap,
             bottom:
                 _bubbleMargin + _bubblePadding.bottom + 10 - kGaiaOrbSize / 2,
             child: GaiaOrb(
               key: orbKey,
               tier: tier.index,
+              startedAt: message.createdAt,
               state: !streaming
                   ? GaiaOrbState.glyph
                   : message.parts.lastOrNull is GaiaTextPart
@@ -957,6 +953,9 @@ class _MessageView extends StatelessWidget {
 
   /// Below each bubble.
   static const _bubbleMargin = 12.0;
+
+  /// Between the orb and Gaia's text.
+  static const _orbGap = 10.0;
 
   static const _bubblePadding = EdgeInsets.symmetric(
     horizontal: 12,

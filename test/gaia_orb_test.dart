@@ -162,11 +162,108 @@ void main() {
     );
     await show(true);
     expect(ticking(tester), isTrue);
+    // Bloomed in first, as that runs to the end regardless.
+    for (var i = 0; i < 100; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     await show(false);
     await tester.pump();
     expect(ticking(tester), isFalse);
     await show(true);
     expect(ticking(tester), isTrue);
+  });
+
+  Future<void> paused(WidgetTester tester, GaiaOrbState state) =>
+      tester.pumpWidget(
+        MaterialApp(
+          home: GaiaAmbient(
+            running: false,
+            child: Center(child: GaiaOrb(state: state, tier: 2)),
+          ),
+        ),
+      );
+
+  testWidgets('a new orb blooms in with ambient motion paused', (tester) async {
+    await paused(tester, GaiaOrbState.thinking);
+    expect(ticking(tester), isTrue, reason: 'blooming');
+    for (var i = 0; i < 100; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(ticking(tester), isFalse, reason: 'bloomed, so it holds');
+  });
+
+  testWidgets('an orb built again partway through a reply skips its bloom', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GaiaAmbient(
+          running: false,
+          child: Center(
+            child: GaiaOrb(
+              state: GaiaOrbState.thinking,
+              tier: 2,
+              startedAt: DateTime.now().subtract(const Duration(seconds: 10)),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(ticking(tester), isFalse, reason: 'already bloomed, so it holds');
+  });
+
+  testWidgets('thinking eases into speaking with ambient motion paused', (
+    tester,
+  ) async {
+    await paused(tester, GaiaOrbState.thinking);
+    for (var i = 0; i < 100; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(ticking(tester), isFalse, reason: 'bloomed, so it holds');
+
+    await paused(tester, GaiaOrbState.speaking);
+    expect(ticking(tester), isTrue, reason: 'easing into speaking');
+    for (var i = 0; i < 150; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(ticking(tester), isFalse, reason: 'speaking, so it holds');
+  });
+
+  testWidgets(
+    'the glyph opens out for a new reply with ambient motion paused',
+    (tester) async {
+      await paused(tester, GaiaOrbState.glyph);
+      expect(find.byType(GaiaTierGlyph), findsOneWidget);
+
+      await paused(tester, GaiaOrbState.thinking);
+      expect(ticking(tester), isTrue, reason: 'opening out');
+      for (var i = 0; i < 100; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byType(GaiaTierGlyph), findsNothing);
+      expect(ticking(tester), isFalse, reason: 'opened, so it holds');
+    },
+  );
+
+  testWidgets('a landed glyph morphs into the next tier', (tester) async {
+    Future<void> at(int tier) => tester.pumpWidget(
+      MaterialApp(
+        home: GaiaAmbient(
+          running: false,
+          child: Center(
+            child: GaiaOrb(state: GaiaOrbState.glyph, tier: tier),
+          ),
+        ),
+      ),
+    );
+    await at(0);
+    expect(ticking(tester), isFalse);
+
+    await at(2);
+    expect(ticking(tester), isTrue, reason: 'morphing');
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(ticking(tester), isFalse, reason: 'morphed, so it holds');
+    expect(tester.widget<GaiaTierGlyph>(find.byType(GaiaTierGlyph)).level, 2);
   });
 
   testWidgets('starts as the glyph when the reply was already done', (
