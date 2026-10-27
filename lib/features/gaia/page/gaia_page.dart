@@ -440,6 +440,10 @@ class _GaiaTranscript extends ConsumerWidget {
                         const SizedBox(height: 4),
                       ],
                       SelectableText(message.text),
+                      // By path: the file is on the device it came from.
+                      for (final file
+                          in message.parts.whereType<GaiaFilePart>())
+                        Text(file.reference, style: muted),
                       if (message.parts.whereType<GaiaImagePart>()
                           case final images when images.isNotEmpty) ...[
                         const SizedBox(height: 8),
@@ -472,9 +476,12 @@ class _GaiaTranscript extends ConsumerWidget {
                             style: muted,
                           ),
                         ),
-                        // Only the user's messages carry images and context.
+                        // Only the user's messages carry attachments and
+                        // context.
                         GaiaImagePart() ||
-                        GaiaContextPart() => const SizedBox.shrink(),
+                        GaiaFilePart() ||
+                        GaiaContextPart() ||
+                        GaiaUnknownPart() => const SizedBox.shrink(),
                       },
                     if (message.status != GaiaMessageStatus.complete)
                       Padding(

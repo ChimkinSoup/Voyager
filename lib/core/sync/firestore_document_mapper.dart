@@ -4435,9 +4435,9 @@ Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'deletedAt': _dateToFirestore(message.deletedAt),
 };
 
-/// [mergeGaiaChatFromRemote] for a message. A part or status this build
-/// doesn't know is a schema failure, not a guess: [GaiaPart.fromJson] and
-/// `byName` throw, and the pull reports the document.
+/// [mergeGaiaChatFromRemote] for a message. A part this build doesn't know
+/// is kept unshown ([GaiaUnknownPart]); a status it doesn't know is a schema
+/// failure, not a guess: `byName` throws, and the pull reports the document.
 GaiaMessage mergeGaiaMessageFromRemote(
   Map<String, dynamic> data,
   String id, {

@@ -49,15 +49,21 @@ Widget _withIcon(
 }
 
 /// A group in a [GaiaNotch]: a trigger showing the selected option, which
-/// opens all of them.
+/// opens all of them. With a [trigger], it's a menu of actions instead.
 class GaiaNotchItem<T> {
   const GaiaNotchItem({
     required this.options,
     required this.value,
     required this.onChanged,
+    this.trigger,
   });
 
   final List<GaiaNotchOption<T>> options;
+
+  /// Drawn in [color] in place of the selected option, such as a +: the
+  /// options are actions, so picking one runs [onChanged] and nothing
+  /// lands in the trigger.
+  final Widget Function(Color color)? trigger;
 
   /// The selected option's value. The notch keeps no selection of its own:
   /// [onChanged] asks, and a parent that turns the change down keeps [value].
@@ -83,14 +89,18 @@ class GaiaNotchItem<T> {
 /// rest blur out bottom first, drawn in toward it as the ring shrinks. Up
 /// and Down or Tab move between options, Enter or Space picks.
 ///
-/// Open, it grows up and to the left from its bottom right corner, over
-/// whatever is there, while its place in the layout keeps the bar's size.
-/// Closed, it sits in that place itself, so whatever it's in (as Gaia's
-/// composer) still counts the cursor over it as over itself.
+/// Open, it grows up and to the left from its bottom right corner (to the
+/// right from its bottom left, when it [opensRight]), over whatever is
+/// there, while its place in the layout keeps the bar's size. Closed, it
+/// sits in that place itself, so whatever it's in (as Gaia's composer)
+/// still counts the cursor over it as over itself.
 class GaiaNotch extends StatefulWidget {
-  const GaiaNotch({super.key, required this.items});
+  const GaiaNotch({super.key, required this.items, this.opensRight = false});
 
   final List<GaiaNotchItem<Object?>> items;
+
+  /// For one at the left of what it's in, as the composer's +.
+  final bool opensRight;
 
   @override
   State<GaiaNotch> createState() => _GaiaNotchState();
@@ -265,6 +275,12 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
   }
 
   void _select(int item, int option) {
+    // An action: the trigger keeps showing itself.
+    if (widget.items[item].trigger != null) {
+      _close();
+      widget.items[item]._pick(option);
+      return;
+    }
     final pending = (item: item, option: option);
     _pending = pending;
     // Closed first, so a confirmation the change opens has the focus.
@@ -286,6 +302,7 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
     final shown = _shown != null && _shown! < widget.items.length
         ? _shown
         : null;
+    final corner = _corner;
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: (context) => Align(
@@ -293,8 +310,8 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
         child: CompositedTransformFollower(
           link: _link,
           showWhenUnlinked: false,
-          targetAnchor: Alignment.bottomRight,
-          followerAnchor: Alignment.bottomRight,
+          targetAnchor: corner,
+          followerAnchor: corner,
           child: TapRegion(
             onTapOutside: (_) => _close(),
             // Inside a text field's group too, so a notch in a field's
@@ -327,6 +344,10 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
       ),
     );
   }
+
+  /// The corner it grows from.
+  Alignment get _corner =>
+      widget.opensRight ? Alignment.bottomLeft : Alignment.bottomRight;
 
   /// The ring, sizing itself to what's inside on the spring, with a shadow
   /// as far as the options show.
@@ -367,14 +388,15 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
           child: AnimatedSize(
             duration: _springTime,
             curve: const _SpringCurve(_shellSpring),
-            alignment: Alignment.bottomRight,
+            alignment: _corner,
             child: Stack(
               key: _frame,
-              alignment: Alignment.bottomRight,
+              alignment: _corner,
               clipBehavior: Clip.none,
               children: [
                 _Ghost(
                   sizes: !open,
+                  left: widget.opensRight,
                   child: IgnorePointer(
                     ignoring: open,
                     child: ExcludeFocus(
@@ -406,6 +428,7 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
                 if (shown != null)
                   _Ghost(
                     sizes: open,
+                    left: widget.opensRight,
                     // On its way out: no longer clickable or focusable.
                     child: IgnorePointer(
                       ignoring: !open,
@@ -446,29 +469,40 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
 }
 
 /// [child], counting toward its parent's size only while it [sizes]. When
-/// it doesn't, it hangs from its parent's bottom right corner, still
-/// painted but taking no room, and not hit.
+/// it doesn't, it hangs from its parent's bottom right corner (bottom left,
+/// for [left]), still painted but taking no room, and not hit.
 class _Ghost extends SingleChildRenderObjectWidget {
-  const _Ghost({required this.sizes, required super.child});
+  const _Ghost({required this.sizes, required this.left, required super.child});
 
   final bool sizes;
+  final bool left;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => _RenderGhost(sizes);
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderGhost(sizes, left);
 
   @override
   void updateRenderObject(BuildContext context, _RenderGhost renderObject) {
-    renderObject.sizes = sizes;
+    renderObject
+      ..sizes = sizes
+      ..left = left;
   }
 }
 
 class _RenderGhost extends RenderShiftedBox {
-  _RenderGhost(this._sizes) : super(null);
+  _RenderGhost(this._sizes, this._left) : super(null);
 
   bool _sizes;
   set sizes(bool value) {
     if (value == _sizes) return;
     _sizes = value;
+    markNeedsLayout();
+  }
+
+  bool _left;
+  set left(bool value) {
+    if (value == _left) return;
+    _left = value;
     markNeedsLayout();
   }
 
@@ -479,6 +513,8 @@ class _RenderGhost extends RenderShiftedBox {
     size = constraints.constrain(_sizes ? child.size : Size.zero);
     (child.parentData! as BoxParentData).offset = _sizes
         ? Offset.zero
+        : _left
+        ? Offset(0, -child.size.height)
         : -child.size.bottomRight(Offset.zero);
   }
 }
@@ -545,6 +581,19 @@ class _Bar extends StatelessWidget {
   }
 
   Widget _trigger(int index, GaiaNotchItem<Object?> item, bool highlighted) {
+    if (item.trigger case final trigger?) {
+      return AnimatedContainer(
+        key: triggers?.putIfAbsent(index, GlobalKey.new),
+        duration: _fade,
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        alignment: Alignment.center,
+        child: KeyedSubtree(
+          key: triggerTexts?.putIfAbsent(index, GlobalKey.new),
+          child: trigger(highlighted ? Colors.white : _muted),
+        ),
+      );
+    }
     final picked = pending;
     final selected = picked != null && picked.item == index
         ? picked.option

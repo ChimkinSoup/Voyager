@@ -88,14 +88,17 @@ typedef GaiaImageInput = ({int label, String path, String mimeType});
 abstract interface class GaiaAgentRunner {
   /// Starts a turn in [chatId]'s session: [sessionId] resumes one, null
   /// starts one. [images] go with [prompt], which names them by their
-  /// `[image N]` tokens. [onEvent] gets each event of the turn; the future
-  /// completes with its result, or throws a [GaiaRunException].
+  /// `[image N]` tokens. [directories] are the folders the chat's attached
+  /// files and folders are in, which the agent must be let read. [onEvent]
+  /// gets each event of the turn; the future completes with its result, or
+  /// throws a [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
     required String model,
     required String prompt,
     List<GaiaImageInput> images = const [],
+    Set<String> directories = const {},
     required void Function(GaiaAgentEvent event) onEvent,
   });
 

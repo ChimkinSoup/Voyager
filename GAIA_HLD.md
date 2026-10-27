@@ -763,6 +763,26 @@ and each adapter sends it the best way it can:
 - Codex (`-i` files) and Gemini CLI (`@path`) attach separately, and the text
   keeps the `[image N]` labels so references still resolve.
 
+As built (2026-10-27): the composer's **+** (a notch like the tier picker's,
+opening rightwards) adds files or a folder. A picked image joins as an
+image; anything else, PDFs included, goes **by path**, shown as a card with
+its name and type beside the images. Files get no `[file N]` token: the
+user names one as they would to a person, by its name. Nothing is copied or
+synced, so a file is only readable on the device it was attached from. The
+agent gets an `<attached_files>` list of paths after the message and reads
+them with its own tools. Claude Code is started with `--add-dir` for each
+file's folder in the chat (outside reads are refused in `-p` under the
+default permission mode); a new one restarts the process, resuming the
+session. Codex's sandboxes read anywhere already. The grant is the whole
+folder, for the rest of the chat: attaching `Downloads\invoice.pdf` lets the
+agent read all of Downloads. Accepted (2026-10-27): the user pointed Gaia
+there, and a copy per chat would cut the agent off from the file itself.
+Only PNG, JPEG and WebP join as images; GIF, BMP and HEIC go by path, as
+ingest refuses the first two and Windows may not decode the third.
+A part from a newer build is kept unshown and written back as it came
+(`GaiaUnknownPart`), so an older build that captions the message doesn't
+strip it.
+
 ### 9.4 Annotation
 
 Clicking a thumbnail opens an editor with pen, line, arrow, rectangle,

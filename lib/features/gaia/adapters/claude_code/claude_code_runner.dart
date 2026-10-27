@@ -115,6 +115,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String model,
     required String prompt,
     List<GaiaImageInput> images = const [],
+    Set<String> directories = const {},
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (result, started) = await _send(
@@ -124,6 +125,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       model: model,
       prompt: prompt,
       images: images,
+      directories: directories,
       onEvent: (event) {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
@@ -154,6 +156,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     model: model,
     prompt: prompt,
     images: images,
+    directories: const {},
     onEvent: onEvent,
   )).$1;
 
@@ -166,14 +169,20 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String model,
     required String prompt,
     required List<GaiaImageInput> images,
+    required Set<String> directories,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     final content = await claudeUserContent(prompt, images);
     var process = _live.remove(chatId);
     // One that never started a session (a resume that found none) is on
-    // its way out.
-    if (process != null && (process.model != model || !process.started)) {
-      unawaited(process.kill());
+    // its way out. Directories are fixed per process too: one that can't
+    // read a newly attached file restarts, resuming the session.
+    if (process != null &&
+        (process.model != model ||
+            !process.started ||
+            !process.directories.containsAll(directories))) {
+      // Gone before another resumes its session.
+      await process.kill();
       process = null;
     }
     if (process == null || process.exited) {
@@ -188,6 +197,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
         model: model,
         configDir: _configDir,
         onLine: onLine,
+        directories: directories,
         sessionArgs: [
           if (_instructions.trim().isNotEmpty) ...[
             '--append-system-prompt-file',
@@ -261,7 +271,12 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
 }
 
 class _ClaudeProcess {
-  _ClaudeProcess._(this._process, this.model, this._onRawLine) {
+  _ClaudeProcess._(
+    this._process,
+    this.model,
+    this.directories,
+    this._onRawLine,
+  ) {
     _process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
@@ -292,6 +307,7 @@ class _ClaudeProcess {
     required String model,
     required String configDir,
     required void Function(String line)? onLine,
+    required Set<String> directories,
     required List<String> sessionArgs,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
@@ -313,6 +329,8 @@ class _ClaudeProcess {
           '--safe-mode',
           '--model',
           model,
+          // Outside the workspace, where attached files are read (§9.3).
+          for (final directory in directories) ...['--add-dir', directory],
           ...sessionArgs,
         ],
         workingDirectory: workingDirectory,
@@ -320,12 +338,14 @@ class _ClaudeProcess {
         includeParentEnvironment: false,
       ),
       model,
+      directories,
       onLine,
     );
   }
 
   final Process _process;
   final String model;
+  final Set<String> directories;
   final void Function(String line)? _onRawLine;
   final _stderr = StringBuffer();
   var exited = false;

@@ -295,15 +295,17 @@ void main() {
       expect(mergeGaiaMessageFromRemote(remote, 'm', local: local), local);
     });
 
-    test('an unknown part is a schema failure, not a guess', () {
+    test("a newer build's part is kept unshown, and written back as it "
+        'came', () {
       final data = gaiaMessageToFirestore(_message('m', 1))
         ..['parts'] = [
-          {'type': 'hologram'},
+          {'type': 'hologram', 'depth': 3},
         ];
-      expect(
-        () => mergeGaiaMessageFromRemote(data, 'm'),
-        throwsFormatException,
-      );
+      final message = mergeGaiaMessageFromRemote(data, 'm');
+      expect(message.parts.single, isA<GaiaUnknownPart>());
+      expect(gaiaMessageToFirestore(message)['parts'], [
+        {'type': 'hologram', 'depth': 3},
+      ]);
     });
   });
 

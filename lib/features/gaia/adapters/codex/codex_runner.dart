@@ -58,6 +58,8 @@ class CodexRunner implements GaiaAgentRunner {
     required String model,
     required String prompt,
     List<GaiaImageInput> images = const [],
+    // Its sandboxes read anywhere: `--add-dir` is for writing.
+    Set<String> directories = const {},
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     await _prepareCodexHome(codexHome, userCodexHome);

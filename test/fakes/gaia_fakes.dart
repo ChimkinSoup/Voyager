@@ -186,6 +186,7 @@ typedef FakeClaudeSend = ({
   String model,
   String prompt,
   List<GaiaImageInput> images,
+  Set<String> directories,
 });
 
 /// A [GaiaAgentRunner] that plays scripted turns instead of running a CLI.
@@ -218,6 +219,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
     required String model,
     required String prompt,
     List<GaiaImageInput> images = const [],
+    Set<String> directories = const {},
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     sent.add((
@@ -226,6 +228,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
       model: model,
       prompt: prompt,
       images: images,
+      directories: directories,
     ));
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);

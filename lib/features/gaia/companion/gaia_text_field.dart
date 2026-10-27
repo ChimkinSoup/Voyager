@@ -23,6 +23,7 @@ class GaiaTextField extends StatefulWidget {
     this.expands = false,
     this.textAlignVertical,
     this.hintText,
+    this.leading,
     this.trailing,
   });
 
@@ -34,6 +35,9 @@ class GaiaTextField extends StatefulWidget {
   final bool expands;
   final TextAlignVertical? textAlignVertical;
   final String? hintText;
+
+  /// Sits inside the field at its bottom left, such as an attach button.
+  final Widget? leading;
 
   /// Sits inside the field at its bottom right, such as a send button.
   final Widget? trailing;
@@ -314,6 +318,11 @@ class _GaiaTextFieldState extends State<GaiaTextField>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                if (widget.leading case final leading?)
+                  Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: TextFieldTapRegion(child: leading),
+                  ),
                 Expanded(
                   // Long prompts scroll without a bar.
                   child: ScrollConfiguration(
@@ -334,9 +343,12 @@ class _GaiaTextFieldState extends State<GaiaTextField>
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 13,
+                        // Less on the left past a leading button.
+                        contentPadding: EdgeInsets.fromLTRB(
+                          widget.leading == null ? 12 : 4,
+                          13,
+                          12,
+                          13,
                         ),
                       ),
                     ),

@@ -9,6 +9,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
@@ -135,10 +136,11 @@ class _DebugMenu extends StatelessWidget {
               controller.send(key);
             },
           ),
-        heading('Sending images'),
+        heading('Sending images and files'),
         Text(
           "A message shows as soon as it's sent. Its images stay dimmed under "
-          "a spinner until they're attached, then Gaia's reply starts.",
+          "a spinner until they're attached, then Gaia's reply starts. Files "
+          'and folders go by path, so they show at once.',
           style: muted,
         ),
         const _UploadPreview(),
@@ -159,11 +161,11 @@ class _DebugMenu extends StatelessWidget {
           'watch it upload in the chat.',
           style: muted,
         ),
-        heading('Images vanishing'),
+        heading('Attachments vanishing'),
         Text(
-          "Sent, a draft's images dissolve from right to left like its text, "
-          'and their row closes behind them. Pick a count to draft that many '
-          'again.',
+          "Sent, a draft's images, files and folders dissolve from right to "
+          'left like its text, and their row closes behind them. Pick a count '
+          'to draft that many images again.',
           style: muted,
         ),
         const _ImageVanishPreview(),
@@ -255,7 +257,15 @@ class _DebugMenu extends StatelessWidget {
   }
 }
 
-/// A sent message with two images, uploading and then attached.
+/// Attached to the previews' messages: never read, so they needn't exist.
+const _files = [
+  GaiaFilePart(path: r'C:\Users\Gaia\Documents\Quarterly report.pdf'),
+  GaiaFilePart(path: r'C:\Users\Gaia\Documents\notes.md'),
+  GaiaFilePart(path: r'C:\Users\Gaia\Pictures\Screenshots', folder: true),
+];
+
+/// A sent message with two images, uploading and then attached, and
+/// [_files].
 class _UploadPreview extends StatefulWidget {
   const _UploadPreview();
 
@@ -345,7 +355,9 @@ class _UploadPreviewState extends State<_UploadPreview> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Wrap(
+                alignment: WrapAlignment.end,
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   for (final label in [1, 2])
                     GaiaImageThumb(
@@ -354,6 +366,8 @@ class _UploadPreviewState extends State<_UploadPreview> {
                       height: 96,
                       uploading: _uploading,
                     ),
+                  for (final file in _files)
+                    GaiaFileCard(file: file, height: 56),
                 ],
               ),
               const SizedBox(height: 8),
@@ -387,8 +401,8 @@ class _UploadPreviewState extends State<_UploadPreview> {
   }
 }
 
-/// The composer's draft images, as many as picked, vanishing as they're
-/// sent.
+/// The composer's draft images, as many as picked, and [_files], vanishing
+/// as they're sent.
 class _ImageVanishPreview extends StatefulWidget {
   const _ImageVanishPreview();
 
@@ -444,9 +458,9 @@ class _ImageVanishPreviewState extends State<_ImageVanishPreview> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
-        // Tall enough for two rows, the composer's bottom at the bottom.
+        // Tall enough for four rows, the composer's bottom at the bottom.
         Container(
-          height: 216,
+          height: 344,
           padding: const EdgeInsets.all(16),
           alignment: Alignment.bottomCenter,
           decoration: BoxDecoration(
@@ -474,6 +488,8 @@ class _ImageVanishPreviewState extends State<_ImageVanishPreview> {
                                 label: label,
                                 height: 56,
                               ),
+                            for (final file in _files)
+                              GaiaFileCard(file: file, height: 56),
                           ],
                         ),
                       ),

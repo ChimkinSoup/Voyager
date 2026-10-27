@@ -271,13 +271,28 @@ sealed class GaiaPart {
           height: (json['height']! as num).toInt(),
           caption: json['caption'] as String?,
         ),
+        'file' => GaiaFilePart(
+          path: json['path']! as String,
+          folder: json['folder'] as bool? ?? false,
+        ),
         'context' => GaiaContextPart(
           app: json['app']! as String,
           title: json['title']! as String,
           url: json['url'] as String?,
         ),
-        final type => throw FormatException('Unknown Gaia part: $type'),
+        _ => GaiaUnknownPart(json),
       };
+}
+
+/// A part from a newer build: not shown, but written back as it came, so a
+/// caption saved here doesn't take it off the message everywhere.
+class GaiaUnknownPart extends GaiaPart {
+  const GaiaUnknownPart(this.json);
+
+  final Map<String, Object?> json;
+
+  @override
+  Map<String, Object?> toJson() => json;
 }
 
 class GaiaTextPart extends GaiaPart {
@@ -342,6 +357,37 @@ class GaiaImagePart extends GaiaPart {
     'caption': ?caption,
   };
 }
+
+/// A file or folder on a user's message (§9.3): its path, never a copy. The
+/// agent reads it where it is, so it's only on the device it was attached
+/// from. It has no token: the message names it, if at all, as the user
+/// would, by its name.
+class GaiaFilePart extends GaiaPart {
+  const GaiaFilePart({required this.path, this.folder = false});
+
+  final String path;
+  final bool folder;
+
+  /// "C:\Notes (folder)", for the agent.
+  String get reference => folder ? '$path (folder)' : path;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'file',
+    'path': path,
+    if (folder) 'folder': true,
+  };
+}
+
+/// What the agent gets after a message with [files]: where each is, to
+/// read with its own tools.
+String gaiaFilesPreamble(Iterable<GaiaFilePart> files) => [
+  '<attached_files>',
+  'Files and folders the user attached to this message. They may refer to '
+      'one by its name. Read them where they are with your own tools.',
+  for (final file in files) '- ${file.reference}',
+  '</attached_files>',
+].join('\n');
 
 /// A window's [title] without the "- [app]" most apps end it with.
 String gaiaTitleWithoutApp(String title, String app) {

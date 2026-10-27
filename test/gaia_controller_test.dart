@@ -659,6 +659,117 @@ void main() {
     });
   });
 
+  group('files and folders (§9.3)', () {
+    late Directory dir;
+    late String pdf;
+    late String folder;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('gaia_files');
+      pdf = p.join(dir.path, 'report.pdf');
+      await File(pdf).writeAsBytes([1]);
+      folder = (await Directory(p.join(dir.path, 'notes')).create()).path;
+      await startCompanion();
+    });
+
+    tearDown(() => dir.delete(recursive: true));
+
+    test('go by path: kept on the message, not named in its text, and '
+        'listed for the agent, which is let read where they are', () async {
+      controller.draft.text = 'Summarise report.pdf';
+      await controller.attachPaths([pdf]);
+      await controller.attachPaths([folder], folder: true);
+      expect(controller.draft.text, 'Summarise report.pdf');
+
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(
+        controller.draft.text,
+        files: controller.takeDraftFiles(),
+      );
+      await settle();
+
+      final sent = runner.sent.single;
+      expect(
+        sent.prompt,
+        'Summarise report.pdf\n\n'
+        '<attached_files>\n'
+        'Files and folders the user attached to this message. They may refer '
+        'to one by its name. Read them where they are with your own tools.\n'
+        '- $pdf\n'
+        '- $folder (folder)\n'
+        '</attached_files>',
+      );
+      expect(sent.directories, {dir.path, folder});
+      expect(sent.images, isEmpty);
+      final question = (await main.messages()).first;
+      expect(question.text, 'Summarise report.pdf');
+      expect(
+        question.parts.whereType<GaiaFilePart>().map(
+          (file) => (file.path, file.folder),
+        ),
+        [(pdf, false), (folder, true)],
+      );
+    });
+
+    test('a message of files alone is sent, its chat titled after the '
+        'first', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.attachPaths([pdf]);
+      await controller.send('', files: controller.takeDraftFiles());
+      await settle();
+
+      expect(runner.sent.single.prompt, startsWith('<attached_files>'));
+      expect((await main.chat()).title, 'report.pdf');
+    });
+
+    test("a later message's turn can still read the chat's earlier "
+        'files', () async {
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      await controller.attachPaths([pdf]);
+      await controller.send('Read it', files: controller.takeDraftFiles());
+      await settle();
+      await controller.attachPaths([folder], folder: true);
+      await controller.send('And this', files: controller.takeDraftFiles());
+      await settle();
+
+      expect(runner.sent.last.prompt, isNot(contains(pdf)));
+      expect(runner.sent.last.directories, {dir.path, folder});
+    });
+
+    test('a picked image joins as an image', () async {
+      final png = p.join(dir.path, 'shot.PNG');
+      await File(png).writeAsBytes([1, 2]);
+      await controller.attachPaths([png]);
+      expect(controller.draftImages.single.label, 1);
+      expect(controller.draftFiles, isEmpty);
+      expect(controller.draft.text, '[image 1]');
+      // Its copy is the draft's, in the system temp folder.
+      controller.removeDraftImage(1);
+    });
+
+    test("a GIF, which ingest refuses, goes by path; so does an image that "
+        "can't be read", () async {
+      final gif = p.join(dir.path, 'anim.gif');
+      await File(gif).writeAsBytes([1]);
+      final missing = p.join(dir.path, 'gone.png');
+      await controller.attachPaths([gif, missing, pdf]);
+      expect(controller.draftImages, isEmpty);
+      expect(controller.draftFiles.map((file) => file.path), [
+        gif,
+        missing,
+        pdf,
+      ]);
+    });
+
+    test('one picked twice is attached once, and can be removed', () async {
+      await controller.attachPaths([pdf]);
+      await controller.attachPaths([pdf]);
+      expect(controller.draftFiles.map((file) => file.path), [pdf]);
+      controller.removeDraftFile(controller.draftFiles.single);
+      expect(controller.draftFiles, isEmpty);
+    });
+  });
+
   group('window context (§15.4)', () {
     setUp(() => startCompanion());
 

@@ -112,6 +112,35 @@ class GaiaController extends ChangeNotifier {
     _attachFile(file.path);
   }
 
+  /// The draft's files and folders (§9.3), shown above it but not named in
+  /// it: the user calls one by its name.
+  final draftFiles = <GaiaFilePart>[];
+
+  /// Picked from the composer's +: an image joins as an image, anything
+  /// else, and every folder, by its path.
+  Future<void> attachPaths(List<String> paths, {bool folder = false}) async {
+    for (final path in paths) {
+      if (!folder &&
+          _imageExtensions.contains(p.extension(path).toLowerCase())) {
+        try {
+          await attachImage(await File(path).readAsBytes());
+          continue;
+        } on FileSystemException catch (error) {
+          // Unreadable here: it goes by its path, like any other file.
+          debugPrint('[gaia] attach: $path not read as an image: $error');
+        }
+      }
+      // Picked twice, it's still one.
+      if (draftFiles.any((file) => p.equals(file.path, path))) continue;
+      draftFiles.add(GaiaFilePart(path: path, folder: folder));
+    }
+    notifyListeners();
+  }
+
+  /// What media ingest takes, less HEIC: Windows may not decode it, and a
+  /// refused image fails the whole send. The rest go by path.
+  static const _imageExtensions = {'.png', '.jpg', '.jpeg', '.webp'};
+
   /// [attachImage] for an image already in a file the draft can own.
   void _attachFile(String path) {
     final label = [
@@ -285,6 +314,20 @@ class GaiaController extends ChangeNotifier {
     draftImages.clear();
     notifyListeners();
     return images;
+  }
+
+  /// Takes [file] out of the draft.
+  void removeDraftFile(GaiaFilePart file) {
+    draftFiles.remove(file);
+    notifyListeners();
+  }
+
+  /// [takeDraftImages] for the draft's files and folders.
+  List<GaiaFilePart> takeDraftFiles() {
+    final files = [...draftFiles];
+    draftFiles.clear();
+    notifyListeners();
+    return files;
   }
 
   /// [text] at the draft's caret, or at its end when it has none, set off
@@ -812,21 +855,23 @@ class GaiaController extends ChangeNotifier {
         text;
   }
 
-  /// Sends [text] with [images] (§9.3), which this send now owns.
+  /// Sends [text] with [images] (§9.3), which this send now owns, and
+  /// [files].
   Future<void> send(
     String text, {
     List<GaiaDraftImage> images = const [],
+    List<GaiaFilePart> files = const [],
   }) async {
     if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
     var prompt = (await _expand(text.trim())).trim();
-    if (prompt.isEmpty && images.isEmpty) return;
+    if (prompt.isEmpty && images.isEmpty && files.isEmpty) return;
     // A chat sent to before its messages came: they're numbered on from.
     if (currentChatId case final id?
         when !_messages.containsKey(id) && !_running.contains(id)) {
       await _load(id);
     }
     if (aborted || draining != null || currentRunning) {
-      return _giveBack(text, images);
+      return _giveBack(text, images, files);
     }
     var chat = currentChat;
     final isNew = chat == null;
@@ -842,13 +887,20 @@ class GaiaController extends ChangeNotifier {
       gaiaNextImageLabel(_messages[chatId] ?? const []),
     );
     prompt = relabeled;
+    // What the router and the title go by: a files-only message's names.
+    final topic = prompt.isEmpty
+        ? files.map((file) => p.basename(file.path)).join(', ')
+        : prompt;
     // The summon's window goes with this message only.
     final context = windowContext;
     windowContext = null;
     final sentAt = utcNow();
     if (chat == null) {
-      // No utility model yet: the title is the first line (§5.1).
-      final firstLine = prompt.isEmpty ? 'Image' : prompt.split('\n').first;
+      // No utility model yet: the title is the first line (§5.1). Its
+      // images' tokens are in it; its files aren't.
+      final firstLine = prompt.isEmpty
+          ? p.basename(files.first.path)
+          : prompt.split('\n').first;
       chat = GaiaChat(
         id: chatId,
         title: firstLine.length > 60
@@ -884,6 +936,7 @@ class GaiaController extends ChangeNotifier {
             width: 0,
             height: 0,
           ),
+        ...files,
         ?context,
       ],
       status: GaiaMessageStatus.complete,
@@ -916,7 +969,7 @@ class GaiaController extends ChangeNotifier {
         if (currentChatId == chatId) currentChatId = null;
       }
       windowContext = context;
-      _giveBack(text, images);
+      _giveBack(text, images, files);
       _reportRuns();
       _settleDrain();
     }
@@ -977,7 +1030,7 @@ class GaiaController extends ChangeNotifier {
       question = _replace(
         question,
         question.copyWith(
-          parts: [GaiaTextPart(prompt), ...imageParts, ?context],
+          parts: [GaiaTextPart(prompt), ...imageParts, ...files, ?context],
           bumpVersion: false,
           touch: false,
         ),
@@ -988,7 +1041,7 @@ class GaiaController extends ChangeNotifier {
     // user's own pick (§7.2).
     if (isNew && pickedTier == null) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
-      tier = await _utility?.route(prompt) ?? tier;
+      tier = await _utility?.route(topic) ?? tier;
     } else {
       debugPrint(
         '[gaia] router: skipped, '
@@ -1110,7 +1163,13 @@ class GaiaController extends ChangeNotifier {
     // What the session didn't see: the whole chat for a new session, or
     // the turns another agent or device took since (§7.4).
     // The window it was asked from goes ahead of it (§15.4).
-    final asked = context == null ? prompt : '${context.preamble}\n\n$prompt';
+    // Its files' paths after it (§9.3).
+    final asked = [
+      ?context?.preamble,
+      // Empty when only files were sent.
+      if (prompt.isNotEmpty) prompt,
+      if (files.isNotEmpty) gaiaFilesPreamble(files),
+    ].join('\n\n');
     Future<String> handedOver() async {
       if (script != null || agent == null || runner == null) return asked;
       List<GaiaMessage> unseen() => gaiaUnseenTurns(
@@ -1134,11 +1193,22 @@ class GaiaController extends ChangeNotifier {
             image.mediaId,
       };
       final paths = await Future.wait(ids.map(imageFile));
-      final files = Map.fromIterables(ids, paths);
-      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: files)}\n$asked';
+      final imagePaths = Map.fromIterables(ids, paths);
+      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: imagePaths)}\n$asked';
     }
 
     final sent = await handedOver();
+    // Where every file the chat has attached is, not just this message's:
+    // the agent may go back to one. Those from another device aren't here.
+    // Checked off the UI thread: an offline drive can take seconds to say.
+    final directories = {
+      for (final directory in {
+        for (final message in _messages[chatId] ?? list)
+          for (final file in message.parts.whereType<GaiaFilePart>())
+            file.folder ? file.path : p.dirname(file.path),
+      })
+        if (await Directory(directory).exists()) directory,
+    };
     var retried = false;
     String failed(Object error) => retried
         ? "This chat's earlier session wasn't found, and starting a new one "
@@ -1191,6 +1261,7 @@ class GaiaController extends ChangeNotifier {
               model: agent.model,
               prompt: sent,
               images: imageInputs,
+              directories: directories,
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
@@ -1208,6 +1279,7 @@ class GaiaController extends ChangeNotifier {
           model: agent.model,
           prompt: await handedOver(),
           images: imageInputs,
+          directories: directories,
           onEvent: onEvent,
         );
       }
@@ -1268,16 +1340,26 @@ class GaiaController extends ChangeNotifier {
     await _persist(reply);
     _reportDone(chatId, reply);
     if (reply.seq == 1 && reply.status == GaiaMessageStatus.complete) {
-      unawaited(_retitle(chatId, prompt, reply.text));
+      unawaited(_retitle(chatId, topic, reply.text));
     }
     _settleDrain();
   }
 
   /// A send that didn't happen: its [text] and [images] go back in the
   /// draft, the text unless the user has typed again.
-  void _giveBack(String text, List<GaiaDraftImage> images) {
+  void _giveBack(
+    String text,
+    List<GaiaDraftImage> images,
+    List<GaiaFilePart> files,
+  ) {
     if (draft.text.isEmpty) draft.text = text;
     draftImages.addAll(images);
+    // One attached again meanwhile is still one.
+    draftFiles.addAll(
+      files.where(
+        (file) => !draftFiles.any((had) => p.equals(had.path, file.path)),
+      ),
+    );
     notifyListeners();
   }
 

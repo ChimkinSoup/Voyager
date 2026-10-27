@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
+import 'package:voyager/core/platform/windows_folder_picker.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
@@ -15,6 +17,7 @@ import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
+import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
@@ -801,13 +804,14 @@ class _MessageView extends StatelessWidget {
     );
     if (message.role == GaiaMessageRole.user) {
       final images = message.parts.whereType<GaiaImagePart>();
+      final files = message.parts.whereType<GaiaFilePart>();
       final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
-      // Images float on their own above the prompt's bubble; a message of
-      // only images has no bubble.
+      // Images and files float on their own above the prompt's bubble; a
+      // message of only those has no bubble.
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (images.isNotEmpty)
+          if (images.isNotEmpty || files.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 48, bottom: 8),
               child: Wrap(
@@ -823,6 +827,8 @@ class _MessageView extends StatelessWidget {
                       uploading: uploading.contains(image.mediaId),
                       onTap: () => onOpen(image),
                     ),
+                  for (final file in files)
+                    GaiaFileCard(file: file, height: 56),
                 ],
               ),
             ),
@@ -878,8 +884,11 @@ class _MessageView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(_activity(tools), style: muted),
               ),
-              // Only the user's messages carry images and context.
-              GaiaImagePart() || GaiaContextPart() => const SizedBox.shrink(),
+              // Only the user's messages carry attachments and context.
+              GaiaImagePart() ||
+              GaiaFilePart() ||
+              GaiaContextPart() ||
+              GaiaUnknownPart() => const SizedBox.shrink(),
             },
           if (status != null)
             Padding(
@@ -1127,16 +1136,37 @@ class _ComposerState extends State<_Composer> {
     if (!await _takeTierCommand(atEnd: true) || !mounted) return;
     final controller = widget.controller;
     final text = _text.text;
-    if ((text.trim().isEmpty && controller.draftImages.isEmpty) ||
-        controller.currentRunning) {
+    final attached =
+        controller.draftImages.isNotEmpty || controller.draftFiles.isNotEmpty;
+    if ((text.trim().isEmpty && !attached) || controller.currentRunning) {
       return;
     }
     GaiaVanishState.vanishTogether([
-      if (controller.draftImages.isNotEmpty) _imagesVanish.currentState!,
+      if (attached) _imagesVanish.currentState!,
       _vanish.currentState!,
     ]);
     _text.clear();
-    controller.send(text, images: controller.takeDraftImages());
+    controller.send(
+      text,
+      images: controller.takeDraftImages(),
+      files: controller.takeDraftFiles(),
+    );
+  }
+
+  /// The +: files or a folder join the draft (§9.3).
+  Future<void> _attach({required bool folder}) async {
+    final paths = folder
+        ? [?await pickFolder(title: 'Add a folder')]
+        : [
+            for (final file
+                in (await FilePicker.platform.pickFiles(
+                      allowMultiple: true,
+                    ))?.files ??
+                    const <PlatformFile>[])
+              ?file.path,
+          ];
+    await widget.controller.attachPaths(paths, folder: folder);
+    if (mounted) _focus.requestFocus();
   }
 
   @override
@@ -1199,12 +1229,16 @@ class _ComposerState extends State<_Composer> {
                       ),
                     ),
                   ),
-                // Sent, the images dissolve like the text, and their row
-                // closes behind them.
+                // Sent, the images and files dissolve like the text, and
+                // their row closes behind them.
                 GaiaVanish(
                   key: _imagesVanish,
-                  refilled: controller.draftImages.isNotEmpty,
-                  builder: (context, _) => controller.draftImages.isEmpty
+                  refilled:
+                      controller.draftImages.isNotEmpty ||
+                      controller.draftFiles.isNotEmpty,
+                  builder: (context, _) =>
+                      controller.draftImages.isEmpty &&
+                          controller.draftFiles.isEmpty
                       ? const SizedBox.shrink()
                       : Padding(
                           padding: const EdgeInsets.only(bottom: 8),
@@ -1224,6 +1258,13 @@ class _ComposerState extends State<_Composer> {
                                   onRemove: () =>
                                       controller.removeDraftImage(image.label),
                                 ),
+                              for (final file in controller.draftFiles)
+                                GaiaFileCard(
+                                  file: file,
+                                  height: 56,
+                                  onRemove: () =>
+                                      controller.removeDraftFile(file),
+                                ),
                             ],
                           ),
                         ),
@@ -1240,6 +1281,43 @@ class _ComposerState extends State<_Composer> {
                     expands: vanishing,
                     textAlignVertical: vanishing ? TextAlignVertical.top : null,
                     hintText: vanishing ? null : 'Message Gaia',
+                    // The tier picker's notch, opening rightwards from the
+                    // field's left edge.
+                    leading: Padding(
+                      // Level with the send button.
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: GaiaNotch(
+                        opensRight: true,
+                        items: [
+                          GaiaNotchItem<bool?>(
+                            trigger: (color) =>
+                                Icon(Icons.add, size: 16, color: color),
+                            options: [
+                              GaiaNotchOption(
+                                value: false,
+                                label: 'Add files',
+                                icon: (color, {required lit}) => Icon(
+                                  Icons.description_outlined,
+                                  size: 16,
+                                  color: color,
+                                ),
+                              ),
+                              GaiaNotchOption(
+                                value: true,
+                                label: 'Add folder',
+                                icon: (color, {required lit}) => Icon(
+                                  Icons.folder_outlined,
+                                  size: 16,
+                                  color: color,
+                                ),
+                              ),
+                            ],
+                            value: null,
+                            onChanged: (folder) => _attach(folder: folder!),
+                          ),
+                        ],
+                      ),
+                    ),
                     trailing: running
                         ? GaiaButton(
                             icon: Icons.stop,

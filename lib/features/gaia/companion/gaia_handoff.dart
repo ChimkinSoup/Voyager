@@ -115,6 +115,9 @@ String gaiaHandoffPreamble({
     for (final part in message.parts.whereType<GaiaImagePart>()) {
       buffer.writeln(image(part));
     }
+    for (final part in message.parts.whereType<GaiaFilePart>()) {
+      buffer.writeln('Attached: ${part.reference}');
+    }
     buffer.writeln();
   }
   buffer.writeln('</gaia_transcript>');
@@ -128,7 +131,7 @@ String _agent(GaiaMessage message, Map<String, String> labels) {
 }
 
 /// The text a summary of [older] is asked for, with each image's caption
-/// after its message.
+/// and each file's path after its message.
 String gaiaTranscriptText(List<GaiaMessage> older) => [
   for (final message in older)
     [
@@ -137,5 +140,7 @@ String gaiaTranscriptText(List<GaiaMessage> older) => [
       for (final image in message.parts.whereType<GaiaImagePart>())
         if (image.caption case final caption?)
           '${gaiaImageToken(image.label)}: $caption',
+      for (final file in message.parts.whereType<GaiaFilePart>())
+        'Attached: ${file.reference}',
     ].join('\n'),
 ].join('\n\n');

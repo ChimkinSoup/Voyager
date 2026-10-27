@@ -72,7 +72,7 @@ class GaiaDevPipe extends GaiaPipe {
         return null;
       case 'attachImage':
         // No media module: a copy stands in for the stored image, and its
-        // path for its id.
+        // path for its ids.
         final copy = await File(
           p['path']! as String,
         ).copy('${p['path']}.stored');
@@ -81,11 +81,14 @@ class GaiaDevPipe extends GaiaPipe {
         image.dispose();
         return {
           'mediaId': copy.path,
+          'referenceId': copy.path,
           'path': copy.path,
           'mimeType': 'image/png',
           'width': size.$1,
           'height': size.$2,
         };
+      case 'detachImage':
+        return null;
       case 'mediaFile':
         return p['mediaId'];
       default:
