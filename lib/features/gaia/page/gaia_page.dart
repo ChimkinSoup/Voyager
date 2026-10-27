@@ -16,7 +16,9 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
@@ -471,9 +473,8 @@ class _GaiaTranscript extends ConsumerWidget {
                         GaiaTextPart(:final text) => SelectableText(text),
                         GaiaActivityPart(:final tools) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Text(
-                            'Used ${tools.toSet().join(', ')}',
-                            style: muted,
+                          child: GaiaActivityChip(
+                            label: 'Used ${tools.toSet().join(', ')}',
                           ),
                         ),
                         // Only the user's messages carry attachments and
@@ -486,14 +487,23 @@ class _GaiaTranscript extends ConsumerWidget {
                     if (message.status != GaiaMessageStatus.complete)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text(switch (message.status) {
-                          GaiaMessageStatus.streaming => 'Still running',
-                          GaiaMessageStatus.error => 'Error',
-                          GaiaMessageStatus.cancelled => 'Stopped',
-                          GaiaMessageStatus.interrupted => 'Interrupted',
-                          GaiaMessageStatus.aborted => 'Aborted',
-                          GaiaMessageStatus.complete => '',
-                        }, style: muted),
+                        child: Text(
+                          switch (message.status) {
+                            GaiaMessageStatus.streaming => 'Still running',
+                            GaiaMessageStatus.error => 'Error',
+                            GaiaMessageStatus.cancelled => 'Stopped',
+                            GaiaMessageStatus.interrupted => 'Interrupted',
+                            GaiaMessageStatus.aborted => 'Aborted',
+                            GaiaMessageStatus.complete => '',
+                          },
+                          style: switch (message.status) {
+                            GaiaMessageStatus.streaming => muted,
+                            GaiaMessageStatus.error => muted?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                            _ => muted?.copyWith(color: kGaiaStatusRose),
+                          },
+                        ),
                       ),
                   ],
                 ),

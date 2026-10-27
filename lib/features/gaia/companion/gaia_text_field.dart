@@ -103,6 +103,10 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   /// The field's text, found once and found again if it's replaced.
   RenderEditable? _editable;
 
+  /// Where the light was when the text was sent, on the caret or under the
+  /// cursor, while the vanish sweeps it away.
+  Offset? _sent;
+
   @override
   void initState() {
     super.initState();
@@ -221,8 +225,13 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     if (!_hovered && !widget.focusNode.hasFocus) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached || !box.hasSize) return;
+    final sweep = context.findAncestorStateOfType<GaiaVanishState>()?.sweep;
+    if (sweep == null) _sent = null;
     final point = switch (_source) {
       _Source.cursor => _cursor == null ? null : box.globalToLocal(_cursor!),
+      // Sent, the light stays where it was until the sweep reaches it, then
+      // goes along with it, rather than racing the text back to the start.
+      _Source.caret when sweep != null => _sweeping(box, sweep),
       _Source.caret => widget.focusNode.hasFocus ? _caret(box) : null,
     };
     if (point == null) return;
@@ -239,6 +248,14 @@ class _GaiaTextFieldState extends State<GaiaTextField>
           !(MediaQuery.maybeDisableAnimationsOf(context) ?? false),
     );
     _jump = false;
+  }
+
+  /// Where the light was when sent, or the [sweep] (across the screen) once
+  /// it's passed there, in [box]'s coordinates.
+  Offset _sweeping(RenderBox box, double sweep) {
+    final sent = _sent ??= _target;
+    final x = sweep - box.localToGlobal(Offset.zero).dx;
+    return Offset(math.min(sent.dx, x), sent.dy);
   }
 
   /// The caret's centre in [box]'s coordinates, scrolling included. Null

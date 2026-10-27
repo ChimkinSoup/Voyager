@@ -87,6 +87,10 @@ class GaiaVanishState extends State<GaiaVanish>
   /// any of them and crosses them all at one speed, so each starts to
   /// dissolve only once the line reaches it.
   static void vanishTogether(List<GaiaVanishState> states) {
+    // Reading the text's pixels back takes a few frames, more while the
+    // send rebuilds the window; the sweep makes them up once they're in,
+    // rather than starting late.
+    final sent = Stopwatch()..start();
     final captured = [
       for (final state in states)
         if (state._capture() case final vanishing?) (state, vanishing),
@@ -115,10 +119,23 @@ class GaiaVanishState extends State<GaiaVanish>
       final speed = math.max(8.0, (right - left) / 45);
       // Started together, the tickers step in lockstep from the same frame.
       for (final (state, vanishing) in live) {
-        vanishing.begin(right - vanishing.left, speed);
+        vanishing.begin(right - vanishing.left, speed, sent);
         state._ticker.start();
       }
     });
+  }
+
+  /// Across the screen, where the sweep has reached while it's still
+  /// releasing what was sent: infinite until it starts, null once it's done
+  /// or there's nothing vanishing.
+  double? get sweep {
+    final vanishing = _vanishing;
+    if (vanishing == null ||
+        _fading ||
+        (vanishing.sweep.isFinite && vanishing.swept)) {
+      return null;
+    }
+    return vanishing.left + vanishing.sweep;
   }
 
   _Vanishing? _capture() {
@@ -334,6 +351,9 @@ class _Vanishing extends ChangeNotifier {
   bool get inked => _count > 0;
   double get right => _sourceX[0] + 1;
 
+  /// Where the sweep has reached, from [origin]; infinite until it begins.
+  double get sweep => _sweep;
+
   // Pixels below this alpha are anti-aliasing fringe, not worth a particle.
   static const _minAlpha = 48;
   static const _stepsPerSecond = 60;
@@ -366,6 +386,12 @@ class _Vanishing extends ChangeNotifier {
   double _sweep = double.infinity;
   double _speed = 0;
   int _steps = 0;
+  late final Stopwatch _sent;
+  Duration? _late;
+
+  /// Whether the sweep has made up the time [_sent] says it started late.
+  /// Until then it runs at most twice its speed, so it doesn't burst.
+  var _caughtUp = false;
 
   /// Reads the recorded text back as pixels and turns each into a particle.
   Future<void> sample() async {
@@ -413,23 +439,27 @@ class _Vanishing extends ChangeNotifier {
     _colors = Int32List(count);
   }
 
-  /// Starts the sweep at [sweep] across the text, moving [speed] a step.
-  void begin(double sweep, double speed) {
+  /// Starts the sweep at [sweep] across the text, moving [speed] a step,
+  /// as if it had started when [sent] did.
+  void begin(double sweep, double speed, Stopwatch sent) {
     _sweep = sweep;
     _speed = speed;
+    _sent = sent;
   }
 
   /// Runs the fixed-rate steps due by [elapsed]. False once all are gone.
   bool advance(Duration elapsed) {
-    final due = math.min(
-      elapsed.inMicroseconds *
-          _stepsPerSecond ~/
-          Duration.microsecondsPerSecond,
-      _steps + 4,
-    );
+    // Up to the first frame, on [_sent]'s clock; the ticker's from there.
+    final late = _late ??= _sent.elapsed - elapsed;
+    final owed =
+        (elapsed + late).inMicroseconds *
+        _stepsPerSecond ~/
+        Duration.microsecondsPerSecond;
+    final due = math.min(owed, _steps + (_caughtUp ? 4 : 2));
     for (; _steps < due; _steps++) {
       _step();
     }
+    if (_steps >= owed) _caughtUp = true;
     notifyListeners();
     return _live > 0 || _next < _count;
   }

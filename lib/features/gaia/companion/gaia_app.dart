@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -18,12 +19,14 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
+import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
+import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
@@ -467,14 +470,63 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends StatefulWidget {
   const _Sidebar({required this.controller});
 
   final GaiaController controller;
 
   @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  /// Each chat's tile as last built. Every change to Gaia rebuilds the
+  /// sidebar, and its tiles are costly to build: one whose chat, selection
+  /// and spinner haven't changed is given back as it was, which Flutter
+  /// skips.
+  final _tiles =
+      <String, ({GaiaChat chat, bool selected, bool running, Widget tile})>{};
+
+  @override
+  void didUpdateWidget(_Sidebar old) {
+    super.didUpdateWidget(old);
+    // The tiles' taps go to the controller they were built with.
+    if (widget.controller != old.controller) _tiles.clear();
+  }
+
+  Widget _tile(GaiaChat chat) {
+    final controller = widget.controller;
+    final selected = chat.id == controller.currentChatId;
+    final running = controller.isRunning(chat.id);
+    if (_tiles[chat.id] case final last?
+        when identical(last.chat, chat) &&
+            last.selected == selected &&
+            last.running == running) {
+      return last.tile;
+    }
+    final tile = ListTile(
+      key: ValueKey(chat.id),
+      dense: true,
+      selected: selected,
+      title: Text(chat.title, overflow: TextOverflow.ellipsis),
+      trailing: running ? const GaiaSpinner(size: 18, label: 'Running') : null,
+      onTap: () => controller.selectChat(chat.id),
+    );
+    _tiles[chat.id] = (
+      chat: chat,
+      selected: selected,
+      running: running,
+      tile: tile,
+    );
+    return tile;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final theme = Theme.of(context);
+    final ids = {for (final chat in controller.chats) chat.id};
+    _tiles.removeWhere((id, _) => !ids.contains(id));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -501,18 +553,7 @@ class _Sidebar extends StatelessWidget {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [
-              for (final chat in controller.chats)
-                ListTile(
-                  dense: true,
-                  selected: chat.id == controller.currentChatId,
-                  title: Text(chat.title, overflow: TextOverflow.ellipsis),
-                  trailing: controller.isRunning(chat.id)
-                      ? const GaiaSpinner(size: 18, label: 'Running')
-                      : null,
-                  onTap: () => controller.selectChat(chat.id),
-                ),
-            ],
+            children: [for (final chat in controller.chats) _tile(chat)],
           ),
         ),
         Padding(
@@ -578,6 +619,11 @@ class _MessagesState extends State<_Messages> {
   /// so its glyph can fly there once the new reply's in view.
   String? _held;
 
+  /// Each message's view as last built. Every change to Gaia rebuilds the
+  /// list, and a message's view is costly to build: one whose message and
+  /// placing haven't changed is given back as it was, which Flutter skips.
+  final _views = <String, _MessageView>{};
+
   @override
   void didUpdateWidget(_Messages old) {
     super.didUpdateWidget(old);
@@ -619,23 +665,63 @@ class _MessagesState extends State<_Messages> {
     super.dispose();
   }
 
+  /// A clicked image opens among every image in the chat so far.
+  void _open(GaiaImagePart image) {
+    final images = [
+      for (final message in widget.messages)
+        ...message.parts.whereType<GaiaImagePart>(),
+    ];
+    showGaiaLightbox(
+      context,
+      images: images,
+      initial: images.indexOf(image),
+      imageFile: widget.imageFile,
+    );
+  }
+
+  /// [message]'s view: the one built last time while nothing it shows has
+  /// changed.
+  _MessageView _view(
+    GaiaMessage message, {
+    required double gutter,
+    required GaiaTier? orbTier,
+    required GlobalKey? orbKey,
+  }) {
+    final uploading = {
+      for (final part in message.parts)
+        if (part is GaiaImagePart && widget.uploading.contains(part.mediaId))
+          part.mediaId,
+    };
+    final last = _views[message.id];
+    if (last != null &&
+        identical(last.message, message) &&
+        last.imageFile == widget.imageFile &&
+        last.gutter == gutter &&
+        last.orbTier == orbTier &&
+        identical(last.orbKey, orbKey) &&
+        setEquals(last.uploading, uploading)) {
+      return last;
+    }
+    return _views[message.id] = _MessageView(
+      message: message,
+      imageFile: widget.imageFile,
+      uploading: uploading,
+      onOpen: _open,
+      gutter: gutter,
+      orbTier: orbTier,
+      orbKey: orbKey,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final _Messages(:messages, :imageFile, :uploading, :tier) = widget;
-    // A clicked image opens among every image in the chat so far.
-    void open(GaiaImagePart image) {
-      final images = [
-        for (final message in messages)
-          ...message.parts.whereType<GaiaImagePart>(),
-      ];
-      showGaiaLightbox(
-        context,
-        images: images,
-        initial: images.indexOf(image),
-        imageFile: imageFile,
-      );
-    }
-
+    final _Messages(:messages, :tier) = widget;
+    // Where each message sits in the reversed list.
+    final indices = {
+      for (final (i, message) in messages.indexed)
+        message.id: messages.length - 1 - i,
+    };
+    _views.removeWhere((id, _) => !indices.containsKey(id));
     final held = messages.indexWhere((message) => message.id == _held);
     final latest = held >= 0
         ? held
@@ -656,15 +742,16 @@ class _MessagesState extends State<_Messages> {
             reverse: true,
             padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 16),
             itemCount: messages.length,
+            // A new message shifts the rest along; found by their keys,
+            // they keep their views rather than each taking its neighbour's.
+            findChildIndexCallback: (key) =>
+                indices[(key as ValueKey<String>).value],
             itemBuilder: (context, index) {
               final i = messages.length - 1 - index;
               final message = messages[i];
               final switched = _switchedFrom(messages, i);
-              final view = _MessageView(
-                message: message,
-                imageFile: imageFile,
-                uploading: uploading,
-                onOpen: open,
+              final view = _view(
+                message,
                 gutter: gutter,
                 orbTier: i == latest ? tier : null,
                 orbKey: i == latest
@@ -674,6 +761,7 @@ class _MessagesState extends State<_Messages> {
               // The orb's reply is kept when scrolled out of the list, so
               // its orb doesn't bloom again on coming back.
               return _KeepAlive(
+                key: ValueKey(message.id),
                 keep: i == latest,
                 child: switched == null
                     ? view
@@ -695,7 +783,7 @@ class _MessagesState extends State<_Messages> {
 
 /// Keeps [child] built while scrolled out of its list, when [keep].
 class _KeepAlive extends StatefulWidget {
-  const _KeepAlive({required this.keep, required this.child});
+  const _KeepAlive({super.key, required this.keep, required this.child});
 
   final bool keep;
   final Widget child;
@@ -747,9 +835,7 @@ class _VendorDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    final muted = theme.textTheme.labelSmall?.copyWith(color: kGaiaStatusRose);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -882,7 +968,7 @@ class _MessageView extends StatelessWidget {
               GaiaTextPart(:final text) => SelectableText(text),
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(_activity(tools), style: muted),
+                child: GaiaActivityChip(label: _activity(tools)),
               ),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
@@ -898,7 +984,7 @@ class _MessageView extends StatelessWidget {
                 style: muted?.copyWith(
                   color: message.status == GaiaMessageStatus.error
                       ? theme.colorScheme.error
-                      : null,
+                      : kGaiaStatusRose,
                 ),
               ),
             ),

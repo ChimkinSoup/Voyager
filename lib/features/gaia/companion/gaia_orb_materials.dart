@@ -218,6 +218,12 @@ Color gaiaAstralLight(Color accent) => Color.lerp(accent, Colors.white, 0.72)!;
 /// The Astral orbits' warm gold.
 const kGaiaAstralGold = Color(0xFFFFDF91);
 
+/// A soft rose for the chat's own notices: a reply that didn't finish
+/// normally (Stopped, Interrupted...) and the switch to another CLI, apart
+/// from the gold of tool calls. Not the orb's,
+/// but beside the gold so the two are chosen together.
+const kGaiaStatusRose = Color(0xFFE9A1A8);
+
 const _tau = math.pi * 2;
 const _rayExtension = 1.65;
 
