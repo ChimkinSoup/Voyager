@@ -320,6 +320,10 @@ class GaiaController extends ChangeNotifier {
   /// Each sent image's local file, by media id, as the main instance says.
   final _imageFiles = <String, Future<String?>>{};
 
+  /// A sent message's images still being attached, by the stand-in media
+  /// id its message shows them under until they are.
+  final uploadingImages = <String>{};
+
   /// The [_imageFiles] the main instance said aren't here, to ask again.
   final _missingImages = <String>{};
 
@@ -591,9 +595,16 @@ class GaiaController extends ChangeNotifier {
       ..forEach(_imageFiles.remove)
       ..clear();
     final list = (await _pipe.request('chats'))! as List;
-    chats = [
+    final saved = [
       for (final chat in list)
         GaiaChat.fromJson((chat as Map).cast<String, Object?>()),
+    ];
+    // A new chat isn't saved until its first message's images are attached.
+    chats = [
+      for (final chat in chats)
+        if (_running.contains(chat.id) && !saved.any((c) => c.id == chat.id))
+          chat,
+      ...saved,
     ];
     final current = currentChatId;
     if (current != null &&
@@ -809,21 +820,20 @@ class GaiaController extends ChangeNotifier {
     if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
     var prompt = (await _expand(text.trim())).trim();
     if (prompt.isEmpty && images.isEmpty) return;
-    var chat = currentChat;
-    if (aborted ||
-        draining != null ||
-        _startingChat ||
-        chat != null && _running.contains(chat.id)) {
+    // A chat sent to before its messages came: they're numbered on from.
+    if (currentChatId case final id?
+        when !_messages.containsKey(id) && !_running.contains(id)) {
+      await _load(id);
+    }
+    if (aborted || draining != null || currentRunning) {
       return _giveBack(text, images);
     }
+    var chat = currentChat;
+    final isNew = chat == null;
     // Claimed now, so a second send can't start while this one's images
     // upload or its tier is picked.
     final chatId = chat?.id ?? _uuid.v4();
-    if (chat != null) {
-      _running.add(chatId);
-    } else {
-      _startingChat = true;
-    }
+    _running.add(chatId);
     // Numbered on from the chat's images, so no two of its messages have
     // the same [image N].
     final (relabeled, labeled) = gaiaRelabelDraft(
@@ -831,21 +841,93 @@ class GaiaController extends ChangeNotifier {
       images,
       gaiaNextImageLabel(_messages[chatId] ?? const []),
     );
+    prompt = relabeled;
+    // The summon's window goes with this message only.
+    final context = windowContext;
+    windowContext = null;
+    final sentAt = utcNow();
+    if (chat == null) {
+      // No utility model yet: the title is the first line (§5.1).
+      final firstLine = prompt.isEmpty ? 'Image' : prompt.split('\n').first;
+      chat = GaiaChat(
+        id: chatId,
+        title: firstLine.length > 60
+            ? '${firstLine.substring(0, 60)}…'
+            : firstLine,
+        createdAt: sentAt,
+        updatedAt: sentAt,
+        lastMessageAt: sentAt,
+        tier: nextTier,
+      );
+      chats = [chat, ...chats];
+      currentChatId = chatId;
+    }
+    final list = _messages[chatId] ??= [];
+    // Shown at once, its images from the draft's own files while they're
+    // attached; saved only once they are.
+    final uploading = [for (final _ in labeled) 'uploading-${_uuid.v4()}'];
+    for (final (i, image) in labeled.indexed) {
+      _imageFiles[uploading[i]] = Future.value(image.preview ?? image.path);
+    }
+    uploadingImages.addAll(uploading);
+    var question = GaiaMessage(
+      id: _uuid.v4(),
+      chatId: chatId,
+      seq: list.isEmpty ? 0 : list.last.seq + 1,
+      role: GaiaMessageRole.user,
+      parts: [
+        GaiaTextPart(prompt),
+        for (final (i, image) in labeled.indexed)
+          GaiaImagePart(
+            mediaId: uploading[i],
+            label: image.label,
+            width: 0,
+            height: 0,
+          ),
+        ?context,
+      ],
+      status: GaiaMessageStatus.complete,
+      createdAt: sentAt,
+      updatedAt: sentAt,
+    );
+    list.add(question);
+    notifyListeners();
     final imageParts = <GaiaImagePart>[];
     final imageInputs = <GaiaImageInput>[];
     final referenceIds = <String>[];
     final uploads = <String>[];
-    // Taken off the chat again when the send doesn't happen.
-    void detach() {
+
+    // The send didn't happen: the question comes off the chat, and a new
+    // chat with it, and it all goes back in the draft.
+    void undo() {
       for (final referenceId in referenceIds) {
         unawaited(_request('detachImage', {'referenceId': referenceId}));
       }
+      uploadingImages.removeAll(uploading);
+      uploading.forEach(_imageFiles.remove);
+      list.removeWhere((message) => message.id == question.id);
+      _running.remove(chatId);
+      if (isNew) {
+        chats = [
+          for (final c in chats)
+            if (c.id != chatId) c,
+        ];
+        _messages.remove(chatId);
+        if (currentChatId == chatId) currentChatId = null;
+      }
+      windowContext = context;
+      _giveBack(text, images);
+      _reportRuns();
+      _settleDrain();
     }
 
     // Before anything is saved: an image that can't be attached stops the
-    // send, and it all goes back in the draft.
+    // send.
     for (final image in labeled) {
       try {
+        if (debug.attachDelay > Duration.zero) {
+          await Future<void>.delayed(debug.attachDelay);
+        }
         // Edits are flattened now (§9.4), and a capture is a BMP, which the
         // media module doesn't take.
         final upload = await gaiaUploadablePath(image.path, edits: image.edits);
@@ -875,9 +957,6 @@ class GaiaController extends ChangeNotifier {
         ));
       } catch (error) {
         uploads.forEach(_deleteQuietly);
-        detach();
-        _running.remove(chatId);
-        _startingChat = false;
         _toasts.add((
           chatId: '',
           title: "Couldn't attach ${gaiaImageToken(image.label)}",
@@ -885,64 +964,77 @@ class GaiaController extends ChangeNotifier {
           error: true,
           question: false,
         ));
-        return _giveBack(text, images);
+        return undo();
       }
     }
     uploads.forEach(_deleteQuietly);
-    prompt = relabeled;
-    // The summon's window goes with this message only.
-    final context = windowContext;
-    windowContext = null;
+    if (labeled.isNotEmpty) {
+      uploadingImages.removeAll(uploading);
+      // A lightbox opened on one while it uploaded still asks by it.
+      for (final (i, image) in imageParts.indexed) {
+        _imageFiles[uploading[i]] = _imageFiles[image.mediaId]!;
+      }
+      question = _replace(
+        question,
+        question.copyWith(
+          parts: [GaiaTextPart(prompt), ...imageParts, ?context],
+          bumpVersion: false,
+          touch: false,
+        ),
+      );
+    }
     var tier = nextTier;
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
-    if (chat == null && pickedTier == null) {
+    if (isNew && pickedTier == null) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
       tier = await _utility?.route(prompt) ?? tier;
     } else {
       debugPrint(
         '[gaia] router: skipped, '
-        '${chat != null ? 'not a new chat' : 'tier picked: ${pickedTier!.name}'}',
+        '${!isNew ? 'not a new chat' : 'tier picked: ${pickedTier!.name}'}',
       );
     }
     debugPrint('[gaia] router: sending on ${tier.name}');
+    // Aborted, or the drain cancelled, while its images uploaded or its tier
+    // was picked: no run starts.
+    if (aborted || _drainCancelled) return undo();
     // After the router, so the reply's orb doesn't count it as bloom time.
     final now = utcNow();
     pickedTier = null;
     final agent = agentFor(tier);
-    if (chat == null) {
-      // No utility model yet: the title is the first line (§5.1).
-      final firstLine = prompt.isEmpty ? 'Image' : prompt.split('\n').first;
-      chat = GaiaChat(
-        id: chatId,
-        title: firstLine.length > 60
-            ? '${firstLine.substring(0, 60)}…'
-            : firstLine,
+    // Saved stamped with the reply, as it always was: a message later than
+    // its chat's last has the main instance write the chat again, which
+    // can land over this run's session.
+    question = _replace(
+      question,
+      GaiaMessage(
+        id: question.id,
+        chatId: chatId,
+        seq: question.seq,
+        role: GaiaMessageRole.user,
+        parts: question.parts,
+        status: GaiaMessageStatus.complete,
         createdAt: now,
         updatedAt: now,
-        lastMessageAt: now,
-        tier: tier,
-      );
-      chats = [chat, ...chats];
-      _messages[chatId] = [];
-      currentChatId = chatId;
-      _running.add(chatId);
-      _startingChat = false;
+      ),
+    );
+    if (isNew) {
+      chat = chat.copyWith(tier: tier, lastMessageAt: now);
+      chats = [for (final c in chats) c.id == chatId ? chat : c];
       try {
         await _pipe.request('putChat', {'chat': chat.toJson()});
       } on GaiaPipeException catch (error) {
         // The main instance is going away: no run whose chat can't be kept.
         debugPrint('[gaia] chat not saved, not sending: $error');
-        chats = [
-          for (final c in chats)
-            if (c.id != chatId) c,
-        ];
-        _messages.remove(chatId);
-        _running.remove(chatId);
-        if (currentChatId == chatId) currentChatId = null;
-        detach();
-        windowContext = context;
-        return _giveBack(text, images);
+        _toasts.add((
+          chatId: '',
+          title: "Couldn't start the chat",
+          body: error.message,
+          error: true,
+          question: false,
+        ));
+        return undo();
       }
     }
     // Sent: the main instance keeps its own copies.
@@ -960,24 +1052,12 @@ class GaiaController extends ChangeNotifier {
       lastTier = tier;
       unawaited(_request('setLastTier', {'tier': tier.name}));
     }
-    final list = _messages[chatId] ??= [];
     final script = debug.scriptFor(prompt);
     final runner = agent == null ? null : _runners[agent.adapter];
-    final seq = list.isEmpty ? 0 : list.last.seq + 1;
-    final question = GaiaMessage(
-      id: _uuid.v4(),
-      chatId: chatId,
-      seq: seq,
-      role: GaiaMessageRole.user,
-      parts: [GaiaTextPart(prompt), ...imageParts, ?context],
-      status: GaiaMessageStatus.complete,
-      createdAt: now,
-      updatedAt: now,
-    );
     var reply = GaiaMessage(
       id: _uuid.v4(),
       chatId: chatId,
-      seq: seq + 1,
+      seq: question.seq + 1,
       role: GaiaMessageRole.assistant,
       parts: const [],
       status: GaiaMessageStatus.streaming,
@@ -986,7 +1066,7 @@ class GaiaController extends ChangeNotifier {
       model: script == null ? agent?.model : 'gaia-debug-script',
       adapter: script == null ? agent?.adapter : null,
     );
-    list.addAll([question, reply]);
+    list.add(reply);
     _moveToTop(chatId, now);
     _reportRuns();
     notifyListeners();
@@ -1036,7 +1116,7 @@ class GaiaController extends ChangeNotifier {
       List<GaiaMessage> unseen() => gaiaUnseenTurns(
         _messages[chatId] ?? list,
         lastSeq: session?.lastSeq ?? -1,
-        beforeSeq: seq,
+        beforeSeq: question.seq,
       );
       final captioning = unseen();
       if (captioning.isEmpty) return asked;
@@ -1192,9 +1272,6 @@ class GaiaController extends ChangeNotifier {
     }
     _settleDrain();
   }
-
-  /// A new chat's first send is under way, before the chat exists.
-  var _startingChat = false;
 
   /// A send that didn't happen: its [text] and [images] go back in the
   /// draft, the text unless the user has typed again.

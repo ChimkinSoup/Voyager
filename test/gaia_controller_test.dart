@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -117,6 +118,7 @@ class _Main {
         aborted = false;
         return null;
       case 'attachImage':
+        await holdImages?.future;
         if (attached.length >= refuseImagesAfter) {
           throw StateError('That image could not be read.');
         }
@@ -143,6 +145,9 @@ class _Main {
 
   /// Each `attachImage`, in order.
   final attached = <({String chatId, String path})>[];
+
+  /// Each `attachImage` waits on it while it's set.
+  Completer<void>? holdImages;
 
   /// How many `attachImage`s succeed before the rest are refused.
   var refuseImagesAfter = 1 << 30;
@@ -403,6 +408,94 @@ void main() {
       expect(drafts.listSync(), isEmpty);
     });
 
+    test('a sent message shows at once, its images uploading from the '
+        "draft's files, and is saved once they're attached", () async {
+      main.holdImages = Completer();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      controller.draft.text = 'Look';
+      await controller.attachImage(Uint8List.fromList([1, 2, 3]));
+      final sending = controller.send(
+        controller.draft.text,
+        images: controller.takeDraftImages(),
+      );
+      await settle();
+
+      final shown = controller.messages.single;
+      expect(shown.text, 'Look [image 1]');
+      final image = shown.parts.whereType<GaiaImagePart>().single;
+      expect(controller.uploadingImages, {image.mediaId});
+      expect(
+        p.dirname((await controller.imageFile(image.mediaId))!),
+        drafts.path,
+      );
+      expect(controller.currentRunning, isTrue);
+      expect(await main.store.chats(), isEmpty);
+      expect(runner.sent, isEmpty);
+
+      main.holdImages!.complete();
+      await sending;
+      await settle();
+      expect(controller.uploadingImages, isEmpty);
+      // A lightbox opened on it while it uploaded finds the stored file.
+      expect(await controller.imageFile(image.mediaId), 'stored-1.jpg');
+      final question = controller.messages.first;
+      expect(question.id, shown.id);
+      expect(
+        question.parts.whereType<GaiaImagePart>().single.mediaId,
+        'media-1',
+      );
+      expect((await main.messages()).first.id, shown.id);
+      expect(runner.sent.single.prompt, 'Look [image 1]');
+    });
+
+    /// A send of 'Look' with one image, held uploading until
+    /// [main.holdImages] completes.
+    late Future<void> held;
+    Future<void> sendHeld() async {
+      main.holdImages = Completer();
+      controller.draft.text = 'Look';
+      await controller.attachImage(Uint8List.fromList([1]));
+      final text = controller.draft.text;
+      final images = controller.takeDraftImages();
+      controller.draft.clear();
+      held = controller.send(text, images: images);
+      await settle();
+    }
+
+    void expectGivenBack() {
+      expect(runner.sent, isEmpty);
+      expect(controller.chats, isEmpty);
+      expect(controller.messages, isEmpty);
+      expect(controller.draft.text, 'Look [image 1]');
+      expect(main.detached, ['ref-1']);
+    }
+
+    test('a drain cancelled while the images upload starts no run, and '
+        'says drained', () async {
+      await sendHeld();
+      expect(await main.pipe.request('drain'), {'running': 1});
+      await controller.cancelDrain();
+      main.holdImages!.complete();
+      await held;
+      await settle();
+
+      expectGivenBack();
+      expect(await main.store.chats(), isEmpty);
+      expect(controller.draining, isNull);
+      expect(main.events.map((e) => e.$1), contains('drained'));
+    });
+
+    test('an Abort while the images upload starts no run', () async {
+      await sendHeld();
+      await main.pipe.request('abort');
+      main.holdImages!.complete();
+      await held;
+      await settle();
+
+      expectGivenBack();
+      expect(await main.store.chats(), isEmpty);
+    });
+
     test("a later message's images number on from the chat's", () async {
       runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
       // As the composer sends: the draft is taken, and its token edited
@@ -554,6 +647,10 @@ void main() {
 
       expect(runner.sent, isEmpty);
       expect(await main.store.chats(), isEmpty);
+      // The message shown while they uploaded, and its new chat, are gone.
+      expect(controller.chats, isEmpty);
+      expect(controller.currentChatId, isNull);
+      expect(controller.uploadingImages, isEmpty);
       expect(main.detached, ['ref-1']);
       expect(controller.draft.text, 'Look [image 1] [image 2]');
       expect(controller.draftImages.map((image) => image.label), [1, 2]);

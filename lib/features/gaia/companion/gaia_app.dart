@@ -207,6 +207,7 @@ class _GaiaShell extends StatelessWidget {
                     ? _lastTurns(controller.messages, 3)
                     : controller.messages,
                 imageFile: controller.imageFile,
+                uploading: controller.uploadingImages,
                 tier: controller.nextTier,
                 running: controller.currentRunning,
               ),
@@ -543,12 +544,16 @@ class _Messages extends StatefulWidget {
   const _Messages({
     required this.messages,
     required this.imageFile,
+    required this.uploading,
     required this.tier,
     required this.running,
   });
 
   final List<GaiaMessage> messages;
   final Future<String?> Function(String mediaId) imageFile;
+
+  /// The media ids of sent images still being attached.
+  final Set<String> uploading;
 
   /// The one the next message goes on, which the latest reply's orb
   /// compacts into.
@@ -622,7 +627,7 @@ class _MessagesState extends State<_Messages> {
 
   @override
   Widget build(BuildContext context) {
-    final _Messages(:messages, :imageFile, :tier) = widget;
+    final _Messages(:messages, :imageFile, :uploading, :tier) = widget;
     // A clicked image opens among every image in the chat so far.
     void open(GaiaImagePart image) {
       final images = [
@@ -664,6 +669,7 @@ class _MessagesState extends State<_Messages> {
               final view = _MessageView(
                 message: message,
                 imageFile: imageFile,
+                uploading: uploading,
                 onOpen: open,
                 gutter: gutter,
                 orbTier: i == latest ? tier : null,
@@ -774,6 +780,7 @@ class _MessageView extends StatelessWidget {
   const _MessageView({
     required this.message,
     required this.imageFile,
+    required this.uploading,
     required this.onOpen,
     required this.gutter,
     required this.orbTier,
@@ -782,6 +789,7 @@ class _MessageView extends StatelessWidget {
 
   final GaiaMessage message;
   final Future<String?> Function(String mediaId) imageFile;
+  final Set<String> uploading;
   final void Function(GaiaImagePart image) onOpen;
 
   /// The list's margin either side of the messages.
@@ -821,6 +829,7 @@ class _MessageView extends StatelessWidget {
                       file: imageFile(image.mediaId),
                       label: image.label,
                       height: 96,
+                      uploading: uploading.contains(image.mediaId),
                       onTap: () => onOpen(image),
                     ),
                 ],

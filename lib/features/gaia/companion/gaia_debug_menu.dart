@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
@@ -128,6 +132,30 @@ class _DebugMenu extends StatelessWidget {
               controller.send(key);
             },
           ),
+        heading('Sending images'),
+        Text(
+          "A message shows as soon as it's sent. Its images stay dimmed under "
+          "a spinner until they're attached, then Gaia's reply starts.",
+          style: muted,
+        ),
+        const _UploadPreview(),
+        _SliderRow(
+          label: 'Wait to attach',
+          value: debug.attachDelay.inMilliseconds / 1000,
+          max: 10,
+          divisions: 20,
+          display:
+              '${(debug.attachDelay.inMilliseconds / 1000).toStringAsFixed(1)} s',
+          onChanged: (seconds, {required save}) => debug.setAttachDelay(
+            Duration(milliseconds: (seconds * 1000).round()),
+            save: save,
+          ),
+        ),
+        Text(
+          'Holds each image of a real send this long before attaching it, to '
+          'watch it upload in the chat.',
+          style: muted,
+        ),
         heading('Toasts'),
         Text(
           "Gaia's own toast, shown now. Hover holds it; a click dismisses it.",
@@ -209,6 +237,138 @@ class _DebugMenu extends StatelessWidget {
           ),
           value: debug.allowScreenshots,
           onChanged: debug.setAllowScreenshots,
+        ),
+      ],
+    );
+  }
+}
+
+/// A sent message with two images, uploading and then attached.
+class _UploadPreview extends StatefulWidget {
+  const _UploadPreview();
+
+  @override
+  State<_UploadPreview> createState() => _UploadPreviewState();
+}
+
+class _UploadPreviewState extends State<_UploadPreview> {
+  late final Future<String?> _image = _paintImage();
+  var _uploading = true;
+  Timer? _done;
+
+  @override
+  void initState() {
+    super.initState();
+    _finishLater();
+  }
+
+  @override
+  void dispose() {
+    _done?.cancel();
+    unawaited(
+      _image.then((path) => File(path!).delete()).then((_) {}, onError: (_) {}),
+    );
+    super.dispose();
+  }
+
+  void _send() {
+    setState(() => _uploading = true);
+    _finishLater();
+  }
+
+  void _finishLater() {
+    _done?.cancel();
+    _done = Timer(const Duration(milliseconds: 2500) * timeDilation, () {
+      if (mounted) setState(() => _uploading = false);
+    });
+  }
+
+  /// A dusk sky with a sun, in a file of this preview's own (deleted with
+  /// it) that the thumbnails can read.
+  static Future<String?> _paintImage() async {
+    const size = Size(160, 110);
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder)
+      ..drawRect(
+        Offset.zero & size,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF2B3A78), Color(0xFFE39A5B)],
+          ).createShader(Offset.zero & size),
+      )
+      ..drawCircle(
+        const Offset(112, 74),
+        18,
+        Paint()..color = const Color(0xFFFFE2A8),
+      );
+    final image = await recorder.endRecording().toImage(160, 110);
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    final file = File(
+      p.join(
+        Directory.systemTemp.path,
+        'gaia-debug-image-$pid-${DateTime.now().microsecondsSinceEpoch}.png',
+      ),
+    );
+    await file.writeAsBytes(png!.buffer.asUint8List());
+    return file.path;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final label in [1, 2])
+                    GaiaImageThumb(
+                      file: _image,
+                      label: label,
+                      height: 96,
+                      uploading: _uploading,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.92,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text("What's different between these two?"),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            icon: Icons.send,
+            label: 'Send again',
+            onPressed: _send,
+          ),
         ),
       ],
     );

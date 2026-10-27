@@ -7,7 +7,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 /// corner (GAIA_HLD.md §9.3): the file at [path], or the one [file]
 /// resolves to, which is null while the image isn't on this device and
 /// shows a placeholder. [onRemove] adds a close button; [onTap] makes it
-/// clickable.
+/// clickable. While [uploading], it's dimmed under a spinner.
 class GaiaImageThumb extends StatelessWidget {
   const GaiaImageThumb({
     super.key,
@@ -17,6 +17,7 @@ class GaiaImageThumb extends StatelessWidget {
     required this.height,
     this.onTap,
     this.onRemove,
+    this.uploading = false,
   });
 
   final Future<String?>? file;
@@ -25,6 +26,7 @@ class GaiaImageThumb extends StatelessWidget {
   final double height;
   final VoidCallback? onTap;
   final VoidCallback? onRemove;
+  final bool uploading;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +53,9 @@ class GaiaImageThumb extends StatelessWidget {
                 height: height,
                 fit: BoxFit.contain,
                 cacheHeight: (height * ratio).round(),
+                // The draft's file swapped for the stored one once uploaded,
+                // without a blank frame between.
+                gaplessPlayback: true,
                 errorBuilder: (context, _, _) => SizedBox.square(
                   dimension: height,
                   child: const Icon(Icons.broken_image_outlined),
@@ -66,8 +71,24 @@ class GaiaImageThumb extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: image,
+                    child: AnimatedOpacity(
+                      opacity: uploading ? 0.45 : 1,
+                      duration: const Duration(milliseconds: 200),
+                      child: image,
+                    ),
                   ),
+                  if (uploading)
+                    const Positioned.fill(
+                      child: Center(
+                        child: SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
                   Positioned(
                     left: 4,
                     bottom: 4,

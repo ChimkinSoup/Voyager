@@ -26,6 +26,10 @@ class GaiaDebug extends ChangeNotifier {
   /// one spends thinking.
   var replyDelay = const Duration(milliseconds: 1500);
 
+  /// How long each of a sent message's images waits before it's attached,
+  /// to see the message's images uploading.
+  var attachDelay = Duration.zero;
+
   /// One of [kGaiaDebugStreamSpeeds].
   var streamSpeed = 400;
 
@@ -49,8 +53,10 @@ class GaiaDebug extends ChangeNotifier {
       final json = jsonDecode(await file.readAsString()) as Map;
       final delayMs =
           (json['replyDelayMs'] as int?) ?? replyDelay.inMilliseconds;
+      final attachMs = (json['attachDelayMs'] as int?) ?? 0;
       scriptedReplies = json['scriptedReplies'] == true;
       replyDelay = Duration(milliseconds: delayMs);
+      attachDelay = Duration(milliseconds: attachMs);
       if (json['streamSpeed'] case final int speed
           when kGaiaDebugStreamSpeeds.contains(speed)) {
         streamSpeed = speed;
@@ -73,6 +79,9 @@ class GaiaDebug extends ChangeNotifier {
   /// Not [save]d mid-drag: the slider saves once it's let go.
   Future<void> setReplyDelay(Duration value, {bool save = true}) =>
       _set(() => replyDelay = value, save: save);
+
+  Future<void> setAttachDelay(Duration value, {bool save = true}) =>
+      _set(() => attachDelay = value, save: save);
 
   Future<void> setStreamSpeed(int value, {bool save = true}) =>
       _set(() => streamSpeed = value, save: save);
@@ -120,6 +129,7 @@ class GaiaDebug extends ChangeNotifier {
         jsonEncode({
           'scriptedReplies': scriptedReplies,
           'replyDelayMs': replyDelay.inMilliseconds,
+          'attachDelayMs': attachDelay.inMilliseconds,
           'streamSpeed': streamSpeed,
           'showFps': showFps,
           'slowAnimations': slowAnimations,
