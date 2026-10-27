@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
+import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 
 /// The annotation editor (GAIA_HLD.md §9.4).
 void main() {
@@ -49,7 +50,7 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
       );
       await tester.pump();
-      if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+      if (find.byType(GaiaSpinner).evaluate().isEmpty) break;
     }
     await tester.pump(const Duration(milliseconds: 500));
     return result;

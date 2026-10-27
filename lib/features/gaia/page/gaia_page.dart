@@ -17,6 +17,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
@@ -160,10 +161,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
             ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: const SizedBox.square(
-                dimension: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              leading: const GaiaSpinner(size: 20, label: 'Running'),
               title: Text(
                 run.title.isEmpty ? 'New chat' : run.title,
                 overflow: TextOverflow.ellipsis,
@@ -305,10 +303,7 @@ class _ChatRow extends ConsumerWidget {
           if (running)
             const Padding(
               padding: EdgeInsets.only(right: 8),
-              child: SizedBox.square(
-                dimension: 12,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              child: GaiaSpinner(size: 20, label: 'Running'),
             ),
           IconButton(
             tooltip: chat.pinned ? 'Unpin' : 'Pin',

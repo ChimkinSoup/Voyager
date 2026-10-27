@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 
 /// An isolated Astral core study with state, arrival, light and size previews.
 /// The preview's own stars gather into it without changing the live chat.
@@ -148,9 +149,42 @@ class _GaiaOrbStudioState extends State<GaiaOrbStudio> {
         ),
         const SizedBox(height: 8),
         study(GaiaOrbDesign.astral),
+        const SizedBox(height: 20),
+        Text('Loading spinner', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Text('Astral core, reduced to two orbits and a light.', style: muted),
+        const SizedBox(height: 12),
+        const Wrap(
+          spacing: 20,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _SpinnerSample(size: 12),
+            _SpinnerSample(size: 16),
+            _SpinnerSample(size: 24),
+            _SpinnerSample(size: 36),
+          ],
+        ),
       ],
     );
   }
+}
+
+class _SpinnerSample extends StatelessWidget {
+  const _SpinnerSample({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      SizedBox.square(
+        dimension: 44,
+        child: Center(child: GaiaSpinner(size: size)),
+      ),
+      Text('${size.round()} px', style: Theme.of(context).textTheme.bodySmall),
+    ],
+  );
 }
 
 /// Every thinking and replying style side by side, each looping its own

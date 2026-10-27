@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
+import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 
 /// Opens the annotation editor (GAIA_HLD.md §9.4) on the image at [path],
 /// starting from [edits]. Returns the edits as the user left them, or null
@@ -355,7 +356,7 @@ class _EditorState extends State<_Editor> {
             const Divider(height: 1),
             Expanded(
               child: image == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: GaiaSpinner(size: 48))
                   : Padding(
                       padding: const EdgeInsets.all(12),
                       child: _Canvas(

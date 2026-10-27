@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 
 /// The light's pace around the ring, as [GaiaButton]'s: a turn every 16s.
 const _spin = math.pi / 8;
@@ -16,16 +17,27 @@ const _dwell = Duration(seconds: 4);
 
 OverlayEntry? _current;
 
+/// What a toast is about, drawn at its core by [GaiaToastOrbIcon].
+enum GaiaToastMark {
+  done('Done'),
+  question('Question'),
+  error('Error'),
+  info('Info');
+
+  const GaiaToastMark(this.label);
+
+  final String label;
+}
+
 /// Shows a toast over Gaia's content, below the header: [GaiaButton]'s
-/// ring and circling light around an [icon], a [title] and a [body]. One at
+/// ring and circling light around a [mark], a [title] and a [body]. One at
 /// a time, so a new one replaces the last. It goes after a few seconds
 /// unless the cursor is on it; a click dismisses it, after [onTap].
 void showGaiaToast(
   BuildContext context, {
   required String title,
   required String body,
-  required IconData icon,
-  Color? iconColor,
+  required GaiaToastMark mark,
   VoidCallback? onTap,
 }) {
   _current?.remove();
@@ -34,8 +46,7 @@ void showGaiaToast(
     builder: (_) => _GaiaToast(
       title: title,
       body: body,
-      icon: icon,
-      iconColor: iconColor,
+      mark: mark,
       onTap: onTap,
       onGone: () {
         if (_current != entry) return;
@@ -52,16 +63,14 @@ class _GaiaToast extends StatefulWidget {
   const _GaiaToast({
     required this.title,
     required this.body,
-    required this.icon,
-    required this.iconColor,
+    required this.mark,
     required this.onTap,
     required this.onGone,
   });
 
   final String title;
   final String body;
-  final IconData icon;
-  final Color? iconColor;
+  final GaiaToastMark mark;
   final VoidCallback? onTap;
   final VoidCallback onGone;
 
@@ -219,11 +228,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    widget.icon,
-                    size: 20,
-                    color: widget.iconColor ?? Colors.white,
-                  ),
+                  GaiaToastOrbIcon(mark: widget.mark),
                   const SizedBox(width: 12),
                   Flexible(
                     child: Column(
@@ -261,4 +266,164 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+/// An Astral orbit framing a drawn status mark, with a finite arrival animation.
+class GaiaToastOrbIcon extends StatefulWidget {
+  const GaiaToastOrbIcon({super.key, required this.mark, this.size = 36});
+
+  final GaiaToastMark mark;
+  final double size;
+
+  @override
+  State<GaiaToastOrbIcon> createState() => _GaiaToastOrbIconState();
+}
+
+class _GaiaToastOrbIconState extends State<GaiaToastOrbIcon>
+    with SingleTickerProviderStateMixin {
+  late final _arrival = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _arrival.value = 1;
+    } else if (_arrival.value < 1 && !_arrival.isAnimating) {
+      _arrival.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _arrival.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: widget.mark.label,
+    image: true,
+    child: SizedBox.square(
+      dimension: widget.size,
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _ToastMarkPainter(
+            arrival: _arrival,
+            mark: widget.mark,
+            accent: Theme.of(context).colorScheme.primary,
+            error: Theme.of(context).colorScheme.error,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _ToastMarkPainter extends CustomPainter {
+  _ToastMarkPainter({
+    required this.arrival,
+    required this.mark,
+    required this.accent,
+    required this.error,
+  }) : super(repaint: arrival);
+
+  final Animation<double> arrival;
+  final GaiaToastMark mark;
+  final Color accent;
+  final Color error;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final d = size.shortestSide;
+    final light = gaiaAstralLight(accent);
+    const gold = kGaiaAstralGold;
+    final progress = Curves.easeOutCubic.transform(arrival.value);
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.scale(d / 36);
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // Open, intersecting orbital arcs leave space for the mark at the core.
+    for (var orbit = 0; orbit < 2; orbit++) {
+      final tint = orbit == 0 ? light : gold;
+      canvas.save();
+      canvas.rotate((orbit == 0 ? -0.55 : 0.7) + (1 - progress) * 0.45);
+      final bounds = Rect.fromCenter(
+        center: Offset.zero,
+        width: 31,
+        height: orbit == 0 ? 25 : 22,
+      );
+      final start = orbit == 0 ? -2.8 : 0.3;
+      final sweep = math.pi * (1.3 + progress * 0.35);
+      canvas.drawArc(
+        bounds,
+        start,
+        sweep,
+        false,
+        line..color = tint.withValues(alpha: 0.25 + progress * 0.35),
+      );
+      final end = start + sweep;
+      canvas.drawCircle(
+        Offset(
+          bounds.width / 2 * math.cos(end),
+          bounds.height / 2 * math.sin(end),
+        ),
+        1.15,
+        Paint()..color = tint,
+      );
+      canvas.restore();
+    }
+
+    final symbol = (mark == GaiaToastMark.error ? error : light).withValues(
+      alpha: 0.35 + progress * 0.65,
+    );
+    canvas.save();
+    // Every mark arrives from its centre on the same curve. Drawing each
+    // path progressively made punctuation grow in opposite directions.
+    canvas.scale(0.82 + progress * 0.18);
+    line
+      ..color = symbol
+      ..strokeWidth = 2.5;
+    final path = Path();
+    switch (mark) {
+      case GaiaToastMark.done:
+        path.moveTo(-6, 0);
+        path.lineTo(-1.5, 4.5);
+        path.lineTo(6, -4.5);
+      case GaiaToastMark.question:
+        path.moveTo(-4, -4);
+        path.cubicTo(-4, -10, 7, -10, 4, -3);
+        path.cubicTo(3, -1, 0, -1, 0, 2);
+      case GaiaToastMark.error:
+        path.moveTo(0, -7);
+        path.lineTo(0, 2);
+      case GaiaToastMark.info:
+        path.moveTo(0, -1);
+        path.lineTo(0, 7);
+    }
+    canvas.drawPath(path, line);
+    if (mark != GaiaToastMark.done) {
+      canvas.drawCircle(
+        Offset(0, mark == GaiaToastMark.info ? -6 : 6.5),
+        1.45,
+        Paint()..color = symbol,
+      );
+    }
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_ToastMarkPainter oldDelegate) =>
+      oldDelegate.mark != mark ||
+      oldDelegate.accent != accent ||
+      oldDelegate.error != error ||
+      oldDelegate.arrival != arrival;
 }

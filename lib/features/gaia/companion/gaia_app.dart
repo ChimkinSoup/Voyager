@@ -23,6 +23,7 @@ import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
@@ -150,12 +151,11 @@ class _RunToastsState extends State<_RunToasts> {
     if (!mounted) return;
     showGaiaToast(
       context,
-      icon: toast.error
-          ? Icons.error_outline
+      mark: toast.error
+          ? GaiaToastMark.error
           : toast.question
-          ? Icons.help_outline
-          : Icons.check_circle_outline,
-      iconColor: toast.error ? Theme.of(context).colorScheme.error : null,
+          ? GaiaToastMark.question
+          : GaiaToastMark.done,
       title: toast.title,
       body: toast.body,
       onTap: toast.chatId.isEmpty
@@ -293,13 +293,7 @@ class _PickUpPill extends StatelessWidget {
         child: Row(
           children: [
             const SizedBox(width: 14),
-            SizedBox.square(
-              dimension: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: theme.colorScheme.primary,
-              ),
-            ),
+            const GaiaSpinner(size: 20, label: 'Picking up'),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -511,10 +505,7 @@ class _Sidebar extends StatelessWidget {
                   selected: chat.id == controller.currentChatId,
                   title: Text(chat.title, overflow: TextOverflow.ellipsis),
                   trailing: controller.isRunning(chat.id)
-                      ? const SizedBox.square(
-                          dimension: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const GaiaSpinner(size: 18, label: 'Running')
                       : null,
                   onTap: () => controller.selectChat(chat.id),
                 ),

@@ -13,6 +13,7 @@ import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
+import 'package:voyager/features/gaia/companion/gaia_toast_icon_studio.dart';
 
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
 /// replies, toast and loading-animation previews and display toggles, kept
@@ -156,6 +157,8 @@ class _DebugMenu extends StatelessWidget {
           'watch it upload in the chat.',
           style: muted,
         ),
+        heading('Toast icon studies'),
+        const GaiaToastIconStudio(),
         heading('Toasts'),
         Text(
           "Gaia's own toast, shown now. Hover holds it; a click dismisses it.",
@@ -170,7 +173,7 @@ class _DebugMenu extends StatelessWidget {
               label: 'Done',
               onPressed: () => showGaiaToast(
                 context,
-                icon: Icons.check_circle_outline,
+                mark: GaiaToastMark.done,
                 title: 'Gaia is done',
                 body:
                     'Debug chat: Fixed. dispose now cancels the timer, and all '
@@ -181,7 +184,7 @@ class _DebugMenu extends StatelessWidget {
               label: 'Question',
               onPressed: () => showGaiaToast(
                 context,
-                icon: Icons.help_outline,
+                mark: GaiaToastMark.question,
                 title: 'Gaia has a question',
                 body: 'Debug chat: Which would you rather I do?',
               ),
@@ -190,8 +193,7 @@ class _DebugMenu extends StatelessWidget {
               label: 'Error',
               onPressed: () => showGaiaToast(
                 context,
-                icon: Icons.error_outline,
-                iconColor: Theme.of(context).colorScheme.error,
+                mark: GaiaToastMark.error,
                 title: 'Gaia ran into an error',
                 body: 'Debug chat: Claude Code exited (code 1)',
               ),
@@ -200,7 +202,7 @@ class _DebugMenu extends StatelessWidget {
               label: 'Long',
               onPressed: () => showGaiaToast(
                 context,
-                icon: Icons.info_outline,
+                mark: GaiaToastMark.info,
                 title: 'A toast with a long body',
                 body:
                     'It runs well past two lines, so the end of it should '

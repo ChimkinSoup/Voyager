@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 
 /// An attached image as a thumbnail [height] tall, its `[image N]` over its
 /// corner (GAIA_HLD.md §9.3): the file at [path], or the one [file]
@@ -80,12 +81,10 @@ class GaiaImageThumb extends StatelessWidget {
                   if (uploading)
                     const Positioned.fill(
                       child: Center(
-                        child: SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                        child: GaiaSpinner(
+                          size: 32,
+                          color: Colors.white,
+                          label: 'Uploading',
                         ),
                       ),
                     ),

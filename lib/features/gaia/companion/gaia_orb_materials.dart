@@ -211,6 +211,13 @@ const kGaiaAstralArrivalTime = 1.25;
 const kGaiaAstralGatherTime = 1.15;
 const kGaiaAstralUnfurlTime = 1.0;
 
+/// The Astral core's white light, tinted a little by [accent]. The spinner
+/// and toast marks share it with the orb.
+Color gaiaAstralLight(Color accent) => Color.lerp(accent, Colors.white, 0.72)!;
+
+/// The Astral orbits' warm gold.
+const kGaiaAstralGold = Color(0xFFFFDF91);
+
 const _tau = math.pi * 2;
 const _rayExtension = 1.65;
 
@@ -1045,7 +1052,7 @@ void paintGaiaMaterialOrb(
     devicePixelRatio,
   );
   final burst = burstAge < 2.8 ? math.sin(math.pi * burstAge / 2.8) : 0.0;
-  final light = Color.lerp(accent, Colors.white, 0.72)!;
+  final light = gaiaAstralLight(accent);
   // Fully invisible materials need no geometry, shaders, glow passes or sort.
   // Leave the glyph draw below intact; no nonzero-opacity frame is skipped.
   if (scene.opacity > 0 && gather < 1) {
@@ -1172,7 +1179,7 @@ void _astral(
   double revealAge,
   _Study study,
 ) {
-  const gold = Color(0xFFFFDF91);
+  const gold = kGaiaAstralGold;
   final pulse =
       1 +
       study.classicReply * 0.1 * math.sin(t * 5) +
@@ -1498,7 +1505,7 @@ void _floatingInterior(
           (1 - inward);
     }
     final color = Color.lerp(
-      i % 7 == 0 ? const Color(0xFFFFDF91) : light,
+      i % 7 == 0 ? kGaiaAstralGold : light,
       accent,
       gather,
     )!;
