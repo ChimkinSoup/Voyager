@@ -245,8 +245,8 @@ class _GaiaShell extends StatelessWidget {
                     ? chat()
                     : GaiaSidebarLayout(
                         sidebar: controller.sidebar,
-                        // A Material, which the chat list's tiles paint
-                        // their selection and ink on.
+                        // A Material, which the sidebar's buttons paint
+                        // their ink on.
                         side: Material(
                           color: Theme.of(context).scaffoldBackgroundColor,
                           child: _Sidebar(controller: controller),
@@ -551,9 +551,22 @@ class _SidebarState extends State<_Sidebar> {
           ),
         ),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [for (final chat in controller.chats) _tile(chat)],
+          // The tiles' highlight and splash paint on this Material, clipped
+          // to the list rather than spilling past it when scrolled.
+          child: ClipRect(
+            child: Material(
+              type: MaterialType.transparency,
+              child: ScrollConfiguration(
+                // Scrolls without a bar.
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: [for (final chat in controller.chats) _tile(chat)],
+                ),
+              ),
+            ),
           ),
         ),
         Padding(
