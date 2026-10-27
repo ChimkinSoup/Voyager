@@ -22,6 +22,11 @@ class GaiaDebug extends ChangeNotifier {
   /// reply, played through the real reply path, instead of a CLI run.
   var scriptedReplies = false;
 
+  /// Every other message gets [gaiaDummyScript]'s reply too, and nothing
+  /// reaches a provider: not the agent, nor the utility model's router or
+  /// titles.
+  var dummyMode = false;
+
   /// How long a scripted reply waits before its first word: the time a real
   /// one spends thinking.
   var replyDelay = const Duration(milliseconds: 1500);
@@ -55,6 +60,7 @@ class GaiaDebug extends ChangeNotifier {
           (json['replyDelayMs'] as int?) ?? replyDelay.inMilliseconds;
       final attachMs = (json['attachDelayMs'] as int?) ?? 0;
       scriptedReplies = json['scriptedReplies'] == true;
+      dummyMode = json['dummyMode'] == true;
       replyDelay = Duration(milliseconds: delayMs);
       attachDelay = Duration(milliseconds: attachMs);
       if (json['streamSpeed'] case final int speed
@@ -76,6 +82,8 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setScriptedReplies(bool value) =>
       _set(() => scriptedReplies = value);
 
+  Future<void> setDummyMode(bool value) => _set(() => dummyMode = value);
+
   /// Not [save]d mid-drag: the slider saves once it's let go.
   Future<void> setReplyDelay(Duration value, {bool save = true}) =>
       _set(() => replyDelay = value, save: save);
@@ -94,10 +102,13 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setAllowScreenshots(bool value) =>
       _set(() => allowScreenshots = value);
 
-  /// The script [prompt] calls for, while [scriptedReplies] is on.
+  /// The script [prompt] calls for, while [scriptedReplies] is on, else
+  /// [gaiaDummyScript] while [dummyMode] is.
   GaiaDebugScript? scriptFor(String prompt) {
-    if (!scriptedReplies) return null;
-    return gaiaDebugScripts[prompt.trim().toLowerCase()];
+    final script = scriptedReplies
+        ? gaiaDebugScripts[prompt.trim().toLowerCase()]
+        : null;
+    return script ?? (dummyMode ? gaiaDummyScript : null);
   }
 
   Future<void> _set(void Function() change, {bool save = true}) {
@@ -128,6 +139,7 @@ class GaiaDebug extends ChangeNotifier {
       await file.writeAsString(
         jsonEncode({
           'scriptedReplies': scriptedReplies,
+          'dummyMode': dummyMode,
           'replyDelayMs': replyDelay.inMilliseconds,
           'attachDelayMs': attachDelay.inMilliseconds,
           'streamSpeed': streamSpeed,
@@ -293,6 +305,13 @@ class GaiaScriptedRunner {
     turn.completeError(GaiaRunException('Claude Code exited (code 1)'));
   }
 }
+
+/// Dummy mode's reply, to every message.
+const gaiaDummyScript = GaiaDebugScript('Dummy mode', [
+  GaiaDebugText(
+    'Dummy reply: dummy mode is on, so this never reached a provider.',
+  ),
+]);
 
 /// The scripts, by command.
 final Map<String, GaiaDebugScript> gaiaDebugScripts = {

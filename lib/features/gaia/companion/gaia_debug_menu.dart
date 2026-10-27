@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
@@ -94,6 +95,16 @@ class _DebugMenu extends StatelessWidget {
           value: debug.scriptedReplies,
           onChanged: debug.setScriptedReplies,
         ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Dummy mode'),
+          subtitle: const Text(
+            'Every other message gets the same canned reply. Nothing reaches '
+            'a provider: no agent run, no routing, no titles.',
+          ),
+          value: debug.dummyMode,
+          onChanged: debug.setDummyMode,
+        ),
         _SliderRow(
           label: 'Wait before replying',
           value: debug.replyDelay.inMilliseconds / 1000,
@@ -169,6 +180,14 @@ class _DebugMenu extends StatelessWidget {
           style: muted,
         ),
         const _ImageVanishPreview(),
+        heading('Messages appearing'),
+        Text(
+          'Sent, a message gathers into the chat out of particles, swept from '
+          'left to right: its text and attachments, but not its bubble. Pick '
+          'a message to send it again.',
+          style: muted,
+        ),
+        const _AppearPreview(),
         heading('Toast icon studies'),
         const GaiaToastIconStudio(),
         heading('Toasts'),
@@ -523,6 +542,176 @@ class _ImageVanishPreviewState extends State<_ImageVanishPreview> {
                 onSelected: (_) => _draft(count),
               ),
             GaiaButton(icon: Icons.send, label: 'Send', onPressed: _send),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// What one of [_AppearPreview]'s messages carries.
+typedef _AppearScenario = ({
+  int images,
+  bool uploading,
+  bool files,
+  String text,
+});
+
+const _longPrompt =
+    'Can you go through the onboarding flow again and tell me where people '
+    'are most likely to drop off? I think the second screen asks for too '
+    "much at once, but I'm not sure splitting it wouldn't make the whole "
+    'thing feel longer. Any numbers you can pull from last month would help '
+    'too.';
+
+const _appearScenarios = <String, _AppearScenario>{
+  'Short text': (images: 0, uploading: false, files: false, text: 'Hi Gaia!'),
+  'Long text': (images: 0, uploading: false, files: false, text: _longPrompt),
+  'One image': (images: 1, uploading: false, files: false, text: ''),
+  'Images only': (images: 3, uploading: false, files: false, text: ''),
+  'Files only': (images: 0, uploading: false, files: true, text: ''),
+  'Image and text': (
+    images: 1,
+    uploading: false,
+    files: false,
+    text: "What's wrong with this layout?",
+  ),
+  'Files and text': (
+    images: 0,
+    uploading: false,
+    files: true,
+    text: 'Summarise these for me.',
+  ),
+  'Still uploading': (
+    images: 2,
+    uploading: true,
+    files: false,
+    text: "What's different between these two?",
+  ),
+  'Many images': (
+    images: 6,
+    uploading: false,
+    files: false,
+    text: 'Which of these reads best?',
+  ),
+  'Everything': (images: 2, uploading: false, files: true, text: _longPrompt),
+};
+
+/// A sent message on the chat's background, laid out as in the chat,
+/// gathering in each time one's picked.
+class _AppearPreview extends StatefulWidget {
+  const _AppearPreview();
+
+  @override
+  State<_AppearPreview> createState() => _AppearPreviewState();
+}
+
+class _AppearPreviewState extends State<_AppearPreview> {
+  late final Future<String?> _image = _UploadPreviewState._paintImage();
+  var _scenario = _appearScenarios.keys.first;
+
+  /// Bumped to send again: a new [GaiaAppear] gathers in afresh.
+  var _sends = 0;
+
+  @override
+  void dispose() {
+    unawaited(
+      _image.then((path) => File(path!).delete()).then((_) {}, onError: (_) {}),
+    );
+    super.dispose();
+  }
+
+  void _send(String scenario) => setState(() {
+    _scenario = scenario;
+    _sends++;
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (:images, :uploading, :files, :text) = _appearScenarios[_scenario]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        // Tall enough for most scenarios, growing for the rest, sent to the
+        // bottom.
+        Container(
+          constraints: const BoxConstraints(minHeight: 380),
+          padding: const EdgeInsets.all(16),
+          alignment: Alignment.bottomRight,
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: GaiaAppear(
+            key: ValueKey(_sends),
+            play: _sends > 0,
+            ready: images == 0
+                ? null
+                : () => GaiaImageThumb.precache(context, _image, 96),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (images > 0 || files)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 48, bottom: 8),
+                    child: GaiaAppearPart(
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (var label = 1; label <= images; label++)
+                            GaiaImageThumb(
+                              file: _image,
+                              label: label,
+                              height: 96,
+                              uploading: uploading,
+                            ),
+                          if (files)
+                            for (final file in _files)
+                              GaiaFileCard(file: file, height: 56),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (text.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(left: 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: GaiaAppearPart(child: SelectableText(text)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final scenario in _appearScenarios.keys)
+              ChoiceChip(
+                label: Text(scenario),
+                selected: scenario == _scenario,
+                onSelected: (_) => _send(scenario),
+              ),
+            GaiaButton(
+              icon: Icons.replay,
+              label: 'Send again',
+              onPressed: () => _send(_scenario),
+            ),
           ],
         ),
       ],

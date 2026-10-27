@@ -29,6 +29,22 @@ class GaiaImageThumb extends StatelessWidget {
   final VoidCallback? onRemove;
   final bool uploading;
 
+  /// Loads [file] as a thumbnail [height] tall shows it, so one built after
+  /// shows it on its first frame.
+  static Future<void> precache(
+    BuildContext context,
+    Future<String?> file,
+    double height,
+  ) async {
+    final path = await file;
+    if (path == null || !context.mounted) return;
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    await precacheImage(
+      ResizeImage(FileImage(File(path)), height: (height * ratio).round()),
+      context,
+    );
+  }
+
   /// One function, so the switcher doesn't rebuild its transitions on every
   /// build; and driven, so it adds no listeners to dispose.
   static Widget _spinnerTransition(Widget child, Animation<double> animation) =>

@@ -24,6 +24,7 @@ void main() {
   test('toggles survive a restart', () async {
     final before = GaiaDebug(file: file);
     await before.setScriptedReplies(true);
+    await before.setDummyMode(true);
     await before.setReplyDelay(const Duration(milliseconds: 3500));
     await before.setStreamSpeed(50);
     await before.setSlowAnimations(true);
@@ -33,6 +34,7 @@ void main() {
     final after = GaiaDebug(file: file);
     await after.load();
     expect(after.scriptedReplies, isTrue);
+    expect(after.dummyMode, isTrue);
     expect(after.replyDelay, const Duration(milliseconds: 3500));
     expect(after.streamSpeed, 50);
     expect(after.slowAnimations, isTrue);
@@ -96,5 +98,15 @@ void main() {
     expect(debug.scriptFor(' /MSG1 '), isNotNull);
     expect(debug.scriptFor('/msg1 please'), isNull);
     expect(debug.scriptFor('/help'), isNotNull);
+  });
+
+  test('dummy mode answers every message, commands still scripted', () async {
+    final debug = GaiaDebug();
+    await debug.setDummyMode(true);
+    expect(debug.scriptFor('hello'), same(gaiaDummyScript));
+    expect(debug.scriptFor('/msg1'), same(gaiaDummyScript));
+    await debug.setScriptedReplies(true);
+    expect(debug.scriptFor('/msg1'), same(gaiaDebugScripts['/msg1']));
+    expect(debug.scriptFor('hello'), same(gaiaDummyScript));
   });
 }

@@ -20,6 +20,7 @@ import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
+import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
@@ -637,9 +638,32 @@ class _MessagesState extends State<_Messages> {
   /// placing haven't changed is given back as it was, which Flutter skips.
   final _views = <String, _MessageView>{};
 
+  /// The messages this list has shown, in any chat, and those of them
+  /// gathering in. Kept across chats, so one still running here isn't sent
+  /// again on coming back to it.
+  late Set<String> _seen;
+  final _appearing = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _seen = {for (final message in widget.messages) message.id};
+  }
+
   @override
   void didUpdateWidget(_Messages old) {
     super.didUpdateWidget(old);
+    // The user's latest message new while a reply's claimed here: just sent
+    // from this window, so it gathers in. Its reply may already be in after
+    // it. The controller adds to the list it gave last time, so it's told
+    // apart by [_seen].
+    final question = widget.messages
+        .where((message) => message.role == GaiaMessageRole.user)
+        .lastOrNull;
+    if (question != null && widget.running && !_seen.contains(question.id)) {
+      _appearing.add(question.id);
+    }
+    _seen.addAll(widget.messages.map((message) => message.id));
     final was = _latestReply(old.messages);
     final now = _latestReply(widget.messages);
     // A new reply in the same chat, running here: a message was sent from
@@ -705,8 +729,10 @@ class _MessagesState extends State<_Messages> {
         if (part is GaiaImagePart && widget.uploading.contains(part.mediaId))
           part.mediaId,
     };
+    final appear = _appearing.contains(message.id);
     final last = _views[message.id];
     if (last != null &&
+        last.appear == appear &&
         identical(last.message, message) &&
         last.imageFile == widget.imageFile &&
         last.gutter == gutter &&
@@ -723,6 +749,10 @@ class _MessagesState extends State<_Messages> {
       gutter: gutter,
       orbTier: orbTier,
       orbKey: orbKey,
+      appear: appear,
+      onAppeared: () {
+        if (mounted) setState(() => _appearing.remove(message.id));
+      },
     );
   }
 
@@ -878,6 +908,8 @@ class _MessageView extends StatelessWidget {
     required this.gutter,
     required this.orbTier,
     required this.orbKey,
+    required this.appear,
+    required this.onAppeared,
   });
 
   final GaiaMessage message;
@@ -895,6 +927,11 @@ class _MessageView extends StatelessWidget {
   /// The chat's orb's, which carries it on from one reply to the next.
   final GlobalKey? orbKey;
 
+  /// A message of the user's just sent from this window, to gather in;
+  /// [onAppeared] once it has.
+  final bool appear;
+  final VoidCallback onAppeared;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -906,49 +943,68 @@ class _MessageView extends StatelessWidget {
       final files = message.parts.whereType<GaiaFilePart>();
       final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
       // Images and files float on their own above the prompt's bubble; a
-      // message of only those has no bubble.
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (images.isNotEmpty || files.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 48, bottom: 8),
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final image in images)
-                    GaiaImageThumb(
-                      file: imageFile(image.mediaId),
-                      label: image.label,
-                      height: 96,
-                      uploading: uploading.contains(image.mediaId),
-                      onTap: () => onOpen(image),
-                    ),
-                  for (final file in files)
-                    GaiaFileCard(file: file, height: 56),
-                ],
+      // message of only those has no bubble. Just sent, its text and
+      // attachments gather in out of particles.
+      return GaiaAppear(
+        play: appear,
+        ready: images.isEmpty
+            ? null
+            : () => Future.wait([
+                for (final image in images)
+                  GaiaImageThumb.precache(
+                    context,
+                    imageFile(image.mediaId),
+                    96,
+                  ),
+              ]),
+        onDone: onAppeared,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (images.isNotEmpty || files.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 48, bottom: 8),
+                child: GaiaAppearPart(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final image in images)
+                        GaiaImageThumb(
+                          file: imageFile(image.mediaId),
+                          label: image.label,
+                          height: 96,
+                          uploading: uploading.contains(image.mediaId),
+                          onTap: () => onOpen(image),
+                        ),
+                      for (final file in files)
+                        GaiaFileCard(file: file, height: 56),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          if (window != null || message.text.isNotEmpty)
-            _bubble(
-              theme.colorScheme.surfaceContainerHighest,
-              Alignment.centerRight,
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (window != null) ...[
-                    _ContextChip(label: window.label),
-                    const SizedBox(height: 6),
-                  ],
-                  if (message.text.isNotEmpty) SelectableText(message.text),
-                ],
-              ),
-            )
-          else
-            const SizedBox(height: 4),
-        ],
+            if (window != null || message.text.isNotEmpty)
+              _bubble(
+                theme.colorScheme.surfaceContainerHighest,
+                Alignment.centerRight,
+                GaiaAppearPart(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (window != null) ...[
+                        _ContextChip(label: window.label),
+                        const SizedBox(height: 6),
+                      ],
+                      if (message.text.isNotEmpty) SelectableText(message.text),
+                    ],
+                  ),
+                ),
+              )
+            else
+              const SizedBox(height: 4),
+          ],
+        ),
       );
     }
     final status = switch (message.status) {

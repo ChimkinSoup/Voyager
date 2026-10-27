@@ -793,7 +793,7 @@ class GaiaController extends ChangeNotifier {
   }
 
   Future<void> _show(GaiaMode mode, {bool behind = false}) {
-    if (currentChatId == null) _utility?.warm();
+    if (currentChatId == null && !debug.dummyMode) _utility?.warm();
     onScreen.value = true;
     return _window.show(mode, () {
       layout = mode;
@@ -804,7 +804,7 @@ class GaiaController extends ChangeNotifier {
   void newChat() {
     currentChatId = null;
     pickedTier = null;
-    _utility?.warm();
+    if (!debug.dummyMode) _utility?.warm();
     notifyListeners();
   }
 
@@ -1039,13 +1039,17 @@ class GaiaController extends ChangeNotifier {
     var tier = nextTier;
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
-    if (isNew && pickedTier == null) {
+    if (isNew && pickedTier == null && !debug.dummyMode) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
       tier = await _utility?.route(topic) ?? tier;
     } else {
       debugPrint(
         '[gaia] router: skipped, '
-        '${!isNew ? 'not a new chat' : 'tier picked: ${pickedTier!.name}'}',
+        '${debug.dummyMode
+            ? 'dummy mode'
+            : !isNew
+            ? 'not a new chat'
+            : 'tier picked: ${pickedTier!.name}'}',
       );
     }
     debugPrint('[gaia] router: sending on ${tier.name}');
@@ -1339,7 +1343,9 @@ class GaiaController extends ChangeNotifier {
     }
     await _persist(reply);
     _reportDone(chatId, reply);
-    if (reply.seq == 1 && reply.status == GaiaMessageStatus.complete) {
+    if (reply.seq == 1 &&
+        reply.status == GaiaMessageStatus.complete &&
+        !debug.dummyMode) {
       unawaited(_retitle(chatId, topic, reply.text));
     }
     _settleDrain();

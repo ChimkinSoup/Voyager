@@ -1324,6 +1324,15 @@ void main() {
       expect(runner.warmed, before + 1);
     });
 
+    test('dummy mode never starts the router', () async {
+      final runner = FakeUtilityRunner((_) => 'quick');
+      await startCompanion(utility: GaiaUtility(runner));
+      controller.debug.dummyMode = true;
+      final before = runner.warmed;
+      controller.newChat();
+      expect(runner.warmed, before);
+    });
+
     test('a picked tier wins over the router, which is not asked', () async {
       await startCompanion(utility: utility('deep'));
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
