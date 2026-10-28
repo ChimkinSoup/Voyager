@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
@@ -462,9 +463,11 @@ class _NoteDialogState extends State<_NoteDialog> {
     super.dispose();
   }
 
+  void _save() => Navigator.pop(context, _controller.text);
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    final dialog = AlertDialog(
       title: const Text('Note'),
       content: SizedBox(
         width: 380,
@@ -486,12 +489,9 @@ class _NoteDialogState extends State<_NoteDialog> {
           label: 'Cancel',
           dense: true,
         ),
-        GlassButton(
-          onPressed: () => Navigator.pop(context, _controller.text),
-          label: 'Save',
-          dense: true,
-        ),
+        GlassButton(onPressed: _save, label: 'Save', dense: true),
       ],
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: dialog);
   }
 }

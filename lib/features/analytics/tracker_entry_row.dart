@@ -218,8 +218,22 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   /// Clamps whatever's typed to the tracker's valid range the moment focus
   /// leaves the field, so an out-of-range value never lingers on screen
   /// waiting for a save/Enter that may not come.
+  ///
+  /// While the field only shows the tracker's default (nothing recorded for
+  /// the period yet), focusing it clears the text so a reading can be typed
+  /// straight in; leaving it untouched puts back what's stored — a reading
+  /// that arrived while it was cleared — or else the default.
   void _handleIntFocusChange() {
-    if (_intFocusNode.hasFocus) return;
+    if (_intFocusNode.hasFocus) {
+      if (_existing == null && !_dirty) _intController.clear();
+      return;
+    }
+    if (!_dirty && _intController.text.isEmpty) {
+      _intController.text = formatTrackerNumber(
+        _existing?.intValue ?? widget.tracker.defaultInt.toDouble(),
+      );
+      return;
+    }
     final raw = double.tryParse(_intController.text.trim());
     if (raw == null) return;
     final clamped = formatTrackerNumber(_clampInt(raw));
@@ -268,7 +282,10 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
         // still showing the transient "saved" flash for a value we just
         // wrote, or the user has an unsaved integer edit pending.
         if (!_saved && !_dirty) {
-          if (widget.tracker.type == TrackerType.integer) {
+          // Not while focused and cleared for typing (see
+          // [_handleIntFocusChange]), or a rebuild would put the default back.
+          if (widget.tracker.type == TrackerType.integer &&
+              !(_intFocusNode.hasFocus && _intController.text.isEmpty)) {
             final val = formatTrackerNumber(
               existing?.intValue ?? widget.tracker.defaultInt.toDouble(),
             );
@@ -534,7 +551,13 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   Future<void> _saveInt(TrackerValue? existing) async {
-    final raw = double.tryParse(_intController.text.trim());
+    // Enter on a field only cleared for typing (see [_handleIntFocusChange])
+    // logs the default it was showing.
+    final untouched =
+        existing == null && !_dirty && _intController.text.isEmpty;
+    final raw = untouched
+        ? widget.tracker.defaultInt.toDouble()
+        : double.tryParse(_intController.text.trim());
     if (raw == null) return;
     final val = _clampInt(raw);
     if (_intController.text != formatTrackerNumber(val)) {

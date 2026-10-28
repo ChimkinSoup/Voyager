@@ -19,7 +19,6 @@ import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/photo_series/vault_activity.dart';
 import 'package:voyager/features/photo_series/vault_image_cache.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
-import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/routing/app_router.dart';
 
 /// The Photos page (PHOTO_SERIES_HLD.md §4): every series as a card, and a
@@ -48,22 +47,21 @@ class _PhotoSeriesPageState extends ConsumerState<PhotoSeriesPage> {
 
   /// Opens the series an inbox row, sticky or OS notification asked for, over
   /// whatever this page had pushed — or back to its detail, when that series
-  /// is already open.
-  Future<void> _takeRevealRequest() async {
-    // Once the page has arrived, a frame after the request: opened as it
-    // crossfades in, the detail zooms under the departing page's fade.
-    await WidgetsBinding.instance.endOfFrame;
-    await shellBranchSwitchSettled();
+  /// is already open. It opens at once, so the list never shows on the way.
+  void _takeRevealRequest() {
     if (!mounted) return;
     final id = ref.read(revealPhotoSeriesRequestProvider);
     if (id == null) return;
-    ref.read(revealPhotoSeriesRequestProvider.notifier).state = null;
     var open = false;
     Navigator.of(context).popUntil((route) {
       open = route is _PhotoSeriesDetailRoute && route.seriesId == id;
       return open || route.isFirst;
     });
-    if (!open) openPhotoSeries(context, id);
+    if (!open) {
+      Navigator.of(context).push(_PhotoSeriesDetailRoute(id, instant: true));
+    }
+    // After the push: clearing it shows the list again, now under the detail.
+    ref.read(revealPhotoSeriesRequestProvider.notifier).state = null;
   }
 
   @override
@@ -99,7 +97,12 @@ class _PhotoSeriesPageState extends ConsumerState<PhotoSeriesPage> {
     ref.listen<String?>(revealPhotoSeriesRequestProvider, (_, id) {
       if (id != null) Future.microtask(_takeRevealRequest);
     });
-    return const VaultActivity(child: _SeriesList());
+    // Nothing while a series is on its way in, rather than the list for a
+    // frame first.
+    final revealing = ref.watch(revealPhotoSeriesRequestProvider) != null;
+    return VaultActivity(
+      child: revealing ? const SizedBox.shrink() : const _SeriesList(),
+    );
   }
 }
 
@@ -189,9 +192,12 @@ void openPhotoSeries(BuildContext context, String seriesId) {
 /// — it counts on the page arriving to cover it — so the list stayed on
 /// screen under the detail until the push ended and it vanished at once.
 class _PhotoSeriesDetailRoute extends PageRouteBuilder<void> {
-  _PhotoSeriesDetailRoute(this.seriesId)
+  /// [instant] skips the entrance, for a series opened from outside the page.
+  _PhotoSeriesDetailRoute(this.seriesId, {bool instant = false})
     : super(
-        transitionDuration: const Duration(milliseconds: 300),
+        transitionDuration: instant
+            ? Duration.zero
+            : const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 250),
         pageBuilder: (_, _, _) => PhotoSeriesDetail(seriesId: seriesId),
         transitionsBuilder: (context, animation, _, child) => _zoom(

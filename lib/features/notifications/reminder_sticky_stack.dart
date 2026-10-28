@@ -273,10 +273,6 @@ class _StickyReminderCardState extends ConsumerState<_StickyReminderCard>
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
-            decoration: isRule ? null : TextDecoration.underline,
-            decorationColor: theme.colorScheme.onSurfaceVariant.withValues(
-              alpha: 0.4,
-            ),
           ),
         ),
         for (final line in meta)
