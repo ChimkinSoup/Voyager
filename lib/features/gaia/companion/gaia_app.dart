@@ -15,6 +15,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -223,6 +224,7 @@ class _GaiaShell extends StatelessWidget {
                 running: controller.currentRunning,
                 onEdit: (message) => _editMessage(context, controller, message),
                 onAttach: controller.attachMessage,
+                controller: controller,
               ),
             ),
             _Composer(controller: controller),
@@ -806,6 +808,7 @@ class _Messages extends StatefulWidget {
     required this.running,
     required this.onEdit,
     required this.onAttach,
+    required this.controller,
   });
 
   final List<GaiaMessage> messages;
@@ -826,6 +829,9 @@ class _Messages extends StatefulWidget {
 
   /// A message to attach to the draft as context (§9.3).
   final void Function(GaiaMessage message) onAttach;
+
+  /// For the cards in replies (§10), which answer through it.
+  final GaiaController controller;
 
   @override
   State<_Messages> createState() => _MessagesState();
@@ -1013,6 +1019,7 @@ class _MessagesState extends State<_Messages> {
       onCopyImage: _copyImage,
       onEdit: _edit,
       onAttach: _attach,
+      controller: widget.controller,
       gutter: gutter,
       orbTier: orbTier,
       orbKey: orbKey,
@@ -1175,6 +1182,7 @@ class _MessageView extends StatelessWidget {
     required this.onCopyImage,
     required this.onEdit,
     required this.onAttach,
+    required this.controller,
     required this.gutter,
     required this.orbTier,
     required this.orbKey,
@@ -1189,6 +1197,7 @@ class _MessageView extends StatelessWidget {
   final void Function(GaiaImagePart image) onCopyImage;
   final void Function(GaiaMessage message) onEdit;
   final void Function(GaiaMessage message) onAttach;
+  final GaiaController controller;
 
   /// The list's margin either side of the messages.
   final double gutter;
@@ -1334,6 +1343,20 @@ class _MessageView extends StatelessWidget {
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: GaiaActivityChip(label: _activity(tools)),
+              ),
+              // Rebuilt with the controller, not the message: whether it's
+              // waiting and what's picked aren't on the message.
+              GaiaCardPart() => ListenableBuilder(
+                listenable: controller,
+                builder: (context, _) => GaiaCardView(
+                  card: part,
+                  waiting: controller.cards.isWaiting(part.id),
+                  picks: controller.cardPicks(part.id),
+                  sendKey: '${_sendCombo(controller)}',
+                  onPick: (index) => controller.pickCardOption(part, index),
+                  onAllow: () => controller.allowCard(part),
+                  onReject: () => controller.rejectCard(part),
+                ),
               ),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
@@ -1666,6 +1689,24 @@ class _ComposerState extends State<_Composer> {
       _text.clear();
       return widget.controller.runBuiltin(builtin);
     }
+    // An open card takes the draft (§10.1): a question's answer, or a
+    // permission's "why not". Sent empty, a permission is allowed.
+    if (widget.controller.openCard case final card?) {
+      final controller = widget.controller;
+      final text = _text.text;
+      switch (card.kind) {
+        case GaiaCardKind.question:
+          if (await controller.answerCard(card, text: text)) _text.clear();
+        case GaiaCardKind.permission:
+          if (text.trim().isEmpty) {
+            controller.allowCard(card);
+          } else {
+            controller.rejectCard(card, message: text);
+            _text.clear();
+          }
+      }
+      return;
+    }
     if (!await _takeTierCommand(atEnd: true) || !mounted) return;
     final controller = widget.controller;
     final attached =
@@ -1716,6 +1757,12 @@ class _ComposerState extends State<_Composer> {
     final running = controller.currentRunning;
     final palette = _palette;
     final send = _sendCombo(controller);
+    final card = controller.openCard;
+    // A question's options by number, while there's nothing typed to put
+    // the digit in.
+    final pickable = card != null && _text.text.isEmpty
+        ? card.options.length
+        : 0;
     return LayoutBuilder(
       builder: (context, constraints) {
         // A little wider than the messages' column, as in Claude's apps.
@@ -1727,6 +1774,9 @@ class _ComposerState extends State<_Composer> {
               send.activator: _send,
               const SingleActivator(LogicalKeyboardKey.keyV, control: true):
                   _paste,
+              for (var i = 0; i < pickable; i++)
+                SingleActivator(_digits[i]): () =>
+                    controller.pickCardOption(card!, i),
               if (palette.isNotEmpty) ...{
                 // Enter picks from the palette, whatever sends.
                 const SingleActivator(LogicalKeyboardKey.enter): _send,
@@ -1871,7 +1921,14 @@ class _ComposerState extends State<_Composer> {
                         textAlignVertical: vanishing
                             ? TextAlignVertical.top
                             : null,
-                        hintText: vanishing ? null : 'Message Gaia',
+                        hintText: vanishing
+                            ? null
+                            : switch (card?.kind) {
+                                GaiaCardKind.question => 'Type an answer',
+                                GaiaCardKind.permission =>
+                                  'Send to allow, or say why not',
+                                null => 'Message Gaia',
+                              },
                         onPaste: _paste,
                         // The tier picker's notch, opening rightwards from the
                         // field's left edge.
@@ -2251,6 +2308,19 @@ Future<bool> switchGaiaTier(
   controller.pickTier(tier);
   return true;
 }
+
+/// 1 to 9, which pick a question card's options.
+const _digits = [
+  LogicalKeyboardKey.digit1,
+  LogicalKeyboardKey.digit2,
+  LogicalKeyboardKey.digit3,
+  LogicalKeyboardKey.digit4,
+  LogicalKeyboardKey.digit5,
+  LogicalKeyboardKey.digit6,
+  LogicalKeyboardKey.digit7,
+  LogicalKeyboardKey.digit8,
+  LogicalKeyboardKey.digit9,
+];
 
 /// The send keybind (§9.1), Ctrl+Enter by default, which is also its
 /// default when unbound: Enter and Shift+Enter are newlines.

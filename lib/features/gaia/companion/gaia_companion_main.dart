@@ -17,6 +17,7 @@ import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 import 'package:window_manager/window_manager.dart';
@@ -78,6 +79,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
       kGaiaCodexAdapter: CodexRunner(
         workingDirectory: p.join(root.path, 'gaia', 'ws'),
         codexHome: await defaultGaiaCodexHome(),
+        toolPipe: GaiaToolPipe(),
       ),
     },
     utility: GaiaUtility(

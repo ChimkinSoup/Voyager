@@ -14,6 +14,7 @@ import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
@@ -50,7 +51,8 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// {chatId}` (returns `{mediaDeletedAt}`), `restoreChat {chatId,
 /// mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
-/// height}`), `mediaFile {mediaId}` (a path, or null), `rearm`, and the `runs {runs}`, `runDone {chatId, title,
+/// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
+/// arguments}` (a `voyager_*` tool's text), `rearm`, and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId}`, `accent {argb}`, `settings {..}` and `changed` events.
@@ -103,6 +105,9 @@ class GaiaHost {
 
   /// Where attached images go; null for none, where attaching fails.
   GaiaMedia? _media;
+
+  /// The `voyager_*` read tools (§5.3); null for none, where they fail.
+  GaiaVoyagerReads? _reads;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
@@ -174,10 +179,12 @@ class GaiaHost {
     required String deviceId,
     required void Function(String chatId, String title, String body) toast,
     GaiaMedia? media,
+    GaiaVoyagerReads? reads,
   }) {
     if (_attached.isCompleted) return;
     _toast = toast;
     _media = media;
+    _reads = reads;
     _attached.complete(GaiaChatStore(repository, deviceId: deviceId));
     _changes = repository.watchChanges().listen((_) {
       _changedSoon ??= Timer(_changedDelay, () {
@@ -740,6 +747,18 @@ class GaiaHost {
         return _media?.file(params['mediaId']! as String);
       case 'draftImageFile':
         return _media?.fileWhenHere(params['mediaId']! as String);
+      case 'voyagerRead':
+        final reads = _reads;
+        if (reads == null) throw GaiaPipeException('Voyager data is not ready');
+        try {
+          return await reads.read(
+            params['tool']! as String,
+            _map(params['arguments']),
+          );
+        } on GaiaReadException catch (error) {
+          // The pipe would carry it as `GaiaReadException: …`.
+          throw GaiaPipeException(error.message);
+        }
       case 'rearm':
         _aborted = false;
         final flag = await _abortFlag();

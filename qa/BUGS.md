@@ -3527,4 +3527,13 @@ Entry format:
 - Actual: `settingsProvider` holds the second value, but neither the probe nor `VoyagerApp`'s listener sees it: `GaiaHost._accent` and the companion stay on the first. With 3 s or more between saves, or both saves in one eval, both changes are seen. Fails `gaia.ps1`'s "the companion follows Voyager's accent" about 1 run in 2 (it saves, waits for the companion, then saves again). Cause not found; it isn't `SettingsNotifier._quiet`.
 - Notes (2026-10-25, closed, no app code change; harness fixed): **not an app bug.** The VM service runs an evaluate at an interrupt point, which can be in the middle of a frame's build. Each failing run logged "Tried to modify a provider while the widget tree was building" to the profile's `voyager_errors.log` with `Eval` called from `Element.updateChild` frames: `SettingsNotifier.saveSettings` set the state, then Riverpod's debug check threw before notifying any listener and before the row was written (the DB kept the first accent). The first save's accent change starts the rebuilds the second eval lands in, hence "about 1 s apart". The app saves settings only from event handlers. `gaia.ps1`'s accent check now runs each save in its own event (`Future(() { … })`): 10 of 10 passed with no such error (3 of ~21 failed earlier in the same session).
 
-<!-- Last ID: BUG-319. -->
+### BUG-320 [GAIA-P4A] A permission card's command box is always eight lines tall
+- Severity: Cosmetic
+- Found: 2026-10-28, Gaia Phase 4A in-app pass, qa-122 on `qa`, debug build of the working tree on `b0e5521`
+- Steps to reproduce: put `{"permissions":{"ask":["Bash(echo gaia-perm*)"]}}` in `<profile>\gaia\ws\.claude\settings.json`; in Gaia (Quick, Claude Code) ask it to run `echo gaia-perm-one` with Bash.
+- Expected: the card's command box fits the one-line command.
+- Actual: the box is eight lines tall with the command on the first (`qa/shots/p4a-08-perm.png`, `p4a-13-stopped.png`). `GaiaCardView` shows the detail in a `SelectableText` with `maxLines: 8` and no `minLines`, which, like a TextField, sizes to `maxLines` whatever the text.
+- Notes: the card otherwise works (allow, typed deny, Deny button; see the pass notes in PROGRESS.md).
+- Notes (2026-10-28, fixed in the working tree, uncommitted): the `SelectableText` now has `minLines: 1`, so the box grows with the command up to eight lines. Not yet checked in the app.
+
+<!-- Last ID: BUG-320. -->

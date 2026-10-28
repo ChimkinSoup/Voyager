@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "flutter_window.h"
+#include "gaia_tool_pipe.h"
 #include "resource.h"
 #include "utils.h"
 
@@ -32,6 +33,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // starting it first in the tray if it isn't running, and exits.
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+  // Gaia's MCP shim (GAIA_HLD.md §5.3): a CLI's stdio relayed to the
+  // companion's tool pipe. No window, no engine, no mutex.
+  if (std::find(command_line_arguments.begin(), command_line_arguments.end(),
+                "--gaia-mcp") != command_line_arguments.end()) {
+    return RunGaiaMcpShim();
+  }
   const bool companion =
       std::find(command_line_arguments.begin(), command_line_arguments.end(),
                 "--companion") != command_line_arguments.end();

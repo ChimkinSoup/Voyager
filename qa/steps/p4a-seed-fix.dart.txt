@@ -1,0 +1,9 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final cr = c.read(calendarRepositoryProvider);
+final fixed = <CalendarEvent>[for (final e in await cr.listEvents()) if (e.id.startsWith('p4a-')) e.copyWith(isFullDay: false)];
+for (final e in fixed) { await cr.upsertEvent(e); }
+await r.pushRecords(FirestoreCollections.calendarEvents, fixed);
+final wr = c.read(workoutRepositoryProvider);
+for (final s in await wr.listSetLogs(sessionId: 'p4a-session')) { final d = s.copyWith(completed: true, completedAt: now); await wr.upsertSetLog(d); r.pushWorkoutSetLog(d); }
+debugPrint('P4A-FIX events=${fixed.length}');

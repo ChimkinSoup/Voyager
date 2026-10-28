@@ -17,6 +17,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
+import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
@@ -486,6 +487,8 @@ class _GaiaTranscript extends ConsumerWidget {
                             label: 'Used ${tools.toSet().join(', ')}',
                           ),
                         ),
+                        // A record: cards are answered in Gaia itself.
+                        GaiaCardPart() => GaiaCardView(card: part),
                         // Only the user's messages carry attachments and
                         // context.
                         GaiaImagePart() ||

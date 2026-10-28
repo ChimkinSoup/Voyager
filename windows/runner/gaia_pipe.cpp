@@ -17,7 +17,8 @@ constexpr DWORD kMaxFrame = 64 * 1024 * 1024;
 // How long the companion waits for the main instance's pipe to appear.
 constexpr DWORD kConnectTimeoutMs = 15000;
 
-// "D:P(A;;GA;;;<current user SID>)": only this user, nothing inherited.
+}  // namespace
+
 std::wstring CurrentUserOnlySddl() {
   HANDLE token = nullptr;
   if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token)) {
@@ -38,6 +39,8 @@ std::wstring CurrentUserOnlySddl() {
   ::CloseHandle(token);
   return sddl;
 }
+
+namespace {
 
 #ifndef NDEBUG
 // qa/harness/gaia.ps1: the companion's own Dart VM service port. A QA launch

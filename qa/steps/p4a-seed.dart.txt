@@ -1,0 +1,27 @@
+final now = DateTime.now().toUtc();
+final t0 = DateTime.now();
+final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'p4a-list', createdAt: now, updatedAt: now, version: 1, name: 'P4A Errands');
+await tr.upsertList(list); r.pushTodoList(list);
+final parent = TodoTask(id: 'p4a-task-parent', createdAt: now, updatedAt: now, version: 1, listId: 'p4a-list', title: 'P4A buy groceries', dueDate: day, sortOrder: 0);
+await tr.upsertTask(parent); await r.pushTodoTaskNow(parent);
+for (var i = 0; i < 2; i++) { final s = TodoTask(id: 'p4a-sub-$i', createdAt: now, updatedAt: now, version: 1, listId: 'p4a-list', parentTaskId: 'p4a-task-parent', title: i == 0 ? 'P4A oat milk' : 'P4A blueberries', sortOrder: i * 1000); await tr.upsertTask(s); await r.pushTodoTaskNow(s); }
+final later = TodoTask(id: 'p4a-task-later', createdAt: now, updatedAt: now, version: 1, listId: 'p4a-list', title: 'P4A renew passport', dueDate: day.add(const Duration(days: 3)), sortOrder: 1000);
+await tr.upsertTask(later); await r.pushTodoTaskNow(later);
+final cal = Calendar(id: 'p4a-cal', createdAt: now, updatedAt: now, version: 1, name: 'P4A Calendar');
+final ev = CalendarEvent(id: 'p4a-event', createdAt: now, updatedAt: now, version: 1, calendarId: 'p4a-cal', title: 'P4A dentist', isFullDay: false, start: day.add(const Duration(days: 1, hours: 15)), end: day.add(const Duration(days: 1, hours: 16)));
+final wk = CalendarEvent(id: 'p4a-weekly', createdAt: now, updatedAt: now, version: 1, calendarId: 'p4a-cal', title: 'P4A climbing', isFullDay: false, start: day.subtract(const Duration(days: 7)).add(const Duration(hours: 19)), end: day.subtract(const Duration(days: 7)).add(const Duration(hours: 21)), recurrence: const RecurrenceRule(frequency: EventRecurrence.weekly));
+await c.read(calendarRepositoryProvider).upsertCalendar(cal); await c.read(calendarRepositoryProvider).upsertEvent(ev); await c.read(calendarRepositoryProvider).upsertEvent(wk);
+await r.pushRecords(FirestoreCollections.calendars, [cal]); await r.pushRecords(FirestoreCollections.calendarEvents, [ev, wk]);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'p4a-journal', createdAt: now, updatedAt: now, version: 1, name: 'P4A Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+final en = JournalEntry(id: 'p4a-entry', createdAt: now, updatedAt: now, version: 1, journalId: 'p4a-journal', title: 'P4A lakeside walk', body: 'Walked around the lake with Mira. Saw a heron (codeword HERON-58).', entryDate: day.subtract(const Duration(days: 1)));
+await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+final wr = c.read(workoutRepositoryProvider);
+final ex = Exercise(id: 'p4a-exercise', createdAt: now, updatedAt: now, version: 1, name: 'P4A Squat');
+final ses = WorkoutSession(id: 'p4a-session', createdAt: now, updatedAt: now, version: 1, date: day.subtract(const Duration(days: 2)), startedAt: day.subtract(const Duration(days: 2)).add(const Duration(hours: 7)), endedAt: day.subtract(const Duration(days: 2)).add(const Duration(hours: 8)));
+await wr.upsertExercise(ex); await wr.upsertSession(ses); r.pushExercise(ex); r.pushWorkoutSession(ses);
+for (var i = 0; i < 3; i++) { final sl = WorkoutSetLog(id: 'p4a-set-$i', createdAt: now, updatedAt: now, version: 1, sessionId: 'p4a-session', exerciseId: 'p4a-exercise', exerciseOrder: 0, setIndex: i, weightKg: 80.0 + i * 5, reps: 5, plannedWeightKg: 80.0 + i * 5, plannedReps: 5, completed: true, completedAt: ses.endedAt); await wr.upsertSetLog(sl); r.pushWorkoutSetLog(sl); }

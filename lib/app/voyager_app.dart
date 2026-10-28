@@ -36,6 +36,7 @@ import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/hotkeys/floaters/main_window_cover.dart';
@@ -178,6 +179,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       repository: ref.read(gaiaRepositoryProvider),
       deviceId: deviceId,
       media: GaiaMedia(ref.read(mediaServiceProvider)),
+      reads: GaiaVoyagerReads(
+        todos: ref.read(todoRepositoryProvider),
+        calendar: ref.read(calendarRepositoryProvider),
+        journal: ref.read(journalRepositoryProvider),
+        workouts: ref.read(workoutRepositoryProvider),
+      ),
       toast: (chatId, title, body) => unawaited(
         os
             .showNow(

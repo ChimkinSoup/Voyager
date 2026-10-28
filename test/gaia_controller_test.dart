@@ -13,6 +13,7 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -123,6 +124,9 @@ class _Main {
       case 'rearm':
         aborted = false;
         return null;
+      case 'voyagerRead':
+        reads.add(params['tool']! as String);
+        return 'read ${params['tool']}';
       case 'attachImage':
         await holdImages?.future;
         if (attached.length >= refuseImagesAfter) {
@@ -170,6 +174,9 @@ class _Main {
   /// Each `attachImage`, in order.
   final attached = <({String chatId, String path})>[];
 
+  /// Each `voyagerRead`'s tool, in order.
+  final reads = <String>[];
+
   /// Each `attachImage` waits on it while it's set.
   Completer<void>? holdImages;
 
@@ -214,9 +221,11 @@ void main() {
     GaiaUtility? utility,
     Map<String, FakeClaudeRunner> otherRunners = const {},
     Future<String> Function()? clipboard,
+    Duration cardHold = const Duration(hours: 1),
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
+      cardHold: cardHold,
       pipe: main.companion,
       window: window,
       runners: {kGaiaClaudeCodeAdapter: runner, ...otherRunners},
@@ -2289,6 +2298,144 @@ void main() {
       main.pipe.notify('settings', {'gaiaMd': 'Be briefer.'});
       await settle();
       expect(runner.instructions, ['Be brief.', 'Be briefer.']);
+    });
+  });
+
+  group('cards (§10)', () {
+    setUp(
+      () => startCompanion(cardHold: const Duration(milliseconds: 200)),
+    );
+
+    /// Sends 'Hi' on a turn that hangs, for its tools to be called.
+    Future<GaiaTurnTools> hanging() async {
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hm.')]);
+      unawaited(controller.send('Hi'));
+      await settle();
+      return runner.sent.last.tools!;
+    }
+
+    GaiaCardPart card(GaiaMessage message) =>
+        message.parts.whereType<GaiaCardPart>().single;
+
+    test('ask_user shows a card the composer answers; the agent gets the '
+        'answer and the card is kept, answered', () async {
+      final tools = await hanging();
+      final result = tools.call('ask_user', {
+        'question': 'Which one?',
+        'options': [
+          {'label': 'Red'},
+          {'label': 'Blue'},
+        ],
+      });
+      await settle();
+      final open = controller.openCard!;
+      expect(open.question, 'Which one?');
+      expect(card(controller.messages.last).isOpen, isTrue);
+      expect(
+        card((await main.messages()).last).isOpen,
+        isTrue,
+        reason: 'saved at once, for the Gaia page',
+      );
+
+      expect(await controller.answerCard(open), isFalse, reason: 'nothing yet');
+      controller.pickCardOption(open, 1);
+      expect(controller.cardPicks(open.id), {1});
+      expect(await controller.answerCard(open, text: 'darker'), isTrue);
+      expect(
+        (await result).text,
+        'The user chose: "Blue".\nThe user wrote: darker',
+      );
+      await settle();
+      expect(controller.openCard, isNull);
+
+      runner.finish(controller.currentChatId!);
+      await settle();
+      final reply = (await main.messages()).last;
+      expect(card(reply).state, GaiaCardState.accepted);
+      expect(card(reply).answer, {
+        'selected': ['Blue'],
+        'text': 'darker',
+      });
+      expect(reply.needsInput, isFalse);
+    });
+
+    test('a permission prompt is allowed or denied from its card', () async {
+      final tools = await hanging();
+      final allowed = tools.permit(
+        tool: 'Bash',
+        input: {'command': 'ls'},
+        description: 'List files',
+      );
+      await settle();
+      controller.allowCard(controller.openCard!);
+      expect((await allowed).allow, isTrue);
+
+      final denied = tools.permit(
+        tool: 'Bash',
+        input: {'command': 'rm x'},
+        description: '',
+      );
+      await settle();
+      controller.rejectCard(controller.openCard!, message: 'keep it');
+      expect(await denied, (allow: false, message: 'The user declined: keep it'));
+    });
+
+    test('Stop voids the open card, and the reply keeps it voided', () async {
+      final tools = await hanging();
+      final result = tools.call('ask_user', {'question': 'Sure?'});
+      await settle();
+      await controller.stop(controller.currentChatId!);
+      expect((await result).isError, isTrue);
+      await settle();
+      final reply = (await main.messages()).last;
+      expect(reply.status, GaiaMessageStatus.cancelled);
+      expect(card(reply).state, GaiaCardState.voided);
+      expect(controller.openCard, isNull);
+    });
+
+    test('Abort voids it, and the tools refuse until re-armed', () async {
+      final tools = await hanging();
+      final result = tools.call('ask_user', {'question': 'Sure?'});
+      await settle();
+      await main.pipe.request('abort');
+      expect((await result).text, startsWith('aborted'));
+      expect((await tools.call('voyager_todos', {})).isError, isTrue);
+      expect(main.reads, isEmpty);
+    });
+
+    test('a question whose wait ran out is answered as the next message, '
+        'and marks the reply as needing input', () async {
+      final tools = await hanging();
+      final result = tools.call('ask_user', {'question': 'Which day?'});
+      await settle();
+      final open = controller.openCard!;
+      expect(controller.cards.isWaiting(open.id), isTrue);
+      // The hold runs out; the agent is told to end its turn, and does.
+      expect((await result).text, startsWith('pending:${open.id}'));
+      runner.finish(controller.currentChatId!);
+      await settle();
+      final reply = controller.messages.last;
+      expect(reply.needsInput, isTrue);
+      expect(card(reply).isOpen, isTrue);
+      expect(controller.openCard?.id, open.id);
+
+      controller.pickCardOption(open, 0);
+      expect(await controller.answerCard(open, text: 'Friday'), isTrue);
+      await settle();
+      expect(runner.sent.last.prompt, 'Re: Which day?\nFriday');
+      final stored = await main.messages();
+      expect(card(stored[1]).state, GaiaCardState.accepted);
+      expect(card(stored[1]).answer?['text'], 'Friday');
+      expect(_text(stored[2]), 'Re: Which day?\nFriday');
+    });
+
+    test('reads go through the main instance', () async {
+      final tools = await hanging();
+      expect(
+        await tools.call('voyager_calendar', {'from': 'x'}),
+        (text: 'read voyager_calendar', isError: false),
+      );
+      expect(main.reads, ['voyager_calendar']);
     });
   });
 

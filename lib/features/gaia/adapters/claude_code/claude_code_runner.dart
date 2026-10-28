@@ -1,5 +1,9 @@
-// FRAGILE(cli): the Claude Code invocation and its stdin message shape
-// (`--input-format stream-json`). See claude_code_events.dart.
+// FRAGILE(cli): the Claude Code invocation, its stdin message shape
+// (`--input-format stream-json`), and the control protocol on the same
+// channel: the `initialize` request that registers Gaia's tools as an
+// `sdk` MCP server, and the `control_response`s answering the CLI's
+// `mcp_message` and `can_use_tool` requests (observed on 2.1.312; the
+// Agent SDK's own protocol, undocumented). See claude_code_events.dart.
 
 import 'dart:async';
 import 'dart:convert';
@@ -7,10 +11,12 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 const _uuid = Uuid();
 
@@ -74,6 +80,13 @@ Future<Object> claudeUserContent(
 const _idleTimeout = Duration(minutes: 10);
 const _maxLive = 4;
 
+/// Gaia's tools, served by Gaia itself over the control channel (§5.3):
+/// safe mode leaves out every MCP server a config names, a stdio one
+/// included, but not an `sdk` one (checked on 2.1.312).
+const _mcpConfig =
+    '{"mcpServers":{"$kGaiaMcpServer":'
+    '{"type":"sdk","name":"$kGaiaMcpServer"}}}';
+
 /// Runs chats on the Claude Code CLI: one long-lived process per active chat,
 /// whose stdin stays open across turns. A process idle for 10 minutes is
 /// killed and the next message resumes its session; past four live, the
@@ -84,6 +97,12 @@ const _maxLive = 4;
 /// CLAUDE.md, hooks and plugins (§5.2: `--setting-sources` doesn't keep
 /// CLAUDE.md out, checked on 2.1.310), with GAIA.md appended to the system
 /// prompt from [instructionsFile].
+///
+/// Gaia is each process's SDK host (§5.3): its tools are an MCP server the
+/// CLI reaches through `control_request`s on stdout, and the permission
+/// prompts the CLI would show come the same way, for a card. The turn's
+/// [GaiaTurnTools] answers each. Claude Code's own `AskUserQuestion` is
+/// left out, for `ask_user` (§10.1): as a host, Gaia would be offered it.
 class ClaudeCodeRunner implements GaiaAgentRunner {
   ClaudeCodeRunner({
     required this.workingDirectory,
@@ -116,6 +135,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
+    GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (result, started) = await _send(
@@ -126,6 +146,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       prompt: prompt,
       images: images,
       directories: directories,
+      tools: tools,
       onEvent: (event) {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
@@ -148,6 +169,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String model,
     required String prompt,
     List<GaiaImageInput> images = const [],
+    GaiaTurnTools? tools,
     required void Function(ClaudeEvent event) onEvent,
   }) async => (await _send(
     chatId: chatId,
@@ -157,6 +179,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     prompt: prompt,
     images: images,
     directories: const {},
+    tools: tools,
     onEvent: onEvent,
   )).$1;
 
@@ -170,6 +193,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String prompt,
     required List<GaiaImageInput> images,
     required Set<String> directories,
+    required GaiaTurnTools? tools,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     final content = await claudeUserContent(prompt, images);
@@ -211,7 +235,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     }
     _live[chatId] = process;
     try {
-      return (await process.turn(content, onEvent), process.started);
+      return (await process.turn(content, tools, onEvent), process.started);
     } finally {
       if (process.exited) {
         _live.remove(chatId);
@@ -311,9 +335,13 @@ class _ClaudeProcess {
     required List<String> sessionArgs,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
+    // A file: through cmd, the JSON's quotes wouldn't survive as an
+    // argument.
+    final mcpConfig = p.join(workingDirectory, 'gaia-mcp.json');
+    await File(mcpConfig).writeAsString(_mcpConfig);
     // Through cmd: an npm install's `claude` is a .cmd shim, which only a
     // shell can run.
-    return _ClaudeProcess._(
+    final process = _ClaudeProcess._(
       await Process.start(
         'cmd',
         [
@@ -327,6 +355,12 @@ class _ClaudeProcess {
           '--verbose',
           '--include-partial-messages',
           '--safe-mode',
+          '--mcp-config',
+          mcpConfig,
+          '--permission-prompt-tool',
+          'stdio',
+          '--disallowedTools',
+          'AskUserQuestion',
           '--model',
           model,
           // Outside the workspace, where attached files are read (§9.3).
@@ -334,13 +368,24 @@ class _ClaudeProcess {
           ...sessionArgs,
         ],
         workingDirectory: workingDirectory,
-        environment: claudeEnvironment(configDir),
+        environment: {
+          ...claudeEnvironment(configDir),
+          'MCP_TOOL_TIMEOUT': '${kGaiaMcpToolTimeout.inMilliseconds}',
+        },
         includeParentEnvironment: false,
       ),
       model,
       directories,
       onLine,
     );
+    // Registers the `sdk` server the config names; the CLI then lists its
+    // tools through [_answer].
+    process._write({
+      'type': 'control_request',
+      'request_id': 'gaia_initialize',
+      'request': {'subtype': 'initialize'},
+    });
+    return process;
   }
 
   final Process _process;
@@ -355,6 +400,7 @@ class _ClaudeProcess {
   Timer? _idle;
 
   void Function(ClaudeEvent event)? _onEvent;
+  GaiaTurnTools? _tools;
   Completer<ClaudeResult>? _turn;
 
   bool get inTurn => _turn != null;
@@ -362,19 +408,83 @@ class _ClaudeProcess {
   /// [content] is text, or content blocks ([claudeUserContent]).
   Future<ClaudeResult> turn(
     Object content,
+    GaiaTurnTools? tools,
     void Function(ClaudeEvent event) onEvent,
   ) {
     _idle?.cancel();
     final turn = _turn = Completer<ClaudeResult>();
     _onEvent = onEvent;
-    _process.stdin.writeln(
-      jsonEncode({
-        'type': 'user',
-        'message': {'role': 'user', 'content': content},
-      }),
-    );
+    _tools = tools;
+    _write({
+      'type': 'user',
+      'message': {'role': 'user', 'content': content},
+    });
     return turn.future;
   }
+
+  void _write(Map<String, Object?> message) {
+    if (!exited) _process.stdin.writeln(jsonEncode(message));
+  }
+
+  /// A `control_request`: an MCP message for Gaia's tools, or a permission
+  /// prompt, answered by the turn's tools. Between turns only the MCP
+  /// handshake comes, which needs none.
+  Future<void> _answer(ClaudeControlRequest request) async {
+    final tools = _tools;
+    final Map<String, Object?> response;
+    switch (request.subtype) {
+      case 'mcp_message':
+        final message = request.request['message'];
+        if (request.request['server_name'] != kGaiaMcpServer ||
+            message is! Map) {
+          return _refuse(request, 'unknown MCP server');
+        }
+        response = {
+          'mcp_response':
+              await gaiaMcpAnswer(message.cast<String, Object?>(), tools) ??
+              // A notification: acknowledged, as the CLI waits on each.
+              {'jsonrpc': '2.0', 'result': <String, Object?>{}},
+        };
+      case 'can_use_tool':
+        final input =
+            (request.request['input'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{};
+        final decision = tools == null
+            ? (allow: false, message: 'No Gaia run is active.')
+            : await tools.permit(
+                tool: request.request['tool_name'] as String? ?? '',
+                input: input,
+                description: request.request['description'] as String? ?? '',
+              );
+        response = decision.allow
+            ? {'behavior': 'allow', 'updatedInput': input}
+            : {
+                'behavior': 'deny',
+                'message': decision.message.isEmpty
+                    ? 'The user declined.'
+                    : decision.message,
+              };
+      default:
+        return _refuse(request, 'unsupported request ${request.subtype}');
+    }
+    _write({
+      'type': 'control_response',
+      'response': {
+        'subtype': 'success',
+        'request_id': request.requestId,
+        'response': response,
+      },
+    });
+  }
+
+  void _refuse(ClaudeControlRequest request, String error) => _write({
+    'type': 'control_response',
+    'response': {
+      'subtype': 'error',
+      'request_id': request.requestId,
+      'error': error,
+    },
+  });
 
   void idleAfter(Duration timeout, void Function() onKilled) {
     _idle?.cancel();
@@ -397,12 +507,25 @@ class _ClaudeProcess {
       return;
     }
     if (event is ClaudeInit) started = true;
+    if (event case final ClaudeControlRequest request) {
+      // Always answered: the CLI blocks on the request until it is.
+      unawaited(
+        _answer(request).catchError((Object error) {
+          debugPrint('[gaia] control_request failed: $error');
+          _refuse(request, '$error');
+        }),
+      );
+    }
+    if (event case ClaudeControlResponse(:final error?)) {
+      debugPrint("[gaia] Claude Code refused Gaia's tools: $error");
+    }
     // Between turns there's nothing to report to.
     _onEvent?.call(event);
     if (event is ClaudeResult) {
       final turn = _turn;
       _turn = null;
       _onEvent = null;
+      _tools = null;
       turn?.complete(event);
     }
   }
@@ -411,6 +534,7 @@ class _ClaudeProcess {
     final turn = _turn;
     _turn = null;
     _onEvent = null;
+    _tools = null;
     turn?.completeError(GaiaRunException(reason));
   }
 

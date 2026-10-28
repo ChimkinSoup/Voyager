@@ -74,4 +74,8 @@ class GaiaPipe {
 // The pipe's name: per Windows session and dev profile.
 std::wstring GaiaPipeName();
 
+// "D:P(A;;GA;;;<current user SID>)": only this user, nothing inherited.
+// Empty when the user's SID can't be read.
+std::wstring CurrentUserOnlySddl();
+
 #endif  // RUNNER_GAIA_PIPE_H_

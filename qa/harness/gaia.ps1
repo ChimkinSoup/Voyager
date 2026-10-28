@@ -290,7 +290,7 @@ function Invoke-Checks {
 
   Check 'the companion launches and connects' {
     $pipe = Get-GaiaPipe
-    $version = Invoke-CEval 'GAIA.cliVersion.toString()'
+    $version = Invoke-CEval 'GAIA.cliVersions[''claude_code''].toString()'
     Report 'the companion launches and connects' ($companionId -ne 0 -and $pipe -and (Invoke-CEval 'GAIA.cliChecked') -eq 'true') "PID $companionId, pipe $pipe, Claude Code $version"
   }
 

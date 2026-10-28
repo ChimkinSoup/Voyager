@@ -2,7 +2,9 @@
 // and the layout of a Codex home (`auth.json`, `AGENTS.md`, `config.toml`'s
 // `[windows] sandbox`, and `.sandbox/setup_marker.json`, which Codex writes
 // once the elevated Windows sandbox is set up for that home; observed on
-// 0.164.0). See codex_events.dart.
+// 0.164.0), and the `mcp_servers` keys that start Gaia's MCP shim
+// (`tool_timeout_sec`, `default_tools_approval_mode`; observed on 0.164.0).
+// See codex_events.dart.
 
 import 'dart:async';
 import 'dart:convert';
@@ -11,9 +13,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// Keys stripped from the CLI's environment, so a stray API key never moves
 /// a ChatGPT login onto API billing.
@@ -30,6 +35,11 @@ const _strippedEnvironment = {'OPENAI_API_KEY', 'CODEX_API_KEY'};
 /// a re-login. The one setting carried over is the Windows sandbox, without
 /// which every shell command is refused.
 ///
+/// Gaia's tools reach Codex through [toolPipe] (§5.3): each turn's process
+/// starts `voyager.exe --gaia-mcp` as an MCP server, its calls approved
+/// up front (Codex would otherwise refuse them under `exec`'s "never"
+/// approval policy) and its timeout set past [kGaiaCardHold].
+///
 /// An elevated sandbox has to be set up once per Codex home, behind a
 /// Windows approval prompt. A headless run that hit it would hang on a
 /// prompt nobody asked for, so until [setUpCodexSandbox] has run (the Gaia
@@ -39,12 +49,21 @@ class CodexRunner implements GaiaAgentRunner {
     required this.workingDirectory,
     required this.codexHome,
     String? userCodexHome,
+    this.toolPipe,
+    String? executable,
     this.onLine,
-  }) : userCodexHome = userCodexHome ?? defaultUserCodexHome();
+  }) : userCodexHome = userCodexHome ?? defaultUserCodexHome(),
+       executable = executable ?? Platform.resolvedExecutable;
 
   final String workingDirectory;
   final String codexHome;
   final String userCodexHome;
+
+  /// Where the shims connect; null offers Codex no Gaia tools.
+  final GaiaToolPipe? toolPipe;
+
+  /// voyager.exe, which `--gaia-mcp` makes the shim.
+  final String executable;
 
   /// Every line the CLI prints, before it's parsed.
   final void Function(String line)? onLine;
@@ -60,6 +79,7 @@ class CodexRunner implements GaiaAgentRunner {
     List<GaiaImageInput> images = const [],
     // Its sandboxes read anywhere: `--add-dir` is for writing.
     Set<String> directories = const {},
+    GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     await _prepareCodexHome(codexHome, userCodexHome);
@@ -71,6 +91,9 @@ class CodexRunner implements GaiaAgentRunner {
         text: kCodexSandboxNotSetUp,
       );
     }
+    final pipe = toolPipe;
+    final serveTools = tools != null && pipe != null && await pipe.listen();
+    const server = 'mcp_servers.$kGaiaMcpServer';
     final process = _live[chatId] = await _CodexProcess.start(
       workingDirectory: workingDirectory,
       codexHome: codexHome,
@@ -83,6 +106,24 @@ class CodexRunner implements GaiaAgentRunner {
         '-m',
         model,
         if (sandbox != null) ...['-c', 'windows.sandbox=$sandbox'],
+        // TOML literal strings: a path's backslashes stay as they are. The
+        // path's is multi-line, which may hold an apostrophe.
+        if (serveTools) ...[
+          '-c',
+          "$server.command='''$executable'''",
+          '-c',
+          "$server.args=['--gaia-mcp']",
+          '-c',
+          '$server.tool_timeout_sec=${kGaiaMcpToolTimeout.inSeconds}',
+          '-c',
+          "$server.default_tools_approval_mode='approve'",
+          // Codex starts MCP servers with only a few environment variables:
+          // the shim needs the dev profile to find this companion's pipe.
+          if (devProfile case final profile?) ...[
+            '-c',
+            "$server.env={VOYAGER_PROFILE='$profile'}",
+          ],
+        ],
         // Attached apart from the text, which keeps their `[image N]`
         // labels (§9.3). One value per flag: `--image a b` would take the
         // `-` below as an image too.
@@ -92,6 +133,7 @@ class CodexRunner implements GaiaAgentRunner {
         '-',
       ],
     );
+    final unbind = serveTools ? pipe.bind(process.pid, tools) : null;
     try {
       return await process.turn(
         images.isEmpty
@@ -102,6 +144,7 @@ class CodexRunner implements GaiaAgentRunner {
         onEvent,
       );
     } finally {
+      unbind?.call();
       if (_live[chatId] == process) _live.remove(chatId);
     }
   }
@@ -285,6 +328,9 @@ class _CodexProcess {
   final void Function(String line)? _onRawLine;
   final _stderr = StringBuffer();
   var _exited = false;
+
+  /// The cmd Gaia started, above Codex and the shims it starts.
+  int get pid => _process.pid;
 
   void Function(GaiaAgentEvent event)? _onEvent;
   Completer<GaiaTurnResult>? _turn;

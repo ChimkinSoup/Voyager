@@ -48,6 +48,53 @@ void main() {
     }
   });
 
+  test("the control channel: Gaia's tools as an sdk MCP server, and a "
+      'permission prompt', () {
+    final events = _events('control.jsonl');
+    final requests = events.whereType<ClaudeControlRequest>().toList();
+    expect(requests.map((r) => r.subtype), [
+      'mcp_message',
+      'mcp_message',
+      'mcp_message',
+      'mcp_message',
+      'can_use_tool',
+    ]);
+    expect(
+      requests
+          .where((r) => r.subtype == 'mcp_message')
+          .map((r) => (r.request['message']! as Map)['method']),
+      ['initialize', 'notifications/initialized', 'tools/list', 'tools/call'],
+    );
+    final call = requests[3].request['message']! as Map;
+    expect((call['params']! as Map)['name'], 'ask_user');
+    final permission = requests.last;
+    expect(permission.request['tool_name'], 'Bash');
+    expect(
+      (permission.request['input']! as Map)['command'],
+      'echo gaia-permission',
+    );
+    final response = events.whereType<ClaudeControlResponse>().single;
+    expect(response.requestId, 'gaia_initialize');
+    expect(response.error, isNull);
+    for (final event in events) {
+      if (event is ClaudeControlRequest || event is ClaudeControlResponse) {
+        expect(gaiaEventOf(event), isNull);
+      }
+    }
+  });
+
+  test("Gaia's own tools are named without their MCP prefix", () {
+    expect(
+      (gaiaEventOf(const ClaudeToolUse('mcp__gaia__ask_user'))! as GaiaToolUse)
+          .name,
+      'ask_user',
+    );
+    expect(
+      (gaiaEventOf(const ClaudeToolUse('Bash'))! as GaiaToolUse).name,
+      'Bash',
+    );
+  });
+
   test('a single turn streams its text and ends in a result', () {
     final events = _events('single_turn.jsonl');
     final init = events.whereType<ClaudeInit>().single;

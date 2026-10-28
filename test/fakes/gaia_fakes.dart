@@ -6,6 +6,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
 /// An in-memory [GaiaPipe]. The main instance's end is [FakeGaiaPipe.main];
@@ -187,13 +188,15 @@ typedef FakeClaudeSend = ({
   String prompt,
   List<GaiaImageInput> images,
   Set<String> directories,
+  GaiaTurnTools? tools,
 });
 
 /// A [GaiaAgentRunner] that plays scripted turns instead of running a CLI.
 /// Each [send] takes the next of [turns], recorded Claude Code events: they
 /// arrive one by one, as lines would, and a turn with no [ClaudeResult]
 /// hangs after its events until [stop] or [killAll], which fail it as a
-/// killed process does.
+/// killed process does, or [finish] ends it. [sent] keeps each turn's
+/// tools, for a test to call as the agent would.
 class FakeClaudeRunner implements GaiaAgentRunner {
   /// Every GAIA.md the companion set, in order.
   final instructions = <String>[];
@@ -220,6 +223,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
+    GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     sent.add((
@@ -229,6 +233,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
       prompt: prompt,
       images: images,
       directories: directories,
+      tools: tools,
     ));
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);
@@ -275,6 +280,15 @@ class FakeClaudeRunner implements GaiaAgentRunner {
 
   /// [chatId]'s CLI dies on its own, mid-turn.
   void crash(String chatId) => _fail(_active.remove(chatId));
+
+  /// Ends [chatId]'s hanging turn as a [ClaudeResult] would.
+  void finish(String chatId, {String sessionId = 'session-1', String text = ''}) {
+    final turn = _active.remove(chatId);
+    if (turn == null || turn.isCompleted) return;
+    turn.complete(
+      GaiaTurnResult(sessionId: sessionId, isError: false, text: text),
+    );
+  }
 
   static void _fail(Completer<GaiaTurnResult>? turn) {
     if (turn == null || turn.isCompleted) return;

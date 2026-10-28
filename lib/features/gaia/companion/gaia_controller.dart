@@ -14,6 +14,7 @@ import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
+import 'package:voyager/features/gaia/companion/gaia_chat_tools.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
@@ -23,6 +24,7 @@ import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 const _uuid = Uuid();
@@ -72,6 +74,7 @@ class GaiaController extends ChangeNotifier {
     this._utility,
     Future<String> Function()? clipboard,
     String? draftDirectory,
+    @visibleForTesting this._cardHold = kGaiaCardHold,
   }) : _clipboard = clipboard ?? _readClipboard,
        _draftDirectory = draftDirectory ?? Directory.systemTemp.path,
        _cliVersions =
@@ -107,6 +110,9 @@ class GaiaController extends ChangeNotifier {
 
   /// Where the draft's images wait until they're sent.
   final String _draftDirectory;
+
+  /// How long a card holds its tool call (§10.1).
+  final Duration _cardHold;
 
   /// The composer's text for the chat in view. Here rather than in the
   /// composer, so it outlives a mode change and a capture can add to it
@@ -934,6 +940,116 @@ class GaiaController extends ChangeNotifier {
 
   bool get currentRunning =>
       currentChatId != null && _running.contains(currentChatId);
+
+  /// The cards tool calls are waiting on, in every chat (§10).
+  final cards = GaiaCards();
+
+  /// The options picked on each open question card, by card id.
+  final _cardPicks = <String, Set<int>>{};
+
+  /// The card the composer answers (§10.1): an open card on the current
+  /// chat's latest reply that a tool call is waiting on, or an open
+  /// question whose wait ran out, which is answered as the next message.
+  /// Null for none.
+  GaiaCardPart? get openCard {
+    final last = messages.lastOrNull;
+    if (last == null || last.role != GaiaMessageRole.assistant) return null;
+    return last.parts.reversed
+        .whereType<GaiaCardPart>()
+        .where(
+          (card) =>
+              card.isOpen &&
+              (cards.isWaiting(card.id) || card.kind == GaiaCardKind.question),
+        )
+        .firstOrNull;
+  }
+
+  Set<int> cardPicks(String cardId) => _cardPicks[cardId] ?? const {};
+
+  /// Picks option [index] of question [card], or unpicks it: one of several
+  /// on a multi-select card, the only one otherwise.
+  void pickCardOption(GaiaCardPart card, int index) {
+    if (!card.isOpen || index < 0 || index >= card.options.length) return;
+    final picks = _cardPicks[card.id] ??= {};
+    if (picks.contains(index)) {
+      picks.remove(index);
+    } else {
+      if (!card.multiSelect) picks.clear();
+      picks.add(index);
+    }
+    notifyListeners();
+  }
+
+  /// Answers question [card] with its picked options and [text]. Its tool
+  /// call gets them; one no longer waiting gets them as the next message,
+  /// and the card is marked answered. False when there's nothing to send.
+  Future<bool> answerCard(GaiaCardPart card, {String text = ''}) async {
+    final selected = [
+      for (final index in cardPicks(card.id).toList()..sort())
+        card.options[index].label,
+    ];
+    if (selected.isEmpty && text.trim().isEmpty) return false;
+    final answer = {'selected': selected, 'text': text.trim()};
+    if (cards.decide(card.id, GaiaCardState.accepted, answer)) {
+      _cardPicks.remove(card.id);
+      notifyListeners();
+      return true;
+    }
+    // What send would give back: the card stays open, its picks kept.
+    if (aborted || draining != null || currentRunning) return false;
+    _cardPicks.remove(card.id);
+    await _decideStored(card.decided(GaiaCardState.accepted, answer));
+    await send(
+      [
+        'Re: ${card.question}',
+        if (selected.isNotEmpty) selected.join(', '),
+        if (text.trim().isNotEmpty) text.trim(),
+      ].join('\n'),
+    );
+    return true;
+  }
+
+  /// Turns [card] down: a question dismissed, a permission denied with
+  /// [message] saying why, if the user said.
+  void rejectCard(GaiaCardPart card, {String message = ''}) {
+    _cardPicks.remove(card.id);
+    final answer = {if (message.trim().isNotEmpty) 'message': message.trim()};
+    // A question whose wait ran out has no call to tell: just its message.
+    if (!cards.decide(card.id, GaiaCardState.rejected, answer) &&
+        card.kind == GaiaCardKind.question) {
+      unawaited(_decideStored(card.decided(GaiaCardState.rejected, answer)));
+    }
+    notifyListeners();
+  }
+
+  /// Allows the call permission [card] asks about.
+  void allowCard(GaiaCardPart card) {
+    cards.decide(card.id, GaiaCardState.accepted);
+    notifyListeners();
+  }
+
+  /// [card] decided with no tool call waiting: written to its message.
+  Future<void> _decideStored(GaiaCardPart card) async {
+    for (final list in _messages.values) {
+      for (final message in list) {
+        if (!message.parts.any((p) => p is GaiaCardPart && p.id == card.id)) {
+          continue;
+        }
+        await _persist(
+          _replace(
+            message,
+            message.copyWith(
+              parts: [
+                for (final part in message.parts)
+                  part is GaiaCardPart && part.id == card.id ? card : part,
+              ],
+            ),
+          ),
+        );
+        return;
+      }
+    }
+  }
 
   Future<void> start() async {
     await _window.init();
@@ -1786,7 +1902,11 @@ class GaiaController extends ChangeNotifier {
               'failed too: $error'
         : '$error';
     final configDir = _claudeConfigDir;
+    // Set once the reply is settled: a card voided as its run ends comes
+    // too late to change it.
+    var ended = false;
     void onEvent(GaiaAgentEvent event) {
+      if (ended) return;
       // Kept as it comes, so a turn stopped later still counts. One from a
       // run on the account before a config dir change isn't this one's.
       if (event case GaiaUsageUpdate(
@@ -1798,10 +1918,37 @@ class GaiaController extends ChangeNotifier {
       if (!builder.apply(event)) return;
       reply = _replace(reply, reply.copyWith(parts: builder.parts));
       final last = _lastPersist[reply.id];
-      if (last == null || DateTime.now().difference(last) > _persistEvery) {
+      // A card at once: it's what the Gaia page and other devices wait on.
+      if (event is GaiaCardUpdate ||
+          last == null ||
+          DateTime.now().difference(last) > _persistEvery) {
         unawaited(_persist(reply));
       }
+      if (event case GaiaCardUpdate(:final card) when card.isOpen) {
+        _reportCard(chatId, card);
+      }
     }
+
+    // Gaia's tools for this turn (§5.3): cards in this reply, reads from
+    // the main instance.
+    final tools = GaiaChatTools(
+      chatId: chatId,
+      cards: cards,
+      onCard: (card) => onEvent(GaiaCardUpdate(card)),
+      read: (tool, arguments) async {
+        try {
+          return await _pipe.request('voyagerRead', {
+                'tool': tool,
+                'arguments': arguments,
+              })
+              as String;
+        } on GaiaPipeException catch (error) {
+          throw GaiaToolException(error.message);
+        }
+      },
+      aborted: () => aborted,
+      hold: _cardHold,
+    );
 
     try {
       var result = script != null
@@ -1833,6 +1980,7 @@ class GaiaController extends ChangeNotifier {
               prompt: sent,
               images: imageInputs,
               directories: directories,
+              tools: tools,
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
@@ -1851,6 +1999,7 @@ class GaiaController extends ChangeNotifier {
           prompt: await handedOver(),
           images: imageInputs,
           directories: directories,
+          tools: tools,
           onEvent: onEvent,
         );
       }
@@ -1867,6 +2016,7 @@ class GaiaController extends ChangeNotifier {
           (keep || session != null)) {
         recordSession(agent.adapter, keep ? result.sessionId : null);
       }
+      ended = true;
       final parts = builder.finished;
       reply = _replace(
         reply,
@@ -1880,17 +2030,33 @@ class GaiaController extends ChangeNotifier {
                 parts: parts,
                 status: GaiaMessageStatus.complete,
                 contextTokens: result.contextTokens,
-                needsInput: gaiaEndsWithQuestion(
-                  parts.whereType<GaiaTextPart>().lastOrNull?.text ?? '',
-                ),
+                // Or a question card left open, its wait run out.
+                needsInput:
+                    gaiaEndsWithQuestion(
+                      parts.whereType<GaiaTextPart>().lastOrNull?.text ?? '',
+                    ) ||
+                    parts.any(
+                      (part) =>
+                          part is GaiaCardPart &&
+                          part.isOpen &&
+                          part.kind == GaiaCardKind.question,
+                    ),
               ),
       );
     } catch (error) {
       final stopped = _stopping.contains(chatId);
+      // Its open cards go with it: nothing is left to answer them.
+      ended = true;
+      cards.voidAll(chatId: chatId);
       reply = _replace(
         reply,
         reply.copyWith(
-          parts: builder.finished,
+          parts: [
+            for (final part in builder.finished)
+              part is GaiaCardPart && part.isOpen
+                  ? part.decided(GaiaCardState.voided)
+                  : part,
+          ],
           status: aborted
               ? GaiaMessageStatus.aborted
               : _drainCancelled
@@ -1956,6 +2122,7 @@ class GaiaController extends ChangeNotifier {
   Future<void> stop(String chatId) async {
     if (!_running.contains(chatId)) return;
     _stopping.add(chatId);
+    cards.voidAll(chatId: chatId);
     _scripted.stop(chatId);
     await Future.wait([
       for (final runner in _runners.values) runner.stop(chatId),
@@ -1978,10 +2145,7 @@ class GaiaController extends ChangeNotifier {
   /// another app has focus, shows it for every chat.
   void _reportDone(String chatId, GaiaMessage reply) {
     if (!_notifyOnDone || draining != null) return;
-    final front = _window.foreground;
-    if (front && chatId == currentChatId) return;
-    final floating =
-        _window.shown == GaiaMode.small || _window.shown == GaiaMode.large;
+    if (_window.foreground && chatId == currentChatId) return;
     final String title;
     final String body;
     switch (reply.status) {
@@ -1995,13 +2159,56 @@ class GaiaController extends ChangeNotifier {
       default:
         return;
     }
+    _toast(
+      chatId,
+      title,
+      body,
+      error: reply.status == GaiaMessageStatus.error,
+      question: reply.needsInput,
+    );
+  }
+
+  /// A card raised while its chat isn't in view raises a toast as a
+  /// finished run does (§14).
+  void _reportCard(String chatId, GaiaCardPart card) {
+    if (!_notifyOnDone || draining != null) return;
+    if (_window.foreground && chatId == currentChatId) return;
+    final String title;
+    final String body;
+    switch (card.kind) {
+      case GaiaCardKind.question:
+        title = 'Gaia has a question';
+        body = card.question;
+      case GaiaCardKind.permission:
+        title = 'Gaia needs your permission';
+        body = card.description.isNotEmpty ? card.description : card.tool;
+    }
+    _toast(
+      chatId,
+      title,
+      body.length > 120 ? '${body.substring(0, 120)}…' : body,
+      question: true,
+    );
+  }
+
+  /// In front, or floating, Gaia's own toast; otherwise a Windows one.
+  void _toast(
+    String chatId,
+    String title,
+    String body, {
+    bool error = false,
+    bool question = false,
+  }) {
+    final front = _window.foreground;
+    final floating =
+        _window.shown == GaiaMode.small || _window.shown == GaiaMode.large;
     final chatTitle = _chat(chatId)?.title ?? '';
     final toast = (
       chatId: chatId,
       title: title,
       body: chatTitle.isEmpty ? body : '$chatTitle: $body',
-      error: reply.status == GaiaMessageStatus.error,
-      question: reply.needsInput,
+      error: error,
+      question: question,
     );
     if (front || floating) {
       _toasts.add(toast);
@@ -2053,6 +2260,8 @@ class GaiaController extends ChangeNotifier {
   /// writing saved as aborted, before the main instance hears back (§15.7).
   Future<void> _abort() async {
     aborted = true;
+    // Their tool calls refuse, and the cards show voided (§15.7).
+    cards.voidAll();
     final saves = <Future<void>>[];
     for (final list in _messages.values) {
       for (final message in list) {

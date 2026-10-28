@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "gaia_pipe.cpp"
+  "gaia_tool_pipe.cpp"
   "main.cpp"
   "utils.cpp"
   "win32_window.cpp"

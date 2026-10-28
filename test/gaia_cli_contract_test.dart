@@ -9,6 +9,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// FRAGILE(cli): the Claude Code contract (GAIA_HLD.md §5.1) against the
 /// real, installed CLI. Gaia's own invocation ([ClaudeCodeRunner]) must
@@ -38,6 +39,37 @@ String _shape(String line) {
     _ => null,
   };
   return sub == null ? '$type' : '$type/$sub';
+}
+
+/// Answers every question with its last option, and denies every
+/// permission, recording each.
+class _ContractTools implements GaiaTurnTools {
+  final calls = <String>[];
+  final asked = <Map<String, Object?>>[];
+  final permits = <String>[];
+
+  @override
+  Future<GaiaToolResult> call(
+    String name,
+    Map<String, Object?> arguments,
+  ) async {
+    calls.add(name);
+    if (name != 'ask_user') return (text: 'unexpected tool', isError: true);
+    asked.add(arguments);
+    final options = (arguments['options'] as List?) ?? const [];
+    final last = options.isEmpty ? 'Blue' : (options.last as Map)['label'];
+    return (text: 'The user chose: "$last".', isError: false);
+  }
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) async {
+    permits.add(tool);
+    return (allow: false, message: 'The user declined.');
+  }
 }
 
 String _text(List<ClaudeEvent> events) {
@@ -211,6 +243,53 @@ void main() {
         expect(result.text, contains('gaia-contract'));
       } finally {
         await second.killAll();
+      }
+    },
+  );
+
+  test(
+    "Gaia's tools over the control channel: ask_user answered, and a "
+    'permission prompt denied',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      // A project rule that always asks, whatever the user's permission
+      // mode: safe mode still reads project settings (checked on 2.1.312).
+      final rules = File(
+        p.join(workingDirectory.path, '.claude', 'settings.json'),
+      )..createSync(recursive: true);
+      rules.writeAsStringSync(
+        '{"permissions":{"ask":["Bash(echo gaia-permission*)"]}}',
+      );
+      final cli = runner('gaia_tools');
+      final tools = _ContractTools();
+      try {
+        final events = <ClaudeEvent>[];
+        final result = await cli.sendRaw(
+          chatId: 'contract',
+          sessionId: null,
+          newSessionId: _uuid.v4(),
+          model: _model,
+          prompt:
+              'First call the gaia ask_user tool with the question "Pick a '
+              'colour" and the options Red and Blue. Then use the Bash tool '
+              'to run `echo gaia-permission`. Finally tell me which colour '
+              'I picked and whether the command ran.',
+          tools: tools,
+          onEvent: events.add,
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        expect(tools.calls, contains('ask_user'));
+        expect(tools.asked.single['question'], contains('colour'));
+        expect(tools.permits, ['Bash']);
+        expect(result.text, contains('Blue'));
+        expect(
+          events.whereType<ClaudeToolUse>().map((e) => e.name),
+          contains('mcp__gaia__ask_user'),
+        );
+      } finally {
+        await cli.killAll();
+        rules.parent.deleteSync(recursive: true);
       }
     },
   );

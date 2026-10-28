@@ -2,7 +2,8 @@
 # runs Gaia's own CLI invocation against the installed Claude Code and says
 # whether its output still parses, for every shape of turn Gaia relies on (a
 # plain turn, a tool call, a second turn on one process, a resume after the
-# process is killed, an unknown model).
+# process is killed, an unknown model, Gaia's tools and a permission prompt
+# over the control channel).
 #
 # Run it whenever Claude Code updates. It makes a few real model calls on the
 # subscription login, as Gaia does, so it's never part of `flutter test`.

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "gaia_pipe.h"
+#include "gaia_tool_pipe.h"
 #include "win32_window.h"
 
 // Registered-message name a second launch broadcasts to ask the running
@@ -61,6 +62,12 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<GaiaPipe> gaia_pipe_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       gaia_pipe_channel_;
+
+  // The companion's pipe for Gaia's MCP shims, created when Dart listens,
+  // and its Dart side.
+  std::unique_ptr<GaiaToolPipe> gaia_tool_pipe_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      gaia_tool_pipe_channel_;
 
   // Whether another window covers this one, for Dart to recheck.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>

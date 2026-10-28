@@ -11,6 +11,7 @@
 import 'dart:convert';
 
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// The Claude Code versions the adapter is tested against: at least the
 /// first, and below the second. Outside it, chats still run, with an
@@ -73,6 +74,33 @@ class ClaudeRateLimit extends ClaudeEvent {
   const ClaudeRateLimit(this.usage);
 
   final GaiaUsage usage;
+}
+
+/// `control_request`: the CLI asks its host, Gaia, mid-session (GAIA_HLD.md
+/// §5.3): `mcp_message` carries a JSON-RPC message for Gaia's tools, and
+/// `can_use_tool` asks whether a tool may run (§10.1). Answered with a
+/// `control_response` on stdin carrying the same [requestId].
+class ClaudeControlRequest extends ClaudeEvent {
+  const ClaudeControlRequest({
+    required this.requestId,
+    required this.subtype,
+    required this.request,
+  });
+
+  final String requestId;
+  final String subtype;
+
+  /// The whole `request`, [subtype] included.
+  final Map<String, Object?> request;
+}
+
+/// `control_response`: the CLI's answer to a request of Gaia's, the
+/// `initialize` that registers its tools. [error] when it failed.
+class ClaudeControlResponse extends ClaudeEvent {
+  const ClaudeControlResponse({required this.requestId, this.error});
+
+  final String requestId;
+  final String? error;
 }
 
 /// Anything the adapter doesn't read: hooks, status, subagent output,
@@ -148,6 +176,22 @@ ClaudeEvent parseClaudeLine(String line) {
     case 'rate_limit_event':
       final usage = claudeUsage(decoded['rate_limit_info']);
       return usage == null ? const ClaudeIgnored() : ClaudeRateLimit(usage);
+    case 'control_request':
+      final request = field<Map<String, Object?>>(decoded, 'request');
+      return ClaudeControlRequest(
+        requestId: field<String>(decoded, 'request_id'),
+        subtype: field<String>(request, 'subtype'),
+        request: request,
+      );
+    case 'control_response':
+      // Read leniently, since it's only logged: an error may lack its id.
+      final response = field<Map<String, Object?>>(decoded, 'response');
+      return ClaudeControlResponse(
+        requestId: response['request_id'] as String? ?? '',
+        error: response['subtype'] == 'success'
+            ? null
+            : response['error'] as String? ?? 'failed',
+      );
     default:
       return const ClaudeIgnored();
   }
@@ -196,13 +240,25 @@ int? claudeContextTokens(Object? usage) {
       count('cache_creation_input_tokens');
 }
 
+const _gaiaToolPrefix = 'mcp__${kGaiaMcpServer}__';
+
 /// What Gaia reads of [event]; null for the session's own bookkeeping.
 GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
   ClaudeTextStart() => const GaiaTextStart(),
   ClaudeTextDelta(:final text) => GaiaTextDelta(text),
-  ClaudeToolUse(:final name) => GaiaToolUse(name),
+  // Gaia's own tools by their own names: `ask_user`, not
+  // `mcp__gaia__ask_user`.
+  ClaudeToolUse(:final name) => GaiaToolUse(
+    name.startsWith(_gaiaToolPrefix)
+        ? name.substring(_gaiaToolPrefix.length)
+        : name,
+  ),
   ClaudeRateLimit(:final usage) => GaiaUsageUpdate(usage),
-  ClaudeInit() || ClaudeResult() || ClaudeIgnored() => null,
+  ClaudeInit() ||
+  ClaudeResult() ||
+  ClaudeControlRequest() ||
+  ClaudeControlResponse() ||
+  ClaudeIgnored() => null,
 };
 
 /// Reads `claude --version` output ("2.1.310 (Claude Code)").

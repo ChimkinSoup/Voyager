@@ -91,6 +91,38 @@ bool FlutterWindow::OnCreate() {
           result->NotImplemented();
         }
       });
+  gaia_tool_pipe_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "voyager/gaia_tools",
+          &flutter::StandardMethodCodec::GetInstance());
+  gaia_tool_pipe_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const std::string& method = call.method_name();
+        const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+        auto id = [&]() -> int64_t {
+          const auto found = args->find(flutter::EncodableValue("id"));
+          return found == args->end() ? 0 : found->second.LongValue();
+        };
+        if (method == "listen") {
+          if (!gaia_tool_pipe_) {
+            gaia_tool_pipe_ = std::make_unique<GaiaToolPipe>(GetHandle());
+          }
+          result->Success(flutter::EncodableValue(gaia_tool_pipe_->Listen()));
+        } else if (method == "send" && args && gaia_tool_pipe_) {
+          const auto line = args->find(flutter::EncodableValue("line"));
+          if (line != args->end()) {
+            gaia_tool_pipe_->Send(id(), std::get<std::string>(line->second));
+          }
+          result->Success();
+        } else if (method == "drop" && args && gaia_tool_pipe_) {
+          gaia_tool_pipe_->Drop(id());
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
   g_cover_window = GetHandle();
   cover_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -133,6 +165,8 @@ void FlutterWindow::OnDestroy() {
   instance_channel_ = nullptr;
   gaia_pipe_channel_ = nullptr;
   gaia_pipe_ = nullptr;
+  gaia_tool_pipe_channel_ = nullptr;
+  gaia_tool_pipe_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -181,6 +215,32 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
           gaia_pipe_channel_->InvokeMethod("disconnected", nullptr);
           break;
       }
+    }
+    return 0;
+  }
+
+  if (message == kGaiaToolPipeEventMessage && gaia_tool_pipe_ &&
+      gaia_tool_pipe_channel_) {
+    for (auto& event : gaia_tool_pipe_->TakeEvents()) {
+      flutter::EncodableMap args{
+          {flutter::EncodableValue("id"), flutter::EncodableValue(event.id)}};
+      const char* method = "disconnected";
+      switch (event.kind) {
+        case GaiaToolPipe::Event::Kind::kConnected:
+          method = "connected";
+          args[flutter::EncodableValue("ancestry")] =
+              flutter::EncodableValue(std::move(event.data));
+          break;
+        case GaiaToolPipe::Event::Kind::kMessage:
+          method = "message";
+          args[flutter::EncodableValue("line")] =
+              flutter::EncodableValue(std::move(event.data));
+          break;
+        case GaiaToolPipe::Event::Kind::kDisconnected:
+          break;
+      }
+      gaia_tool_pipe_channel_->InvokeMethod(
+          method, std::make_unique<flutter::EncodableValue>(std::move(args)));
     }
     return 0;
   }

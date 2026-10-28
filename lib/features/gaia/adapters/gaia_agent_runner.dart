@@ -1,4 +1,5 @@
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// What every adapter reports of a turn (GAIA_HLD.md §5.1), whatever its
 /// CLI or API prints: the agent's text and the tools it called.
@@ -22,6 +23,14 @@ class GaiaToolUse extends GaiaAgentEvent {
   const GaiaToolUse(this.name);
 
   final String name;
+}
+
+/// A card was raised, or decided (§10): one with a new id goes after the
+/// reply so far, one already there is replaced where it is.
+class GaiaCardUpdate extends GaiaAgentEvent {
+  const GaiaCardUpdate(this.card);
+
+  final GaiaCardPart card;
 }
 
 /// The account's usage, as the backend reported it mid-turn.
@@ -89,9 +98,11 @@ abstract interface class GaiaAgentRunner {
   /// Starts a turn in [chatId]'s session: [sessionId] resumes one, null
   /// starts one. [images] go with [prompt], which names them by their
   /// `[image N]` tokens. [directories] are the folders the chat's attached
-  /// files and folders are in, which the agent must be let read. [onEvent]
-  /// gets each event of the turn; the future completes with its result, or
-  /// throws a [GaiaRunException].
+  /// files and folders are in, which the agent must be let read. [tools]
+  /// answers the turn's calls to Gaia's tools and its CLI's permission
+  /// prompts (§5.3); null offers none. [onEvent] gets each event of the
+  /// turn; the future completes with its result, or throws a
+  /// [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
@@ -99,6 +110,7 @@ abstract interface class GaiaAgentRunner {
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
+    GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
   });
 
@@ -161,6 +173,15 @@ class GaiaTurnBuilder {
           _parts.last = GaiaActivityPart([...tools, name]);
         } else {
           _parts.add(GaiaActivityPart([name]));
+        }
+      case GaiaCardUpdate(:final card):
+        final index = _parts.indexWhere(
+          (part) => part is GaiaCardPart && part.id == card.id,
+        );
+        if (index < 0) {
+          _parts.add(card);
+        } else {
+          _parts[index] = card;
         }
       case GaiaUsageUpdate():
         return false;

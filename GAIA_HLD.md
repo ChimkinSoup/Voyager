@@ -8,7 +8,10 @@ keeps one synced chat history across desktop and phone.
 Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
-in. Phases 0 to 3 are done (Phase 3 checked live 2026-10-26, §19).
+in. Phases 0 to 3 are done (Phase 3 checked live 2026-10-26, §19). Phase 4
+is split in two: 4A (Gaia tools, reads, question and permission cards) is
+done and checked live 2026-10-28; 4B (proposals and the action log) is
+specified in §19 but not started.
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -275,8 +278,14 @@ should replace those with its own synced `GAIA.md`, edited on the Gaia page:
   CLAUDE.md out; `--safe-mode` does (it also drops hooks and plugins), and
   keeps the subscription login, unlike `--bare`. GAIA.md goes in with
   `--append-system-prompt-file`, since `cmd /c` would mangle multi-line text.
-  Safe mode also disables MCP servers; Phase 4 has to check `--mcp-config`
-  still works under it.
+  Safe mode also disables MCP servers, `--mcp-config` stdio ones included
+  (checked on 2.1.312), but not an `sdk` server that Gaia hosts itself over
+  the stream-json control channel. That's how Claude Code gets Gaia's tools
+  (§5.3, decided 2026-10-28). The alternative was dropping safe mode for
+  `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, which does keep CLAUDE.md out, but
+  `--setting-sources ""` would also drop the user's permission mode, and
+  `user` would bring their hooks and plugins back. Project settings still
+  apply under safe mode.
 - **Codex:** one Gaia-owned `CODEX_HOME` per account
   (`%APPDATA%\Voyager\gaia\codex\<account>`, §6.1) with its own `AGENTS.md`
   and `config.toml`. `auth.json` is **copied**, not symlinked (symlinks need
@@ -308,13 +317,31 @@ per-chat toggle (§5.3).
 
 ### 5.3 Gaia tools: the agent-agnostic integration layer
 
-Gaia's tools are served over **stdio MCP**. Every adapter's MCP config
-launches `voyager.exe --gaia-mcp --chat <id> --run <id>`, a thin shim that
-relays MCP calls to the companion over the named pipe (§3.2). Nothing listens
-on a localhost port, so other local processes can't call the tools, and every
-call is bound to its chat and run. Grants, Abort and cards rely on that
-binding. Everything Gaia-specific is a tool, so all three agents get
-identical capabilities without per-vendor code:
+Gaia's tools are one MCP server (`gaia`) with two transports, both handing
+each JSON-RPC message to the same Dart handler (`lib/features/gaia/tools/`):
+
+- **Claude Code:** in-process. Gaia is the process's SDK host. An `sdk`
+  server in `--mcp-config` registers it through an `initialize` control
+  request, and the CLI sends `mcp_message` requests on stdout that Gaia
+  answers on stdin. Its permission prompts arrive on the same channel as
+  `can_use_tool` requests (`--permission-prompt-tool stdio`). This is the
+  Agent SDK's own protocol, undocumented, so it's FRAGILE with a fixture
+  (`control.jsonl`) and a contract scenario like the event shapes (§5.1).
+- **Codex:** stdio. Its MCP config launches `voyager.exe --gaia-mcp`, a
+  native byte relay (no engine, no window) between its stdio and the
+  companion's tool pipe (`windows/runner/gaia_tool_pipe.cpp`), which is
+  current-user only and rejects remote clients. Each shim is accepted only
+  when a process the companion launched for a run is among its ancestors,
+  and its calls are bound to that run. The shim takes no `--chat`/`--run`
+  arguments, since an argument could be forged and the ancestry can't. The
+  shim checks that the pipe's server is its own exe.
+
+Nothing listens on a localhost port, so other local processes can't call
+the tools, and every call is bound to its chat and run. Grants, Abort and
+cards rely on that binding. Everything Gaia-specific is a tool, so every
+agent gets the same capabilities without per-vendor code. Tool names carry
+no dots (`ask_user`, `voyager_todos`), since the Messages API allows only
+letters, digits, `_` and `-`:
 
 - `voyager.*` — read tools (today's todos, a journal day, calendar range,
   workouts…) and **propose** tools (`propose_calendar_event`,
@@ -878,7 +905,9 @@ mechanism as proposals: number keys pick an option, typing gives a free
 answer, and Ctrl+Enter submits. The answer is the tool result, so the agent
 continues in the same turn with its working state intact.
 - Claude Code's built-in `AskUserQuestion` is disabled (`--disallowedTools`),
-  so it can't misbehave in headless mode. GAIA.md tells every agent to use
+  so it can't misbehave in headless mode. Plain `-p` leaves it out anyway,
+  but as an SDK host Gaia is offered it, so the flag is needed (checked on
+  2.1.312). GAIA.md tells every agent to use
   `gaia.ask_user` when it needs a decision. Codex and Gemini have no built-in
   equivalent in headless mode, so this is their only structured path.
 - **Waiting a long time:** the tool holds the agent for up to **1 hour** (a
@@ -1299,7 +1328,8 @@ Other additions:
 | 1 | Done | Gaia drift tables + sync, Gaia page (chats, settings, setup checklist), GAIA.md, notifications/background runs, update drain |
 | 2 | Done | Agents/tiers/router, Codex adapter, Haiku utility model on Claude Code, cross-vendor handoff, commands, keybinds. **Gemini skipped** (below) |
 | 3 | Done | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
-| 4 | | Gaia tools (stdio MCP shim) + `voyager.*` read/propose + approval cards + action log, `gaia.ask_user` question cards, permission cards |
+| 4A | Done | Gaia tools (Claude Code's control channel, Codex's stdio shim), `voyager_*` reads, the card system, `ask_user` question cards, Claude Code permission cards |
+| 4B | | `propose_*` tools (todo, calendar event, journal entry) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` and its permission cards |
 | 5 | | Memory + curator + inbox |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
@@ -1315,6 +1345,68 @@ built to §5.1's standard. The Gemini API utility model was built, then
 removed for Haiku on Claude Code (§5.1), which needs no key. Gemini comes
 back once a login works: record fixtures, then add the CLI adapter beside
 the Codex one.
+
+Phase 4A as built (2026-10-28):
+- **Transports** as in §5.3. Codex gets the shim through `-c
+  mcp_servers.gaia.*` on each turn: `command` (this exe), `args`
+  (`--gaia-mcp`), `tool_timeout_sec`, and `default_tools_approval_mode =
+  'approve'`, without which `exec`'s "never" policy refuses every MCP
+  call. In a dev profile it also gets `env = {VOYAGER_PROFILE = …}`,
+  because Codex starts MCP servers with only a few environment variables.
+  Claude Code gets `MCP_TOOL_TIMEOUT` past the hold. A 75 s held call
+  works on both (2.1.312, 0.164.0).
+- **Tools.** `ask_user` (a question, up to 9 options, multi-select, a
+  recommended one), plus four reads answered by the main instance:
+  `voyager_todos` (open tasks by list with subtasks, by due date or list),
+  `voyager_calendar` (up to 62 days, repeating events on each day they
+  occur, moved occurrences in their place), `voyager_journal` (up to 31
+  days) and `voyager_workouts` (up to 62 days, sets per exercise). Each
+  read is plain text in a `<voyager_data>` block framed as reference, not
+  instructions, with today's date. None of them reads secure notes. Reads
+  are on in every chat: the workspace toggle (§5.2) waits for workspace
+  chats, which don't exist yet. Claude Code's activity chip names Gaia's
+  tools without their `mcp__gaia__` prefix; Codex reports them as "MCP".
+- **Cards** are a `card` part on the reply (§8), saved as soon as each is
+  raised or decided. A raised card toasts like a finished run when its
+  chat isn't in view. While the current chat's latest reply has an open
+  card, the composer answers it:
+  - a question: the picked options (keys 1–9 while the draft is empty, or
+    a click) plus anything typed, sent with the send key;
+  - a permission: the send key on an empty draft allows, and typed text
+    denies with that text as the reason.
+
+  The card's own buttons (Dismiss, Deny, Allow) do the same. A question
+  unanswered for the hour stays open, the agent is told to end its turn,
+  and the reply is marked `needsInput`. Answering later marks the card and
+  sends `Re: <question>` with the answer as the next message. A permission
+  unanswered for the hour expires, denied. Stop, Abort, or a run that dies
+  voids its chat's open cards, and the reply keeps them voided. While
+  aborted, every tool refuses. The Gaia page shows cards as a record only;
+  answering from the phone comes with Phase 6.
+- **Checked live (2026-10-28)** on the `qa` profile with the debug build:
+  - Codex (gpt-6.1-sol) called `voyager_todos` and `ask_user` through the
+    shim, and answering the card in the controller reached it.
+  - The same through Claude Code (Haiku).
+  - The contract check's new scenario: an `ask_user` call and a permission
+    prompt forced by a project `ask` rule, on Opus.
+
+  Not checked live: a permission card from the user's own Auto mode
+  (rarely asked), the hour's expiry (unit-tested with a short hold), and
+  the shim's connection being dropped for a process Gaia didn't start.
+
+Phase 4B, specified but not started: the writes.
+- `propose_todo`, `propose_calendar_event` and `propose_journal_entry` raise
+  a `proposal` card holding a real editor (§10). Accepting commits through
+  the main instance's executor with an approval token the companion issues.
+  The executor checks the abort flag itself, and every row it writes gets
+  `origin: gaia`.
+- A typed correction rejects the card with that text; Abort voids it;
+  several proposals in one turn stack, with "accept all".
+- The action log on the Gaia page lists committed proposals, with undo
+  where the entity supports it.
+- Codex `app-server` is evaluated against `exec`. If it can surface
+  approvals, Codex gets permission cards too; until then Codex runs as
+  §5.1 describes and can't ask.
 
 Phase 3 as built:
 - **Images.** A user message keeps its whole text, `[image N]` tokens
@@ -1471,7 +1563,7 @@ No open questions remain.
 To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's
 auto-compact override, Codex `app-server` vs `exec` (including approval
-requests), `--disallowedTools AskUserQuestion` in headless mode, and the usage calls for
+requests; Phase 4B), and the usage calls for
 Codex idle accounts and Gemini CLI (§6.2).
 
 Before Phase 7: re-check each provider's consumer terms on switching between

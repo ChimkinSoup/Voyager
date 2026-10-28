@@ -380,6 +380,7 @@ sealed class GaiaPart {
           role: GaiaMessageRole.values.byName(json['role']! as String),
           text: json['text']! as String,
         ),
+        'card' => GaiaCardPart.fromJson(json),
         _ => GaiaUnknownPart(json),
       };
 }
@@ -590,6 +591,115 @@ class GaiaQuotePart extends GaiaPart {
     'role': role.name,
     'text': text,
   };
+}
+
+/// What a card asks (§10.1): a question the agent put through `ask_user`,
+/// or a permission prompt from its CLI. Proposals come with Phase 4B.
+enum GaiaCardKind { question, permission }
+
+/// [open] until the user answers ([accepted]) or turns it down ([rejected]),
+/// Abort or a stopped run voids it, or its wait runs out ([expired]).
+enum GaiaCardState { open, accepted, rejected, voided, expired }
+
+/// One option of a question card.
+typedef GaiaCardOption = ({String label, String description});
+
+/// A card in an agent's reply (§8, §10): the tool call it stands for blocks
+/// until it's decided, and it's kept on the message, so the history shows
+/// what was asked and what the user said.
+///
+/// A question carries [question], [options] (none for a free answer only),
+/// [multiSelect] and [recommended] (an option's index); its [answer] is
+/// `{selected: [labels], text}`. A permission carries [tool] and [input],
+/// the call the CLI asks about, and [description]; its [answer] is
+/// `{message}` when the user said why not.
+class GaiaCardPart extends GaiaPart {
+  const GaiaCardPart({
+    required this.id,
+    required this.kind,
+    this.state = GaiaCardState.open,
+    this.question = '',
+    this.options = const [],
+    this.multiSelect = false,
+    this.recommended,
+    this.tool = '',
+    this.input = const {},
+    this.description = '',
+    this.answer,
+  });
+
+  final String id;
+  final GaiaCardKind kind;
+  final GaiaCardState state;
+  final String question;
+  final List<GaiaCardOption> options;
+  final bool multiSelect;
+  final int? recommended;
+  final String tool;
+  final Map<String, Object?> input;
+  final String description;
+  final Map<String, Object?>? answer;
+
+  bool get isOpen => state == GaiaCardState.open;
+
+  GaiaCardPart decided(GaiaCardState state, [Map<String, Object?>? answer]) =>
+      GaiaCardPart(
+        id: id,
+        kind: kind,
+        state: state,
+        question: question,
+        options: options,
+        multiSelect: multiSelect,
+        recommended: recommended,
+        tool: tool,
+        input: input,
+        description: description,
+        answer: answer ?? this.answer,
+      );
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'card',
+    'id': id,
+    'kind': kind.name,
+    'state': state.name,
+    if (kind == GaiaCardKind.question) ...{
+      'question': question,
+      'options': [
+        for (final option in options)
+          {'label': option.label, 'description': option.description},
+      ],
+      'multiSelect': multiSelect,
+      'recommended': ?recommended,
+    } else ...{
+      'tool': tool,
+      'input': input,
+      'description': description,
+    },
+    'answer': ?answer,
+  };
+
+  factory GaiaCardPart.fromJson(Map<String, Object?> json) => GaiaCardPart(
+    id: json['id']! as String,
+    kind: GaiaCardKind.values.byName(json['kind']! as String),
+    state: GaiaCardState.values.byName(json['state']! as String),
+    question: json['question'] as String? ?? '',
+    options: [
+      for (final option
+          in (json['options'] as List?)?.cast<Map<Object?, Object?>>() ??
+              const <Map<Object?, Object?>>[])
+        (
+          label: option['label']! as String,
+          description: option['description'] as String? ?? '',
+        ),
+    ],
+    multiSelect: json['multiSelect'] == true,
+    recommended: (json['recommended'] as num?)?.toInt(),
+    tool: json['tool'] as String? ?? '',
+    input: (json['input'] as Map?)?.cast<String, Object?>() ?? const {},
+    description: json['description'] as String? ?? '',
+    answer: (json['answer'] as Map?)?.cast<String, Object?>(),
+  );
 }
 
 /// The `[image N]` token an attachment is referred to by (§9.3).
