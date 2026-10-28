@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -37,6 +38,9 @@ const _captionWait = Duration(seconds: 20);
 /// How many messages' images are captioned at once: each is a CLI process.
 const _captionsAtOnce = 3;
 
+/// How soon a changed draft is saved (§9.3).
+const _saveDraftsAfter = Duration(seconds: 1);
+
 /// A finished run, as Gaia's own toast shows it.
 typedef GaiaRunToast = ({
   String chatId,
@@ -44,6 +48,13 @@ typedef GaiaRunToast = ({
   String body,
   bool error,
   bool question,
+});
+
+/// A chat's draft while it's out of view.
+typedef _Draft = ({
+  TextEditingValue text,
+  List<GaiaDraftImage> images,
+  List<GaiaFilePart> files,
 });
 
 /// The companion's state: chats read from and written to the main instance,
@@ -97,8 +108,9 @@ class GaiaController extends ChangeNotifier {
   /// Where the draft's images wait until they're sent.
   final String _draftDirectory;
 
-  /// The composer's text. Here rather than in the composer, so it outlives
-  /// a mode change and a capture can add to it (§15.1).
+  /// The composer's text for the chat in view. Here rather than in the
+  /// composer, so it outlives a mode change and a capture can add to it
+  /// (§15.1).
   final draft = TextEditingController();
 
   /// The draft's images (§9.3), each named in [draft] by its `[image N]`.
@@ -146,10 +158,29 @@ class GaiaController extends ChangeNotifier {
     final label = [
       gaiaNextImageLabel(messages),
       for (final image in draftImages) image.label + 1,
+      for (final image in arrivingImages) image.label + 1,
+      for (final image
+          in _unfetched[_keyOf(currentChatId)] ??
+              const <GaiaDraftImageRecord>[])
+        image.label + 1,
     ].reduce(max);
     draftImages.add(GaiaDraftImage(label: label, path: path));
     _insertInDraft(gaiaImageToken(label));
     notifyListeners();
+    unawaited(_ingest(path));
+  }
+
+  /// The main instance takes the draft image at [path] in, so the kept
+  /// draft can name it. Refused, it stays in this draft alone, and its
+  /// send says why.
+  Future<void> _ingest(String path) async {
+    try {
+      final mediaId =
+          (await _pipe.request('ingestImage', {'path': path}))! as String;
+      _ingested(path, mediaId);
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] draft image not kept: $error');
+    }
   }
 
   /// The region capture being cropped on the overlay (§3.2): its file and
@@ -275,13 +306,14 @@ class GaiaController extends ChangeNotifier {
       ).writeAsBytes(await gaiaRenderPng(image.path, edits: edits));
     }
     if (image.preview case final old?) unawaited(_deleteQuietly(old));
-    // Removed while it rendered.
-    final at = draftImages.indexOf(image);
+    // Removed while it rendered. By its file: an ingest or a kept draft
+    // may have replaced its entry meanwhile.
+    final at = draftImages.indexWhere((held) => held.path == image.path);
     if (at < 0) {
       if (preview != null) unawaited(_deleteQuietly(preview));
       return;
     }
-    draftImages[at] = image.copyWith(edits: edits, preview: preview);
+    draftImages[at] = draftImages[at].copyWith(edits: edits, preview: preview);
     notifyListeners();
   }
 
@@ -294,6 +326,12 @@ class GaiaController extends ChangeNotifier {
       }
     }
     draftImages.removeWhere((image) => image.label == label);
+    _arriving[_keyOf(currentChatId)]?.removeWhere(
+      (image) => image.label == label,
+    );
+    if (_arriving[_keyOf(currentChatId)]?.isEmpty ?? false) {
+      _arriving.remove(_keyOf(currentChatId));
+    }
     final token = gaiaImageToken(label);
     final text = draft.text;
     final at = text.indexOf(token);
@@ -374,6 +412,363 @@ class GaiaController extends ChangeNotifier {
   void removeDraftQuote(GaiaQuotePart quote) {
     draftQuotes.remove(quote);
     notifyListeners();
+  }
+
+  /// Each chat's text, images and files while another chat is in view, by
+  /// [_keyOf] its chat. The one in view is [draft], [draftImages] and
+  /// [draftFiles]; quotes and the window go with whichever chat is in view.
+  final _drafts = <String, _Draft>{};
+
+  /// [chatId]'s draft's key, here and in the main instance's store.
+  static String _keyOf(String? chatId) => chatId ?? GaiaDraft.newChatId;
+
+  /// Brings [chatId] into view with its own draft, the one in view put
+  /// away for when its chat is back.
+  void _viewChat(String? chatId) {
+    if (chatId == currentChatId) return;
+    if (draft.text.isNotEmpty ||
+        draftImages.isNotEmpty ||
+        draftFiles.isNotEmpty) {
+      _drafts[_keyOf(currentChatId)] = (
+        text: draft.value.copyWith(composing: TextRange.empty),
+        images: [...draftImages],
+        files: [...draftFiles],
+      );
+    }
+    final next = _drafts.remove(_keyOf(chatId));
+    draftImages
+      ..clear()
+      ..addAll(next?.images ?? const []);
+    draftFiles
+      ..clear()
+      ..addAll(next?.files ?? const []);
+    currentChatId = chatId;
+    draft.value = next?.text ?? TextEditingValue.empty;
+  }
+
+  /// [key]'s draft, in view or put away.
+  _Draft _draftAt(String key) => key == _keyOf(currentChatId)
+      ? (text: draft.value, images: draftImages, files: draftFiles)
+      : _drafts[key] ??
+            (text: TextEditingValue.empty, images: const [], files: const []);
+
+  /// [_draftAt]'s other half.
+  void _setDraftAt(String key, _Draft to) {
+    // Copied first: [to] may hold the lists in view.
+    final images = [...to.images];
+    final files = [...to.files];
+    if (key == _keyOf(currentChatId)) {
+      draftImages
+        ..clear()
+        ..addAll(images);
+      draftFiles
+        ..clear()
+        ..addAll(files);
+      draft.value = to.text;
+    } else if (to.text.text.isEmpty && images.isEmpty && files.isEmpty) {
+      _drafts.remove(key);
+    } else {
+      _drafts[key] = (text: to.text, images: images, files: files);
+    }
+    notifyListeners();
+  }
+
+  /// The drafts are kept by the main instance and synced (§9.3). Each
+  /// draft's content as last saved or loaded, by key, so a save sends only
+  /// what changed; and its `updatedAt`, so a draft that comes back with it
+  /// is known as this one's own, or one already taken.
+  final _savedDrafts = <String, String>{};
+  final _draftStamps = <String, DateTime>{};
+
+  /// Until the kept drafts are in, nothing is saved over them.
+  var _draftsLoaded = false;
+  Timer? _saveSoon;
+
+  /// A kept draft's images still on their way to this device, by key: its
+  /// saves keep them until they're here.
+  final _arriving = <String, List<GaiaDraftImageRecord>>{};
+
+  /// A kept draft's images that never came to this device, by key: not
+  /// shown, and their tokens taken out when it's sent, but kept in its
+  /// saves, so the device that has them doesn't lose them.
+  final _unfetched = <String, List<GaiaDraftImageRecord>>{};
+
+  /// The draft in view's images still syncing from another device, which
+  /// the composer shows as placeholders until they're here.
+  List<GaiaDraftImageRecord> get arrivingImages =>
+      _arriving[_keyOf(currentChatId)] ?? const [];
+
+  /// Whether the draft in view can go now: not while any of its images are
+  /// still syncing, which a toast says rather than sending without them.
+  /// Ready, it loses the tokens of images that never came, and goes only
+  /// if anything's left.
+  bool readyToSend() {
+    final waiting = arrivingImages;
+    if (waiting.isEmpty) {
+      for (final lost in _unfetched.remove(_keyOf(currentChatId)) ?? const []) {
+        removeDraftImage(lost.label);
+      }
+      return !draftIsEmpty;
+    }
+    _toasts.add((
+      chatId: '',
+      title: 'Images still syncing',
+      body:
+          '${waiting.map((image) => gaiaImageToken(image.label)).join(', ')} '
+          "${waiting.length == 1 ? "hasn't" : "haven't"} arrived from your "
+          'other device yet.',
+      error: false,
+      question: false,
+    ));
+    return false;
+  }
+
+  /// At most a save a second: the controller notifies on every streamed
+  /// token too, which would otherwise put it off for a whole reply.
+  void _draftsChanged() {
+    if (!_draftsLoaded) return;
+    _saveSoon ??= Timer(_saveDraftsAfter, () => unawaited(_saveDrafts()));
+  }
+
+  /// [key]'s draft as the main instance keeps it, stamped [at].
+  GaiaDraft _keptDraft(String key, DateTime at) {
+    final held = _draftAt(key);
+    final selection = held.text.selection;
+    return GaiaDraft(
+      id: key,
+      text: held.text.text,
+      caret: selection.isValid ? selection.extentOffset : -1,
+      images: [
+        for (final image in held.images)
+          if (image.mediaId case final mediaId?)
+            GaiaDraftImageRecord(
+              mediaId: mediaId,
+              label: image.label,
+              edits: image.edits.isEmpty ? null : image.edits.toJson(),
+            ),
+        ...?_arriving[key],
+        ...?_unfetched[key],
+      ]..sort((a, b) => a.label.compareTo(b.label)),
+      files: [...held.files],
+      createdAt: at,
+      updatedAt: at,
+    );
+  }
+
+  /// What [_savedDrafts] compares: [kept] less its stamps.
+  static String _contentOf(GaiaDraft kept) => jsonEncode({
+    'text': kept.text,
+    'caret': kept.caret,
+    'images': [for (final image in kept.images) image.toJson()],
+    'files': [for (final file in kept.files) file.toJson()],
+  });
+
+  static final _emptyContent = _contentOf(
+    GaiaDraft(id: '', createdAt: DateTime.utc(0), updatedAt: DateTime.utc(0)),
+  );
+
+  /// Whether [key]'s draft has changed here since it was saved or loaded.
+  bool _unsaved(String key) =>
+      _contentOf(_keptDraft(key, DateTime.utc(0))) !=
+      (_savedDrafts[key] ?? _emptyContent);
+
+  Future<void> _saveDrafts() async {
+    _saveSoon = null;
+    final keys = {
+      ..._drafts.keys,
+      _keyOf(currentChatId),
+      ..._savedDrafts.keys,
+      ..._arriving.keys,
+      ..._unfetched.keys,
+    };
+    for (final key in keys) {
+      if (!_unsaved(key)) continue;
+      final kept = _keptDraft(key, utcNow());
+      _savedDrafts[key] = _contentOf(kept);
+      _draftStamps[key] = kept.updatedAt;
+      try {
+        await _pipe.request('putDraft', {'draft': kept.toJson()});
+      } on GaiaPipeException catch (error) {
+        // Tried again with the next change.
+        debugPrint('[gaia] draft not saved: $error');
+        _savedDrafts.remove(key);
+      }
+    }
+  }
+
+  /// One load at a time, in order: an older list taken after a newer one
+  /// would put the drafts back.
+  Future<void> _draftsLoading = Future.value();
+
+  Future<void> _loadDrafts() => _draftsLoading = _draftsLoading.then(
+    (_) => _loadDraftsNow(),
+    onError: (_) => _loadDraftsNow(),
+  );
+
+  /// The kept drafts, at start and whenever they change: one another
+  /// device saved replaces this one's, unless this one's has changed since
+  /// and is about to be saved over it.
+  Future<void> _loadDraftsNow() async {
+    try {
+      final list = (await _pipe.request('drafts'))! as List;
+      for (final json in list) {
+        var kept = GaiaDraft.fromJson((json as Map).cast<String, Object?>());
+        final key = kept.id;
+        if (_draftStamps[key] == kept.updatedAt || _unsaved(key)) continue;
+        if (kept.deletedAt != null) {
+          // Its chat deleted elsewhere while in view: [_refresh] moves what's
+          // here to a new chat.
+          if (key == _keyOf(currentChatId) && !kept.isEmpty) continue;
+          kept = GaiaDraft(
+            id: key,
+            createdAt: kept.createdAt,
+            updatedAt: kept.updatedAt,
+          );
+        }
+        _draftStamps[key] = kept.updatedAt;
+        _applyDraft(kept);
+        // As it stands here, its caret placed: taking it isn't a change.
+        _savedDrafts[key] = _contentOf(_keptDraft(key, kept.updatedAt));
+      }
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] drafts not loaded: $error');
+    } finally {
+      // Saved over only where something's been typed here since.
+      _draftsLoaded = true;
+    }
+  }
+
+  /// [kept] in place of [kept.id]'s draft. Its images already here stay;
+  /// the rest are fetched, and join it as they come.
+  void _applyDraft(GaiaDraft kept) {
+    final key = kept.id;
+    final had = _draftAt(key);
+    final images = <GaiaDraftImage>[];
+    final arriving = <GaiaDraftImageRecord>[];
+    final unfetched = <GaiaDraftImageRecord>[];
+    for (final record in kept.images) {
+      // Each of its own: the same bytes twice are one media id.
+      final same = had.images
+          .where(
+            (image) =>
+                !images.any((taken) => taken.path == image.path) &&
+                image.mediaId == record.mediaId &&
+                jsonEncode(image.edits.isEmpty ? null : image.edits.toJson()) ==
+                    jsonEncode(record.edits),
+          )
+          .firstOrNull;
+      if (same != null) {
+        images.add(same.copyWith(label: record.label));
+      } else if (_unfetched[key]?.any(
+            (lost) => jsonEncode(lost.toJson()) == jsonEncode(record.toJson()),
+          ) ??
+          false) {
+        // Not waited on again.
+        unfetched.add(record);
+      } else {
+        arriving.add(record);
+      }
+    }
+    if (unfetched.isEmpty) {
+      _unfetched.remove(key);
+    } else {
+      _unfetched[key] = unfetched;
+    }
+    for (final image in had.images) {
+      if (images.any((kept) => kept.path == image.path)) continue;
+      // Not in any kept draft yet, still being ingested or refused: no
+      // other device can have taken it out.
+      if (image.mediaId == null) {
+        images.add(image);
+        continue;
+      }
+      unawaited(_deleteQuietly(image.path));
+      if (image.preview case final preview?) {
+        unawaited(_deleteQuietly(preview));
+      }
+    }
+    if (arriving.isEmpty) {
+      _arriving.remove(key);
+    } else {
+      _arriving[key] = arriving;
+    }
+    final text = kept.text;
+    _setDraftAt(key, (
+      text: TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(
+          offset: kept.caret < 0 || kept.caret > text.length
+              ? text.length
+              : kept.caret,
+        ),
+      ),
+      images: images,
+      files: kept.files,
+    ));
+    for (final record in arriving) {
+      unawaited(_fetchDraftImage(key, record));
+    }
+  }
+
+  /// A kept draft's image, once it's on this device: copied into a file
+  /// of the companion's own, as every draft image is, and into [key]'s
+  /// draft. One that doesn't come is let go here, into [_unfetched].
+  Future<void> _fetchDraftImage(String key, GaiaDraftImageRecord record) async {
+    String? path;
+    try {
+      path =
+          await _pipe.request('draftImageFile', {'mediaId': record.mediaId})
+              as String?;
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] draft image ${record.mediaId} not fetched: $error');
+    }
+    final waiting = _arriving[key];
+    // Replaced by a newer draft meanwhile.
+    if (waiting == null || !waiting.remove(record)) return;
+    if (waiting.isEmpty) _arriving.remove(key);
+    GaiaDraftImage? image;
+    if (path != null) {
+      final copy = p.join(_draftDirectory, '${_uuid.v4()}.img');
+      await Directory(_draftDirectory).create(recursive: true);
+      await File(path).copy(copy);
+      final edits = GaiaImageEdits.fromJson(record.edits);
+      String? preview;
+      if (!edits.isEmpty) {
+        preview = p.join(_draftDirectory, '${_uuid.v4()}-preview.png');
+        await File(
+          preview,
+        ).writeAsBytes(await gaiaRenderPng(copy, edits: edits));
+      }
+      image = GaiaDraftImage(
+        label: record.label,
+        path: copy,
+        edits: edits,
+        preview: preview,
+        mediaId: record.mediaId,
+      );
+    } else {
+      (_unfetched[key] ??= []).add(record);
+    }
+    final held = _draftAt(key);
+    _setDraftAt(key, (
+      text: held.text,
+      images: [...held.images, ?image],
+      files: held.files,
+    ));
+  }
+
+  /// A draft image the main instance now holds, by its own [path]: named
+  /// by its [mediaId] in the kept draft from now on.
+  void _ingested(String path, String mediaId) {
+    for (final images in [
+      draftImages,
+      for (final held in _drafts.values) held.images,
+    ]) {
+      final at = images.indexWhere((image) => image.path == path);
+      if (at < 0) continue;
+      images[at] = images[at].copyWith(mediaId: mediaId);
+      return notifyListeners();
+    }
   }
 
   /// Nothing typed or attached.
@@ -545,6 +940,8 @@ class GaiaController extends ChangeNotifier {
     void applyCapturable() => _window.setCapturable(debug.allowScreenshots);
     applyCapturable();
     debug.addListener(applyCapturable);
+    draft.addListener(_draftsChanged);
+    addListener(_draftsChanged);
     _pipe
       ..onEvent = _onEvent
       ..onRequest = _onRequest
@@ -568,6 +965,7 @@ class GaiaController extends ChangeNotifier {
     _deviceId = hello['deviceId']! as String;
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
     await _refresh();
+    await _loadDrafts();
   }
 
   Future<void> _checkCli() async {
@@ -673,6 +1071,8 @@ class GaiaController extends ChangeNotifier {
         unawaited(_applySettings(params));
       case 'changed':
         unawaited(_refresh());
+      case 'drafts':
+        unawaited(_loadDrafts());
     }
   }
 
@@ -716,7 +1116,11 @@ class GaiaController extends ChangeNotifier {
     if (current != null &&
         !_running.contains(current) &&
         !chats.any((chat) => chat.id == current)) {
-      currentChatId = null;
+      _viewChat(null);
+      // What was typed in it goes to a new chat, as a failed new chat's does.
+      if (_drafts.remove(current) case final typed?) {
+        _giveBack(null, typed.text.text, typed.images, typed.files);
+      }
     }
     _messages.removeWhere(
       (chatId, _) => !_running.contains(chatId) && chatId != currentChatId,
@@ -875,7 +1279,7 @@ class GaiaController extends ChangeNotifier {
   }
 
   void newChat() {
-    currentChatId = null;
+    _viewChat(null);
     pickedTier = null;
     if (!debug.dummyMode) _utility?.warm();
     notifyListeners();
@@ -883,7 +1287,7 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> selectChat(String chatId) async {
     if (chatId != currentChatId) pickedTier = null;
-    currentChatId = chatId;
+    _viewChat(chatId);
     notifyListeners();
     if (_messages.containsKey(chatId)) return;
     await _load(chatId);
@@ -1005,7 +1409,7 @@ class GaiaController extends ChangeNotifier {
       await _load(id);
     }
     if (aborted || draining != null || currentRunning) {
-      return _giveBack(text, images, files);
+      return _giveBack(currentChatId, text, images, files);
     }
     var chat = currentChat;
     final isNew = chat == null;
@@ -1108,7 +1512,11 @@ class GaiaController extends ChangeNotifier {
             if (c.id != chatId) c,
         ];
         _messages.remove(chatId);
-        if (currentChatId == chatId) currentChatId = null;
+        if (currentChatId == chatId) _viewChat(null);
+        // What was typed in it since goes back to a new chat with the rest.
+        if (_drafts.remove(chatId) case final typed?) {
+          _giveBack(null, typed.text.text, typed.images, typed.files);
+        }
       }
       windowContext = context;
       // Less any attached again meanwhile.
@@ -1119,7 +1527,7 @@ class GaiaController extends ChangeNotifier {
           ))
             quote,
       ]);
-      _giveBack(text, images, files);
+      _giveBack(isNew ? null : chatId, text, images, files);
       _reportRuns();
       _settleDrain();
     }
@@ -1510,13 +1918,30 @@ class GaiaController extends ChangeNotifier {
     _settleDrain();
   }
 
-  /// A send that didn't happen: its [text] and [images] go back in the
-  /// draft, the text unless the user has typed again.
+  /// A send that didn't happen: its [text] and [images] go back in
+  /// [chatId]'s draft, the text unless the user has typed again.
   void _giveBack(
+    String? chatId,
     String text,
     List<GaiaDraftImage> images,
     List<GaiaFilePart> files,
   ) {
+    if (chatId != currentChatId) {
+      final had = _drafts[_keyOf(chatId)];
+      final hadFiles = had?.files ?? const <GaiaFilePart>[];
+      _drafts[_keyOf(chatId)] = (
+        text: had == null || had.text.text.isEmpty
+            ? TextEditingValue(text: text)
+            : had.text,
+        images: [...?had?.images, ...images],
+        files: [
+          ...hadFiles,
+          for (final file in files)
+            if (!hadFiles.any((had) => p.equals(had.path, file.path))) file,
+        ],
+      );
+      return notifyListeners();
+    }
     if (draft.text.isEmpty) draft.text = text;
     draftImages.addAll(images);
     // One attached again meanwhile is still one.

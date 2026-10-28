@@ -66,6 +66,48 @@ class GaiaImageEdits {
   final Rect? crop;
 
   bool get isEmpty => marks.isEmpty && crop == null;
+
+  /// As a kept draft holds them (§9.3).
+  Map<String, Object?> toJson() => {
+    'marks': [
+      for (final mark in marks)
+        {
+          'tool': mark.tool.name,
+          'points': [
+            for (final point in mark.points) [point.dx, point.dy],
+          ],
+          'color': mark.color.toARGB32(),
+          'width': mark.width,
+        },
+    ],
+    if (crop case final crop?)
+      'crop': [crop.left, crop.top, crop.right, crop.bottom],
+  };
+
+  /// [toJson]'s; none for null, or a tool this build doesn't know.
+  static GaiaImageEdits fromJson(Map<String, Object?>? json) {
+    if (json == null) return none;
+    double d(Object? value) => (value! as num).toDouble();
+    final crop = json['crop'] as List?;
+    return GaiaImageEdits(
+      marks: [
+        for (final mark in (json['marks'] as List? ?? const []).cast<Map>())
+          if (GaiaTool.values.asNameMap()[mark['tool']] case final tool?)
+            GaiaMark(
+              tool: tool,
+              points: [
+                for (final point in (mark['points']! as List).cast<List>())
+                  Offset(d(point[0]), d(point[1])),
+              ],
+              color: Color((mark['color']! as num).toInt()),
+              width: d(mark['width']),
+            ),
+      ],
+      crop: crop == null
+          ? null
+          : Rect.fromLTRB(d(crop[0]), d(crop[1]), d(crop[2]), d(crop[3])),
+    );
+  }
 }
 
 /// Paints [marks] over [image], drawn at its own size on [canvas].

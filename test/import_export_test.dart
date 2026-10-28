@@ -1020,6 +1020,24 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertDraft(
+    GaiaDraft(
+      id: 'gaia-chat-1',
+      text: 'Compare [image 1]',
+      caret: 7,
+      images: const [
+        GaiaDraftImageRecord(
+          mediaId: 'gaia-media-1',
+          label: 1,
+          edits: {'marks': []},
+        ),
+      ],
+      files: const [GaiaFilePart(path: r'C:\notes', folder: true)],
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1395,6 +1413,7 @@ void main() {
         'gaia_chats_table',
         'gaia_messages_table',
         'gaia_settings_table',
+        'gaia_drafts_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };

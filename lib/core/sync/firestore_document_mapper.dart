@@ -4615,6 +4615,50 @@ GaiaSettings mergeGaiaSettingsFromRemote(
   );
 }
 
+Map<String, dynamic> gaiaDraftToFirestore(GaiaDraft draft) => {
+  'id': draft.id,
+  'text': draft.text,
+  'caret': draft.caret,
+  'images': [for (final image in draft.images) image.toJson()],
+  'files': [for (final file in draft.files) file.toJson()],
+  'createdAt': _dateToFirestoreRequired(draft.createdAt),
+  'updatedAt': _dateToFirestoreRequired(draft.updatedAt),
+  'version': draft.version,
+  'deletedAt': _dateToFirestore(draft.deletedAt),
+};
+
+/// The last write wins, typed on either device: a draft is one person's,
+/// rarely typed in two places at once.
+GaiaDraft mergeGaiaDraftFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaDraft? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaDraft(
+    id: id,
+    text: data['text'] as String? ?? '',
+    caret: (data['caret'] as num?)?.toInt() ?? -1,
+    images: gaiaDraftImagesFromJson(data['images']),
+    files: gaiaDraftFilesFromJson(data['files']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The settings document (`users/{uid}/settings/app`, alongside the weather
 // location the weather service already keeps there).

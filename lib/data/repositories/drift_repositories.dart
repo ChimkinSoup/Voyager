@@ -9957,7 +9957,65 @@ class DriftGaiaRepository implements GaiaRepository {
       _syncedWrites?.notifyOne(FirestoreCollections.gaiaSettings, settings);
     }
   }
+
+  @override
+  Future<List<GaiaDraft>> listDrafts() async =>
+      (await _db.select(_db.gaiaDraftsTable).get()).map(_mapGaiaDraft).toList();
+
+  @override
+  Future<GaiaDraft?> getDraft(String id) async {
+    final row = await (_db.select(
+      _db.gaiaDraftsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaDraft(row);
+  }
+
+  @override
+  Future<void> upsertDraft(
+    GaiaDraft draft, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaDraftsTable)
+        .insertOnConflictUpdate(
+          GaiaDraftsTableCompanion(
+            id: Value(draft.id),
+            body: Value(draft.text),
+            caret: Value(draft.caret),
+            imagesJson: Value(
+              jsonEncode([for (final image in draft.images) image.toJson()]),
+            ),
+            filesJson: Value(
+              jsonEncode([for (final file in draft.files) file.toJson()]),
+            ),
+            createdAt: Value(draft.createdAt),
+            updatedAt: Value(draft.updatedAt),
+            version: Value(draft.version),
+            deletedAt: Value(draft.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaDrafts, draft);
+    }
+  }
+
+  @override
+  Stream<void> watchDrafts() => _db
+      .tableUpdates(TableUpdateQuery.onTable(_db.gaiaDraftsTable))
+      .map((_) {});
 }
+
+GaiaDraft _mapGaiaDraft(GaiaDraftsTableData row) => GaiaDraft(
+  id: row.id,
+  text: row.body,
+  caret: row.caret,
+  images: gaiaDraftImagesFromJson(jsonDecode(row.imagesJson)),
+  files: gaiaDraftFilesFromJson(jsonDecode(row.filesJson)),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
 
 GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   id: row.id,

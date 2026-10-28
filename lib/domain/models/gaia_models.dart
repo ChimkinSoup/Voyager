@@ -241,6 +241,102 @@ class GaiaChat extends SoftDeletable {
   }
 }
 
+/// What a chat's composer holds until it's sent (GAIA_HLD.md §9.3), kept
+/// and synced so it survives a restart and follows the user to another
+/// device. [id] is its chat's, or [newChatId] for a new chat's.
+class GaiaDraft extends SoftDeletable {
+  const GaiaDraft({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    this.text = '',
+    this.caret = -1,
+    this.images = const [],
+    this.files = const [],
+  });
+
+  static const newChatId = 'new';
+
+  final String text;
+
+  /// Where the caret was, or -1 for the end.
+  final int caret;
+  final List<GaiaDraftImageRecord> images;
+
+  /// Paths on the device they were attached on.
+  final List<GaiaFilePart> files;
+
+  bool get isEmpty => text.isEmpty && images.isEmpty && files.isEmpty;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'text': text,
+    'caret': caret,
+    'images': [for (final image in images) image.toJson()],
+    'files': [for (final file in files) file.toJson()],
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory GaiaDraft.fromJson(Map<String, Object?> json) {
+    final createdAt = DateTime.parse(json['createdAt']! as String);
+    return GaiaDraft(
+      id: json['id']! as String,
+      text: json['text'] as String? ?? '',
+      caret: (json['caret'] as num?)?.toInt() ?? -1,
+      images: gaiaDraftImagesFromJson(json['images']),
+      files: gaiaDraftFilesFromJson(json['files']),
+      createdAt: createdAt,
+      updatedAt: _date(json['updatedAt']) ?? createdAt,
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      deletedAt: _date(json['deletedAt']),
+    );
+  }
+}
+
+/// A draft's image: its media asset, its `[image N]`, and the annotation
+/// editor's edits as `GaiaImageEdits` JSON, null for none.
+class GaiaDraftImageRecord {
+  const GaiaDraftImageRecord({
+    required this.mediaId,
+    required this.label,
+    this.edits,
+  });
+
+  final String mediaId;
+  final int label;
+  final Map<String, Object?>? edits;
+
+  Map<String, Object?> toJson() => {
+    'mediaId': mediaId,
+    'label': label,
+    if (edits != null) 'edits': edits,
+  };
+}
+
+List<GaiaDraftImageRecord> gaiaDraftImagesFromJson(Object? json) => [
+  if (json is List)
+    for (final image in json.cast<Map<Object?, Object?>>())
+      GaiaDraftImageRecord(
+        mediaId: image['mediaId']! as String,
+        label: (image['label']! as num).toInt(),
+        edits: (image['edits'] as Map<Object?, Object?>?)?.cast(),
+      ),
+];
+
+List<GaiaFilePart> gaiaDraftFilesFromJson(Object? json) => [
+  if (json is List)
+    for (final file in json.cast<Map<Object?, Object?>>())
+      GaiaFilePart(
+        path: file['path']! as String,
+        folder: file['folder'] == true,
+      ),
+];
+
 /// Null for no tier, or one this build doesn't know.
 GaiaTier? gaiaTierFromName(Object? name) =>
     GaiaTier.values.where((tier) => tier.name == name).firstOrNull;

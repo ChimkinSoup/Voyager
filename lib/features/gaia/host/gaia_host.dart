@@ -105,6 +105,7 @@ class GaiaHost {
   GaiaMedia? _media;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
+  StreamSubscription<void>? _draftChanges;
   Timer? _changedSoon;
   var _settings = GaiaSettings.initial();
 
@@ -184,6 +185,10 @@ class GaiaHost {
         if (_pipe.connected) _pipe.notify('changed');
       });
     });
+    // Each save of the companion's comes back too, which it knows as its own.
+    _draftChanges = repository.watchDrafts().listen((_) {
+      if (_pipe.connected) _pipe.notify('drafts');
+    });
     _settingsChanges = repository.watchSettings().listen((settings) {
       _settings = settings;
       unawaited(_applyHotkeys(settings.keybinds));
@@ -230,6 +235,7 @@ class GaiaHost {
     _changedSoon?.cancel();
     unawaited(_changes?.cancel());
     unawaited(_settingsChanges?.cancel());
+    unawaited(_draftChanges?.cancel());
     if (_started) await _pipe.close();
   }
 
@@ -662,9 +668,11 @@ class GaiaHost {
       case 'deleteChat':
         final chatId = params['chatId']! as String;
         await store.deleteChat(chatId);
+        await store.deleteDraft(chatId);
         // Deleted either way: its images just don't follow it if this fails.
         DateTime? at;
         try {
+          await _media?.keepDraft(chatId, const {});
           at = await _media?.removeChat(chatId);
         } catch (error) {
           debugPrint('[gaia] images of $chatId not taken off: $error');
@@ -675,6 +683,11 @@ class GaiaHost {
         await store.restoreChat(chatId);
         if (params['mediaDeletedAt'] case final String at) {
           await _media?.restoreChat(chatId, DateTime.parse(at));
+        }
+        if (await store.restoreDraft(chatId) case final draft?) {
+          await _media?.keepDraft(chatId, {
+            for (final image in draft.images) image.mediaId,
+          });
         }
         return null;
       case 'setLastTier':
@@ -707,11 +720,26 @@ class GaiaHost {
           'width': image.width,
           'height': image.height,
         };
+      case 'drafts':
+        return [for (final draft in await store.drafts()) draft.toJson()];
+      case 'putDraft':
+        final draft = GaiaDraft.fromJson(_map(params['draft']));
+        await store.putDraft(draft);
+        await _media?.keepDraft(draft.id, {
+          for (final image in draft.images) image.mediaId,
+        });
+        return null;
+      case 'ingestImage':
+        final media = _media;
+        if (media == null) throw GaiaPipeException('no media store');
+        return media.ingest(params['path']! as String);
       case 'detachImage':
         await _media?.detach(params['referenceId']! as String);
         return null;
       case 'mediaFile':
         return _media?.file(params['mediaId']! as String);
+      case 'draftImageFile':
+        return _media?.fileWhenHere(params['mediaId']! as String);
       case 'rearm':
         _aborted = false;
         final flag = await _abortFlag();

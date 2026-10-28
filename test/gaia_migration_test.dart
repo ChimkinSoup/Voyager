@@ -3,7 +3,7 @@
 // adds Phase 2's tiers and agents; 172 the utility model and router; 173
 // each reply's context size; 174 slash commands; 175 rebound keys; 176
 // the Claude config folder, and the utility model off Gemini; 177 the
-// focused-window context settings. The
+// focused-window context settings; 178 the drafts table. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -257,6 +257,23 @@ void main() {
       (await repo.getSettings()).claudeConfigDir,
       r'C:\Users\me\.claude-1',
     );
+  });
+
+  test('177→178 adds the drafts table', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());
+    await seed.customStatement('DROP TABLE gaia_drafts_table');
+    await seed.customStatement('PRAGMA user_version = 177');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect(await repo.listDrafts(), isEmpty);
+    await repo.upsertDraft(
+      GaiaDraft(id: 'c1', text: 'Half typed', createdAt: now, updatedAt: now),
+    );
+    expect((await repo.getDraft('c1'))!.text, 'Half typed');
   });
 
   test('176→177 adds the window context settings', () async {

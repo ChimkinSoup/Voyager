@@ -2060,7 +2060,8 @@ void invalidateProvidersForRemoteChange(Ref ref, String collection) {
     // Gaia's page and the companion read streams of the database too.
     case FirestoreCollections.gaiaChats ||
         FirestoreCollections.gaiaMessages ||
-        FirestoreCollections.gaiaSettings:
+        FirestoreCollections.gaiaSettings ||
+        FirestoreCollections.gaiaDrafts:
       container.invalidate(syncConflictsProvider);
       container.invalidate(trashItemsProvider);
     default:

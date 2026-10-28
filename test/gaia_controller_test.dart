@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/data/database/app_database.dart';
@@ -145,6 +145,24 @@ class _Main {
         return null;
       case 'mediaFile':
         return 'stored-file';
+      case 'drafts':
+        return [for (final draft in await store.drafts()) draft.toJson()];
+      case 'putDraft':
+        await store.putDraft(
+          GaiaDraft.fromJson((params['draft']! as Map).cast<String, Object?>()),
+        );
+        return null;
+      case 'ingestImage':
+        final mediaId = 'draft-media-${media.length + 1}';
+        media[mediaId] = await File(params['path']! as String).readAsBytes();
+        return mediaId;
+      case 'draftImageFile':
+        await holdMedia?.future;
+        final bytes = media[params['mediaId']! as String];
+        if (bytes == null) return null;
+        final file = File(p.join(mediaDir.path, '${params['mediaId']}.img'));
+        await file.writeAsBytes(bytes);
+        return file.path;
     }
     throw StateError('unknown method $method');
   }
@@ -160,6 +178,15 @@ class _Main {
 
   /// Each `detachImage`'s reference, in order.
   final detached = <String>[];
+
+  /// The media store's images, by id, as `ingestImage` took them in or
+  /// another device's sync brought them; `draftImageFile` serves them from
+  /// [mediaDir].
+  final media = <String, List<int>>{};
+  late final mediaDir = Directory.systemTemp.createTempSync('gaia_media');
+
+  /// Each `draftImageFile` waits on it while it's set: a download.
+  Completer<void>? holdMedia;
 
   Future<GaiaChat> chat() async => (await store.chats()).single;
 
@@ -550,7 +577,11 @@ void main() {
       await settle();
     });
 
-    tearDown(() => drafts.delete(recursive: true));
+    tearDown(() async {
+      // A draft image's ingest may still be reading its file.
+      await settle();
+      await drafts.delete(recursive: true);
+    });
 
     test('an attached image is named at the caret and goes with the message, '
         'stored on its chat', () async {
@@ -841,6 +872,268 @@ void main() {
       expect(controller.draftImages.map((image) => image.label), [1, 2]);
       expect(images.every((image) => File(image.path).existsSync()), isTrue);
       expect(toasts.single.title, "Couldn't attach [image 2]");
+    });
+
+    test(
+      'a refused send goes back in its own chat, not the one in view',
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+        await controller.send('First');
+        await settle();
+        final first = controller.currentChatId!;
+        main.refuseImagesAfter = 0;
+        main.holdImages = Completer();
+        controller.draft.text = 'Look';
+        await controller.attachImage(Uint8List.fromList([1]));
+        final text = controller.draft.text;
+        final images = controller.takeDraftImages();
+        controller.draft.clear();
+        final sending = controller.send(text, images: images);
+        await settle();
+
+        controller.newChat();
+        controller.draft.text = 'Elsewhere';
+        main.holdImages!.complete();
+        await sending;
+        await settle();
+        expect(controller.draft.text, 'Elsewhere');
+        expect(controller.draftImages, isEmpty);
+
+        await controller.selectChat(first);
+        expect(controller.draft.text, 'Look [image 1]');
+        expect(controller.draftImages.map((image) => image.label), [1]);
+      },
+    );
+  });
+
+  group('kept drafts (§9.3)', () {
+    late Directory drafts;
+
+    Future<GaiaController> companion() async {
+      await main.pipe.startCompanion();
+      final started = GaiaController(
+        pipe: main.companion,
+        window: window,
+        runners: {kGaiaClaudeCodeAdapter: runner},
+        cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
+        exit: exits.add,
+        draftDirectory: drafts.path,
+      );
+      await started.start();
+      await settle();
+      return started;
+    }
+
+    /// A fetched image is copied on disk, past what [settle] waits for.
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 100 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    /// Past the companion's wait before it saves.
+    Future<void> saved() async {
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await settle();
+    }
+
+    /// A save from another device, synced in.
+    Future<void> fromElsewhere(
+      String id,
+      String text, {
+      List<GaiaDraftImageRecord> images = const [],
+    }) async {
+      final had = await main.repository.getDraft(id);
+      final now = DateTime.now().toUtc().add(const Duration(seconds: 5));
+      await main.repository.upsertDraft(
+        GaiaDraft(
+          id: id,
+          text: text,
+          images: images,
+          createdAt: had?.createdAt ?? now,
+          updatedAt: now,
+          version: (had?.version ?? 0) + 1,
+        ),
+      );
+      main.pipe.notify('drafts');
+      await settle();
+    }
+
+    setUp(() async {
+      drafts = await Directory.systemTemp.createTemp('gaia_drafts');
+      controller = await companion();
+    });
+
+    tearDown(() async {
+      await settle();
+      await drafts.delete(recursive: true);
+      await main.mediaDir.delete(recursive: true);
+    });
+
+    test(
+      'each chat\'s draft and its images come back after a restart',
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        final chat = controller.currentChatId!;
+        controller.draft.text = 'Later';
+        await controller.attachImage(Uint8List.fromList([1, 2, 3]));
+        controller.newChat();
+        controller.draft.text = 'Fresh';
+        await saved();
+
+        main.companion.disconnect();
+        await drafts.delete(recursive: true);
+        await drafts.create();
+        final restarted = await companion();
+        expect(restarted.draft.text, 'Fresh');
+        await restarted.selectChat(chat);
+        await until(() => restarted.draftImages.isNotEmpty);
+        expect(restarted.draft.text, 'Later [image 1]');
+        final image = restarted.draftImages.single;
+        expect(image.label, 1);
+        expect(image.mediaId, 'draft-media-1');
+        expect(p.dirname(image.path), drafts.path);
+        expect(File(image.path).readAsBytesSync(), [1, 2, 3]);
+      },
+    );
+
+    test("another device's save replaces this one's, unless this one has "
+        'changed since', () async {
+      controller.draft.text = 'Mine';
+      await saved();
+      await fromElsewhere(GaiaDraft.newChatId, 'Theirs');
+      expect(controller.draft.text, 'Theirs');
+
+      controller.draft.text = 'Mine again';
+      await fromElsewhere(GaiaDraft.newChatId, 'Other');
+      expect(controller.draft.text, 'Mine again');
+      await saved();
+      expect(
+        (await main.repository.getDraft(GaiaDraft.newChatId))!.text,
+        'Mine again',
+      );
+    });
+
+    test("another device's image joins the draft once it's here", () async {
+      main.media['m1'] = [4, 5];
+      await fromElsewhere(
+        GaiaDraft.newChatId,
+        'See [image 1]',
+        images: const [GaiaDraftImageRecord(mediaId: 'm1', label: 1)],
+      );
+      expect(controller.draft.text, 'See [image 1]');
+      await until(() => controller.draftImages.isNotEmpty);
+      final image = controller.draftImages.single;
+      expect(image.mediaId, 'm1');
+      expect(p.dirname(image.path), drafts.path);
+      expect(File(image.path).readAsBytesSync(), [4, 5]);
+    });
+
+    test("an image still syncing is a placeholder, and holds the send until "
+        "it's here", () async {
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+      main.media['m1'] = [4, 5];
+      main.holdMedia = Completer();
+      await fromElsewhere(
+        GaiaDraft.newChatId,
+        'See [image 1]',
+        images: const [GaiaDraftImageRecord(mediaId: 'm1', label: 1)],
+      );
+      expect(controller.draftImages, isEmpty);
+      expect(controller.arrivingImages.single.label, 1);
+      expect(controller.readyToSend(), isFalse);
+      await settle();
+      expect(toasts.single.title, 'Images still syncing');
+      expect(toasts.single.body, contains('[image 1]'));
+
+      main.holdMedia!.complete();
+      await until(() => controller.draftImages.isNotEmpty);
+      expect(controller.arrivingImages, isEmpty);
+      expect(controller.readyToSend(), isTrue);
+    });
+
+    test(
+      'an image still syncing can be taken off, its token with it',
+      () async {
+        main.holdMedia = Completer();
+        await fromElsewhere(
+          GaiaDraft.newChatId,
+          'See [image 1]',
+          images: const [GaiaDraftImageRecord(mediaId: 'm1', label: 1)],
+        );
+        controller.removeDraftImage(1);
+        expect(controller.arrivingImages, isEmpty);
+        expect(controller.draft.text, 'See');
+        main.holdMedia!.complete();
+        await settle();
+        expect(controller.draftImages, isEmpty);
+      },
+    );
+
+    test("an image that never comes stays in the kept draft, and its token "
+        "doesn't go with the send", () async {
+      await fromElsewhere(
+        GaiaDraft.newChatId,
+        'See [image 1]',
+        images: const [GaiaDraftImageRecord(mediaId: 'gone', label: 1)],
+      );
+      await until(() => controller.arrivingImages.isEmpty);
+      expect(controller.draftImages, isEmpty);
+      controller.draft.text = 'See [image 1] now';
+      await saved();
+      expect(
+        (await main.repository.getDraft(
+          GaiaDraft.newChatId,
+        ))!.images.single.mediaId,
+        'gone',
+      );
+
+      await controller.attachImage(Uint8List.fromList([1]));
+      expect(controller.draftImages.single.label, 2);
+      expect(controller.readyToSend(), isTrue);
+      expect(controller.draft.text, 'See now [image 2]');
+    });
+
+    test('a deleted draft is taken as emptied', () async {
+      controller.draft.text = 'Mine';
+      await saved();
+      final had = (await main.repository.getDraft(GaiaDraft.newChatId))!;
+      final at = DateTime.now().toUtc().add(const Duration(seconds: 5));
+      await main.repository.upsertDraft(
+        GaiaDraft(
+          id: had.id,
+          createdAt: had.createdAt,
+          updatedAt: at,
+          version: had.version + 1,
+          deletedAt: at,
+        ),
+      );
+      main.pipe.notify('drafts');
+      await settle();
+      expect(controller.draft.text, isEmpty);
+    });
+
+    test('a sent draft is kept empty, its images off it', () async {
+      controller.draft.text = 'Look';
+      await controller.attachImage(Uint8List.fromList([1]));
+      await saved();
+      expect(
+        (await main.repository.getDraft(GaiaDraft.newChatId))!.images,
+        hasLength(1),
+      );
+
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      final text = controller.draft.text;
+      final images = controller.takeDraftImages();
+      controller.draft.clear();
+      await controller.send(text, images: images);
+      await saved();
+      final kept = (await main.repository.getDraft(GaiaDraft.newChatId))!;
+      expect(kept.text, isEmpty);
+      expect(kept.images, isEmpty);
     });
   });
 
@@ -1349,7 +1642,11 @@ void main() {
       await settle();
     });
 
-    tearDown(() => drafts.delete(recursive: true));
+    tearDown(() async {
+      // A draft image's ingest may still be reading its file.
+      await settle();
+      await drafts.delete(recursive: true);
+    });
 
     test('a sent image is captioned once, and handed over as its caption '
         'and file', () async {
@@ -1556,6 +1853,42 @@ void main() {
 
   group('chats', () {
     setUp(() => startCompanion());
+
+    test('each chat keeps its own draft, caret and all', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      final first = controller.currentChatId!;
+      controller.draft.value = const TextEditingValue(
+        text: 'For the first',
+        selection: TextSelection.collapsed(offset: 3),
+      );
+
+      controller.newChat();
+      expect(controller.draft.text, isEmpty);
+      controller.draft.text = 'For a new one';
+
+      await controller.selectChat(first);
+      expect(controller.draft.text, 'For the first');
+      expect(
+        controller.draft.selection,
+        const TextSelection.collapsed(offset: 3),
+      );
+
+      controller.newChat();
+      expect(controller.draft.text, 'For a new one');
+    });
+
+    test('a draft carries between the floaters and the Gaia window', () async {
+      await controller.onHotkey('small');
+      controller.draft.text = 'Half typed';
+      await controller.onHotkey('large');
+      expect(controller.draft.text, 'Half typed');
+      await controller.openWindow();
+      expect(controller.draft.text, 'Half typed');
+      await controller.onHotkey('small');
+      expect(controller.draft.text, 'Half typed');
+    });
 
     test(
       'a first message makes a chat, runs it and saves both turns',

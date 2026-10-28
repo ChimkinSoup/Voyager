@@ -2271,6 +2271,27 @@ class GaiaSettingsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A Gaia chat's unsent draft (GAIA_HLD.md §9.3), by its chat's id, or
+/// `GaiaDraft.newChatId` for a new chat's.
+class GaiaDraftsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get body => text().withDefault(const Constant(''))();
+  IntColumn get caret => integer().withDefault(const Constant(-1))();
+
+  /// `[GaiaDraftImageRecord]` as JSON.
+  TextColumn get imagesJson => text().withDefault(const Constant('[]'))();
+
+  /// `[GaiaFilePart]` as JSON.
+  TextColumn get filesJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   // Gaia's message search (GAIA_HLD.md §17), an FTS5 table. Declared to drift
   // rather than created by hand, so it is in `allTables` and an account
@@ -2354,13 +2375,14 @@ class GaiaSettingsTable extends Table {
     GaiaChatsTable,
     GaiaMessagesTable,
     GaiaSettingsTable,
+    GaiaDraftsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 177;
+  int get schemaVersion => 178;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4358,6 +4380,10 @@ class AppDatabase extends _$AppDatabase {
             column,
           );
         }
+      }
+      if (from < 178) {
+        // Gaia's per-chat drafts, kept and synced (GAIA_HLD.md §9.3).
+        await migrator.createTable(gaiaDraftsTable);
       }
     },
   );

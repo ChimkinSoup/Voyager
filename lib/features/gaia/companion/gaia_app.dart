@@ -1668,12 +1668,14 @@ class _ComposerState extends State<_Composer> {
     }
     if (!await _takeTierCommand(atEnd: true) || !mounted) return;
     final controller = widget.controller;
-    final text = _text.text;
     final attached =
         controller.draftImages.isNotEmpty || controller.draftFiles.isNotEmpty;
     if (controller.draftIsEmpty || controller.currentRunning) {
       return;
     }
+    if (!controller.readyToSend()) return;
+    // After: it may take tokens out.
+    final text = _text.text;
     GaiaVanishState.vanishTogether([
       if (attached) _imagesVanish.currentState!,
       _vanish.currentState!,
@@ -1806,9 +1808,11 @@ class _ComposerState extends State<_Composer> {
                       key: _imagesVanish,
                       refilled:
                           controller.draftImages.isNotEmpty ||
+                          controller.arrivingImages.isNotEmpty ||
                           controller.draftFiles.isNotEmpty,
                       builder: (context, _) =>
                           controller.draftImages.isEmpty &&
+                              controller.arrivingImages.isEmpty &&
                               controller.draftFiles.isEmpty
                           ? const SizedBox.shrink()
                           : Padding(
@@ -1828,6 +1832,18 @@ class _ComposerState extends State<_Composer> {
                                       label: image.label,
                                       height: 56,
                                       onTap: () => _edit(image),
+                                      onRemove: () => controller
+                                          .removeDraftImage(image.label),
+                                    ),
+                                  // Synced from another device and still
+                                  // on their way: a placeholder until here.
+                                  for (final image in controller.arrivingImages)
+                                    GaiaImageThumb(
+                                      key: ValueKey(image.mediaId),
+                                      label: image.label,
+                                      height: 56,
+                                      uploading: true,
+                                      busyLabel: 'Syncing',
                                       onRemove: () => controller
                                           .removeDraftImage(image.label),
                                     ),

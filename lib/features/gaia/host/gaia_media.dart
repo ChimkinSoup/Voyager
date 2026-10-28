@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:voyager/core/media/media_service.dart';
@@ -41,6 +42,36 @@ class GaiaMedia {
     );
   }
 
+  /// Ingests the image at [path] for a draft (§9.3), on no draft yet:
+  /// [keepDraft] puts it on one. Throws `MediaIngestException` for one the
+  /// module refuses.
+  Future<String> ingest(String path) async =>
+      (await _media.ingestBytes(await File(path).readAsBytes())).id;
+
+  /// [draftId]'s images are [mediaIds], and no others: one taken off the
+  /// draft goes onto the 30-day clock, unless a message has it too.
+  Future<void> keepDraft(String draftId, Set<String> mediaIds) async {
+    final references = await _media.referencesFor(
+      FirestoreCollections.gaiaDrafts,
+      draftId,
+    );
+    for (final reference in references) {
+      if (!mediaIds.contains(reference.mediaId)) {
+        await _media.removeReference(reference.id);
+      }
+    }
+    final held = {for (final reference in references) reference.mediaId};
+    for (final mediaId in mediaIds.difference(held)) {
+      // Not synced here yet: the device that attached it holds it.
+      if (await _media.asset(mediaId) == null) continue;
+      await _media.addReference(
+        mediaId: mediaId,
+        collection: FirestoreCollections.gaiaDrafts,
+        documentId: draftId,
+      );
+    }
+  }
+
   /// Takes an image [attach] put on a chat off it again: its send didn't
   /// happen.
   Future<void> detach(String referenceId) =>
@@ -57,6 +88,36 @@ class GaiaMedia {
         chatId,
         deletedAt,
       );
+
+  /// [file], waiting up to [wait] for the download it asks for: a draft's
+  /// image synced from another device (§9.3). Null when it doesn't come.
+  Future<String?> fileWhenHere(
+    String mediaId, {
+    Duration wait = const Duration(minutes: 2),
+  }) async {
+    final deadline = DateTime.now().add(wait);
+    while (true) {
+      if (await file(mediaId) case final path?) return path;
+      final left = deadline.difference(DateTime.now());
+      if (left <= Duration.zero) return null;
+      // A download's end notifies; an asset row arriving by sync may not,
+      // so it's looked for again every few seconds too.
+      final changed = Completer<void>();
+      void onChange() {
+        if (!changed.isCompleted) changed.complete();
+      }
+
+      _media.addListener(onChange);
+      try {
+        await changed.future.timeout(
+          left < const Duration(seconds: 5) ? left : const Duration(seconds: 5),
+          onTimeout: () {},
+        );
+      } finally {
+        _media.removeListener(onChange);
+      }
+    }
+  }
 
   /// The local file holding [mediaId]'s bytes; null while they're only
   /// remote, when a download is asked for.

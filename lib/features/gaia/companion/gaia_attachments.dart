@@ -10,9 +10,14 @@ class GaiaDraftImage {
     required this.path,
     this.edits = GaiaImageEdits.none,
     this.preview,
+    this.mediaId,
   });
 
   final int label;
+
+  /// Its asset once the main instance has it, which the kept draft names
+  /// it by (§9.3); null before, or when it was refused.
+  final String? mediaId;
 
   /// The image as it came, in a file of the companion's own. Edits never
   /// change it, so they can be edited again (§9.4).
@@ -26,11 +31,13 @@ class GaiaDraftImage {
     int? label,
     GaiaImageEdits? edits,
     String? preview,
+    String? mediaId,
   }) => GaiaDraftImage(
     label: label ?? this.label,
     path: path,
     edits: edits ?? this.edits,
     preview: edits == null ? this.preview : preview,
+    mediaId: mediaId ?? this.mediaId,
   );
 }
 

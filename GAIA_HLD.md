@@ -795,6 +795,29 @@ between them; it appears only when there are some. Messages are shown as
 plain text, so there is no per-block copy button yet, and inline code isn't
 counted. Both are for later, with Markdown rendering.
 
+As built (2026-10-28): **each chat has its own draft**: its text (caret
+included), images and files are put away when another chat comes into view
+and come back with it, and "New chat" has one of its own. A send that fails
+after the user has moved on goes back in its own chat's draft. The quote
+chips and the window chip stay with the composer, as above, and aren't kept.
+Drafts carry across the floaters and the Gaia window, and are **kept and
+synced**: the companion saves a changed draft at most once a second through
+the main instance into `gaia_drafts` (one record per chat, `new` for "New
+chat"), which syncs and backs up like any other collection. The last save
+wins: a draft another device saved replaces this one's unless this one has
+changed since. A draft image is taken into the media module when attached,
+not when sent, and is referenced by its draft (owner `gaia_drafts`), so it
+uploads and syncs; a draft holds its asset id, `[image N]` and edits, and a
+device without the bytes downloads them, waiting up to two minutes before
+letting that image go: it stays in the kept draft, for the device that has
+it, but isn't shown, and its `[image N]` comes out of the text when the
+draft is sent from here. A chat's draft is deleted with it and restored with
+it, and a draft saved empty is kept deleted. Meanwhile the composer shows it as a placeholder tile
+with a "Syncing" spinner and its `[image N]`, which can be removed, and a send
+is held with a toast naming the images still on their way. Files and folders sync as paths, which only mean
+something on the device that attached them. After a restart the drafts and
+their images come back from the store.
+
 ### 9.4 Annotation
 
 Clicking a thumbnail opens an editor with pen, line, arrow, rectangle,

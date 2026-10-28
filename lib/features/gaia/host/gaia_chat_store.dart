@@ -1,4 +1,5 @@
 import 'package:voyager/core/soft_delete/erasure.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -78,6 +79,64 @@ class GaiaChatStore {
     if (settings.lastTier == tier) return;
     await _repository.upsertSettings(settings.copyWith(lastTier: tier));
   }
+
+  /// Each chat's draft (§9.3), as this device or another left it. Deleted
+  /// ones too: the companion takes one as emptied.
+  Future<List<GaiaDraft>> drafts() => _repository.listDrafts();
+
+  /// The companion's [draft], versioned on from what's stored. Its
+  /// `updatedAt` is the companion's, so it knows its own write when it
+  /// comes back. An empty one is kept deleted.
+  Future<void> putDraft(GaiaDraft draft) async {
+    final existing = await _repository.getDraft(draft.id);
+    await _repository.upsertDraft(
+      GaiaDraft(
+        id: draft.id,
+        text: draft.text,
+        caret: draft.caret,
+        images: draft.images,
+        files: draft.files,
+        createdAt: existing?.createdAt ?? draft.createdAt,
+        updatedAt: draft.updatedAt,
+        version: (existing?.version ?? 0) + 1,
+        deletedAt: draft.isEmpty ? draft.updatedAt : null,
+      ),
+    );
+  }
+
+  /// [chatId]'s draft goes with its chat, what it holds kept for
+  /// [restoreDraft].
+  Future<void> deleteDraft(String chatId) async {
+    final draft = await _repository.getDraft(chatId);
+    if (draft == null || draft.deletedAt != null) return;
+    final now = utcNow();
+    await _repository.upsertDraft(_restamped(draft, now, deletedAt: now));
+  }
+
+  /// [chatId]'s draft back with its chat; null when it had none.
+  Future<GaiaDraft?> restoreDraft(String chatId) async {
+    final draft = await _repository.getDraft(chatId);
+    if (draft == null || draft.deletedAt == null || draft.isEmpty) return null;
+    final restored = _restamped(draft, utcNow());
+    await _repository.upsertDraft(restored);
+    return restored;
+  }
+
+  static GaiaDraft _restamped(
+    GaiaDraft draft,
+    DateTime at, {
+    DateTime? deletedAt,
+  }) => GaiaDraft(
+    id: draft.id,
+    text: draft.text,
+    caret: draft.caret,
+    images: draft.images,
+    files: draft.files,
+    createdAt: draft.createdAt,
+    updatedAt: at,
+    version: draft.version + 1,
+    deletedAt: deletedAt,
+  );
 
   Future<List<GaiaMessage>> messages(String chatId) =>
       _repository.listMessages(chatId);

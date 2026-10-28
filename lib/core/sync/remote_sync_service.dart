@@ -2305,6 +2305,11 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.gaiaDrafts:
+        return pullGaiaDrafts(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -3212,6 +3217,24 @@ class RemoteSyncService {
           mergeGaiaSettingsFromRemote(data, local: local),
           recordLocalActivity: false,
         );
+      },
+    );
+  }
+
+  Future<bool> pullGaiaDrafts({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaDrafts,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getDraft(id);
+        final merged = mergeGaiaDraftFromRemote(data, id, local: local);
+        if (identical(merged, local)) return;
+        await _gaiaRepository.upsertDraft(merged, recordLocalActivity: false);
       },
     );
   }
@@ -7074,6 +7097,9 @@ class RemoteSyncService {
       case FirestoreCollections.gaiaSettings:
         if (record is! GaiaSettings) return null;
         return (id: record.id, payload: gaiaSettingsToFirestore(record));
+      case FirestoreCollections.gaiaDrafts:
+        if (record is! GaiaDraft) return null;
+        return (id: record.id, payload: gaiaDraftToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -8107,6 +8133,7 @@ class RemoteSyncService {
       ]),
       _inOrder([pullMediaAssets, pullMediaReferences]),
       _inOrder([pullGaiaSettings, pullGaiaChats, pullGaiaMessages]),
+      pullGaiaDrafts(),
     ]);
   }
 
@@ -8447,6 +8474,7 @@ class LiveSyncController {
     FirestoreCollections.gaiaChats,
     FirestoreCollections.gaiaMessages,
     FirestoreCollections.gaiaSettings,
+    FirestoreCollections.gaiaDrafts,
     FirestoreCollections.settings,
   ];
 

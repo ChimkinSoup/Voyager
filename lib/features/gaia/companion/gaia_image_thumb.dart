@@ -19,6 +19,7 @@ class GaiaImageThumb extends StatelessWidget {
     this.onTap,
     this.onRemove,
     this.uploading = false,
+    this.busyLabel = 'Uploading',
   });
 
   final Future<String?>? file;
@@ -28,6 +29,9 @@ class GaiaImageThumb extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onRemove;
   final bool uploading;
+
+  /// What the spinner says while [uploading].
+  final String busyLabel;
 
   /// Loads [file] as a thumbnail [height] tall shows it, so one built after
   /// shows it on its first frame.
@@ -118,10 +122,10 @@ class GaiaImageThumb extends StatelessWidget {
                         duration: const Duration(milliseconds: 200),
                         transitionBuilder: _spinnerTransition,
                         child: uploading
-                            ? const GaiaSpinner(
+                            ? GaiaSpinner(
                                 size: 32,
                                 color: Colors.white,
-                                label: 'Uploading',
+                                label: busyLabel,
                               )
                             : const SizedBox.shrink(),
                       ),

@@ -60183,6 +60183,560 @@ class GaiaSettingsTableCompanion
   }
 }
 
+class $GaiaDraftsTableTable extends GaiaDraftsTable
+    with TableInfo<$GaiaDraftsTableTable, GaiaDraftsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaDraftsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _caretMeta = const VerificationMeta('caret');
+  @override
+  late final GeneratedColumn<int> caret = GeneratedColumn<int>(
+    'caret',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(-1),
+  );
+  static const VerificationMeta _imagesJsonMeta = const VerificationMeta(
+    'imagesJson',
+  );
+  @override
+  late final GeneratedColumn<String> imagesJson = GeneratedColumn<String>(
+    'images_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _filesJsonMeta = const VerificationMeta(
+    'filesJson',
+  );
+  @override
+  late final GeneratedColumn<String> filesJson = GeneratedColumn<String>(
+    'files_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    body,
+    caret,
+    imagesJson,
+    filesJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_drafts_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaDraftsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    }
+    if (data.containsKey('caret')) {
+      context.handle(
+        _caretMeta,
+        caret.isAcceptableOrUnknown(data['caret']!, _caretMeta),
+      );
+    }
+    if (data.containsKey('images_json')) {
+      context.handle(
+        _imagesJsonMeta,
+        imagesJson.isAcceptableOrUnknown(data['images_json']!, _imagesJsonMeta),
+      );
+    }
+    if (data.containsKey('files_json')) {
+      context.handle(
+        _filesJsonMeta,
+        filesJson.isAcceptableOrUnknown(data['files_json']!, _filesJsonMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GaiaDraftsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaDraftsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      caret: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}caret'],
+      )!,
+      imagesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}images_json'],
+      )!,
+      filesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}files_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $GaiaDraftsTableTable createAlias(String alias) {
+    return $GaiaDraftsTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaDraftsTableData extends DataClass
+    implements Insertable<GaiaDraftsTableData> {
+  final String id;
+  final String body;
+  final int caret;
+
+  /// `[GaiaDraftImageRecord]` as JSON.
+  final String imagesJson;
+
+  /// `[GaiaFilePart]` as JSON.
+  final String filesJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const GaiaDraftsTableData({
+    required this.id,
+    required this.body,
+    required this.caret,
+    required this.imagesJson,
+    required this.filesJson,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['body'] = Variable<String>(body);
+    map['caret'] = Variable<int>(caret);
+    map['images_json'] = Variable<String>(imagesJson);
+    map['files_json'] = Variable<String>(filesJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  GaiaDraftsTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaDraftsTableCompanion(
+      id: Value(id),
+      body: Value(body),
+      caret: Value(caret),
+      imagesJson: Value(imagesJson),
+      filesJson: Value(filesJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory GaiaDraftsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaDraftsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      body: serializer.fromJson<String>(json['body']),
+      caret: serializer.fromJson<int>(json['caret']),
+      imagesJson: serializer.fromJson<String>(json['imagesJson']),
+      filesJson: serializer.fromJson<String>(json['filesJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'body': serializer.toJson<String>(body),
+      'caret': serializer.toJson<int>(caret),
+      'imagesJson': serializer.toJson<String>(imagesJson),
+      'filesJson': serializer.toJson<String>(filesJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  GaiaDraftsTableData copyWith({
+    String? id,
+    String? body,
+    int? caret,
+    String? imagesJson,
+    String? filesJson,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => GaiaDraftsTableData(
+    id: id ?? this.id,
+    body: body ?? this.body,
+    caret: caret ?? this.caret,
+    imagesJson: imagesJson ?? this.imagesJson,
+    filesJson: filesJson ?? this.filesJson,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  GaiaDraftsTableData copyWithCompanion(GaiaDraftsTableCompanion data) {
+    return GaiaDraftsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      body: data.body.present ? data.body.value : this.body,
+      caret: data.caret.present ? data.caret.value : this.caret,
+      imagesJson: data.imagesJson.present
+          ? data.imagesJson.value
+          : this.imagesJson,
+      filesJson: data.filesJson.present ? data.filesJson.value : this.filesJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaDraftsTableData(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('caret: $caret, ')
+          ..write('imagesJson: $imagesJson, ')
+          ..write('filesJson: $filesJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    body,
+    caret,
+    imagesJson,
+    filesJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaDraftsTableData &&
+          other.id == this.id &&
+          other.body == this.body &&
+          other.caret == this.caret &&
+          other.imagesJson == this.imagesJson &&
+          other.filesJson == this.filesJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class GaiaDraftsTableCompanion extends UpdateCompanion<GaiaDraftsTableData> {
+  final Value<String> id;
+  final Value<String> body;
+  final Value<int> caret;
+  final Value<String> imagesJson;
+  final Value<String> filesJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const GaiaDraftsTableCompanion({
+    this.id = const Value.absent(),
+    this.body = const Value.absent(),
+    this.caret = const Value.absent(),
+    this.imagesJson = const Value.absent(),
+    this.filesJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaDraftsTableCompanion.insert({
+    required String id,
+    this.body = const Value.absent(),
+    this.caret = const Value.absent(),
+    this.imagesJson = const Value.absent(),
+    this.filesJson = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<GaiaDraftsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? body,
+    Expression<int>? caret,
+    Expression<String>? imagesJson,
+    Expression<String>? filesJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (body != null) 'body': body,
+      if (caret != null) 'caret': caret,
+      if (imagesJson != null) 'images_json': imagesJson,
+      if (filesJson != null) 'files_json': filesJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaDraftsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? body,
+    Value<int>? caret,
+    Value<String>? imagesJson,
+    Value<String>? filesJson,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaDraftsTableCompanion(
+      id: id ?? this.id,
+      body: body ?? this.body,
+      caret: caret ?? this.caret,
+      imagesJson: imagesJson ?? this.imagesJson,
+      filesJson: filesJson ?? this.filesJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (caret.present) {
+      map['caret'] = Variable<int>(caret.value);
+    }
+    if (imagesJson.present) {
+      map['images_json'] = Variable<String>(imagesJson.value);
+    }
+    if (filesJson.present) {
+      map['files_json'] = Variable<String>(filesJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaDraftsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('caret: $caret, ')
+          ..write('imagesJson: $imagesJson, ')
+          ..write('filesJson: $filesJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -60337,6 +60891,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $GaiaMessagesTableTable(this);
   late final $GaiaSettingsTableTable gaiaSettingsTable =
       $GaiaSettingsTableTable(this);
+  late final $GaiaDraftsTableTable gaiaDraftsTable = $GaiaDraftsTableTable(
+    this,
+  );
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -60484,6 +61041,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaChatsTable,
     gaiaMessagesTable,
     gaiaSettingsTable,
+    gaiaDraftsTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -89179,6 +89737,294 @@ typedef $$GaiaSettingsTableTableProcessedTableManager =
       GaiaSettingsTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaDraftsTableTableCreateCompanionBuilder =
+    GaiaDraftsTableCompanion Function({
+      required String id,
+      Value<String> body,
+      Value<int> caret,
+      Value<String> imagesJson,
+      Value<String> filesJson,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaDraftsTableTableUpdateCompanionBuilder =
+    GaiaDraftsTableCompanion Function({
+      Value<String> id,
+      Value<String> body,
+      Value<int> caret,
+      Value<String> imagesJson,
+      Value<String> filesJson,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaDraftsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaDraftsTableTable> {
+  $$GaiaDraftsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get caret => $composableBuilder(
+    column: $table.caret,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imagesJson => $composableBuilder(
+    column: $table.imagesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filesJson => $composableBuilder(
+    column: $table.filesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaDraftsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaDraftsTableTable> {
+  $$GaiaDraftsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get caret => $composableBuilder(
+    column: $table.caret,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imagesJson => $composableBuilder(
+    column: $table.imagesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filesJson => $composableBuilder(
+    column: $table.filesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaDraftsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaDraftsTableTable> {
+  $$GaiaDraftsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<int> get caret =>
+      $composableBuilder(column: $table.caret, builder: (column) => column);
+
+  GeneratedColumn<String> get imagesJson => $composableBuilder(
+    column: $table.imagesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get filesJson =>
+      $composableBuilder(column: $table.filesJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$GaiaDraftsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaDraftsTableTable,
+          GaiaDraftsTableData,
+          $$GaiaDraftsTableTableFilterComposer,
+          $$GaiaDraftsTableTableOrderingComposer,
+          $$GaiaDraftsTableTableAnnotationComposer,
+          $$GaiaDraftsTableTableCreateCompanionBuilder,
+          $$GaiaDraftsTableTableUpdateCompanionBuilder,
+          (
+            GaiaDraftsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaDraftsTableTable,
+              GaiaDraftsTableData
+            >,
+          ),
+          GaiaDraftsTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaDraftsTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaDraftsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaDraftsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GaiaDraftsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GaiaDraftsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<int> caret = const Value.absent(),
+                Value<String> imagesJson = const Value.absent(),
+                Value<String> filesJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaDraftsTableCompanion(
+                id: id,
+                body: body,
+                caret: caret,
+                imagesJson: imagesJson,
+                filesJson: filesJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String> body = const Value.absent(),
+                Value<int> caret = const Value.absent(),
+                Value<String> imagesJson = const Value.absent(),
+                Value<String> filesJson = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaDraftsTableCompanion.insert(
+                id: id,
+                body: body,
+                caret: caret,
+                imagesJson: imagesJson,
+                filesJson: filesJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaDraftsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaDraftsTableTable,
+      GaiaDraftsTableData,
+      $$GaiaDraftsTableTableFilterComposer,
+      $$GaiaDraftsTableTableOrderingComposer,
+      $$GaiaDraftsTableTableAnnotationComposer,
+      $$GaiaDraftsTableTableCreateCompanionBuilder,
+      $$GaiaDraftsTableTableUpdateCompanionBuilder,
+      (
+        GaiaDraftsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaDraftsTableTable,
+          GaiaDraftsTableData
+        >,
+      ),
+      GaiaDraftsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -89404,4 +90250,6 @@ class $AppDatabaseManager {
       $$GaiaMessagesTableTableTableManager(_db, _db.gaiaMessagesTable);
   $$GaiaSettingsTableTableTableManager get gaiaSettingsTable =>
       $$GaiaSettingsTableTableTableManager(_db, _db.gaiaSettingsTable);
+  $$GaiaDraftsTableTableTableManager get gaiaDraftsTable =>
+      $$GaiaDraftsTableTableTableManager(_db, _db.gaiaDraftsTable);
 }

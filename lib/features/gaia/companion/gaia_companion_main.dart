@@ -51,7 +51,8 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
       // The console still has it.
     }
   };
-  // A draft lives only as long as its companion.
+  // The drafts' own copies of their images: the kept drafts fetch theirs
+  // again from the media store (§9.3).
   final drafts = Directory(p.join(root.path, 'gaia', 'drafts'));
   if (await drafts.exists()) await drafts.delete(recursive: true);
   final pipe = dev ? GaiaDevPipe() : GaiaPipe();

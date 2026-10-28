@@ -178,6 +178,31 @@ void main() {
     expect((await store.chats()).single.id, 'c1');
   });
 
+  GaiaDraft draft(String text) =>
+      GaiaDraft(id: 'c1', text: text, createdAt: _created, updatedAt: _created);
+
+  test('a draft goes with its chat, and comes back with it', () async {
+    await store.putDraft(draft('Half typed'));
+    await store.deleteDraft('c1');
+    final deleted = (await repository.getDraft('c1'))!;
+    expect(deleted.deletedAt, isNotNull);
+    expect(deleted.text, 'Half typed');
+
+    final restored = (await store.restoreDraft('c1'))!;
+    expect(restored.deletedAt, isNull);
+    expect(restored.version, deleted.version + 1);
+    expect((await repository.getDraft('c1'))!.text, 'Half typed');
+  });
+
+  test('an empty draft is kept deleted, and not restored', () async {
+    await store.putDraft(draft('Hi'));
+    await store.putDraft(draft(''));
+    expect((await repository.getDraft('c1'))!.deletedAt, isNotNull);
+    expect(await store.restoreDraft('c1'), isNull);
+    await store.putDraft(draft('Again'));
+    expect((await repository.getDraft('c1'))!.deletedAt, isNull);
+  });
+
   group('search', () {
     setUp(() async {
       await store.createChat(_chat('c1'));
@@ -242,9 +267,9 @@ void main() {
     test('a winning copy keeps the sessions it lacks', () {
       const mine = GaiaAgentSession(sessionId: 'mine', lastSeq: 2);
       const theirs = GaiaAgentSession(sessionId: 'theirs', lastSeq: 3);
-      final local = _chat('c1').copyWith(
-        agentSessions: {gaiaSessionKey('laptop'): mine},
-      );
+      final local = _chat(
+        'c1',
+      ).copyWith(agentSessions: {gaiaSessionKey('laptop'): mine});
       final remote = _chat('c1').copyWith(
         agentSessions: {gaiaSessionKey('desktop'): theirs},
         version: local.version + 1,

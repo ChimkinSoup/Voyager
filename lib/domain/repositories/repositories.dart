@@ -903,6 +903,14 @@ abstract class GaiaRepository {
     GaiaSettings settings, {
     bool recordLocalActivity = true,
   });
+
+  /// Every draft, empty ones included (§9.3).
+  Future<List<GaiaDraft>> listDrafts();
+  Future<GaiaDraft?> getDraft(String id);
+  Future<void> upsertDraft(GaiaDraft draft, {bool recordLocalActivity = true});
+
+  /// Fires after any write to the drafts.
+  Stream<void> watchDrafts();
 }
 
 /// Metadata half of the media module: asset rows and the references that

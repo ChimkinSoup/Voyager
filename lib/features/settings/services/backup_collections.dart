@@ -1521,5 +1521,17 @@ List<BackupCollection> buildBackupCollections({
         return message;
       },
     ),
+    BackupCollection(
+      name: FirestoreCollections.gaiaDrafts,
+      read: () async => [
+        for (final draft in await gaiaRepository.listDrafts())
+          BackupRecord(id: draft.id, data: gaiaDraftToFirestore(draft)),
+      ],
+      restore: (id, data) async {
+        final draft = mergeGaiaDraftFromRemote(data, id);
+        await gaiaRepository.upsertDraft(draft, recordLocalActivity: false);
+        return draft;
+      },
+    ),
   ];
 }
