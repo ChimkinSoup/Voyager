@@ -177,7 +177,7 @@ void main() {
           async.flushMicrotasks();
           expect(pipe.launches, hasLength(1));
           connect(async);
-          expect(companions.single.events, ['hotkey small']);
+          expect(companions.single.events, ['hotkey small false']);
         });
       },
     );
@@ -187,7 +187,10 @@ void main() {
         connect(async);
         host.onHotkey(GaiaHotkey.large);
         async.flushMicrotasks();
-        expect(companions.single.events, ['hotkey window', 'hotkey large']);
+        expect(companions.single.events, [
+          'hotkey window',
+          'hotkey large false',
+        ]);
       });
     });
 
@@ -645,7 +648,7 @@ void main() {
         uia = (url: 'github.com/pulls', selection: 'some code');
         host.onHotkey(GaiaHotkey.small);
         async.flushMicrotasks();
-        expect(companions.single.events, contains('hotkey small'));
+        expect(companions.single.events, contains('hotkey small false'));
         expect(lastContext, {
           'window': {
             'type': 'context',
@@ -724,7 +727,7 @@ void main() {
         async.flushMicrotasks();
         expect(
           companions.single.events,
-          containsAllInOrder(['summon 42', 'hotkey small']),
+          containsAllInOrder(['summon 42', 'hotkey small false']),
         );
       });
     });

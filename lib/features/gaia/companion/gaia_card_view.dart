@@ -49,6 +49,7 @@ class GaiaCardView extends StatelessWidget {
     );
     final interactive = _answerable && (onPick != null || onAllow != null);
     final question = card.kind == GaiaCardKind.question;
+    final detail = question ? null : gaiaPermissionDetail(card);
     return Container(
       constraints: const BoxConstraints(maxWidth: 520),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -85,10 +86,10 @@ class GaiaCardView extends StatelessWidget {
           ),
           if (!question) ...[
             if (card.description.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(card.description, style: muted),
+              const SizedBox(height: 8),
+              Text(card.description, style: theme.textTheme.bodySmall),
             ],
-            if (gaiaPermissionDetail(card) case final detail?) ...[
+            if (detail != null) ...[
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
@@ -142,18 +143,21 @@ class GaiaCardView extends StatelessWidget {
                             if (sendKey != null) '$sendKey allows',
                             'or type why not',
                           ].join(' · '),
-                    style: muted,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
                   ),
                 ),
                 if (onReject != null)
                   GaiaButton(
                     label: question ? 'Dismiss' : 'Deny',
                     onPressed: onReject,
+                    size: 28,
                     color: theme.colorScheme.error,
                   ),
                 if (!question && onAllow != null) ...[
                   const SizedBox(width: 8),
-                  GaiaButton(label: 'Allow', onPressed: onAllow),
+                  GaiaButton(label: 'Allow', onPressed: onAllow, size: 28),
                 ],
               ],
             )

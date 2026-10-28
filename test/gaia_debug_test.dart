@@ -3,6 +3,21 @@ import 'dart:io';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+
+/// For scripts with no cards, which never call it.
+class _NoTools implements GaiaTurnTools {
+  @override
+  Future<GaiaToolResult> call(String name, Map<String, Object?> arguments) =>
+      throw UnimplementedError();
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) => throw UnimplementedError();
+}
 
 /// The Gaia debug menu's toggles, kept in a local file.
 void main() {
@@ -85,6 +100,7 @@ void main() {
       replyDelay: Duration.zero,
       streamSpeed: 25,
       onEvent: (_) {},
+      tools: _NoTools(),
     );
     // Ten characters at 25 a second: 400ms, not the 300ms that rounding
     // each 30ms tick up to a character gave.

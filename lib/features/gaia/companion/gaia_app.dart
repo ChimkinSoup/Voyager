@@ -1321,12 +1321,12 @@ class _MessageView extends StatelessWidget {
     };
     final streaming = message.status == GaiaMessageStatus.streaming;
     // The orb sits just left of Gaia's text, in the gutter and the bubble's
-    // padding. Where those are narrower than the orb, every reply of hers is
-    // indented to make room, so none of them moves when one starts or
-    // finishes.
+    // padding. Where those are narrower than the orb and its margin, every
+    // reply of hers is indented to make room, so none of them moves when one
+    // starts or finishes.
     final indent = max(
       0.0,
-      kGaiaOrbSize + _orbGap - gutter - _bubblePadding.left,
+      _orbMargin + kGaiaOrbSize + _orbGap - gutter - _bubblePadding.left,
     );
     // The chat's own background, so Gaia's bubble shows only as the stars
     // fading behind it.
@@ -1489,6 +1489,9 @@ class _MessageView extends StatelessWidget {
 
   /// Between the orb and Gaia's text.
   static const _orbGap = 10.0;
+
+  /// At least this between the orb and the chat's left edge.
+  static const _orbMargin = 16.0;
 
   static const _bubblePadding = EdgeInsets.symmetric(
     horizontal: 12,
@@ -1759,9 +1762,11 @@ class _ComposerState extends State<_Composer> {
     final send = _sendCombo(controller);
     final card = controller.openCard;
     // A question's options by number, while there's nothing typed to put
-    // the digit in.
-    final pickable = card != null && _text.text.isEmpty
-        ? card.options.length
+    // the digit in. Every digit, so a miss does nothing rather than typing
+    // itself and taking the rest away.
+    final pickable =
+        card != null && card.options.isNotEmpty && _text.text.isEmpty
+        ? _digits.length
         : 0;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2320,6 +2325,8 @@ const _digits = [
   LogicalKeyboardKey.digit7,
   LogicalKeyboardKey.digit8,
   LogicalKeyboardKey.digit9,
+  // Never an option (ask_user takes at most 9), but beside 9 to miss onto.
+  LogicalKeyboardKey.digit0,
 ];
 
 /// The send keybind (§9.1), Ctrl+Enter by default, which is also its

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// The streaming speeds the debug menu offers, in characters a second.
 const kGaiaDebugStreamSpeeds = [25, 50, 100, 200, 400, 800, 1600, 6400];
@@ -187,6 +188,23 @@ class GaiaDebugTool extends GaiaDebugStep {
   final Duration duration;
 }
 
+/// A permission card, raised as the CLI raises one; the tool runs once
+/// allowed.
+class GaiaDebugPermission extends GaiaDebugStep {
+  const GaiaDebugPermission(this.tool, this.input, [this.description = '']);
+
+  final String tool;
+  final Map<String, Object?> input;
+  final String description;
+}
+
+/// A question card, raised as `ask_user` raises one; [arguments] are its.
+class GaiaDebugQuestion extends GaiaDebugStep {
+  const GaiaDebugQuestion(this.arguments);
+
+  final Map<String, Object?> arguments;
+}
+
 class GaiaDebugPause extends GaiaDebugStep {
   const GaiaDebugPause(this.duration);
 
@@ -212,7 +230,8 @@ class GaiaDebugHang extends GaiaDebugStep {
 
 /// Plays [GaiaDebugScript]s as an agent runner runs turns: the same
 /// events, a [GaiaTurnResult] at the end, and an error when stopped or
-/// killed. No process, no tokens.
+/// killed. No process, no tokens. Its cards go through the turn's [tools],
+/// as a real run's do.
 class GaiaScriptedRunner {
   final _active = <String, Completer<GaiaTurnResult>>{};
 
@@ -222,9 +241,10 @@ class GaiaScriptedRunner {
     required Duration replyDelay,
     required int streamSpeed,
     required void Function(GaiaAgentEvent event) onEvent,
+    required GaiaTurnTools tools,
   }) async {
     final turn = _active[chatId] = Completer<GaiaTurnResult>();
-    unawaited(_play(turn, script, replyDelay, streamSpeed, onEvent));
+    unawaited(_play(turn, script, replyDelay, streamSpeed, onEvent, tools));
     try {
       return await turn.future;
     } finally {
@@ -240,6 +260,7 @@ class GaiaScriptedRunner {
     Duration replyDelay,
     int streamSpeed,
     void Function(GaiaAgentEvent event) onEvent,
+    GaiaTurnTools tools,
   ) async {
     // False once the turn was stopped, or ended.
     Future<bool> wait(Duration duration) async {
@@ -271,6 +292,20 @@ class GaiaScriptedRunner {
         case GaiaDebugTool(:final name, :final duration):
           onEvent(GaiaToolUse(name));
           if (!await wait(duration)) return;
+        case GaiaDebugPermission(:final tool, :final input, :final description):
+          final permission = await tools.permit(
+            tool: tool,
+            input: input,
+            description: description,
+          );
+          if (turn.isCompleted) return;
+          if (permission.allow) {
+            onEvent(GaiaToolUse(tool));
+            if (!await wait(const Duration(seconds: 1))) return;
+          }
+        case GaiaDebugQuestion(:final arguments):
+          await tools.call('ask_user', arguments);
+          if (turn.isCompleted) return;
         case GaiaDebugPause(:final duration):
           if (!await wait(duration)) return;
         case GaiaDebugError(:final message):
@@ -369,6 +404,147 @@ const _scripts = {
   ]),
   '/msg7': GaiaDebugScript('Edge cases: emoji, CJK, RTL, unbroken text', [
     GaiaDebugText(_edges),
+  ]),
+  '/card1': GaiaDebugScript('A permission and a question, between text', [
+    GaiaDebugText("I'll check the tests before touching anything."),
+    GaiaDebugPermission('Bash', {
+      'command': 'flutter test test/gaia_debug_test.dart',
+    }, 'Run the Gaia debug tests'),
+    GaiaDebugText('They pass. Now, how should I name the new setting?'),
+    GaiaDebugQuestion({
+      'question': 'What should the setting be called?',
+      'options': [
+        {'label': 'replyDelay', 'description': 'Matches the existing name'},
+        {'label': 'thinkingTime', 'description': 'Says what it stands for'},
+      ],
+      'recommended': 'replyDelay',
+    }),
+    GaiaDebugText('Done.'),
+  ]),
+  '/card2': GaiaDebugScript('Permissions for each kind of call', [
+    GaiaDebugText('A few calls in a row, each needing permission.'),
+    GaiaDebugPermission('Edit', {
+      'file_path': r'C:\Users\Juno\Code\Voyager\lib\main.dart',
+      'old_string': 'runApp(const App());',
+      'new_string': 'runApp(const ProviderScope(child: App()));',
+    }),
+    GaiaDebugPermission('Write', {
+      'file_path': r'C:\Users\Juno\Code\Voyager\docs\notes.md',
+      'content': '# Notes\n\nA new file.',
+    }),
+    GaiaDebugPermission('WebFetch', {
+      'url': 'https://pub.dev/packages/flutter_riverpod',
+      'prompt': 'What is the latest version?',
+    }, 'Fetch the package page'),
+    // No command, path or URL: the card shows the whole input.
+    GaiaDebugPermission('mcp__github__create_issue', {
+      'owner': 'juno',
+      'repo': 'voyager',
+      'title': 'Gaia: cards overflow on narrow floaters',
+      'labels': ['bug', 'gaia'],
+    }, 'Open an issue on GitHub'),
+    GaiaDebugText('That was all of them.'),
+  ]),
+  '/card3': GaiaDebugScript(
+    'A permission with a long command and description',
+    [
+      GaiaDebugPermission(
+        'Bash',
+        {
+          'command':
+              'cd C:/Users/Juno/Code/Voyager && git stash && '
+              'flutter pub get && dart run build_runner build '
+              '--delete-conflicting-outputs && flutter test '
+              '--reporter expanded test/gaia_debug_test.dart '
+              'test/gaia_card_view_test.dart test/gaia_controller_test.dart '
+              '&& git stash pop\n'
+              'for f in lib/features/gaia/**/*.dart; do\n'
+              '  dart format "\$f"\n'
+              'done\n'
+              'echo "formatted"\n'
+              'git status --short\n'
+              'git diff --stat\n'
+              'git log --oneline -5\n'
+              'echo done',
+        },
+        'Stash the working tree, regenerate code, run the three Gaia test '
+            'files, restore the stash, then format every Gaia file and show '
+            'what changed, so we know the tree is clean before committing',
+      ),
+      GaiaDebugText('That one is long on purpose.'),
+    ],
+  ),
+  '/card4': GaiaDebugScript('A bare permission: no description or input', [
+    GaiaDebugPermission('TodoWrite', {}),
+    GaiaDebugPermission('Bash', {'command': 'ls'}),
+    GaiaDebugText('Two small ones.'),
+  ]),
+  '/card5': GaiaDebugScript('A question with nine options and a recommended', [
+    GaiaDebugQuestion({
+      'question': 'Which state management should the new feature use?',
+      'options': [
+        {'label': 'Riverpod', 'description': 'What the rest of the app uses'},
+        {'label': 'Provider', 'description': 'Simpler, but older'},
+        {'label': 'Bloc', 'description': 'Events and states, more ceremony'},
+        {'label': 'ValueNotifier', 'description': ''},
+        {'label': 'setState', 'description': 'Fine for a single screen'},
+        {'label': 'MobX', 'description': 'Observables and codegen'},
+        {'label': 'Redux', 'description': 'One store for everything'},
+        {'label': 'GetX', 'description': ''},
+        {
+          'label': 'Something else',
+          'description':
+              'A long description that has to wrap onto a second line, to '
+              'see how an option grows when it does',
+        },
+      ],
+      'recommended': 'Riverpod',
+    }),
+    GaiaDebugText('Noted.'),
+  ]),
+  '/card6': GaiaDebugScript('A multi-select question', [
+    GaiaDebugQuestion({
+      'question': 'Which platforms should the release include?',
+      'options': [
+        {'label': 'Windows', 'description': ''},
+        {'label': 'macOS', 'description': 'Needs notarising'},
+        {'label': 'Linux', 'description': ''},
+        {'label': 'Android', 'description': ''},
+        {'label': 'iOS', 'description': 'Needs a TestFlight build'},
+      ],
+      'multi_select': true,
+    }),
+    GaiaDebugText('Got it.'),
+  ]),
+  '/card7': GaiaDebugScript('A free-text question, long, with no options', [
+    GaiaDebugQuestion({
+      'question':
+          "I couldn't find where the sync conflict comes from. It happens "
+          'only on the second device, after the first goes offline and '
+          'comes back. What were you doing when you last saw it, and which '
+          'note was it on?',
+    }),
+    GaiaDebugText('Thanks, that helps.'),
+  ]),
+  '/card8': GaiaDebugScript('Two questions, then a permission, back to back', [
+    GaiaDebugQuestion({
+      'question': 'Commit the fix?',
+      'options': [
+        {'label': 'Yes', 'description': ''},
+        {'label': 'No', 'description': ''},
+      ],
+    }),
+    GaiaDebugQuestion({
+      'question': 'Push it too?',
+      'options': [
+        {'label': 'Yes', 'description': ''},
+        {'label': 'No', 'description': ''},
+      ],
+    }),
+    GaiaDebugPermission('Bash', {
+      'command': 'git commit -am "Fix the timer" && git push',
+    }, 'Commit and push'),
+    GaiaDebugText('Pushed.'),
   ]),
   '/slow': GaiaDebugScript('Ten seconds of thinking, then a short reply', [
     GaiaDebugPause(Duration(seconds: 10)),

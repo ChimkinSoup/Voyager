@@ -1958,6 +1958,7 @@ class GaiaController extends ChangeNotifier {
               replyDelay: debug.replyDelay,
               streamSpeed: debug.streamSpeed,
               onEvent: onEvent,
+              tools: tools,
             )
           : agent == null
           ? GaiaTurnResult(

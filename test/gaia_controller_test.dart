@@ -759,7 +759,10 @@ void main() {
       addTearDown(() => captures.delete(recursive: true));
       final shot = File('${captures.path}/shot.bmp')..writeAsBytesSync([0]);
       main.companion.onEvent!('capture', capture('screen', shot.path));
-      await settle();
+      // Moved into the drafts on disk, past what [settle] waits for.
+      for (var i = 0; i < 100 && window.shown == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
 
       expect(window.shown, GaiaMode.small);
       expect(p.dirname(controller.draftImages.single.path), drafts.path);
@@ -2601,15 +2604,12 @@ void main() {
       expect(window.shown, GaiaMode.small);
     });
 
-    test(
-      'B opens the large floater, and is a no-op when it is showing',
-      () async {
-        await press('large');
-        expect(window.shown, GaiaMode.large);
-        await press('large');
-        expect(window.shown, GaiaMode.large);
-      },
-    );
+    test('B opens the large floater, and hides it when it is showing', () async {
+      await press('large');
+      expect(window.shown, GaiaMode.large);
+      await press('large');
+      expect(window.shown, isNull);
+    });
 
     test('G opens the Gaia window', () async {
       await press('window');
