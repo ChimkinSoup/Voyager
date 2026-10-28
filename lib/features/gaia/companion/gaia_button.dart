@@ -31,7 +31,8 @@ class GaiaAmbient extends InheritedWidget {
 /// cursor comes within [_reach] of the button, the light swings round to
 /// face it and follows it, a tint of the accent; over the button, it centres
 /// on the cursor, widens, and turns the accent at full saturation. Squared
-/// off with a [label], or round with only an [icon].
+/// off with a [label], or round with only an [icon]. A [color] stands in for
+/// the accent and tints the label, as Cancel's red does.
 class GaiaButton extends StatefulWidget {
   const GaiaButton({
     super.key,
@@ -39,6 +40,7 @@ class GaiaButton extends StatefulWidget {
     this.label,
     this.icon,
     this.size = 36,
+    this.color,
   }) : assert(label != null || icon != null);
 
   /// Null disables the button.
@@ -48,6 +50,9 @@ class GaiaButton extends StatefulWidget {
 
   /// The height, and a round button's width.
   final double size;
+
+  /// The light's colour and the label's; the accent and white when null.
+  final Color? color;
 
   @override
   State<GaiaButton> createState() => _GaiaButtonState();
@@ -77,19 +82,20 @@ class _GaiaButtonState extends State<GaiaButton> {
     final round = widget.label == null;
     final outer = round ? widget.size / 2 : 6.0;
     final iconSize = widget.size * 0.45;
+    final foreground = widget.color ?? Colors.white;
     final content = round
-        ? Icon(widget.icon, size: iconSize, color: Colors.white)
+        ? Icon(widget.icon, size: iconSize, color: foreground)
         : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.icon != null) ...[
-                Icon(widget.icon, size: iconSize, color: Colors.white),
+                Icon(widget.icon, size: iconSize, color: foreground),
                 const SizedBox(width: 8),
               ],
               Text(
                 widget.label!,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: foreground,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -119,6 +125,7 @@ class _GaiaButtonState extends State<GaiaButton> {
               child: GaiaGlowRing(
                 radius: outer,
                 hovered: _hovered,
+                color: widget.color,
                 child: Container(
                   alignment: Alignment.center,
                   padding: round
@@ -144,12 +151,16 @@ class GaiaGlowRing extends StatefulWidget {
     super.key,
     required this.radius,
     required this.hovered,
+    this.color,
     required this.child,
   });
 
   /// The outer corner radius.
   final double radius;
   final bool hovered;
+
+  /// The light's colour; the accent when null.
+  final Color? color;
 
   /// Clipped to the fill.
   final Widget child;
@@ -262,6 +273,7 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final outer = widget.radius;
+    final accent = widget.color ?? colors.primary;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.1),
@@ -279,10 +291,8 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
                     angle: _angle,
                     hover: _hover,
                     cursor: () => _cursor,
-                    idle: Color.lerp(colors.primary, Colors.white, 0.5)!,
-                    lit: HSLColor.fromColor(
-                      colors.primary,
-                    ).withSaturation(1).toColor(),
+                    idle: Color.lerp(accent, Colors.white, 0.5)!,
+                    lit: HSLColor.fromColor(accent).withSaturation(1).toColor(),
                   ),
                 ),
               ),

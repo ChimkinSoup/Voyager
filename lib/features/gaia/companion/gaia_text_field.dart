@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 
 /// Gaia's text field (after Aceternity UI's signup form input): a dark field
@@ -25,6 +26,7 @@ class GaiaTextField extends StatefulWidget {
     this.hintText,
     this.leading,
     this.trailing,
+    this.onPaste,
   });
 
   final TextEditingController controller;
@@ -41,6 +43,9 @@ class GaiaTextField extends StatefulWidget {
 
   /// Sits inside the field at its bottom right, such as a send button.
   final Widget? trailing;
+
+  /// Paste from the right-click menu, in place of plain text paste.
+  final VoidCallback? onPaste;
 
   @override
   State<GaiaTextField> createState() => _GaiaTextFieldState();
@@ -304,6 +309,11 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     _light.value += gap * (1 - math.exp(-dt * _follow));
   }
 
+  /// The same function every build: a different one makes the field build
+  /// its open menu afresh, replaying its entrance, as on every hover.
+  Widget _contextMenu(BuildContext context, EditableTextState state) =>
+      gaiaTextMenu(context, state, onPaste: widget.onPaste);
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -352,6 +362,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
                       maxLines: widget.maxLines,
                       expands: widget.expands,
                       textAlignVertical: widget.textAlignVertical,
+                      contextMenuBuilder: _contextMenu,
                       decoration: InputDecoration(
                         hintText: widget.hintText,
                         // The field paints its own fill and edge.

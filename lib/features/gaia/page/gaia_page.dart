@@ -441,6 +441,15 @@ class _GaiaTranscript extends ConsumerWidget {
                         Text(window.label, style: muted),
                         const SizedBox(height: 4),
                       ],
+                      for (final quote
+                          in message.parts.whereType<GaiaQuotePart>()) ...[
+                        Text(
+                          quote.label,
+                          style: muted,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                      ],
                       SelectableText(message.text),
                       // By path: the file is on the device it came from.
                       for (final file
@@ -482,6 +491,7 @@ class _GaiaTranscript extends ConsumerWidget {
                         GaiaImagePart() ||
                         GaiaFilePart() ||
                         GaiaContextPart() ||
+                        GaiaQuotePart() ||
                         GaiaUnknownPart() => const SizedBox.shrink(),
                       },
                     if (message.status != GaiaMessageStatus.complete)

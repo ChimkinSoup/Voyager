@@ -46,6 +46,18 @@ class GaiaMedia {
   Future<void> detach(String referenceId) =>
       _media.removeReference(referenceId);
 
+  /// Takes [chatId]'s images onto its 30-day clock as it's deleted. The
+  /// stamp [restoreChat] needs to bring them back, or null if it had none.
+  Future<DateTime?> removeChat(String chatId) =>
+      _media.removeReferencesForOwner(FirestoreCollections.gaiaChats, chatId);
+
+  Future<void> restoreChat(String chatId, DateTime deletedAt) =>
+      _media.restoreReferencesForOwner(
+        FirestoreCollections.gaiaChats,
+        chatId,
+        deletedAt,
+      );
+
   /// The local file holding [mediaId]'s bytes; null while they're only
   /// remote, when a download is asked for.
   Future<String?> file(String mediaId) async {

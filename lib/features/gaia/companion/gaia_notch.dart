@@ -7,6 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 
+part 'gaia_menu.dart';
+
 /// One choice in a [GaiaNotchItem].
 class GaiaNotchOption<T> {
   const GaiaNotchOption({

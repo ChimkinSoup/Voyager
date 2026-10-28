@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 
 import 'narrow_window_harness.dart';
@@ -557,6 +558,35 @@ void main() {
       focus.unfocus();
       await settle(tester);
       expect(tester.binding.hasScheduledFrame, isFalse);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'its open right-click menu stays as it is while the field rebuilds',
+    (tester) async {
+      text = TextEditingController(text: 'hello');
+      focus = FocusNode();
+      addTearDown(text.dispose);
+      addTearDown(focus.dispose);
+      await buildField(tester);
+      await tester.tap(find.byType(TextField), buttons: kSecondaryButton);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      final menu = tester.state(find.byType(GaiaMenu));
+
+      // The cursor going in and out, and Gaia rebuilding the field.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(find.byType(TextField)));
+      await tester.pump();
+      await mouse.moveTo(Offset.zero);
+      await tester.pump();
+      await buildField(tester);
+      await tester.pump();
+
+      expect(tester.state(find.byType(GaiaMenu)), same(menu));
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/platform/windows_folder_picker.dart';
@@ -38,7 +40,9 @@ import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
+import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/domain/services/media_ingest.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// The companion's UI (GAIA_HLD.md §3.3): the small floater shows the last
@@ -217,6 +221,8 @@ class _GaiaShell extends StatelessWidget {
                 uploading: controller.uploadingImages,
                 tier: controller.nextTier,
                 running: controller.currentRunning,
+                onEdit: (message) => _editMessage(context, controller, message),
+                onAttach: controller.attachMessage,
               ),
             ),
             _Composer(controller: controller),
@@ -488,6 +494,11 @@ class _SidebarState extends State<_Sidebar> {
   final _tiles =
       <String, ({GaiaChat chat, bool selected, bool running, Widget tile})>{};
 
+  /// The chat being renamed in its tile, and its field.
+  String? _renaming;
+  final _rename = TextEditingController();
+  final _renameFocus = FocusNode();
+
   @override
   void didUpdateWidget(_Sidebar old) {
     super.didUpdateWidget(old);
@@ -495,24 +506,144 @@ class _SidebarState extends State<_Sidebar> {
     if (widget.controller != old.controller) _tiles.clear();
   }
 
+  @override
+  void dispose() {
+    _rename.dispose();
+    _renameFocus.dispose();
+    super.dispose();
+  }
+
+  void _startRename(GaiaChat chat) {
+    _rename.value = TextEditingValue(
+      text: chat.title,
+      selection: TextSelection(baseOffset: 0, extentOffset: chat.title.length),
+    );
+    setState(() => _renaming = chat.id);
+    // Asked for, not autofocused: the composer, or the menu's giving it
+    // back, has the scope's focus already.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _renaming == chat.id) _renameFocus.requestFocus();
+    });
+  }
+
+  /// Enter or a click away keeps the new name; Esc doesn't.
+  void _endRename({required bool keep}) {
+    final chatId = _renaming;
+    if (chatId == null) return;
+    setState(() => _renaming = null);
+    if (keep) {
+      unawaited(widget.controller.renameChat(chatId, _rename.text.trim()));
+    }
+  }
+
+  /// Off the list at once; the toast, once it's deleted, undoes it.
+  Future<void> _delete(GaiaChat chat) async {
+    final controller = widget.controller;
+    final open = controller.currentChatId == chat.id;
+    final String? media;
+    try {
+      media = await controller.deleteChat(chat.id);
+    } on GaiaPipeException catch (error) {
+      if (!mounted) return;
+      showGaiaToast(
+        context,
+        mark: GaiaToastMark.error,
+        title: '${chat.title} not deleted',
+        body: '$error',
+      );
+      return;
+    }
+    if (!mounted) return;
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: 'Deleted ${chat.title}',
+      body: 'Click to undo',
+      onTap: () => controller.restoreChat(chat.id, media, open: open),
+    );
+  }
+
+  void _menu(GaiaChat chat, Offset position) {
+    final controller = widget.controller;
+    final running = controller.isRunning(chat.id);
+    showGaiaMenu(context, position, [
+      GaiaMenuItem(
+        label: 'Rename',
+        icon: Icons.edit_outlined,
+        onPressed: () => _startRename(chat),
+      ),
+      GaiaMenuItem(
+        label: 'Copy title',
+        icon: Icons.content_copy,
+        onPressed: () => Clipboard.setData(ClipboardData(text: chat.title)),
+      ),
+      if (running)
+        GaiaMenuItem(
+          label: 'Stop',
+          icon: Icons.stop,
+          onPressed: () => controller.stop(chat.id),
+        )
+      else
+        // Not mid-run: the run would write it back.
+        GaiaMenuItem(
+          label: 'Delete',
+          icon: Icons.delete_outline,
+          destructive: true,
+          onPressed: () => _delete(chat),
+        ),
+    ]);
+  }
+
   Widget _tile(GaiaChat chat) {
     final controller = widget.controller;
     final selected = chat.id == controller.currentChatId;
     final running = controller.isRunning(chat.id);
+    final renaming = chat.id == _renaming;
     if (_tiles[chat.id] case final last?
-        when identical(last.chat, chat) &&
+        when !renaming &&
+            identical(last.chat, chat) &&
             last.selected == selected &&
             last.running == running) {
       return last.tile;
     }
-    final tile = ListTile(
+    final tile = GestureDetector(
       key: ValueKey(chat.id),
-      dense: true,
-      selected: selected,
-      title: Text(chat.title, overflow: TextOverflow.ellipsis),
-      trailing: running ? const GaiaSpinner(size: 18, label: 'Running') : null,
-      onTap: () => controller.selectChat(chat.id),
+      onSecondaryTapUp: (details) => _menu(chat, details.globalPosition),
+      child: _ChatTile(
+        selected: selected,
+        title: renaming
+            // In the tile's own text style, as its title was.
+            ? Builder(
+                builder: (context) => TextField(
+                  controller: _rename,
+                  focusNode: _renameFocus,
+                  autofocus: true,
+                  style: DefaultTextStyle.of(context).style,
+                  decoration: const InputDecoration.collapsed(hintText: ''),
+                  contextMenuBuilder: gaiaTextMenu,
+                  onSubmitted: (_) => _endRename(keep: true),
+                  onTapOutside: (_) => _endRename(keep: true),
+                ),
+              )
+            : Text(chat.title, overflow: TextOverflow.ellipsis),
+        trailing: running
+            ? const GaiaSpinner(size: 16, label: 'Running')
+            : null,
+        onTap: renaming ? null : () => controller.selectChat(chat.id),
+      ),
     );
+    if (renaming) {
+      // Not kept: the field's tile is built afresh as it's typed in.
+      _tiles.remove(chat.id);
+      return CallbackShortcuts(
+        key: ValueKey(chat.id),
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _endRename(keep: false),
+        },
+        child: tile,
+      );
+    }
     _tiles[chat.id] = (
       chat: chat,
       selected: selected,
@@ -552,36 +683,113 @@ class _SidebarState extends State<_Sidebar> {
           ),
         ),
         Expanded(
-          // The tiles' highlight and splash paint on this Material, clipped
-          // to the list rather than spilling past it when scrolled.
-          child: ClipRect(
-            child: Material(
-              type: MaterialType.transparency,
-              child: ScrollConfiguration(
-                // Scrolls without a bar.
-                behavior: ScrollConfiguration.of(
-                  context,
-                ).copyWith(scrollbars: false),
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [for (final chat in controller.chats) _tile(chat)],
-                ),
-              ),
+          child: ScrollConfiguration(
+            // Scrolls without a bar.
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              children: [for (final chat in controller.chats) _tile(chat)],
             ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(12),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: IconButton(
-              tooltip: 'Debug menu (Ctrl+Shift+D)',
-              icon: const Icon(Icons.bug_report_outlined, size: 18),
-              onPressed: () => showGaiaDebugMenu(context, controller),
+            child: Tooltip(
+              message: 'Debug menu (Ctrl+Shift+D)',
+              child: GaiaButton(
+                icon: Icons.bug_report_outlined,
+                size: 32,
+                onPressed: () => showGaiaDebugMenu(context, controller),
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A chat in the sidebar, in the look of a [GaiaMenu]'s rows: dim text that
+/// whitens over a faint fill on hover, and the open chat lit and edged in
+/// the glow rings' rim.
+class _ChatTile extends StatefulWidget {
+  const _ChatTile({
+    required this.selected,
+    required this.title,
+    required this.trailing,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final Widget title;
+  final Widget? trailing;
+
+  /// Null while it's being renamed.
+  final VoidCallback? onTap;
+
+  @override
+  State<_ChatTile> createState() => _ChatTileState();
+}
+
+class _ChatTileState extends State<_ChatTile> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    final lit = selected || _hovered;
+    return MouseRegion(
+      cursor: widget.onTap == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: 36,
+          margin: const EdgeInsets.only(bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(
+              alpha: selected
+                  ? 0.08
+                  : _hovered
+                  ? 0.05
+                  : 0,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: selected ? 0.1 : 0),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 150),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: lit ? Colors.white : const Color(0xFFA3A3A3),
+                  ),
+                  child: widget.title,
+                ),
+              ),
+              if (widget.trailing case final trailing?) ...[
+                const SizedBox(width: 8),
+                trailing,
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -596,6 +804,8 @@ class _Messages extends StatefulWidget {
     required this.uploading,
     required this.tier,
     required this.running,
+    required this.onEdit,
+    required this.onAttach,
   });
 
   final List<GaiaMessage> messages;
@@ -610,6 +820,12 @@ class _Messages extends StatefulWidget {
 
   /// The chat has a reply running from this window.
   final bool running;
+
+  /// A message of the user's to edit and resend: it into the composer.
+  final void Function(GaiaMessage message) onEdit;
+
+  /// A message to attach to the draft as context (§9.3).
+  final void Function(GaiaMessage message) onAttach;
 
   @override
   State<_Messages> createState() => _MessagesState();
@@ -716,6 +932,54 @@ class _MessagesState extends State<_Messages> {
     );
   }
 
+  void _edit(GaiaMessage message) => widget.onEdit(message);
+
+  void _attach(GaiaMessage message) => widget.onAttach(message);
+
+  /// An image's bytes onto the clipboard, as stored.
+  Future<void> _copyImage(GaiaImagePart image) async {
+    final path = await widget.imageFile(image.mediaId);
+    final clipboard = SystemClipboard.instance;
+    if (!mounted) return;
+    if (path == null || clipboard == null) {
+      showGaiaToast(
+        context,
+        mark: GaiaToastMark.error,
+        title: 'Image not copied',
+        body: path == null
+            ? "It isn't on this device yet."
+            : "Copying images isn't supported here.",
+      );
+      return;
+    }
+    try {
+      final bytes = await File(path).readAsBytes();
+      await clipboard.write([DataWriterItem()..add(_imageFormat(bytes))]);
+    } on Exception catch (error) {
+      if (!mounted) return;
+      showGaiaToast(
+        context,
+        mark: GaiaToastMark.error,
+        title: 'Image not copied',
+        body: '$error',
+      );
+    }
+  }
+
+  /// [bytes] in its format, by its signature: a draft's still uploading
+  /// can be a GIF or a BMP, a stored one a WebP; anything else is a JPEG.
+  static FutureOr<EncodedData> _imageFormat(Uint8List bytes) {
+    if (bytes.length > 1 && bytes[0] == 0x42 && bytes[1] == 0x4D) {
+      return Formats.bmp(bytes);
+    }
+    return switch (sniffImageFormat(bytes)) {
+      SniffedImageFormat.png => Formats.png(bytes),
+      SniffedImageFormat.gif => Formats.gif(bytes),
+      SniffedImageFormat.webp => Formats.webp(bytes),
+      _ => Formats.jpeg(bytes),
+    };
+  }
+
   /// [message]'s view: the one built last time while nothing it shows has
   /// changed.
   _MessageView _view(
@@ -746,6 +1010,9 @@ class _MessagesState extends State<_Messages> {
       imageFile: widget.imageFile,
       uploading: uploading,
       onOpen: _open,
+      onCopyImage: _copyImage,
+      onEdit: _edit,
+      onAttach: _attach,
       gutter: gutter,
       orbTier: orbTier,
       orbKey: orbKey,
@@ -905,6 +1172,9 @@ class _MessageView extends StatelessWidget {
     required this.imageFile,
     required this.uploading,
     required this.onOpen,
+    required this.onCopyImage,
+    required this.onEdit,
+    required this.onAttach,
     required this.gutter,
     required this.orbTier,
     required this.orbKey,
@@ -916,6 +1186,9 @@ class _MessageView extends StatelessWidget {
   final Future<String?> Function(String mediaId) imageFile;
   final Set<String> uploading;
   final void Function(GaiaImagePart image) onOpen;
+  final void Function(GaiaImagePart image) onCopyImage;
+  final void Function(GaiaMessage message) onEdit;
+  final void Function(GaiaMessage message) onAttach;
 
   /// The list's margin either side of the messages.
   final double gutter;
@@ -942,6 +1215,7 @@ class _MessageView extends StatelessWidget {
       final images = message.parts.whereType<GaiaImagePart>();
       final files = message.parts.whereType<GaiaFilePart>();
       final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
+      final quotes = message.parts.whereType<GaiaQuotePart>();
       // Images and files float on their own above the prompt's bubble; a
       // message of only those has no bubble. Just sent, its text and
       // attachments gather in out of particles.
@@ -971,12 +1245,27 @@ class _MessageView extends StatelessWidget {
                     runSpacing: 8,
                     children: [
                       for (final image in images)
-                        GaiaImageThumb(
-                          file: imageFile(image.mediaId),
-                          label: image.label,
-                          height: 96,
-                          uploading: uploading.contains(image.mediaId),
-                          onTap: () => onOpen(image),
+                        GestureDetector(
+                          onSecondaryTapUp: (details) =>
+                              showGaiaMenu(context, details.globalPosition, [
+                                GaiaMenuItem(
+                                  label: 'Open',
+                                  icon: Icons.open_in_full,
+                                  onPressed: () => onOpen(image),
+                                ),
+                                GaiaMenuItem(
+                                  label: 'Copy image',
+                                  icon: Icons.content_copy,
+                                  onPressed: () => onCopyImage(image),
+                                ),
+                              ]),
+                          child: GaiaImageThumb(
+                            file: imageFile(image.mediaId),
+                            label: image.label,
+                            height: 96,
+                            uploading: uploading.contains(image.mediaId),
+                            onTap: () => onOpen(image),
+                          ),
                         ),
                       for (final file in files)
                         GaiaFileCard(file: file, height: 56),
@@ -984,7 +1273,7 @@ class _MessageView extends StatelessWidget {
                   ),
                 ),
               ),
-            if (window != null || message.text.isNotEmpty)
+            if (window != null || quotes.isNotEmpty || message.text.isNotEmpty)
               _bubble(
                 theme.colorScheme.surfaceContainerHighest,
                 Alignment.centerRight,
@@ -996,7 +1285,14 @@ class _MessageView extends StatelessWidget {
                         _ContextChip(label: window.label),
                         const SizedBox(height: 6),
                       ],
-                      if (message.text.isNotEmpty) SelectableText(message.text),
+                      for (final quote in quotes) ...[
+                        _ContextChip(
+                          label: quote.label,
+                          icon: Icons.format_quote,
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      if (message.text.isNotEmpty) _text(message.text),
                     ],
                   ),
                 ),
@@ -1034,7 +1330,7 @@ class _MessageView extends StatelessWidget {
         children: [
           for (final part in message.parts)
             switch (part) {
-              GaiaTextPart(:final text) => SelectableText(text),
+              GaiaTextPart(:final text) => _text(text),
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: GaiaActivityChip(label: _activity(tools)),
@@ -1043,6 +1339,7 @@ class _MessageView extends StatelessWidget {
               GaiaImagePart() ||
               GaiaFilePart() ||
               GaiaContextPart() ||
+              GaiaQuotePart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },
           if (status != null)
@@ -1099,21 +1396,70 @@ class _MessageView extends StatelessWidget {
   }) {
     return Align(
       alignment: alignment,
-      child: Container(
-        // The user's keep clear of the left, so their side stays theirs.
-        margin: EdgeInsets.only(
-          bottom: _bubbleMargin,
-          left: alignment == Alignment.centerRight ? 48 : indent,
+      child: _menuArea(
+        Container(
+          // The user's keep clear of the left, so their side stays theirs.
+          margin: EdgeInsets.only(
+            bottom: _bubbleMargin,
+            left: alignment == Alignment.centerRight ? 48 : indent,
+          ),
+          padding: _bubblePadding,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: child,
         ),
-        padding: _bubblePadding,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: child,
       ),
     );
   }
+
+  /// What right-clicking the message offers, beyond its text's own.
+  List<GaiaMenuItem> _menu() => [
+    if (message.text.isNotEmpty)
+      GaiaMenuItem(
+        label: 'Copy message',
+        icon: Icons.copy_all,
+        onPressed: () => Clipboard.setData(ClipboardData(text: message.text)),
+      ),
+    if (gaiaCodeBlocks(message.text) case final code?)
+      GaiaMenuItem(
+        label: 'Copy code',
+        icon: Icons.code,
+        onPressed: () => Clipboard.setData(ClipboardData(text: code)),
+      ),
+    if (message.text.isNotEmpty)
+      GaiaMenuItem(
+        label: 'Attach as context',
+        icon: Icons.format_quote,
+        onPressed: () => onAttach(message),
+      ),
+    if (message.role == GaiaMessageRole.user &&
+        (message.text.isNotEmpty ||
+            message.parts.any((part) => part is GaiaQuotePart)))
+      GaiaMenuItem(
+        label: 'Edit & resend',
+        icon: Icons.edit_outlined,
+        onPressed: () => onEdit(message),
+      ),
+  ];
+
+  /// Selectable, with the message's actions in its right-click menu.
+  Widget _text(String text) => _MessageText(text: text, menu: _menu);
+
+  /// Right-clicked off its text, as on the bubble's padding: the message's
+  /// actions alone.
+  Widget _menuArea(Widget child) => Builder(
+    builder: (context) => GestureDetector(
+      onSecondaryTapUp: (details) {
+        final items = _menu();
+        if (items.isNotEmpty) {
+          showGaiaMenu(context, details.globalPosition, items);
+        }
+      },
+      child: child,
+    ),
+  );
 
   /// Below each bubble.
   static const _bubbleMargin = 12.0;
@@ -1138,6 +1484,32 @@ class _MessageView extends StatelessWidget {
   }
 }
 
+/// A message's text, selectable, with [menu] after its own buttons in its
+/// right-click menu.
+class _MessageText extends StatefulWidget {
+  const _MessageText({required this.text, required this.menu});
+
+  final String text;
+
+  /// Built only when the menu is: it scans the text for code.
+  final List<GaiaMenuItem> Function() menu;
+
+  @override
+  State<_MessageText> createState() => _MessageTextState();
+}
+
+class _MessageTextState extends State<_MessageText> {
+  /// The same function every build: a different one makes the text build
+  /// its open menu afresh, replaying its entrance, as a streaming reply
+  /// rebuilds it.
+  Widget _contextMenu(BuildContext context, EditableTextState state) =>
+      gaiaTextMenu(context, state, extra: widget.menu());
+
+  @override
+  Widget build(BuildContext context) =>
+      SelectableText(widget.text, contextMenuBuilder: _contextMenu);
+}
+
 class _Composer extends StatefulWidget {
   const _Composer({required this.controller});
 
@@ -1158,10 +1530,16 @@ class _ComposerState extends State<_Composer> {
   var _highlight = 0;
   String? _paletteClosedFor;
 
+  /// The palette hovers over the chat from the overlay, above the
+  /// composer, rather than pushing the chat up.
+  final _portal = OverlayPortalController();
+  final _link = LayerLink();
+
   @override
   void initState() {
     super.initState();
     _text.addListener(_onDraft);
+    _portal.show();
   }
 
   void _onDraft() {
@@ -1293,7 +1671,7 @@ class _ComposerState extends State<_Composer> {
     final text = _text.text;
     final attached =
         controller.draftImages.isNotEmpty || controller.draftFiles.isNotEmpty;
-    if ((text.trim().isEmpty && !attached) || controller.currentRunning) {
+    if (controller.draftIsEmpty || controller.currentRunning) {
       return;
     }
     GaiaVanishState.vanishTogether([
@@ -1335,10 +1713,7 @@ class _ComposerState extends State<_Composer> {
     }
     final running = controller.currentRunning;
     final palette = _palette;
-    // Ctrl+Enter by default (§9.1): Enter and Shift+Enter are newlines.
-    final send =
-        parseGaiaCombo(gaiaComboFor(GaiaKeybind.send, controller.keybinds)) ??
-        parseGaiaCombo(GaiaKeybind.send.defaultCombo)!;
+    final send = _sendCombo(controller);
     return LayoutBuilder(
       builder: (context, constraints) {
         // A little wider than the messages' column, as in Claude's apps.
@@ -1363,133 +1738,181 @@ class _ComposerState extends State<_Composer> {
                     setState(() => _paletteClosedFor = _text.text),
               },
             },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (palette.isNotEmpty)
-                  _Palette(
-                    items: palette,
-                    highlight: _highlight.clamp(0, palette.length - 1),
-                    onPick: _pick,
-                  ),
-                if (controller.windowContext case final window?)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: _ContextChip(
-                        label: window.label,
-                        onRemove: controller.dropWindowContext,
-                      ),
-                    ),
-                  ),
-                // Sent, the images and files dissolve like the text, and
-                // their row closes behind them.
-                GaiaVanish(
-                  key: _imagesVanish,
-                  refilled:
-                      controller.draftImages.isNotEmpty ||
-                      controller.draftFiles.isNotEmpty,
-                  builder: (context, _) =>
-                      controller.draftImages.isEmpty &&
-                          controller.draftFiles.isEmpty
-                      ? const SizedBox.shrink()
-                      : Padding(
+            child: OverlayPortal(
+              controller: _portal,
+              overlayChildBuilder: (context) => palette.isEmpty
+                  ? const SizedBox.shrink()
+                  : Align(
+                      alignment: Alignment.topLeft,
+                      child: CompositedTransformFollower(
+                        link: _link,
+                        showWhenUnlinked: false,
+                        targetAnchor: Alignment.topLeft,
+                        followerAnchor: Alignment.bottomLeft,
+                        child: Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final image in controller.draftImages)
-                                GaiaImageThumb(
-                                  // The preview's path too: the thumbnail
-                                  // reads its path only once.
-                                  key: ValueKey(image.preview ?? image.path),
-                                  path: image.preview ?? image.path,
-                                  label: image.label,
-                                  height: 56,
-                                  onTap: () => _edit(image),
-                                  onRemove: () =>
-                                      controller.removeDraftImage(image.label),
-                                ),
-                              for (final file in controller.draftFiles)
-                                GaiaFileCard(
-                                  file: file,
-                                  height: 56,
-                                  onRemove: () =>
-                                      controller.removeDraftFile(file),
+                          child: GaiaPalette(
+                            width: constraints.maxWidth - 2 * side,
+                            highlight: _highlight.clamp(0, palette.length - 1),
+                            items: [
+                              for (final item in palette)
+                                GaiaMenuItem(
+                                  label: '/${item.name}',
+                                  detail: item.description,
+                                  onPressed: () => _pick(item),
                                 ),
                             ],
                           ),
                         ),
-                ),
-                GaiaVanish(
-                  key: _vanish,
-                  controller: _text,
-                  builder: (context, vanishing) => GaiaTextField(
-                    controller: _text,
-                    focusNode: _focus,
-                    autofocus: true,
-                    minLines: vanishing ? null : 1,
-                    maxLines: vanishing ? null : 8,
-                    expands: vanishing,
-                    textAlignVertical: vanishing ? TextAlignVertical.top : null,
-                    hintText: vanishing ? null : 'Message Gaia',
-                    // The tier picker's notch, opening rightwards from the
-                    // field's left edge.
-                    leading: Padding(
-                      // Level with the send button.
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: GaiaNotch(
-                        opensRight: true,
-                        items: [
-                          GaiaNotchItem<bool?>(
-                            trigger: (color) =>
-                                Icon(Icons.add, size: 16, color: color),
-                            options: [
-                              GaiaNotchOption(
-                                value: false,
-                                label: 'Add files',
-                                icon: (color, {required lit}) => Icon(
-                                  Icons.description_outlined,
-                                  size: 16,
-                                  color: color,
-                                ),
-                              ),
-                              GaiaNotchOption(
-                                value: true,
-                                label: 'Add folder',
-                                icon: (color, {required lit}) => Icon(
-                                  Icons.folder_outlined,
-                                  size: 16,
-                                  color: color,
-                                ),
-                              ),
-                            ],
-                            value: null,
-                            onChanged: (folder) => _attach(folder: folder!),
-                          ),
-                        ],
                       ),
                     ),
-                    trailing: running
-                        ? GaiaButton(
-                            icon: Icons.stop,
-                            size: 32,
-                            onPressed: () =>
-                                controller.stop(controller.currentChatId!),
-                          )
-                        : GaiaButton(
-                            icon: Icons.arrow_upward,
-                            size: 32,
-                            onPressed: _send,
+              child: CompositedTransformTarget(
+                link: _link,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (controller.windowContext case final window?)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _ContextChip(
+                            label: window.label,
+                            onRemove: controller.dropWindowContext,
                           ),
-                  ),
+                        ),
+                      ),
+                    if (controller.draftQuotes.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final quote in controller.draftQuotes)
+                              _ContextChip(
+                                label: quote.label,
+                                icon: Icons.format_quote,
+                                onRemove: () =>
+                                    controller.removeDraftQuote(quote),
+                              ),
+                          ],
+                        ),
+                      ),
+                    // Sent, the images and files dissolve like the text, and
+                    // their row closes behind them.
+                    GaiaVanish(
+                      key: _imagesVanish,
+                      refilled:
+                          controller.draftImages.isNotEmpty ||
+                          controller.draftFiles.isNotEmpty,
+                      builder: (context, _) =>
+                          controller.draftImages.isEmpty &&
+                              controller.draftFiles.isEmpty
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final image in controller.draftImages)
+                                    GaiaImageThumb(
+                                      // The preview's path too: the thumbnail
+                                      // reads its path only once.
+                                      key: ValueKey(
+                                        image.preview ?? image.path,
+                                      ),
+                                      path: image.preview ?? image.path,
+                                      label: image.label,
+                                      height: 56,
+                                      onTap: () => _edit(image),
+                                      onRemove: () => controller
+                                          .removeDraftImage(image.label),
+                                    ),
+                                  for (final file in controller.draftFiles)
+                                    GaiaFileCard(
+                                      file: file,
+                                      height: 56,
+                                      onRemove: () =>
+                                          controller.removeDraftFile(file),
+                                    ),
+                                ],
+                              ),
+                            ),
+                    ),
+                    GaiaVanish(
+                      key: _vanish,
+                      controller: _text,
+                      builder: (context, vanishing) => GaiaTextField(
+                        controller: _text,
+                        focusNode: _focus,
+                        autofocus: true,
+                        minLines: vanishing ? null : 1,
+                        maxLines: vanishing ? null : 8,
+                        expands: vanishing,
+                        textAlignVertical: vanishing
+                            ? TextAlignVertical.top
+                            : null,
+                        hintText: vanishing ? null : 'Message Gaia',
+                        onPaste: _paste,
+                        // The tier picker's notch, opening rightwards from the
+                        // field's left edge.
+                        leading: Padding(
+                          // Level with the send button.
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: GaiaNotch(
+                            opensRight: true,
+                            items: [
+                              GaiaNotchItem<bool?>(
+                                trigger: (color) =>
+                                    Icon(Icons.add, size: 16, color: color),
+                                options: [
+                                  GaiaNotchOption(
+                                    value: false,
+                                    label: 'Add files',
+                                    icon: (color, {required lit}) => Icon(
+                                      Icons.description_outlined,
+                                      size: 16,
+                                      color: color,
+                                    ),
+                                  ),
+                                  GaiaNotchOption(
+                                    value: true,
+                                    label: 'Add folder',
+                                    icon: (color, {required lit}) => Icon(
+                                      Icons.folder_outlined,
+                                      size: 16,
+                                      color: color,
+                                    ),
+                                  ),
+                                ],
+                                value: null,
+                                onChanged: (folder) => _attach(folder: folder!),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: running
+                            ? GaiaButton(
+                                icon: Icons.stop,
+                                size: 32,
+                                onPressed: () =>
+                                    controller.stop(controller.currentChatId!),
+                              )
+                            : GaiaButton(
+                                icon: Icons.arrow_upward,
+                                size: 32,
+                                onPressed: _send,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _ComposerStatus(controller: controller),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                _ComposerStatus(controller: controller),
-              ],
+              ),
             ),
           ),
         );
@@ -1498,12 +1921,17 @@ class _ComposerState extends State<_Composer> {
   }
 }
 
-/// The window the next message says it was asked from (§15.4), which the
-/// user can take off it.
+/// The window the next message says it was asked from (§15.4), or a
+/// message attached to it (§9.3), which the user can take off it.
 class _ContextChip extends StatelessWidget {
-  const _ContextChip({required this.label, this.onRemove});
+  const _ContextChip({
+    required this.label,
+    this.icon = Icons.web_asset,
+    this.onRemove,
+  });
 
   final String label;
+  final IconData icon;
   final VoidCallback? onRemove;
 
   @override
@@ -1521,7 +1949,7 @@ class _ContextChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.web_asset, size: 12, color: accent),
+          Icon(icon, size: 12, color: accent),
           const SizedBox(width: 4),
           Flexible(
             child: Text(label, style: style, overflow: TextOverflow.ellipsis),
@@ -1535,62 +1963,6 @@ class _ContextChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(6),
       onTap: onRemove,
       child: chip,
-    );
-  }
-}
-
-/// The `/` palette above the composer (§9.2): built-ins, tiers and the
-/// user's commands matching what's typed. Up and Down move, Enter or Tab
-/// picks, Esc closes.
-class _Palette extends StatelessWidget {
-  const _Palette({
-    required this.items,
-    required this.highlight,
-    required this.onPick,
-  });
-
-  final List<GaiaPaletteItem> items;
-  final int highlight;
-  final void Function(GaiaPaletteItem item) onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      constraints: const BoxConstraints(maxHeight: 240),
-      decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      // The tiles' highlight and splash paint on this, above the
-      // decoration's colour (BUG-318).
-      child: Material(
-        type: MaterialType.transparency,
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          children: [
-            for (final (index, item) in items.indexed)
-              ListTile(
-                dense: true,
-                selected: index == highlight,
-                title: Text('/${item.name}'),
-                subtitle: Text(
-                  item.description,
-                  style: muted,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () => onPick(item),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1797,7 +2169,7 @@ class _TierPicker extends StatelessWidget {
 /// Switches the current chat's next message to [tier]: silently before
 /// its first reply, after the user's yes once there is one (§7.5). The
 /// dialog says what the switch costs: the prompt cache, and across vendors
-/// everything but a transcript. Ctrl+Enter confirms; Esc keeps the tier,
+/// everything but a transcript. The send keybind confirms; Esc keeps the tier,
 /// and the result is false.
 Future<bool> switchGaiaTier(
   BuildContext context,
@@ -1820,13 +2192,11 @@ Future<bool> switchGaiaTier(
       toAgent != null &&
       fromAgent.adapter != toAgent.adapter;
   final tokens = controller.contextTokens;
+  final send = _sendCombo(controller);
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
-            Navigator.of(context).pop(true),
-      },
+      bindings: {send.activator: () => Navigator.of(context).pop(true)},
       child: Focus(
         autofocus: true,
         child: AlertDialog(
@@ -1843,13 +2213,14 @@ Future<bool> switchGaiaTier(
               if (crossVendor)
                 'Only a transcript carries over to ${cli(toAgent)}. '
                     "${cli(fromAgent)}'s tool history doesn't.",
-              'Press Ctrl+Enter to switch.',
+              'Press $send to switch.',
             ].join('\n\n'),
           ),
           actions: [
             GaiaButton(
               label: 'Cancel',
               onPressed: () => Navigator.of(context).pop(false),
+              color: Theme.of(context).colorScheme.error,
             ),
             GaiaButton(
               label: 'Switch',
@@ -1863,6 +2234,53 @@ Future<bool> switchGaiaTier(
   if (confirmed != true) return false;
   controller.pickTier(tier);
   return true;
+}
+
+/// The send keybind (§9.1), Ctrl+Enter by default, which is also its
+/// default when unbound: Enter and Shift+Enter are newlines.
+GaiaCombo _sendCombo(GaiaController controller) =>
+    parseGaiaCombo(gaiaComboFor(GaiaKeybind.send, controller.keybinds)) ??
+    parseGaiaCombo(GaiaKeybind.send.defaultCombo)!;
+
+/// Edit & resend: [message] into the composer, once the user says to
+/// replace what's in it, with the send keybind or the button.
+Future<void> _editMessage(
+  BuildContext context,
+  GaiaController controller,
+  GaiaMessage message,
+) async {
+  if (!controller.draftIsEmpty) {
+    final send = _sendCombo(controller);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => CallbackShortcuts(
+        bindings: {send.activator: () => Navigator.of(context).pop(true)},
+        child: Focus(
+          autofocus: true,
+          child: AlertDialog(
+            title: const Text('Replace the draft?'),
+            content: Text(
+              "What's in the composer now, and what's attached to it, is "
+              'lost.\n\nPress $send to replace.',
+            ),
+            actions: [
+              GaiaButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.of(context).pop(false),
+                color: Theme.of(context).colorScheme.error,
+              ),
+              GaiaButton(
+                label: 'Replace',
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+  }
+  controller.editMessage(message);
 }
 
 /// In place of the composer while Voyager waits to quit or update (§3.2):
@@ -1891,7 +2309,11 @@ class _Draining extends StatelessWidget {
             GaiaButton(label: 'Wait', onPressed: controller.waitForDrain),
             const SizedBox(width: 8),
           ],
-          GaiaButton(label: 'Cancel', onPressed: controller.cancelDrain),
+          GaiaButton(
+            label: 'Cancel',
+            onPressed: controller.cancelDrain,
+            color: Theme.of(context).colorScheme.error,
+          ),
         ],
       ),
     );
@@ -1899,31 +2321,28 @@ class _Draining extends StatelessWidget {
 }
 
 /// In place of the composer while Abort is engaged (§15.7). Re-arming is
-/// deliberate: confirmed with Ctrl+Enter.
+/// deliberate: confirmed with the send keybind.
 class _Aborted extends StatelessWidget {
   const _Aborted({required this.controller});
 
   final GaiaController controller;
 
   Future<void> _confirm(BuildContext context) async {
+    final send = _sendCombo(controller);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
-              Navigator.of(context).pop(true),
-        },
+        bindings: {send.activator: () => Navigator.of(context).pop(true)},
         child: Focus(
           autofocus: true,
           child: AlertDialog(
             title: const Text('Re-arm Gaia?'),
-            content: const Text(
-              'Chats and runs work again. Press Ctrl+Enter to confirm.',
-            ),
+            content: Text('Chats and runs work again. Press $send to confirm.'),
             actions: [
               GaiaButton(
                 label: 'Cancel',
                 onPressed: () => Navigator.of(context).pop(false),
+                color: Theme.of(context).colorScheme.error,
               ),
             ],
           ),

@@ -66,6 +66,12 @@ class GaiaChatStore {
     await _repository.upsertChat(chat.copyWith(title: title));
   }
 
+  /// Deleted from Gaia's sidebar: tombstoned, as on the Gaia page, so
+  /// [restoreChat] can undo it.
+  Future<void> deleteChat(String chatId) => _repository.softDeleteChat(chatId);
+
+  Future<void> restoreChat(String chatId) => _repository.restoreChat(chatId);
+
   /// The tier a new chat starts on (§7.2).
   Future<void> setLastTier(GaiaTier tier) async {
     final settings = await _repository.getSettings();

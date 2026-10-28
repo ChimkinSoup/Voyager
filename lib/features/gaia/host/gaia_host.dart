@@ -46,7 +46,9 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// The pipe protocol, companion to main: `hello` (returns `{aborted, accent,
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, sessionId, lastSeq}`, `setTier {chatId, tier}`,
-/// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `messages {chatId}`, `putMessage {message}`,
+/// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `deleteChat
+/// {chatId}` (returns `{mediaDeletedAt}`), `restoreChat {chatId,
+/// mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `rearm`, and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
@@ -212,7 +214,7 @@ class GaiaHost {
       try {
         await hotKeyManager.register(
           parsed.hotKey,
-          keyDownHandler: onPressOnly((_) => onHotkey(hotkey)),
+          keyDownHandler: onPressOnly((_) => onHotkey(hotkey, pressed: true)),
         );
         _registered[hotkey] = combo;
       } catch (error) {
@@ -269,8 +271,9 @@ class GaiaHost {
     if (_pipe.connected) _pipe.notify('accent', {'argb': argb});
   }
 
-  /// Also the tray's and a second launch's way in.
-  void onHotkey(GaiaHotkey hotkey) {
+  /// Also the tray's and a second launch's way in. [pressed] is the hotkey
+  /// itself, which closes a Gaia window already in front; those only open.
+  void onHotkey(GaiaHotkey hotkey, {bool pressed = false}) {
     if (hotkey == GaiaHotkey.abort) {
       unawaited(_abort());
       return;
@@ -300,7 +303,7 @@ class GaiaHost {
         unawaited(_captureSelection(hotkey, window));
         return;
       case GaiaHotkey.small || GaiaHotkey.large || GaiaHotkey.window:
-        _sendOrLaunch('hotkey', {'key': hotkey.name});
+        _sendOrLaunch('hotkey', {'key': hotkey.name, 'pressed': pressed});
       case GaiaHotkey.abort:
         break;
     }
@@ -655,6 +658,24 @@ class GaiaHost {
           params['title']! as String,
           params['from']! as String,
         );
+        return null;
+      case 'deleteChat':
+        final chatId = params['chatId']! as String;
+        await store.deleteChat(chatId);
+        // Deleted either way: its images just don't follow it if this fails.
+        DateTime? at;
+        try {
+          at = await _media?.removeChat(chatId);
+        } catch (error) {
+          debugPrint('[gaia] images of $chatId not taken off: $error');
+        }
+        return {'mediaDeletedAt': at?.toIso8601String()};
+      case 'restoreChat':
+        final chatId = params['chatId']! as String;
+        await store.restoreChat(chatId);
+        if (params['mediaDeletedAt'] case final String at) {
+          await _media?.restoreChat(chatId, DateTime.parse(at));
+        }
         return null;
       case 'setLastTier':
         if (gaiaTierFromName(params['tier']) case final tier?) {

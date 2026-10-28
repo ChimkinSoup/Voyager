@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -235,5 +236,97 @@ void main() {
     expect(hidden('standard'), findsOneWidget);
     await settle(tester);
     expect(hidden('standard'), findsNothing);
+  });
+
+  group('right-click menu', () {
+    late List<String> picked;
+
+    Future<void> pumpMenu(WidgetTester tester, {required Widget child}) async {
+      picked = [];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: VoyagerTheme.dark(accent: const Color(0xFF3B82F6)),
+          home: Scaffold(body: Center(child: child)),
+        ),
+      );
+    }
+
+    Widget area() => Builder(
+      builder: (context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (details) =>
+            showGaiaMenu(context, details.globalPosition, [
+              for (final label in ['Rename', 'Delete'])
+                GaiaMenuItem(label: label, onPressed: () => picked.add(label)),
+            ]),
+        child: const SizedBox.square(key: Key('area'), dimension: 100),
+      ),
+    );
+
+    testWidgets('runs the row picked, and closes', (tester) async {
+      await pumpMenu(tester, child: area());
+      await tester.tap(
+        find.byKey(const Key('area')),
+        buttons: kSecondaryButton,
+      );
+      await settle(tester);
+      expect(find.byType(GaiaMenu), findsOneWidget);
+      expect(find.byType(GaiaGlowRing), findsOneWidget);
+
+      await tester.tap(find.text('Delete'));
+      await settle(tester);
+      expect(picked, ['Delete']);
+      expect(find.byType(GaiaMenu), findsNothing);
+    });
+
+    testWidgets('Esc closes it; the arrows and Enter pick', (tester) async {
+      await pumpMenu(tester, child: area());
+      await tester.tap(
+        find.byKey(const Key('area')),
+        buttons: kSecondaryButton,
+      );
+      await settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+      expect(find.byType(GaiaMenu), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('area')),
+        buttons: kSecondaryButton,
+      );
+      await settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+      expect(picked, ['Delete']);
+    });
+
+    testWidgets("a text field's has its own buttons, and the Paste given", (
+      tester,
+    ) async {
+      final text = TextEditingController(text: 'hello');
+      var pasted = 0;
+      await pumpMenu(
+        tester,
+        child: SizedBox(
+          width: 200,
+          child: TextField(
+            controller: text,
+            contextMenuBuilder: (context, state) =>
+                gaiaTextMenu(context, state, onPaste: () => pasted++),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextField), buttons: kSecondaryButton);
+      await settle(tester);
+      expect(find.byType(GaiaMenu), findsOneWidget);
+      expect(find.text('Select all'), findsOneWidget);
+
+      await tester.tap(find.text('Paste'));
+      await settle(tester);
+      expect(pasted, 1);
+      expect(find.byType(GaiaMenu), findsNothing);
+    });
   });
 }

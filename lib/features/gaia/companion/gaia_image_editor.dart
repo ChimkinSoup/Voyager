@@ -344,6 +344,7 @@ class _EditorState extends State<_Editor> {
                   GaiaButton(
                     label: 'Cancel',
                     onPressed: () => Navigator.of(context).pop(),
+                    color: Theme.of(context).colorScheme.error,
                   ),
                   const SizedBox(width: 8),
                   GaiaButton(

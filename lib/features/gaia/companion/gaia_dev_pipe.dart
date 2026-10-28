@@ -59,6 +59,12 @@ class GaiaDevPipe extends GaiaPipe {
           adapter: p['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
         );
         return null;
+      case 'deleteChat':
+        await _store.deleteChat(p['chatId']! as String);
+        return {'mediaDeletedAt': null};
+      case 'restoreChat':
+        await _store.restoreChat(p['chatId']! as String);
+        return null;
       case 'messages':
         return [
           for (final message in await _store.messages(p['chatId']! as String))

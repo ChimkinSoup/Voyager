@@ -8,6 +8,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
+import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -107,6 +108,7 @@ void main() {
   void run(
     void Function(FakeAsync async, GaiaHost host) body, {
     bool show = false,
+    GaiaMedia? media,
   }) {
     fakeAsync((async) {
       final host = newHost();
@@ -115,6 +117,7 @@ void main() {
         repository: DriftGaiaRepository(db),
         deviceId: 'laptop',
         toast: (chatId, title, body) => toasts.add('$chatId $title $body'),
+        media: media,
       );
       async.flushMicrotasks();
       body(async, host);
@@ -289,6 +292,35 @@ void main() {
         async.elapse(const Duration(seconds: 2));
         connect(async);
         expect(status(async), 'interrupted');
+      });
+    });
+
+    test(
+      'deleteChat takes a chat off the list; restoreChat brings it back',
+      () {
+        run(show: true, (async, _) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat.toJson()});
+          final deleted =
+              request(async, 'deleteChat', {'chatId': 'c1'})! as Map;
+          expect(request(async, 'chats'), isEmpty);
+          request(async, 'restoreChat', {
+            'chatId': 'c1',
+            'mediaDeletedAt': deleted['mediaDeletedAt'],
+          });
+          final chats = request(async, 'chats')! as List;
+          expect((chats.single as Map)['id'], 'c1');
+        });
+      },
+    );
+
+    test('deleteChat deletes a chat whose images could not be taken off', () {
+      run(show: true, media: _FailingMedia(), (async, _) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat.toJson()});
+        final deleted = request(async, 'deleteChat', {'chatId': 'c1'})! as Map;
+        expect(deleted['mediaDeletedAt'], isNull);
+        expect(request(async, 'chats'), isEmpty);
       });
     });
 
@@ -884,4 +916,14 @@ void main() {
       });
     });
   });
+}
+
+/// Media whose images can't be taken off a chat.
+class _FailingMedia implements GaiaMedia {
+  @override
+  Future<DateTime?> removeChat(String chatId) =>
+      Future.error(StateError('media store unavailable'));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

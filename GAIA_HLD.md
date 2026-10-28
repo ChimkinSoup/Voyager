@@ -783,6 +783,18 @@ A part from a newer build is kept unshown and written back as it came
 (`GaiaUnknownPart`), so an older build that captions the message doesn't
 strip it.
 
+As built (2026-10-28): right-clicking a message offers **Attach as
+context**, which puts it on the draft as a quote chip beside the window's
+(§15.4). Several can be attached, from any chat; they stay on the draft
+when the chat changes. Each is copied into the message as a `quote` part
+(its text and who wrote it, not its images), shown as a chip on the sent
+message, and goes to the agent as a `<quoted_message>` block ahead of the
+prompt, framed as context (§5.3). Handoffs carry it as a `Quoted (…)` line.
+**Copy code** copies a message's fenced ```` ``` ```` blocks, a blank line
+between them; it appears only when there are some. Messages are shown as
+plain text, so there is no per-block copy button yet, and inline code isn't
+counted. Both are for later, with Markdown rendering.
+
 ### 9.4 Annotation
 
 Clicking a thumbnail opens an editor with pen, line, arrow, rectangle,
@@ -1200,6 +1212,39 @@ Other additions:
 - **Edit & resend / regenerate on another tier** ("try this on Deep"), with
   the alternatives kept as branches. Regenerating on another tier goes
   through §7.5.
+- **Rewind to a message** (right-click a message): everything after it comes
+  off the chat, with an undo toast as chat delete has. Rewound messages are
+  soft-deleted. Their images go onto the media module's 30-day clock, and undo
+  brings them back. Messages don't keep a `referenceId`, so the main instance
+  finds each image's reference on the chat by its media id. The chat's
+  `agentSessions` are cleared for every device and adapter, since each
+  session still holds the rewound turns. The next message
+  starts a new session, which gets the chat so far through the handoff
+  (§7.4): older turns summarised, recent ones verbatim, images as captions.
+  A running reply is stopped first. Not undone: files the agent changed on
+  disk, which the menu row says. Smaller than fork: one host request, no
+  copying.
+- **Fork from a message**: a new chat holding copies of the messages up to
+  and including it (new ids, same `seq`s and `[image N]` labels), titled
+  "<title> (fork)", opened at once. The main instance copies the messages and
+  adds a media reference for each image under the new chat, so deleting
+  either chat leaves the other's images. The fork has no sessions, so its
+  first message hands over as above. Its tier is the original's. A fork
+  remembers where it came from (`forkedFrom`: chat id and seq), shown as a
+  link at its top. This is also how Edit & resend's branches can be kept: a
+  resend on an earlier message forks rather than overwriting.
+  - Both lean on the handoff rather than the CLI's own session: Claude Code's
+    `--fork-session` forks only at a session's end, and cutting one at a
+    message would mean rewriting its undocumented JSONL. The cost is
+    fidelity: a new session sees a summary of older turns, not the original
+    session's tool results.
+- **Chapters**: pin a message as a chapter (right-click, "Pin as chapter",
+  with an optional name defaulting to its first line). A chat's chapters
+  are listed in a strip at the top of the large floater and the Gaia
+  window, and clicking one scrolls to its message. They're a `chapters` list
+  on the chat (message id and name), synced with it. A rewound or deleted
+  message's chapter goes with it, and a fork keeps the chapters in its copied
+  range. They're for navigation only: the agent doesn't see them.
 - **@-mentions for Voyager context:** `@today`, `@todo`, `@journal:yesterday`,
   `@workout:plan`. These are explicit, visible context instead of hoping the
   agent calls a read tool.

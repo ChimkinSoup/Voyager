@@ -356,6 +356,64 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Messages attached to the draft as context, chips on it like
+  /// [windowContext]'s. They stay on it from one chat to another.
+  final draftQuotes = <GaiaQuotePart>[];
+
+  void attachMessage(GaiaMessage message) {
+    // Attached twice, it's still one.
+    if (draftQuotes.any(
+      (quote) => quote.role == message.role && quote.text == message.text,
+    )) {
+      return;
+    }
+    draftQuotes.add(GaiaQuotePart(role: message.role, text: message.text));
+    notifyListeners();
+  }
+
+  void removeDraftQuote(GaiaQuotePart quote) {
+    draftQuotes.remove(quote);
+    notifyListeners();
+  }
+
+  /// Nothing typed or attached.
+  bool get draftIsEmpty =>
+      draft.text.trim().isEmpty &&
+      draftImages.isEmpty &&
+      draftFiles.isEmpty &&
+      draftQuotes.isEmpty;
+
+  /// Edit & resend: [message]'s text, files, quotes and window in place of
+  /// the draft's. Its images don't come back, so their tokens come out; an
+  /// earlier message's it names stay.
+  void editMessage(GaiaMessage message) {
+    for (final image in draftImages) {
+      unawaited(_deleteQuietly(image.path));
+      if (image.preview case final preview?) {
+        unawaited(_deleteQuietly(preview));
+      }
+    }
+    draftImages.clear();
+    var text = message.text;
+    for (final image in message.parts.whereType<GaiaImagePart>()) {
+      final token = gaiaImageToken(image.label);
+      text = text.replaceAll(' $token', '').replaceAll(token, '');
+    }
+    text = text.trim();
+    draftFiles
+      ..clear()
+      ..addAll(message.parts.whereType<GaiaFilePart>());
+    draftQuotes
+      ..clear()
+      ..addAll(message.parts.whereType<GaiaQuotePart>());
+    windowContext = message.parts.whereType<GaiaContextPart>().firstOrNull;
+    draft.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    notifyListeners();
+  }
+
   /// The text selected where Gaia was last summoned from, for `$SELECTION`
   /// (§9.2).
   var _summonSelection = '';
@@ -583,7 +641,12 @@ class GaiaController extends ChangeNotifier {
         // the pick-up pill, the user was last in the summoning app.
         _window.returnTo = params['returnTo']! as int;
       case 'hotkey':
-        unawaited(onHotkey(params['key']! as String));
+        unawaited(
+          onHotkey(
+            params['key']! as String,
+            pressed: params['pressed'] == true,
+          ),
+        );
       case 'capture':
         unawaited(_onCapture(params));
       case 'context':
@@ -750,21 +813,31 @@ class GaiaController extends ChangeNotifier {
     if (_window.shown == null) await _show(GaiaMode.small);
   }
 
-  /// The hotkey table in §15.1.
-  Future<void> onHotkey(String key) async {
+  /// The hotkey table in §15.1. [pressed] is the hotkey itself, not the
+  /// tray or a button opening the window.
+  Future<void> onHotkey(String key, {bool pressed = false}) async {
     // Mid-crop, any of them cancels it.
     if (cropping != null) return finishCrop(null);
     _dropPickUp();
     final shown = _window.shown;
+    // Pressed again, a floater closes rather than going back to the Gaia
+    // window it was opened over, which the next press would turn back into
+    // the floater.
+    if (key == shown?.name) _returnTo = null;
     switch (key) {
       case 'small':
         if (shown == GaiaMode.small) return dismiss();
         _returnTo = shown == GaiaMode.window ? GaiaMode.window : _returnTo;
         await _show(GaiaMode.small);
       case 'large':
+        if (shown == GaiaMode.large) return dismiss();
         _returnTo = shown == GaiaMode.window ? GaiaMode.window : _returnTo;
         await _show(GaiaMode.large);
       case 'window':
+        // Up but behind another app, it's brought to the front instead.
+        if (pressed && shown == GaiaMode.window && _window.foreground) {
+          return dismiss();
+        }
         await openWindow();
     }
   }
@@ -816,6 +889,62 @@ class GaiaController extends ChangeNotifier {
     await _load(chatId);
   }
 
+  /// The user's own name for [chatId], which the utility model's title
+  /// then leaves alone.
+  Future<void> renameChat(String chatId, String title) async {
+    final from = _chat(chatId)?.title;
+    if (from == null || title.isEmpty || title == from) return;
+    chats = [
+      for (final c in chats) c.id == chatId ? c.copyWith(title: title) : c,
+    ];
+    notifyListeners();
+    await _request('setTitle', {
+      'chatId': chatId,
+      'title': title,
+      'from': from,
+    });
+  }
+
+  /// Takes [chatId] off the list at once and deletes it in the main
+  /// instance. Returns what [restoreChat] needs to undo it: when its images
+  /// were taken off with it. Throws [GaiaPipeException] when it wasn't
+  /// deleted, the list as it was again.
+  Future<String?> deleteChat(String chatId) async {
+    chats = [
+      for (final c in chats)
+        if (c.id != chatId) c,
+    ];
+    _messages.remove(chatId);
+    if (currentChatId == chatId) {
+      newChat();
+    } else {
+      notifyListeners();
+    }
+    try {
+      final result = await _pipe.request('deleteChat', {'chatId': chatId});
+      return (result as Map?)?['mediaDeletedAt'] as String?;
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] chat not deleted: $error');
+      await _refresh();
+      rethrow;
+    }
+  }
+
+  /// With [open], as it was when deleted: the chat in view again, once
+  /// it's back.
+  Future<void> restoreChat(
+    String chatId,
+    String? mediaDeletedAt, {
+    bool open = false,
+  }) async {
+    await _request('restoreChat', {
+      'chatId': chatId,
+      'mediaDeletedAt': mediaDeletedAt,
+    });
+    await _refresh();
+    if (open && _chat(chatId) != null) await selectChat(chatId);
+  }
+
   Future<void> _load(String chatId) async {
     final list = (await _pipe.request('messages', {'chatId': chatId}))! as List;
     // A run that started meanwhile has the newer list.
@@ -864,7 +993,12 @@ class GaiaController extends ChangeNotifier {
   }) async {
     if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
     var prompt = (await _expand(text.trim())).trim();
-    if (prompt.isEmpty && images.isEmpty && files.isEmpty) return;
+    if (prompt.isEmpty &&
+        images.isEmpty &&
+        files.isEmpty &&
+        draftQuotes.isEmpty) {
+      return;
+    }
     // A chat sent to before its messages came: they're numbered on from.
     if (currentChatId case final id?
         when !_messages.containsKey(id) && !_running.contains(id)) {
@@ -887,20 +1021,27 @@ class GaiaController extends ChangeNotifier {
       gaiaNextImageLabel(_messages[chatId] ?? const []),
     );
     prompt = relabeled;
-    // What the router and the title go by: a files-only message's names.
-    final topic = prompt.isEmpty
+    // What the router and the title go by: a files-only message's names, a
+    // quote-only one's first quote.
+    final topic = prompt.isNotEmpty
+        ? prompt
+        : files.isNotEmpty
         ? files.map((file) => p.basename(file.path)).join(', ')
-        : prompt;
+        : draftQuotes.first.text;
     // The summon's window goes with this message only.
     final context = windowContext;
     windowContext = null;
+    final quotes = [...draftQuotes];
+    draftQuotes.clear();
     final sentAt = utcNow();
     if (chat == null) {
       // No utility model yet: the title is the first line (§5.1). Its
       // images' tokens are in it; its files aren't.
-      final firstLine = prompt.isEmpty
+      final firstLine = prompt.isNotEmpty
+          ? prompt.split('\n').first
+          : files.isNotEmpty
           ? p.basename(files.first.path)
-          : prompt.split('\n').first;
+          : quotes.first.text.trim().split('\n').first;
       chat = GaiaChat(
         id: chatId,
         title: firstLine.length > 60
@@ -937,6 +1078,7 @@ class GaiaController extends ChangeNotifier {
             height: 0,
           ),
         ...files,
+        ...quotes,
         ?context,
       ],
       status: GaiaMessageStatus.complete,
@@ -969,6 +1111,14 @@ class GaiaController extends ChangeNotifier {
         if (currentChatId == chatId) currentChatId = null;
       }
       windowContext = context;
+      // Less any attached again meanwhile.
+      draftQuotes.insertAll(0, [
+        for (final quote in quotes)
+          if (!draftQuotes.any(
+            (q) => q.role == quote.role && q.text == quote.text,
+          ))
+            quote,
+      ]);
       _giveBack(text, images, files);
       _reportRuns();
       _settleDrain();
@@ -1030,7 +1180,13 @@ class GaiaController extends ChangeNotifier {
       question = _replace(
         question,
         question.copyWith(
-          parts: [GaiaTextPart(prompt), ...imageParts, ...files, ?context],
+          parts: [
+            GaiaTextPart(prompt),
+            ...imageParts,
+            ...files,
+            ...quotes,
+            ?context,
+          ],
           bumpVersion: false,
           touch: false,
         ),
@@ -1077,7 +1233,8 @@ class GaiaController extends ChangeNotifier {
       ),
     );
     if (isNew) {
-      chat = chat.copyWith(tier: tier, lastMessageAt: now);
+      // As it's listed now, so a rename while it was unsaved is kept.
+      chat = (_chat(chatId) ?? chat).copyWith(tier: tier, lastMessageAt: now);
       chats = [for (final c in chats) c.id == chatId ? chat : c];
       try {
         await _pipe.request('putChat', {'chat': chat.toJson()});
@@ -1166,10 +1323,12 @@ class GaiaController extends ChangeNotifier {
 
     // What the session didn't see: the whole chat for a new session, or
     // the turns another agent or device took since (§7.4).
-    // The window it was asked from goes ahead of it (§15.4).
+    // The window it was asked from goes ahead of it (§15.4), and the
+    // messages attached to it (§9.3).
     // Its files' paths after it (§9.3).
     final asked = [
       ?context?.preamble,
+      for (final quote in quotes) quote.preamble,
       // Empty when only files were sent.
       if (prompt.isNotEmpty) prompt,
       if (files.isNotEmpty) gaiaFilesPreamble(files),
