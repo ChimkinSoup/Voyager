@@ -34,6 +34,8 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
+import 'package:voyager/features/gaia/host/gaia_app_writes.dart';
+import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -184,6 +186,13 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         calendar: ref.read(calendarRepositoryProvider),
         journal: ref.read(journalRepositoryProvider),
         workouts: ref.read(workoutRepositoryProvider),
+      ),
+      executor: GaiaExecutor(
+        todos: ref.read(todoRepositoryProvider),
+        calendar: ref.read(calendarRepositoryProvider),
+        journal: ref.read(journalRepositoryProvider),
+        settings: ref.read(settingsRepositoryProvider),
+        writes: GaiaAppWrites(ProviderScope.containerOf(context)),
       ),
       toast: (chatId, title, body) => unawaited(
         os

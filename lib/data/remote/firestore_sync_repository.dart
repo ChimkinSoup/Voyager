@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/firestore_writable.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -81,11 +82,13 @@ class FirestoreSyncRepository implements SyncRepository {
 
   /// [data] with the server write time added. Every write to a synced
   /// collection must go through this — [OutboxSyncWorker] included — or the
-  /// change is invisible to incremental pulls and live listeners.
-  static Map<String, dynamic> stamped(Map<String, dynamic> data) => {
-    ...data,
-    _writeTimeField: FieldValue.serverTimestamp(),
-  };
+  /// change is invisible to incremental pulls and live listeners. Throws
+  /// [SyncPayloadUnwritableException] for a document Firestore would refuse
+  /// for its shape, which on Windows would end the app.
+  static Map<String, dynamic> stamped(Map<String, dynamic> data) {
+    checkFirestoreWritable(data);
+    return {...data, _writeTimeField: FieldValue.serverTimestamp()};
+  }
 
   /// A document as the rest of the app knows it — the write time is this
   /// class's business, and a pending one reads as null anyway.
@@ -237,6 +240,7 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
+    checkFirestoreWritable(data);
     await _write(() => _settingsDoc.set(data, SetOptions(merge: true)));
   }
 
@@ -261,6 +265,7 @@ class FirestoreSyncRepository implements SyncRepository {
       final snap = await txn.get(doc);
       final patch = settingsUploadPatch(settings, snap.data());
       if (patch.isEmpty) return;
+      checkFirestoreWritable(patch);
       // An update rather than a merging set leaves the weather keys sharing this
       // document alone just the same, and fake_cloud_firestore's transaction
       // ignores `SetOptions`.

@@ -135,6 +135,7 @@ RecurrenceEditResult editRecurringEvent({
         // The occurrence it replaces may have been marked done; that belongs
         // to this row now, since the master no longer draws that day.
         isDone: calendarEventDoneOn(master, occurrence),
+        origin: master.origin,
       );
       return RecurrenceEditResult(
         upserts: [
@@ -182,6 +183,7 @@ RecurrenceEditResult editRecurringEvent({
         // Set when the edit also stopped the tail repeating; see
         // [carryDoneAcrossRepeatChange].
         isDone: edited.isDone,
+        origin: master.origin,
       );
       return RecurrenceEditResult(
         upserts: [

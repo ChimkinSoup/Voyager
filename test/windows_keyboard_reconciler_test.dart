@@ -143,6 +143,19 @@ void main() {
       expect(HardwareKeyboard.instance.physicalKeysPressed, isEmpty);
     });
 
+    /// Reported 2026-10-29: Backspace deleted whole words in the journal
+    /// floater and Vim went wonky. The running app held Control Left under
+    /// physical key `0x1600000000` — the Windows plane with scan code 0, which
+    /// only a synthetic key sends — and Windows reported no Ctrl down.
+    test('releases a modifier sent with no scan code', () {
+      const synthetic = PhysicalKeyboardKey(0x1600000000);
+      stick(synthetic, LogicalKeyboardKey.controlLeft);
+      WindowsKeyboardReconciler.debugProbe = (_) => false;
+
+      expect(WindowsKeyboardReconciler.instance.reconcile(), 1);
+      expect(HardwareKeyboard.instance.isControlPressed, isFalse);
+    });
+
     test('never touches a non-modifier key', () {
       stick(PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA);
       WindowsKeyboardReconciler.debugProbe = (_) => false;
@@ -207,6 +220,31 @@ void main() {
       await press(tester, LogicalKeyboardKey.keyZ);
       await tester.pump();
       expect(HardwareKeyboard.instance.isMetaPressed, isFalse);
+    });
+
+    testWidgets('a floater hotkey still held does not spend the one-shot', (
+      tester,
+    ) async {
+      await pumpField(tester, text: 'abc');
+      WindowsKeyboardReconciler.instance.install();
+      setViewFocus(tester, ViewFocusState.unfocused);
+      const synthetic = PhysicalKeyboardKey(0x1600000000);
+      stick(synthetic, LogicalKeyboardKey.controlLeft);
+
+      // Ctrl+Alt+J brings the floater up with Ctrl genuinely held, through the
+      // focus reads and the first key after them.
+      WindowsKeyboardReconciler.debugProbe = (key) => key == 0xA2;
+      setViewFocus(tester, ViewFocusState.focused);
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyZ);
+      await tester.pump();
+      expect(HardwareKeyboard.instance.isControlPressed, isTrue);
+
+      // Ctrl let go: the next key clears the stale one.
+      WindowsKeyboardReconciler.debugProbe = (_) => false;
+      await press(tester, LogicalKeyboardKey.keyZ);
+      await tester.pump();
+      expect(HardwareKeyboard.instance.isControlPressed, isFalse);
     });
   });
 }

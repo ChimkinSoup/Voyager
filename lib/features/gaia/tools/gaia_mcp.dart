@@ -70,7 +70,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         },
         'options': {
           'type': 'array',
-          'description': 'Choices to offer, at most 9. Leave out for a free '
+          'description':
+              'Choices to offer, at most 9. Leave out for a free '
               'answer only.',
           'items': {
             'type': 'object',
@@ -100,7 +101,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'voyager_todos',
     'description':
         "Read the user's todo lists from Voyager: open tasks with their "
-        'list, due date, notes and subtasks.',
+        'list, due date, notes, subtasks and id.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -123,7 +124,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'voyager_calendar',
     'description':
         "Read the user's calendar from Voyager: events from one day to "
-        'another, at most 62 days, repeating ones on each day they occur.',
+        'another, at most 62 days, repeating ones on each day they occur, '
+        'each with its id.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -137,7 +139,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'voyager_journal',
     'description':
         "Read the user's journal entries from Voyager, from one day to "
-        'another, at most 31 days.',
+        'another, at most 31 days, each with its id.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -159,6 +161,111 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         'to': {'type': 'string', 'description': 'YYYY-MM-DD, inclusive.'},
       },
       'required': ['from', 'to'],
+    },
+  },
+  {
+    'name': 'propose_todo',
+    'description':
+        'Propose a new task in Voyager, or a change to one. Nothing is '
+        'written until the user accepts it: they see it in an editor, can '
+        'change any field, and accept or turn it down. The result says what '
+        'was saved, with their edits, or what they want changed instead; '
+        'propose again with those changes. Pass "id" (from voyager_todos) '
+        'to change a task, with only the fields that change.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'id': {
+          'type': 'string',
+          'description': "An existing task's id, to change it.",
+        },
+        'title': {'type': 'string'},
+        'list': {
+          'type': 'string',
+          'description': "A list's name. Leave out for the default list.",
+        },
+        'due': {
+          'type': ['string', 'null'],
+          'description':
+              'YYYY-MM-DD, or YYYY-MM-DDTHH:mm for a time; null clears it.',
+        },
+        'notes': {'type': 'string'},
+        'starred': {'type': 'boolean'},
+        'completed': {
+          'type': 'boolean',
+          'description': 'Mark it done, or not done.',
+        },
+      },
+    },
+  },
+  {
+    'name': 'propose_calendar_event',
+    'description':
+        'Propose a new calendar event in Voyager, or a change to one. '
+        'Nothing is written until the user accepts it in an editor, where '
+        'they can change any field. The result says what was saved, with '
+        'their edits, or what they want changed instead; propose again with '
+        'those changes. Pass "id" (from voyager_calendar) to change an '
+        "event, with only the fields that change. Repeating events can't be "
+        'changed this way.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'id': {
+          'type': 'string',
+          'description': "An existing event's id, to change it.",
+        },
+        'title': {'type': 'string'},
+        'start': {
+          'type': 'string',
+          'description':
+              'YYYY-MM-DD for an all-day event, YYYY-MM-DDTHH:mm (local '
+              'time) for a timed one.',
+        },
+        'end': {
+          'type': 'string',
+          'description':
+              'Same form as start; the last day of an all-day event. '
+              'Leave out for one day, or an hour.',
+        },
+        'calendar': {
+          'type': 'string',
+          'description': "A calendar's name. Leave out for the default.",
+        },
+        'notes': {'type': 'string'},
+      },
+    },
+  },
+  {
+    'name': 'propose_journal_entry',
+    'description':
+        'Propose a new journal entry in Voyager, or a change to one. '
+        'Nothing is written until the user accepts it in an editor, where '
+        'they can change any of it. The result says what was saved, with '
+        'their edits, or what they want changed instead. Pass "id" (from '
+        "voyager_journal) to change an entry; a new body replaces the whole "
+        'entry, so include everything it should keep.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'id': {
+          'type': 'string',
+          'description': "An existing entry's id, to change it.",
+        },
+        'title': {'type': 'string'},
+        'body': {'type': 'string', 'description': 'The entry itself.'},
+        'date': {
+          'type': 'string',
+          'description':
+              'When it was written: YYYY-MM-DDTHH:mm (local time), or '
+              'YYYY-MM-DD. Leave out for now.',
+        },
+        'journal': {
+          'type': 'string',
+          'description': "A journal's name. Leave out for the default.",
+        },
+        'mood': {'type': 'integer', 'minimum': 0, 'maximum': 10},
+      },
     },
   },
 ];

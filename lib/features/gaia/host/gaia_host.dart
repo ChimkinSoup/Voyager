@@ -12,6 +12,7 @@ import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -108,6 +109,9 @@ class GaiaHost {
 
   /// The `voyager_*` read tools (§5.3); null for none, where they fail.
   GaiaVoyagerReads? _reads;
+
+  /// Commits accepted proposals (§10); null for none, where they fail.
+  GaiaExecutor? _executor;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
@@ -180,11 +184,13 @@ class GaiaHost {
     required void Function(String chatId, String title, String body) toast,
     GaiaMedia? media,
     GaiaVoyagerReads? reads,
+    GaiaExecutor? executor,
   }) {
     if (_attached.isCompleted) return;
     _toast = toast;
     _media = media;
     _reads = reads;
+    _executor = executor;
     _attached.complete(GaiaChatStore(repository, deviceId: deviceId));
     _changes = repository.watchChanges().listen((_) {
       _changedSoon ??= Timer(_changedDelay, () {
@@ -759,6 +765,33 @@ class GaiaHost {
           // The pipe would carry it as `GaiaReadException: …`.
           throw GaiaPipeException(error.message);
         }
+      case 'prepareProposal':
+        try {
+          return (await _executorOrThrow().prepare(
+            params['cardId']! as String,
+            params['tool']! as String,
+            _map(params['arguments']),
+          )).toJson();
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'dropProposal':
+        _executor?.drop(params['cardId']! as String);
+        return null;
+      case 'commitProposal':
+        // Checked here, in the main instance, whatever the companion did
+        // about Abort (§15.7).
+        if (_aborted) throw GaiaPipeException('Gaia is aborted.');
+        try {
+          final committed = await _executorOrThrow().commit(
+            params['cardId']! as String,
+            params['token']! as String,
+            _map(params['fields']),
+          );
+          return {'record': committed.record, 'text': committed.text};
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
       case 'rearm':
         _aborted = false;
         final flag = await _abortFlag();
@@ -767,6 +800,45 @@ class GaiaHost {
       default:
         throw GaiaPipeException('unknown method $method');
     }
+  }
+
+  GaiaExecutor _executorOrThrow() =>
+      _executor ?? (throw GaiaPipeException('Voyager data is not ready'));
+
+  /// Takes back what accepted proposal card [cardId] of [message] committed,
+  /// for the Gaia page's action log (§17), and marks the card undone.
+  /// Throws a [GaiaReadException] saying why it can't.
+  Future<void> undoProposal(GaiaMessage message, String cardId) async {
+    if (_aborted) throw GaiaReadException('Gaia is aborted.');
+    final executor =
+        _executor ?? (throw GaiaReadException('Voyager data is not ready.'));
+    final card = message.parts
+        .whereType<GaiaCardPart>()
+        .where((card) => card.id == cardId)
+        .firstOrNull;
+    final committed = (card?.answer?['committed'] as Map?)
+        ?.cast<String, Object?>();
+    if (card == null ||
+        card.state != GaiaCardState.accepted ||
+        committed == null) {
+      throw GaiaReadException('Nothing was saved to undo.');
+    }
+    if (card.answer!['undoneAt'] != null) {
+      throw GaiaReadException('Undone already.');
+    }
+    await executor.undo(committed);
+    final undone = card.decided(card.state, {
+      ...card.answer!,
+      'undoneAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    await (await _attached.future).putMessage(
+      message.copyWith(
+        parts: [
+          for (final part in message.parts)
+            part is GaiaCardPart && part.id == cardId ? undone : part,
+        ],
+      ),
+    );
   }
 
   static Map<String, Object?> _map(Object? value) =>

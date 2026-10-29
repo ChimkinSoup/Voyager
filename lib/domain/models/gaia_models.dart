@@ -324,9 +324,32 @@ List<GaiaDraftImageRecord> gaiaDraftImagesFromJson(Object? json) => [
       GaiaDraftImageRecord(
         mediaId: image['mediaId']! as String,
         label: (image['label']! as num).toInt(),
-        edits: (image['edits'] as Map<Object?, Object?>?)?.cast(),
+        edits: _upgradeEdits(
+          (image['edits'] as Map<Object?, Object?>?)?.cast(),
+        ),
       ),
 ];
+
+/// [edits] with each mark's points as `{x, y}`. Drafts kept before held
+/// `[x, y]`, an array in an array, which Firestore refuses by throwing in
+/// native code: on Windows that ended the app at every sync of the draft.
+Map<String, Object?>? _upgradeEdits(Map<String, Object?>? edits) {
+  final marks = edits?['marks'];
+  if (marks is! List) return edits;
+  return {
+    ...edits!,
+    'marks': [
+      for (final mark in marks.cast<Map<Object?, Object?>>())
+        {
+          ...mark.cast<String, Object?>(),
+          'points': [
+            for (final point in mark['points']! as List)
+              if (point case [final x, final y]) {'x': x, 'y': y} else point,
+          ],
+        },
+    ],
+  };
+}
 
 List<GaiaFilePart> gaiaDraftFilesFromJson(Object? json) => [
   if (json is List)
@@ -593,9 +616,10 @@ class GaiaQuotePart extends GaiaPart {
   };
 }
 
-/// What a card asks (§10.1): a question the agent put through `ask_user`,
-/// or a permission prompt from its CLI. Proposals come with Phase 4B.
-enum GaiaCardKind { question, permission }
+/// What a card asks (§10, §10.1): a question the agent put through
+/// `ask_user`, a permission prompt from its CLI, or a write to Voyager
+/// data proposed through a `propose_*` tool.
+enum GaiaCardKind { question, permission, proposal }
 
 /// [open] until the user answers ([accepted]) or turns it down ([rejected]),
 /// Abort or a stopped run voids it, or its wait runs out ([expired]).
@@ -603,6 +627,62 @@ enum GaiaCardState { open, accepted, rejected, voided, expired }
 
 /// One option of a question card.
 typedef GaiaCardOption = ({String label, String description});
+
+/// What a proposal writes to.
+enum GaiaProposalEntity { todo, event, journal }
+
+/// A list, calendar or journal a proposal can go in.
+typedef GaiaProposalChoice = ({String id, String name});
+
+/// What a proposal card would write (§10): a new [entity] row, or, with
+/// [targetId], changes to that row as it stood at [baseVersion], when its
+/// values were [before]. [fields] are the values proposed, as the editor
+/// shows them (see `gaia_proposals.dart`), and [choices] are where the row
+/// can go.
+class GaiaProposal {
+  const GaiaProposal({
+    required this.entity,
+    required this.fields,
+    this.targetId,
+    this.baseVersion,
+    this.before,
+    this.choices = const [],
+  });
+
+  final GaiaProposalEntity entity;
+  final String? targetId;
+  final int? baseVersion;
+  final Map<String, Object?> fields;
+  final Map<String, Object?>? before;
+  final List<GaiaProposalChoice> choices;
+
+  bool get isEdit => targetId != null;
+
+  Map<String, Object?> toJson() => {
+    'entity': entity.name,
+    'targetId': ?targetId,
+    'baseVersion': ?baseVersion,
+    'fields': fields,
+    'before': ?before,
+    'choices': [
+      for (final choice in choices) {'id': choice.id, 'name': choice.name},
+    ],
+  };
+
+  factory GaiaProposal.fromJson(Map<String, Object?> json) => GaiaProposal(
+    entity: GaiaProposalEntity.values.byName(json['entity']! as String),
+    targetId: json['targetId'] as String?,
+    baseVersion: (json['baseVersion'] as num?)?.toInt(),
+    fields: (json['fields']! as Map).cast<String, Object?>(),
+    before: (json['before'] as Map?)?.cast<String, Object?>(),
+    choices: [
+      for (final choice
+          in (json['choices'] as List?)?.cast<Map<Object?, Object?>>() ??
+              const <Map<Object?, Object?>>[])
+        (id: choice['id']! as String, name: choice['name']! as String),
+    ],
+  );
+}
 
 /// A card in an agent's reply (§8, §10): the tool call it stands for blocks
 /// until it's decided, and it's kept on the message, so the history shows
@@ -612,7 +692,10 @@ typedef GaiaCardOption = ({String label, String description});
 /// [multiSelect] and [recommended] (an option's index); its [answer] is
 /// `{selected: [labels], text}`. A permission carries [tool] and [input],
 /// the call the CLI asks about, and [description]; its [answer] is
-/// `{message}` when the user said why not.
+/// `{message}` when the user said why not. A proposal carries [proposal];
+/// accepted, its [answer] is `{fields, token, committed: {id, version,
+/// before?}, undoneAt?}`, what was written and how to take it back, and
+/// turned down it's `{message}`, the user's correction.
 class GaiaCardPart extends GaiaPart {
   const GaiaCardPart({
     required this.id,
@@ -625,6 +708,7 @@ class GaiaCardPart extends GaiaPart {
     this.tool = '',
     this.input = const {},
     this.description = '',
+    this.proposal,
     this.answer,
   });
 
@@ -638,6 +722,7 @@ class GaiaCardPart extends GaiaPart {
   final String tool;
   final Map<String, Object?> input;
   final String description;
+  final GaiaProposal? proposal;
   final Map<String, Object?>? answer;
 
   bool get isOpen => state == GaiaCardState.open;
@@ -654,6 +739,7 @@ class GaiaCardPart extends GaiaPart {
         tool: tool,
         input: input,
         description: description,
+        proposal: proposal,
         answer: answer ?? this.answer,
       );
 
@@ -663,18 +749,25 @@ class GaiaCardPart extends GaiaPart {
     'id': id,
     'kind': kind.name,
     'state': state.name,
-    if (kind == GaiaCardKind.question) ...{
-      'question': question,
-      'options': [
-        for (final option in options)
-          {'label': option.label, 'description': option.description},
-      ],
-      'multiSelect': multiSelect,
-      'recommended': ?recommended,
-    } else ...{
-      'tool': tool,
-      'input': input,
-      'description': description,
+    ...switch (kind) {
+      GaiaCardKind.question => {
+        'question': question,
+        'options': [
+          for (final option in options)
+            {'label': option.label, 'description': option.description},
+        ],
+        'multiSelect': multiSelect,
+        'recommended': ?recommended,
+      },
+      GaiaCardKind.permission => {
+        'tool': tool,
+        'input': input,
+        'description': description,
+      },
+      GaiaCardKind.proposal => {
+        'tool': tool,
+        'proposal': proposal!.toJson(),
+      },
     },
     'answer': ?answer,
   };
@@ -698,6 +791,12 @@ class GaiaCardPart extends GaiaPart {
     tool: json['tool'] as String? ?? '',
     input: (json['input'] as Map?)?.cast<String, Object?>() ?? const {},
     description: json['description'] as String? ?? '',
+    proposal: switch (json['proposal']) {
+      final Map proposal => GaiaProposal.fromJson(
+        proposal.cast<String, Object?>(),
+      ),
+      _ => null,
+    },
     answer: (json['answer'] as Map?)?.cast<String, Object?>(),
   );
 }

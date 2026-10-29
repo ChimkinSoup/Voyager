@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
 const _uuid = Uuid();
 
@@ -57,16 +58,38 @@ class GaiaCards {
   }
 }
 
-/// One turn's Gaia tools (§5.3), bound to its chat: `ask_user` and the
-/// CLI's permission prompts raise cards in the reply through [onCard] and
-/// wait in [cards]; the `voyager_*` reads go to the main instance through
-/// [read]. While [aborted], every tool refuses (§15.7).
+/// The main instance's side of a proposal (§10): [prepare] fills a
+/// `propose_*` call in as card `cardId`'s proposal, [commit] writes it with
+/// the user's fields once they accepted it, and [drop] forgets one that
+/// won't be. Each throws a [GaiaToolException] the agent is shown.
+typedef GaiaProposalHost = ({
+  Future<GaiaProposal> Function(
+    String cardId,
+    String tool,
+    Map<String, Object?> arguments,
+  )
+  prepare,
+  Future<({Map<String, Object?> record, String text})> Function(
+    String cardId,
+    String token,
+    Map<String, Object?> fields,
+  )
+  commit,
+  void Function(String cardId) drop,
+});
+
+/// One turn's Gaia tools (§5.3), bound to its chat: `ask_user`, the CLI's
+/// permission prompts and the `propose_*` tools raise cards in the reply
+/// through [onCard] and wait in [cards]; the `voyager_*` reads go to the
+/// main instance through [read], and proposals through [proposals]. While
+/// [aborted], every tool refuses (§15.7).
 class GaiaChatTools implements GaiaTurnTools {
   GaiaChatTools({
     required this.chatId,
     required this.cards,
     required this.onCard,
     required this.read,
+    required this.proposals,
     required this.aborted,
     this.hold = kGaiaCardHold,
   });
@@ -76,6 +99,7 @@ class GaiaChatTools implements GaiaTurnTools {
   final void Function(GaiaCardPart card) onCard;
   final Future<String> Function(String tool, Map<String, Object?> arguments)
   read;
+  final GaiaProposalHost proposals;
   final bool Function() aborted;
   final Duration hold;
 
@@ -88,6 +112,7 @@ class GaiaChatTools implements GaiaTurnTools {
   ) async {
     if (aborted()) return _aborted;
     if (name == 'ask_user') return _ask(arguments);
+    if (kGaiaProposalTools.containsKey(name)) return _propose(name, arguments);
     if (isGaiaVoyagerRead(name)) {
       try {
         return (text: await read(name, arguments), isError: false);
@@ -106,8 +131,9 @@ class GaiaChatTools implements GaiaTurnTools {
     final options = <GaiaCardOption>[
       if (arguments['options'] case final List list)
         for (final option in list)
-          if (option case {'label': final String label}
-              when label.trim().isNotEmpty)
+          if (option case {
+            'label': final String label,
+          } when label.trim().isNotEmpty)
             (
               label: label.trim(),
               description: switch (option['description']) {
@@ -157,6 +183,81 @@ class GaiaChatTools implements GaiaTurnTools {
     };
   }
 
+  /// A `propose_*` call (§10): the main instance fills it in, the card holds
+  /// it in an editor until the user decides, and accepted, the main
+  /// instance commits what the editor holds with the token the acceptance
+  /// issued. The agent is told what was written, or the user's correction.
+  Future<GaiaToolResult> _propose(
+    String tool,
+    Map<String, Object?> arguments,
+  ) async {
+    final id = _uuid.v4();
+    final GaiaProposal proposal;
+    try {
+      proposal = await proposals.prepare(id, tool, arguments);
+    } catch (error) {
+      return (text: '$error', isError: true);
+    }
+    final card = GaiaCardPart(
+      id: id,
+      kind: GaiaCardKind.proposal,
+      tool: tool,
+      proposal: proposal,
+    );
+    onCard(card);
+    final answer = await cards.wait(chatId, card, hold);
+    if (answer == null) {
+      proposals.drop(id);
+      onCard(card.decided(GaiaCardState.expired));
+      return (
+        text:
+            "The user didn't answer within an hour, so nothing was written. "
+            'End your turn; they can ask again.',
+        isError: false,
+      );
+    }
+    switch (answer.state) {
+      case GaiaCardState.accepted:
+        final fields = (answer.answer!['fields']! as Map)
+            .cast<String, Object?>();
+        final token = answer.answer!['token']! as String;
+        try {
+          final committed = await proposals.commit(id, token, fields);
+          onCard(
+            card.decided(GaiaCardState.accepted, {
+              'fields': fields,
+              'token': token,
+              'committed': committed.record,
+            }),
+          );
+          return (text: committed.text, isError: false);
+        } catch (error) {
+          onCard(card.decided(GaiaCardState.voided, {'error': '$error'}));
+          return (
+            text: 'The user accepted, but it could not be saved: $error',
+            isError: true,
+          );
+        }
+      case GaiaCardState.rejected:
+        proposals.drop(id);
+        final decided = card.decided(answer.state, answer.answer);
+        onCard(decided);
+        return (
+          text: switch (decided.answer?['message']) {
+            final String message when message.trim().isNotEmpty =>
+              'rejected: the user wants changes: ${message.trim()}\n'
+                  'Nothing was written. Propose again with their changes.',
+            _ => 'The user turned it down; nothing was written.',
+          },
+          isError: false,
+        );
+      default:
+        proposals.drop(id);
+        onCard(card.decided(answer.state));
+        return _aborted;
+    }
+  }
+
   @override
   Future<GaiaPermission> permit({
     required String tool,
@@ -164,6 +265,12 @@ class GaiaChatTools implements GaiaTurnTools {
     required String description,
   }) async {
     if (aborted()) return (allow: false, message: 'Gaia is aborted.');
+    // Gaia's own tools ask for themselves where they need to: a proposal
+    // is its own card. A CLI asking about one, outside Auto mode, gets no
+    // second card in front of it.
+    if (tool.startsWith('mcp__${kGaiaMcpServer}__')) {
+      return (allow: true, message: '');
+    }
     final card = GaiaCardPart(
       id: _uuid.v4(),
       kind: GaiaCardKind.permission,
@@ -222,6 +329,5 @@ Map<String, Object?> gaiaTrimmedInput(Map<String, Object?> input) => {
 
 const _maxInputText = 2000;
 
-String _short(String text) => text.length > _maxInputText
-    ? '${text.substring(0, _maxInputText)}…'
-    : text;
+String _short(String text) =>
+    text.length > _maxInputText ? '${text.substring(0, _maxInputText)}…' : text;

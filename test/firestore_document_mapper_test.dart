@@ -10,6 +10,77 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 void main() {
+  test("a row's origin syncs, and a document from an older build without "
+      'one keeps the local one (GAIA_HLD.md §10)', () {
+    final at = DateTime.utc(2026, 10, 1);
+    final task = TodoTask(
+      id: 't1',
+      createdAt: at,
+      updatedAt: at,
+      listId: 'l1',
+      title: 'Call',
+      origin: 'gaia',
+    );
+    final data = todoTaskToFirestore(task);
+    expect(data['origin'], 'gaia');
+    expect(mergeTodoTaskFromRemote(data, 't1').origin, 'gaia');
+    final older = {...data, 'version': 5}..remove('origin');
+    expect(mergeTodoTaskFromRemote(older, 't1', local: task).origin, 'gaia');
+    expect(
+      todoTaskToFirestore(task.copyWith(title: 'x')).containsKey('origin'),
+      isTrue,
+      reason: 'an edit keeps it',
+    );
+
+    final event = CalendarEvent(
+      id: 'e1',
+      createdAt: at,
+      updatedAt: at,
+      calendarId: 'c1',
+      title: 'Dentist',
+      start: DateTime(2026, 10, 30, 14),
+      end: DateTime(2026, 10, 30, 15),
+      origin: 'gaia',
+    );
+    expect(
+      mergeCalendarEventFromRemote(calendarEventToFirestore(event), 'e1').origin,
+      'gaia',
+    );
+    expect(
+      calendarEventToFirestore(event.copyWith(title: 'x')).containsKey('origin'),
+      isTrue,
+    );
+    final mine = CalendarEvent(
+      id: 'e2',
+      createdAt: at,
+      updatedAt: at,
+      calendarId: 'c1',
+      title: 'Mine',
+      start: at,
+      end: at,
+    );
+    expect(
+      calendarEventToFirestore(mine).containsKey('origin'),
+      isFalse,
+      reason: "left out, so an upload's merge never clears another device's",
+    );
+
+    final entry = JournalEntry(
+      id: 'j1',
+      createdAt: at,
+      updatedAt: at,
+      journalId: 'journal',
+      title: '',
+      body: 'Hi',
+      entryDate: at,
+      origin: 'gaia',
+    );
+    expect(
+      mergeJournalEntryFromRemote(journalEntryToFirestore(entry), 'j1').origin,
+      'gaia',
+    );
+  });
+
   test('remote journal entry merge prefers newer version', () {
     final older = DateTime.utc(2024, 1, 1);
     final newer = DateTime.utc(2024, 2, 1);

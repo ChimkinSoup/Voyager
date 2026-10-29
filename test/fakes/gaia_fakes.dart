@@ -2,10 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
@@ -346,4 +351,42 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
     this.images.add(images);
     return answer(job);
   }
+}
+
+/// The executor's writes straight to the repositories, as the app's would
+/// be, minus the uploads and providers.
+class DirectGaiaWrites implements GaiaVoyagerWrites {
+  DirectGaiaWrites(this.todos, this.calendar, this.journal);
+
+  final TodoRepository todos;
+  final CalendarRepository calendar;
+  final JournalRepository journal;
+
+  @override
+  Future<void> saveTasks(List<TodoTask> tasks) async {
+    for (final task in tasks) {
+      await todos.upsertTask(task);
+    }
+  }
+
+  @override
+  Future<void> deleteTask(TodoTask task) => todos.softDeleteTask(task.id);
+
+  @override
+  Future<void> saveEvent(CalendarEvent event) => calendar.upsertEvent(event);
+
+  @override
+  Future<void> deleteEvent(String id) => calendar.softDeleteEvent(id);
+
+  @override
+  Future<void> createEntry(JournalEntry entry) => journal.upsertEntry(entry);
+
+  @override
+  Future<void> editEntry(
+    String id,
+    JournalEntry Function(JournalEntry current) apply,
+  ) async => journal.upsertEntry(apply((await journal.getEntry(id))!));
+
+  @override
+  Future<void> deleteEntry(String id) => journal.softDeleteEntry(id);
 }

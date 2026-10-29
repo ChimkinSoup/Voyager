@@ -1262,6 +1262,15 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1323,6 +1332,7 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     customQuote,
     weatherIcon,
     guidedPrompt,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -1446,6 +1456,12 @@ class $JournalEntriesTableTable extends JournalEntriesTable
         ),
       );
     }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1542,6 +1558,10 @@ class $JournalEntriesTableTable extends JournalEntriesTable
         DriftSqlType.string,
         data['${effectivePrefix}guided_prompt'],
       ),
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1585,6 +1605,9 @@ class JournalEntriesTableData extends DataClass
   final String? customQuote;
   final String? weatherIcon;
   final String? guidedPrompt;
+
+  /// See [JournalEntry.origin].
+  final String? origin;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -1604,6 +1627,7 @@ class JournalEntriesTableData extends DataClass
     this.customQuote,
     this.weatherIcon,
     this.guidedPrompt,
+    this.origin,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -1641,6 +1665,9 @@ class JournalEntriesTableData extends DataClass
     }
     if (!nullToAbsent || guidedPrompt != null) {
       map['guided_prompt'] = Variable<String>(guidedPrompt);
+    }
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -1681,6 +1708,9 @@ class JournalEntriesTableData extends DataClass
       guidedPrompt: guidedPrompt == null && nullToAbsent
           ? const Value.absent()
           : Value(guidedPrompt),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -1710,6 +1740,7 @@ class JournalEntriesTableData extends DataClass
       customQuote: serializer.fromJson<String?>(json['customQuote']),
       weatherIcon: serializer.fromJson<String?>(json['weatherIcon']),
       guidedPrompt: serializer.fromJson<String?>(json['guidedPrompt']),
+      origin: serializer.fromJson<String?>(json['origin']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -1734,6 +1765,7 @@ class JournalEntriesTableData extends DataClass
       'customQuote': serializer.toJson<String?>(customQuote),
       'weatherIcon': serializer.toJson<String?>(weatherIcon),
       'guidedPrompt': serializer.toJson<String?>(guidedPrompt),
+      'origin': serializer.toJson<String?>(origin),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -1756,6 +1788,7 @@ class JournalEntriesTableData extends DataClass
     Value<String?> customQuote = const Value.absent(),
     Value<String?> weatherIcon = const Value.absent(),
     Value<String?> guidedPrompt = const Value.absent(),
+    Value<String?> origin = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -1777,6 +1810,7 @@ class JournalEntriesTableData extends DataClass
     customQuote: customQuote.present ? customQuote.value : this.customQuote,
     weatherIcon: weatherIcon.present ? weatherIcon.value : this.weatherIcon,
     guidedPrompt: guidedPrompt.present ? guidedPrompt.value : this.guidedPrompt,
+    origin: origin.present ? origin.value : this.origin,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -1808,6 +1842,7 @@ class JournalEntriesTableData extends DataClass
       guidedPrompt: data.guidedPrompt.present
           ? data.guidedPrompt.value
           : this.guidedPrompt,
+      origin: data.origin.present ? data.origin.value : this.origin,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -1832,6 +1867,7 @@ class JournalEntriesTableData extends DataClass
           ..write('customQuote: $customQuote, ')
           ..write('weatherIcon: $weatherIcon, ')
           ..write('guidedPrompt: $guidedPrompt, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -1856,6 +1892,7 @@ class JournalEntriesTableData extends DataClass
     customQuote,
     weatherIcon,
     guidedPrompt,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -1879,6 +1916,7 @@ class JournalEntriesTableData extends DataClass
           other.customQuote == this.customQuote &&
           other.weatherIcon == this.weatherIcon &&
           other.guidedPrompt == this.guidedPrompt &&
+          other.origin == this.origin &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -1901,6 +1939,7 @@ class JournalEntriesTableCompanion
   final Value<String?> customQuote;
   final Value<String?> weatherIcon;
   final Value<String?> guidedPrompt;
+  final Value<String?> origin;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -1921,6 +1960,7 @@ class JournalEntriesTableCompanion
     this.customQuote = const Value.absent(),
     this.weatherIcon = const Value.absent(),
     this.guidedPrompt = const Value.absent(),
+    this.origin = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -1942,6 +1982,7 @@ class JournalEntriesTableCompanion
     this.customQuote = const Value.absent(),
     this.weatherIcon = const Value.absent(),
     this.guidedPrompt = const Value.absent(),
+    this.origin = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -1969,6 +2010,7 @@ class JournalEntriesTableCompanion
     Expression<String>? customQuote,
     Expression<String>? weatherIcon,
     Expression<String>? guidedPrompt,
+    Expression<String>? origin,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -1990,6 +2032,7 @@ class JournalEntriesTableCompanion
       if (customQuote != null) 'custom_quote': customQuote,
       if (weatherIcon != null) 'weather_icon': weatherIcon,
       if (guidedPrompt != null) 'guided_prompt': guidedPrompt,
+      if (origin != null) 'origin': origin,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -2013,6 +2056,7 @@ class JournalEntriesTableCompanion
     Value<String?>? customQuote,
     Value<String?>? weatherIcon,
     Value<String?>? guidedPrompt,
+    Value<String?>? origin,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -2034,6 +2078,7 @@ class JournalEntriesTableCompanion
       customQuote: customQuote ?? this.customQuote,
       weatherIcon: weatherIcon ?? this.weatherIcon,
       guidedPrompt: guidedPrompt ?? this.guidedPrompt,
+      origin: origin ?? this.origin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -2087,6 +2132,9 @@ class JournalEntriesTableCompanion
     if (guidedPrompt.present) {
       map['guided_prompt'] = Variable<String>(guidedPrompt.value);
     }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2122,6 +2170,7 @@ class JournalEntriesTableCompanion
           ..write('customQuote: $customQuote, ')
           ..write('weatherIcon: $weatherIcon, ')
           ..write('guidedPrompt: $guidedPrompt, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -3493,6 +3542,15 @@ class $TodoTasksTableTable extends TodoTasksTable
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3555,6 +3613,7 @@ class $TodoTasksTableTable extends TodoTasksTable
     dueDateSetAt,
     recurrence,
     recurrenceAnchor,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -3683,6 +3742,12 @@ class $TodoTasksTableTable extends TodoTasksTable
         ),
       );
     }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3780,6 +3845,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}recurrence_anchor'],
       ),
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3836,6 +3905,9 @@ class TodoTasksTableData extends DataClass
   /// on Feb 28, and re-anchoring there would drag every later occurrence to the
   /// 28th. Holding the original anchor is what lets March return to the 31st.
   final DateTime? recurrenceAnchor;
+
+  /// See [TodoTask.origin].
+  final String? origin;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -3856,6 +3928,7 @@ class TodoTasksTableData extends DataClass
     this.dueDateSetAt,
     required this.recurrence,
     this.recurrenceAnchor,
+    this.origin,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -3894,6 +3967,9 @@ class TodoTasksTableData extends DataClass
     map['recurrence'] = Variable<String>(recurrence);
     if (!nullToAbsent || recurrenceAnchor != null) {
       map['recurrence_anchor'] = Variable<DateTime>(recurrenceAnchor);
+    }
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3936,6 +4012,9 @@ class TodoTasksTableData extends DataClass
       recurrenceAnchor: recurrenceAnchor == null && nullToAbsent
           ? const Value.absent()
           : Value(recurrenceAnchor),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -3970,6 +4049,7 @@ class TodoTasksTableData extends DataClass
       recurrenceAnchor: serializer.fromJson<DateTime?>(
         json['recurrenceAnchor'],
       ),
+      origin: serializer.fromJson<String?>(json['origin']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -3997,6 +4077,7 @@ class TodoTasksTableData extends DataClass
       'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
       'recurrence': serializer.toJson<String>(recurrence),
       'recurrenceAnchor': serializer.toJson<DateTime?>(recurrenceAnchor),
+      'origin': serializer.toJson<String?>(origin),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -4020,6 +4101,7 @@ class TodoTasksTableData extends DataClass
     Value<DateTime?> dueDateSetAt = const Value.absent(),
     String? recurrence,
     Value<DateTime?> recurrenceAnchor = const Value.absent(),
+    Value<String?> origin = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -4044,6 +4126,7 @@ class TodoTasksTableData extends DataClass
     recurrenceAnchor: recurrenceAnchor.present
         ? recurrenceAnchor.value
         : this.recurrenceAnchor,
+    origin: origin.present ? origin.value : this.origin,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -4080,6 +4163,7 @@ class TodoTasksTableData extends DataClass
       recurrenceAnchor: data.recurrenceAnchor.present
           ? data.recurrenceAnchor.value
           : this.recurrenceAnchor,
+      origin: data.origin.present ? data.origin.value : this.origin,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -4105,6 +4189,7 @@ class TodoTasksTableData extends DataClass
           ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('recurrence: $recurrence, ')
           ..write('recurrenceAnchor: $recurrenceAnchor, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -4130,6 +4215,7 @@ class TodoTasksTableData extends DataClass
     dueDateSetAt,
     recurrence,
     recurrenceAnchor,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -4154,6 +4240,7 @@ class TodoTasksTableData extends DataClass
           other.dueDateSetAt == this.dueDateSetAt &&
           other.recurrence == this.recurrence &&
           other.recurrenceAnchor == this.recurrenceAnchor &&
+          other.origin == this.origin &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -4176,6 +4263,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<DateTime?> dueDateSetAt;
   final Value<String> recurrence;
   final Value<DateTime?> recurrenceAnchor;
+  final Value<String?> origin;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -4197,6 +4285,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.dueDateSetAt = const Value.absent(),
     this.recurrence = const Value.absent(),
     this.recurrenceAnchor = const Value.absent(),
+    this.origin = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -4219,6 +4308,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.dueDateSetAt = const Value.absent(),
     this.recurrence = const Value.absent(),
     this.recurrenceAnchor = const Value.absent(),
+    this.origin = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -4245,6 +4335,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<DateTime>? dueDateSetAt,
     Expression<String>? recurrence,
     Expression<DateTime>? recurrenceAnchor,
+    Expression<String>? origin,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -4268,6 +4359,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
       if (recurrence != null) 'recurrence': recurrence,
       if (recurrenceAnchor != null) 'recurrence_anchor': recurrenceAnchor,
+      if (origin != null) 'origin': origin,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -4292,6 +4384,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<DateTime?>? dueDateSetAt,
     Value<String>? recurrence,
     Value<DateTime?>? recurrenceAnchor,
+    Value<String?>? origin,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -4315,6 +4408,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
       recurrence: recurrence ?? this.recurrence,
       recurrenceAnchor: recurrenceAnchor ?? this.recurrenceAnchor,
+      origin: origin ?? this.origin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -4373,6 +4467,9 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     if (recurrenceAnchor.present) {
       map['recurrence_anchor'] = Variable<DateTime>(recurrenceAnchor.value);
     }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4409,6 +4506,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('recurrence: $recurrence, ')
           ..write('recurrenceAnchor: $recurrenceAnchor, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -5639,6 +5737,15 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -5704,6 +5811,7 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     recurrenceDate,
     isDone,
     doneMarks,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -5849,6 +5957,12 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         doneMarks.isAcceptableOrUnknown(data['done_marks']!, _doneMarksMeta),
       );
     }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -5961,6 +6075,10 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         DriftSqlType.string,
         data['${effectivePrefix}done_marks'],
       )!,
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -6021,6 +6139,9 @@ class CalendarEventsTableData extends DataClass
 
   /// A series' done marks as JSON — see [encodeDoneMarks].
   final String doneMarks;
+
+  /// See [CalendarEvent.origin].
+  final String? origin;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -6044,6 +6165,7 @@ class CalendarEventsTableData extends DataClass
     this.recurrenceDate,
     required this.isDone,
     required this.doneMarks,
+    this.origin,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -6080,6 +6202,9 @@ class CalendarEventsTableData extends DataClass
     }
     map['is_done'] = Variable<bool>(isDone);
     map['done_marks'] = Variable<String>(doneMarks);
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -6119,6 +6244,9 @@ class CalendarEventsTableData extends DataClass
           : Value(recurrenceDate),
       isDone: Value(isDone),
       doneMarks: Value(doneMarks),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -6156,6 +6284,7 @@ class CalendarEventsTableData extends DataClass
       recurrenceDate: serializer.fromJson<DateTime?>(json['recurrenceDate']),
       isDone: serializer.fromJson<bool>(json['isDone']),
       doneMarks: serializer.fromJson<String>(json['doneMarks']),
+      origin: serializer.fromJson<String?>(json['origin']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -6184,6 +6313,7 @@ class CalendarEventsTableData extends DataClass
       'recurrenceDate': serializer.toJson<DateTime?>(recurrenceDate),
       'isDone': serializer.toJson<bool>(isDone),
       'doneMarks': serializer.toJson<String>(doneMarks),
+      'origin': serializer.toJson<String?>(origin),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -6210,6 +6340,7 @@ class CalendarEventsTableData extends DataClass
     Value<DateTime?> recurrenceDate = const Value.absent(),
     bool? isDone,
     String? doneMarks,
+    Value<String?> origin = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -6241,6 +6372,7 @@ class CalendarEventsTableData extends DataClass
         : this.recurrenceDate,
     isDone: isDone ?? this.isDone,
     doneMarks: doneMarks ?? this.doneMarks,
+    origin: origin.present ? origin.value : this.origin,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -6284,6 +6416,7 @@ class CalendarEventsTableData extends DataClass
           : this.recurrenceDate,
       isDone: data.isDone.present ? data.isDone.value : this.isDone,
       doneMarks: data.doneMarks.present ? data.doneMarks.value : this.doneMarks,
+      origin: data.origin.present ? data.origin.value : this.origin,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -6312,6 +6445,7 @@ class CalendarEventsTableData extends DataClass
           ..write('recurrenceDate: $recurrenceDate, ')
           ..write('isDone: $isDone, ')
           ..write('doneMarks: $doneMarks, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -6340,6 +6474,7 @@ class CalendarEventsTableData extends DataClass
     recurrenceDate,
     isDone,
     doneMarks,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -6367,6 +6502,7 @@ class CalendarEventsTableData extends DataClass
           other.recurrenceDate == this.recurrenceDate &&
           other.isDone == this.isDone &&
           other.doneMarks == this.doneMarks &&
+          other.origin == this.origin &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -6393,6 +6529,7 @@ class CalendarEventsTableCompanion
   final Value<DateTime?> recurrenceDate;
   final Value<bool> isDone;
   final Value<String> doneMarks;
+  final Value<String?> origin;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -6417,6 +6554,7 @@ class CalendarEventsTableCompanion
     this.recurrenceDate = const Value.absent(),
     this.isDone = const Value.absent(),
     this.doneMarks = const Value.absent(),
+    this.origin = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -6442,6 +6580,7 @@ class CalendarEventsTableCompanion
     this.recurrenceDate = const Value.absent(),
     this.isDone = const Value.absent(),
     this.doneMarks = const Value.absent(),
+    this.origin = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -6472,6 +6611,7 @@ class CalendarEventsTableCompanion
     Expression<DateTime>? recurrenceDate,
     Expression<bool>? isDone,
     Expression<String>? doneMarks,
+    Expression<String>? origin,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -6498,6 +6638,7 @@ class CalendarEventsTableCompanion
       if (recurrenceDate != null) 'recurrence_date': recurrenceDate,
       if (isDone != null) 'is_done': isDone,
       if (doneMarks != null) 'done_marks': doneMarks,
+      if (origin != null) 'origin': origin,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -6525,6 +6666,7 @@ class CalendarEventsTableCompanion
     Value<DateTime?>? recurrenceDate,
     Value<bool>? isDone,
     Value<String>? doneMarks,
+    Value<String?>? origin,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -6550,6 +6692,7 @@ class CalendarEventsTableCompanion
       recurrenceDate: recurrenceDate ?? this.recurrenceDate,
       isDone: isDone ?? this.isDone,
       doneMarks: doneMarks ?? this.doneMarks,
+      origin: origin ?? this.origin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -6615,6 +6758,9 @@ class CalendarEventsTableCompanion
     if (doneMarks.present) {
       map['done_marks'] = Variable<String>(doneMarks.value);
     }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -6654,6 +6800,7 @@ class CalendarEventsTableCompanion
           ..write('recurrenceDate: $recurrenceDate, ')
           ..write('isDone: $isDone, ')
           ..write('doneMarks: $doneMarks, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -61635,6 +61782,7 @@ typedef $$JournalEntriesTableTableCreateCompanionBuilder =
       Value<String?> customQuote,
       Value<String?> weatherIcon,
       Value<String?> guidedPrompt,
+      Value<String?> origin,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -61657,6 +61805,7 @@ typedef $$JournalEntriesTableTableUpdateCompanionBuilder =
       Value<String?> customQuote,
       Value<String?> weatherIcon,
       Value<String?> guidedPrompt,
+      Value<String?> origin,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -61740,6 +61889,11 @@ class $$JournalEntriesTableTableFilterComposer
 
   ColumnFilters<String> get guidedPrompt => $composableBuilder(
     column: $table.guidedPrompt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -61843,6 +61997,11 @@ class $$JournalEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -61925,6 +62084,9 @@ class $$JournalEntriesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -61995,6 +62157,7 @@ class $$JournalEntriesTableTableTableManager
                 Value<String?> customQuote = const Value.absent(),
                 Value<String?> weatherIcon = const Value.absent(),
                 Value<String?> guidedPrompt = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -62015,6 +62178,7 @@ class $$JournalEntriesTableTableTableManager
                 customQuote: customQuote,
                 weatherIcon: weatherIcon,
                 guidedPrompt: guidedPrompt,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -62037,6 +62201,7 @@ class $$JournalEntriesTableTableTableManager
                 Value<String?> customQuote = const Value.absent(),
                 Value<String?> weatherIcon = const Value.absent(),
                 Value<String?> guidedPrompt = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -62057,6 +62222,7 @@ class $$JournalEntriesTableTableTableManager
                 customQuote: customQuote,
                 weatherIcon: weatherIcon,
                 guidedPrompt: guidedPrompt,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -62705,6 +62871,7 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<DateTime?> dueDateSetAt,
       Value<String> recurrence,
       Value<DateTime?> recurrenceAnchor,
+      Value<String?> origin,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -62728,6 +62895,7 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<DateTime?> dueDateSetAt,
       Value<String> recurrence,
       Value<DateTime?> recurrenceAnchor,
+      Value<String?> origin,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -62816,6 +62984,11 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<DateTime> get recurrenceAnchor => $composableBuilder(
     column: $table.recurrenceAnchor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -62924,6 +63097,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -63013,6 +63191,9 @@ class $$TodoTasksTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -63078,6 +63259,7 @@ class $$TodoTasksTableTableTableManager
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
                 Value<String> recurrence = const Value.absent(),
                 Value<DateTime?> recurrenceAnchor = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -63099,6 +63281,7 @@ class $$TodoTasksTableTableTableManager
                 dueDateSetAt: dueDateSetAt,
                 recurrence: recurrence,
                 recurrenceAnchor: recurrenceAnchor,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -63122,6 +63305,7 @@ class $$TodoTasksTableTableTableManager
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
                 Value<String> recurrence = const Value.absent(),
                 Value<DateTime?> recurrenceAnchor = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -63143,6 +63327,7 @@ class $$TodoTasksTableTableTableManager
                 dueDateSetAt: dueDateSetAt,
                 recurrence: recurrence,
                 recurrenceAnchor: recurrenceAnchor,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -63722,6 +63907,7 @@ typedef $$CalendarEventsTableTableCreateCompanionBuilder =
       Value<DateTime?> recurrenceDate,
       Value<bool> isDone,
       Value<String> doneMarks,
+      Value<String?> origin,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -63748,6 +63934,7 @@ typedef $$CalendarEventsTableTableUpdateCompanionBuilder =
       Value<DateTime?> recurrenceDate,
       Value<bool> isDone,
       Value<String> doneMarks,
+      Value<String?> origin,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -63851,6 +64038,11 @@ class $$CalendarEventsTableTableFilterComposer
 
   ColumnFilters<String> get doneMarks => $composableBuilder(
     column: $table.doneMarks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -63974,6 +64166,11 @@ class $$CalendarEventsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -64076,6 +64273,9 @@ class $$CalendarEventsTableTableAnnotationComposer
   GeneratedColumn<String> get doneMarks =>
       $composableBuilder(column: $table.doneMarks, builder: (column) => column);
 
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -64150,6 +64350,7 @@ class $$CalendarEventsTableTableTableManager
                 Value<DateTime?> recurrenceDate = const Value.absent(),
                 Value<bool> isDone = const Value.absent(),
                 Value<String> doneMarks = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -64174,6 +64375,7 @@ class $$CalendarEventsTableTableTableManager
                 recurrenceDate: recurrenceDate,
                 isDone: isDone,
                 doneMarks: doneMarks,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -64200,6 +64402,7 @@ class $$CalendarEventsTableTableTableManager
                 Value<DateTime?> recurrenceDate = const Value.absent(),
                 Value<bool> isDone = const Value.absent(),
                 Value<String> doneMarks = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -64224,6 +64427,7 @@ class $$CalendarEventsTableTableTableManager
                 recurrenceDate: recurrenceDate,
                 isDone: isDone,
                 doneMarks: doneMarks,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

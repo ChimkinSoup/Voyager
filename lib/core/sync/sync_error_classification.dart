@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:voyager/core/sync/firestore_writable.dart';
 import 'package:voyager/domain/services/character_operation.dart';
 
 /// Whether a failed sync write is worth attempting again.
@@ -37,6 +38,7 @@ const _permanentFirestoreCodes = {
 /// on this to eventually say stop.
 SyncFailureKind classifySyncFailure(Object error) {
   if (error is SyncPayloadTooLargeException) return SyncFailureKind.permanent;
+  if (error is SyncPayloadUnwritableException) return SyncFailureKind.permanent;
   if (error is FirebaseException) {
     return _permanentFirestoreCodes.contains(error.code)
         ? SyncFailureKind.permanent
@@ -50,6 +52,9 @@ String describeSyncFailure(Object error) {
   if (error is SyncPayloadTooLargeException) {
     return 'Too large to sync: ${error.part} is ${error.bytes} bytes, over '
         'the ${error.maxBytes} byte limit.';
+  }
+  if (error is SyncPayloadUnwritableException) {
+    return "Can't sync: ${error.field} ${error.reason}.";
   }
   if (error is FirebaseException) {
     return '[${error.code}] ${error.message ?? 'Firestore rejected the write.'}';

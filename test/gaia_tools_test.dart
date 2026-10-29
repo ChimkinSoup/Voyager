@@ -4,6 +4,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_chat_tools.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
 /// Gaia's tools (GAIA_HLD.md §5.3, §10.1): the MCP server both transports
 /// hand messages to, and a turn's tools, whose cards wait on the user.
@@ -59,6 +60,9 @@ void main() {
         'voyager_calendar',
         'voyager_journal',
         'voyager_workouts',
+        'propose_todo',
+        'propose_calendar_event',
+        'propose_journal_entry',
       ]);
       for (final tool in tools) {
         expect(tool['name'], matches(RegExp(r'^[a-zA-Z0-9_-]{1,64}$')));
@@ -183,6 +187,40 @@ void main() {
     late List<GaiaCardPart> raised;
     late bool aborted;
     late List<String> reads;
+    late List<(String, String, Map<String, Object?>)> committed;
+    late List<String> dropped;
+    late Object? commitError;
+
+    const proposal = GaiaProposal(
+      entity: GaiaProposalEntity.todo,
+      fields: {
+        'list': 'l1',
+        'title': 'Call the dentist',
+        'notes': '',
+        'due': null,
+        'starred': false,
+        'completed': false,
+      },
+      choices: [(id: 'l1', name: 'Inbox')],
+    );
+
+    final GaiaProposalHost proposals = (
+      prepare: (cardId, tool, arguments) async {
+        if (arguments['fail'] == true) {
+          throw GaiaToolException('No todo list is called "Nope".');
+        }
+        return proposal;
+      },
+      commit: (cardId, token, fields) async {
+        if (commitError case final error?) throw error;
+        committed.add((cardId, token, fields));
+        return (
+          record: <String, Object?>{'entity': 'todo', 'id': 't9', 'version': 0},
+          text: 'Saved a new task (id t9)',
+        );
+      },
+      drop: (cardId) => dropped.add(cardId),
+    );
 
     GaiaChatTools tools({Duration hold = const Duration(hours: 1)}) =>
         GaiaChatTools(
@@ -194,6 +232,7 @@ void main() {
             if (arguments['fail'] == true) throw GaiaToolException('bad range');
             return 'data for $tool';
           },
+          proposals: proposals,
           aborted: () => aborted,
           hold: hold,
         );
@@ -203,6 +242,106 @@ void main() {
       raised = [];
       aborted = false;
       reads = [];
+      committed = [];
+      dropped = [];
+      commitError = null;
+    });
+
+    test('a proposal raises an editor card and commits what the user '
+        'accepted, with the token the acceptance issued', () async {
+      final result = tools().call('propose_todo', {'title': 'Call'});
+      await pumpEventQueue();
+      final card = raised.single;
+      expect(card.kind, GaiaCardKind.proposal);
+      expect(card.tool, 'propose_todo');
+      expect(card.proposal!.fields['title'], 'Call the dentist');
+      expect(cards.isWaiting(card.id), isTrue);
+      final edited = {...proposal.fields, 'title': 'Call the dentist at 2'};
+      final token = gaiaApprovalToken();
+      cards.decide(card.id, GaiaCardState.accepted, {
+        'fields': edited,
+        'token': token,
+      });
+      expect(await result, (text: 'Saved a new task (id t9)', isError: false));
+      final (cardId, sentToken, fields) = committed.single;
+      expect((cardId, sentToken), (card.id, token));
+      expect(fields, edited);
+      expect(raised.last.state, GaiaCardState.accepted);
+      expect(raised.last.answer!['committed'], containsPair('id', 't9'));
+      expect(raised.last.answer!['fields'], edited);
+    });
+
+    test('a typed correction turns a proposal down and tells the agent to '
+        're-propose', () async {
+      final result = tools().call('propose_todo', {});
+      await pumpEventQueue();
+      final card = raised.single;
+      cards.decide(card.id, GaiaCardState.rejected, {'message': 'make it 3'});
+      final text = (await result).text;
+      expect(text, startsWith('rejected: the user wants changes: make it 3'));
+      expect(text, contains('Propose again'));
+      expect(committed, isEmpty);
+      expect(dropped, [card.id]);
+      expect(raised.last.state, GaiaCardState.rejected);
+    });
+
+    test('a proposal the main instance refuses raises no card', () async {
+      expect(
+        await tools().call('propose_todo', {'fail': true}),
+        (text: 'No todo list is called "Nope".', isError: true),
+      );
+      expect(raised, isEmpty);
+    });
+
+    test('Abort voids a proposal, and nothing is committed', () async {
+      final result = tools().call('propose_todo', {});
+      await pumpEventQueue();
+      cards.voidAll();
+      expect(await result, (text: 'aborted: Gaia is aborted.', isError: true));
+      expect(committed, isEmpty);
+      expect(dropped, hasLength(1));
+      expect(raised.last.state, GaiaCardState.voided);
+    });
+
+    test('a commit that fails voids the card with why', () async {
+      commitError = GaiaToolException("It's been changed since.");
+      final result = tools().call('propose_todo', {});
+      await pumpEventQueue();
+      cards.decide(raised.single.id, GaiaCardState.accepted, {
+        'fields': proposal.fields,
+        'token': gaiaApprovalToken(),
+      });
+      final answer = await result;
+      expect(answer.isError, isTrue);
+      expect(answer.text, contains("It's been changed since."));
+      expect(raised.last.state, GaiaCardState.voided);
+      expect(raised.last.answer, {'error': "It's been changed since."});
+    });
+
+    test('a proposal left for the hour expires with nothing written', () {
+      fakeAsync((async) {
+        GaiaToolResult? answer;
+        tools(hold: const Duration(minutes: 1))
+            .call('propose_todo', {})
+            .then((value) => answer = value);
+        async.elapse(const Duration(minutes: 2));
+        expect(answer!.text, contains('nothing was written'));
+        expect(raised.last.state, GaiaCardState.expired);
+        expect(dropped, hasLength(1));
+      });
+    });
+
+    test("the CLI's prompt about one of Gaia's own tools is allowed without "
+        'a card', () async {
+      expect(
+        await tools().permit(
+          tool: 'mcp__gaia__propose_todo',
+          input: const {},
+          description: '',
+        ),
+        (allow: true, message: ''),
+      );
+      expect(raised, isEmpty);
     });
 
     test('ask_user raises a card and returns what the user picked and wrote',
@@ -288,6 +427,7 @@ void main() {
         cards: cards,
         onCard: raised.add,
         read: (_, _) async => '',
+        proposals: proposals,
         aborted: () => false,
       ).call('ask_user', {'question': 'Theirs?'});
       await pumpEventQueue();

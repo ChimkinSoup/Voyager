@@ -9,9 +9,10 @@ Named after ESA's Gaia spacecraft, the star mapper, to fit Voyager's theme.
 
 Status: design draft (2026-10-24), with the first review's decisions folded
 in. Phases 0 to 3 are done (Phase 3 checked live 2026-10-26, §19). Phase 4
-is split in two: 4A (Gaia tools, reads, question and permission cards) is
+is split in three: 4A (Gaia tools, reads, question and permission cards) is
 done and checked live 2026-10-28; 4B (proposals and the action log) is
-specified in §19 but not started.
+built and unit-tested (2026-10-28) but not yet checked live; 4C (a Codex
+adapter on `app-server`, which 4B evaluated) is not started (§19).
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -142,7 +143,7 @@ Gaia is floater-first. Its window has three modes:
 
 | Mode | Shape | Topmost | Taskbar / Alt+Tab |
 |---|---|---|---|
-| **Small floater** | compact panel: composer and the last few turns | yes | no (`WS_EX_TOOLWINDOW`) |
+| **Small floater** | compact panel: composer and the full chat | yes | no (`WS_EX_TOOLWINDOW`) |
 | **Large floater** | big centred panel showing the full chat | yes | no |
 | **Gaia window** | normal resizable window with a chat sidebar, like Claude Desktop | no | yes (own taskbar button) |
 
@@ -774,6 +775,13 @@ phases. A message is stored as its expansion, since that's what the agent
 saw. Phase 3 added `$SELECTION`: the text selected where Gaia was last
 summoned from, read through UI Automation at the summon (§15.2).
 
+As built (2026-10-28): the palette follows the caret, so a `/word` anywhere
+in the draft (a whole token, not in code) opens it. Built-ins and tiers can
+be picked there, the `/word` taken out of the draft; the user's commands
+only when the `/word` is the whole draft, since they take the rest as
+arguments. `/new` takes what's left of the draft into the new chat, as
+Ctrl+Shift+N does (§9.3).
+
 ### 9.3 Attachments and the "[image N]" question
 
 **Does placement matter?** Somewhat. The Messages API takes an **ordered**
@@ -825,7 +833,10 @@ counted. Both are for later, with Markdown rendering.
 As built (2026-10-28): **each chat has its own draft**: its text (caret
 included), images and files are put away when another chat comes into view
 and come back with it, and "New chat" has one of its own. A send that fails
-after the user has moved on goes back in its own chat's draft. The quote
+after the user has moved on goes back in its own chat's draft. Ctrl+N starts
+a new chat; **Ctrl+Shift+N, or Shift-clicking New chat, moves the draft in
+view into it**, after New chat's own draft, its images renumbered on from
+that draft's (not while any are still syncing). The quote
 chips and the window chip stay with the composer, as above, and aren't kept.
 Drafts carry across the floaters and the Gaia window, and are **kept and
 synced**: the companion saves a changed draft at most once a second through
@@ -930,8 +941,7 @@ the signal: a turn whose last paragraph ends in a question is marked
 - Claude Code: `--permission-prompt-tool` routes them to a Gaia approval card
   (§5.3).
 - Codex: `codex exec` can't surface approvals. `codex app-server` sends them
-  as requests the client answers, which is another reason to evaluate
-  app-server (§5.1).
+  as requests the client answers; an adapter on it is Phase 4C (§19).
 - Gemini CLI: headless mode can't ask. Each chat sets an approval mode up
   front (ask nothing / auto-edit / full auto), and anything outside it fails
   instead of prompting.
@@ -1329,7 +1339,8 @@ Other additions:
 | 2 | Done | Agents/tiers/router, Codex adapter, Haiku utility model on Claude Code, cross-vendor handoff, commands, keybinds. **Gemini skipped** (below) |
 | 3 | Done | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
 | 4A | Done | Gaia tools (Claude Code's control channel, Codex's stdio shim), `voyager_*` reads, the card system, `ask_user` question cards, Claude Code permission cards |
-| 4B | | `propose_*` tools (todo, calendar event, journal entry) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` and its permission cards |
+| 4B | Done | `propose_*` tools (todo, calendar event, journal entry; new and changed) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` evaluated |
+| 4C | | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback |
 | 5 | | Memory + curator + inbox |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
@@ -1394,19 +1405,103 @@ Phase 4A as built (2026-10-28):
   (rarely asked), the hour's expiry (unit-tested with a short hold), and
   the shim's connection being dropped for a process Gaia didn't start.
 
-Phase 4B, specified but not started: the writes.
-- `propose_todo`, `propose_calendar_event` and `propose_journal_entry` raise
-  a `proposal` card holding a real editor (§10). Accepting commits through
-  the main instance's executor with an approval token the companion issues.
-  The executor checks the abort flag itself, and every row it writes gets
-  `origin: gaia`.
-- A typed correction rejects the card with that text; Abort voids it;
-  several proposals in one turn stack, with "accept all".
-- The action log on the Gaia page lists committed proposals, with undo
-  where the entity supports it.
-- Codex `app-server` is evaluated against `exec`. If it can surface
-  approvals, Codex gets permission cards too; until then Codex runs as
-  §5.1 describes and can't ask.
+Phase 4B as built (2026-10-28):
+- **Tools.** `propose_todo`, `propose_calendar_event` and
+  `propose_journal_entry` each make a new row, or, given an `id`, change
+  one (decided 2026-10-28), with only the fields that change. The reads
+  now show each row's id for that. A change can't tick off a repeating
+  task, or touch a repeating event or a Google one; the tool says so and
+  the agent tells the user to do it in Voyager. A journal entry's new body
+  replaces the whole entry.
+- **Prepare, accept, commit.** A call goes to the main instance's executor
+  (`host/gaia_executor.dart`), which resolves names to ids (list, calendar,
+  journal, else the default, as a new item's own default), fills in the
+  rest, and keeps the result by card id. A change also records the row's
+  current values and version. The card holds that proposal in an editor:
+  - title and text fields, a picker for the list, calendar or journal;
+  - date and time pickers, and switches for all day, starred and done;
+  - mood on a slider;
+  - on a change, under each field it alters, what it was.
+
+  The send key on an empty draft accepts, as do the card's Save and, with
+  several open, Save all. Typed text turns it down with that text as the
+  correction, and the agent is told to re-propose with it. Accepting issues
+  an approval token. The executor commits only a card it prepared, once,
+  with a token. It uses its own kept copy of what's written where, takes
+  only the fields from the card, and checks them again. It refuses a row
+  that changed since it was proposed. The main instance refuses every
+  commit and undo while aborted, whatever the companion does. The token
+  binds one acceptance to one commit; it isn't a signature, since the pipe
+  is already the user's own.
+- **Writes** go through the same paths Voyager's pages use, so each one
+  syncs and the open pages show it: tasks through the repository with an
+  upload, placed in their list's order; events through the repository;
+  entries through the journal's write coordinator. Every row Gaia
+  creates gets `origin: gaia` (a column on todo tasks, calendar events and
+  journal entries, schema 179, synced). Firestore merges take either
+  side's, since it never changes after creation. A change keeps the row's
+  own origin: `origin` says who made the row, and the action log says what
+  Gaia changed.
+- **The agent is told** exactly what was saved, field by field, and the
+  new row's id. Each field the user changed in the editor is marked with
+  what the agent proposed (`(changed by the user; you proposed …)`; an
+  entry's text only as changed), since a small model left to compare the
+  two misreported an edited title (added 2026-10-29).
+- **Unlike §10**, a proposal unanswered for the hour expires with nothing
+  written, as a permission does, rather than staying open as `pending:`.
+  The executor keeps prepared proposals in memory, so a later accept would
+  need re-preparing, which wasn't worth it yet.
+- **The action log** is the Gaia page's Actions tab: every accepted
+  proposal in a live chat, newest first, read from the cards themselves
+  (each keeps what it committed), so it needs no collection of its own.
+  Undo puts a new row in the trash or a change back, and is refused if the
+  row changed since; the card is marked undone. Undo runs through the
+  desktop's executor, so the phone shows the log without it.
+- **Permission prompts for Gaia's own tools** (Claude Code outside Auto
+  mode) are allowed without a card: a proposal is its own card.
+- **A turn that ends with a call still held** (Codex `exec` stops waiting
+  on a tool after about 30 s and ends its turn) voids its proposals and
+  permissions, with nothing written; a question stays open and, answered
+  later, goes as the next message. So on Codex a proposal has to be decided
+  within about 30 s until Phase 4C.
+- **Not done:** the trash doesn't show `origin: gaia` yet.
+- **Checked live (2026-10-29)** on the `qa` profile with the debug build,
+  on Claude Code (Haiku) and Codex (gpt-6.1-sol):
+  - a new task, event and journal entry, each accepted as proposed or
+    edited in the card first, written with `origin: gaia` and synced to
+    Firestore; times across the 1 November DST change land right;
+  - a change to a task and a journal entry's whole body, with the card's
+    "was" values; the row keeps its own origin;
+  - a repeating event's change refused by the tool;
+  - turned down with a correction (from the card and from the composer),
+    then re-proposed and accepted with the send key on an empty draft;
+  - a row changed between proposing and accepting: refused, nothing
+    written, and the agent re-read it and proposed again;
+  - the Actions tab: Undo trashes new rows and puts a change back, both
+    synced, and refuses a row changed since;
+  - Abort voids an open proposal, refuses a late accept, and refuses Undo.
+
+  That check found and fixed: a Codex turn ending with a proposal held left
+  the card waiting, so a later accept wrote the row with the card still
+  open (out of the action log, and the agent never told); and a new task's
+  editor showing the whole summary where the hidden Done switch goes, with
+  a decided card showing none. Claude Code runs its tool calls one at a
+  time, so its proposals come one card at a time and Save all doesn't show.
+  Not checked live: Save all (Codex only), the hour's expiry (unit-tested),
+  and the phone's action log.
+
+Codex `app-server` evaluated (2026-10-28, 0.164.0, still marked
+experimental): it can ask. Its JSON-RPC protocol (`codex app-server
+generate-json-schema`) sends the client `item/commandExecution/requestApproval`,
+`item/fileChange/requestApproval` and `item/permissions/requestApproval`,
+answered `accept`, `acceptForSession` or `decline`. So Codex can get
+permission cards. It also has `item/tool/call`, client-hosted tools, which
+could replace the `--gaia-mcp` shim, and `item/tool/requestUserInput`.
+Threads (`thread/start`, `thread/resume`) and turns (`turn/start`,
+`turn/interrupt`) on one long-lived process would also give Codex the
+process lifecycle Claude Code has (§5.1). Building it is a new adapter with
+its own recorded fixtures and contract scenario, so it's Phase 4C; until
+then Codex runs on `exec` and can't ask.
 
 Phase 3 as built:
 - **Images.** A user message keeps its whole text, `[image N]` tokens
@@ -1562,9 +1657,9 @@ No open questions remain.
 
 To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's
-auto-compact override, Codex `app-server` vs `exec` (including approval
-requests; Phase 4B), and the usage calls for
-Codex idle accounts and Gemini CLI (§6.2).
+auto-compact override, and the usage calls for
+Codex idle accounts and Gemini CLI (§6.2). Codex `app-server` vs `exec`
+was evaluated in Phase 4B (§19).
 
 Before Phase 7: re-check each provider's consumer terms on switching between
 one person's accounts when one runs low (§6.5), not just on owning several.

@@ -67,14 +67,15 @@ class GaiaImageEdits {
 
   bool get isEmpty => marks.isEmpty && crop == null;
 
-  /// As a kept draft holds them (§9.3).
+  /// As a kept draft holds them (§9.3). Points are maps: the draft syncs,
+  /// and Firestore refuses an array in an array.
   Map<String, Object?> toJson() => {
     'marks': [
       for (final mark in marks)
         {
           'tool': mark.tool.name,
           'points': [
-            for (final point in mark.points) [point.dx, point.dy],
+            for (final point in mark.points) {'x': point.dx, 'y': point.dy},
           ],
           'color': mark.color.toARGB32(),
           'width': mark.width,
@@ -96,8 +97,8 @@ class GaiaImageEdits {
             GaiaMark(
               tool: tool,
               points: [
-                for (final point in (mark['points']! as List).cast<List>())
-                  Offset(d(point[0]), d(point[1])),
+                for (final point in (mark['points']! as List).cast<Map>())
+                  Offset(d(point['x']), d(point['y'])),
               ],
               color: Color((mark['color']! as num).toInt()),
               width: d(mark['width']),

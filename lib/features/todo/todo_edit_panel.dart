@@ -1058,6 +1058,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       parentTaskId: subtask.parentTaskId,
       recurrence: subtask.recurrence,
       recurrenceAnchor: subtask.recurrenceAnchor,
+      origin: subtask.origin,
     );
     await repo.upsertTask(restored);
     container

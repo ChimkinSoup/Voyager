@@ -107,6 +107,7 @@ class JournalEntry extends SoftDeletable {
     this.customQuote,
     this.weatherIcon,
     this.guidedPrompt,
+    this.origin,
   });
 
   final String journalId;
@@ -135,6 +136,11 @@ class JournalEntry extends SoftDeletable {
   final String? customQuote;
   final String? weatherIcon;
   final String? guidedPrompt;
+
+  /// Who made the row: `gaia` for one Gaia committed from an approved
+  /// proposal (GAIA_HLD.md §10), null for the user's own. Set at creation;
+  /// edits keep it.
+  final String? origin;
 
   JournalEntry copyWith({
     DateTime? updatedAt,
@@ -183,6 +189,7 @@ class JournalEntry extends SoftDeletable {
       customQuote: customQuote ?? this.customQuote,
       weatherIcon: clearWeatherIcon ? null : weatherIcon ?? this.weatherIcon,
       guidedPrompt: guidedPrompt ?? this.guidedPrompt,
+      origin: origin,
     );
   }
 
@@ -208,6 +215,7 @@ class JournalEntry extends SoftDeletable {
     'customQuote': customQuote,
     'weatherIcon': weatherIcon,
     'guidedPrompt': guidedPrompt,
+    'origin': origin,
   };
 
   factory JournalEntry.fromJson(Map<String, dynamic> json) {
@@ -237,6 +245,7 @@ class JournalEntry extends SoftDeletable {
       customQuote: json['customQuote'] as String?,
       weatherIcon: json['weatherIcon'] as String?,
       guidedPrompt: json['guidedPrompt'] as String?,
+      origin: json['origin'] as String?,
     );
   }
 }

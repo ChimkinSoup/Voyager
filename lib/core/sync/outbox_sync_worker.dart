@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/firestore_writable.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/note_sync.dart';
 import 'package:voyager/core/sync/sync_error_classification.dart';
@@ -370,15 +371,28 @@ class OutboxSyncWorker {
               collection,
               pending.documentId,
             );
+            final Map<String, dynamic> stamped;
+            try {
+              // Stamped like any other upload, or incremental pulls and live
+              // listeners on other devices never see this change.
+              stamped = FirestoreSyncRepository.stamped(data);
+            } on SyncPayloadUnwritableException catch (error) {
+              // A mapper bug, not the connection's: parked, so the row stops
+              // here instead of ending the app at every launch.
+              debugPrint(
+                '[sync] outbox parked $collection/${pending.documentId}: '
+                '$error',
+              );
+              if (await _handleUploadFailure(pending, error)) pushed = true;
+              continue;
+            }
             uploads.add(
               _PendingUpload(
                 pending: pending,
                 reference: _firestore.doc(
                   'users/$userId/$collection/$firestoreId',
                 ),
-                // Stamped like any other upload, or incremental pulls and live
-                // listeners on other devices never see this change.
-                data: FirestoreSyncRepository.stamped(data),
+                data: stamped,
               ),
             );
           }

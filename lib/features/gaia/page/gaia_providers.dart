@@ -27,6 +27,40 @@ final gaiaSearchProvider = FutureProvider.autoDispose
       return ref.watch(gaiaRepositoryProvider).searchChatIds(query);
     });
 
+/// One committed proposal in the action log (§17): [card], accepted, in
+/// [message] of [chat].
+typedef GaiaAction = ({GaiaChat chat, GaiaMessage message, GaiaCardPart card});
+
+/// The action log (§10, §17): every accepted proposal that wrote something,
+/// in live chats, newest first. Read again on every write to the chats or
+/// messages, since an undo changes a card without touching its chat.
+final gaiaActionsProvider = StreamProvider.autoDispose<List<GaiaAction>>((
+  ref,
+) async* {
+  final repository = ref.watch(gaiaRepositoryProvider);
+  Future<List<GaiaAction>> load() async {
+    final chats = {
+      for (final chat in await repository.listChats()) chat.id: chat,
+    };
+    final actions = <GaiaAction>[
+      for (final message in await repository.listMessagesWithCommits())
+        if (chats[message.chatId] != null)
+          for (final card in message.parts.whereType<GaiaCardPart>())
+            if (card.kind == GaiaCardKind.proposal &&
+                card.state == GaiaCardState.accepted &&
+                card.answer?['committed'] != null)
+              (chat: chats[message.chatId]!, message: message, card: card),
+    ];
+    return actions
+      ..sort((a, b) => b.message.createdAt.compareTo(a.message.createdAt));
+  }
+
+  yield await load();
+  await for (final _ in repository.watchChanges()) {
+    yield await load();
+  }
+});
+
 /// Runs in progress on this desktop, as the companion reports them.
 final gaiaRunsProvider = Provider.autoDispose<List<GaiaRun>>((ref) {
   final runs = GaiaHost.instance.runs;

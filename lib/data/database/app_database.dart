@@ -78,6 +78,9 @@ class JournalEntriesTable extends Table {
   TextColumn get customQuote => text().nullable()();
   TextColumn get weatherIcon => text().nullable()();
   TextColumn get guidedPrompt => text().nullable()();
+
+  /// See [JournalEntry.origin].
+  TextColumn get origin => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -234,6 +237,9 @@ class TodoTasksTable extends Table {
   /// on Feb 28, and re-anchoring there would drag every later occurrence to the
   /// 28th. Holding the original anchor is what lets March return to the 31st.
   DateTimeColumn get recurrenceAnchor => dateTime().nullable()();
+
+  /// See [TodoTask.origin].
+  TextColumn get origin => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -317,6 +323,9 @@ class CalendarEventsTable extends Table {
 
   /// A series' done marks as JSON — see [encodeDoneMarks].
   TextColumn get doneMarks => text().withDefault(const Constant(''))();
+
+  /// See [CalendarEvent.origin].
+  TextColumn get origin => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2382,7 +2391,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 178;
+  int get schemaVersion => 179;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4384,6 +4393,28 @@ class AppDatabase extends _$AppDatabase {
       if (from < 178) {
         // Gaia's per-chat drafts, kept and synced (GAIA_HLD.md §9.3).
         await migrator.createTable(gaiaDraftsTable);
+      }
+      if (from < 179) {
+        // Who made the row (GAIA_HLD.md §10). Nullable with no backfill:
+        // nothing Gaia-made exists before this.
+        await _addColumnIfNotExists(
+          migrator,
+          'todo_tasks_table',
+          todoTasksTable,
+          todoTasksTable.origin,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'calendar_events_table',
+          calendarEventsTable,
+          calendarEventsTable.origin,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'journal_entries_table',
+          journalEntriesTable,
+          journalEntriesTable.origin,
+        );
       }
     },
   );

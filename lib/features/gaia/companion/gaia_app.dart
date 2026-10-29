@@ -46,9 +46,8 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/services/media_ingest.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// The companion's UI (GAIA_HLD.md §3.3): the small floater shows the last
-/// few turns, the large one the whole chat, and the Gaia window adds a chat
-/// sidebar.
+/// The companion's UI (GAIA_HLD.md §3.3): the small and large floaters show
+/// the whole chat, and the Gaia window adds a chat sidebar.
 class GaiaApp extends StatelessWidget {
   const GaiaApp({super.key, required this.controller});
 
@@ -215,9 +214,7 @@ class _GaiaShell extends StatelessWidget {
             const Divider(height: 1),
             Expanded(
               child: _Messages(
-                messages: controller.layout == GaiaMode.small
-                    ? _lastTurns(controller.messages, 3)
-                    : controller.messages,
+                messages: controller.messages,
                 imageFile: controller.imageFile,
                 uploading: controller.uploadingImages,
                 tier: controller.nextTier,
@@ -235,6 +232,13 @@ class _GaiaShell extends StatelessWidget {
         if (floater)
           const SingleActivator(LogicalKeyboardKey.escape): () =>
               controller.dismiss(),
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+            controller.newChat,
+        const SingleActivator(
+          LogicalKeyboardKey.keyN,
+          control: true,
+          shift: true,
+        ): controller.moveDraftToNewChat,
         const SingleActivator(
           LogicalKeyboardKey.keyD,
           control: true,
@@ -279,17 +283,6 @@ class _GaiaShell extends StatelessWidget {
       ),
     );
   }
-
-  /// The messages from the [turns]th-last user message on.
-  static List<GaiaMessage> _lastTurns(List<GaiaMessage> messages, int turns) {
-    var seen = 0;
-    for (var i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role == GaiaMessageRole.user && ++seen == turns) {
-        return messages.sublist(i);
-      }
-    }
-    return messages;
-  }
 }
 
 /// Pick-up mode's indicator (§15.3), at the top of the screen while the
@@ -331,6 +324,12 @@ class _PickUpPill extends StatelessWidget {
     );
   }
 }
+
+/// New chat's buttons: with Shift held, the draft goes with it.
+void _newChat(GaiaController controller) =>
+    HardwareKeyboard.instance.isShiftPressed
+    ? controller.moveDraftToNewChat()
+    : controller.newChat();
 
 class _Header extends StatelessWidget {
   const _Header({
@@ -396,7 +395,7 @@ class _Header extends StatelessWidget {
               GaiaButton(
                 icon: Icons.add,
                 size: 32,
-                onPressed: controller.newChat,
+                onPressed: () => _newChat(controller),
               ),
               const SizedBox(width: 10),
             ],
@@ -681,7 +680,7 @@ class _SidebarState extends State<_Sidebar> {
           child: GaiaButton(
             icon: Icons.add,
             label: 'New chat',
-            onPressed: controller.newChat,
+            onPressed: () => _newChat(controller),
           ),
         ),
         Expanded(
@@ -1352,10 +1351,20 @@ class _MessageView extends StatelessWidget {
                   card: part,
                   waiting: controller.cards.isWaiting(part.id),
                   picks: controller.cardPicks(part.id),
+                  fields: part.kind == GaiaCardKind.proposal
+                      ? controller.proposalFields(part)
+                      : null,
                   sendKey: '${_sendCombo(controller)}',
                   onPick: (index) => controller.pickCardOption(part, index),
-                  onAllow: () => controller.allowCard(part),
+                  onAllow: part.kind == GaiaCardKind.proposal
+                      ? () => controller.acceptProposal(part)
+                      : () => controller.allowCard(part),
                   onReject: () => controller.rejectCard(part),
+                  onEdit: (key, value) =>
+                      controller.editProposal(part, key, value),
+                  onAcceptAll: controller.openProposals.length > 1
+                      ? controller.acceptAllProposals
+                      : null,
                 ),
               ),
               // Only the user's messages carry attachments and context.
@@ -1548,6 +1557,7 @@ class _Composer extends StatefulWidget {
 class _ComposerState extends State<_Composer> {
   TextEditingController get _text => widget.controller.draft;
   final _focus = FocusNode();
+  late final StreamSubscription<void> _summoned;
   final _vanish = GlobalKey<GaiaVanishState>();
   final _imagesVanish = GlobalKey<GaiaVanishState>();
 
@@ -1565,6 +1575,7 @@ class _ComposerState extends State<_Composer> {
   void initState() {
     super.initState();
     _text.addListener(_onDraft);
+    _summoned = widget.controller.summoned.listen((_) => _focus.requestFocus());
     _portal.show();
   }
 
@@ -1616,13 +1627,32 @@ class _ComposerState extends State<_Composer> {
     }
   }
 
-  /// The palette's rows for the draft; empty when it isn't showing.
+  /// The palette's rows for the draft; empty when it isn't showing. A
+  /// user's command only for a whole draft: it takes the rest as arguments.
   List<GaiaPaletteItem> get _palette {
-    final query = gaiaPaletteQuery(_text.text);
-    if (query == null || _text.text == _paletteClosedFor) return const [];
-    return filterGaiaPalette(
-      gaiaPaletteItems(widget.controller.commands),
-      query,
+    final token = gaiaPaletteToken(_text.value);
+    if (token == null || _text.text == _paletteClosedFor) return const [];
+    return filterGaiaPalette([
+      for (final item in gaiaPaletteItems(widget.controller.commands))
+        if (token.whole || item.command == null) item,
+    ], token.query);
+  }
+
+  /// The palette's `/word` taken out of the draft, with a space beside it.
+  void _cutToken() {
+    final token = gaiaPaletteToken(_text.value);
+    if (token == null) return;
+    final text = _text.text;
+    var start = token.start;
+    var end = token.end;
+    if (end < text.length && text[end] == ' ') {
+      end++;
+    } else if (start > 0 && text[start - 1] == ' ') {
+      start--;
+    }
+    _text.value = TextEditingValue(
+      text: text.replaceRange(start, end, ''),
+      selection: TextSelection.collapsed(offset: start),
     );
   }
 
@@ -1632,10 +1662,10 @@ class _ComposerState extends State<_Composer> {
   Future<void> _pick(GaiaPaletteItem item) async {
     final controller = widget.controller;
     if (item.builtin case final builtin?) {
-      _text.clear();
+      _cutToken();
       await controller.runBuiltin(builtin);
     } else if (item.tier case final tier?) {
-      _text.clear();
+      _cutToken();
       await switchGaiaTier(context, controller, tier);
     } else if (item.command case final command?) {
       // Closed over a standalone command left unsent mid-reply, so it
@@ -1663,6 +1693,7 @@ class _ComposerState extends State<_Composer> {
   @override
   void dispose() {
     _text.removeListener(_onDraft);
+    unawaited(_summoned.cancel());
     _focus.dispose();
     super.dispose();
   }
@@ -1692,8 +1723,9 @@ class _ComposerState extends State<_Composer> {
       _text.clear();
       return widget.controller.runBuiltin(builtin);
     }
-    // An open card takes the draft (§10.1): a question's answer, or a
-    // permission's "why not". Sent empty, a permission is allowed.
+    // An open card takes the draft (§10, §10.1): a question's answer, a
+    // permission's "why not", or a proposal's correction. Sent empty, a
+    // permission is allowed and a proposal saved as its editor has it.
     if (widget.controller.openCard case final card?) {
       final controller = widget.controller;
       final text = _text.text;
@@ -1703,6 +1735,13 @@ class _ComposerState extends State<_Composer> {
         case GaiaCardKind.permission:
           if (text.trim().isEmpty) {
             controller.allowCard(card);
+          } else {
+            controller.rejectCard(card, message: text);
+            _text.clear();
+          }
+        case GaiaCardKind.proposal:
+          if (text.trim().isEmpty) {
+            controller.acceptProposal(card);
           } else {
             controller.rejectCard(card, message: text);
             _text.clear();
@@ -1932,6 +1971,8 @@ class _ComposerState extends State<_Composer> {
                                 GaiaCardKind.question => 'Type an answer',
                                 GaiaCardKind.permission =>
                                   'Send to allow, or say why not',
+                                GaiaCardKind.proposal =>
+                                  'Send to save, or say what to change',
                                 null => 'Message Gaia',
                               },
                         onPaste: _paste,

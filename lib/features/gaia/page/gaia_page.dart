@@ -23,9 +23,11 @@ import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
-enum _GaiaTab { chats, setup, settings }
+enum _GaiaTab { chats, actions, setup, settings }
 
 /// The Gaia page (GAIA_HLD.md §17): chats with search, the setup checklist,
 /// and Gaia's settings. On the desktop a chat opens in Gaia itself; on
@@ -79,6 +81,11 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
                   icon: Icon(PhosphorIconsRegular.chatsCircle, size: 15),
                   label: Text('Chats'),
                 ),
+                const ButtonSegment(
+                  value: _GaiaTab.actions,
+                  icon: Icon(PhosphorIconsRegular.listChecks, size: 15),
+                  label: Text('Actions'),
+                ),
                 // The CLIs run on the desktop only.
                 if (isWindows)
                   const ButtonSegment(
@@ -99,6 +106,7 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
           const SizedBox(height: 16),
           switch (_tab) {
             _GaiaTab.chats => const _ChatsTab(),
+            _GaiaTab.actions => const _ActionsTab(),
             _GaiaTab.setup => const _SetupTab(),
             _GaiaTab.settings => const _SettingsTab(),
           },
@@ -217,6 +225,106 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
             _ChatRow(chat: chat, running: running.contains(chat.id)),
         ],
       ],
+    );
+  }
+}
+
+/// The action log (§17): what Gaia saved, from which chat, with Undo. Undo
+/// runs through this desktop's executor, so the phone shows the log alone.
+class _ActionsTab extends ConsumerWidget {
+  const _ActionsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final actions = ref.watch(gaiaActionsProvider).valueOrNull;
+    if (actions == null) return const SizedBox.shrink();
+    if (actions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(
+          "Nothing yet. What Gaia saves after you accept it shows here.",
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [for (final action in actions) _ActionRow(action: action)],
+    );
+  }
+}
+
+class _ActionRow extends StatefulWidget {
+  const _ActionRow({required this.action});
+
+  final GaiaAction action;
+
+  @override
+  State<_ActionRow> createState() => _ActionRowState();
+}
+
+class _ActionRowState extends State<_ActionRow> {
+  var _undoing = false;
+
+  Future<void> _undo() async {
+    setState(() => _undoing = true);
+    try {
+      await GaiaHost.instance.undoProposal(
+        widget.action.message,
+        widget.action.card.id,
+      );
+    } on GaiaReadException catch (error) {
+      if (mounted) {
+        showVoyagerToast(context, message: "Couldn't undo: ${error.message}");
+      }
+    } finally {
+      if (mounted) setState(() => _undoing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (:chat, :message, :card) = widget.action;
+    final proposal = card.proposal!;
+    final fields =
+        (card.answer?['fields'] as Map?)?.cast<String, Object?>() ??
+        proposal.fields;
+    final undone = card.answer?['undoneAt'] != null;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(switch (proposal.entity) {
+        GaiaProposalEntity.todo => PhosphorIconsRegular.checkSquare,
+        GaiaProposalEntity.event => PhosphorIconsRegular.calendarBlank,
+        GaiaProposalEntity.journal => PhosphorIconsRegular.notebook,
+      }, size: 20),
+      title: Text(
+        gaiaProposalTitle(proposal, fields),
+        overflow: TextOverflow.ellipsis,
+        style: undone
+            ? const TextStyle(decoration: TextDecoration.lineThrough)
+            : null,
+      ),
+      subtitle: Text(
+        [
+          chat.title,
+          DateFormat.yMMMd().add_Hm().format(message.createdAt.toLocal()),
+          if (undone) 'undone',
+        ].join(' · '),
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall,
+      ),
+      trailing: isWindows && !undone
+          ? GlassButton(
+              onPressed: _undoing ? null : _undo,
+              icon: const Icon(PhosphorIconsRegular.arrowCounterClockwise),
+              label: 'Undo',
+              dense: true,
+            )
+          : null,
     );
   }
 }

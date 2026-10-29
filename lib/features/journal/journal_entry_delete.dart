@@ -123,6 +123,7 @@ Future<void> restoreJournalEntry(
     customQuote: entry.customQuote,
     weatherIcon: entry.weatherIcon,
     guidedPrompt: entry.guidedPrompt,
+    origin: entry.origin,
   );
   await repository.upsertEntry(restored);
   container.read(remoteSyncServiceProvider).pushJournalEntryNow(restored);

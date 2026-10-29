@@ -6,9 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -109,6 +113,7 @@ void main() {
     void Function(FakeAsync async, GaiaHost host) body, {
     bool show = false,
     GaiaMedia? media,
+    GaiaExecutor? executor,
   }) {
     fakeAsync((async) {
       final host = newHost();
@@ -118,6 +123,7 @@ void main() {
         deviceId: 'laptop',
         toast: (chatId, title, body) => toasts.add('$chatId $title $body'),
         media: media,
+        executor: executor,
       );
       async.flushMicrotasks();
       body(async, host);
@@ -405,6 +411,128 @@ void main() {
         request(async, 'rearm');
         expect(fs.file('gaia_aborted').existsSync(), isFalse);
         expect((request(async, 'hello')! as Map)['aborted'], isFalse);
+      });
+    });
+  });
+
+  group('proposals (§10)', () {
+    late DriftTodoRepository todos;
+
+    GaiaExecutor executor() {
+      todos = DriftTodoRepository(db);
+      return GaiaExecutor(
+        todos: todos,
+        calendar: DriftCalendarRepository(db),
+        journal: DriftJournalRepository(db),
+        settings: DriftSettingsRepository(db),
+        writes: DirectGaiaWrites(
+          todos,
+          DriftCalendarRepository(db),
+          DriftJournalRepository(db),
+        ),
+      );
+    }
+
+    void inbox(FakeAsync async) {
+      final at = DateTime.utc(2026);
+      todos.upsertList(
+        TodoListModel(id: 'l1', createdAt: at, updatedAt: at, name: 'Inbox'),
+      );
+      async.flushMicrotasks();
+    }
+
+    Map<String, Object?> prepare(FakeAsync async) =>
+        (request(async, 'prepareProposal', {
+                  'cardId': 'card',
+                  'tool': 'propose_todo',
+                  'arguments': {'title': 'Call'},
+                })!
+                as Map)
+            .cast<String, Object?>();
+
+    test('the main instance refuses to commit while aborted, whatever the '
+        'companion sends', () {
+      fs.file('gaia_aborted').writeAsStringSync('2026-10-28');
+      run(show: true, executor: executor(), (async, host) {
+        inbox(async);
+        connect(async);
+        final proposal = prepare(async);
+        expect(
+          () => request(async, 'commitProposal', {
+            'cardId': 'card',
+            'token': gaiaApprovalToken(),
+            'fields': proposal['fields'],
+          }),
+          throwsA(isA<GaiaPipeException>()),
+        );
+        todos.listTasks('l1').then((tasks) => expect(tasks, isEmpty));
+        async.flushMicrotasks();
+      });
+    });
+
+    test('undo from the action log takes the row back and marks the card',
+        () {
+      run(show: true, executor: executor(), (async, host) {
+        inbox(async);
+        connect(async);
+        final proposal = prepare(async);
+        final committed =
+            (request(async, 'commitProposal', {
+                      'cardId': 'card',
+                      'token': gaiaApprovalToken(),
+                      'fields': proposal['fields'],
+                    })!
+                    as Map)
+                .cast<String, Object?>();
+        final at = DateTime.utc(2026);
+        request(async, 'putChat', {
+          'chat': GaiaChat(
+            id: 'c1',
+            title: 'Hi',
+            createdAt: at,
+            updatedAt: at,
+            lastMessageAt: at,
+          ).toJson(),
+        });
+        final message = GaiaMessage(
+          id: 'm1',
+          chatId: 'c1',
+          seq: 0,
+          role: GaiaMessageRole.assistant,
+          parts: [
+            GaiaCardPart(
+              id: 'card',
+              kind: GaiaCardKind.proposal,
+              tool: 'propose_todo',
+              proposal: GaiaProposal.fromJson(proposal),
+            ).decided(GaiaCardState.accepted, {
+              'fields': proposal['fields'],
+              'committed': committed['record'],
+            }),
+          ],
+          status: GaiaMessageStatus.complete,
+          createdAt: at,
+          updatedAt: at,
+        );
+        request(async, 'putMessage', {'message': message.toJson()});
+
+        host.undoProposal(message, 'card');
+        async.flushMicrotasks();
+        final id = (committed['record']! as Map)['id']! as String;
+        todos.getTask(id).then((task) => expect(task!.deletedAt, isNotNull));
+        final stored = GaiaMessage.fromJson(
+          ((request(async, 'messages', {'chatId': 'c1'})! as List).single
+                  as Map)
+              .cast<String, Object?>(),
+        );
+        final card = stored.parts.whereType<GaiaCardPart>().single;
+        expect(card.answer!['undoneAt'], isNotNull);
+
+        // Twice is refused.
+        Object? error;
+        host.undoProposal(stored, 'card').catchError((Object e) => error = e);
+        async.flushMicrotasks();
+        expect(error, isA<GaiaReadException>());
       });
     });
   });

@@ -1,5 +1,7 @@
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 
 /// Gaia's own commands (GAIA_HLD.md §9.2) that run rather than expand. The
 /// others the HLD lists come with their phases.
@@ -76,11 +78,34 @@ List<GaiaPaletteItem> filterGaiaPalette(
   return [for (final (_, _, item) in scored) item];
 }
 
-/// The palette's query while the draft is a lone `/word` being typed;
-/// null otherwise.
-String? gaiaPaletteQuery(String draft) {
-  final match = RegExp(r'^/([\w-]*)$').firstMatch(draft);
-  return match?.group(1);
+/// The `/word` being typed at the caret, for the palette: its query (what's
+/// after the slash) and where it is. [whole] when it's the whole draft, as
+/// a user's command must be; a built-in or a tier can be anywhere.
+typedef GaiaPaletteToken = ({String query, int start, int end, bool whole});
+
+/// [value]'s [GaiaPaletteToken]: a whole token, at the start or after
+/// whitespace, ending at the caret (the end when there's none), and not
+/// inside code. Null otherwise.
+GaiaPaletteToken? gaiaPaletteToken(TextEditingValue value) {
+  final text = value.text;
+  final selection = value.selection;
+  if (selection.isValid && !selection.isCollapsed) return null;
+  final end = selection.isValid ? selection.end : text.length;
+  // Not with a word running on past the caret.
+  if (end < text.length && text[end].trim().isNotEmpty) return null;
+  final match = RegExp(
+    r'(?:^|\s)/([\w-]*)$',
+  ).firstMatch(text.substring(0, end));
+  if (match == null) return null;
+  final query = match.group(1)!;
+  final start = end - query.length - 1;
+  if (gaiaInCode(text, start)) return null;
+  return (
+    query: query,
+    start: start,
+    end: end,
+    whole: start == 0 && end == text.length,
+  );
 }
 
 /// What a user command in [draft] expands to on send, or null when the

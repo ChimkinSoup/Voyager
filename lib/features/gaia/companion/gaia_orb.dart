@@ -227,6 +227,9 @@ class _RenderFlight extends RenderProxyBox {
 
   var _tracking = false;
 
+  /// What it was attached under when last attached.
+  RenderObject? _attachedTo;
+
   Offset get _lag => !enabled
       ? Offset.zero
       : _waiting
@@ -237,8 +240,11 @@ class _RenderFlight extends RenderProxyBox {
   void attach(PipelineOwner owner) {
     super.attach(owner);
     flight.addListener(markNeedsPaint);
-    // Back in the tree, having shown elsewhere.
-    if (_shown != null) _moved = true;
+    // Back in the tree, having shown elsewhere. Under the same parent it's
+    // only its list keeping its reply alive while scrolled away, and its
+    // paint can lag that by a frame of fast scrolling: no flight then.
+    if (_shown != null && parent != _attachedTo) _moved = true;
+    _attachedTo = parent;
     if (!_tracking) {
       _tracking = true;
       SchedulerBinding.instance.addPostFrameCallback(_track);
@@ -258,7 +264,9 @@ class _RenderFlight extends RenderProxyBox {
       _tracking = false;
       return;
     }
-    _shown = localToGlobal(Offset.zero) + _lag;
+    // Kept alive out of its list, it has no position.
+    final shown = localToGlobal(Offset.zero) + _lag;
+    if (shown.isFinite) _shown = shown;
     SchedulerBinding.instance.addPostFrameCallback(_track);
   }
 

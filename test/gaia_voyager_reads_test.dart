@@ -71,10 +71,16 @@ void main() {
     await task('t4', 'l2', 'Report', due: DateTime(2026, 11, 3), notes: 'Q3');
 
     final all = await reads.read('voyager_todos', {});
-    expect(all, contains('## Inbox\n- [ ] Buy milk (due 2026-10-28 Wednesday)'));
-    expect(all, contains('  - [ ] Get oat'));
+    expect(
+      all,
+      contains('## Inbox\n- [ ] Buy milk (due 2026-10-28 Wednesday, id t1)'),
+    );
+    expect(all, contains('  - [ ] Get oat (id t2)'));
     expect(all, isNot(contains('Done thing')));
-    expect(all, contains('## Work\n- [ ] Report (due 2026-11-03 Tuesday)'));
+    expect(
+      all,
+      contains('## Work\n- [ ] Report (due 2026-11-03 Tuesday, id t4)'),
+    );
     expect(all, contains('  Notes: Q3'));
 
     final soon = await reads.read('voyager_todos', {'due_by': '2026-10-30'});
@@ -131,9 +137,11 @@ void main() {
     expect(
       text,
       contains(
-        '## 2026-10-28 Wednesday\n- 07:00–08:00 Gym [Personal]\n\n'
-        '## 2026-10-29 Thursday\n- 07:00–08:00 Gym [Personal]\n'
-        '- 14:00–15:00 Dentist [Personal]',
+        '## 2026-10-28 Wednesday\n'
+        '- 07:00–08:00 Gym [Personal] (repeats, id e2)\n\n'
+        '## 2026-10-29 Thursday\n'
+        '- 07:00–08:00 Gym [Personal] (repeats, id e2)\n'
+        '- 14:00–15:00 Dentist [Personal] (id e1)',
       ),
     );
   });

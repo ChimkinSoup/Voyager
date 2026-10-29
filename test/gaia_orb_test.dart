@@ -111,6 +111,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets("a glyph scrolled quickly back into its list doesn't fly", (
+    tester,
+  ) async {
+    final scroll = ScrollController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GaiaAmbient(
+          running: true,
+          child: ListView.builder(
+            controller: scroll,
+            reverse: true,
+            itemCount: 50,
+            itemBuilder: (context, index) => _KeepAlive(
+              keep: index == 0,
+              child: SizedBox(
+                height: 200,
+                child: index == 0
+                    ? const GaiaOrb(state: GaiaOrbState.glyph, tier: 1)
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    scroll.jumpTo(scroll.position.maxScrollExtent);
+    await tester.pump();
+    await tester.pump();
+
+    // Back down in big steps, as a free-spinning wheel does.
+    for (var at = scroll.position.maxScrollExtent; at > 0; at -= 1500) {
+      scroll.jumpTo(at);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    scroll.jumpTo(0);
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(
+      tester.binding.transientCallbackCount,
+      1,
+      reason: "only the glyph's turning, no flight",
+    );
+  });
+
   testWidgets('completion reverses when another message arrives mid-fold', (
     tester,
   ) async {
@@ -272,4 +316,28 @@ void main() {
     await pumpOrb(tester, state: GaiaOrbState.glyph);
     expect(find.byType(GaiaTierGlyph), findsOneWidget);
   });
+}
+
+/// Keeps [child] built while scrolled out of its list, when [keep], as the
+/// chat keeps the orb's reply.
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.keep, required this.child});
+
+  final bool keep;
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => widget.keep;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }

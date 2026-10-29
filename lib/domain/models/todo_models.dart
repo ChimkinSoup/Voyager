@@ -64,6 +64,7 @@ class TodoTask extends SoftDeletable {
     this.parentTaskId,
     this.recurrence = RecurrenceRule.none,
     this.recurrenceAnchor,
+    this.origin,
   });
 
   final String listId;
@@ -99,6 +100,11 @@ class TodoTask extends SoftDeletable {
   /// The due date [recurrence] is measured from, frozen when the repeat was
   /// set. Null on tasks that predate the field; callers fall back to [dueDate].
   final DateTime? recurrenceAnchor;
+
+  /// Who made the row: `gaia` for one Gaia committed from an approved
+  /// proposal (GAIA_HLD.md §10), null for the user's own. Set at creation;
+  /// edits keep it.
+  final String? origin;
 
   /// The date the pattern counts from.
   DateTime? get effectiveRecurrenceAnchor => recurrenceAnchor ?? dueDate;
@@ -170,6 +176,7 @@ class TodoTask extends SoftDeletable {
       recurrenceAnchor: clearRecurrenceAnchor
           ? null
           : (recurrenceAnchor ?? this.recurrenceAnchor),
+      origin: origin,
     );
   }
 
@@ -193,6 +200,7 @@ class TodoTask extends SoftDeletable {
     'parentTaskId': parentTaskId,
     'recurrence': recurrence.toStorage(),
     'recurrenceAnchor': recurrenceAnchor?.toUtc().toIso8601String(),
+    'origin': origin,
   };
 
   factory TodoTask.fromJson(Map<String, dynamic> json) {
@@ -227,6 +235,7 @@ class TodoTask extends SoftDeletable {
       recurrenceAnchor: json['recurrenceAnchor'] != null
           ? DateTime.parse(json['recurrenceAnchor'] as String).toUtc()
           : null,
+      origin: json['origin'] as String?,
     );
   }
 }

@@ -2239,6 +2239,7 @@ Map<String, dynamic> journalEntryToFirestore(JournalEntry entry) => {
   'customQuote': entry.customQuote,
   'weatherIcon': entry.weatherIcon,
   'guidedPrompt': entry.guidedPrompt,
+  'origin': ?entry.origin,
   'createdAt': _dateToFirestoreRequired(entry.createdAt),
   'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
   'version': entry.version,
@@ -2347,6 +2348,9 @@ JournalEntry mergeJournalEntryFromRemote(
               ? data['guidedPrompt'] as String?
               : local?.guidedPrompt)
         : local!.guidedPrompt,
+    // Set once at creation, so either side's will do: an older build's
+    // document has none.
+    origin: data['origin'] as String? ?? local?.origin,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2430,6 +2434,7 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
     taskDateForStorage(task.recurrenceAnchor, hasTime: task.dueHasTime),
   ),
   'parentTaskId': task.parentTaskId,
+  'origin': ?task.origin,
   'createdAt': _dateToFirestoreRequired(task.createdAt),
   'updatedAt': _dateToFirestoreRequired(task.updatedAt),
   'version': task.version,
@@ -2543,6 +2548,8 @@ TodoTask mergeTodoTaskFromRemote(
           : local!.recurrenceAnchor,
       hasTime: dueHasTime,
     ),
+    // See [mergeJournalEntryFromRemote].
+    origin: data['origin'] as String? ?? local?.origin,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2870,6 +2877,8 @@ Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) {
             'at': _dateToFirestoreRequired(entry.value.at),
           },
       },
+    // Left out when null, so a merge never clears another device's.
+    'origin': ?event.origin,
     'createdAt': _dateToFirestoreRequired(event.createdAt),
     'updatedAt': _dateToFirestoreRequired(event.updatedAt),
     'version': event.version,
@@ -2918,6 +2927,7 @@ CalendarEvent mergeCalendarEventFromRemote(
       recurrenceDate: local.recurrenceDate,
       isDone: local.isDone,
       doneMarks: doneMarks,
+      origin: local.origin ?? data['origin'] as String?,
     );
   }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
@@ -2967,6 +2977,8 @@ CalendarEvent mergeCalendarEventFromRemote(
         (data.containsKey('recurrenceDate') ? null : local?.recurrenceDate),
     isDone: data['isDone'] as bool? ?? local?.isDone ?? false,
     doneMarks: doneMarks,
+    // See [mergeJournalEntryFromRemote].
+    origin: data['origin'] as String? ?? local?.origin,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

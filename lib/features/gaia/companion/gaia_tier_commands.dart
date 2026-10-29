@@ -25,7 +25,7 @@ GaiaTierCommand? findGaiaTierCommand(
   for (final match in pattern.allMatches(text)) {
     final start = match.start + match.group(1)!.length;
     final end = start + match.group(2)!.length;
-    if (_inCode(text, start)) continue;
+    if (gaiaInCode(text, start)) continue;
     // The command and one space after it, or the space before it when it
     // ends the text.
     var cutStart = start;
@@ -57,7 +57,7 @@ GaiaTierCommand? findGaiaTierCommand(
 
 /// Whether [offset] is inside a ``` fence, or an inline `code` span on its
 /// line.
-bool _inCode(String text, int offset) {
+bool gaiaInCode(String text, int offset) {
   final before = text.substring(0, offset);
   if ('```'.allMatches(before).length.isOdd) return true;
   final line = before.substring(before.lastIndexOf('\n') + 1);

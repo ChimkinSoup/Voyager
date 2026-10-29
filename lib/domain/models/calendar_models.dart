@@ -115,6 +115,7 @@ class CalendarEvent extends SoftDeletable {
     this.recurrenceDate,
     this.isDone = false,
     this.doneMarks = const {},
+    this.origin,
   });
 
   final String calendarId;
@@ -173,6 +174,11 @@ class CalendarEvent extends SoftDeletable {
   /// date by date, newest mark winning, and an unmark has to be able to win
   /// over an older mark from another device.
   final Map<DateTime, CalendarDoneMark> doneMarks;
+
+  /// Who made the row: `gaia` for one Gaia committed from an approved
+  /// proposal (GAIA_HLD.md §10), null for the user's own. Set at creation;
+  /// edits keep it, and so do a series' detached occurrences.
+  final String? origin;
 
   /// Occurrence starts currently marked done in [doneMarks].
   Iterable<DateTime> get doneDates => [
@@ -238,6 +244,7 @@ class CalendarEvent extends SoftDeletable {
           : (recurrenceDate ?? this.recurrenceDate),
       isDone: isDone ?? this.isDone,
       doneMarks: doneMarks ?? this.doneMarks,
+      origin: origin,
     );
   }
 }

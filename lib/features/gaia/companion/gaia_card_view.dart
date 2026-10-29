@@ -4,21 +4,26 @@ import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_proposal_card.dart';
 
 /// A card in a reply (GAIA_HLD.md §10): a question the agent asked through
-/// `ask_user`, or a permission prompt from its CLI. Open and [waiting], it
-/// takes the user's answer: [onPick] an option, [onAllow] or [onReject]. The
-/// Gaia page shows it with none of them, as a record.
+/// `ask_user`, a permission prompt from its CLI, or a proposal. Open and
+/// [waiting], it takes the user's answer: [onPick] an option, [onAllow]
+/// (a proposal's save) or [onReject], and a proposal's [onEdit] and
+/// [onAcceptAll]. The Gaia page shows it with none of them, as a record.
 class GaiaCardView extends StatelessWidget {
   const GaiaCardView({
     super.key,
     required this.card,
     this.waiting = false,
     this.picks = const {},
+    this.fields,
     this.sendKey,
     this.onPick,
     this.onAllow,
     this.onReject,
+    this.onEdit,
+    this.onAcceptAll,
   });
 
   final GaiaCardPart card;
@@ -33,15 +38,35 @@ class GaiaCardView extends StatelessWidget {
 
   /// The send keybind's label, for the hint; null leaves the hint out.
   final String? sendKey;
+
+  /// A proposal's fields as its editor holds them; its proposed ones when
+  /// null.
+  final Map<String, Object?>? fields;
   final void Function(int index)? onPick;
   final VoidCallback? onAllow;
   final VoidCallback? onReject;
+  final void Function(String key, Object? value)? onEdit;
+  final VoidCallback? onAcceptAll;
 
   bool get _answerable =>
       card.isOpen && (waiting || card.kind == GaiaCardKind.question);
 
   @override
   Widget build(BuildContext context) {
+    if (card.kind == GaiaCardKind.proposal) {
+      return GaiaProposalCard(
+        // Each proposal's editor keeps its own text fields.
+        key: ValueKey(card.id),
+        card: card,
+        fields: fields ?? card.proposal!.fields,
+        waiting: waiting,
+        sendKey: sendKey,
+        onEdit: onEdit,
+        onAccept: onAllow,
+        onAcceptAll: onAcceptAll,
+        onReject: onReject,
+      );
+    }
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final muted = theme.textTheme.bodySmall?.copyWith(

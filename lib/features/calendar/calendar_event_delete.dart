@@ -90,6 +90,7 @@ Future<void> restoreCalendarEvents(
         recurrenceDate: event.recurrenceDate,
         isDone: event.isDone,
         doneMarks: event.doneMarks,
+        origin: event.origin,
       ),
     );
   }

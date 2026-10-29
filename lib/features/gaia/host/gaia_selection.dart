@@ -64,7 +64,10 @@ List<int> _heldModifiers() => [
 /// Ctrl+C, after letting go of the modifiers in [release]. Alt or Win let go
 /// of alone would open the app's menu bar or Start, so an unassigned key is
 /// pressed under them first, as AutoHotkey's menu mask does. One
-/// [SendInput], so none of the user's own keys land in between.
+/// [SendInput], so none of the user's own keys land in between. Each key
+/// carries its scan code: Flutter names a key by it, and a Ctrl sent without
+/// one is a key no real keyboard has, which a Voyager window that missed its
+/// release can't recognise to let go of.
 void _sendCtrlC({List<int> release = const []}) {
   const mask = 0xE8;
   final keys = [
@@ -85,6 +88,7 @@ void _sendCtrlC({List<int> release = const []}) {
       inputs[i].type = INPUT_KEYBOARD;
       inputs[i].ki
         ..wVk = key
+        ..wScan = MapVirtualKey(key, MAPVK_VK_TO_VSC)
         ..dwFlags = flags;
     }
     SendInput(keys.length, inputs, sizeOf<INPUT>());

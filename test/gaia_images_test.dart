@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/firestore_writable.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
@@ -25,6 +27,61 @@ void main() {
       (back.mediaId, back.label, back.width, back.height),
       ('m1', 3, 1920, 1080),
     );
+  });
+
+  group("a kept draft's edits", () {
+    GaiaDraft draftWith(Map<String, Object?> edits) => GaiaDraft(
+      id: 'c1',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      images: gaiaDraftImagesFromJson([
+        {'mediaId': 'm1', 'label': 1, 'edits': edits},
+      ]),
+    );
+
+    const edits = GaiaImageEdits(
+      crop: Rect.fromLTRB(1, 2, 30, 40),
+      marks: [
+        GaiaMark(
+          tool: GaiaTool.pen,
+          points: [Offset(1, 2), Offset(3, 4)],
+          color: Color(0xFFFF0000),
+          width: 2,
+        ),
+      ],
+    );
+
+    test('round-trip, and sync as Firestore takes them', () {
+      final draft = draftWith(edits.toJson());
+      checkFirestoreWritable(gaiaDraftToFirestore(draft));
+      final back = GaiaImageEdits.fromJson(draft.images.single.edits);
+      expect(back.marks.single.points, [
+        const Offset(1, 2),
+        const Offset(3, 4),
+      ]);
+      expect(back.crop, edits.crop);
+    });
+
+    test('kept with [x, y] points before, are upgraded', () {
+      final draft = draftWith({
+        'marks': [
+          {
+            'tool': 'pen',
+            'points': [
+              [1, 2],
+              [3, 4],
+            ],
+            'color': 0xFFFF0000,
+            'width': 2,
+          },
+        ],
+      });
+      checkFirestoreWritable(gaiaDraftToFirestore(draft));
+      expect(
+        GaiaImageEdits.fromJson(draft.images.single.edits).marks.single.points,
+        [const Offset(1, 2), const Offset(3, 4)],
+      );
+    });
   });
 
   test('the next label follows the highest in the chat', () {

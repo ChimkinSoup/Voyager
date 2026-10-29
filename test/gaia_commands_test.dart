@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
@@ -58,11 +59,21 @@ void main() {
     expect(gaiaBuiltinIn('/stop now'), isNull);
   });
 
-  test('the palette shows for a lone slash word', () {
-    expect(gaiaPaletteQuery('/'), '');
-    expect(gaiaPaletteQuery('/ex'), 'ex');
-    expect(gaiaPaletteQuery('/explain '), isNull);
-    expect(gaiaPaletteQuery('hi /ex'), isNull);
+  test('the palette shows for a slash word at the caret', () {
+    GaiaPaletteToken? at(String text, [int? caret]) => gaiaPaletteToken(
+      TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: caret ?? text.length),
+      ),
+    );
+    expect(at('/'), (query: '', start: 0, end: 1, whole: true));
+    expect(at('/ex'), (query: 'ex', start: 0, end: 3, whole: true));
+    expect(at('/explain '), isNull);
+    expect(at('hi /ne'), (query: 'ne', start: 3, end: 6, whole: false));
+    expect(at('/ne hi', 3), (query: 'ne', start: 0, end: 3, whole: false));
+    expect(at('/new', 2), isNull);
+    expect(at('a/b'), isNull);
+    expect(at('`hi /ne'), isNull);
   });
 
   test('palette matches: prefix, then substring, then letters in order', () {

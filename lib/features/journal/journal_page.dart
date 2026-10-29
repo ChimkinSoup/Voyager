@@ -1631,6 +1631,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       customQuote: entry.customQuote,
       weatherIcon: entry.weatherIcon,
       guidedPrompt: entry.guidedPrompt,
+      origin: entry.origin,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       version: entry.version,

@@ -14,6 +14,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -317,6 +318,66 @@ void main() {
     ).listChangedDocuments(FirestoreCollections.transactions, since: since);
     expect(listed.documents.map((d) => d.id), ['txn-1']);
     expect(listed.newestWrite, isNotNull);
+  });
+
+  test('a row Firestore refuses for its shape is parked, not sent', () async {
+    // The Windows SDK throws that refusal in native code, which ended the
+    // app at every launch while the row stayed queued.
+    final firestore = FakeFirebaseFirestore();
+    final worker = OutboxSyncWorker(
+      db,
+      firestore,
+      () => 'user-1',
+      yieldDelay: Duration.zero,
+    );
+    final at = DateTime.utc(2026, 5, 1);
+    await DriftGaiaRepository(db).upsertDraft(
+      GaiaDraft(
+        id: 'chat-1',
+        createdAt: at,
+        updatedAt: at,
+        images: const [
+          GaiaDraftImageRecord(
+            mediaId: 'm1',
+            label: 1,
+            edits: {
+              'crop': [
+                [1, 2],
+              ],
+            },
+          ),
+        ],
+      ),
+      recordLocalActivity: false,
+    );
+    await DriftFinanceRepository(db).upsertTransaction(
+      FinancialTransaction(
+        id: 'txn-1',
+        type: TransactionType.expense,
+        amountCents: 1250,
+        occurredAt: at,
+        createdAt: at,
+        updatedAt: at,
+      ),
+      recordLocalActivity: false,
+    );
+    await worker.enqueue(
+      collection: FirestoreCollections.gaiaDrafts,
+      documentId: 'chat-1',
+    );
+    await worker.enqueue(
+      collection: FirestoreCollections.transactions,
+      documentId: 'txn-1',
+    );
+    await worker.startDraining();
+
+    final parked = await worker.listParked();
+    expect(parked.map((row) => row.documentId), ['chat-1']);
+    expect(parked.single.failureReason, contains('images.0.edits.crop.0'));
+    Future<bool> inCloud(String collection, String id) async =>
+        (await firestore.doc('users/user-1/$collection/$id').get()).exists;
+    expect(await inCloud(FirestoreCollections.gaiaDrafts, 'chat-1'), isFalse);
+    expect(await inCloud(FirestoreCollections.transactions, 'txn-1'), isTrue);
   });
 
   test('a drained settings upload writes only the settings changed here', () async {

@@ -878,6 +878,11 @@ abstract class GaiaRepository {
 
   /// Tombstones included — the backup registry wants them.
   Future<List<GaiaMessage>> getAllMessages();
+
+  /// Live messages that may hold an accepted proposal that wrote something,
+  /// for the action log. Matched on their stored JSON, so the caller still
+  /// checks each card.
+  Future<List<GaiaMessage>> listMessagesWithCommits();
   Future<void> upsertMessage(
     GaiaMessage message, {
     bool recordLocalActivity = true,

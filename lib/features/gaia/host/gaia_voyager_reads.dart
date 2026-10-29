@@ -107,6 +107,7 @@ class GaiaVoyagerReads {
             '${task.dueHasTime ? ' ${DateFormat.Hm().format(due.toLocal())}' : ''}',
       if (task.recurrence.repeats) 'repeats',
       if (task.starred) 'starred',
+      'id ${task.id}',
     ];
     final notes = task.notes?.trim() ?? '';
     return [
@@ -130,8 +131,10 @@ class GaiaVoyagerReads {
     // stands in for the series on that day.
     final overridden = {
       for (final event in events)
-        if ((event.recurrenceParentId, event.recurrenceDate)
-            case (final parent?, final date?))
+        if ((event.recurrenceParentId, event.recurrenceDate) case (
+          final parent?,
+          final date?,
+        ))
           (parent, _day(date)),
     };
     final out = StringBuffer();
@@ -148,7 +151,7 @@ class GaiaVoyagerReads {
         final notes = event.notes.trim();
         out.writeln(
           '- ${_eventTime(event)} ${event.title} [${names[event.calendarId]}]'
-          '${calendarEventDoneOn(event, day) ? ' (done)' : ''}'
+          ' (${[if (calendarEventDoneOn(event, day)) 'done', if (event.recurrence.repeats) 'repeats', 'id ${event.id}'].join(', ')})'
           '${notes.isEmpty ? '' : ' Notes: ${_clip(notes, 300)}'}',
         );
       }
@@ -196,12 +199,15 @@ class GaiaVoyagerReads {
           '## ${_dayLabel(_day(entry.entryDate))} '
           '${DateFormat.Hm().format(entry.entryDate.toLocal())} '
           '[${names[entry.journalId]}]'
-          '${entry.title.trim().isEmpty ? '' : ' ${entry.title.trim()}'}',
+          '${entry.title.trim().isEmpty ? '' : ' ${entry.title.trim()}'}'
+          ' (id ${entry.id})',
         )
-        ..writeln([
-          if (entry.mood != null) 'Mood: ${entry.mood}/10',
-          if (entry.tags.isNotEmpty) 'Tags: ${entry.tags.join(', ')}',
-        ].join(' · '))
+        ..writeln(
+          [
+            if (entry.mood != null) 'Mood: ${entry.mood}/10',
+            if (entry.tags.isNotEmpty) 'Tags: ${entry.tags.join(', ')}',
+          ].join(' · '),
+        )
         ..writeln(_clip(entry.body.trim(), 4000))
         ..writeln();
     }

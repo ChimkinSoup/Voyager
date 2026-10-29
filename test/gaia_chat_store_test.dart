@@ -342,6 +342,48 @@ void main() {
     expect(GaiaMessage.fromJson(message.toJson()).toJson(), message.toJson());
   });
 
+  test('the action log reads only live messages holding a commit', () async {
+    GaiaCardPart card(GaiaCardState state, {bool committed = true}) =>
+        GaiaCardPart(
+          id: 'card',
+          kind: GaiaCardKind.proposal,
+          state: state,
+          tool: 'propose_todo',
+          proposal: const GaiaProposal(
+            entity: GaiaProposalEntity.todo,
+            fields: {'title': 'One'},
+          ),
+          answer: {
+            'fields': const {'title': 'One'},
+            if (committed) 'committed': const {'entity': 'todo', 'id': 't1'},
+          },
+        );
+    GaiaMessage withParts(String id, int seq, List<GaiaPart> parts) =>
+        _message(id, seq).copyWith(parts: parts);
+    await repository.upsertMessage(
+      withParts('kept', 0, [card(GaiaCardState.accepted)]),
+    );
+    await repository.upsertMessage(
+      withParts('rejected', 1, [card(GaiaCardState.rejected)]),
+    );
+    await repository.upsertMessage(
+      withParts('unwritten', 2, [
+        card(GaiaCardState.accepted, committed: false),
+      ]),
+    );
+    await repository.upsertMessage(
+      _message('talk', 3, text: '"state":"accepted" and "committed": both'),
+    );
+    await repository.upsertMessage(
+      withParts('deleted', 4, [
+        card(GaiaCardState.accepted),
+      ]).copyWith(deletedAt: _created),
+    );
+    final found = await repository.listMessagesWithCommits();
+    // Text's quotes are escaped in the JSON, so words alone don't match.
+    expect(found.map((m) => m.id), ['kept']);
+  });
+
   test('a question is told apart from a statement', () {
     expect(gaiaEndsWithQuestion('Done.\n\nShould I push?'), isTrue);
     expect(gaiaEndsWithQuestion('Want me to **merge it?**'), isTrue);

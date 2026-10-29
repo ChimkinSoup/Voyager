@@ -135,10 +135,18 @@ class WindowsKeyboardReconciler {
   /// synthesized event of its own, which `_dispatchKeyEvent` asserts against
   /// (`Nested keyboard dispatching is not supported`). The key in hand is
   /// therefore still lost if it needed a modifier; every key after it is not.
+  ///
+  /// Stays armed while the OS reports a modifier down. A floater's hotkey
+  /// brings the window up with its Ctrl and Alt genuinely held, and a one-shot
+  /// spent on the hotkey's own keys would leave a stale Ctrl stuck for good.
   bool _handleKey(KeyEvent event) {
     if (!_armed) return false;
-    _armed = false;
-    scheduleMicrotask(reconcile);
+    scheduleMicrotask(() {
+      reconcile();
+      if (!_modifierVirtualKeys.values.any((key) => _held(key) ?? false)) {
+        _armed = false;
+      }
+    });
     return false;
   }
 
@@ -148,21 +156,26 @@ class WindowsKeyboardReconciler {
   /// alone, and so is one the probe cannot answer for. Nothing here can invent
   /// a release for a key the user is genuinely holding.
   ///
+  /// Matched by logical key, not physical: a synthetic key sent with no scan
+  /// code (Gaia's own Ctrl+C sends `VK_CONTROL` that way) reaches the framework
+  /// as Windows-plane physical key `0x1600000000` mapped to Control Left, and
+  /// would never match the real keyboard's Control Left.
+  ///
   /// Returns the number of keys released, for tests.
   @visibleForTesting
   int reconcile() {
     final keyboard = HardwareKeyboard.instance;
     var released = 0;
-    for (final MapEntry<PhysicalKeyboardKey, int> entry
-        in _modifierVirtualKeys.entries) {
-      final logical = keyboard.lookUpLayout(entry.key);
-      // The framework agrees it is up.
-      if (logical == null) continue;
+    for (final physical in keyboard.physicalKeysPressed.toList()) {
+      final logical = keyboard.lookUpLayout(physical);
+      final virtualKey = _modifierVirtualKeys[logical];
+      // Not a modifier.
+      if (logical == null || virtualKey == null) continue;
       // Still down, or no native answer to go on.
-      if (_held(entry.value) ?? true) continue;
+      if (_held(virtualKey) ?? true) continue;
       keyboard.handleKeyEvent(
         KeyUpEvent(
-          physicalKey: entry.key,
+          physicalKey: physical,
           logicalKey: logical,
           timeStamp: ServicesBinding.instance.currentSystemFrameTimeStamp,
           // The same shape the framework's own `KeyEventManager` builds when it
@@ -180,18 +193,18 @@ class WindowsKeyboardReconciler {
 /// virtual-key code each is read by. Deliberately only the modifiers: they are
 /// the keys whose stale state changes how *other* keys are interpreted.
 ///
-/// Not `const`: [PhysicalKeyboardKey] overrides `==`, which rules it out as a
+/// Not `const`: [LogicalKeyboardKey] overrides `==`, which rules it out as a
 /// constant map key.
-final Map<PhysicalKeyboardKey, int> _modifierVirtualKeys =
-    <PhysicalKeyboardKey, int>{
-      PhysicalKeyboardKey.shiftLeft: 0xA0, // VK_LSHIFT
-      PhysicalKeyboardKey.shiftRight: 0xA1, // VK_RSHIFT
-      PhysicalKeyboardKey.controlLeft: 0xA2, // VK_LCONTROL
-      PhysicalKeyboardKey.controlRight: 0xA3, // VK_RCONTROL
-      PhysicalKeyboardKey.altLeft: 0xA4, // VK_LMENU
-      PhysicalKeyboardKey.altRight: 0xA5, // VK_RMENU
-      PhysicalKeyboardKey.metaLeft: 0x5B, // VK_LWIN
-      PhysicalKeyboardKey.metaRight: 0x5C, // VK_RWIN
+final Map<LogicalKeyboardKey, int> _modifierVirtualKeys =
+    <LogicalKeyboardKey, int>{
+      LogicalKeyboardKey.shiftLeft: 0xA0, // VK_LSHIFT
+      LogicalKeyboardKey.shiftRight: 0xA1, // VK_RSHIFT
+      LogicalKeyboardKey.controlLeft: 0xA2, // VK_LCONTROL
+      LogicalKeyboardKey.controlRight: 0xA3, // VK_RCONTROL
+      LogicalKeyboardKey.altLeft: 0xA4, // VK_LMENU
+      LogicalKeyboardKey.altRight: 0xA5, // VK_RMENU
+      LogicalKeyboardKey.metaLeft: 0x5B, // VK_LWIN
+      LogicalKeyboardKey.metaRight: 0x5C, // VK_RWIN
     };
 
 /// Whether the OS says this key is physically down, or null where there is

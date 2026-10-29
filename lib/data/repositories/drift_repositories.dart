@@ -397,6 +397,7 @@ class DriftJournalRepository implements JournalRepository {
             customQuote: Value(entry.customQuote),
             weatherIcon: Value(entry.weatherIcon),
             guidedPrompt: Value(entry.guidedPrompt),
+            origin: Value(entry.origin),
             createdAt: Value(entry.createdAt),
             updatedAt: Value(entry.updatedAt),
             version: Value(entry.version),
@@ -503,6 +504,7 @@ class DriftJournalRepository implements JournalRepository {
     customQuote: row.customQuote,
     weatherIcon: row.weatherIcon,
     guidedPrompt: row.guidedPrompt,
+    origin: row.origin,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -1524,6 +1526,7 @@ class DriftTodoRepository implements TodoRepository {
       hasTime: r.dueHasTime,
     ),
     parentTaskId: r.parentTaskId,
+    origin: r.origin,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     version: r.version,
@@ -1561,6 +1564,7 @@ class DriftTodoRepository implements TodoRepository {
                 hasTime: task.dueHasTime,
               ),
             ),
+            origin: Value(task.origin),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
             version: Value(task.version),
@@ -1604,6 +1608,7 @@ class DriftTodoRepository implements TodoRepository {
                 hasTime: task.dueHasTime,
               ),
             ),
+            origin: Value(task.origin),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
             version: Value(task.version),
@@ -1963,6 +1968,7 @@ class DriftCalendarRepository implements CalendarRepository {
             ),
             isDone: Value(event.isDone),
             doneMarks: Value(encodeDoneMarks(event.doneMarks)),
+            origin: Value(event.origin),
             createdAt: Value(event.createdAt),
             updatedAt: Value(event.updatedAt),
             version: Value(event.version),
@@ -2050,6 +2056,7 @@ class DriftCalendarRepository implements CalendarRepository {
     recurrenceDate: calendarDayOfOrNull(row.recurrenceDate),
     isDone: row.isDone,
     doneMarks: decodeDoneMarks(row.doneMarks),
+    origin: row.origin,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -9795,6 +9802,18 @@ class DriftGaiaRepository implements GaiaRepository {
   @override
   Future<List<GaiaMessage>> getAllMessages() async =>
       (await _db.select(_db.gaiaMessagesTable).get())
+          .map(_mapGaiaMessage)
+          .toList();
+
+  @override
+  Future<List<GaiaMessage>> listMessagesWithCommits() async =>
+      (await (_db.select(_db.gaiaMessagesTable)..where(
+                (t) =>
+                    t.deletedAt.isNull() &
+                    t.partsJson.like('%"state":"accepted"%') &
+                    t.partsJson.like('%"committed":%'),
+              ))
+              .get())
           .map(_mapGaiaMessage)
           .toList();
 

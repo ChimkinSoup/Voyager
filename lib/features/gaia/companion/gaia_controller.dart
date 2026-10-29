@@ -25,6 +25,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 const _uuid = Uuid();
@@ -161,20 +162,22 @@ class GaiaController extends ChangeNotifier {
 
   /// [attachImage] for an image already in a file the draft can own.
   void _attachFile(String path) {
-    final label = [
-      gaiaNextImageLabel(messages),
-      for (final image in draftImages) image.label + 1,
-      for (final image in arrivingImages) image.label + 1,
-      for (final image
-          in _unfetched[_keyOf(currentChatId)] ??
-              const <GaiaDraftImageRecord>[])
-        image.label + 1,
-    ].reduce(max);
+    final label = _nextDraftLabel();
     draftImages.add(GaiaDraftImage(label: label, path: path));
     _insertInDraft(gaiaImageToken(label));
     notifyListeners();
     unawaited(_ingest(path));
   }
+
+  /// The label the next image in the draft in view gets.
+  int _nextDraftLabel() => [
+    gaiaNextImageLabel(messages),
+    for (final image in draftImages) image.label + 1,
+    for (final image in arrivingImages) image.label + 1,
+    for (final image
+        in _unfetched[_keyOf(currentChatId)] ?? const <GaiaDraftImageRecord>[])
+      image.label + 1,
+  ].reduce(max);
 
   /// The main instance takes the draft image at [path] in, so the kept
   /// draft can name it. Refused, it stays in this draft alone, and its
@@ -858,6 +861,11 @@ class GaiaController extends ChangeNotifier {
   Stream<GaiaRunToast> get toasts => _toasts.stream;
   final _toasts = StreamController<GaiaRunToast>.broadcast();
 
+  /// Gaia opened by [onHotkey]: the composer takes the focus, to type
+  /// straight away.
+  Stream<void> get summoned => _summoned.stream;
+  final _summoned = StreamController<void>.broadcast();
+
   /// Each CLI's `--version` by adapter, and how the companion ends:
   /// parameters for tests.
   final Map<String, Future<GaiaCliVersion?> Function()> _cliVersions;
@@ -1010,7 +1018,8 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// Turns [card] down: a question dismissed, a permission denied with
-  /// [message] saying why, if the user said.
+  /// [message] saying why, if the user said, or a proposal turned down with
+  /// [message] as the correction the agent re-proposes with (§10).
   void rejectCard(GaiaCardPart card, {String message = ''}) {
     _cardPicks.remove(card.id);
     final answer = {if (message.trim().isNotEmpty) 'message': message.trim()};
@@ -1026,6 +1035,64 @@ class GaiaController extends ChangeNotifier {
   void allowCard(GaiaCardPart card) {
     cards.decide(card.id, GaiaCardState.accepted);
     notifyListeners();
+  }
+
+  /// The user's edits to each open proposal card's fields, by card id.
+  final _proposalEdits = <String, Map<String, Object?>>{};
+
+  /// What proposal [card]'s editor holds: the proposed fields, as the user
+  /// has edited them.
+  Map<String, Object?> proposalFields(GaiaCardPart card) =>
+      _proposalEdits[card.id] ?? card.proposal!.fields;
+
+  /// Sets field [key] of proposal [card]'s editor to [value].
+  void editProposal(GaiaCardPart card, String key, Object? value) {
+    if (!card.isOpen || !cards.isWaiting(card.id)) return;
+    // A text field's listener fires on caret moves too.
+    if (proposalFields(card)[key] == value) return;
+    _proposalEdits[card.id] = {...proposalFields(card), key: value};
+    notifyListeners();
+  }
+
+  /// Accepts proposal [card] with what its editor holds, issuing the
+  /// approval token its commit needs (§10). False when the fields can't be
+  /// committed as they are, or nothing waits on it.
+  bool acceptProposal(GaiaCardPart card) {
+    final fields = proposalFields(card);
+    if (gaiaProposalProblem(card.proposal!, fields) != null) return false;
+    if (!cards.decide(card.id, GaiaCardState.accepted, {
+      'fields': fields,
+      'token': gaiaApprovalToken(),
+    })) {
+      return false;
+    }
+    _proposalEdits.remove(card.id);
+    notifyListeners();
+    return true;
+  }
+
+  /// The proposal cards on the current chat's latest reply still waiting
+  /// on the user, in the order they came: several in one turn stack (§10).
+  List<GaiaCardPart> get openProposals {
+    final last = messages.lastOrNull;
+    if (last == null || last.role != GaiaMessageRole.assistant) return const [];
+    return [
+      for (final card in last.parts.whereType<GaiaCardPart>())
+        if (card.kind == GaiaCardKind.proposal &&
+            card.isOpen &&
+            cards.isWaiting(card.id))
+          card,
+    ];
+  }
+
+  /// Accepts every open proposal that can be committed as it stands; the
+  /// rest stay open. How many were accepted.
+  int acceptAllProposals() {
+    var accepted = 0;
+    for (final card in openProposals) {
+      if (acceptProposal(card)) accepted++;
+    }
+    return accepted;
   }
 
   /// [card] decided with no tool call waiting: written to its message.
@@ -1360,6 +1427,7 @@ class GaiaController extends ChangeNotifier {
         }
         await openWindow();
     }
+    _summoned.add(null);
   }
 
   Future<void> openWindow() async {
@@ -1398,6 +1466,48 @@ class GaiaController extends ChangeNotifier {
     _viewChat(null);
     pickedTier = null;
     if (!debug.dummyMode) _utility?.warm();
+    notifyListeners();
+  }
+
+  /// [newChat], the draft in view going with it: after the new chat's own
+  /// draft, its images numbered on from that one's. Not while any of its
+  /// images are still syncing, which a toast says.
+  void moveDraftToNewChat() {
+    final from = _keyOf(currentChatId);
+    if (from == GaiaDraft.newChatId) return newChat();
+    // Its tokens out for images that never came, a toast for ones coming.
+    if (!readyToSend()) {
+      if (arrivingImages.isEmpty) newChat();
+      return;
+    }
+    final moving = (
+      text: draft.text,
+      images: [...draftImages],
+      files: [...draftFiles],
+    );
+    // Emptied, not deleted: the images are the new chat's now.
+    draftImages.clear();
+    draftFiles.clear();
+    draft.clear();
+    newChat();
+    final (text, images) = gaiaRelabelDraft(
+      moving.text,
+      moving.images,
+      _nextDraftLabel(),
+    );
+    final joined = [
+      if (draft.text.trim().isNotEmpty) draft.text.trimRight(),
+      if (text.trim().isNotEmpty) text.trim(),
+    ].join('\n\n');
+    draft.value = TextEditingValue(
+      text: joined,
+      selection: TextSelection.collapsed(offset: joined.length),
+    );
+    draftImages.addAll(images);
+    for (final file in moving.files) {
+      if (draftFiles.any((held) => p.equals(held.path, file.path))) continue;
+      draftFiles.add(file);
+    }
     notifyListeners();
   }
 
@@ -1476,11 +1586,12 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Runs a built-in command (§9.2).
+  /// Runs a built-in command (§9.2). `/new` takes what's left of the draft
+  /// with it.
   Future<void> runBuiltin(GaiaBuiltin builtin) async {
     switch (builtin) {
       case GaiaBuiltin.newChat:
-        newChat();
+        moveDraftToNewChat();
       case GaiaBuiltin.stop:
         if (currentChatId case final chatId?) await stop(chatId);
     }
@@ -1946,6 +2057,51 @@ class GaiaController extends ChangeNotifier {
           throw GaiaToolException(error.message);
         }
       },
+      proposals: (
+        prepare: (cardId, tool, arguments) async {
+          try {
+            return GaiaProposal.fromJson(
+              ((await _pipe.request('prepareProposal', {
+                        'cardId': cardId,
+                        'tool': tool,
+                        'arguments': arguments,
+                      }))!
+                      as Map)
+                  .cast<String, Object?>(),
+            );
+          } on GaiaPipeException catch (error) {
+            throw GaiaToolException(error.message);
+          }
+        },
+        commit: (cardId, token, fields) async {
+          try {
+            final committed =
+                (await _pipe.request('commitProposal', {
+                          'cardId': cardId,
+                          'token': token,
+                          'fields': fields,
+                        })
+                        as Map)
+                    .cast<String, Object?>();
+            return (
+              record: (committed['record']! as Map).cast<String, Object?>(),
+              text: committed['text']! as String,
+            );
+          } on GaiaPipeException catch (error) {
+            throw GaiaToolException(error.message);
+          }
+        },
+        drop: (cardId) {
+          _proposalEdits.remove(cardId);
+          if (_pipe.connected) {
+            unawaited(
+              _pipe
+                  .request('dropProposal', {'cardId': cardId})
+                  .catchError((_) => null),
+            );
+          }
+        },
+      ),
       aborted: () => aborted,
       hold: _cardHold,
     );
@@ -2018,7 +2174,19 @@ class GaiaController extends ChangeNotifier {
         recordSession(agent.adapter, keep ? result.sessionId : null);
       }
       ended = true;
-      final parts = builder.finished;
+      // A turn can end with a call still held: Codex stops waiting on a
+      // tool after about 30 s. Nothing is left to take a proposal's or a
+      // permission's answer, so they're voided; a question stays open and,
+      // answered later, goes as the next message.
+      cards.voidAll(chatId: chatId);
+      final parts = [
+        for (final part in builder.finished)
+          part is GaiaCardPart &&
+                  part.isOpen &&
+                  part.kind != GaiaCardKind.question
+              ? part.decided(GaiaCardState.voided)
+              : part,
+      ];
       reply = _replace(
         reply,
         result.isError
@@ -2183,6 +2351,9 @@ class GaiaController extends ChangeNotifier {
       case GaiaCardKind.permission:
         title = 'Gaia needs your permission';
         body = card.description.isNotEmpty ? card.description : card.tool;
+      case GaiaCardKind.proposal:
+        title = 'Gaia has something to save';
+        body = gaiaProposalTitle(card.proposal!, card.proposal!.fields);
     }
     _toast(
       chatId,

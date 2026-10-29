@@ -12,8 +12,11 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -46,6 +49,18 @@ class _Main {
   final db = AppDatabase.inMemory();
   late final repository = DriftGaiaRepository(db);
   late final store = GaiaChatStore(repository, deviceId: 'laptop');
+  late final todos = DriftTodoRepository(db);
+  late final executor = GaiaExecutor(
+    todos: todos,
+    calendar: DriftCalendarRepository(db),
+    journal: DriftJournalRepository(db),
+    settings: DriftSettingsRepository(db),
+    writes: DirectGaiaWrites(
+      todos,
+      DriftCalendarRepository(db),
+      DriftJournalRepository(db),
+    ),
+  );
   final requests = <String>[];
 
   /// The companion's events, as `event` or `event {params}`.
@@ -127,6 +142,22 @@ class _Main {
       case 'voyagerRead':
         reads.add(params['tool']! as String);
         return 'read ${params['tool']}';
+      case 'prepareProposal':
+        return (await executor.prepare(
+          params['cardId']! as String,
+          params['tool']! as String,
+          (params['arguments']! as Map).cast<String, Object?>(),
+        )).toJson();
+      case 'commitProposal':
+        final committed = await executor.commit(
+          params['cardId']! as String,
+          params['token']! as String,
+          (params['fields']! as Map).cast<String, Object?>(),
+        );
+        return {'record': committed.record, 'text': committed.text};
+      case 'dropProposal':
+        executor.drop(params['cardId']! as String);
+        return null;
       case 'attachImage':
         await holdImages?.future;
         if (attached.length >= refuseImagesAfter) {
@@ -812,6 +843,22 @@ void main() {
       await controller.onHotkey('small');
       expect(window.shown, GaiaMode.window);
       expect(controller.cropping, isNull);
+    });
+
+    test('a hotkey opening Gaia summons the composer; one closing it '
+        'does not', () async {
+      var summons = 0;
+      final listening = controller.summoned.listen((_) => summons++);
+      addTearDown(listening.cancel);
+      await controller.onHotkey('small');
+      await controller.onHotkey('large');
+      await settle();
+      expect(summons, 2);
+
+      await controller.onHotkey('large');
+      await settle();
+      expect(window.shown, isNull);
+      expect(summons, 2);
     });
 
     test('a cancelled C over a Gaia window behind other apps puts it back '
@@ -1891,6 +1938,48 @@ void main() {
       expect(controller.draft.text, 'For a new one');
     });
 
+    test(
+      'a draft moved to a new chat joins its own, images renumbered',
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        final first = controller.currentChatId!;
+        controller.newChat();
+        await controller.attachImage(Uint8List.fromList([1]));
+        controller.draft.text = '${controller.draft.text} waiting';
+        await controller.selectChat(first);
+        await controller.attachImage(Uint8List.fromList([2]));
+        controller.draftFiles.add(const GaiaFilePart(path: r'C:\a.txt'));
+
+        controller.moveDraftToNewChat();
+        expect(controller.currentChatId, isNull);
+        expect(controller.draft.text, '[image 1] waiting\n\n[image 2]');
+        expect(controller.draftImages.map((image) => image.label), [1, 2]);
+        expect(controller.draftFiles.map((file) => file.path), [r'C:\a.txt']);
+
+        await controller.selectChat(first);
+        expect(controller.draft.text, isEmpty);
+        expect(controller.draftImages, isEmpty);
+        expect(controller.draftFiles, isEmpty);
+      },
+    );
+
+    test('/new takes what is left of the draft with it', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      final first = controller.currentChatId!;
+      controller.draft.text = 'Look at this';
+
+      await controller.send('/new');
+      expect(controller.currentChatId, isNull);
+      expect(controller.draft.text, 'Look at this');
+
+      await controller.selectChat(first);
+      expect(controller.draft.text, isEmpty);
+    });
+
     test('a draft carries between the floaters and the Gaia window', () async {
       await controller.onHotkey('small');
       controller.draft.text = 'Half typed';
@@ -2305,9 +2394,7 @@ void main() {
   });
 
   group('cards (§10)', () {
-    setUp(
-      () => startCompanion(cardHold: const Duration(milliseconds: 200)),
-    );
+    setUp(() => startCompanion(cardHold: const Duration(milliseconds: 200)));
 
     /// Sends 'Hi' on a turn that hangs, for its tools to be called.
     Future<GaiaTurnTools> hanging() async {
@@ -2380,8 +2467,65 @@ void main() {
       );
       await settle();
       controller.rejectCard(controller.openCard!, message: 'keep it');
-      expect(await denied, (allow: false, message: 'The user declined: keep it'));
+      expect(await denied, (
+        allow: false,
+        message: 'The user declined: keep it',
+      ));
     });
+
+    test('a proposal is edited in its card and saved with the send key; the '
+        'agent is told what was saved', () async {
+      final at = DateTime.utc(2026, 10, 1);
+      await main.todos.upsertList(
+        TodoListModel(id: 'l1', createdAt: at, updatedAt: at, name: 'Inbox'),
+      );
+      final tools = await hanging();
+      final result = tools.call('propose_todo', {'title': 'Dentist'});
+      await settle();
+      final open = controller.openCard!;
+      expect(open.kind, GaiaCardKind.proposal);
+      controller.editProposal(open, 'title', '  ');
+      expect(controller.acceptProposal(open), isFalse, reason: 'no title');
+      controller.editProposal(open, 'title', 'Call the dentist');
+      expect(controller.proposalFields(open)['title'], 'Call the dentist');
+      expect(controller.acceptProposal(open), isTrue);
+      final answer = await result;
+      expect(answer.isError, isFalse);
+      expect(answer.text, contains('- Title: Call the dentist'));
+      final task = (await main.todos.listTasks('l1')).single;
+      expect(task.title, 'Call the dentist');
+      expect(task.origin, kGaiaOrigin);
+
+      runner.finish(controller.currentChatId!);
+      await settle();
+      final saved = card((await main.messages()).last);
+      expect(saved.state, GaiaCardState.accepted);
+      expect(saved.answer!['committed'], containsPair('id', task.id));
+      expect(isGaiaApprovalToken(saved.answer!['token']), isTrue);
+    });
+
+    test(
+      'several proposals in a turn stack, and accept all saves each one',
+      () async {
+        final at = DateTime.utc(2026, 10, 1);
+        await main.todos.upsertList(
+          TodoListModel(id: 'l1', createdAt: at, updatedAt: at, name: 'Inbox'),
+        );
+        final tools = await hanging();
+        final first = tools.call('propose_todo', {'title': 'One'});
+        final second = tools.call('propose_todo', {'title': 'Two'});
+        await settle();
+        expect(controller.openProposals, hasLength(2));
+        expect(controller.acceptAllProposals(), 2);
+        expect((await first).isError, isFalse);
+        expect((await second).isError, isFalse);
+        expect((await main.todos.listTasks('l1')).map((t) => t.title).toSet(), {
+          'One',
+          'Two',
+        });
+        expect(controller.openProposals, isEmpty);
+      },
+    );
 
     test('Stop voids the open card, and the reply keeps it voided', () async {
       final tools = await hanging();
@@ -2394,6 +2538,42 @@ void main() {
       expect(reply.status, GaiaMessageStatus.cancelled);
       expect(card(reply).state, GaiaCardState.voided);
       expect(controller.openCard, isNull);
+    });
+
+    test('a turn that ends with calls still held voids the proposal, and '
+        'the question is answered as the next message', () async {
+      final at = DateTime.utc(2026, 10, 1);
+      await main.todos.upsertList(
+        TodoListModel(id: 'l1', createdAt: at, updatedAt: at, name: 'Inbox'),
+      );
+      final tools = await hanging();
+      final proposed = tools.call('propose_todo', {'title': 'Dentist'});
+      unawaited(tools.call('ask_user', {'question': 'Which day?'}));
+      await settle();
+      final proposal = controller.openProposals.single;
+      // Codex stops waiting on a tool after about 30 s and ends its turn.
+      runner.finish(controller.currentChatId!);
+      await settle();
+      expect((await proposed).isError, isTrue);
+      expect(controller.openProposals, isEmpty);
+      expect(controller.acceptProposal(proposal), isFalse);
+      expect(await main.todos.listTasks('l1'), isEmpty);
+
+      final reply = (await main.messages()).last;
+      final cards = reply.parts.whereType<GaiaCardPart>().toList();
+      expect(
+        cards.map((c) => (c.kind, c.state)),
+        unorderedEquals([
+          (GaiaCardKind.proposal, GaiaCardState.voided),
+          (GaiaCardKind.question, GaiaCardState.open),
+        ]),
+      );
+      expect(reply.needsInput, isTrue);
+      final question = controller.openCard!;
+      expect(controller.cards.isWaiting(question.id), isFalse);
+      expect(await controller.answerCard(question, text: 'Friday'), isTrue);
+      await settle();
+      expect(runner.sent.last.prompt, 'Re: Which day?\nFriday');
     });
 
     test('Abort voids it, and the tools refuse until re-armed', () async {
@@ -2434,10 +2614,10 @@ void main() {
 
     test('reads go through the main instance', () async {
       final tools = await hanging();
-      expect(
-        await tools.call('voyager_calendar', {'from': 'x'}),
-        (text: 'read voyager_calendar', isError: false),
-      );
+      expect(await tools.call('voyager_calendar', {'from': 'x'}), (
+        text: 'read voyager_calendar',
+        isError: false,
+      ));
       expect(main.reads, ['voyager_calendar']);
     });
   });
@@ -2604,12 +2784,15 @@ void main() {
       expect(window.shown, GaiaMode.small);
     });
 
-    test('B opens the large floater, and hides it when it is showing', () async {
-      await press('large');
-      expect(window.shown, GaiaMode.large);
-      await press('large');
-      expect(window.shown, isNull);
-    });
+    test(
+      'B opens the large floater, and hides it when it is showing',
+      () async {
+        await press('large');
+        expect(window.shown, GaiaMode.large);
+        await press('large');
+        expect(window.shown, isNull);
+      },
+    );
 
     test('G opens the Gaia window', () async {
       await press('window');
