@@ -146,12 +146,13 @@ class _GaiaOrbState extends State<GaiaOrb> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final label = widget.state.label;
     final landed = widget.state == GaiaOrbState.glyph && _orb.settled;
-    return Semantics(
-      label: label,
-      liveRegion: label != null,
-      child: _Flight(
-        flight: _flight,
-        enabled: !_orb.reduced,
+    // Outermost, so it's what's moved: its parent is then where it shows.
+    return _Flight(
+      flight: _flight,
+      enabled: !_orb.reduced,
+      child: Semantics(
+        label: label,
+        liveRegion: label != null,
         child: SizedBox.square(
           dimension: widget.size,
           // The material's final frame paints this exact glyph. No crossfade

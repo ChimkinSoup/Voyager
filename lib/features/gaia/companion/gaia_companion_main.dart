@@ -63,11 +63,12 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     file: File(p.join(root.path, 'gaia', 'sidebar.json')),
   );
   await sidebar.load();
+  final window = GaiaWindow();
   final controller = GaiaController(
     debug: debug,
     sidebar: sidebar,
     pipe: pipe,
-    window: GaiaWindow(),
+    window: window,
     draftDirectory: drafts.path,
     // Gaia's own working directory, so the CLI never picks up an unrelated
     // project's instruction files (§5.1).
@@ -91,7 +92,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   runApp(GaiaApp(controller: controller));
   // Before start, which can already show the window.
   windowManager.addListener(_DismissOnClose(controller));
-  windowManager.addListener(_TrackFocus(controller));
+  windowManager.addListener(_TrackFocus(controller, window));
   _escapeCancelsCrop(controller);
   await controller.start();
   if (pipe is GaiaDevPipe) {
@@ -174,15 +175,19 @@ class _DismissOnClose with WindowListener {
 /// Hiding and minimising blur too: window_manager reports focus from
 /// `WM_NCACTIVATE`.
 class _TrackFocus with WindowListener {
-  _TrackFocus(this.controller);
+  _TrackFocus(this.controller, this.window);
 
   final GaiaController controller;
+  final GaiaWindow window;
 
   @override
   void onWindowFocus() => controller.focused.value = true;
 
   @override
-  void onWindowBlur() => controller.focused.value = false;
+  void onWindowBlur() {
+    controller.focused.value = false;
+    window.blurred();
+  }
 
   // Minimised in window mode is still shown as far as the controller knows,
   // so muting the tickers is up to this.

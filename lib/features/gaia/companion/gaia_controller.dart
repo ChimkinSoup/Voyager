@@ -1448,7 +1448,11 @@ class GaiaController extends ChangeNotifier {
     if (_pickingUp) return cancelPickUp();
     final back = _returnTo;
     _returnTo = null;
-    if (back != null && _window.shown != back) return _show(back);
+    // Not in the Gaia window when the floater came up, or gone to another
+    // app since, the user gets that app back, with the window behind it.
+    if (back != null && _window.shown != back) {
+      return _show(back, behind: _window.away);
+    }
     _window.hide();
     onScreen.value = false;
   }

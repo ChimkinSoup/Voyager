@@ -2817,6 +2817,35 @@ void main() {
         },
       );
 
+      test('a $key floater over the Gaia window the user was in dismisses '
+          'back to it in front', () async {
+        await press('window');
+        await press(key);
+        await controller.dismiss();
+        expect(window.shown, GaiaMode.window);
+        expect(window.behind, isFalse);
+      });
+
+      test('a $key floater over the Gaia window the user wasn\'t in '
+          'dismisses back to it behind their app', () async {
+        await press('window');
+        window.behind = true;
+        await press(key);
+        await controller.dismiss();
+        expect(window.shown, GaiaMode.window);
+        expect(window.behind, isTrue);
+      });
+
+      test('a $key floater over the Gaia window the user left for another '
+          'app dismisses back to it behind that app', () async {
+        await press('window');
+        await press(key);
+        window.blurred();
+        await controller.dismiss();
+        expect(window.shown, GaiaMode.window);
+        expect(window.behind, isTrue);
+      });
+
       test('a $key floater over the Gaia window hides when its hotkey is '
           'pressed again', () async {
         await press('window');

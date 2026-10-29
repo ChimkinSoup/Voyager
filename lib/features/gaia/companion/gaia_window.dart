@@ -44,8 +44,12 @@ class GaiaWindow {
   /// Where the Gaia window was when last on screen, so a floater opened
   /// over it can put it back: its frame when not maximised or minimised (in
   /// workspace coordinates, as [GetWindowPlacement] gives them) and whether
-  /// it was maximised.
-  ({({int left, int top, int width, int height}) frame, bool maximized})?
+  /// it was maximised or minimised.
+  ({
+    ({int left, int top, int width, int height}) frame,
+    bool maximized,
+    bool minimized,
+  })?
   _windowPlacement;
 
   Future<void> init() async {
@@ -101,8 +105,10 @@ class GaiaWindow {
       if (!pill) SetForegroundWindow(hwnd);
       return;
     }
+    _showing = true;
     final front = GetForegroundWindow();
     if (front != hwnd) _cameFrom = front;
+    away = front != hwnd;
     final back = _cameFrom;
     behind = behind && IsWindowVisible(back) != 0 && IsIconic(back) == 0;
     // The chat's minimum size would hold the pill at the size of one.
@@ -116,11 +122,15 @@ class GaiaWindow {
     final placement = mode == GaiaMode.window ? _windowPlacement : null;
     frame ??= placement?.frame ?? _frameFor(mode);
     final old = _readFrame(hwnd);
+    // Put back behind the user's app, a window they had minimised stays
+    // minimised, and never paints at its size.
+    final minimized = behind && (placement?.minimized ?? false);
     // A maximised window fills the work area: no floater is bigger.
     final grows =
-        shown == null ||
-        (placement?.maximized ?? false) ||
-        frame.width * frame.height > old.width * old.height;
+        !minimized &&
+        (shown == null ||
+            (placement?.maximized ?? false) ||
+            frame.width * frame.height > old.width * old.height);
     final floater = mode != GaiaMode.window;
 
     while (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
@@ -159,7 +169,12 @@ class GaiaWindow {
     );
     if (!grows) layout();
     if (placement != null) {
-      _setPlacement(hwnd, placement.frame, placement.maximized);
+      _setPlacement(
+        hwnd,
+        placement.frame,
+        placement.maximized,
+        minimized: minimized,
+      );
     }
     if (mode == GaiaMode.overlay) {
       // The monitor is the client area's to cover, for its frame at 1:1:
@@ -184,7 +199,7 @@ class GaiaWindow {
           (pill ? SWP_NOACTIVATE : 0) |
           (placement != null ? SWP_NOMOVE | SWP_NOSIZE : 0),
     );
-    await _paintedAt();
+    if (!minimized) await _paintedAt();
     if (grows) {
       layout();
       await _paintedAt();
@@ -207,7 +222,43 @@ class GaiaWindow {
     _cloak(hwnd, false);
     if (!pill && !behind) SetForegroundWindow(hwnd);
     shown = mode;
+    _showing = false;
   }
+
+  /// Mid-[show], which can hide the window on the way.
+  var _showing = false;
+
+  /// The window lost the foreground. To another app the user went to, the
+  /// app [returnTo] names is no longer the one they were last in: Windows
+  /// gives the foreground to that one when Gaia hides.
+  void blurred() {
+    if (shown == null || _showing) return;
+    returnTo = 0;
+    away = true;
+    final front = GetForegroundWindow();
+    if (front != 0 && front != _hwnd && !_isShell(front)) _cameFrom = front;
+  }
+
+  /// The taskbar or the desktop, in front on the way to the user's app when
+  /// they click through it: no app to put Gaia behind.
+  static bool _isShell(int hwnd) {
+    final className = wsalloc(64);
+    try {
+      GetClassName(hwnd, className, 64);
+      return const {
+        'Shell_TrayWnd',
+        'Shell_SecondaryTrayWnd',
+        'Progman',
+        'WorkerW',
+      }.contains(className.toDartString());
+    } finally {
+      free(className);
+    }
+  }
+
+  /// The user was in another app when Gaia last came up, or has gone to one
+  /// since: [show]'s `behind` puts the window back behind it.
+  var away = false;
 
   /// The app in front when Gaia last came up; see [show]'s `behind`.
   int _cameFrom = 0;
@@ -318,7 +369,11 @@ class GaiaWindow {
     }
   }
 
-  static ({({int left, int top, int width, int height}) frame, bool maximized})
+  static ({
+    ({int left, int top, int width, int height}) frame,
+    bool maximized,
+    bool minimized,
+  })
   _readPlacement(int hwnd) {
     final placement = calloc<WINDOWPLACEMENT>()
       ..ref.length = sizeOf<WINDOWPLACEMENT>();
@@ -336,6 +391,7 @@ class GaiaWindow {
             IsZoomed(hwnd) != 0 ||
             (IsIconic(hwnd) != 0 &&
                 placement.ref.flags & WPF_RESTORETOMAXIMIZED != 0),
+        minimized: IsIconic(hwnd) != 0,
       );
     } finally {
       free(placement);
@@ -345,11 +401,18 @@ class GaiaWindow {
   static void _setPlacement(
     int hwnd,
     ({int left, int top, int width, int height}) frame,
-    bool maximized,
-  ) {
+    bool maximized, {
+    bool minimized = false,
+  }) {
     final placement = calloc<WINDOWPLACEMENT>()
       ..ref.length = sizeOf<WINDOWPLACEMENT>()
-      ..ref.showCmd = maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+      ..ref.showCmd = minimized
+          ? SW_SHOWMINNOACTIVE
+          : maximized
+          ? SW_SHOWMAXIMIZED
+          : SW_SHOWNORMAL
+      // Restored from minimised, it comes back maximised.
+      ..ref.flags = minimized && maximized ? WPF_RESTORETOMAXIMIZED : 0;
     placement.ref.rcNormalPosition
       ..left = frame.left
       ..top = frame.top

@@ -163,6 +163,7 @@ class FakeGaiaWindow implements GaiaWindow {
     GaiaFrame? frame,
     bool behind = false,
   }) async {
+    away = !foreground;
     shown = mode;
     this.frame = frame;
     this.behind = behind;
@@ -183,6 +184,16 @@ class FakeGaiaWindow implements GaiaWindow {
 
   @override
   void setCapturable(bool capturable) => this.capturable = capturable;
+
+  @override
+  void blurred() {
+    if (shown == null) return;
+    returnTo = 0;
+    away = true;
+  }
+
+  @override
+  var away = false;
 }
 
 /// One [FakeClaudeRunner.send] call.

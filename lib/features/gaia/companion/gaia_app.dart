@@ -854,6 +854,10 @@ class _MessagesState extends State<_Messages> {
   /// so its glyph can fly there once the new reply's in view.
   String? _held;
 
+  /// The latest reply as last built. The controller changes the list it
+  /// gave last time in place, so the old widget's list can't tell.
+  GaiaMessage? _reply;
+
   /// Each message's view as last built. Every change to Gaia rebuilds the
   /// list, and a message's view is costly to build: one whose message and
   /// placing haven't changed is given back as it was, which Flutter skips.
@@ -869,6 +873,7 @@ class _MessagesState extends State<_Messages> {
   void initState() {
     super.initState();
     _seen = {for (final message in widget.messages) message.id};
+    _reply = _latestReply(widget.messages);
   }
 
   @override
@@ -885,8 +890,8 @@ class _MessagesState extends State<_Messages> {
       _appearing.add(question.id);
     }
     _seen.addAll(widget.messages.map((message) => message.id));
-    final was = _latestReply(old.messages);
-    final now = _latestReply(widget.messages);
+    final was = _reply;
+    final now = _reply = _latestReply(widget.messages);
     // A new reply in the same chat, running here: a message was sent from
     // this window, so down to it. One synced in from elsewhere leaves the
     // chat where it is.
