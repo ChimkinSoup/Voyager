@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:voyager/core/constants/default_color_palette.dart';
@@ -4379,6 +4380,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'pinned': chat.pinned,
   'agentSessions': chat.toJson()['agentSessions'],
   'tier': chat.tier?.name,
+  'curatedSeq': chat.curatedSeq,
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4419,6 +4421,13 @@ GaiaChat mergeGaiaChatFromRemote(
             ...gaiaAgentSessionsFromJson(data['agentSessions']),
           }
         : local?.agentSessions ?? const {},
+    // Only ever moves on, so a concurrent write that lost a device's mark
+    // doesn't take it back; an erase takes the remote's.
+    curatedSeq: switch ((data['curatedSeq'] as num?)?.toInt()) {
+      final remote? when isErasedPayload(data) => remote,
+      final remote? => max(remote, local?.curatedSeq ?? -1),
+      null => local?.curatedSeq ?? -1,
+    },
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -4568,6 +4577,7 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'keybinds': settings.keybinds,
   'windowContext': settings.windowContext,
   'contextExclusions': settings.contextExclusions,
+  'autoAcceptCurator': settings.autoAcceptCurator,
   'createdAt': _dateToFirestoreRequired(settings.createdAt),
   'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
   'version': settings.version,
@@ -4612,8 +4622,7 @@ GaiaSettings mergeGaiaSettingsFromRemote(
         local?.utilityModel ??
         kGaiaDefaultUtilityModel,
     autoRoute: data['autoRoute'] as bool? ?? local?.autoRoute ?? true,
-    routerRubric:
-        data['routerRubric'] as String? ?? local?.routerRubric ?? '',
+    routerRubric: data['routerRubric'] as String? ?? local?.routerRubric ?? '',
     commands: data['commands'] is List
         ? gaiaCommandsFromJson(data['commands'])
         : local?.commands ?? const [],
@@ -4625,6 +4634,8 @@ GaiaSettings mergeGaiaSettingsFromRemote(
     contextExclusions: data['contextExclusions'] is List
         ? gaiaContextExclusionsFromJson(data['contextExclusions'])
         : local?.contextExclusions ?? kGaiaDefaultContextExclusions,
+    autoAcceptCurator:
+        data['autoAcceptCurator'] as bool? ?? local?.autoAcceptCurator ?? false,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -4668,6 +4679,52 @@ GaiaDraft mergeGaiaDraftFromRemote(
     caret: (data['caret'] as num?)?.toInt() ?? -1,
     images: gaiaDraftImagesFromJson(data['images']),
     files: gaiaDraftFilesFromJson(data['files']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> gaiaMemoryToFirestore(GaiaMemory memory) => {
+  'id': memory.id,
+  'text': memory.text,
+  'tags': memory.tags,
+  'sourceChatId': memory.sourceChatId,
+  'status': memory.status.name,
+  'createdAt': _dateToFirestoreRequired(memory.createdAt),
+  'updatedAt': _dateToFirestoreRequired(memory.updatedAt),
+  'version': memory.version,
+  'deletedAt': _dateToFirestore(memory.deletedAt),
+};
+
+GaiaMemory mergeGaiaMemoryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaMemory? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaMemory(
+    id: id,
+    text: data['text'] as String? ?? local?.text ?? '',
+    tags: data['tags'] is List
+        ? gaiaMemoryTags(data['tags'])
+        : local?.tags ?? const [],
+    sourceChatId: data['sourceChatId'] as String? ?? local?.sourceChatId,
+    status: data.containsKey('status')
+        ? gaiaMemoryStatusFromName(data['status'])
+        : local?.status ?? GaiaMemoryStatus.proposed,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

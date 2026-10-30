@@ -296,6 +296,23 @@ void main() {
       expect(erased.agentSessions, isEmpty);
     });
 
+    test("a winning copy doesn't take curatedSeq back", () {
+      final local = _chat('c1').copyWith(curatedSeq: 12);
+      final remote = _chat('c1').copyWith(version: local.version + 1);
+      final merged = mergeGaiaChatFromRemote(
+        gaiaChatToFirestore(remote),
+        'c1',
+        local: local,
+      );
+      expect(merged.curatedSeq, 12);
+      final ahead = mergeGaiaChatFromRemote(
+        gaiaChatToFirestore(remote.copyWith(curatedSeq: 20)),
+        'c1',
+        local: local,
+      );
+      expect(ahead.curatedSeq, 20);
+    });
+
     test('a message round-trips through Firestore', () {
       final message = _message('m', 1).copyWith(
         parts: const [

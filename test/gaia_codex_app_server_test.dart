@@ -129,6 +129,7 @@ void main() {
       tools: tools,
       onEvent: events.add,
       onNewThread: (id) async => newThread = id,
+      instructions: '# Memories',
     );
     late Future<GaiaTurnResult> second;
     final started = first.then((_) {
@@ -145,6 +146,7 @@ void main() {
 
     final start = replay.sentFor('thread/start')['params']! as Map;
     expect(start['approvalPolicy'], 'on-request');
+    expect(start['developerInstructions'], '# Memories');
     expect(
       [
         for (final tool in start['dynamicTools']! as List)
@@ -208,12 +210,13 @@ void main() {
       input: _text('What colour did I choose earlier?'),
       tools: _Tools(),
       onEvent: events.add,
+      instructions: '# Memories',
     );
     await replay.feed();
-    expect(
-      (replay.sentFor('thread/resume')['params']! as Map)['threadId'],
-      _thread,
-    );
+    final resume = replay.sentFor('thread/resume')['params']! as Map;
+    expect(resume['threadId'], _thread);
+    // The thread keeps those it started with (§11).
+    expect(resume.containsKey('developerInstructions'), isFalse);
     final result = await turn;
     expect(result.isError, isFalse);
     expect(result.sessionFound, isTrue);

@@ -9963,6 +9963,7 @@ class DriftGaiaRepository implements GaiaRepository {
             contextExclusionsJson: Value(
               jsonEncode(settings.contextExclusions),
             ),
+            autoAcceptCurator: Value(settings.autoAcceptCurator),
             commandsJson: Value(
               jsonEncode([
                 for (final command in settings.commands) command.toJson(),
@@ -10023,7 +10024,70 @@ class DriftGaiaRepository implements GaiaRepository {
   Stream<void> watchDrafts() => _db
       .tableUpdates(TableUpdateQuery.onTable(_db.gaiaDraftsTable))
       .map((_) {});
+
+  SimpleSelectStatement<$GaiaMemoriesTableTable, GaiaMemoriesTableData>
+  _memories({bool includeDeleted = false}) => _db.select(_db.gaiaMemoriesTable)
+    ..where((t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull())
+    ..orderBy([
+      (t) => OrderingTerm.asc(t.createdAt),
+      (t) => OrderingTerm.asc(t.id),
+    ]);
+
+  @override
+  Future<List<GaiaMemory>> listMemories({bool includeDeleted = false}) async =>
+      (await _memories(
+        includeDeleted: includeDeleted,
+      ).get()).map(_mapGaiaMemory).toList();
+
+  @override
+  Future<GaiaMemory?> getMemory(String id) async {
+    final row = await (_db.select(
+      _db.gaiaMemoriesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaMemory(row);
+  }
+
+  @override
+  Future<void> upsertMemory(
+    GaiaMemory memory, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaMemoriesTable)
+        .insertOnConflictUpdate(
+          GaiaMemoriesTableCompanion(
+            id: Value(memory.id),
+            body: Value(memory.text),
+            tagsJson: Value(jsonEncode(memory.tags)),
+            sourceChatId: Value(memory.sourceChatId),
+            status: Value(memory.status.name),
+            createdAt: Value(memory.createdAt),
+            updatedAt: Value(memory.updatedAt),
+            version: Value(memory.version),
+            deletedAt: Value(memory.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaMemories, memory);
+    }
+  }
+
+  @override
+  Stream<List<GaiaMemory>> watchMemories() =>
+      _memories().watch().map((rows) => rows.map(_mapGaiaMemory).toList());
 }
+
+GaiaMemory _mapGaiaMemory(GaiaMemoriesTableData row) => GaiaMemory(
+  id: row.id,
+  text: row.body,
+  tags: gaiaMemoryTags(jsonDecode(row.tagsJson)),
+  sourceChatId: row.sourceChatId,
+  status: gaiaMemoryStatusFromName(row.status),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
 
 GaiaDraft _mapGaiaDraft(GaiaDraftsTableData row) => GaiaDraft(
   id: row.id,
@@ -10044,6 +10108,7 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   pinned: row.pinned,
   agentSessions: gaiaAgentSessionsFromJson(jsonDecode(row.agentSessionsJson)),
   tier: gaiaTierFromName(row.tier),
+  curatedSeq: row.curatedSeq,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10058,6 +10123,7 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       pinned: Value(chat.pinned),
       agentSessionsJson: Value(jsonEncode(chat.toJson()['agentSessions'])),
       tier: Value(chat.tier?.name),
+      curatedSeq: Value(chat.curatedSeq),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),
@@ -10124,6 +10190,7 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
   contextExclusions: row.contextExclusionsJson == null
       ? kGaiaDefaultContextExclusions
       : gaiaContextExclusionsFromJson(jsonDecode(row.contextExclusionsJson!)),
+  autoAcceptCurator: row.autoAcceptCurator,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

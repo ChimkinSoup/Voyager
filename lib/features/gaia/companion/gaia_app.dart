@@ -1883,11 +1883,19 @@ class _ComposerState extends State<_Composer> {
   }
 
   /// A palette row picked (§9.2): a built-in runs, a tier switches, a
-  /// standalone command sends, and any other command waits for its
-  /// arguments.
+  /// standalone command sends, and any other command, or `/remember`, waits
+  /// for its arguments.
   Future<void> _pick(GaiaPaletteItem item) async {
     final controller = widget.controller;
-    if (item.builtin case final builtin?) {
+    if (item.builtin == GaiaBuiltin.remember) {
+      // What else the draft held becomes what's remembered.
+      _cutToken();
+      final text = '/remember ${_text.text.trim()}';
+      _text.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    } else if (item.builtin case final builtin?) {
       _cutToken();
       await controller.runBuiltin(builtin);
     } else if (item.tier case final tier?) {
@@ -1948,6 +1956,11 @@ class _ComposerState extends State<_Composer> {
     if (gaiaBuiltinIn(_text.text) case final builtin?) {
       _text.clear();
       return widget.controller.runBuiltin(builtin);
+    }
+    // So is /remember (§11), which never goes to the agent.
+    if (gaiaRememberText(_text.text) case final memory?) {
+      _text.clear();
+      return widget.controller.remember(memory);
     }
     // An open card takes the draft (§10, §10.1): a question's answer, a
     // permission's "why not", or a proposal's correction. Sent empty, a

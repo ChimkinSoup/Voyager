@@ -9,10 +9,13 @@
 //   initialize {clientInfo, capabilities: {experimentalApi: true}}, then
 //   the `initialized` notification; `experimentalApi` is what lets
 //   thread/start take `dynamicTools`
-//   thread/start {model, approvalPolicy: "on-request", dynamicTools}
-//     -> {thread: {id}}; a thread keeps its tools when it's resumed
-//   thread/resume {threadId, model, approvalPolicy} -> an error when there's
-//     no such thread ("no rollout found for thread id …")
+//   thread/start {model, approvalPolicy: "on-request", dynamicTools,
+//     developerInstructions?} -> {thread: {id}}; a thread keeps its tools
+//     when it's resumed
+//   thread/resume {threadId, model, approvalPolicy} -> an error when
+//     there's no such thread ("no rollout found for thread id …"); a
+//     thread keeps the developer instructions it started with, and ignores
+//     new ones given on a resume (checked on 0.164.0)
 //   turn/start {threadId, model, input: [text | localImage]} -> {turn: {id}}
 //   turn/interrupt {threadId, turnId}
 // What it reads:
@@ -149,13 +152,15 @@ class CodexAppServerClient {
   /// a new thread, which [onNewThread] is told of. [onThread] is told the
   /// turn's thread once [stop] can reach it. A resume that finds no thread
   /// ends with `sessionFound: false`; one that fails otherwise, with an
-  /// error that keeps it.
+  /// error that keeps it. [instructions] are a new thread's developer
+  /// instructions; a resumed thread keeps those it started with.
   Future<GaiaTurnResult> send({
     required String? threadId,
     required String model,
     required List<Map<String, Object?>> input,
     required GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
+    String instructions = '',
     void Function(String threadId)? onThread,
     Future<void> Function(String threadId)? onNewThread,
   }) async {
@@ -167,6 +172,7 @@ class CodexAppServerClient {
           'model': model,
           'approvalPolicy': 'on-request',
           'dynamicTools': _dynamicTools,
+          if (instructions.isNotEmpty) 'developerInstructions': instructions,
         });
       } on _RpcError catch (error) {
         throw GaiaRunException('Codex refused the thread: $error');
@@ -499,8 +505,10 @@ const _idleTimeout = Duration(minutes: 10);
 /// and the chat is handed over to a new thread (§7.4).
 ///
 /// It runs in Gaia's own Codex home, as [fallback] does: GAIA.md is its
-/// AGENTS.md, and the login and Windows sandbox come from the user's. When
-/// `app-server` can't start, every turn goes to [fallback], `codex exec`.
+/// AGENTS.md, and the login and Windows sandbox come from the user's. A
+/// session's own instructions (§11) are the thread's developer
+/// instructions. When `app-server` can't start, every turn goes to
+/// [fallback], `codex exec`, without them.
 class CodexAppServerRunner implements GaiaAgentRunner {
   CodexAppServerRunner({
     required this.workingDirectory,
@@ -548,6 +556,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
     GaiaTurnTools? tools,
+    String sessionInstructions = '',
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     Future<GaiaTurnResult> fallBack() => fallback.send(
@@ -594,6 +603,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         ],
         tools: tools,
         onEvent: onEvent,
+        instructions: sessionInstructions,
         onThread: (threadId) {
           _threads[chatId] = threadId;
           if (_stopped.remove(chatId)) process.client.stop(threadId);

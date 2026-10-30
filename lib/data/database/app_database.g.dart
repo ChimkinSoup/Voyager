@@ -57882,6 +57882,18 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _curatedSeqMeta = const VerificationMeta(
+    'curatedSeq',
+  );
+  @override
+  late final GeneratedColumn<int> curatedSeq = GeneratedColumn<int>(
+    'curated_seq',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(-1),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -57935,6 +57947,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     pinned,
     agentSessionsJson,
     tier,
+    curatedSeq,
     createdAt,
     updatedAt,
     version,
@@ -57995,6 +58008,12 @@ class $GaiaChatsTableTable extends GaiaChatsTable
       context.handle(
         _tierMeta,
         tier.isAcceptableOrUnknown(data['tier']!, _tierMeta),
+      );
+    }
+    if (data.containsKey('curated_seq')) {
+      context.handle(
+        _curatedSeqMeta,
+        curatedSeq.isAcceptableOrUnknown(data['curated_seq']!, _curatedSeqMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -58058,6 +58077,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.string,
         data['${effectivePrefix}tier'],
       ),
+      curatedSeq: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}curated_seq'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58096,6 +58119,9 @@ class GaiaChatsTableData extends DataClass
 
   /// The tier it last used (`GaiaTier.name`); null before its first message.
   final String? tier;
+
+  /// The last message the memory curator read (GAIA_HLD.md §11).
+  final int curatedSeq;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58107,6 +58133,7 @@ class GaiaChatsTableData extends DataClass
     required this.pinned,
     required this.agentSessionsJson,
     this.tier,
+    required this.curatedSeq,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58123,6 +58150,7 @@ class GaiaChatsTableData extends DataClass
     if (!nullToAbsent || tier != null) {
       map['tier'] = Variable<String>(tier);
     }
+    map['curated_seq'] = Variable<int>(curatedSeq);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58140,6 +58168,7 @@ class GaiaChatsTableData extends DataClass
       pinned: Value(pinned),
       agentSessionsJson: Value(agentSessionsJson),
       tier: tier == null && nullToAbsent ? const Value.absent() : Value(tier),
+      curatedSeq: Value(curatedSeq),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58161,6 +58190,7 @@ class GaiaChatsTableData extends DataClass
       pinned: serializer.fromJson<bool>(json['pinned']),
       agentSessionsJson: serializer.fromJson<String>(json['agentSessionsJson']),
       tier: serializer.fromJson<String?>(json['tier']),
+      curatedSeq: serializer.fromJson<int>(json['curatedSeq']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58177,6 +58207,7 @@ class GaiaChatsTableData extends DataClass
       'pinned': serializer.toJson<bool>(pinned),
       'agentSessionsJson': serializer.toJson<String>(agentSessionsJson),
       'tier': serializer.toJson<String?>(tier),
+      'curatedSeq': serializer.toJson<int>(curatedSeq),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58191,6 +58222,7 @@ class GaiaChatsTableData extends DataClass
     bool? pinned,
     String? agentSessionsJson,
     Value<String?> tier = const Value.absent(),
+    int? curatedSeq,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58202,6 +58234,7 @@ class GaiaChatsTableData extends DataClass
     pinned: pinned ?? this.pinned,
     agentSessionsJson: agentSessionsJson ?? this.agentSessionsJson,
     tier: tier.present ? tier.value : this.tier,
+    curatedSeq: curatedSeq ?? this.curatedSeq,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58219,6 +58252,9 @@ class GaiaChatsTableData extends DataClass
           ? data.agentSessionsJson.value
           : this.agentSessionsJson,
       tier: data.tier.present ? data.tier.value : this.tier,
+      curatedSeq: data.curatedSeq.present
+          ? data.curatedSeq.value
+          : this.curatedSeq,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58235,6 +58271,7 @@ class GaiaChatsTableData extends DataClass
           ..write('pinned: $pinned, ')
           ..write('agentSessionsJson: $agentSessionsJson, ')
           ..write('tier: $tier, ')
+          ..write('curatedSeq: $curatedSeq, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58251,6 +58288,7 @@ class GaiaChatsTableData extends DataClass
     pinned,
     agentSessionsJson,
     tier,
+    curatedSeq,
     createdAt,
     updatedAt,
     version,
@@ -58266,6 +58304,7 @@ class GaiaChatsTableData extends DataClass
           other.pinned == this.pinned &&
           other.agentSessionsJson == this.agentSessionsJson &&
           other.tier == this.tier &&
+          other.curatedSeq == this.curatedSeq &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58279,6 +58318,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<bool> pinned;
   final Value<String> agentSessionsJson;
   final Value<String?> tier;
+  final Value<int> curatedSeq;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58291,6 +58331,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.pinned = const Value.absent(),
     this.agentSessionsJson = const Value.absent(),
     this.tier = const Value.absent(),
+    this.curatedSeq = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58304,6 +58345,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.pinned = const Value.absent(),
     this.agentSessionsJson = const Value.absent(),
     this.tier = const Value.absent(),
+    this.curatedSeq = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58321,6 +58363,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<bool>? pinned,
     Expression<String>? agentSessionsJson,
     Expression<String>? tier,
+    Expression<int>? curatedSeq,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58334,6 +58377,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (pinned != null) 'pinned': pinned,
       if (agentSessionsJson != null) 'agent_sessions_json': agentSessionsJson,
       if (tier != null) 'tier': tier,
+      if (curatedSeq != null) 'curated_seq': curatedSeq,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58349,6 +58393,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<bool>? pinned,
     Value<String>? agentSessionsJson,
     Value<String?>? tier,
+    Value<int>? curatedSeq,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58362,6 +58407,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       pinned: pinned ?? this.pinned,
       agentSessionsJson: agentSessionsJson ?? this.agentSessionsJson,
       tier: tier ?? this.tier,
+      curatedSeq: curatedSeq ?? this.curatedSeq,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -58391,6 +58437,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (tier.present) {
       map['tier'] = Variable<String>(tier.value);
     }
+    if (curatedSeq.present) {
+      map['curated_seq'] = Variable<int>(curatedSeq.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -58418,6 +58467,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('pinned: $pinned, ')
           ..write('agentSessionsJson: $agentSessionsJson, ')
           ..write('tier: $tier, ')
+          ..write('curatedSeq: $curatedSeq, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59471,6 +59521,21 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _autoAcceptCuratorMeta = const VerificationMeta(
+    'autoAcceptCurator',
+  );
+  @override
+  late final GeneratedColumn<bool> autoAcceptCurator = GeneratedColumn<bool>(
+    'auto_accept_curator',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_accept_curator" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -59533,6 +59598,7 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     keybindsJson,
     windowContext,
     contextExclusionsJson,
+    autoAcceptCurator,
     createdAt,
     updatedAt,
     version,
@@ -59666,6 +59732,15 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         ),
       );
     }
+    if (data.containsKey('auto_accept_curator')) {
+      context.handle(
+        _autoAcceptCuratorMeta,
+        autoAcceptCurator.isAcceptableOrUnknown(
+          data['auto_accept_curator']!,
+          _autoAcceptCuratorMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -59763,6 +59838,10 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}context_exclusions_json'],
       ),
+      autoAcceptCurator: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_accept_curator'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59817,6 +59896,7 @@ class GaiaSettingsTableData extends DataClass
 
   /// A JSON list of names and hosts; null for the defaults.
   final String? contextExclusionsJson;
+  final bool autoAcceptCurator;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59837,6 +59917,7 @@ class GaiaSettingsTableData extends DataClass
     required this.keybindsJson,
     required this.windowContext,
     this.contextExclusionsJson,
+    required this.autoAcceptCurator,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59868,6 +59949,7 @@ class GaiaSettingsTableData extends DataClass
     if (!nullToAbsent || contextExclusionsJson != null) {
       map['context_exclusions_json'] = Variable<String>(contextExclusionsJson);
     }
+    map['auto_accept_curator'] = Variable<bool>(autoAcceptCurator);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -59902,6 +59984,7 @@ class GaiaSettingsTableData extends DataClass
       contextExclusionsJson: contextExclusionsJson == null && nullToAbsent
           ? const Value.absent()
           : Value(contextExclusionsJson),
+      autoAcceptCurator: Value(autoAcceptCurator),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59934,6 +60017,7 @@ class GaiaSettingsTableData extends DataClass
       contextExclusionsJson: serializer.fromJson<String?>(
         json['contextExclusionsJson'],
       ),
+      autoAcceptCurator: serializer.fromJson<bool>(json['autoAcceptCurator']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59961,6 +60045,7 @@ class GaiaSettingsTableData extends DataClass
       'contextExclusionsJson': serializer.toJson<String?>(
         contextExclusionsJson,
       ),
+      'autoAcceptCurator': serializer.toJson<bool>(autoAcceptCurator),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59984,6 +60069,7 @@ class GaiaSettingsTableData extends DataClass
     String? keybindsJson,
     bool? windowContext,
     Value<String?> contextExclusionsJson = const Value.absent(),
+    bool? autoAcceptCurator,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -60006,6 +60092,7 @@ class GaiaSettingsTableData extends DataClass
     contextExclusionsJson: contextExclusionsJson.present
         ? contextExclusionsJson.value
         : this.contextExclusionsJson,
+    autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -60048,6 +60135,9 @@ class GaiaSettingsTableData extends DataClass
       contextExclusionsJson: data.contextExclusionsJson.present
           ? data.contextExclusionsJson.value
           : this.contextExclusionsJson,
+      autoAcceptCurator: data.autoAcceptCurator.present
+          ? data.autoAcceptCurator.value
+          : this.autoAcceptCurator,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -60073,6 +60163,7 @@ class GaiaSettingsTableData extends DataClass
           ..write('keybindsJson: $keybindsJson, ')
           ..write('windowContext: $windowContext, ')
           ..write('contextExclusionsJson: $contextExclusionsJson, ')
+          ..write('autoAcceptCurator: $autoAcceptCurator, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -60098,6 +60189,7 @@ class GaiaSettingsTableData extends DataClass
     keybindsJson,
     windowContext,
     contextExclusionsJson,
+    autoAcceptCurator,
     createdAt,
     updatedAt,
     version,
@@ -60122,6 +60214,7 @@ class GaiaSettingsTableData extends DataClass
           other.keybindsJson == this.keybindsJson &&
           other.windowContext == this.windowContext &&
           other.contextExclusionsJson == this.contextExclusionsJson &&
+          other.autoAcceptCurator == this.autoAcceptCurator &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -60145,6 +60238,7 @@ class GaiaSettingsTableCompanion
   final Value<String> keybindsJson;
   final Value<bool> windowContext;
   final Value<String?> contextExclusionsJson;
+  final Value<bool> autoAcceptCurator;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -60166,6 +60260,7 @@ class GaiaSettingsTableCompanion
     this.keybindsJson = const Value.absent(),
     this.windowContext = const Value.absent(),
     this.contextExclusionsJson = const Value.absent(),
+    this.autoAcceptCurator = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -60188,6 +60283,7 @@ class GaiaSettingsTableCompanion
     this.keybindsJson = const Value.absent(),
     this.windowContext = const Value.absent(),
     this.contextExclusionsJson = const Value.absent(),
+    this.autoAcceptCurator = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -60212,6 +60308,7 @@ class GaiaSettingsTableCompanion
     Expression<String>? keybindsJson,
     Expression<bool>? windowContext,
     Expression<String>? contextExclusionsJson,
+    Expression<bool>? autoAcceptCurator,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -60235,6 +60332,7 @@ class GaiaSettingsTableCompanion
       if (windowContext != null) 'window_context': windowContext,
       if (contextExclusionsJson != null)
         'context_exclusions_json': contextExclusionsJson,
+      if (autoAcceptCurator != null) 'auto_accept_curator': autoAcceptCurator,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -60259,6 +60357,7 @@ class GaiaSettingsTableCompanion
     Value<String>? keybindsJson,
     Value<bool>? windowContext,
     Value<String?>? contextExclusionsJson,
+    Value<bool>? autoAcceptCurator,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -60282,6 +60381,7 @@ class GaiaSettingsTableCompanion
       windowContext: windowContext ?? this.windowContext,
       contextExclusionsJson:
           contextExclusionsJson ?? this.contextExclusionsJson,
+      autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -60340,6 +60440,9 @@ class GaiaSettingsTableCompanion
         contextExclusionsJson.value,
       );
     }
+    if (autoAcceptCurator.present) {
+      map['auto_accept_curator'] = Variable<bool>(autoAcceptCurator.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -60376,6 +60479,7 @@ class GaiaSettingsTableCompanion
           ..write('keybindsJson: $keybindsJson, ')
           ..write('windowContext: $windowContext, ')
           ..write('contextExclusionsJson: $contextExclusionsJson, ')
+          ..write('autoAcceptCurator: $autoAcceptCurator, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -60940,6 +61044,571 @@ class GaiaDraftsTableCompanion extends UpdateCompanion<GaiaDraftsTableData> {
   }
 }
 
+class $GaiaMemoriesTableTable extends GaiaMemoriesTable
+    with TableInfo<$GaiaMemoriesTableTable, GaiaMemoriesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaMemoriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tagsJsonMeta = const VerificationMeta(
+    'tagsJson',
+  );
+  @override
+  late final GeneratedColumn<String> tagsJson = GeneratedColumn<String>(
+    'tags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _sourceChatIdMeta = const VerificationMeta(
+    'sourceChatId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceChatId = GeneratedColumn<String>(
+    'source_chat_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    body,
+    tagsJson,
+    sourceChatId,
+    status,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_memories_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaMemoriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('tags_json')) {
+      context.handle(
+        _tagsJsonMeta,
+        tagsJson.isAcceptableOrUnknown(data['tags_json']!, _tagsJsonMeta),
+      );
+    }
+    if (data.containsKey('source_chat_id')) {
+      context.handle(
+        _sourceChatIdMeta,
+        sourceChatId.isAcceptableOrUnknown(
+          data['source_chat_id']!,
+          _sourceChatIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GaiaMemoriesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaMemoriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      tagsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags_json'],
+      )!,
+      sourceChatId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_chat_id'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $GaiaMemoriesTableTable createAlias(String alias) {
+    return $GaiaMemoriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaMemoriesTableData extends DataClass
+    implements Insertable<GaiaMemoriesTableData> {
+  final String id;
+  final String body;
+
+  /// A JSON list.
+  final String tagsJson;
+  final String? sourceChatId;
+
+  /// `GaiaMemoryStatus.name`.
+  final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const GaiaMemoriesTableData({
+    required this.id,
+    required this.body,
+    required this.tagsJson,
+    this.sourceChatId,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['body'] = Variable<String>(body);
+    map['tags_json'] = Variable<String>(tagsJson);
+    if (!nullToAbsent || sourceChatId != null) {
+      map['source_chat_id'] = Variable<String>(sourceChatId);
+    }
+    map['status'] = Variable<String>(status);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  GaiaMemoriesTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaMemoriesTableCompanion(
+      id: Value(id),
+      body: Value(body),
+      tagsJson: Value(tagsJson),
+      sourceChatId: sourceChatId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceChatId),
+      status: Value(status),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory GaiaMemoriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaMemoriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      body: serializer.fromJson<String>(json['body']),
+      tagsJson: serializer.fromJson<String>(json['tagsJson']),
+      sourceChatId: serializer.fromJson<String?>(json['sourceChatId']),
+      status: serializer.fromJson<String>(json['status']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'body': serializer.toJson<String>(body),
+      'tagsJson': serializer.toJson<String>(tagsJson),
+      'sourceChatId': serializer.toJson<String?>(sourceChatId),
+      'status': serializer.toJson<String>(status),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  GaiaMemoriesTableData copyWith({
+    String? id,
+    String? body,
+    String? tagsJson,
+    Value<String?> sourceChatId = const Value.absent(),
+    String? status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => GaiaMemoriesTableData(
+    id: id ?? this.id,
+    body: body ?? this.body,
+    tagsJson: tagsJson ?? this.tagsJson,
+    sourceChatId: sourceChatId.present ? sourceChatId.value : this.sourceChatId,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  GaiaMemoriesTableData copyWithCompanion(GaiaMemoriesTableCompanion data) {
+    return GaiaMemoriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      body: data.body.present ? data.body.value : this.body,
+      tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
+      sourceChatId: data.sourceChatId.present
+          ? data.sourceChatId.value
+          : this.sourceChatId,
+      status: data.status.present ? data.status.value : this.status,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemoriesTableData(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('sourceChatId: $sourceChatId, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    body,
+    tagsJson,
+    sourceChatId,
+    status,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaMemoriesTableData &&
+          other.id == this.id &&
+          other.body == this.body &&
+          other.tagsJson == this.tagsJson &&
+          other.sourceChatId == this.sourceChatId &&
+          other.status == this.status &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class GaiaMemoriesTableCompanion
+    extends UpdateCompanion<GaiaMemoriesTableData> {
+  final Value<String> id;
+  final Value<String> body;
+  final Value<String> tagsJson;
+  final Value<String?> sourceChatId;
+  final Value<String> status;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const GaiaMemoriesTableCompanion({
+    this.id = const Value.absent(),
+    this.body = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    this.sourceChatId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaMemoriesTableCompanion.insert({
+    required String id,
+    required String body,
+    this.tagsJson = const Value.absent(),
+    this.sourceChatId = const Value.absent(),
+    required String status,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       body = Value(body),
+       status = Value(status),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<GaiaMemoriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? body,
+    Expression<String>? tagsJson,
+    Expression<String>? sourceChatId,
+    Expression<String>? status,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (body != null) 'body': body,
+      if (tagsJson != null) 'tags_json': tagsJson,
+      if (sourceChatId != null) 'source_chat_id': sourceChatId,
+      if (status != null) 'status': status,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaMemoriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? body,
+    Value<String>? tagsJson,
+    Value<String?>? sourceChatId,
+    Value<String>? status,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaMemoriesTableCompanion(
+      id: id ?? this.id,
+      body: body ?? this.body,
+      tagsJson: tagsJson ?? this.tagsJson,
+      sourceChatId: sourceChatId ?? this.sourceChatId,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (tagsJson.present) {
+      map['tags_json'] = Variable<String>(tagsJson.value);
+    }
+    if (sourceChatId.present) {
+      map['source_chat_id'] = Variable<String>(sourceChatId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemoriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('sourceChatId: $sourceChatId, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -61097,6 +61766,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $GaiaDraftsTableTable gaiaDraftsTable = $GaiaDraftsTableTable(
     this,
   );
+  late final $GaiaMemoriesTableTable gaiaMemoriesTable =
+      $GaiaMemoriesTableTable(this);
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -61245,6 +61916,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaMessagesTable,
     gaiaSettingsTable,
     gaiaDraftsTable,
+    gaiaMemoriesTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -88815,6 +89487,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<bool> pinned,
       Value<String> agentSessionsJson,
       Value<String?> tier,
+      Value<int> curatedSeq,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -88829,6 +89502,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<bool> pinned,
       Value<String> agentSessionsJson,
       Value<String?> tier,
+      Value<int> curatedSeq,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -88872,6 +89546,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<String> get tier => $composableBuilder(
     column: $table.tier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get curatedSeq => $composableBuilder(
+    column: $table.curatedSeq,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88935,6 +89614,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get curatedSeq => $composableBuilder(
+    column: $table.curatedSeq,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88986,6 +89670,11 @@ class $$GaiaChatsTableTableAnnotationComposer
 
   GeneratedColumn<String> get tier =>
       $composableBuilder(column: $table.tier, builder: (column) => column);
+
+  GeneratedColumn<int> get curatedSeq => $composableBuilder(
+    column: $table.curatedSeq,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -89043,6 +89732,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<bool> pinned = const Value.absent(),
                 Value<String> agentSessionsJson = const Value.absent(),
                 Value<String?> tier = const Value.absent(),
+                Value<int> curatedSeq = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -89055,6 +89745,7 @@ class $$GaiaChatsTableTableTableManager
                 pinned: pinned,
                 agentSessionsJson: agentSessionsJson,
                 tier: tier,
+                curatedSeq: curatedSeq,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -89069,6 +89760,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<bool> pinned = const Value.absent(),
                 Value<String> agentSessionsJson = const Value.absent(),
                 Value<String?> tier = const Value.absent(),
+                Value<int> curatedSeq = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -89081,6 +89773,7 @@ class $$GaiaChatsTableTableTableManager
                 pinned: pinned,
                 agentSessionsJson: agentSessionsJson,
                 tier: tier,
+                curatedSeq: curatedSeq,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -89536,6 +90229,7 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<String> keybindsJson,
       Value<bool> windowContext,
       Value<String?> contextExclusionsJson,
+      Value<bool> autoAcceptCurator,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -89559,6 +90253,7 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String> keybindsJson,
       Value<bool> windowContext,
       Value<String?> contextExclusionsJson,
+      Value<bool> autoAcceptCurator,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -89647,6 +90342,11 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<String> get contextExclusionsJson => $composableBuilder(
     column: $table.contextExclusionsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoAcceptCurator => $composableBuilder(
+    column: $table.autoAcceptCurator,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -89755,6 +90455,11 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get autoAcceptCurator => $composableBuilder(
+    column: $table.autoAcceptCurator,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -89850,6 +90555,11 @@ class $$GaiaSettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get autoAcceptCurator => $composableBuilder(
+    column: $table.autoAcceptCurator,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -89918,6 +90628,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> keybindsJson = const Value.absent(),
                 Value<bool> windowContext = const Value.absent(),
                 Value<String?> contextExclusionsJson = const Value.absent(),
+                Value<bool> autoAcceptCurator = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -89939,6 +90650,7 @@ class $$GaiaSettingsTableTableTableManager
                 keybindsJson: keybindsJson,
                 windowContext: windowContext,
                 contextExclusionsJson: contextExclusionsJson,
+                autoAcceptCurator: autoAcceptCurator,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -89962,6 +90674,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> keybindsJson = const Value.absent(),
                 Value<bool> windowContext = const Value.absent(),
                 Value<String?> contextExclusionsJson = const Value.absent(),
+                Value<bool> autoAcceptCurator = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -89983,6 +90696,7 @@ class $$GaiaSettingsTableTableTableManager
                 keybindsJson: keybindsJson,
                 windowContext: windowContext,
                 contextExclusionsJson: contextExclusionsJson,
+                autoAcceptCurator: autoAcceptCurator,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -90306,6 +91020,297 @@ typedef $$GaiaDraftsTableTableProcessedTableManager =
       GaiaDraftsTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaMemoriesTableTableCreateCompanionBuilder =
+    GaiaMemoriesTableCompanion Function({
+      required String id,
+      required String body,
+      Value<String> tagsJson,
+      Value<String?> sourceChatId,
+      required String status,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaMemoriesTableTableUpdateCompanionBuilder =
+    GaiaMemoriesTableCompanion Function({
+      Value<String> id,
+      Value<String> body,
+      Value<String> tagsJson,
+      Value<String?> sourceChatId,
+      Value<String> status,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaMemoriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaMemoriesTableTable> {
+  $$GaiaMemoriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceChatId => $composableBuilder(
+    column: $table.sourceChatId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaMemoriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaMemoriesTableTable> {
+  $$GaiaMemoriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceChatId => $composableBuilder(
+    column: $table.sourceChatId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaMemoriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaMemoriesTableTable> {
+  $$GaiaMemoriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get tagsJson =>
+      $composableBuilder(column: $table.tagsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceChatId => $composableBuilder(
+    column: $table.sourceChatId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$GaiaMemoriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaMemoriesTableTable,
+          GaiaMemoriesTableData,
+          $$GaiaMemoriesTableTableFilterComposer,
+          $$GaiaMemoriesTableTableOrderingComposer,
+          $$GaiaMemoriesTableTableAnnotationComposer,
+          $$GaiaMemoriesTableTableCreateCompanionBuilder,
+          $$GaiaMemoriesTableTableUpdateCompanionBuilder,
+          (
+            GaiaMemoriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaMemoriesTableTable,
+              GaiaMemoriesTableData
+            >,
+          ),
+          GaiaMemoriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaMemoriesTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaMemoriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaMemoriesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GaiaMemoriesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GaiaMemoriesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                Value<String?> sourceChatId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemoriesTableCompanion(
+                id: id,
+                body: body,
+                tagsJson: tagsJson,
+                sourceChatId: sourceChatId,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String body,
+                Value<String> tagsJson = const Value.absent(),
+                Value<String?> sourceChatId = const Value.absent(),
+                required String status,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemoriesTableCompanion.insert(
+                id: id,
+                body: body,
+                tagsJson: tagsJson,
+                sourceChatId: sourceChatId,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaMemoriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaMemoriesTableTable,
+      GaiaMemoriesTableData,
+      $$GaiaMemoriesTableTableFilterComposer,
+      $$GaiaMemoriesTableTableOrderingComposer,
+      $$GaiaMemoriesTableTableAnnotationComposer,
+      $$GaiaMemoriesTableTableCreateCompanionBuilder,
+      $$GaiaMemoriesTableTableUpdateCompanionBuilder,
+      (
+        GaiaMemoriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaMemoriesTableTable,
+          GaiaMemoriesTableData
+        >,
+      ),
+      GaiaMemoriesTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -90533,4 +91538,6 @@ class $AppDatabaseManager {
       $$GaiaSettingsTableTableTableManager(_db, _db.gaiaSettingsTable);
   $$GaiaDraftsTableTableTableManager get gaiaDraftsTable =>
       $$GaiaDraftsTableTableTableManager(_db, _db.gaiaDraftsTable);
+  $$GaiaMemoriesTableTableTableManager get gaiaMemoriesTable =>
+      $$GaiaMemoriesTableTableTableManager(_db, _db.gaiaMemoriesTable);
 }

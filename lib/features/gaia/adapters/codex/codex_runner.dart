@@ -80,6 +80,8 @@ class CodexRunner implements GaiaAgentRunner {
     // Its sandboxes read anywhere: `--add-dir` is for writing.
     Set<String> directories = const {},
     GaiaTurnTools? tools,
+    // `exec` has nowhere to put them: GAIA.md alone is its AGENTS.md.
+    String sessionInstructions = '',
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (:notReady, :sandbox) = await readyCodexHome(

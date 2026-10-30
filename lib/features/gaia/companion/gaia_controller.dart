@@ -39,6 +39,14 @@ const _persistEvery = Duration(seconds: 1);
 /// the files alone; the captions carry on, for the next one.
 const _captionWait = Duration(seconds: 20);
 
+/// How long a chat this device ran sits idle before the memory curator
+/// reads its new turns (§11).
+const kGaiaCurateAfter = Duration(minutes: 10);
+
+/// How far back, at start, the curator looks for chats whose wait a quit
+/// cut short (§11): older turns are left unread.
+const kGaiaCurateMissedWithin = Duration(days: 7);
+
 /// How many messages' images are captioned at once: each is a CLI process.
 const _captionsAtOnce = 3;
 
@@ -78,6 +86,7 @@ class GaiaController extends ChangeNotifier {
     String? draftDirectory,
     this._reach,
     @visibleForTesting this._cardHold = kGaiaCardHold,
+    @visibleForTesting this._curateAfter = kGaiaCurateAfter,
   }) : _clipboard = clipboard ?? _readClipboard,
        _draftDirectory = draftDirectory ?? Directory.systemTemp.path,
        _cliVersions =
@@ -116,6 +125,9 @@ class GaiaController extends ChangeNotifier {
 
   /// How long a card holds its tool call (§10.1).
   final Duration _cardHold;
+
+  /// How long a chat sits idle before the memory curator reads it (§11).
+  final Duration _curateAfter;
 
   /// The composer's text for the chat in view. Here rather than in the
   /// composer, so it outlives a mode change and a capture can add to it
@@ -978,6 +990,10 @@ class GaiaController extends ChangeNotifier {
   final _running = <String>{};
   final _lastPersist = <String, DateTime>{};
 
+  /// Chats this device ran a turn in, each curated once it's been idle for
+  /// [kGaiaCurateAfter] (§11).
+  final _curateSoon = <String, Timer>{};
+
   GaiaChat? get currentChat =>
       chats.where((chat) => chat.id == currentChatId).firstOrNull;
 
@@ -1191,6 +1207,7 @@ class GaiaController extends ChangeNotifier {
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
     await _refresh();
     await _loadDrafts();
+    unawaited(_curateMissed());
   }
 
   Future<void> _checkCli() async {
@@ -1678,6 +1695,37 @@ class GaiaController extends ChangeNotifier {
         moveDraftToNewChat();
       case GaiaBuiltin.stop:
         if (currentChatId case final chatId?) await stop(chatId);
+      case GaiaBuiltin.remember:
+        await remember('');
+    }
+  }
+
+  /// `/remember <text>` (§11): [text] saved as a memory, active at once,
+  /// since the user wrote it. Not saved, it goes back in the draft.
+  Future<void> remember(String text) async {
+    void toast(String title, String body, {bool error = false}) => _toasts.add((
+      chatId: '',
+      title: title,
+      body: body,
+      error: error,
+      question: false,
+    ));
+    if (text.trim().isEmpty) {
+      return toast('Nothing to remember', 'Type it after /remember.');
+    }
+    try {
+      final reply =
+          (await _pipe.request('remember', {
+                'chatId': currentChatId,
+                'text': text.trim(),
+              }))!
+              as Map;
+      reply['saved'] == true
+          ? toast('Remembered', text.trim())
+          : toast('Already remembered', text.trim());
+    } on GaiaPipeException catch (error) {
+      if (draft.text.isEmpty) draft.text = '/remember $text';
+      toast("Couldn't remember that", error.message, error: true);
     }
   }
 
@@ -1707,6 +1755,7 @@ class GaiaController extends ChangeNotifier {
     List<GaiaFilePart> files = const [],
   }) async {
     if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
+    if (gaiaRememberText(text) case final memory?) return remember(memory);
     var prompt = (await _expand(text.trim())).trim();
     if (prompt.isEmpty &&
         images.isEmpty &&
@@ -1728,6 +1777,8 @@ class GaiaController extends ChangeNotifier {
     // upload or its tier is picked.
     final chatId = chat?.id ?? _uuid.v4();
     _running.add(chatId);
+    // Read once it's idle again.
+    _curateSoon.remove(chatId)?.cancel();
     // Numbered on from the chat's images, so no two of its messages have
     // the same [image N].
     final (relabeled, labeled) = gaiaRelabelDraft(
@@ -2136,10 +2187,10 @@ class GaiaController extends ChangeNotifier {
       onCard: (card) => onEvent(GaiaCardUpdate(card)),
       read: (tool, arguments) async {
         try {
-          return await _pipe.request('voyagerRead', {
-                'tool': tool,
-                'arguments': arguments,
-              })
+          return await _pipe.request(
+                isGaiaMemoryTool(tool) ? 'memoryTool' : 'voyagerRead',
+                {'tool': tool, 'arguments': arguments, 'chatId': chatId},
+              )
               as String;
         } on GaiaPipeException catch (error) {
           throw GaiaToolException(error.message);
@@ -2226,6 +2277,8 @@ class GaiaController extends ChangeNotifier {
               images: imageInputs,
               directories: directories,
               tools: tools,
+              // A resumed session keeps the index it started with.
+              sessionInstructions: session == null ? await _memoryIndex() : '',
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
@@ -2245,6 +2298,7 @@ class GaiaController extends ChangeNotifier {
           images: imageInputs,
           directories: directories,
           tools: tools,
+          sessionInstructions: await _memoryIndex(),
           onEvent: onEvent,
         );
       }
@@ -2338,7 +2392,135 @@ class GaiaController extends ChangeNotifier {
         !debug.dummyMode) {
       unawaited(_retitle(chatId, topic, reply.text));
     }
+    if (reply.status == GaiaMessageStatus.complete &&
+        script == null &&
+        !debug.dummyMode) {
+      _curateLater(chatId, _curateAfter);
+    }
     _settleDrain();
+  }
+
+  /// Curates [chatId] after [wait], in place of any wait it had.
+  void _curateLater(String chatId, Duration wait) {
+    _curateSoon.remove(chatId)?.cancel();
+    late final Timer timer;
+    timer = Timer(wait, () {
+      if (_curateSoon[chatId] == timer) _curateSoon.remove(chatId);
+      unawaited(_curate(chatId));
+    });
+    _curateSoon[chatId] = timer;
+  }
+
+  /// This device's last turn in [chat] when it ran the chat's last turn,
+  /// which stands in for the run lease (§11); null when another device did.
+  int? _ranLast(GaiaChat chat) {
+    var last = -1;
+    var mine = -1;
+    for (final MapEntry(:key, :value) in chat.agentSessions.entries) {
+      last = max(last, value.lastSeq);
+      if (key.startsWith('$_deviceId/')) mine = max(mine, value.lastSeq);
+    }
+    return mine < last ? null : mine;
+  }
+
+  /// Chats this device ran last whose newest turns the curator hasn't read,
+  /// their wait cut short by a quit (§11): each is curated once the rest of
+  /// its wait has passed, those already due one at a time.
+  Future<void> _curateMissed() async {
+    if (debug.dummyMode) return;
+    final now = DateTime.now();
+    final due = <String>[];
+    for (final chat in chats) {
+      final idle = now.difference(chat.lastMessageAt);
+      if (idle > kGaiaCurateMissedWithin || _curateSoon.containsKey(chat.id)) {
+        continue;
+      }
+      final mine = _ranLast(chat);
+      if (mine == null || mine <= chat.curatedSeq) continue;
+      if (idle < _curateAfter) {
+        _curateLater(chat.id, _curateAfter - idle);
+      } else {
+        due.add(chat.id);
+      }
+    }
+    for (final chatId in due) {
+      await _curate(chatId);
+    }
+  }
+
+  /// The memory index for a new session (§11): the active memories as
+  /// they are now, which the session keeps; a memory saved later is
+  /// reached through `memory_search`. Empty when the main instance can't
+  /// say.
+  Future<String> _memoryIndex() async {
+    try {
+      return await _pipe.request('memoryIndex') as String? ?? '';
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memory index: $error');
+      return '';
+    }
+  }
+
+  /// The memory curator (§11): the utility model reads [chatId]'s turns
+  /// since it last did, and what it finds goes to the inbox, or straight in
+  /// with auto-accept on. Only the device that ran the chat's last turn
+  /// curates it, so two never propose the same. A failure leaves the turns
+  /// for next time.
+  Future<void> _curate(String chatId) async {
+    final utility = _utility;
+    // A chat deleted while it waited is left alone, and one another device
+    // went on with is its to curate.
+    final chat = _chat(chatId);
+    if (utility == null ||
+        chat == null ||
+        _ranLast(chat) == null ||
+        aborted ||
+        _running.contains(chatId)) {
+      return;
+    }
+    final from = chat.curatedSeq;
+    final List<GaiaMessage> turns;
+    final String index;
+    try {
+      final listed =
+          (await _pipe.request('messages', {'chatId': chatId}))! as List;
+      turns = [
+        for (final json in listed)
+          if (GaiaMessage.fromJson((json as Map).cast<String, Object?>())
+              case final message
+              when message.seq > from &&
+                  message.status != GaiaMessageStatus.streaming)
+            message,
+      ];
+      if (turns.isEmpty) return;
+      index = await _pipe.request('memoryIndex') as String? ?? '';
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] curator: $error');
+      return;
+    }
+    final found = await utility.curate(gaiaTranscriptText(turns), index);
+    // Sent again meanwhile: its next idle reads these turns too.
+    if (found == null || _running.contains(chatId)) return;
+    final seq = turns.last.seq;
+    debugPrint('[gaia] curator: ${found.length} from $chatId up to $seq');
+    try {
+      await _pipe.request('curated', {
+        'chatId': chatId,
+        'seq': seq,
+        'memories': [
+          for (final memory in found)
+            {'text': memory.text, 'tags': memory.tags},
+        ],
+      });
+    } on GaiaPipeException catch (error) {
+      // Not marked read: the next idle reads these turns again.
+      debugPrint('[gaia] curator: $error');
+      return;
+    }
+    chats = [
+      for (final c in chats)
+        c.id == chatId && c.curatedSeq < seq ? c.copyWith(curatedSeq: seq) : c,
+    ];
   }
 
   /// A send that didn't happen: its [text] and [images] go back in

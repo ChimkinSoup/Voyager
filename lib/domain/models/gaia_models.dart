@@ -163,6 +163,7 @@ class GaiaChat extends SoftDeletable {
     this.pinned = false,
     this.agentSessions = const {},
     this.tier,
+    this.curatedSeq = -1,
   });
 
   final String title;
@@ -174,6 +175,9 @@ class GaiaChat extends SoftDeletable {
 
   /// The tier the chat last used (§7.2); null before its first message.
   final GaiaTier? tier;
+
+  /// The last message the memory curator has read (§11); -1 for none.
+  final int curatedSeq;
 
   /// The session this chat resumes on [deviceId] with [adapter], or null to
   /// start one.
@@ -190,6 +194,7 @@ class GaiaChat extends SoftDeletable {
     bool? pinned,
     Map<String, GaiaAgentSession>? agentSessions,
     GaiaTier? tier,
+    int? curatedSeq,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -206,12 +211,14 @@ class GaiaChat extends SoftDeletable {
     pinned: pinned ?? this.pinned,
     agentSessions: agentSessions ?? this.agentSessions,
     tier: tier ?? this.tier,
+    curatedSeq: curatedSeq ?? this.curatedSeq,
   );
 
   Map<String, Object?> toJson() => {
     'id': id,
     'title': title,
     'tier': tier?.name,
+    'curatedSeq': curatedSeq,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'version': version,
@@ -237,6 +244,7 @@ class GaiaChat extends SoftDeletable {
       pinned: json['pinned'] == true,
       agentSessions: gaiaAgentSessionsFromJson(json['agentSessions']),
       tier: gaiaTierFromName(json['tier']),
+      curatedSeq: (json['curatedSeq'] as num?)?.toInt() ?? -1,
     );
   }
 }
@@ -764,10 +772,7 @@ class GaiaCardPart extends GaiaPart {
         'input': input,
         'description': description,
       },
-      GaiaCardKind.proposal => {
-        'tool': tool,
-        'proposal': proposal!.toJson(),
-      },
+      GaiaCardKind.proposal => {'tool': tool, 'proposal': proposal!.toJson()},
     },
     'answer': ?answer,
   };
@@ -1011,6 +1016,7 @@ class GaiaSettings extends SoftDeletable {
     this.keybinds = const {},
     this.windowContext = true,
     this.contextExclusions = kGaiaDefaultContextExclusions,
+    this.autoAcceptCurator = false,
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -1067,6 +1073,9 @@ class GaiaSettings extends SoftDeletable {
   /// host (password managers, banking).
   final List<String> contextExclusions;
 
+  /// The curator's memories go straight in, skipping the inbox (§11).
+  final bool autoAcceptCurator;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -1087,6 +1096,7 @@ class GaiaSettings extends SoftDeletable {
     Map<String, String>? keybinds,
     bool? windowContext,
     List<String>? contextExclusions,
+    bool? autoAcceptCurator,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -1105,6 +1115,7 @@ class GaiaSettings extends SoftDeletable {
     keybinds: keybinds ?? this.keybinds,
     windowContext: windowContext ?? this.windowContext,
     contextExclusions: contextExclusions ?? this.contextExclusions,
+    autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
   );
 
   /// What the companion needs of them.
@@ -1123,6 +1134,7 @@ class GaiaSettings extends SoftDeletable {
     'keybinds': keybinds,
     'windowContext': windowContext,
     'contextExclusions': contextExclusions,
+    'autoAcceptCurator': autoAcceptCurator,
   };
 }
 
@@ -1139,6 +1151,73 @@ const kGaiaDefaultContextExclusions = [
 
 List<String> gaiaContextExclusionsFromJson(Object? json) =>
     json is List ? [for (final entry in json) entry as String] : const [];
+
+/// A memory's place (§11): waiting in the inbox, in every new chat's index,
+/// or kept out of it.
+enum GaiaMemoryStatus { proposed, active, archived }
+
+/// One short, self-contained fact Gaia keeps about the user (GAIA_HLD.md
+/// §11), shared by every agent.
+class GaiaMemory extends SoftDeletable {
+  const GaiaMemory({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.text,
+    this.tags = const [],
+    this.sourceChatId,
+    this.status = GaiaMemoryStatus.proposed,
+  });
+
+  final String text;
+  final List<String> tags;
+
+  /// The chat it was learnt in; null for one written on the Gaia page.
+  final String? sourceChatId;
+  final GaiaMemoryStatus status;
+
+  GaiaMemory copyWith({
+    String? text,
+    List<String>? tags,
+    GaiaMemoryStatus? status,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+  }) => GaiaMemory(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version + 1,
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    text: text ?? this.text,
+    tags: tags ?? this.tags,
+    sourceChatId: sourceChatId,
+    status: status ?? this.status,
+  );
+}
+
+/// [GaiaMemoryStatus.proposed] for a name this build doesn't know.
+GaiaMemoryStatus gaiaMemoryStatusFromName(Object? name) =>
+    GaiaMemoryStatus.values.where((s) => s.name == name).firstOrNull ??
+    GaiaMemoryStatus.proposed;
+
+/// Tags as they're kept: lower case, trimmed, without a leading `#`, spaces
+/// inside as `-` (one `#tea-time`, not `#tea time`), each once.
+List<String> gaiaMemoryTags(Object? json) => [
+  ...{
+    if (json is List)
+      for (final tag in json)
+        if (tag is String && _memoryTag(tag).isNotEmpty) _memoryTag(tag),
+  },
+];
+
+String _memoryTag(String tag) => tag
+    .trim()
+    .replaceFirst(RegExp('^#+'), '')
+    .trim()
+    .toLowerCase()
+    .replaceAll(RegExp(r'\s+'), '-');
 
 DateTime? _date(Object? value) =>
     value is String ? DateTime.parse(value) : null;

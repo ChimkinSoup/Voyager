@@ -3,7 +3,8 @@
 // adds Phase 2's tiers and agents; 172 the utility model and router; 173
 // each reply's context size; 174 slash commands; 175 rebound keys; 176
 // the Claude config folder, and the utility model off Gemini; 177 the
-// focused-window context settings; 178 the drafts table. The
+// focused-window context settings; 178 the drafts table; 180 the default
+// tier; 181 memories and the curator fields. The
 // database is rewound to look like a schema-168 one and
 // reopened, so the real `onUpgrade` path runs — the shape
 // `leetcode_cheat_sheet_migration_test.dart` uses.
@@ -255,6 +256,44 @@ void main() {
       (await repo.getSettings()).copyWith(clearDefaultTier: true),
     );
     expect((await repo.getSettings()).defaultTier, isNull);
+  });
+
+  test('180→181 adds memories and the curator fields', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    final seedRepo = DriftGaiaRepository(seed);
+    await seedRepo.upsertSettings(GaiaSettings.initial());
+    final at = DateTime.utc(2026, 10, 30);
+    await seedRepo.upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Kept',
+        createdAt: at,
+        updatedAt: at,
+        lastMessageAt: at,
+      ),
+    );
+    await seed.customStatement('DROP TABLE gaia_memories_table');
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN curated_seq',
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN auto_accept_curator',
+    );
+    await seed.customStatement('PRAGMA user_version = 180');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.title, 'Kept');
+    expect(chat.curatedSeq, -1);
+    expect((await repo.getSettings()).autoAcceptCurator, isFalse);
+    expect(await repo.listMemories(), isEmpty);
+    await repo.upsertMemory(
+      GaiaMemory(id: 'm1', text: 'Fact', createdAt: at, updatedAt: at),
+    );
+    expect((await repo.getMemory('m1'))!.text, 'Fact');
   });
 
   test('175→176 adds the Claude config folder and moves off Gemini', () async {

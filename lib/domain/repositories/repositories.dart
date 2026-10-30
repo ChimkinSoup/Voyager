@@ -916,6 +916,17 @@ abstract class GaiaRepository {
 
   /// Fires after any write to the drafts.
   Stream<void> watchDrafts();
+
+  /// Memories (§11), oldest first; tombstones only with [includeDeleted].
+  Future<List<GaiaMemory>> listMemories({bool includeDeleted = false});
+  Future<GaiaMemory?> getMemory(String id);
+  Future<void> upsertMemory(
+    GaiaMemory memory, {
+    bool recordLocalActivity = true,
+  });
+
+  /// [listMemories] as it changes.
+  Stream<List<GaiaMemory>> watchMemories();
 }
 
 /// Metadata half of the media module: asset rows and the references that

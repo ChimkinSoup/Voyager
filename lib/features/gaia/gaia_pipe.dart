@@ -117,7 +117,11 @@ class GaiaPipe {
       if (handler == null) throw GaiaPipeException('no handler');
       _send({'id': id, 'result': await handler(method, params)});
     } catch (error) {
-      _send({'id': id, 'error': '$error'});
+      // Its message alone: the other side wraps it in one again.
+      _send({
+        'id': id,
+        'error': error is GaiaPipeException ? error.message : '$error',
+      });
     }
   }
 }

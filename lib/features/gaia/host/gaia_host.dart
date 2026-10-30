@@ -14,6 +14,7 @@ import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
@@ -53,7 +54,10 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
-/// arguments}` (a `voyager_*` tool's text), `rearm`, and the `runs {runs}`, `runDone {chatId, title,
+/// arguments}` (a `voyager_*` tool's text), `memoryIndex` (§11),
+/// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
+/// `remember {chatId, text}`, `curated {chatId, seq, memories}`, `rearm`,
+/// and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId}`, `accent {argb}`, `settings {..}` and `changed` events.
@@ -112,6 +116,9 @@ class GaiaHost {
 
   /// Commits accepted proposals (§10); null for none, where they fail.
   GaiaExecutor? _executor;
+
+  /// Gaia's memories (§11); null for none, where their tools fail.
+  GaiaMemories? _memories;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
@@ -185,12 +192,14 @@ class GaiaHost {
     GaiaMedia? media,
     GaiaVoyagerReads? reads,
     GaiaExecutor? executor,
+    GaiaMemories? memories,
   }) {
     if (_attached.isCompleted) return;
     _toast = toast;
     _media = media;
     _reads = reads;
     _executor = executor;
+    _memories = memories;
     _attached.complete(GaiaChatStore(repository, deviceId: deviceId));
     _changes = repository.watchChanges().listen((_) {
       _changedSoon ??= Timer(_changedDelay, () {
@@ -765,6 +774,45 @@ class GaiaHost {
           // The pipe would carry it as `GaiaReadException: …`.
           throw GaiaPipeException(error.message);
         }
+      case 'memoryIndex':
+        return await _memories?.index() ?? '';
+      case 'memoryTool':
+        try {
+          return await _memoriesOrThrow().tool(
+            params['chatId']! as String,
+            params['tool']! as String,
+            _map(params['arguments']),
+          );
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'remember':
+        // The user's own words, saved as they asked (§11). An active
+        // memory steers every chat after it, so it's refused here while
+        // aborted, whatever the companion did about Abort (§15.7).
+        if (_aborted) {
+          throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
+        }
+        try {
+          final saved = await _memoriesOrThrow().save(
+            params['text']! as String,
+            chatId: params['chatId'] as String?,
+            status: GaiaMemoryStatus.active,
+            byUser: true,
+          );
+          return {'saved': saved != null};
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'curated':
+        if (_aborted) throw GaiaPipeException('Gaia is aborted.');
+        await _memoriesOrThrow()
+            .curated(params['chatId']! as String, params['seq']! as int, [
+              for (final memory in params['memories']! as List)
+                if (memory case {'text': final String text})
+                  (text: text, tags: gaiaMemoryTags(memory['tags'])),
+            ]);
+        return null;
       case 'prepareProposal':
         try {
           return (await _executorOrThrow().prepare(
@@ -804,6 +852,9 @@ class GaiaHost {
 
   GaiaExecutor _executorOrThrow() =>
       _executor ?? (throw GaiaPipeException('Voyager data is not ready'));
+
+  GaiaMemories _memoriesOrThrow() =>
+      _memories ?? (throw GaiaPipeException('Voyager data is not ready'));
 
   /// Takes back what accepted proposal card [cardId] of [message] committed,
   /// for the Gaia page's action log (§17), and marks the card undone.

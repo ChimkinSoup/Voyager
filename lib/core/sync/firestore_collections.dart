@@ -125,6 +125,9 @@ abstract final class FirestoreCollections {
   /// Each chat's unsent draft, by chat id (§9.3).
   static const gaiaDrafts = 'gaia_drafts';
 
+  /// What Gaia remembers about the user (§11).
+  static const gaiaMemories = 'gaia_memories';
+
   /// A message's parts when they're too big for its own document (§8), as
   /// pieces of their JSON at `{messageId}_{n}`. Read with the message, never
   /// pulled on their own.
@@ -224,6 +227,7 @@ abstract final class FirestoreCollections {
     gaiaMessages,
     gaiaSettings,
     gaiaDrafts,
+    gaiaMemories,
   };
 
   /// The only collections whose documents carry text two devices can edit at

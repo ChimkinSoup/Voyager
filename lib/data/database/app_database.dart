@@ -2203,6 +2203,9 @@ class GaiaChatsTable extends Table {
 
   /// The tier it last used (`GaiaTier.name`); null before its first message.
   TextColumn get tier => text().nullable()();
+
+  /// The last message the memory curator read (GAIA_HLD.md §11).
+  IntColumn get curatedSeq => integer().withDefault(const Constant(-1))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2274,6 +2277,8 @@ class GaiaSettingsTable extends Table {
 
   /// A JSON list of names and hosts; null for the defaults.
   TextColumn get contextExclusionsJson => text().nullable()();
+  BoolColumn get autoAcceptCurator =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2295,6 +2300,26 @@ class GaiaDraftsTable extends Table {
 
   /// `[GaiaFilePart]` as JSON.
   TextColumn get filesJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One of Gaia's memories (GAIA_HLD.md §11).
+class GaiaMemoriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get body => text()();
+
+  /// A JSON list.
+  TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get sourceChatId => text().nullable()();
+
+  /// `GaiaMemoryStatus.name`.
+  TextColumn get status => text()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2388,13 +2413,14 @@ class GaiaDraftsTable extends Table {
     GaiaMessagesTable,
     GaiaSettingsTable,
     GaiaDraftsTable,
+    GaiaMemoriesTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 180;
+  int get schemaVersion => 181;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4427,6 +4453,25 @@ class AppDatabase extends _$AppDatabase {
           gaiaSettingsTable,
           gaiaSettingsTable.defaultTier,
         );
+      }
+      if (from >= 169 && from < 181) {
+        // Gaia Phase 5: the memory curator (GAIA_HLD.md §11).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.curatedSeq,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.autoAcceptCurator,
+        );
+      }
+      if (from < 181) {
+        // Gaia's memories (GAIA_HLD.md §11).
+        await migrator.createTable(gaiaMemoriesTable);
       }
     },
   );

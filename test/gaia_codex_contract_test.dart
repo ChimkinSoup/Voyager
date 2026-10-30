@@ -247,6 +247,47 @@ void main() {
   );
 
   test(
+    "app-server: a thread's developer instructions (the memory index, §11), "
+    'kept by a resume in a new process that gives none',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      const index =
+          '# Memories\n\n- The user has a dog called Biscuit. [pets]\n'
+          '- The user has a cat called Mochi. [pets]';
+      final first = appServer('app_server_instructions');
+      final events = <GaiaAgentEvent>[];
+      try {
+        final result = await first.send(
+          chatId: 'contract',
+          sessionId: null,
+          model: _model,
+          prompt: "What is my dog's name? One word.",
+          sessionInstructions: index,
+          onEvent: events.add,
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        expect(text(events), contains('Biscuit'));
+        await first.killAll();
+
+        final resumed = <GaiaAgentEvent>[];
+        final again = await appServer('app_server_instructions_resume').send(
+          chatId: 'contract',
+          sessionId: result.sessionId,
+          model: _model,
+          prompt: "And my cat's name? One word.",
+          onEvent: resumed.add,
+        );
+        expect(again.isError, isFalse, reason: again.text);
+        expect(again.sessionId, result.sessionId);
+        expect(text(resumed), contains('Mochi'));
+      } finally {
+        await first.killAll();
+      }
+    },
+  );
+
+  test(
     'app-server: an unknown model ends the turn with an error result',
     skip: !_enabled,
     timeout: _timeout,

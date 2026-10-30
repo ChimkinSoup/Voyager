@@ -11,6 +11,7 @@ import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
@@ -114,6 +115,7 @@ void main() {
     bool show = false,
     GaiaMedia? media,
     GaiaExecutor? executor,
+    GaiaMemories? memories,
   }) {
     fakeAsync((async) {
       final host = newHost();
@@ -124,6 +126,7 @@ void main() {
         toast: (chatId, title, body) => toasts.add('$chatId $title $body'),
         media: media,
         executor: executor,
+        memories: memories,
       );
       async.flushMicrotasks();
       body(async, host);
@@ -341,6 +344,45 @@ void main() {
     });
   });
 
+  group('memories (§11)', () {
+    test('remember and the curator are refused while aborted, whatever the '
+        'companion sends, in words the user can read', () {
+      fs.file('gaia_aborted').writeAsStringSync('2026-10-30');
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, host) {
+        connect(async);
+        Object? error;
+        try {
+          request(async, 'remember', {'chatId': null, 'text': 'I like tea'});
+        } catch (caught) {
+          error = caught;
+        }
+        expect(
+          (error! as GaiaPipeException).message,
+          'Gaia is aborted. Rearm to save memories.',
+        );
+        expect(
+          () => request(async, 'curated', {
+            'chatId': 'c1',
+            'seq': 3,
+            'memories': [
+              {'text': 'I like coffee', 'tags': <String>[]},
+            ],
+          }),
+          throwsA(isA<GaiaPipeException>()),
+        );
+        repository.listMemories().then((list) => expect(list, isEmpty));
+        async.flushMicrotasks();
+
+        request(async, 'rearm');
+        expect(
+          request(async, 'remember', {'chatId': null, 'text': 'I like tea'}),
+          {'saved': true},
+        );
+      });
+    });
+  });
+
   group('Abort (§15.7)', () {
     test('saves the flag and asks the companion, which confirms', () {
       run(show: true, (async, host) {
@@ -470,8 +512,7 @@ void main() {
       });
     });
 
-    test('undo from the action log takes the row back and marks the card',
-        () {
+    test('undo from the action log takes the row back and marks the card', () {
       run(show: true, executor: executor(), (async, host) {
         inbox(async);
         connect(async);

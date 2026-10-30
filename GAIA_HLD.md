@@ -290,6 +290,11 @@ should replace those with its own synced `GAIA.md`, edited on the Gaia page:
   `--setting-sources ""` would also drop the user's permission mode, and
   `user` would bring their hooks and plugins back. Project settings still
   apply under safe mode.
+  *Checked on 2.1.314 (2026-10-30):* a `--resume` keeps the system prompt
+  the session started with and ignores a changed
+  `--append-system-prompt-file`. So a GAIA.md edit reaches new Claude Code
+  chats, but not chats resumed after it, even though their idle processes
+  restart.
 - **Codex:** one Gaia-owned `CODEX_HOME` per account
   (`%APPDATA%\Voyager\gaia\codex\<account>`, §6.1) with its own `AGENTS.md`
   and `config.toml`. `auth.json` is **copied**, not symlinked (symlinks need
@@ -970,10 +975,12 @@ shared by every agent:
 - **Store:** `gaia_memories`, with short self-contained facts, tags, optional
   `[[links]]`, and the source chat.
 - **Recall:** a compact **index** (one line per memory) rides in every system
-  prompt, and `memory.search` returns full bodies. The index is snapshotted
-  at chat start and at each compaction, so a new memory never invalidates a
-  running chat's prompt cache. Memories added mid-chat are reachable through
-  `memory.search` only. Embeddings aren't needed
+  prompt, and `memory.search` returns full bodies. The index is taken when a
+  session starts and kept for that session's life, so a new memory never
+  invalidates a running chat's prompt cache. It can't be refreshed later
+  (at a compaction or a restart either): both CLIs keep a session's first
+  system prompt when it's resumed (§19, Phase 5). Memories added mid-chat
+  are reachable through `memory.search` only. Embeddings aren't needed
   until there are hundreds of memories. Start with tag + keyword search.
 - **Capture, three ways:**
   1. `/remember <text>`, or "remember that…": saved as active.
@@ -1351,7 +1358,7 @@ Other additions:
 | 4A | Done | Gaia tools (Claude Code's control channel, Codex's stdio shim), `voyager_*` reads, the card system, `ask_user` question cards, Claude Code permission cards |
 | 4B | Done | `propose_*` tools (todo, calendar event, journal entry; new and changed) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` evaluated |
 | 4C | Done | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
-| 5 | | Memory + curator + inbox |
+| 5 | Done | Memory + curator + inbox (below; checked live in the app 2026-10-30) |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
 | 8 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
@@ -1577,6 +1584,101 @@ Phase 4C as built (2026-10-30, codex-cli 0.164.0):
   error, "Codex exited (code -1)", with its text kept); a GAIA.md change
   stopping the idle process, the next turn following the new text. Not
   forced live: the fallback to `exec` when `app-server` can't start.
+
+Phase 5 as built (2026-10-30):
+- **Store.** `gaia_memories` (schema 181, synced, in backups): text (at
+  most 500 characters), tags (lower case, no `#`, a space inside kept as
+  `-`, so `#tea-time` rather than `#tea time`), `sourceChatId`, and
+  status `proposed`, `active` or `archived`. A memory that says what an
+  active or proposed one already says, case and spacing aside, isn't saved
+  twice. Nor is a proposal (the curator's or `memory_propose`'s) of one the
+  user archived, dismissed or deleted, so what they set aside isn't offered
+  again; `/remember` can still save it. `[[links]]` aren't built; they wait for the graph view.
+- **The index** is one line per active memory (cut at 200 characters, its
+  tags after it) under a `# Memories` heading that frames them as
+  background, not instructions, and points at `memory_search` and
+  `memory_propose`. It goes in the session's system prompt (decided
+  2026-10-30, over a block ahead of the first message, so it survives the
+  CLI's own compaction):
+  - Claude Code: GAIA.md and the index in the chat's own file
+    (`gaia/sessions/<chatId>.md`) for `--append-system-prompt-file`,
+    deleted after the process's first turn: the session keeps what it
+    read, and no copy of the memories is left on disk.
+  - Codex `app-server`: the thread's `developerInstructions` on
+    `thread/start`.
+  - Codex `exec` (the fallback): GAIA.md alone; `memory_search` still works.
+
+  The companion sends the index only when a session starts (a new chat, a
+  handoff, a session not found), and none on a resume: both CLIs keep the
+  system prompt a session started with and ignore new text given on a
+  resume (Claude Code 2.1.314's `--resume` with a changed file, Codex
+  0.164.0's `thread/resume` with new `developerInstructions`; checked
+  2026-10-30, live and with a standalone repro). So a session keeps its
+  first index for good, across companion restarts and compaction, and a
+  memory saved since is reached through `memory_search`. Until 2026-10-30
+  the companion resent the index on a resume and restarted a Claude Code
+  process over it, which changed nothing.
+- **Tools.** `memory_search {query?, tags?}` returns active memories in
+  full, ranked by how many of the query's words each has, at most 20, in a
+  `<memories>` block framed as reference. `memory_propose {text, tags?}`
+  puts one in the inbox. Both are answered by the main instance (pipe
+  `memoryTool`), refuse while aborted, and change Codex's tool-set hash,
+  so each `app-server` thread from before is handed over once (§19, 4C).
+- **Capture.** `/remember <text>` (a built-in, in the palette, run even
+  mid-reply or with a card open) saves an active memory at once with a
+  toast, and never reaches the agent. While aborted the main instance
+  refuses it, whatever the companion sends (an active memory steers every
+  chat after it, §15.7): the toast says to rearm, and the text goes back in
+  the draft. **Unlike §11**, an agent's `memory_propose` always lands in
+  the inbox, even when the user said "remember that…" (decided 2026-10-30): the index is in every new
+  chat's system prompt, so a memory an injected instruction planted (a
+  journal entry, a web page) would steer every chat after it. The tool's
+  result tells the agent it waits for the user's approval.
+- **The curator.** A chat whose turn finished here is curated after 10
+  minutes with no new turn: the utility model gets the turns since the
+  chat's `curatedSeq` (a synced column on `gaia_chats`) and the current
+  index, and answers a JSON array of at most three `{text, tags}`, each one
+  fact in the first person as the user would put it ("My sister lives in
+  Lisbon"), like what `/remember` saves; `memory_propose` asks for the same.
+  They go
+  to the inbox, or straight in with **Keep what Gaia notices without
+  asking** on (`autoAcceptCurator`, synced, off by default), and the chat
+  is marked read up to its last turn. A failed run marks nothing, so the
+  next idle reads the turns again; so does one the main instance refuses
+  while aborted. Only the device that ran the chat's
+  last turn sets the timer, which stands in for the run lease until Phase
+  6. The timer lives in the companion, so at start the companion looks
+  for chats whose wait a quit or restart cut short: last messaged within
+  7 days, last run by this device (its session's `lastSeq` is the
+  chat's highest), with turns past `curatedSeq`. Those already 10 minutes
+  quiet are curated one at a time, and the rest get a timer for what's
+  left of their wait. Older turns are left unread.
+- **The Memories tab** on the Gaia page (desktop and phone): the inbox
+  (Remember, edit, Dismiss), the remembered ones (edit, Archive, Delete)
+  and the archived ones (Remember again, Delete), each showing its tags,
+  source chat and date. Dismiss and Delete tombstone it with Undo. The
+  tab's label counts the inbox.
+- **Checked** with the contract checks on the real CLIs (2026-10-30): a
+  session's index in its system prompt answered from, then kept by a
+  resume in a new process that gives none, on Claude Code (2.1.314) and on
+  Codex `app-server` (0.164.0). Unit tests cover the store, the index and
+  search, the migration, `/remember` (refused while aborted), tags, a
+  resume carrying no index, and the curator's wait, read and later read.
+- **Checked live in the app** (2026-10-30, profiles qa + qb, account
+  qa-123): `/remember` (duplicates, empty, over the limit, mid-reply);
+  the index answered from on Claude Code (Haiku) and Codex `app-server`,
+  a memory saved mid-chat kept out of it, also across a killed
+  `app-server`; `memory_search` and `memory_propose` (a duplicate refused);
+  every Memories tab action, with Undo; memories, tombstones and
+  `curatedSeq` synced to a second device; nine curator runs on time, from
+  timers and at start after a quit (one overdue, one with time left),
+  auto-accept on, and a timer that outlived an Abort; the 180 → 181
+  migration on a real database (qa-122's 23 chats). That pass found the
+  resume behaviour above, the `GaiaPipeException:` prefix on pipe errors
+  (now sent as the message alone), `/remember` saving while aborted,
+  third-person curator text and tags with spaces; the fixes since are
+  checked by unit tests and the contract checks, not a second in-app
+  pass.
 
 Phase 3 as built:
 - **Images.** A user message keeps its whole text, `[image N]` tokens

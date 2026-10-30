@@ -15,6 +15,29 @@ import 'fakes/gaia_fakes.dart';
 /// test/gaia_cli_contract_test.dart); GAIA_CLAUDE_CONFIG_DIR picks the
 /// account. It makes two tiny Haiku calls.
 void main() {
+  test("the curator's answer: its JSON array, at most three, wherever it "
+      'is', () {
+    expect(parseCuratorAnswer('[]'), isEmpty);
+    final found = parseCuratorAnswer(
+      'Here you go:\n```json\n[{"text": " Likes tea ", "tags": ["food", 3]},'
+      ' {"text": ""}, {"text": "b"}, {"text": "c"}, {"text": "d"}]\n```',
+    );
+    expect(found.map((memory) => memory.text), ['Likes tea', 'b', 'c']);
+    expect(found.map((memory) => memory.tags), [
+      ['food'],
+      <String>[],
+      <String>[],
+    ]);
+    expect(() => parseCuratorAnswer('Nothing.'), throwsFormatException);
+  });
+
+  test('the curator keeps the newest turns of a long transcript', () async {
+    final runner = FakeUtilityRunner((_) => '[]');
+    await GaiaUtility(runner).curate('first ${'x' * 200000} newest', '');
+    expect(runner.inputs.single, contains('newest'));
+    expect(runner.inputs.single, isNot(contains('first')));
+  });
+
   group('router and titles', () {
     late FakeUtilityRunner runner;
 

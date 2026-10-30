@@ -147,6 +147,7 @@ void main() {
     required bool resume,
     required String prompt,
     String model = _model,
+    String sessionInstructions = '',
   }) async {
     final events = <ClaudeEvent>[];
     final result = await runner.sendRaw(
@@ -155,6 +156,7 @@ void main() {
       newSessionId: sessionId,
       model: model,
       prompt: prompt,
+      sessionInstructions: sessionInstructions,
       onEvent: events.add,
     );
     return (result, events);
@@ -241,6 +243,61 @@ void main() {
         expect(result.isError, isFalse, reason: result.text);
         expect(result.sessionId, sessionId);
         expect(result.text, contains('gaia-contract'));
+      } finally {
+        await second.killAll();
+      }
+    },
+  );
+
+  test(
+    "a session's own instructions (the memory index, §11) in its system "
+    'prompt, kept by a resume in a new process that gives none',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      const index =
+          '# Memories\n\n- The user has a dog called Biscuit. [pets]\n'
+          '- The user has a cat called Mochi. [pets]';
+      final sessionId = _uuid.v4();
+      final first = runner('session_instructions');
+      try {
+        final (result, _) = await turn(
+          first,
+          sessionId: sessionId,
+          resume: false,
+          prompt: "What is my dog's name? One word.",
+          sessionInstructions: index,
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        expect(result.text, contains('Biscuit'));
+        // Gone once read, and the live process still has it.
+        expect(
+          File(
+            p.join(workingDirectory.path, '..', 'sessions', 'contract.md'),
+          ).existsSync(),
+          isFalse,
+        );
+        final (next, _) = await turn(
+          first,
+          sessionId: sessionId,
+          resume: true,
+          prompt: "And my cat's name? One word.",
+        );
+        expect(next.isError, isFalse, reason: next.text);
+        expect(next.text, contains('Mochi'));
+      } finally {
+        await first.killAll();
+      }
+      final second = runner('session_instructions_resume');
+      try {
+        final (result, _) = await turn(
+          second,
+          sessionId: sessionId,
+          resume: true,
+          prompt: "And my cat's name? One word.",
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        expect(result.text, contains('Mochi'));
       } finally {
         await second.killAll();
       }

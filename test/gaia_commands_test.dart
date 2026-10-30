@@ -59,6 +59,18 @@ void main() {
     expect(gaiaBuiltinIn('/stop now'), isNull);
   });
 
+  test('/remember takes the rest of the draft', () {
+    expect(gaiaRememberText('/remember  I like tea \n'), 'I like tea');
+    expect(
+      gaiaRememberText('/remember line one\nline two'),
+      'line one\nline two',
+    );
+    expect(gaiaRememberText('/remember'), isNull);
+    expect(gaiaRememberText('/remembered that'), isNull);
+    expect(gaiaRememberText('please /remember this'), isNull);
+    expect(gaiaBuiltinIn('/remember'), GaiaBuiltin.remember);
+  });
+
   test('the palette shows for a slash word at the caret', () {
     GaiaPaletteToken? at(String text, [int? caret]) => gaiaPaletteToken(
       TextEditingValue(
@@ -81,6 +93,7 @@ void main() {
     expect(items.map((i) => i.name), [
       'new',
       'stop',
+      'remember',
       'quick',
       'std',
       'deep',
@@ -93,7 +106,10 @@ void main() {
       'std',
       'swap',
     ]);
-    expect(filterGaiaPalette(items, 'ee').map((i) => i.name), ['deep']);
+    expect(filterGaiaPalette(items, 'ee').map((i) => i.name), [
+      'deep',
+      'remember',
+    ]);
     expect(filterGaiaPalette(items, 'xpl').single.name, 'explain');
     expect(filterGaiaPalette(items, 'tdy').single.name, 'tidy');
     expect(filterGaiaPalette(items, 'zzz'), isEmpty);

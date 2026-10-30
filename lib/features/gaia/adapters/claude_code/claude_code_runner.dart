@@ -96,7 +96,8 @@ const _mcpConfig =
 /// Every process runs in safe mode, which leaves out the user's global
 /// CLAUDE.md, hooks and plugins (§5.2: `--setting-sources` doesn't keep
 /// CLAUDE.md out, checked on 2.1.310), with GAIA.md appended to the system
-/// prompt from [instructionsFile].
+/// prompt from [instructionsFile], or, with a session's own instructions
+/// after it (§11), from that chat's file beside it in `sessions`.
 ///
 /// Gaia is each process's SDK host (§5.3): its tools are an MCP server the
 /// CLI reaches through `control_request`s on stdout, and the permission
@@ -136,6 +137,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
     GaiaTurnTools? tools,
+    String sessionInstructions = '',
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (result, started) = await _send(
@@ -147,6 +149,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       images: images,
       directories: directories,
       tools: tools,
+      sessionInstructions: sessionInstructions,
       onEvent: (event) {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
@@ -170,6 +173,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required String prompt,
     List<GaiaImageInput> images = const [],
     GaiaTurnTools? tools,
+    String sessionInstructions = '',
     required void Function(ClaudeEvent event) onEvent,
   }) async => (await _send(
     chatId: chatId,
@@ -180,6 +184,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     images: images,
     directories: const {},
     tools: tools,
+    sessionInstructions: sessionInstructions,
     onEvent: onEvent,
   )).$1;
 
@@ -194,13 +199,17 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required List<GaiaImageInput> images,
     required Set<String> directories,
     required GaiaTurnTools? tools,
+    required String sessionInstructions,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     final content = await claudeUserContent(prompt, images);
     var process = _live.remove(chatId);
+    String? sessionFile;
     // One that never started a session (a resume that found none) is on
     // its way out. Directories are fixed per process too: one that can't
-    // read a newly attached file restarts, resuming the session.
+    // read a newly attached file restarts, resuming the session. A
+    // session's own instructions aren't: a resume keeps those it started
+    // with, whatever file it's given (checked on 2.1.314).
     if (process != null &&
         (process.model != model ||
             !process.started ||
@@ -216,6 +225,11 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
         if (idle == null) break;
         unawaited(_live.remove(idle)!.kill());
       }
+      final instructions = await _instructionsFileFor(
+        chatId,
+        sessionInstructions,
+      );
+      if (instructions != instructionsFile) sessionFile = instructions;
       process = await _ClaudeProcess.start(
         workingDirectory: workingDirectory,
         model: model,
@@ -223,9 +237,9 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
         onLine: onLine,
         directories: directories,
         sessionArgs: [
-          if (_instructions.trim().isNotEmpty) ...[
+          if (instructions != null) ...[
             '--append-system-prompt-file',
-            instructionsFile,
+            instructions,
           ],
           ...sessionId == null
               ? ['--session-id', newSessionId]
@@ -237,6 +251,13 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     try {
       return (await process.turn(content, tools, onEvent), process.started);
     } finally {
+      // Read once, as the process started, and the session keeps it (§11):
+      // not left on disk with a copy of the user's memories.
+      if (sessionFile != null) {
+        try {
+          await File(sessionFile).delete();
+        } on FileSystemException catch (_) {}
+      }
       if (process.exited) {
         _live.remove(chatId);
       } else {
@@ -245,6 +266,29 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
         });
       }
     }
+  }
+
+  /// The file a process for [chatId] appends to its system prompt: GAIA.md's
+  /// own, or GAIA.md and [sessionInstructions] in the chat's; null for
+  /// nothing to append.
+  Future<String?> _instructionsFileFor(
+    String chatId,
+    String sessionInstructions,
+  ) async {
+    if (sessionInstructions.trim().isEmpty) {
+      return _instructions.trim().isEmpty ? null : instructionsFile;
+    }
+    final file = File(
+      p.join(p.dirname(instructionsFile), 'sessions', '$chatId.md'),
+    );
+    await file.parent.create(recursive: true);
+    await file.writeAsString(
+      [
+        _instructions.trim(),
+        sessionInstructions.trim(),
+      ].where((text) => text.isNotEmpty).join('\n\n'),
+    );
+    return file.path;
   }
 
   @override

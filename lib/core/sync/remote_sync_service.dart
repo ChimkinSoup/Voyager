@@ -2310,6 +2310,11 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.gaiaMemories:
+        return pullGaiaMemories(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -3235,6 +3240,24 @@ class RemoteSyncService {
         final merged = mergeGaiaDraftFromRemote(data, id, local: local);
         if (identical(merged, local)) return;
         await _gaiaRepository.upsertDraft(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullGaiaMemories({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaMemories,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getMemory(id);
+        final merged = mergeGaiaMemoryFromRemote(data, id, local: local);
+        if (identical(merged, local)) return;
+        await _gaiaRepository.upsertMemory(merged, recordLocalActivity: false);
       },
     );
   }
@@ -7102,6 +7125,9 @@ class RemoteSyncService {
       case FirestoreCollections.gaiaDrafts:
         if (record is! GaiaDraft) return null;
         return (id: record.id, payload: gaiaDraftToFirestore(record));
+      case FirestoreCollections.gaiaMemories:
+        if (record is! GaiaMemory) return null;
+        return (id: record.id, payload: gaiaMemoryToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -8136,6 +8162,7 @@ class RemoteSyncService {
       _inOrder([pullMediaAssets, pullMediaReferences]),
       _inOrder([pullGaiaSettings, pullGaiaChats, pullGaiaMessages]),
       pullGaiaDrafts(),
+      pullGaiaMemories(),
     ]);
   }
 
@@ -8477,6 +8504,7 @@ class LiveSyncController {
     FirestoreCollections.gaiaMessages,
     FirestoreCollections.gaiaSettings,
     FirestoreCollections.gaiaDrafts,
+    FirestoreCollections.gaiaMemories,
     FirestoreCollections.settings,
   ];
 

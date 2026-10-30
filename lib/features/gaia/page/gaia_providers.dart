@@ -10,6 +10,11 @@ final gaiaChatsProvider = StreamProvider<List<GaiaChat>>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchChats(),
 );
 
+/// Live memories (§11), oldest first.
+final gaiaMemoriesProvider = StreamProvider<List<GaiaMemory>>(
+  (ref) => ref.watch(gaiaRepositoryProvider).watchMemories(),
+);
+
 final gaiaSettingsProvider = StreamProvider<GaiaSettings>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchSettings(),
 );

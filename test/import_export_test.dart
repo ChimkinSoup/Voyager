@@ -1038,6 +1038,18 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertMemory(
+    GaiaMemory(
+      id: 'gaia-memory-1',
+      text: 'Prefers metric units',
+      tags: const ['units'],
+      sourceChatId: 'gaia-chat-1',
+      status: GaiaMemoryStatus.active,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1414,6 +1426,7 @@ void main() {
         'gaia_messages_table',
         'gaia_settings_table',
         'gaia_drafts_table',
+        'gaia_memories_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };

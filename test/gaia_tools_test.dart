@@ -63,6 +63,8 @@ void main() {
         'propose_todo',
         'propose_calendar_event',
         'propose_journal_entry',
+        'memory_search',
+        'memory_propose',
       ]);
       for (final tool in tools) {
         expect(tool['name'], matches(RegExp(r'^[a-zA-Z0-9_-]{1,64}$')));

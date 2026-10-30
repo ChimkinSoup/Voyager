@@ -80,8 +80,9 @@ typedef GaiaProposalHost = ({
 
 /// One turn's Gaia tools (§5.3), bound to its chat: `ask_user`, the CLI's
 /// permission prompts and the `propose_*` tools raise cards in the reply
-/// through [onCard] and wait in [cards]; the `voyager_*` reads go to the
-/// main instance through [read], and proposals through [proposals]. While
+/// through [onCard] and wait in [cards]; the `voyager_*` reads and the
+/// `memory_*` tools (§11) go to the main instance through [read], and
+/// proposals through [proposals]. While
 /// [aborted], every tool refuses (§15.7).
 class GaiaChatTools implements GaiaTurnTools {
   GaiaChatTools({
@@ -113,7 +114,7 @@ class GaiaChatTools implements GaiaTurnTools {
     if (aborted()) return _aborted;
     if (name == 'ask_user') return _ask(arguments);
     if (kGaiaProposalTools.containsKey(name)) return _propose(name, arguments);
-    if (isGaiaVoyagerRead(name)) {
+    if (isGaiaVoyagerRead(name) || isGaiaMemoryTool(name)) {
       try {
         return (text: await read(name, arguments), isError: false);
       } catch (error) {

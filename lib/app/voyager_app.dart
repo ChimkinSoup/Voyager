@@ -38,6 +38,7 @@ import 'package:voyager/features/gaia/host/gaia_app_writes.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
@@ -194,6 +195,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         settings: ref.read(settingsRepositoryProvider),
         writes: GaiaAppWrites(ProviderScope.containerOf(context)),
       ),
+      memories: GaiaMemories(ref.read(gaiaRepositoryProvider)),
       toast: (chatId, title, body) => unawaited(
         os
             .showNow(

@@ -268,10 +268,66 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       },
     },
   },
+  {
+    'name': 'memory_search',
+    'description':
+        "Search what the user has asked Gaia to remember about them: "
+        'preferences, people, projects, facts about their life. Returns '
+        'each matching memory in full. Your instructions list the memories '
+        'saved when this chat started; search for the full text of one, '
+        'or for any saved since.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'query': {
+          'type': 'string',
+          'description':
+              'Words to look for; a memory matching more ranks '
+              'higher.',
+        },
+        'tags': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'Only memories with every one of these tags.',
+        },
+      },
+    },
+  },
+  {
+    'name': 'memory_propose',
+    'description':
+        'Offer a memory: one short fact about the user worth keeping '
+        'across chats, such as a lasting preference, a person or project '
+        'in their life, or a decision they made. Not for passing details '
+        'of this chat. It waits in the user\'s memory inbox until they '
+        'approve it. Use it when the user asks you to remember something, '
+        'or when you learn something they would want remembered.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'text': {
+          'type': 'string',
+          'description':
+              'The fact, complete on its own, in the first person as the '
+              'user would put it, and at most 500 characters: "I prefer '
+              'metric units", not "They said yes".',
+        },
+        'tags': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'A few one-word topics, such as "food" or "work".',
+        },
+      },
+      'required': ['text'],
+    },
+  },
 ];
 
 /// The `voyager_*` read tools: the main instance answers them.
 bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
+
+/// The `memory_*` tools (§11): the main instance answers them too.
+bool isGaiaMemoryTool(String name) => name.startsWith('memory_');
 
 /// The protocol version answered when the client names none.
 const _protocolVersion = '2025-06-18';

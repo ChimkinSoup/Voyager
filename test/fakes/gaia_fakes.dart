@@ -118,7 +118,12 @@ class FakeGaiaPipe extends GaiaPipe {
         if (_pending.remove(completer)) completer.complete(result);
       } catch (error) {
         if (_pending.remove(completer)) {
-          completer.completeError(GaiaPipeException('$error'));
+          // As GaiaPipe sends it: a GaiaPipeException's message alone.
+          completer.completeError(
+            GaiaPipeException(
+              error is GaiaPipeException ? error.message : '$error',
+            ),
+          );
         }
       }
     }());
@@ -205,6 +210,7 @@ typedef FakeClaudeSend = ({
   List<GaiaImageInput> images,
   Set<String> directories,
   GaiaTurnTools? tools,
+  String sessionInstructions,
 });
 
 /// A [GaiaAgentRunner] that plays scripted turns instead of running a CLI.
@@ -240,6 +246,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
     GaiaTurnTools? tools,
+    String sessionInstructions = '',
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     sent.add((
@@ -250,6 +257,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
       images: images,
       directories: directories,
       tools: tools,
+      sessionInstructions: sessionInstructions,
     ));
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);
@@ -298,7 +306,11 @@ class FakeClaudeRunner implements GaiaAgentRunner {
   void crash(String chatId) => _fail(_active.remove(chatId));
 
   /// Ends [chatId]'s hanging turn as a [ClaudeResult] would.
-  void finish(String chatId, {String sessionId = 'session-1', String text = ''}) {
+  void finish(
+    String chatId, {
+    String sessionId = 'session-1',
+    String text = '',
+  }) {
     final turn = _active.remove(chatId);
     if (turn == null || turn.isCompleted) return;
     turn.complete(
@@ -334,6 +346,9 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
   final String Function(String job) answer;
   final jobs = <String>[];
 
+  /// Each job's input, in order.
+  final inputs = <String>[];
+
   /// Each job's images, in order.
   final images = <List<GaiaImageInput>>[];
   var warmed = 0;
@@ -359,6 +374,7 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
     List<GaiaImageInput> images = const [],
   }) async {
     jobs.add(job);
+    inputs.add(input);
     this.images.add(images);
     return answer(job);
   }

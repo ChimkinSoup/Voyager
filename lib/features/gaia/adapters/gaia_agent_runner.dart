@@ -100,9 +100,11 @@ abstract interface class GaiaAgentRunner {
   /// `[image N]` tokens. [directories] are the folders the chat's attached
   /// files and folders are in, which the agent must be let read. [tools]
   /// answers the turn's calls to Gaia's tools and its CLI's permission
-  /// prompts (§5.3); null offers none. [onEvent] gets each event of the
-  /// turn; the future completes with its result, or throws a
-  /// [GaiaRunException].
+  /// prompts (§5.3); null offers none. [sessionInstructions] go after
+  /// GAIA.md in a new session's system prompt (the memory index, §11); a
+  /// resumed session keeps those it started with, since neither CLI takes
+  /// new ones on a resume. [onEvent] gets each event of the turn; the future completes with
+  /// its result, or throws a [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
@@ -111,6 +113,7 @@ abstract interface class GaiaAgentRunner {
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
     GaiaTurnTools? tools,
+    String sessionInstructions = '',
     required void Function(GaiaAgentEvent event) onEvent,
   });
 

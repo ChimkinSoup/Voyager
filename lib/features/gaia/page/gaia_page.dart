@@ -9,6 +9,7 @@ import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -24,14 +25,15 @@ import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
-enum _GaiaTab { chats, actions, setup, settings }
+enum _GaiaTab { chats, actions, memories, setup, settings }
 
-/// The Gaia page (GAIA_HLD.md §17): chats with search, the setup checklist,
-/// and Gaia's settings. On the desktop a chat opens in Gaia itself; on
+/// The Gaia page (GAIA_HLD.md §17): chats with search, the action log,
+/// memories and their inbox, the setup checklist, and Gaia's settings. On the desktop a chat opens in Gaia itself; on
 /// Android, until a phone can run agents (Phases 2 and 6), its transcript
 /// opens read-only.
 class GaiaPage extends ConsumerStatefulWidget {
@@ -47,6 +49,11 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final inbox = [
+      for (final memory
+          in ref.watch(gaiaMemoriesProvider).valueOrNull ?? const [])
+        if (memory.status == GaiaMemoryStatus.proposed) memory,
+    ].length;
     return Material(
       type: MaterialType.transparency,
       child: ListView(
@@ -87,6 +94,11 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
                   icon: Icon(PhosphorIconsRegular.listChecks, size: 15),
                   label: Text('Actions'),
                 ),
+                ButtonSegment(
+                  value: _GaiaTab.memories,
+                  icon: const Icon(PhosphorIconsRegular.brain, size: 15),
+                  label: Text(inbox == 0 ? 'Memories' : 'Memories ($inbox)'),
+                ),
                 // The CLIs run on the desktop only.
                 if (isWindows)
                   const ButtonSegment(
@@ -108,6 +120,7 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
           switch (_tab) {
             _GaiaTab.chats => const _ChatsTab(),
             _GaiaTab.actions => const _ActionsTab(),
+            _GaiaTab.memories => const _MemoriesTab(),
             _GaiaTab.setup => const _SetupTab(),
             _GaiaTab.settings => const _SettingsTab(),
           },
@@ -326,6 +339,250 @@ class _ActionRowState extends State<_ActionRow> {
               dense: true,
             )
           : null,
+    );
+  }
+}
+
+/// Gaia's memories (§11, §17): the inbox of proposed ones to approve, edit
+/// or dismiss, the active ones every new chat's index lists, and the
+/// archived ones kept out of it.
+class _MemoriesTab extends ConsumerWidget {
+  const _MemoriesTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final memories = ref.watch(gaiaMemoriesProvider).valueOrNull;
+    final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
+    if (memories == null || settings == null) return const SizedBox.shrink();
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    List<GaiaMemory> withStatus(GaiaMemoryStatus status) => [
+      for (final memory in memories.reversed)
+        if (memory.status == status) memory,
+    ];
+    final inbox = withStatus(GaiaMemoryStatus.proposed);
+    final active = withStatus(GaiaMemoryStatus.active);
+    final archived = withStatus(GaiaMemoryStatus.archived);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Every new chat starts with a list of these, whichever agent '
+          'answers. Save one yourself with /remember in Gaia. What Gaia '
+          'offers, or notices once a chat goes quiet, waits in the inbox.',
+          style: muted,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Keep what Gaia notices without asking'),
+          subtitle: const Text(
+            'What Gaia picks out of a chat once it goes quiet skips the '
+            'inbox. What an agent offers mid-chat still waits for you.',
+          ),
+          value: settings.autoAcceptCurator,
+          onChanged: (value) => ref
+              .read(gaiaRepositoryProvider)
+              .upsertSettings(settings.copyWith(autoAcceptCurator: value)),
+        ),
+        const SizedBox(height: 8),
+        if (inbox.isNotEmpty) ...[
+          _SectionLabel('Inbox (${inbox.length})'),
+          for (final memory in inbox) _MemoryRow(memory: memory),
+          const SizedBox(height: 16),
+        ],
+        _SectionLabel(
+          active.isEmpty ? 'Remembered' : 'Remembered (${active.length})',
+        ),
+        if (active.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text('Nothing yet.', style: muted),
+          ),
+        for (final memory in active) _MemoryRow(memory: memory),
+        if (archived.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _SectionLabel('Archived (${archived.length})'),
+          for (final memory in archived) _MemoryRow(memory: memory),
+        ],
+      ],
+    );
+  }
+}
+
+class _MemoryRow extends ConsumerWidget {
+  const _MemoryRow({required this.memory});
+
+  final GaiaMemory memory;
+
+  Future<void> _save(WidgetRef ref, GaiaMemory memory) =>
+      ref.read(gaiaRepositoryProvider).upsertMemory(memory);
+
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final edited = await showDialog<({String text, List<String> tags})>(
+      context: context,
+      builder: (_) => _MemoryDialog(memory: memory),
+    );
+    if (edited == null) return;
+    await _save(ref, memory.copyWith(text: edited.text, tags: edited.tags));
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final repository = container.read(gaiaRepositoryProvider);
+    final proposed = memory.status == GaiaMemoryStatus.proposed;
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: proposed
+          ? 'Dismissed'
+          : deletedMessage(memory.text, fallback: 'memory'),
+      delete: () =>
+          repository.upsertMemory(memory.copyWith(deletedAt: utcNow())),
+      restore: () async {
+        final current = await repository.getMemory(memory.id);
+        if (current == null) return;
+        await repository.upsertMemory(current.copyWith(clearDeletedAt: true));
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final source = memory.sourceChatId == null
+        ? null
+        : (ref.watch(gaiaChatsProvider).valueOrNull ?? const [])
+              .where((chat) => chat.id == memory.sourceChatId)
+              .firstOrNull;
+    final (icon, label, onPressed) = switch (memory.status) {
+      GaiaMemoryStatus.proposed => (
+        PhosphorIconsRegular.check,
+        'Remember',
+        () => _save(ref, memory.copyWith(status: GaiaMemoryStatus.active)),
+      ),
+      GaiaMemoryStatus.active => (
+        PhosphorIconsRegular.archive,
+        'Archive',
+        () => _save(ref, memory.copyWith(status: GaiaMemoryStatus.archived)),
+      ),
+      GaiaMemoryStatus.archived => (
+        PhosphorIconsRegular.arrowCounterClockwise,
+        'Remember again',
+        () => _save(ref, memory.copyWith(status: GaiaMemoryStatus.active)),
+      ),
+    };
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(memory.text),
+      subtitle: Text(
+        [
+          if (memory.tags.isNotEmpty) memory.tags.map((t) => '#$t').join(' '),
+          ?source?.title,
+          DateFormat.yMMMd().format(memory.createdAt.toLocal()),
+        ].join(' · '),
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall,
+      ),
+      onTap: () => _edit(context, ref),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: label,
+            icon: Icon(icon, size: 16),
+            onPressed: onPressed,
+          ),
+          IconButton(
+            tooltip: memory.status == GaiaMemoryStatus.proposed
+                ? 'Dismiss'
+                : 'Delete',
+            icon: Icon(
+              memory.status == GaiaMemoryStatus.proposed
+                  ? PhosphorIconsRegular.x
+                  : PhosphorIconsRegular.trash,
+              size: 16,
+            ),
+            onPressed: () => _delete(context),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemoryDialog extends StatefulWidget {
+  const _MemoryDialog({required this.memory});
+
+  final GaiaMemory memory;
+
+  @override
+  State<_MemoryDialog> createState() => _MemoryDialogState();
+}
+
+class _MemoryDialogState extends State<_MemoryDialog> {
+  late final _text = TextEditingController(text: widget.memory.text);
+  late final _tags = TextEditingController(text: widget.memory.tags.join(', '));
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _tags.dispose();
+    super.dispose();
+  }
+
+  bool get _valid {
+    final text = _text.text.trim();
+    return text.isNotEmpty && text.length <= kGaiaMemoryMaxLength;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit memory'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            VoyagerTextField(
+              controller: _text,
+              minLines: 2,
+              maxLines: 6,
+              maxLength: kGaiaMemoryMaxLength,
+              decoration: const InputDecoration(labelText: 'Memory'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            VoyagerTextField(
+              controller: _tags,
+              decoration: const InputDecoration(
+                labelText: 'Tags',
+                hintText: 'Separated by commas',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+          dense: true,
+        ),
+        GlassButton(
+          onPressed: _valid
+              ? () => Navigator.of(context).pop((
+                  text: _text.text.trim(),
+                  tags: gaiaMemoryTags(_tags.text.split(',')),
+                ))
+              : null,
+          label: 'Save',
+          dense: true,
+        ),
+      ],
     );
   }
 }

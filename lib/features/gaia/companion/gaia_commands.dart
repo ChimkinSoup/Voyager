@@ -7,7 +7,10 @@ import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 /// others the HLD lists come with their phases.
 enum GaiaBuiltin {
   newChat('new', 'Start a new chat'),
-  stop('stop', 'Stop the reply in progress');
+  stop('stop', 'Stop the reply in progress'),
+
+  /// Takes the rest of the draft: see [gaiaRememberText].
+  remember('remember', 'Remember something about you in every new chat');
 
   const GaiaBuiltin(this.name, this.description);
 
@@ -140,6 +143,13 @@ String? expandGaiaCommand(
       final n => int.parse(n) <= words.length ? words[int.parse(n) - 1] : '',
     },
   );
+}
+
+/// What `/remember <text>` in [draft] saves (§11): the text after it, or
+/// null when the draft doesn't start with `/remember` and some text.
+String? gaiaRememberText(String draft) {
+  final match = RegExp(r'^/remember\s+(\S[\s\S]*)$').firstMatch(draft.trim());
+  return match?.group(1)!.trim();
 }
 
 /// The built-in [draft] is, alone; null otherwise.

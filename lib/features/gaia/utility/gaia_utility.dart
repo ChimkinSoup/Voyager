@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -12,10 +13,15 @@ const _routeTimeout = Duration(seconds: 5);
 const _titleTimeout = Duration(seconds: 15);
 const _summaryTimeout = Duration(seconds: 30);
 const _captionTimeout = Duration(seconds: 30);
+const _curateTimeout = Duration(seconds: 60);
+
+/// A memory the curator found (§11).
+typedef GaiaFoundMemory = ({String text, List<String> tags});
 
 /// Gaia's small internal jobs on the utility model (GAIA_HLD.md §5.1): the
-/// tier router, chat titles, and handoff summaries and image captions. Haiku on Claude Code, on
-/// the account Gaia's chats use.
+/// tier router, chat titles, handoff summaries and image captions, and the
+/// memory curator (§11). Haiku on Claude Code, on the account Gaia's chats
+/// use.
 ///
 /// Any failure is a null: the caller falls back to what Gaia does with no
 /// utility model.
@@ -150,6 +156,40 @@ class GaiaUtility {
     }
   }
 
+  /// At most three memories worth keeping from a chat's new turns in
+  /// [transcript], none of them in [index], the memories already kept
+  /// (§11); null when it failed, so the turns are read again next time.
+  Future<List<GaiaFoundMemory>?> curate(String transcript, String index) async {
+    try {
+      final answer = await _runner
+          .generate(
+            'You keep a short list of lasting facts about the user for '
+                'their assistant, Gaia. Read the new turns of a chat in <input> '
+                'and pick at most 3 facts about the user worth remembering in '
+                'future, unrelated chats: lasting preferences, people, places '
+                'and projects in their life, decisions they made, how they like '
+                'to work. Leave out anything that only matters to this chat, '
+                'anything only the assistant said, anything already among the '
+                'memories kept, and secrets such as passwords or account '
+                'numbers. Usually there is nothing worth keeping.\n\n'
+                'Reply with only a JSON array, [] for nothing: each item '
+                '{"text": "...", "tags": ["..."]}, the text one fact in one '
+                'sentence under 200 characters that makes sense on its own, '
+                'in the first person as the user would put it ("I prefer '
+                'metric units", "My sister lives in Lisbon"), the tags one or '
+                'two one-word topics.',
+            'Memories kept:\n${index.trim().isEmpty ? '(none)' : index}\n\n'
+                // The newest kept: the chat is marked read up to its last.
+                'New turns:\n${transcript.length <= 100000 ? transcript : transcript.substring(transcript.length - 100000)}',
+          )
+          .timeout(_curateTimeout);
+      return parseCuratorAnswer(answer);
+    } catch (error) {
+      debugPrint('[gaia] curator: $error');
+      return null;
+    }
+  }
+
   static String _clip(String text, int max) =>
       text.length <= max ? text : text.substring(0, max);
 }
@@ -164,6 +204,31 @@ GaiaTier? parseRoute(String answer) {
     'deep' => GaiaTier.deep,
     _ => null,
   };
+}
+
+/// The memories in a curator [answer]: its JSON array, wherever it is in
+/// the text, at most three. Throws a [FormatException] when there's none.
+@visibleForTesting
+List<GaiaFoundMemory> parseCuratorAnswer(String answer) {
+  final start = answer.indexOf('[');
+  final end = answer.lastIndexOf(']');
+  if (start < 0 || end < start) {
+    throw FormatException('no JSON array', answer);
+  }
+  final list = jsonDecode(answer.substring(start, end + 1));
+  if (list is! List) throw FormatException('not a JSON array', answer);
+  return [
+    for (final item in list)
+      if (item case {'text': final String text} when text.trim().isNotEmpty)
+        (
+          text: text.trim(),
+          tags: [
+            if (item['tags'] case final List tags)
+              for (final tag in tags)
+                if (tag is String) tag,
+          ],
+        ),
+  ].take(3).toList();
 }
 
 /// [answer]'s first line, without quotes, a heading mark or an end stop,

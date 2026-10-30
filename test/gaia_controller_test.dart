@@ -15,6 +15,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
@@ -61,6 +62,7 @@ class _Main {
       DriftJournalRepository(db),
     ),
   );
+  late final memories = GaiaMemories(repository);
   final requests = <String>[];
 
   /// The companion's events, as `event` or `event {params}`.
@@ -142,6 +144,26 @@ class _Main {
       case 'voyagerRead':
         reads.add(params['tool']! as String);
         return 'read ${params['tool']}';
+      case 'memoryIndex':
+        return memories.index();
+      case 'remember':
+        final saved = await memories.save(
+          params['text']! as String,
+          chatId: params['chatId'] as String?,
+          status: GaiaMemoryStatus.active,
+          byUser: true,
+        );
+        return {'saved': saved != null};
+      case 'curated':
+        await memories
+            .curated(params['chatId']! as String, params['seq']! as int, [
+              for (final memory in params['memories']! as List)
+                (
+                  text: (memory as Map)['text']! as String,
+                  tags: gaiaMemoryTags(memory['tags']),
+                ),
+            ]);
+        return null;
       case 'prepareProposal':
         return (await executor.prepare(
           params['cardId']! as String,
@@ -253,11 +275,13 @@ void main() {
     Map<String, FakeClaudeRunner> otherRunners = const {},
     Future<String> Function()? clipboard,
     Duration cardHold = const Duration(hours: 1),
+    Duration curateAfter = kGaiaCurateAfter,
     Future<void> Function(String host)? reach,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
       cardHold: cardHold,
+      curateAfter: curateAfter,
       pipe: main.companion,
       window: window,
       runners: {kGaiaClaudeCodeAdapter: runner, ...otherRunners},
@@ -316,6 +340,235 @@ void main() {
         expect(controller.currentChatId, 'c1');
       },
     );
+  });
+
+  group('memories (§11)', () {
+    Future<void> remembered(String text) =>
+        main.memories.save(text, status: GaiaMemoryStatus.active);
+
+    test('a new session carries the index as it is; a resume carries none, '
+        'since the session keeps the one it started with', () async {
+      await remembered('Has a dog called Biscuit');
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      final first = runner.sent.single.sessionInstructions;
+      expect(first, contains('- Has a dog called Biscuit'));
+
+      await remembered('Lives in Lisbon');
+      await controller.send('And again');
+      await settle();
+      expect(runner.sent[1].sessionId, isNotNull);
+      expect(runner.sent[1].sessionInstructions, isEmpty);
+
+      controller.newChat();
+      await controller.send('A new chat');
+      await settle();
+      expect(runner.sent[2].sessionId, isNull);
+      expect(runner.sent[2].sessionInstructions, contains('Lives in Lisbon'));
+    });
+
+    test(
+      '/remember saves an active memory and starts no run, even mid-reply',
+      () async {
+        await startCompanion();
+        final toasts = <GaiaRunToast>[];
+        controller.toasts.listen(toasts.add);
+        await controller.send('/remember  Prefers tea ');
+        await settle();
+        expect(runner.sent, isEmpty);
+        expect(controller.chats, isEmpty);
+        final memory = (await main.repository.listMemories()).single;
+        expect(memory.text, 'Prefers tea');
+        expect(memory.status, GaiaMemoryStatus.active);
+        expect(toasts.single.title, 'Remembered');
+
+        await controller.send('/remember prefers TEA');
+        await settle();
+        expect(toasts.last.title, 'Already remembered');
+      },
+    );
+
+    test("once a chat goes quiet, the curator reads its new turns and "
+        'proposes what it found; a later read starts after them', () async {
+      final utility = FakeUtilityRunner(
+        (job) => job.startsWith('You keep')
+            ? '[{"text": "Is learning Portuguese", "tags": ["languages"]}]'
+            : 'Title',
+      );
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Help me practise Portuguese');
+      await settle();
+      expect(await main.repository.listMemories(), isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+
+      final proposed = (await main.repository.listMemories()).single;
+      expect(proposed.text, 'Is learning Portuguese');
+      expect(proposed.status, GaiaMemoryStatus.proposed);
+      expect(proposed.sourceChatId, (await main.chat()).id);
+      expect((await main.chat()).curatedSeq, 1);
+      final read = utility.jobs.where((job) => job.startsWith('You keep'));
+      expect(read, hasLength(1));
+
+      await controller.send('Obrigado');
+      await settle();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      expect((await main.chat()).curatedSeq, 3);
+      // The second read has the new turns only, and what's kept already.
+      expect(
+        utility.jobs.where((job) => job.startsWith('You keep')),
+        hasLength(2),
+      );
+    });
+
+    test(
+      'a turn sent before the chat goes quiet puts the curator off',
+      () async {
+        final utility = FakeUtilityRunner((_) => '[]');
+        await startCompanion(
+          utility: GaiaUtility(utility),
+          curateAfter: const Duration(milliseconds: 80),
+        );
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('One');
+        await settle();
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        await controller.send('Two');
+        await settle();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(
+          utility.jobs.where((job) => job.startsWith('You keep')),
+          isEmpty,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        await settle();
+        expect(
+          utility.jobs.where((job) => job.startsWith('You keep')),
+          hasLength(1),
+        );
+        expect((await main.chat()).curatedSeq, 3);
+      },
+    );
+
+    test('a chat another device went on with while it waited is left to '
+        'that device', () async {
+      final utility = FakeUtilityRunner((_) => '[]');
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 80),
+      );
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('One');
+      await settle();
+      final chat = await main.chat();
+      await main.repository.upsertChat(
+        chat.copyWith(
+          agentSessions: {
+            ...chat.agentSessions,
+            gaiaSessionKey('desktop'): const GaiaAgentSession(
+              sessionId: 'desktop-session',
+              lastSeq: 3,
+            ),
+          },
+        ),
+      );
+      main.pipe.notify('changed');
+      await settle();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await settle();
+      expect(utility.jobs.where((job) => job.startsWith('You keep')), isEmpty);
+      expect((await main.chat()).curatedSeq, -1);
+    });
+
+    test('at start, the curator reads chats this device ran last whose wait '
+        'a quit cut short', () async {
+      final now = DateTime.now().toUtc();
+      Future<void> seed(
+        String id, {
+        required Duration idle,
+        Map<String, int> sessions = const {'laptop': 1},
+        int curatedSeq = -1,
+      }) async {
+        final at = now.subtract(idle);
+        await main.repository.upsertChat(
+          GaiaChat(
+            id: id,
+            title: id,
+            createdAt: at,
+            updatedAt: at,
+            lastMessageAt: at,
+            curatedSeq: curatedSeq,
+            agentSessions: {
+              for (final MapEntry(:key, :value) in sessions.entries)
+                gaiaSessionKey(key): GaiaAgentSession(
+                  sessionId: '$key-session',
+                  lastSeq: value,
+                ),
+            },
+          ),
+        );
+        for (final (seq, role) in [
+          (0, GaiaMessageRole.user),
+          (1, GaiaMessageRole.assistant),
+        ]) {
+          await main.repository.upsertMessage(
+            GaiaMessage(
+              id: '$id-$seq',
+              chatId: id,
+              seq: seq,
+              role: role,
+              parts: [GaiaTextPart('zq-$id')],
+              status: GaiaMessageStatus.complete,
+              createdAt: at,
+              updatedAt: at,
+            ),
+          );
+        }
+      }
+
+      // Saved times keep whole seconds, so 'soon' is a second from due.
+      const curateAfter = Duration(seconds: 2);
+      await seed('due', idle: const Duration(hours: 1));
+      await seed('soon', idle: Duration.zero);
+      await seed(
+        'elsewhere',
+        idle: const Duration(hours: 1),
+        sessions: {'laptop': 1, 'desktop': 3},
+      );
+      await seed('read', idle: const Duration(hours: 1), curatedSeq: 1);
+      await seed('old', idle: kGaiaCurateMissedWithin + curateAfter);
+      final utility = FakeUtilityRunner((_) => '[]');
+      Future<List<String>> read() async => [
+        for (final chat in await main.repository.listChats())
+          if (chat.curatedSeq == 1 && chat.id != 'read') chat.id,
+      ];
+
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: curateAfter,
+      );
+      await settle();
+      expect(await read(), ['due']);
+
+      await Future<void>.delayed(curateAfter);
+      await settle();
+      expect(await read(), unorderedEquals(['due', 'soon']));
+      expect(
+        utility.jobs.where((job) => job.startsWith('You keep')),
+        hasLength(2),
+      );
+    });
   });
 
   test('a message attached as context goes ahead of the next one, and is '
