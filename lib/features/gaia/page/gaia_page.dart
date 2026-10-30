@@ -1495,6 +1495,31 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
           value: settings.autoRoute,
           onChanged: (value) => _save(settings.copyWith(autoRoute: value)),
         ),
+        Row(
+          children: [
+            const Expanded(child: Text('Default tier')),
+            DropdownButton<GaiaTier?>(
+              value: settings.defaultTier,
+              hint: const Text('Last used'),
+              items: [
+                const DropdownMenuItem(child: Text('Last used')),
+                for (final tier in GaiaTier.values)
+                  DropdownMenuItem(value: tier, child: Text(tier.label)),
+              ],
+              onChanged: (tier) => _save(
+                tier == null
+                    ? settings.copyWith(clearDefaultTier: true)
+                    : settings.copyWith(defaultTier: tier),
+              ),
+            ),
+          ],
+        ),
+        Text(
+          'A new chat starts on it when the router is off or fails, and the '
+          'router picks it when unsure.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
         VoyagerTextField(
           controller: _rubric,
           minLines: 3,

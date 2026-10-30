@@ -1002,6 +1002,7 @@ class GaiaSettings extends SoftDeletable {
     this.agents = kGaiaDefaultAgents,
     this.tiers = kGaiaDefaultTiers,
     this.lastTier = GaiaTier.standard,
+    this.defaultTier,
     this.claudeConfigDir = '',
     this.utilityModel = kGaiaDefaultUtilityModel,
     this.autoRoute = true,
@@ -1033,6 +1034,10 @@ class GaiaSettings extends SoftDeletable {
 
   /// The tier a new chat starts on while there's no router (§7.2).
   final GaiaTier lastTier;
+
+  /// The tier a new chat starts on, the router's fallback and its pick when
+  /// unsure (§7.2); null for [lastTier].
+  final GaiaTier? defaultTier;
 
   /// The `CLAUDE_CONFIG_DIR` Gaia's Claude Code runs use, which picks the
   /// account (§6.1); empty for the one Voyager was started with.
@@ -1072,6 +1077,8 @@ class GaiaSettings extends SoftDeletable {
     List<GaiaAgent>? agents,
     Map<GaiaTier, String>? tiers,
     GaiaTier? lastTier,
+    GaiaTier? defaultTier,
+    bool clearDefaultTier = false,
     String? claudeConfigDir,
     String? utilityModel,
     bool? autoRoute,
@@ -1089,6 +1096,7 @@ class GaiaSettings extends SoftDeletable {
     agents: agents ?? this.agents,
     tiers: tiers ?? this.tiers,
     lastTier: lastTier ?? this.lastTier,
+    defaultTier: clearDefaultTier ? null : defaultTier ?? this.defaultTier,
     claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
     utilityModel: utilityModel ?? this.utilityModel,
     autoRoute: autoRoute ?? this.autoRoute,
@@ -1106,6 +1114,7 @@ class GaiaSettings extends SoftDeletable {
     'agents': [for (final agent in agents) agent.toJson()],
     'tiers': gaiaTiersToJson(tiers),
     'lastTier': lastTier.name,
+    'defaultTier': defaultTier?.name,
     'claudeConfigDir': claudeConfigDir,
     'utilityModel': utilityModel,
     'autoRoute': autoRoute,

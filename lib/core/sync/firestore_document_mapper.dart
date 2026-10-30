@@ -4559,6 +4559,7 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'agents': [for (final agent in settings.agents) agent.toJson()],
   'tiers': gaiaTiersToJson(settings.tiers),
   'lastTier': settings.lastTier.name,
+  'defaultTier': settings.defaultTier?.name,
   'claudeConfigDir': settings.claudeConfigDir,
   'utilityModel': settings.utilityModel,
   'autoRoute': settings.autoRoute,
@@ -4598,6 +4599,12 @@ GaiaSettings mergeGaiaSettingsFromRemote(
         gaiaTierFromName(data['lastTier']) ??
         local?.lastTier ??
         GaiaTier.standard,
+    // Null is "last used": an absent key, or a name this build doesn't
+    // know, keeps the local one.
+    defaultTier: switch (data['defaultTier']) {
+      null => data.containsKey('defaultTier') ? null : local?.defaultTier,
+      final name => gaiaTierFromName(name) ?? local?.defaultTier,
+    },
     claudeConfigDir:
         data['claudeConfigDir'] as String? ?? local?.claudeConfigDir ?? '',
     utilityModel:

@@ -33,6 +33,16 @@ void main() {
       expect(runner.jobs.single, contains(kGaiaDefaultRouterRubric));
     });
 
+    test('a default tier is the router pick when unsure', () async {
+      await utility((_) => 'quick').route('x');
+      expect(runner.jobs.single, isNot(contains('If unsure')));
+      await utility(
+        (_) => 'quick',
+        settings: {'defaultTier': 'quick'},
+      ).route('x');
+      expect(runner.jobs.single, contains('If unsure, choose quick.'));
+    });
+
     test('the model and account come from the settings', () {
       utility(
         (_) => '',

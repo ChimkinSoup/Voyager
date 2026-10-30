@@ -253,6 +253,7 @@ void main() {
     Map<String, FakeClaudeRunner> otherRunners = const {},
     Future<String> Function()? clipboard,
     Duration cardHold = const Duration(hours: 1),
+    Future<void> Function(String host)? reach,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
@@ -267,6 +268,7 @@ void main() {
       debug: debug,
       utility: utility,
       clipboard: clipboard,
+      reach: reach,
     );
     await controller.start();
     await settle();
@@ -1448,6 +1450,41 @@ void main() {
     });
   });
 
+  test("the offline icon starts over on a tier whose CLI talks to another "
+      'host', () async {
+    final reached = <String>[];
+    await startCompanion(reach: (host) async => reached.add(host));
+    controller.onScreen.value = true;
+    final claude = controller.connectivity!;
+    await claude.retryNow();
+    expect(reached, ['api.anthropic.com']);
+
+    main.companion.onEvent!('settings', {
+      ...GaiaSettings.initial().toJson(),
+      'agents': [
+        const GaiaAgent(
+          id: 'sol',
+          label: 'GPT-6.1 Sol',
+          adapter: kGaiaCodexAdapter,
+          model: 'gpt-6.1-sol',
+        ).toJson(),
+      ],
+      'tiers': {'standard': 'sol'},
+    });
+    await settle();
+    final codex = controller.connectivity!;
+    expect(codex, isNot(same(claude)));
+    await codex.retryNow();
+    expect(reached, ['api.anthropic.com', 'chatgpt.com']);
+
+    main.companion.onEvent!('settings', {
+      ...GaiaSettings.initial().toJson(),
+      'tiers': <String, Object?>{},
+    });
+    await settle();
+    expect(controller.connectivity, isNull, reason: 'no agent, no host');
+  });
+
   group('tiers', () {
     setUp(() => startCompanion());
 
@@ -1489,6 +1526,21 @@ void main() {
       expect((await main.chat()).agentSessions.keys, [
         gaiaSessionKey('laptop', adapter: kGaiaClaudeCodeAdapter),
       ]);
+    });
+
+    test('a default tier starts a new chat over the last used one', () async {
+      main.companion.onEvent!('settings', {
+        ...GaiaSettings.initial().toJson(),
+        'lastTier': 'deep',
+        'defaultTier': 'quick',
+      });
+      await settle();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent.single.model, 'claude-haiku-5-5');
+      expect((await main.chat()).tier, GaiaTier.quick);
     });
 
     test("an agent this companion can't run ends in an error", () async {

@@ -12,6 +12,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
+import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
@@ -243,6 +244,14 @@ class _DebugMenu extends StatelessWidget {
             ),
           ],
         ),
+        heading('Offline icon'),
+        Text(
+          "In the header once the next tier's CLI has failed to reach its "
+          'servers twice in a row. Hover for its tooltip; a click checks '
+          'again, here for a second.',
+          style: muted,
+        ),
+        const _OfflinePreview(),
         heading('Display'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -416,6 +425,55 @@ class _UploadPreviewState extends State<_UploadPreview> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The header with its offline icon, whose check never reaches anything.
+class _OfflinePreview extends StatefulWidget {
+  const _OfflinePreview();
+
+  @override
+  State<_OfflinePreview> createState() => _OfflinePreviewState();
+}
+
+class _OfflinePreviewState extends State<_OfflinePreview> {
+  var _retrying = false;
+  Timer? _done;
+
+  @override
+  void dispose() {
+    _done?.cancel();
+    super.dispose();
+  }
+
+  void _retry() {
+    setState(() => _retrying = true);
+    _done = Timer(const Duration(seconds: 1) * timeDilation, () {
+      if (mounted) setState(() => _retrying = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text('New chat', style: theme.textTheme.titleSmall)),
+          GaiaOfflineIcon(
+            cli: 'Claude Code',
+            retrying: _retrying,
+            onRetry: _retry,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -9953,6 +9953,7 @@ class DriftGaiaRepository implements GaiaRepository {
             ),
             tiersJson: Value(jsonEncode(gaiaTiersToJson(settings.tiers))),
             lastTier: Value(settings.lastTier.name),
+            defaultTier: Value(settings.defaultTier?.name),
             claudeConfigDir: Value(settings.claudeConfigDir),
             utilityModel: Value(settings.utilityModel),
             autoRoute: Value(settings.autoRoute),
@@ -10112,6 +10113,7 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
       ? kGaiaDefaultTiers
       : gaiaTiersFromJson(jsonDecode(row.tiersJson!)),
   lastTier: gaiaTierFromName(row.lastTier) ?? GaiaTier.standard,
+  defaultTier: gaiaTierFromName(row.defaultTier),
   claudeConfigDir: row.claudeConfigDir,
   utilityModel: row.utilityModel,
   autoRoute: row.autoRoute,

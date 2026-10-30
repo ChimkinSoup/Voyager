@@ -29,6 +29,9 @@ class GaiaUtility {
   /// The router's rubric; empty for [kGaiaDefaultRouterRubric].
   var rubric = '';
 
+  /// The tier the router picks when unsure; null for no lean.
+  GaiaTier? defaultTier;
+
   void apply(Map<String, Object?> settings) {
     final model = (settings['utilityModel'] as String? ?? '').trim();
     _runner.configure(
@@ -37,6 +40,7 @@ class GaiaUtility {
     );
     autoRoute = settings['autoRoute'] != false;
     rubric = settings['routerRubric'] as String? ?? '';
+    defaultTier = gaiaTierFromName(settings['defaultTier']);
   }
 
   /// A new chat is being written: the router will be asked soon.
@@ -50,10 +54,10 @@ class GaiaUtility {
   }
 
   /// The tier for a new chat's first message (§7.2), or null to use the
-  /// last used one.
+  /// default or last used one.
   Future<GaiaTier?> route(String prompt) async {
     if (!autoRoute) {
-      debugPrint('[gaia] router: off, using the last used tier');
+      debugPrint('[gaia] router: off, using the default or last used tier');
       return null;
     }
     final elapsed = Stopwatch()..start();
@@ -67,6 +71,7 @@ class GaiaUtility {
             "Route the user's message in <input> to one of three model "
             'tiers.\n\n'
             '${rubric.trim().isEmpty ? kGaiaDefaultRouterRubric : rubric}'
+            '${defaultTier == null ? '' : '\n\nIf unsure, choose ${defaultTier!.name}.'}'
             '\n\nReply with exactly one word: quick, standard or deep.',
             _clip(prompt, 4000),
           )
@@ -74,13 +79,13 @@ class GaiaUtility {
       final tier = parseRoute(answer);
       debugPrint(
         '[gaia] router: answered "$answer" in ${elapsed.elapsedMilliseconds} '
-        'ms -> ${tier?.name ?? 'no tier, using the last used one'}',
+        'ms -> ${tier?.name ?? 'no tier, using the default or last used one'}',
       );
       return tier;
     } catch (error) {
       debugPrint(
         '[gaia] router: failed after ${elapsed.elapsedMilliseconds} ms, '
-        'using the last used tier: $error',
+        'using the default or last used tier: $error',
       );
       return null;
     }

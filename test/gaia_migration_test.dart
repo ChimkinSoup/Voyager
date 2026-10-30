@@ -231,6 +231,32 @@ void main() {
     expect(saved.routerRubric, 'r');
   });
 
+  test('179→180 adds the default tier', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(
+      seed,
+    ).upsertSettings(GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.'));
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN default_tier',
+    );
+    await seed.customStatement('PRAGMA user_version = 179');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.gaiaMd, 'Be brief.');
+    expect(settings.defaultTier, isNull);
+
+    await repo.upsertSettings(settings.copyWith(defaultTier: GaiaTier.quick));
+    expect((await repo.getSettings()).defaultTier, GaiaTier.quick);
+    await repo.upsertSettings(
+      (await repo.getSettings()).copyWith(clearDefaultTier: true),
+    );
+    expect((await repo.getSettings()).defaultTier, isNull);
+  });
+
   test('175→176 adds the Claude config folder and moves off Gemini', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());

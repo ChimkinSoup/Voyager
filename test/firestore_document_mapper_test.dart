@@ -5,6 +5,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -405,6 +406,31 @@ void main() {
       expect(merged.name, 'Local name');
     },
   );
+
+  test("a remote Gaia default tier this build can't read keeps the local "
+      'one, and an explicit null still clears it', () {
+    final local = GaiaSettings.initial().copyWith(defaultTier: GaiaTier.deep);
+    final remote = {
+      ...gaiaSettingsToFirestore(local),
+      'version': local.version + 1,
+    };
+
+    GaiaTier? merged(Object? tier) => mergeGaiaSettingsFromRemote({
+      ...remote,
+      'defaultTier': tier,
+    }, local: local).defaultTier;
+
+    expect(merged('quick'), GaiaTier.quick);
+    expect(merged('turbo'), GaiaTier.deep);
+    expect(merged(null), isNull);
+    expect(
+      mergeGaiaSettingsFromRemote(
+        {...remote}..remove('defaultTier'),
+        local: local,
+      ).defaultTier,
+      GaiaTier.deep,
+    );
+  });
 
   group('job application seasons', () {
     final now = DateTime.utc(2026, 8, 20);

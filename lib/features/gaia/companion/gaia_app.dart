@@ -31,6 +31,7 @@ import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
@@ -395,6 +396,17 @@ class _Header extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (controller.connectivity case final connectivity?)
+              ListenableBuilder(
+                listenable: connectivity,
+                builder: (context, _) => connectivity.isOnline
+                    ? const SizedBox.shrink()
+                    : GaiaOfflineIcon(
+                        cli: cli?.name,
+                        retrying: connectivity.isRetrying,
+                        onRetry: () => unawaited(connectivity.retryNow()),
+                      ),
+              ),
             if (chip != null) ...[
               Chip(
                 label: Text(chip),

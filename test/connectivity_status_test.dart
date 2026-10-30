@@ -357,4 +357,40 @@ void main() {
       });
     });
   });
+
+  group('paced by a visibility signal', () {
+    test('probes only while shown, and ignores the app lifecycle', () {
+      var probes = 0;
+      fakeAsync((async) {
+        final visible = ValueNotifier(false);
+        final controller = ConnectivityStatusController(
+          probe: () async => probes++,
+          visible: visible,
+          startDelay: start,
+          onlineInterval: online,
+          offlineInterval: offline,
+        );
+        async.elapse(online * 3);
+        expect(probes, 0, reason: 'hidden from the start');
+
+        // A floater can be shown while its window is not resumed.
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        visible.value = true;
+        async.flushMicrotasks();
+        expect(probes, 1, reason: 'the owed probe is spent on showing');
+        async.elapse(online);
+        expect(probes, 2);
+
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        visible.value = false;
+        async.elapse(online * 3);
+        expect(probes, 2);
+
+        controller.dispose();
+        visible.value = true;
+        async.elapse(online * 3);
+        expect(probes, 2, reason: 'disposed, it stops listening');
+      });
+    });
+  });
 }

@@ -70,6 +70,11 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     pipe: pipe,
     window: window,
     draftDirectory: drafts.path,
+    reach: (host) async => (await Socket.connect(
+      host,
+      443,
+      timeout: const Duration(seconds: 8),
+    )).destroy(),
     // Gaia's own working directory, so the CLI never picks up an unrelated
     // project's instruction files (§5.1).
     runners: {

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 /// Tracks whether the sync backend is reachable, by asking it.
@@ -26,22 +27,33 @@ import 'package:flutter/widgets.dart';
 /// come due spends it immediately, which makes the badge current by the time
 /// the window has finished painting rather than up to a minute later; a
 /// quicker round-trip to another window and back simply picks the interval up
-/// where it left off.
+/// where it left off. A window whose app lifecycle doesn't say whether it is
+/// shown passes [visible] instead.
 class ConnectivityStatusController extends ChangeNotifier
     with WidgetsBindingObserver {
   ConnectivityStatusController({
     required this.probe,
+    this.visible,
     this.onlineInterval = const Duration(seconds: 60),
     this.offlineInterval = const Duration(seconds: 10),
     this.probeTimeout = const Duration(seconds: 8),
     this.startDelay = const Duration(seconds: 3),
   }) {
-    WidgetsBinding.instance.addObserver(this);
+    if (visible case final visible?) {
+      _paused = !visible.value;
+      visible.addListener(_visibilityChanged);
+    } else {
+      WidgetsBinding.instance.addObserver(this);
+    }
     _timer = Timer(startDelay, _onProbeDue);
   }
 
   /// The round-trip itself.
   final Future<void> Function() probe;
+
+  /// Whether anyone can see the status, over the app lifecycle: true keeps
+  /// the timer alive, as `resumed` would.
+  final ValueListenable<bool>? visible;
 
   /// Gap between probes while the backend is answering.
   final Duration onlineInterval;
@@ -110,6 +122,8 @@ class ConnectivityStatusController extends ChangeNotifier
       _pause();
     }
   }
+
+  void _visibilityChanged() => visible!.value ? _resume() : _pause();
 
   void _pause() {
     _paused = true;
@@ -187,7 +201,11 @@ class ConnectivityStatusController extends ChangeNotifier
   void dispose() {
     _disposed = true;
     _timer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
+    if (visible case final visible?) {
+      visible.removeListener(_visibilityChanged);
+    } else {
+      WidgetsBinding.instance.removeObserver(this);
+    }
     super.dispose();
   }
 }

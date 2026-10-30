@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart'
     show TextEditingController, TextEditingValue, TextSelection;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
@@ -75,6 +76,7 @@ class GaiaController extends ChangeNotifier {
     this._utility,
     Future<String> Function()? clipboard,
     String? draftDirectory,
+    this._reach,
     @visibleForTesting this._cardHold = kGaiaCardHold,
   }) : _clipboard = clipboard ?? _readClipboard,
        _draftDirectory = draftDirectory ?? Directory.systemTemp.path,
@@ -902,8 +904,9 @@ class GaiaController extends ChangeNotifier {
   var agents = kGaiaDefaultAgents;
   var tiers = kGaiaDefaultTiers;
 
-  /// The tier a new chat starts on (§7.2).
+  /// The tier a new chat starts on (§7.2): the default, else the last used.
   var lastTier = GaiaTier.standard;
+  GaiaTier? defaultTier;
 
   /// The tier picked for the next message, over the chat's own (§7.2).
   GaiaTier? pickedTier;
@@ -925,6 +928,37 @@ class GaiaController extends ChangeNotifier {
   /// Each CLI's version by adapter, once read; null when not installed.
   var cliVersions = <String, GaiaCliVersion?>{};
   var cliChecked = false;
+
+  /// Connects to a host, or throws: [connectivity]'s probe. Null, as in
+  /// tests, for no probing at all.
+  final Future<void> Function(String host)? _reach;
+
+  /// Whether the next tier's CLI can reach its API, for the header's
+  /// offline icon. Probed by the companion itself: the main instance's own
+  /// check asks after Firestore, and pauses while Voyager is in the
+  /// background, which is where it is whenever Gaia is up.
+  ConnectivityStatusController? get connectivity => _connectivity;
+  ConnectivityStatusController? _connectivity;
+  String? _probedHost;
+
+  /// Starts [connectivity] over whenever the next tier's CLI talks to
+  /// another host, so one host's answer never shows under another CLI's
+  /// name. Paced by [onScreen]: the companion's app lifecycle doesn't say
+  /// whether a window or floater is showing.
+  void _followProbedHost() {
+    final reach = _reach;
+    if (reach == null) return;
+    final host = kGaiaClis[agentFor(nextTier)?.adapter]?.apiHost;
+    if (host == _probedHost) return;
+    _probedHost = host;
+    _connectivity?.dispose();
+    _connectivity = host == null
+        ? null
+        : ConnectivityStatusController(
+            probe: () => reach(host),
+            visible: onScreen,
+          );
+  }
 
   /// Runs still going while an update or quit waits on them (§3.2); null
   /// when nothing is draining.
@@ -1131,6 +1165,8 @@ class GaiaController extends ChangeNotifier {
     debug.addListener(applyCapturable);
     draft.addListener(_draftsChanged);
     addListener(_draftsChanged);
+    addListener(_followProbedHost);
+    _followProbedHost();
     _pipe
       ..onEvent = _onEvent
       ..onRequest = _onRequest
@@ -1172,6 +1208,7 @@ class GaiaController extends ChangeNotifier {
     agents = gaiaAgentsFromJson(settings['agents']);
     tiers = gaiaTiersFromJson(settings['tiers']);
     lastTier = gaiaTierFromName(settings['lastTier']) ?? GaiaTier.standard;
+    defaultTier = gaiaTierFromName(settings['defaultTier']);
     commands = gaiaCommandsFromJson(settings['commands']);
     keybinds = gaiaKeybindsFromJson(settings['keybinds']);
     final configDir = settings['claudeConfigDir'] as String? ?? '';
@@ -1207,7 +1244,8 @@ class GaiaController extends ChangeNotifier {
       messages.any((message) => message.role == GaiaMessageRole.assistant);
 
   /// The tier the next message in the current chat goes to (§7.2).
-  GaiaTier get nextTier => pickedTier ?? currentChat?.tier ?? lastTier;
+  GaiaTier get nextTier =>
+      pickedTier ?? currentChat?.tier ?? defaultTier ?? lastTier;
 
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;

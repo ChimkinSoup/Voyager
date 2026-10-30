@@ -2255,6 +2255,9 @@ class GaiaSettingsTable extends Table {
   TextColumn get tiersJson => text().nullable()();
   TextColumn get lastTier =>
       text().withDefault(const Constant('standard'))();
+
+  /// Null for the last used tier.
+  TextColumn get defaultTier => text().nullable()();
   TextColumn get claudeConfigDir => text().withDefault(const Constant(''))();
   TextColumn get utilityModel =>
       text().withDefault(const Constant(kGaiaDefaultUtilityModel))();
@@ -2391,7 +2394,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 179;
+  int get schemaVersion => 180;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4414,6 +4417,15 @@ class AppDatabase extends _$AppDatabase {
           'journal_entries_table',
           journalEntriesTable,
           journalEntriesTable.origin,
+        );
+      }
+      if (from >= 169 && from < 180) {
+        // Gaia's default tier (GAIA_HLD.md §7.2).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.defaultTier,
         );
       }
     },
