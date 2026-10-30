@@ -13,6 +13,7 @@ import 'package:voyager/core/sound/app_sounds.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -452,15 +453,16 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
     );
   }
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
+  Future<void> _pickDate(BuildContext buttonContext) async {
+    final picked = await showDayPickerPopover(
       context: context,
-      initialDate: _takenOn,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(now.year, now.month, now.day),
+      buttonContext: buttonContext,
+      initial: _takenOn,
+      lastDate: DateTime.now(),
     );
-    if (picked != null && mounted) setState(() => _date = picked);
+    if (picked != null && mounted) {
+      setState(() => _date = DateUtils.dateOnly(picked));
+    }
   }
 
   Future<void> _store(
@@ -836,11 +838,13 @@ class _CheckInDialogState extends ConsumerState<_CheckInDialog> {
           children: [
             Text('Date', style: theme.textTheme.labelMedium),
             const SizedBox(width: 12),
-            GlassButton(
-              onPressed: _pickDate,
-              icon: const Icon(PhosphorIconsRegular.calendarBlank, size: 13),
-              label: DateFormat.yMMMEd().format(_takenOn),
-              dense: true,
+            Builder(
+              builder: (buttonContext) => GlassButton(
+                onPressed: () => _pickDate(buttonContext),
+                icon: const Icon(PhosphorIconsRegular.calendarBlank, size: 13),
+                label: DateFormat.yMMMEd().format(_takenOn),
+                dense: true,
+              ),
             ),
           ],
         ),

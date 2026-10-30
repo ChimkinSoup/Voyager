@@ -14,7 +14,6 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
-import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -862,20 +861,11 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   /// rather than a position (§3.5).
   Future<void> _pickCreatedAt(BuildContext pillContext, Color accent) async {
     final initial = _current.createdAt.toLocal();
-    final picked = await showContextualPopover<DateTime>(
+    final picked = await showDayPickerPopover(
       context: context,
       buttonContext: pillContext,
-      width: kDateSelectorPopoverSize.width,
-      height: kDateSelectorPopoverSize.height,
+      initial: initial,
       accentColor: accent,
-      builder: (context) => DateSelectorPopover(
-        initialStartDate: initial,
-        initialEndDate: initial,
-        singleDateMode: true,
-        inlineMode: true,
-        accentColor: accent,
-        onDateSelected: (date) => Navigator.of(context).pop(date),
-      ),
     );
     if (picked == null) return;
     await _save(

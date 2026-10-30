@@ -1340,7 +1340,7 @@ Other additions:
 | 3 | Done | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
 | 4A | Done | Gaia tools (Claude Code's control channel, Codex's stdio shim), `voyager_*` reads, the card system, `ask_user` question cards, Claude Code permission cards |
 | 4B | Done | `propose_*` tools (todo, calendar event, journal entry; new and changed) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` evaluated |
-| 4C | | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback |
+| 4C | | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
 | 5 | | Memory + curator + inbox |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
@@ -1464,7 +1464,7 @@ Phase 4B as built (2026-10-28):
   permissions, with nothing written; a question stays open and, answered
   later, goes as the next message. So on Codex a proposal has to be decided
   within about 30 s until Phase 4C.
-- **Not done:** the trash doesn't show `origin: gaia` yet.
+- **Not done:** the trash doesn't show `origin: gaia` yet; moved to 4C.
 - **Checked live (2026-10-29)** on the `qa` profile with the debug build,
   on Claude Code (Haiku) and Codex (gpt-6.1-sol):
   - a new task, event and journal entry, each accepted as proposed or

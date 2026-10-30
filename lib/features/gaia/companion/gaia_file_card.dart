@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
 
 /// An attached file or folder (§9.3) as a card [height] tall, beside the
 /// images: its name and type, its whole path on hover. [onRemove] adds a
@@ -85,17 +86,11 @@ class GaiaFileCard extends StatelessWidget {
               Positioned(
                 right: 2,
                 top: 2,
-                child: Material(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: remove,
-                    child: const Padding(
-                      padding: EdgeInsets.all(2),
-                      child: Icon(Icons.close, size: 14, color: Colors.white),
-                    ),
-                  ),
+                child: GaiaButton(
+                  icon: Icons.close,
+                  onPressed: remove,
+                  size: 24,
+                  still: true,
                 ),
               ),
           ],

@@ -312,10 +312,13 @@ class _PickUpPill extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            IconButton(
-              tooltip: 'Cancel (Esc)',
-              icon: const Icon(Icons.close, size: 16),
-              onPressed: controller.cancelPickUp,
+            Tooltip(
+              message: 'Cancel (Esc)',
+              child: GaiaButton(
+                icon: Icons.close,
+                onPressed: controller.cancelPickUp,
+                size: 28,
+              ),
             ),
             const SizedBox(width: 4),
           ],

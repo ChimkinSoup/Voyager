@@ -2,11 +2,14 @@
 // restarts, and opening it scrolls it into view.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -264,5 +267,35 @@ void main() {
     final header = tester.getRect(_logStats);
     expect(header.top, greaterThanOrEqualTo(viewport.top));
     expect(header.top - viewport.top, lessThan(20));
+  });
+
+  testWidgets("the date opens Voyager's picker, which can't go past today", (
+    tester,
+  ) async {
+    await _pumpInbox(tester);
+    await tester.tap(_logStats);
+    await _settle(tester);
+    final date = find.byIcon(PhosphorIconsRegular.calendar);
+
+    await tester.tap(date);
+    await _settle(tester);
+    expect(find.byType(DateSelectorPopover), findsOneWidget);
+    // Tomorrow is greyed out, and the highlight stops at today.
+    await tester.tap(find.text('Tomorrow'));
+    await _settle(tester);
+    expect(find.byType(DateSelectorPopover), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await _settle(tester);
+    expect(find.byType(DateSelectorPopover), findsNothing);
+    expect(find.byTooltip('Jump to today'), findsNothing);
+
+    await tester.tap(date);
+    await _settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await _settle(tester);
+    expect(find.byType(DateSelectorPopover), findsNothing);
+    expect(find.byTooltip('Jump to today'), findsOneWidget);
   });
 }

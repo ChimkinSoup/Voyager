@@ -9,11 +9,47 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/calendar_days.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
 
 /// The size to open [DateSelectorPopover] at. Its day grid hangs off an
 /// Expanded, so it needs a fixed height, and this one fits all six week rows
 /// under the quick picks, month header and weekday labels.
 const kDateSelectorPopoverSize = Size(320, 400);
+
+/// Builds a quick pick (Today, Tomorrow, Next Week) in a host's own look;
+/// [selected] when it's the picked day, and [onPressed] null when it's out
+/// of the picker's range.
+typedef QuickPickBuilder =
+    Widget Function(String label, bool selected, VoidCallback? onPressed);
+
+/// Opens a [DateSelectorPopover] off [buttonContext] for one day, from
+/// [firstDate] to [lastDate] when given. Null when closed without a pick.
+Future<DateTime?> showDayPickerPopover({
+  required BuildContext context,
+  required BuildContext buttonContext,
+  required DateTime initial,
+  Color? accentColor,
+  DateTime? firstDate,
+  DateTime? lastDate,
+}) => showContextualPopover<DateTime>(
+  context: context,
+  buttonContext: buttonContext,
+  // Both are needed: the calendar hangs its grid off an Expanded, so a
+  // popover left to size itself gives that grid no height at all.
+  width: kDateSelectorPopoverSize.width,
+  height: kDateSelectorPopoverSize.height,
+  accentColor: accentColor,
+  builder: (context) => DateSelectorPopover(
+    initialStartDate: initial,
+    initialEndDate: initial,
+    singleDateMode: true,
+    inlineMode: true,
+    accentColor: accentColor,
+    firstDate: firstDate,
+    lastDate: lastDate,
+    onDateSelected: (date) => Navigator.of(context).pop(date),
+  ),
+);
 
 class DateSelectorPopover extends ConsumerStatefulWidget {
   final DateTime initialStartDate;
@@ -23,6 +59,15 @@ class DateSelectorPopover extends ConsumerStatefulWidget {
   final ValueChanged<DateTime>? onDateSelected;
   final Color? accentColor;
 
+  /// Replaces the quick-pick chips, which then keep to one line, scaled
+  /// down if they must.
+  final QuickPickBuilder? quickPickBuilder;
+
+  /// The first and last days that can be picked, either open when null.
+  /// Days and quick picks outside them are greyed out.
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+
   const DateSelectorPopover({
     super.key,
     required this.initialStartDate,
@@ -31,6 +76,9 @@ class DateSelectorPopover extends ConsumerStatefulWidget {
     this.inlineMode = false,
     this.onDateSelected,
     this.accentColor,
+    this.quickPickBuilder,
+    this.firstDate,
+    this.lastDate,
   });
 
   @override
@@ -182,7 +230,16 @@ class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
     });
   }
 
+  bool _inRange(DateTime date) {
+    final day = DateUtils.dateOnly(date);
+    final first = widget.firstDate;
+    final last = widget.lastDate;
+    return (first == null || !day.isBefore(DateUtils.dateOnly(first))) &&
+        (last == null || !day.isAfter(DateUtils.dateOnly(last)));
+  }
+
   void _handleDateTap(DateTime date, {bool startsRange = false}) {
+    if (!_inRange(date)) return;
     setState(() {
       _hoveredDate = date;
       // A plain tap picks one day. Shift+tap, or a long press on touch,
@@ -264,7 +321,15 @@ class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
       return;
     }
 
-    if (dayDelta != 0) {
+    // The highlight stops at the range's edge.
+    if (dayDelta != 0 &&
+        _inRange(
+          DateTime(
+            _hoveredDate.year,
+            _hoveredDate.month,
+            _hoveredDate.day + dayDelta,
+          ),
+        )) {
       setState(() {
         _showHoverRing = true;
         _hoveredDate = DateTime(
@@ -382,9 +447,12 @@ class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
 
       final isHovered = _isSameDay(date, _hoveredDate);
 
+      final enabled = _inRange(date);
       Color textColor = theme.colorScheme.onSurface;
       if (isSelected) {
         textColor = onAccent;
+      } else if (!enabled) {
+        textColor = theme.colorScheme.onSurface.withValues(alpha: 0.25);
       }
 
       final highlightColor = Color.alphaBlend(
@@ -506,18 +574,22 @@ class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
                   color: Colors
                       .transparent, // Let Container handle the background color securely
                   child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _showHoverRing = false;
-                      });
-                      _handleDateTap(date);
-                    },
-                    onLongPress: () {
-                      setState(() {
-                        _showHoverRing = false;
-                      });
-                      _handleDateTap(date, startsRange: true);
-                    },
+                    onTap: enabled
+                        ? () {
+                            setState(() {
+                              _showHoverRing = false;
+                            });
+                            _handleDateTap(date);
+                          }
+                        : null,
+                    onLongPress: enabled
+                        ? () {
+                            setState(() {
+                              _showHoverRing = false;
+                            });
+                            _handleDateTap(date, startsRange: true);
+                          }
+                        : null,
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -584,43 +656,65 @@ class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
           // overflowing.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: chips.map((c) {
-                final chipDate = c['date'] as DateTime;
-                final isSelected = _isQuickChipSelected(chipDate);
-                return ActionChip(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 0,
-                  ),
-                  // Half the default: the labels have to sit inside the
-                  // pane at their natural width, unabbreviated.
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  label: Text(
-                    c['label'] as String,
-                    style: TextStyle(
-                      color: isSelected
-                          ? onAccent
-                          : theme.colorScheme.onSurface,
+            child: switch (widget.quickPickBuilder) {
+              final builder? => FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 6,
+                  children: [
+                    for (final c in chips)
+                      builder(
+                        c['label'] as String,
+                        _isQuickChipSelected(c['date'] as DateTime),
+                        _inRange(c['date'] as DateTime)
+                            ? () => _submitQuickAction(c['date'] as DateTime)
+                            : null,
+                      ),
+                  ],
+                ),
+              ),
+              null => Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: chips.map((c) {
+                  final chipDate = c['date'] as DateTime;
+                  final isSelected = _isQuickChipSelected(chipDate);
+                  return ActionChip(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 0,
                     ),
-                  ),
-                  backgroundColor: isSelected
-                      ? selectedFill
-                      : Colors.transparent,
-                  side: isSelected
-                      ? BorderSide(color: accent, width: 1)
-                      : BorderSide(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.2,
+                    // Half the default: the labels have to sit inside the
+                    // pane at their natural width, unabbreviated.
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    label: Text(
+                      c['label'] as String,
+                      style: TextStyle(
+                        color: isSelected
+                            ? onAccent
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    backgroundColor: isSelected
+                        ? selectedFill
+                        : Colors.transparent,
+                    side: isSelected
+                        ? BorderSide(color: accent, width: 1)
+                        : BorderSide(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.2,
+                            ),
+                            width: 1,
                           ),
-                          width: 1,
-                        ),
-                  onPressed: () => _submitQuickAction(chipDate),
-                );
-              }).toList(),
-            ),
+                    onPressed: _inRange(chipDate)
+                        ? () => _submitQuickAction(chipDate)
+                        : null,
+                  );
+                }).toList(),
+              ),
+            },
           ),
           const SizedBox(height: 8),
           const Divider(height: 1),

@@ -394,23 +394,11 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
 
   Future<void> _pickDate(BuildContext pillContext) async {
     final initial = jobDayKey(_current.dateApplied);
-    final picked = await showContextualPopover<DateTime>(
+    final picked = await showDayPickerPopover(
       context: context,
       buttonContext: pillContext,
-      // Both are needed: the calendar hangs its grid off an Expanded, so a
-      // popover left to size itself gives that grid no height at all and the
-      // sheet paints as an empty box.
-      width: kDateSelectorPopoverSize.width,
-      height: kDateSelectorPopoverSize.height,
+      initial: initial,
       accentColor: widget.accentColor,
-      builder: (context) => DateSelectorPopover(
-        initialStartDate: initial,
-        initialEndDate: initial,
-        singleDateMode: true,
-        inlineMode: true,
-        accentColor: widget.accentColor,
-        onDateSelected: (date) => Navigator.of(context).pop(date),
-      ),
     );
     if (picked == null) return;
     // Date-only, at UTC midnight: the sparkline buckets by calendar day, and

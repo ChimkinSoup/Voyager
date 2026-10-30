@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 
 /// An attached image as a thumbnail [height] tall, its `[image N]` over its
@@ -150,21 +151,11 @@ class GaiaImageThumb extends StatelessWidget {
                     Positioned(
                       right: 2,
                       top: 2,
-                      child: Material(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: remove,
-                          child: const Padding(
-                            padding: EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.close,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
+                      child: GaiaButton(
+                        icon: Icons.close,
+                        onPressed: remove,
+                        size: 24,
+                        still: true,
                       ),
                     ),
                 ],

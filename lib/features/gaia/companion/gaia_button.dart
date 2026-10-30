@@ -41,6 +41,8 @@ class GaiaButton extends StatefulWidget {
     this.icon,
     this.size = 36,
     this.color,
+    this.padding = 16,
+    this.still = false,
   }) : assert(label != null || icon != null);
 
   /// Null disables the button.
@@ -53,6 +55,13 @@ class GaiaButton extends StatefulWidget {
 
   /// The light's colour and the label's; the accent and white when null.
   final Color? color;
+
+  /// Either side of a squared-off button's label.
+  final double padding;
+
+  /// The ring without its moving light, which lights up whole on hover:
+  /// for small buttons there can be many of, as on each attachment.
+  final bool still;
 
   @override
   State<GaiaButton> createState() => _GaiaButtonState();
@@ -102,6 +111,42 @@ class _GaiaButtonState extends State<GaiaButton> {
               ),
             ],
           );
+    final inner = Container(
+      alignment: Alignment.center,
+      padding: round ? null : EdgeInsets.symmetric(horizontal: widget.padding),
+      child: content,
+    );
+    final Widget ring;
+    if (widget.still) {
+      final colors = Theme.of(context).colorScheme;
+      final accent = widget.color ?? colors.primary;
+      // The moving ring's colours, idle and lit, round the whole edge.
+      ring = AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(1),
+        decoration: BoxDecoration(
+          color: _hovered
+              ? HSLColor.fromColor(accent).withSaturation(1).toColor()
+              : Color.lerp(accent, Colors.white, 0.5)!.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(outer),
+        ),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Color.lerp(colors.surface, Colors.black, 0.5),
+            borderRadius: BorderRadius.circular(outer - 1),
+          ),
+          child: inner,
+        ),
+      );
+    } else {
+      ring = GaiaGlowRing(
+        radius: outer,
+        hovered: _hovered,
+        color: widget.color,
+        child: inner,
+      );
+    }
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
@@ -122,18 +167,8 @@ class _GaiaButtonState extends State<GaiaButton> {
             child: SizedBox(
               height: widget.size,
               width: round ? widget.size : null,
-              child: GaiaGlowRing(
-                radius: outer,
-                hovered: _hovered,
-                color: widget.color,
-                child: Container(
-                  alignment: Alignment.center,
-                  padding: round
-                      ? null
-                      : const EdgeInsets.symmetric(horizontal: 16),
-                  child: content,
-                ),
-              ),
+              // As wide as its label, unless made wider.
+              child: round ? ring : IntrinsicWidth(child: ring),
             ),
           ),
         ),

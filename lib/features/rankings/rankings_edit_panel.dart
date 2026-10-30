@@ -13,7 +13,6 @@ import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/palette_color.dart';
-import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -311,22 +310,11 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
 
   Future<void> _pickCreatedAt(BuildContext pillContext) async {
     final initial = _current.createdAt.toLocal();
-    final picked = await showContextualPopover<DateTime>(
+    final picked = await showDayPickerPopover(
       context: context,
       buttonContext: pillContext,
-      // Both are needed: the calendar hangs its grid off an Expanded, so a
-      // popover left to size itself gives that grid no height at all.
-      width: kDateSelectorPopoverSize.width,
-      height: kDateSelectorPopoverSize.height,
+      initial: initial,
       accentColor: _accent,
-      builder: (context) => DateSelectorPopover(
-        initialStartDate: initial,
-        initialEndDate: initial,
-        singleDateMode: true,
-        inlineMode: true,
-        accentColor: _accent,
-        onDateSelected: (date) => Navigator.of(context).pop(date),
-      ),
     );
     if (picked == null) return;
     await _save(

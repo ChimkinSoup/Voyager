@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_date_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
@@ -115,39 +116,48 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
                   ),
                 ),
               ),
-            Row(
+            // The hint goes above the buttons, whole, when it can't sit
+            // beside them on one line: with Save all too, it can't.
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              overflowSpacing: 6,
+              spacing: 8,
               children: [
-                Expanded(
-                  child: Text(
-                    [
-                      if (widget.sendKey != null) '${widget.sendKey} saves',
-                      'or type what to change',
-                    ].join(' · '),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
+                Text(
+                  [
+                    if (widget.sendKey != null) '${widget.sendKey} saves',
+                    'or type what to change',
+                  ].join(' · '),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.outline,
                   ),
                 ),
-                if (widget.onReject != null)
-                  GaiaButton(
-                    label: 'Turn down',
-                    onPressed: widget.onReject,
-                    size: 28,
-                    color: theme.colorScheme.error,
-                  ),
-                if (widget.onAcceptAll != null) ...[
-                  const SizedBox(width: 8),
-                  GaiaButton(
-                    label: 'Save all',
-                    onPressed: widget.onAcceptAll,
-                    size: 28,
-                  ),
-                ],
-                const SizedBox(width: 8),
-                GaiaButton(
-                  label: 'Save',
-                  onPressed: problem == null ? widget.onAccept : null,
-                  size: 28,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.onReject != null)
+                      GaiaButton(
+                        label: 'Turn down',
+                        onPressed: widget.onReject,
+                        size: 28,
+                        color: theme.colorScheme.error,
+                      ),
+                    if (widget.onAcceptAll != null) ...[
+                      const SizedBox(width: 8),
+                      GaiaButton(
+                        label: 'Save all',
+                        onPressed: widget.onAcceptAll,
+                        size: 28,
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    GaiaButton(
+                      label: 'Save',
+                      onPressed: problem == null ? widget.onAccept : null,
+                      size: 28,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -354,7 +364,6 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
     String label,
     Map<String, Object?> fields,
   ) {
-    final theme = Theme.of(context);
     final when = gaiaParseWhen(fields[key]);
     final timed = switch (key) {
       'start' || 'end' => fields['allDay'] != true,
@@ -362,24 +371,23 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
       _ => when?.hasTime ?? false,
     };
     Future<void> pick() async {
-      final initial = when?.at ?? DateUtils.dateOnly(DateTime.now());
-      final day = await showDatePicker(
-        context: context,
-        initialDate: initial,
-        firstDate: DateTime(initial.year - 10),
-        lastDate: DateTime(initial.year + 10),
+      // A due date's time is optional in the picker, as in Voyager's.
+      final due = key == 'due';
+      final picked = await showGaiaDatePicker(
+        context,
+        initial:
+            when?.at ??
+            DateUtils.dateOnly(DateTime.now()).add(const Duration(hours: 9)),
+        timed: timed || due,
+        optionalTime: due,
+        initialHasTime: timed,
       );
-      if (day == null || !context.mounted) return;
-      var at = DateUtils.dateOnly(day);
-      if (timed) {
-        final time = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(when?.at ?? DateTime(0, 1, 1, 9)),
-        );
-        if (time == null) return;
-        at = at.add(Duration(hours: time.hour, minutes: time.minute));
-      }
-      widget.onEdit?.call(key, gaiaFormatWhen(at, hasTime: timed));
+      // Not once the card has gone, or been answered meanwhile.
+      if (picked == null || !mounted || !_editing) return;
+      widget.onEdit?.call(
+        key,
+        gaiaFormatWhen(picked.dateTime, hasTime: picked.hasTime),
+      );
     }
 
     return Row(
@@ -388,37 +396,44 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
+            child: GaiaButton(
+              label: gaiaWhenLabel(fields[key]),
               onPressed: pick,
-              child: Text(gaiaWhenLabel(fields[key])),
+              size: 28,
             ),
           ),
         ),
         if (key == 'due') ...[
-          if (when != null)
-            IconButton(
-              tooltip: when.hasTime ? 'Day only' : 'Add a time',
-              iconSize: 18,
-              icon: Icon(when.hasTime ? Icons.timer_off : Icons.schedule),
-              onPressed: () => widget.onEdit?.call(
-                key,
-                gaiaFormatWhen(
-                  when.hasTime
-                      ? DateUtils.dateOnly(when.at)
-                      : DateUtils.dateOnly(
-                          when.at,
-                        ).add(const Duration(hours: 9)),
-                  hasTime: !when.hasTime,
+          if (when != null) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: when.hasTime ? 'Day only' : 'Add a time',
+              child: GaiaButton(
+                icon: when.hasTime ? Icons.timer_off : Icons.schedule,
+                size: 28,
+                onPressed: () => widget.onEdit?.call(
+                  key,
+                  gaiaFormatWhen(
+                    when.hasTime
+                        ? DateUtils.dateOnly(when.at)
+                        : DateUtils.dateOnly(
+                            when.at,
+                          ).add(const Duration(hours: 9)),
+                    hasTime: !when.hasTime,
+                  ),
                 ),
               ),
             ),
-          if (when != null)
-            IconButton(
-              tooltip: 'No due date',
-              iconSize: 18,
-              icon: Icon(Icons.close, color: theme.colorScheme.outline),
-              onPressed: () => widget.onEdit?.call(key, null),
+            const SizedBox(width: 6),
+            Tooltip(
+              message: 'No due date',
+              child: GaiaButton(
+                icon: Icons.close,
+                size: 28,
+                onPressed: () => widget.onEdit?.call(key, null),
+              ),
             ),
+          ],
         ],
       ],
     );

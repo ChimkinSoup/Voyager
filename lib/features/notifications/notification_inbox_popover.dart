@@ -25,6 +25,7 @@ import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
@@ -2972,15 +2973,16 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
       ..scheduleFrame();
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickDate(BuildContext buttonContext) async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showDayPickerPopover(
       context: context,
-      initialDate: _selectedDate,
+      buttonContext: buttonContext,
+      initial: _selectedDate,
       firstDate: DateTime(now.year - 5),
       lastDate: now,
     );
-    if (picked != null && mounted) await _setDate(picked);
+    if (picked != null && mounted) await _setDate(DateUtils.dateOnly(picked));
   }
 
   void _resetToToday() {
@@ -3132,10 +3134,12 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                         ),
                         const SizedBox(width: 2),
                       ],
-                      _FooterTextButton(
-                        onTap: _pickDate,
-                        icon: PhosphorIconsRegular.calendar,
-                        label: _formatDate(_selectedDate),
+                      Builder(
+                        builder: (buttonContext) => _FooterTextButton(
+                          onTap: () => _pickDate(buttonContext),
+                          icon: PhosphorIconsRegular.calendar,
+                          label: _formatDate(_selectedDate),
+                        ),
                       ),
                     ],
                   )

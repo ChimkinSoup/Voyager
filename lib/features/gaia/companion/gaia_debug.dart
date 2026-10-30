@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
 /// The streaming speeds the debug menu offers, in characters a second.
 const kGaiaDebugStreamSpeeds = [25, 50, 100, 200, 400, 800, 1600, 6400];
@@ -205,6 +206,26 @@ class GaiaDebugQuestion extends GaiaDebugStep {
   final Map<String, Object?> arguments;
 }
 
+/// Proposal cards, raised as `propose_*` calls raise them, through the main
+/// instance's executor: accepted, each is really written. More than one
+/// are raised together, as Codex's parallel calls are.
+class GaiaDebugProposals extends GaiaDebugStep {
+  const GaiaDebugProposals(this.proposals);
+
+  final List<GaiaDebugProposal> proposals;
+}
+
+/// One `propose_*` call. Its [arguments] are worked out from today when it
+/// plays. A change to an existing row names the [read] that finds one: the
+/// first row it lists that doesn't repeat goes in as `id`.
+class GaiaDebugProposal {
+  const GaiaDebugProposal(this.tool, this.arguments, {this.read});
+
+  final String tool;
+  final Map<String, Object?> Function(DateTime today) arguments;
+  final String? read;
+}
+
 class GaiaDebugPause extends GaiaDebugStep {
   const GaiaDebugPause(this.duration);
 
@@ -306,6 +327,16 @@ class GaiaScriptedRunner {
         case GaiaDebugQuestion(:final arguments):
           await tools.call('ask_user', arguments);
           if (turn.isCompleted) return;
+        case GaiaDebugProposals(:final proposals):
+          final results = await Future.wait(
+            proposals.map((proposal) => _propose(proposal, tools)),
+          );
+          if (turn.isCompleted) return;
+          // What the agent would be told, so a refusal shows why.
+          final told = results.join('\n\n');
+          onEvent(const GaiaTextStart());
+          reply.write(told);
+          onEvent(GaiaTextDelta(told));
         case GaiaDebugPause(:final duration):
           if (!await wait(duration)) return;
         case GaiaDebugError(:final message):
@@ -323,6 +354,49 @@ class GaiaScriptedRunner {
     turn.complete(
       GaiaTurnResult(sessionId: '', isError: false, text: reply.toString()),
     );
+  }
+
+  /// Plays [proposal]'s call, finding its row first when it changes one,
+  /// and gives back what the agent would have been told.
+  static Future<String> _propose(
+    GaiaDebugProposal proposal,
+    GaiaTurnTools tools,
+  ) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final arguments = proposal.arguments(today);
+    if (proposal.read case final read?) {
+      // Events still to come, entries already written; tasks need no days.
+      final listed = await tools.call(read, switch (read) {
+        'voyager_calendar' => {'from': _on(today, 0), 'to': _on(today, 30)},
+        'voyager_journal' => {'from': _on(today, -30), 'to': _on(today, 0)},
+        _ => {},
+      });
+      final id = listed.text
+          .split('\n')
+          // Not a ticked task's.
+          .where((line) => !line.trimLeft().startsWith('- [x]'))
+          .map((line) {
+            // Each row's details end with its id, `(…, id <id>)`, which an
+            // event's notes can follow.
+            final row = RegExp(
+              r'\((?:([^()]*), )?id ([\w-]+)\)',
+            ).firstMatch(line);
+            if (row == null) return null;
+            final details = (row.group(1) ?? '').split(', ');
+            return details.contains('repeats') || details.contains('done')
+                ? null
+                : row.group(2);
+          })
+          .nonNulls
+          .firstOrNull;
+      if (id == null) {
+        return 'Nothing for ${proposal.tool} to change: $read lists no row '
+            "that doesn't repeat. Add one in Voyager first.";
+      }
+      arguments['id'] = id;
+    }
+    return (await tools.call(proposal.tool, arguments)).text;
   }
 
   bool isRunning(String chatId) => _active.containsKey(chatId);
@@ -353,10 +427,144 @@ final Map<String, GaiaDebugScript> gaiaDebugScripts = {
   '/help': GaiaDebugScript('Lists these commands', [
     GaiaDebugText(
       'Scripted replies, for testing Gaia without a Claude Code run:\n\n'
-      '${[for (final MapEntry(:key, :value) in _scripts.entries) '- `$key`: ${value.description}'].join('\n')}',
+      '${[
+        for (final MapEntry(:key, :value) in {..._scripts, ..._proposalScripts}.entries) '- `$key`: ${value.description}',
+      ].join('\n')}',
     ),
   ]),
   ..._scripts,
+  ..._proposalScripts,
+};
+
+/// [today], [days] on, as a proposal takes it: a day, or a time on it.
+String _on(DateTime today, int days, [int? hour, int minute = 0]) =>
+    gaiaFormatWhen(
+      DateTime(today.year, today.month, today.day + days, hour ?? 0, minute),
+      hasTime: hour != null,
+    );
+
+GaiaDebugProposal _newTask(String title) => GaiaDebugProposal(
+  'propose_todo',
+  (today) => {
+    'title': title,
+    'notes': 'Proposed from the Gaia debug menu.',
+    'due': _on(today, 1, 9, 30),
+    'starred': true,
+  },
+);
+
+GaiaDebugProposal _newEvent(String title) => GaiaDebugProposal(
+  'propose_calendar_event',
+  (today) => {
+    'title': title,
+    'start': _on(today, 1, 15),
+    'end': _on(today, 1, 16, 30),
+    'notes': 'Proposed from the Gaia debug menu.',
+  },
+);
+
+GaiaDebugProposal _newEntry(String title) => GaiaDebugProposal(
+  'propose_journal_entry',
+  (today) => {
+    'title': title,
+    'body':
+        'Proposed from the Gaia debug menu.\n\n'
+        'A second paragraph, so the editor has a few lines to show. #gaia',
+    'mood': 8,
+  },
+);
+
+/// Proposal cards, each raised through the main instance: accepted, they
+/// really write, so try them on the qa profile.
+final _proposalScripts = {
+  '/propose1': GaiaDebugScript('Proposal: a new task, every field filled', [
+    const GaiaDebugText("Here's the task:"),
+    GaiaDebugProposals([_newTask('Water the plants')]),
+  ]),
+  '/propose2': GaiaDebugScript('Proposal: a new timed event, with notes', [
+    const GaiaDebugText("Here's the event:"),
+    GaiaDebugProposals([_newEvent('Dentist')]),
+  ]),
+  '/propose3': GaiaDebugScript('Proposal: a new all-day event over 3 days', [
+    const GaiaDebugText("Here's the trip:"),
+    GaiaDebugProposals([
+      GaiaDebugProposal(
+        'propose_calendar_event',
+        (today) => {
+          'title': 'Trip to the coast',
+          'start': _on(today, 7),
+          'end': _on(today, 9),
+        },
+      ),
+    ]),
+  ]),
+  '/propose4': GaiaDebugScript('Proposal: a new journal entry, with a mood', [
+    const GaiaDebugText("Here's the entry:"),
+    GaiaDebugProposals([_newEntry('A good day')]),
+  ]),
+  '/propose5': GaiaDebugScript(
+    'Proposal: a change to your first task, with "was" values',
+    [
+      const GaiaDebugText('Changing a task:'),
+      GaiaDebugProposals([
+        GaiaDebugProposal(
+          'propose_todo',
+          (today) => {
+            'title': 'Renamed by Gaia debug',
+            'notes': 'Changed from the Gaia debug menu.',
+            'due': _on(today, 3, 17),
+            'starred': true,
+          },
+          read: 'voyager_todos',
+        ),
+      ]),
+    ],
+  ),
+  '/propose6': GaiaDebugScript(
+    'Proposal: a change to your next event, with "was" values',
+    [
+      const GaiaDebugText('Moving an event:'),
+      GaiaDebugProposals([
+        GaiaDebugProposal(
+          'propose_calendar_event',
+          (today) => {
+            'title': 'Moved by Gaia debug',
+            'start': _on(today, 2, 10),
+            'notes': 'Changed from the Gaia debug menu.',
+          },
+          read: 'voyager_calendar',
+        ),
+      ]),
+    ],
+  ),
+  '/propose7': GaiaDebugScript(
+    'Proposal: a change to a recent journal entry, with "was" values',
+    [
+      const GaiaDebugText('Rewriting an entry:'),
+      GaiaDebugProposals([
+        GaiaDebugProposal(
+          'propose_journal_entry',
+          (today) => {
+            'title': 'Rewritten by Gaia debug',
+            'body': 'The whole entry, replaced from the Gaia debug menu.',
+            'mood': 3,
+          },
+          read: 'voyager_journal',
+        ),
+      ]),
+    ],
+  ),
+  '/propose8': GaiaDebugScript(
+    'Proposals: a task, an event and an entry at once (Save all)',
+    [
+      const GaiaDebugText('Three at once:'),
+      GaiaDebugProposals([
+        _newTask('Book the hotel'),
+        _newEvent('Call with the hotel'),
+        _newEntry('Planning the trip'),
+      ]),
+    ],
+  ),
 };
 
 const _scripts = {

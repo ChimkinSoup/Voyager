@@ -36,6 +36,17 @@ class DateTimeSelectorPopover extends StatefulWidget {
   /// does.
   final ValueChanged<DateTimePick>? onChanged;
 
+  /// Replaces the calendar's quick-pick chips; see
+  /// [DateSelectorPopover.quickPickBuilder].
+  final QuickPickBuilder? quickPickBuilder;
+
+  /// Replaces the Done bar's text with a host's own button, centred in it.
+  final Widget Function(VoidCallback onPressed)? doneBuilder;
+
+  /// Whether closing the route without Done, by Esc or a click outside,
+  /// still returns the pick. False makes it cancel.
+  final bool keepOnDismiss;
+
   const DateTimeSelectorPopover({
     super.key,
     required this.initialDateTime,
@@ -44,6 +55,9 @@ class DateTimeSelectorPopover extends StatefulWidget {
     this.initialHasTime = true,
     this.onSubmitted,
     this.onChanged,
+    this.quickPickBuilder,
+    this.doneBuilder,
+    this.keepOnDismiss = true,
   });
 
   @override
@@ -248,7 +262,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
     );
 
     return PopScope(
-      canPop: _canPop || widget.onSubmitted != null,
+      canPop: _canPop || widget.onSubmitted != null || !widget.keepOnDismiss,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (mounted) {
@@ -307,6 +321,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                           initialEndDate: _currentDateTime,
                           singleDateMode: true,
                           inlineMode: true,
+                          quickPickBuilder: widget.quickPickBuilder,
                           onDateSelected: (newDate) {
                             setState(() {
                               _currentDateTime = DateTime(
@@ -425,20 +440,27 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
               ),
             ),
             const Divider(height: 1),
-            InkWell(
-              onTap: _submit,
-              child: Container(
+            if (widget.doneBuilder case final doneBuilder?)
+              Container(
                 height: _doneBarHeight,
                 alignment: Alignment.center,
-                child: Text(
-                  'Done',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: accent,
-                    fontWeight: FontWeight.bold,
+                child: doneBuilder(_submit),
+              )
+            else
+              InkWell(
+                onTap: _submit,
+                child: Container(
+                  height: _doneBarHeight,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Done',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: accent,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

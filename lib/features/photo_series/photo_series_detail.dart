@@ -12,6 +12,7 @@ import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
@@ -834,15 +835,19 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
   Future<void> _editDate() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final picked = await showDatePicker(
+    // A camera clock ahead of ours can date a photo past today.
+    final initial = _checkIn.takenOn.isAfter(today) ? today : _checkIn.takenOn;
+    // Off the check-in itself: the menu that opened it has gone.
+    final picked = await showDayPickerPopover(
       context: context,
-      // A camera clock ahead of ours can date a photo past today.
-      initialDate: _checkIn.takenOn.isAfter(today) ? today : _checkIn.takenOn,
-      firstDate: DateTime(1900),
+      buttonContext: context,
+      initial: initial,
       lastDate: today,
     );
-    if (picked == null) return;
-    await ref.read(photoSeriesServiceProvider).setDate(_checkIn, picked);
+    if (picked == null || !mounted) return;
+    await ref
+        .read(photoSeriesServiceProvider)
+        .setDate(_checkIn, DateUtils.dateOnly(picked));
   }
 
   Future<void> _editNote() async {
