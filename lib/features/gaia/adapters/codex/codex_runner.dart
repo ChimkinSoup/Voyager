@@ -82,15 +82,11 @@ class CodexRunner implements GaiaAgentRunner {
     GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    await _prepareCodexHome(codexHome, userCodexHome);
-    final sandbox = await _windowsSandbox(userCodexHome);
-    if (sandbox != null && !await _sandboxSetUp(codexHome)) {
-      return const GaiaTurnResult(
-        sessionId: '',
-        isError: true,
-        text: kCodexSandboxNotSetUp,
-      );
-    }
+    final (:notReady, :sandbox) = await readyCodexHome(
+      codexHome,
+      userCodexHome,
+    );
+    if (notReady != null) return notReady;
     final pipe = toolPipe;
     final serveTools = tools != null && pipe != null && await pipe.listen();
     const server = 'mcp_servers.$kGaiaMcpServer';
@@ -135,14 +131,7 @@ class CodexRunner implements GaiaAgentRunner {
     );
     final unbind = serveTools ? pipe.bind(process.pid, tools) : null;
     try {
-      return await process.turn(
-        images.isEmpty
-            ? prompt
-            // Nothing else says which attachment a label means.
-            : '$prompt\n\n(Attached images, in order: '
-                  '${images.map((image) => gaiaImageToken(image.label)).join(', ')}.)',
-        onEvent,
-      );
+      return await process.turn(codexPrompt(prompt, images), onEvent);
     } finally {
       unbind?.call();
       if (_live[chatId] == process) _live.remove(chatId);
@@ -187,6 +176,35 @@ String defaultUserCodexHome() =>
 /// Gaia's own Codex home (§5.2). One per account from Phase 7.
 Future<String> defaultGaiaCodexHome() async =>
     p.join((await appSupportRoot()).path, 'gaia', 'codex', 'default');
+
+/// Readies Gaia's Codex home for a turn: the user's login copied in, and the
+/// user's Windows sandbox, if any, to run it under. [notReady] is the turn's
+/// result when that sandbox isn't set up for Gaia yet.
+Future<({GaiaTurnResult? notReady, String? sandbox})> readyCodexHome(
+  String codexHome,
+  String userCodexHome,
+) async {
+  await _prepareCodexHome(codexHome, userCodexHome);
+  final sandbox = await _windowsSandbox(userCodexHome);
+  if (sandbox != null && !await _sandboxSetUp(codexHome)) {
+    return (
+      notReady: const GaiaTurnResult(
+        sessionId: '',
+        isError: true,
+        text: kCodexSandboxNotSetUp,
+      ),
+      sandbox: sandbox,
+    );
+  }
+  return (notReady: null, sandbox: sandbox);
+}
+
+/// A turn's prompt, naming its images' labels in order.
+String codexPrompt(String prompt, List<GaiaImageInput> images) => images.isEmpty
+    ? prompt
+    // Nothing else says which attachment a label means.
+    : '$prompt\n\n(Attached images, in order: '
+          '${images.map((image) => gaiaImageToken(image.label)).join(', ')}.)';
 
 /// Copies the user's login in when it's newer than Gaia's copy.
 Future<void> _prepareCodexHome(String codexHome, String userCodexHome) async {
@@ -270,12 +288,16 @@ String? parseCodexWindowsSandbox(String toml) {
   return null;
 }
 
-class _CodexProcess {
-  _CodexProcess._(this._process, this._onRawLine) {
+/// A `codex` process in Gaia's Codex home, its output one line at a time.
+/// [onLine] takes each line that isn't blank; a [CodexParseException] from
+/// it kills the process. [onFail] is told when the output can't be read or
+/// the process exits, with the last line of its stderr.
+class CodexProcess {
+  CodexProcess._(this._process, this._onRawLine, this._onLine, this._onFail) {
     _process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen(_onLine);
+        .listen(_line);
     _process.stderr.transform(utf8.decoder).listen((text) {
       _stderr.write(text);
       if (_stderr.length > 4096) {
@@ -285,10 +307,12 @@ class _CodexProcess {
           ..write(tail.substring(tail.length - 2048));
       }
     });
+    // A write after Codex died fails here; its exit fails the turn.
+    _process.stdin.done.ignore();
     unawaited(
       _process.exitCode.then((code) {
         _exited = true;
-        _fail(
+        _onFail(
           'Codex exited (code $code)'
           '${_stderr.isEmpty ? '' : ': ${_lastLine(_stderr.toString())}'}',
         );
@@ -296,11 +320,13 @@ class _CodexProcess {
     );
   }
 
-  static Future<_CodexProcess> start({
+  static Future<CodexProcess> start({
     required String workingDirectory,
     required String codexHome,
-    required void Function(String line)? onLine,
     required List<String> args,
+    required void Function(String line)? onRawLine,
+    required void Function(String line) onLine,
+    required void Function(String reason) onFail,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
     final environment = {
@@ -312,7 +338,7 @@ class _CodexProcess {
     };
     // Through cmd: an npm install's `codex` is a .cmd shim, which only a
     // shell can run.
-    return _CodexProcess._(
+    return CodexProcess._(
       await Process.start(
         'cmd',
         ['/c', 'codex', ...args],
@@ -320,14 +346,74 @@ class _CodexProcess {
         environment: environment,
         includeParentEnvironment: false,
       ),
+      onRawLine,
       onLine,
+      onFail,
     );
   }
 
   final Process _process;
   final void Function(String line)? _onRawLine;
+  final void Function(String line) _onLine;
+  final void Function(String reason) _onFail;
   final _stderr = StringBuffer();
   var _exited = false;
+  var _killed = false;
+
+  /// The cmd Gaia started, above Codex and anything it starts.
+  int get pid => _process.pid;
+
+  IOSink get stdin => _process.stdin;
+
+  /// Also once it's being killed: nothing new should go to it.
+  bool get exited => _exited || _killed;
+
+  void _line(String line) {
+    _onRawLine?.call(line);
+    if (line.trim().isEmpty) return;
+    try {
+      _onLine(line);
+    } on CodexParseException catch (error) {
+      debugPrint('[gaia] $error');
+      _onFail('Unreadable output from Codex: ${error.reason}');
+      unawaited(kill());
+    }
+  }
+
+  static String _lastLine(String text) =>
+      const LineSplitter().convert(text.trim()).lastOrNull ?? '';
+
+  /// Kills the whole tree: cmd, the CLI, and anything the CLI started.
+  Future<void> kill() async {
+    if (_exited) return;
+    _killed = true;
+    await Process.run('taskkill', ['/t', '/f', '/pid', '${_process.pid}']);
+  }
+}
+
+/// One `codex exec` turn's process.
+class _CodexProcess {
+  _CodexProcess._();
+
+  static Future<_CodexProcess> start({
+    required String workingDirectory,
+    required String codexHome,
+    required void Function(String line)? onLine,
+    required List<String> args,
+  }) async {
+    final codex = _CodexProcess._();
+    codex._process = await CodexProcess.start(
+      workingDirectory: workingDirectory,
+      codexHome: codexHome,
+      args: args,
+      onRawLine: onLine,
+      onLine: codex._onLine,
+      onFail: codex._fail,
+    );
+    return codex;
+  }
+
+  late final CodexProcess _process;
 
   /// The cmd Gaia started, above Codex and the shims it starts.
   int get pid => _process.pid;
@@ -349,17 +435,7 @@ class _CodexProcess {
   }
 
   void _onLine(String line) {
-    _onRawLine?.call(line);
-    if (line.trim().isEmpty) return;
-    final CodexEvent event;
-    try {
-      event = parseCodexLine(line);
-    } on CodexParseException catch (error) {
-      debugPrint('[gaia] $error');
-      _fail('Unreadable output from Codex: ${error.reason}');
-      unawaited(kill());
-      return;
-    }
+    final event = parseCodexLine(line);
     switch (event) {
       case CodexThreadStarted(:final threadId):
         _threadId = threadId;
@@ -394,14 +470,7 @@ class _CodexProcess {
     turn?.completeError(GaiaRunException(reason));
   }
 
-  static String _lastLine(String text) =>
-      const LineSplitter().convert(text.trim()).lastOrNull ?? '';
-
-  /// Kills the whole tree: cmd, the CLI, and anything the CLI started.
-  Future<void> kill() async {
-    if (_exited) return;
-    await Process.run('taskkill', ['/t', '/f', '/pid', '${_process.pid}']);
-  }
+  Future<void> kill() => _process.kill();
 }
 
 /// `codex --version`, parsed; null when the CLI isn't installed or its

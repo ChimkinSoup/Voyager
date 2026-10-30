@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
+import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/trash/trash_kinds.dart';
 import 'package:voyager/features/trash/trash_service.dart';
 
@@ -33,7 +35,16 @@ String trashItemLabel(TrashItem item) {
   return quoted ?? 'Untitled ${item.kind.noun}';
 }
 
-/// "To-Do · deleted 5 days ago · 25 days left".
+/// The collections whose `origin` says who made the row (§10 of
+/// GAIA_HLD.md). A transaction's is where the money went.
+const _madeByOrigin = {
+  FirestoreCollections.todoTasks,
+  FirestoreCollections.calendarEvents,
+  FirestoreCollections.journalEntries,
+};
+
+/// "To-Do · deleted 5 days ago · 25 days left", with "made by Gaia" after
+/// the feature for a row Gaia created.
 String trashItemDetail(
   TrashItem item,
   DateTime now, {
@@ -55,8 +66,12 @@ String trashItemDetail(
   final under = parent == null
       ? null
       : 'subtask of "${cappedTrashTitle(parent)}"';
+  final byGaia =
+      _madeByOrigin.contains(item.kind.collection) &&
+      item.row.data['origin'] == kGaiaOrigin;
   return [
     item.kind.feature.label,
+    if (byGaia) 'made by Gaia',
     ?under,
     ?item.summary,
     deleted,

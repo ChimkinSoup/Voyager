@@ -11,8 +11,8 @@ Status: design draft (2026-10-24), with the first review's decisions folded
 in. Phases 0 to 3 are done (Phase 3 checked live 2026-10-26, §19). Phase 4
 is split in three: 4A (Gaia tools, reads, question and permission cards) is
 done and checked live 2026-10-28; 4B (proposals and the action log) is
-built and unit-tested (2026-10-28) but not yet checked live; 4C (a Codex
-adapter on `app-server`, which 4B evaluated) is not started (§19).
+checked live 2026-10-29; 4C (a Codex adapter on `app-server`) is done and
+checked live 2026-10-30, all but the `exec` fallback (§19).
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -202,7 +202,7 @@ streams JSONL, resumes sessions, and speaks MCP:
 | Backend | Auth | Headless invocation | Resume |
 |---|---|---|---|
 | Claude Code | `claude` login (subscription) | `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --model <m>` | `--resume <session>` |
-| Codex | ChatGPT login (`codex login`) or API key | `codex exec --json`, prompt on stdin (`codex app-server` is re-evaluated in Phase 4, for approvals) | `codex exec resume <id>` |
+| Codex | ChatGPT login (`codex login`) or API key | `codex app-server`, JSON-RPC on stdio (Phase 4C); `codex exec --json` with the prompt on stdin as the fallback | `thread/resume`; `codex exec resume <id>` |
 | Gemini CLI (skipped for now) | Google login or API key | `gemini -p --output-format stream-json --model <m>` | `--resume <session>` |
 | Gemini API (skipped for now) | AI Studio API key | direct HTTPS streaming | Gaia replays history |
 
@@ -236,8 +236,10 @@ Lessons carried over from nus-desktop's `src/ai.js`:
 **Process lifecycle.** Each **active** chat has one long-lived process
 (`--input-format stream-json` keeps stdin open across turns). It is killed
 after 10 minutes idle and `--resume`d on the next message. At most about 4
-live at once, with the least recently used evicted. Where a CLI can't keep
-stdin open (`codex exec`), each turn gets its own process.
+live at once, with the least recently used evicted. Codex's `app-server`
+is one process for every chat (a thread each, a turn per message), killed
+after 10 minutes with no turn running. Where a CLI can't keep stdin open
+(the `codex exec` fallback), each turn gets its own process.
 
 **CLI output is fragile too.** The `stream-json`/`--json` event shapes change
 between CLI releases, and the CLIs update themselves. Adapters get the §6.3
@@ -250,10 +252,11 @@ treatment:
 Outside the range the chat still runs, with an "untested CLI version" chip. A
 parse failure puts the run into `error` and logs the raw line.
 
-**Codex specifics (as built, 0.164.0).** `codex exec --json` prints each
-agent message whole, not streamed, so Codex replies appear a block at a
-time. Gaia's Codex home carries over one setting from the user's
-config.toml, `[windows] sandbox`. Without it every shell command is refused.
+**Codex specifics (as built, 0.164.0).** On `app-server` replies stream
+(Phase 4C); the `exec` fallback prints each agent message whole, so there
+they appear a block at a time. Gaia's Codex home carries over one setting
+from the user's config.toml, `[windows] sandbox`. Without it every shell
+command is refused.
 An elevated sandbox needs a one-time setup per Codex home, behind a Windows
 approval prompt, and a headless run that hits the setup hangs on that
 prompt. So the setup checklist has a **Set up** step that runs one trivial
@@ -328,8 +331,14 @@ each JSON-RPC message to the same Dart handler (`lib/features/gaia/tools/`):
   `can_use_tool` requests (`--permission-prompt-tool stdio`). This is the
   Agent SDK's own protocol, undocumented, so it's FRAGILE with a fixture
   (`control.jsonl`) and a contract scenario like the event shapes (§5.1).
-- **Codex:** stdio. Its MCP config launches `voyager.exe --gaia-mcp`, a
-  native byte relay (no engine, no window) between its stdio and the
+- **Codex:** client-hosted tools on `app-server` (Phase 4C): each thread
+  is started with Gaia's tools as `dynamicTools`, and Codex sends each call
+  as an `item/tool/call` request on the same stdio the companion already
+  owns, so the call is bound to its run by which process and thread it came
+  from. FRAGILE, with recorded fixtures and a contract scenario.
+- **Codex on the `exec` fallback:** stdio. Its MCP config launches
+  `voyager.exe --gaia-mcp`, a native byte relay (no engine, no window)
+  between its stdio and the
   companion's tool pipe (`windows/runner/gaia_tool_pipe.cpp`), which is
   current-user only and rejects remote clients. Each shim is accepted only
   when a process the companion launched for a run is among its ancestors,
@@ -940,8 +949,9 @@ the signal: a turn whose last paragraph ends in a question is marked
 **3. Permission prompts** (may I run this command / edit this file):
 - Claude Code: `--permission-prompt-tool` routes them to a Gaia approval card
   (§5.3).
-- Codex: `codex exec` can't surface approvals. `codex app-server` sends them
-  as requests the client answers; an adapter on it is Phase 4C (§19).
+- Codex: `codex app-server` sends them as requests Gaia answers (Phase 4C,
+  §19), under the `on-request` approval policy, as permission cards. The
+  `exec` fallback can't surface approvals.
 - Gemini CLI: headless mode can't ask. Each chat sets an approval mode up
   front (ask nothing / auto-edit / full auto), and anything outside it fails
   instead of prompting.
@@ -1340,7 +1350,7 @@ Other additions:
 | 3 | Done | Screenshots (C/D), crop overlay, annotation, `[image N]` parts, selection capture + pick-up, focused-window context |
 | 4A | Done | Gaia tools (Claude Code's control channel, Codex's stdio shim), `voyager_*` reads, the card system, `ask_user` question cards, Claude Code permission cards |
 | 4B | Done | `propose_*` tools (todo, calendar event, journal entry; new and changed) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` evaluated |
-| 4C | | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
+| 4C | Done | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
 | 5 | | Memory + curator + inbox |
 | 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
@@ -1463,7 +1473,8 @@ Phase 4B as built (2026-10-28):
   on a tool after about 30 s and ends its turn) voids its proposals and
   permissions, with nothing written; a question stays open and, answered
   later, goes as the next message. So on Codex a proposal has to be decided
-  within about 30 s until Phase 4C.
+  within about 30 s on `exec`. Phase 4C's `app-server` adapter holds a
+  call as long as the card does (a 75 s hold checked on 0.164.0).
 - **Not done:** the trash doesn't show `origin: gaia` yet; moved to 4C.
 - **Checked live (2026-10-29)** on the `qa` profile with the debug build,
   on Claude Code (Haiku) and Codex (gpt-6.1-sol):
@@ -1502,6 +1513,70 @@ Threads (`thread/start`, `thread/resume`) and turns (`turn/start`,
 process lifecycle Claude Code has (§5.1). Building it is a new adapter with
 its own recorded fixtures and contract scenario, so it's Phase 4C; until
 then Codex runs on `exec` and can't ask.
+
+Phase 4C as built (2026-10-30, codex-cli 0.164.0):
+- **Adapter.** `adapters/codex/codex_app_server.dart`: one `codex app-server`
+  process, started on the first Codex message with the same Codex home,
+  login copy and `[windows] sandbox` as `exec`, and `initialize`d with
+  `experimentalApi`, which `dynamicTools` needs. Each chat is a thread
+  (`thread/start`, or `thread/resume` the first time this process sees it)
+  and each message a `turn/start` with the turn's model, so a tier change
+  needs no restart. Images go as `localImage` inputs after the text, with
+  the line naming their labels, as on `exec`. The process is killed after
+  10 minutes with no turn running, and on a GAIA.md change once its turns
+  end, since a thread reads AGENTS.md when it's loaded. Stop sends
+  `turn/interrupt` and fails the turn at once.
+- **Streaming.** `item/agentMessage/delta` streams the reply, where `exec`
+  gave a block at a time. A message's trailing whitespace is held back, so
+  a block doesn't end in a blank line. `thread/tokenUsage/updated` gives
+  the context size (`last.totalTokens`).
+- **Gaia's tools** are the thread's `dynamicTools`, answered through the
+  same handler as the other transports (`gaiaMcpAnswer`). The activity chip
+  names them (`ask_user`), where `exec` said "MCP". A held call waits as
+  long as its card: no 30 s limit.
+- **Permission cards.** Threads run under `on-request` in Codex's default
+  read-only sandbox. A command, a file change or a permissions request
+  outside it becomes a card: Shell (the command and its folder), Edit (the
+  paths and diff) or Permissions. Allow answers `accept`, or grants the
+  permissions for the turn; Deny answers `decline`. Codex's answer has no
+  reason field, so a reason typed in the composer reaches the card but not
+  the agent.
+- **Old threads are handed over** (decided 2026-10-30). A thread keeps the
+  tools it was started with, and nothing changes them later (checked: they
+  survive a resume in a new process). Gaia records each thread's tool-set
+  hash in the Codex home (`gaia-threads.json`). A chat whose thread isn't
+  recorded with the current hash (an `exec` thread, or one from before
+  Gaia's tools changed) reports its session as not found, and the
+  controller hands it over to a new thread with the chat summarised (§7.4).
+  So each old chat loses fidelity once, then has the current tools.
+- **Fallback.** When `app-server` can't start or `initialize` (30 s), every
+  Codex turn for the rest of the session goes to `codex exec`, which keeps
+  its Gaia tools through the `--gaia-mcp` shim (kept for that, decided
+  2026-10-30). Other server requests (`item/tool/requestUserInput`, MCP
+  elicitations, token refresh) are refused with a JSON-RPC error.
+- **The trash** shows "made by Gaia" in a task's, event's or journal
+  entry's detail line when its `origin` is `gaia` (a transaction's `origin`
+  is its store, so it never does).
+- **Checked** with the contract check (`GAIA_CLI_CHECK=1 flutter test
+  test/gaia_codex_contract_test.dart`) on the real CLI: `ask_user` and a
+  denied shell command in one streamed turn, a second turn on the same
+  process, a resume in a new process that remembers the first turn, an
+  unknown model, and a missing thread. Its transcripts are the fixtures in
+  `test/fixtures/gaia/codex_app_server/`, replayed by
+  `gaia_codex_app_server_test.dart`. Probed by hand: a 75 s held tool
+  call, and `turn/interrupt`.
+
+  Checked live in the app on the `qa` profile (2026-10-30): a question
+  card answered after a minute; a proposal accepted after more than 30 s,
+  committed with `origin: gaia` and shown in the trash as made by Gaia; a
+  Shell card allowed (the file was written) and one denied with a reason
+  (the file stayed); Stop mid-stream, after which the next turn on the
+  thread still answered; an `exec`-era chat handed over to a new thread
+  with its transcript; the process killed between turns (the next send
+  started one and resumed the thread) and mid-turn (the reply ended in an
+  error, "Codex exited (code -1)", with its text kept); a GAIA.md change
+  stopping the idle process, the next turn following the new text. Not
+  forced live: the fallback to `exec` when `app-server` can't start.
 
 Phase 3 as built:
 - **Images.** A user message keeps its whole text, `[image N]` tokens
@@ -1659,7 +1734,7 @@ To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's
 auto-compact override, and the usage calls for
 Codex idle accounts and Gemini CLI (§6.2). Codex `app-server` vs `exec`
-was evaluated in Phase 4B (§19).
+was evaluated in Phase 4B and built on in 4C (§19).
 
 Before Phase 7: re-check each provider's consumer terms on switching between
 one person's accounts when one runs low (§6.5), not just on owning several.

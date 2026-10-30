@@ -970,6 +970,34 @@ void main() {
       );
     });
 
+    test('a row Gaia made says so; a transaction at a store called gaia '
+        "doesn't", () async {
+      await todos.upsertTask(
+        TodoTask(
+          id: 'g',
+          listId: legacyTodoListId,
+          title: 'Gaia task',
+          origin: 'gaia',
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      await todos.softDeleteTask('g');
+      await addTransaction('tx', store: 'gaia');
+      await finance.softDeleteTransaction('tx');
+
+      final items = await trash.list();
+
+      expect(
+        trashItemDetail(items.firstWhere((i) => i.id == 'g'), utcNow()),
+        startsWith('To-Do · made by Gaia · deleted today'),
+      );
+      expect(
+        trashItemDetail(items.firstWhere((i) => i.id == 'tx'), utcNow()),
+        isNot(contains('Gaia')),
+      );
+    });
+
     test('an occurrence split off a series names no parent', () async {
       for (final (id, parent) in [('series', null), ('one', 'series')]) {
         await calendars.upsertEvent(

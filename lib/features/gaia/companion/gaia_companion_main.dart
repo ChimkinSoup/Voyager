@@ -9,6 +9,7 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_app_server.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -64,6 +65,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   );
   await sidebar.load();
   final window = GaiaWindow();
+  final codexHome = await defaultGaiaCodexHome();
   final controller = GaiaController(
     debug: debug,
     sidebar: sidebar,
@@ -82,10 +84,14 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
         workingDirectory: p.join(root.path, 'gaia', 'ws'),
         instructionsFile: p.join(root.path, 'gaia', 'GAIA.md'),
       ),
-      kGaiaCodexAdapter: CodexRunner(
+      kGaiaCodexAdapter: CodexAppServerRunner(
         workingDirectory: p.join(root.path, 'gaia', 'ws'),
-        codexHome: await defaultGaiaCodexHome(),
-        toolPipe: GaiaToolPipe(),
+        codexHome: codexHome,
+        fallback: CodexRunner(
+          workingDirectory: p.join(root.path, 'gaia', 'ws'),
+          codexHome: codexHome,
+          toolPipe: GaiaToolPipe(),
+        ),
       ),
     },
     utility: GaiaUtility(
