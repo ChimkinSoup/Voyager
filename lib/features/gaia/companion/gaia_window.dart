@@ -14,7 +14,8 @@ enum GaiaMode { small, large, window, overlay, pickUp }
 /// A window frame in physical pixels.
 typedef GaiaFrame = ({int left, int top, int width, int height});
 
-/// Logical sizes. The Gaia window remembers its own once moved or resized.
+/// Logical sizes. The Gaia window and the floaters remember their own once
+/// moved or resized.
 const _smallSize = Size(560, 460);
 const _largeSize = Size(980, 760);
 const _windowSize = Size(1200, 820);
@@ -51,6 +52,22 @@ class GaiaWindow {
     bool minimized,
   })?
   _windowPlacement;
+
+  /// Where each floater was when last on screen, so it opens again there,
+  /// at the size the user left it, or at that spot on another monitor the
+  /// cursor has gone to.
+  final _floaterFrames = <GaiaMode, GaiaFrame>{};
+
+  /// Keeps where the mode on screen is, for the next time it's shown.
+  void _rememberFrame() {
+    switch (shown) {
+      case GaiaMode.window:
+        _windowPlacement = _readPlacement(_hwnd);
+      case final mode? when mode == GaiaMode.small || mode == GaiaMode.large:
+        if (IsIconic(_hwnd) == 0) _floaterFrames[mode] = _readFrame(_hwnd);
+      case _:
+    }
+  }
 
   Future<void> init() async {
     await windowManager.ensureInitialized();
@@ -118,9 +135,12 @@ class GaiaWindow {
         pill ? const Size(1, 1) : _minimumSize,
       );
     }
-    if (shown == GaiaMode.window) _windowPlacement = _readPlacement(hwnd);
+    _rememberFrame();
     final placement = mode == GaiaMode.window ? _windowPlacement : null;
-    frame ??= placement?.frame ?? _frameFor(mode);
+    frame ??=
+        placement?.frame ??
+        _underCursor(_floaterFrames[mode]) ??
+        _frameFor(mode);
     final old = _readFrame(hwnd);
     // Put back behind the user's app, a window they had minimised stays
     // minimised, and never paints at its size.
@@ -162,6 +182,14 @@ class GaiaWindow {
       ShowWindow(hwnd, SW_HIDE);
       SetWindowLongPtr(hwnd, GWL_EXSTYLE, wantStyle);
     }
+    // Without a maximise box, a floater dragged to the screen's edge isn't
+    // snapped to half of it or maximised.
+    final style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    SetWindowLongPtr(
+      hwnd,
+      GWL_STYLE,
+      floater ? style & ~WS_MAXIMIZEBOX : style | WS_MAXIMIZEBOX,
+    );
     // Square to the monitor's edges as an overlay; rounded otherwise.
     _setCorners(
       hwnd,
@@ -269,7 +297,7 @@ class GaiaWindow {
   /// [between] hides it on the way to showing it again, as a crop does
   /// while it renders: [returnTo] isn't used up, and keeps the foreground.
   void hide({bool between = false}) {
-    if (shown == GaiaMode.window) _windowPlacement = _readPlacement(_hwnd);
+    _rememberFrame();
     // Windows would activate whichever window was active before Gaia. Over
     // a Voyager floater that's Voyager's main window, which has gone back
     // behind the app the user was in by now, and would come up over it.
@@ -292,16 +320,11 @@ class GaiaWindow {
 
   ({int left, int top, int width, int height}) _frameFor(GaiaMode mode) {
     final cursor = calloc<POINT>();
-    final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
-    final dpiX = calloc<Uint32>();
-    final dpiY = calloc<Uint32>();
     try {
       GetCursorPos(cursor);
-      final monitor = MonitorFromPoint(cursor.ref, MONITOR_DEFAULTTONEAREST);
-      GetMonitorInfo(monitor, info);
-      GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, dpiX, dpiY);
-      final scale = dpiX.value / 96;
-      final work = info.ref.rcWork;
+      final (:work, :scale) = _monitor(
+        MonitorFromPoint(cursor.ref, MONITOR_DEFAULTTONEAREST),
+      );
       final workWidth = work.right - work.left;
       final workHeight = work.bottom - work.top;
       final size = switch (mode) {
@@ -326,6 +349,66 @@ class GaiaWindow {
       return (left: left, top: top, width: width, height: height);
     } finally {
       free(cursor);
+    }
+  }
+
+  /// [frame] on the monitor under the cursor, at the same logical size and
+  /// spot in the work area, kept inside it: also on its own monitor, whose
+  /// work area or scale may have changed since.
+  static GaiaFrame? _underCursor(GaiaFrame? frame) {
+    if (frame == null) return null;
+    final cursor = calloc<POINT>();
+    final rect = calloc<RECT>()
+      ..ref.left = frame.left
+      ..ref.top = frame.top
+      ..ref.right = frame.left + frame.width
+      ..ref.bottom = frame.top + frame.height;
+    try {
+      GetCursorPos(cursor);
+      final to = MonitorFromPoint(cursor.ref, MONITOR_DEFAULTTONEAREST);
+      // Nearest, for a monitor that has been unplugged since.
+      final from = MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
+      final old = _monitor(from);
+      final now = _monitor(to);
+      final scale = now.scale / old.scale;
+      final workWidth = now.work.right - now.work.left;
+      final workHeight = now.work.bottom - now.work.top;
+      final width = (frame.width * scale).round().clamp(1, workWidth);
+      final height = (frame.height * scale).round().clamp(1, workHeight);
+      return (
+        left: (now.work.left + ((frame.left - old.work.left) * scale).round())
+            .clamp(now.work.left, now.work.right - width),
+        top: (now.work.top + ((frame.top - old.work.top) * scale).round())
+            .clamp(now.work.top, now.work.bottom - height),
+        width: width,
+        height: height,
+      );
+    } finally {
+      free(cursor);
+      free(rect);
+    }
+  }
+
+  /// [monitor]'s work area and its scale against 96 DPI.
+  static ({({int left, int top, int right, int bottom}) work, double scale})
+  _monitor(int monitor) {
+    final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
+    final dpiX = calloc<Uint32>();
+    final dpiY = calloc<Uint32>();
+    try {
+      GetMonitorInfo(monitor, info);
+      GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, dpiX, dpiY);
+      final work = info.ref.rcWork;
+      return (
+        work: (
+          left: work.left,
+          top: work.top,
+          right: work.right,
+          bottom: work.bottom,
+        ),
+        scale: dpiX.value / 96,
+      );
+    } finally {
       free(info);
       free(dpiX);
       free(dpiY);

@@ -53,13 +53,15 @@ class GaiaCombo {
 
   bool get hasModifier => control || alt || meta;
 
-  /// For a shortcut inside Gaia, such as send.
+  /// For a shortcut inside Gaia, such as send. Not repeated while held, so
+  /// a held send doesn't go on to stop the reply it started.
   SingleActivator get activator => SingleActivator(
     logical,
     control: control,
     shift: shift,
     alt: alt,
     meta: meta,
+    includeRepeats: false,
   );
 
   /// For a system-wide hotkey.

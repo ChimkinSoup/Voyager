@@ -6,6 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, ScrollCacheExtent;
 import 'package:intl/intl.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
@@ -31,6 +33,7 @@ import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
@@ -302,7 +305,8 @@ class _PickUpPill extends StatelessWidget {
     final theme = Theme.of(context);
     final combo = gaiaComboFor(GaiaKeybind.pickUp, controller.keybinds);
     return Scaffold(
-      body: DragToMoveArea(
+      body: _DragArea(
+        floater: true,
         child: Row(
           children: [
             const SizedBox(width: 14),
@@ -367,7 +371,8 @@ class _Header extends StatelessWidget {
         ? null
         : 'Untested ${cli.name} ${version.$1}.${version.$2}.${version.$3}';
     final floater = controller.layout != GaiaMode.window;
-    return DragToMoveArea(
+    return _DragArea(
+      floater: floater,
       child: SizedBox(
         // Room for the round buttons' shadows.
         height: 52,
@@ -427,6 +432,24 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Drags the window by its header. A double click maximises the Gaia
+/// window, as a title bar's does; a floater keeps its size.
+class _DragArea extends StatelessWidget {
+  const _DragArea({required this.floater, required this.child});
+
+  final bool floater;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => floater
+      ? GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onPanStart: (_) => windowManager.startDragging(),
+          child: child,
+        )
+      : DragToMoveArea(child: child);
 }
 
 /// The Gaia window's Minimize and Maximize or Restore, beside its close.
@@ -877,6 +900,14 @@ class _MessagesState extends State<_Messages> {
   late Set<String> _seen;
   final _appearing = <String>{};
 
+  /// Each built message's context, so the list can tell where it sits.
+  final _placed = <String, BuildContext>{};
+
+  /// The user's message heading the turn at the list's top, while it's
+  /// scrolled off above: pinned over the chat, to go back to.
+  String? _pinned;
+  bool _placing = false;
+
   @override
   void initState() {
     super.initState();
@@ -887,6 +918,7 @@ class _MessagesState extends State<_Messages> {
   @override
   void didUpdateWidget(_Messages old) {
     super.didUpdateWidget(old);
+    _place();
     // The user's latest message new while a reply's claimed here: just sent
     // from this window, so it gathers in. Its reply may already be in after
     // it. The controller adds to the list it gave last time, so it's told
@@ -948,6 +980,84 @@ class _MessagesState extends State<_Messages> {
       initial: images.indexOf(image),
       imageFile: widget.imageFile,
     );
+  }
+
+  /// [_pinned] afresh once the list's laid out.
+  void _place() {
+    if (_placing) return;
+    _placing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _placing = false;
+      if (!mounted) return;
+      final pinned = _cutOff();
+      if (pinned != _pinned) setState(() => _pinned = pinned);
+    });
+    // Told of a change after a frame, as of metrics, there may be no next.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// The user's message, with text, heading the turn across the list's
+  /// top, when that's scrolled above it.
+  String? _cutOff() {
+    final list = context.findRenderObject();
+    if (list is! RenderBox) return null;
+    final messages = widget.messages;
+    for (final (i, message) in messages.indexed) {
+      // Unbuilt messages have no place yet.
+      final box = _placed[message.id]?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) continue;
+      final top = box.localToGlobal(Offset.zero, ancestor: list).dy;
+      if (top + box.size.height <= 0) continue;
+      // The first message reaching below the top: the one across it.
+      final prompt = messages.lastIndexWhere(
+        (message) => message.role == GaiaMessageRole.user,
+        i,
+      );
+      if (prompt < 0 || (prompt == i && top >= 0)) return null;
+      final pinned = messages[prompt];
+      return _pinnedLabel(pinned).isEmpty ? null : pinned.id;
+    }
+    return null;
+  }
+
+  /// How far past the list's edges it's built, while [_reveal] reaches a
+  /// message out of it; the default otherwise.
+  ScrollCacheExtent? _cacheExtent;
+
+  /// Up to [id]'s message, its top to the list's.
+  Future<void> _reveal(String id) async {
+    // A long reply can keep it from being built: built further out, off
+    // screen, till it is. Its place known, the way there is one glide, not
+    // jumps through the replies between or a stop short at the list's
+    // guessed end.
+    var viewports = 1.0;
+    while (mounted &&
+        _placed[id] == null &&
+        widget.messages.any((message) => message.id == id)) {
+      viewports *= 2;
+      setState(() => _cacheExtent = ScrollCacheExtent.viewport(viewports));
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    final box = _placed[id]?.findRenderObject();
+    if (!mounted || box is! RenderBox) return;
+    // Reversed, so its top to the list's.
+    final target = RenderAbstractViewport.of(
+      box,
+    ).getOffsetToReveal(box, 1).offset;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _scroll.jumpTo(target);
+    } else {
+      // Longer the further it goes, so a long way isn't a blur.
+      final distance = (target - _scroll.offset).abs();
+      await _scroll.animateTo(
+        target,
+        duration: Duration(
+          milliseconds: (250 + distance / 8).clamp(250, 600).round(),
+        ),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+    if (mounted) setState(() => _cacheExtent = null);
   }
 
   void _edit(GaiaMessage message) => widget.onEdit(message);
@@ -1063,12 +1173,16 @@ class _MessagesState extends State<_Messages> {
       // in Claude's apps; narrower chats keep only a small gutter.
       builder: (context, constraints) {
         final gutter = max(16.0, (constraints.maxWidth - _column) / 2);
-        return ScrollConfiguration(
+        final pinned = messages
+            .where((message) => message.id == _pinned)
+            .firstOrNull;
+        final list = ScrollConfiguration(
           // Scrolls without a bar.
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: ListView.builder(
             controller: _scroll,
             reverse: true,
+            scrollCacheExtent: _cacheExtent,
             padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 16),
             itemCount: messages.length,
             // A new message shifts the rest along; found by their keys,
@@ -1092,22 +1206,109 @@ class _MessagesState extends State<_Messages> {
               return _KeepAlive(
                 key: ValueKey(message.id),
                 keep: i == latest,
-                child: switched == null
-                    ? view
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _VendorDivider(to: message.adapter!),
-                          view,
-                        ],
-                      ),
+                child: _Placed(
+                  id: message.id,
+                  placed: _placed,
+                  child: switched == null
+                      ? view
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _VendorDivider(to: message.adapter!),
+                            view,
+                          ],
+                        ),
+                ),
               );
             },
+          ),
+        );
+        return NotificationListener<Notification>(
+          onNotification: (notification) {
+            // The list's own, not a code block's scrolled sideways.
+            if ((notification is ScrollNotification &&
+                    notification.depth == 0) ||
+                (notification is ScrollMetricsNotification &&
+                    notification.depth == 0)) {
+              _place();
+            }
+            return false;
+          },
+          child: Stack(
+            children: [
+              list,
+              Positioned(
+                top: 8,
+                left: gutter,
+                right: gutter,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: pinned == null
+                      ? const SizedBox.shrink()
+                      // One key for every prompt, so only coming and going
+                      // fades the box.
+                      : GaiaPinnedPrompt(
+                          key: const ValueKey('pinned'),
+                          id: pinned.id,
+                          text: _pinnedLabel(pinned),
+                          onTap: () => _reveal(pinned.id),
+                        ),
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
+}
+
+/// Notes its context in [placed], under [id], while it's built.
+class _Placed extends StatefulWidget {
+  const _Placed({required this.id, required this.placed, required this.child});
+
+  final String id;
+  final Map<String, BuildContext> placed;
+  final Widget child;
+
+  @override
+  State<_Placed> createState() => _PlacedState();
+}
+
+class _PlacedState extends State<_Placed> {
+  @override
+  void initState() {
+    super.initState();
+    widget.placed[widget.id] = context;
+  }
+
+  @override
+  void dispose() {
+    if (widget.placed[widget.id] == context) widget.placed.remove(widget.id);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// What [message] shows pinned over the chat: its first line, or failing
+/// that what it attached, as "2 images, PDF file".
+String _pinnedLabel(GaiaMessage message) {
+  final text = message.text.trim();
+  if (text.isNotEmpty) return text.split('\n').first;
+  final images = message.parts.whereType<GaiaImagePart>().length;
+  final files = message.parts.whereType<GaiaFilePart>().toList();
+  final type = files.length == 1 ? gaiaFileType(files.single) : null;
+  return [
+    if (images > 0) images == 1 ? '1 image' : '$images images',
+    if (type == 'Folder' || type == 'File')
+      type
+    else if (type != null)
+      '$type file'
+    else if (files.length > 1)
+      '${files.length} files',
+  ].join(', ');
 }
 
 /// Keeps [child] built while scrolled out of its list, when [keep].
@@ -1296,7 +1497,7 @@ class _MessageView extends StatelessWidget {
               ),
             if (window != null || quotes.isNotEmpty || message.text.isNotEmpty)
               _bubble(
-                theme.colorScheme.surfaceContainerHighest,
+                gaiaPromptColor(theme),
                 Alignment.centerRight,
                 GaiaAppearPart(
                   child: Column(
@@ -1766,9 +1967,12 @@ class _ComposerState extends State<_Composer> {
     final controller = widget.controller;
     final attached =
         controller.draftImages.isNotEmpty || controller.draftFiles.isNotEmpty;
-    if (controller.draftIsEmpty || controller.currentRunning) {
-      return;
+    // Mid-reply, send is the stop button's, as the button is; the draft
+    // waits.
+    if (controller.currentRunning) {
+      return controller.stop(controller.currentChatId!);
     }
+    if (controller.draftIsEmpty) return;
     if (!controller.readyToSend()) return;
     // After: it may take tokens out.
     final text = _text.text;

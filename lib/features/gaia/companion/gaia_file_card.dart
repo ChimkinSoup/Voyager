@@ -3,6 +3,17 @@ import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 
+/// [file]'s type, as its card shows it: "Folder", "PDF", or "File" without
+/// an extension.
+String gaiaFileType(GaiaFilePart file) {
+  final extension = p.extension(file.path);
+  return file.folder
+      ? 'Folder'
+      : extension.isEmpty
+      ? 'File'
+      : extension.substring(1).toUpperCase();
+}
+
 /// An attached file or folder (§9.3) as a card [height] tall, beside the
 /// images: its name and type, its whole path on hover. [onRemove] adds a
 /// close button, as on an image's thumbnail.
@@ -23,11 +34,7 @@ class GaiaFileCard extends StatelessWidget {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final extension = p.extension(file.path).toLowerCase();
-    final type = file.folder
-        ? 'Folder'
-        : extension.isEmpty
-        ? 'File'
-        : extension.substring(1).toUpperCase();
+    final type = gaiaFileType(file);
     final icon = file.folder
         ? Icons.folder_outlined
         : extension == '.pdf'
