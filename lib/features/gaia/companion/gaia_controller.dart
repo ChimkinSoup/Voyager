@@ -532,8 +532,9 @@ class GaiaController extends ChangeNotifier {
     return false;
   }
 
-  /// At most a save a second: the controller notifies on every streamed
-  /// token too, which would otherwise put it off for a whole reply.
+  /// At most a save a second: the controller notifies on every card and
+  /// tool update of a streaming reply too, which would otherwise put it off
+  /// for a whole reply.
   void _draftsChanged() {
     if (!_draftsLoaded) return;
     _saveSoon ??= Timer(_saveDraftsAfter, () => unawaited(_saveDrafts()));
@@ -885,6 +886,11 @@ class GaiaController extends ChangeNotifier {
   /// is muted: a hidden window's tree stays alive, and the buttons' glow
   /// rings would otherwise keep asking for frames at the display's rate.
   final onScreen = ValueNotifier(false);
+
+  /// Bumped, instead of notifying, as a reply's text streams in: only the
+  /// messages show it, and rebuilding the sidebar and composer for every
+  /// chunk made streaming stutter.
+  final streamed = ValueNotifier(0);
 
   /// The main instance's device, whose native sessions this companion runs.
   var _deviceId = '';
@@ -1274,20 +1280,41 @@ class GaiaController extends ChangeNotifier {
     }
   }
 
+  /// Each chat as last fetched, with the JSON it came from. A reply saving
+  /// as it streams has the main instance send every chat again each
+  /// second; one unchanged is given back as it was, so the sidebar's tile
+  /// for it isn't built again.
+  final _fetchedChats = <String, (String, GaiaChat)>{};
+
+  GaiaChat _fetchedChat(Map<String, Object?> json) {
+    final id = json['id']! as String;
+    final encoded = jsonEncode(json);
+    if (_fetchedChats[id] case (final was, final chat) when was == encoded) {
+      return chat;
+    }
+    final chat = GaiaChat.fromJson(json);
+    _fetchedChats[id] = (encoded, chat);
+    return chat;
+  }
+
   /// Chats and messages changed in the main instance: written here, synced
   /// from another device, or pinned, renamed or deleted on the Gaia page.
   /// A chat running here keeps the messages it is writing.
   Future<void> _refresh() async {
     // An image that wasn't here may be now. One still being asked about
     // isn't waited on.
+    var changed = _missingImages.isNotEmpty;
     _missingImages
       ..forEach(_imageFiles.remove)
       ..clear();
     final list = (await _pipe.request('chats'))! as List;
     final saved = [
       for (final chat in list)
-        GaiaChat.fromJson((chat as Map).cast<String, Object?>()),
+        _fetchedChat((chat as Map).cast<String, Object?>()),
     ];
+    final ids = {for (final chat in saved) chat.id};
+    _fetchedChats.removeWhere((id, _) => !ids.contains(id));
+    final was = chats;
     // A new chat isn't saved until its first message's images are attached.
     chats = [
       for (final chat in chats)
@@ -1304,11 +1331,18 @@ class GaiaController extends ChangeNotifier {
       if (_drafts.remove(current) case final typed?) {
         _giveBack(null, typed.text.text, typed.images, typed.files);
       }
+      changed = true;
     }
     _messages.removeWhere(
       (chatId, _) => !_running.contains(chatId) && chatId != currentChatId,
     );
-    notifyListeners();
+    // Not for a refresh that changed nothing shown, as each of a streaming
+    // reply's saves brings: it would rebuild all of Gaia every second.
+    if (changed ||
+        chats.length != was.length ||
+        chats.indexed.any((entry) => !identical(entry.$2, was[entry.$1]))) {
+      notifyListeners();
+    }
     final shown = currentChatId;
     if (shown != null && !_running.contains(shown)) await _load(shown);
   }
@@ -1579,10 +1613,18 @@ class GaiaController extends ChangeNotifier {
     if (open && _chat(chatId) != null) await selectChat(chatId);
   }
 
+  /// The chat and the JSON of the messages [_load] last fetched. A reply
+  /// saving as it streams elsewhere refreshes the shown chat each second;
+  /// one that came back unchanged isn't drawn again.
+  (String, String)? _loaded;
+
   Future<void> _load(String chatId) async {
     final list = (await _pipe.request('messages', {'chatId': chatId}))! as List;
     // A run that started meanwhile has the newer list.
     if (_running.contains(chatId)) return;
+    final loaded = (chatId, jsonEncode(list));
+    if (loaded == _loaded && _messages.containsKey(chatId)) return;
+    _loaded = loaded;
     _messages[chatId] = [
       for (final message in list)
         GaiaMessage.fromJson((message as Map).cast<String, Object?>()),
@@ -2031,7 +2073,11 @@ class GaiaController extends ChangeNotifier {
         notifyListeners();
       }
       if (!builder.apply(event)) return;
-      reply = _replace(reply, reply.copyWith(parts: builder.parts));
+      reply = _replace(
+        reply,
+        reply.copyWith(parts: builder.parts),
+        textOnly: event is GaiaTextDelta,
+      );
       final last = _lastPersist[reply.id];
       // A card at once: it's what the Gaia page and other devices wait on.
       if (event is GaiaCardUpdate ||
@@ -2475,11 +2521,21 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// Swaps [updated] in for [old] in its chat's list, and redraws.
-  GaiaMessage _replace(GaiaMessage old, GaiaMessage updated) {
+  /// [textOnly]: only its text changed, which [streamed] tells.
+  GaiaMessage _replace(
+    GaiaMessage old,
+    GaiaMessage updated, {
+    bool textOnly = false,
+  }) {
     final list = _messages[old.chatId];
     final index = list?.indexWhere((m) => m.id == old.id) ?? -1;
     if (index >= 0) list![index] = updated;
-    notifyListeners();
+    if (textOnly) {
+      // Only the shown chat's messages are drawn.
+      if (old.chatId == currentChatId) streamed.value++;
+    } else {
+      notifyListeners();
+    }
     return updated;
   }
 

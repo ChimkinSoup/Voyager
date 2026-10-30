@@ -213,15 +213,20 @@ class _GaiaShell extends StatelessWidget {
             ),
             const Divider(height: 1),
             Expanded(
-              child: _Messages(
-                messages: controller.messages,
-                imageFile: controller.imageFile,
-                uploading: controller.uploadingImages,
-                tier: controller.nextTier,
-                running: controller.currentRunning,
-                onEdit: (message) => _editMessage(context, controller, message),
-                onAttach: controller.attachMessage,
-                controller: controller,
+              // Also rebuilt alone as a reply's text streams in.
+              child: ValueListenableBuilder(
+                valueListenable: controller.streamed,
+                builder: (context, _, _) => _Messages(
+                  messages: controller.messages,
+                  imageFile: controller.imageFile,
+                  uploading: controller.uploadingImages,
+                  tier: controller.nextTier,
+                  running: controller.currentRunning,
+                  onEdit: (message) =>
+                      _editMessage(context, controller, message),
+                  onAttach: controller.attachMessage,
+                  controller: controller,
+                ),
               ),
             ),
             _Composer(controller: controller),

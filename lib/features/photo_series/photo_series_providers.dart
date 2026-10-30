@@ -39,7 +39,7 @@ final photoSeriesTodayProvider = Provider.autoDispose<DateTime>((ref) {
   return today;
 });
 
-final photoSeriesServiceProvider =Provider<PhotoSeriesService>((ref) {
+final photoSeriesServiceProvider = Provider<PhotoSeriesService>((ref) {
   return PhotoSeriesService(
     repository: ref.watch(photoSeriesRepositoryProvider),
     media: ref.watch(vaultMediaServiceProvider.notifier),

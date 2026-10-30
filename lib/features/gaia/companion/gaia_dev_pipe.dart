@@ -61,9 +61,11 @@ class GaiaDevPipe extends GaiaPipe {
         return null;
       case 'deleteChat':
         await _store.deleteChat(p['chatId']! as String);
+        await _store.deleteDraft(p['chatId']! as String);
         return {'mediaDeletedAt': null};
       case 'restoreChat':
         await _store.restoreChat(p['chatId']! as String);
+        await _store.restoreDraft(p['chatId']! as String);
         return null;
       case 'messages':
         return [
@@ -97,6 +99,20 @@ class GaiaDevPipe extends GaiaPipe {
         return null;
       case 'mediaFile':
         return p['mediaId'];
+      case 'drafts':
+        return [for (final draft in await _store.drafts()) draft.toJson()];
+      case 'putDraft':
+        await _store.putDraft(GaiaDraft.fromJson(_map(p['draft'])));
+        return null;
+      case 'ingestImage':
+        // As attachImage: a copy, its path for its id. Its own, so an
+        // image attached from the same file doesn't overwrite it.
+        return (await File(
+          p['path']! as String,
+        ).copy('${p['path']}.draft')).path;
+      case 'draftImageFile':
+        final path = p['mediaId']! as String;
+        return await File(path).exists() ? path : null;
       default:
         throw GaiaPipeException('unknown method $method');
     }
