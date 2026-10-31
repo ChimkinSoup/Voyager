@@ -9,6 +9,7 @@ import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -845,9 +846,20 @@ class _GaiaTranscript extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final part in message.parts)
+                    for (final (index, part) in message.parts.indexed)
                       switch (part) {
-                        GaiaTextPart(:final text) => GaiaMarkdown(text: text),
+                        GaiaTextPart(:final text, :final checks) =>
+                          GaiaMarkdown(
+                            text: text,
+                            checks: checks,
+                            onCheck: (task) => GaiaHost.instance.toggleCheck(
+                              ref.read(gaiaRepositoryProvider),
+                              message.id,
+                              index,
+                              task,
+                              !checks.contains(task),
+                            ),
+                          ),
                         GaiaActivityPart(:final tools) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           child: GaiaActivityChip(
@@ -1230,7 +1242,7 @@ class _CheckRow extends StatelessWidget {
                           child: SelectableText(
                             command,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              fontFamily: 'monospace',
+                              fontFamily: AppFonts.monoFamily,
                             ),
                           ),
                         ),

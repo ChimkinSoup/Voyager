@@ -3,6 +3,29 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
+/// Sets task [task] in text part [part] of message [messageId] [flipped]
+/// or not in [repository]; gives back what was written, or null for
+/// nothing. Where there's no [GaiaChatStore], as on the phone.
+Future<GaiaMessage?> gaiaToggleCheck(
+  GaiaRepository repository,
+  String messageId,
+  int part,
+  int task,
+  bool flipped,
+) async {
+  final message = await repository.getMessage(messageId);
+  if (message == null ||
+      message.isDeleted ||
+      message.parts.elementAtOrNull(part) is! GaiaTextPart) {
+    return null;
+  }
+  final written = message.copyWith(
+    parts: gaiaWithCheck(message.parts, part, task, flipped),
+  );
+  await repository.upsertMessage(written);
+  return written;
+}
+
 /// The companion's chat reads and writes, as the main instance serves them
 /// over the pipe (GAIA_HLD.md §3.2), on top of [GaiaRepository].
 ///
@@ -23,10 +46,10 @@ class GaiaChatStore {
 
   /// Saves a chat the companion just started. A chat already stored is left
   /// as it is.
-  Future<void> createChat(GaiaChat chat) async {
+  Future<void> createChat(GaiaChat chat) => _serial(() async {
     if (await _repository.getChat(chat.id) != null) return;
     await _repository.upsertChat(chat.copyWith(version: 1));
-  }
+  });
 
   /// Records the native session [chatId] resumes on this device with
   /// [adapter], and the last message it took part in; a null [sessionId]
@@ -36,7 +59,7 @@ class GaiaChatStore {
     String? sessionId,
     int lastSeq, {
     String adapter = kGaiaClaudeCodeAdapter,
-  }) async {
+  }) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
     final key = gaiaSessionKey(deviceId, adapter: adapter);
@@ -50,29 +73,30 @@ class GaiaChatStore {
               },
       ),
     );
-  }
+  });
 
   /// The tier [chatId] now uses (§7.2).
-  Future<void> setTier(String chatId, GaiaTier tier) async {
+  Future<void> setTier(String chatId, GaiaTier tier) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null || chat.tier == tier) return;
     await _repository.upsertChat(chat.copyWith(tier: tier));
-  }
+  });
 
   /// The utility model's title for [chatId], over [from]; a chat renamed
   /// since keeps its name.
-  Future<void> setTitle(String chatId, String title, String from) async {
-    final chat = await _repository.getChat(chatId);
-    if (chat == null || chat.title != from) return;
-    await _repository.upsertChat(chat.copyWith(title: title));
-  }
+  Future<void> setTitle(String chatId, String title, String from) =>
+      _serial(() async {
+        final chat = await _repository.getChat(chatId);
+        if (chat == null || chat.title != from) return;
+        await _repository.upsertChat(chat.copyWith(title: title));
+      });
 
   /// Pinned or unpinned from Gaia's sidebar, as on the Gaia page.
-  Future<void> setPinned(String chatId, bool pinned) async {
+  Future<void> setPinned(String chatId, bool pinned) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null || chat.pinned == pinned) return;
     await _repository.upsertChat(chat.copyWith(pinned: pinned));
-  }
+  });
 
   /// Deleted from Gaia's sidebar: tombstoned, as on the Gaia page, so
   /// [restoreChat] can undo it.
@@ -148,20 +172,26 @@ class GaiaChatStore {
   Future<List<GaiaMessage>> messages(String chatId) =>
       _repository.listMessages(chatId);
 
-  /// A message's first write also moves its chat to the top.
+  /// A message's first write also moves its chat to the top. Gives back
+  /// what was written, or null for nothing.
   ///
   /// A message erased while its run streams stays erased, as does a chat
   /// erased meanwhile: the run's later writes are dropped, or they'd bring the
-  /// erased text back.
-  Future<void> putMessage(GaiaMessage message) async {
+  /// erased text back. Its task ticks stay as stored: only [toggleCheck]
+  /// changes them, from the companion or the Gaia page, as it streams too.
+  Future<GaiaMessage?> putMessage(GaiaMessage message) => _serial(() async {
     final existing = await _repository.getMessage(message.id);
-    if (existing != null && existing.isDeleted) return;
+    if (existing != null && existing.isDeleted) return null;
     if (isErasedAt((await _repository.getChat(message.chatId))?.deletedAt)) {
-      return;
+      return null;
     }
-    await _repository.upsertMessage(
-      message.copyWith(version: (existing?.version ?? 0) + 1),
+    final written = message.copyWith(
+      parts: existing == null
+          ? null
+          : gaiaKeepChecks(message.parts, gaiaChecksOf(existing.parts)),
+      version: (existing?.version ?? 0) + 1,
     );
+    await _repository.upsertMessage(written);
     final chat = await _repository.getChat(message.chatId);
     if (chat == null) throw StateError('No chat ${message.chatId}');
     if (message.createdAt.isAfter(chat.lastMessageAt)) {
@@ -169,6 +199,29 @@ class GaiaChatStore {
         chat.copyWith(lastMessageAt: message.createdAt),
       );
     }
+    return written;
+  });
+
+  /// Sets task [task] in text part [part] of message [messageId] [flipped]
+  /// or not, as stored; gives back what was written, or null for nothing.
+  Future<GaiaMessage?> toggleCheck(
+    String messageId,
+    int part,
+    int task,
+    bool flipped,
+  ) => _serial(
+    () => gaiaToggleCheck(_repository, messageId, part, task, flipped),
+  );
+
+  /// Writes that read what they change, one at a time: a tick written
+  /// between a streaming reply's read and its write would be lost, as would
+  /// a session [setSession] forgot under the chat [putMessage] read before.
+  var _writes = Future<void>.value();
+
+  Future<T> _serial<T>(Future<T> Function() write) {
+    final done = _writes.then((_) => write());
+    _writes = done.then((_) {}, onError: (_) {});
+    return done;
   }
 
   /// Marks messages a companion left streaming as [status]: the companion

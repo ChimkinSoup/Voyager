@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
@@ -128,7 +129,7 @@ class GaiaCardView extends StatelessWidget {
                   minLines: 1,
                   maxLines: 8,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: 'Consolas',
+                    fontFamily: AppFonts.monoFamily,
                   ),
                 ),
               ),

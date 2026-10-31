@@ -389,7 +389,10 @@ sealed class GaiaPart {
 
   factory GaiaPart.fromJson(Map<String, Object?> json) =>
       switch (json['type']) {
-        'text' => GaiaTextPart(json['text']! as String),
+        'text' => GaiaTextPart(
+          json['text']! as String,
+          checks: {...?(json['checks'] as List?)?.cast<int>()},
+        ),
         'activity' => GaiaActivityPart((json['tools']! as List).cast<String>()),
         'image' => GaiaImagePart(
           mediaId: json['mediaId']! as String,
@@ -428,13 +431,67 @@ class GaiaUnknownPart extends GaiaPart {
 }
 
 class GaiaTextPart extends GaiaPart {
-  const GaiaTextPart(this.text);
+  const GaiaTextPart(this.text, {this.checks = const {}});
 
   final String text;
 
+  /// The task-list checkboxes the user has ticked or unticked, by their
+  /// order in [text]: each shows the other way from how Gaia wrote it. Only
+  /// shown, never in [text], so Gaia doesn't see them.
+  final Set<int> checks;
+
+  /// With task [index] [flipped] or not.
+  GaiaTextPart withCheck(int index, bool flipped) => GaiaTextPart(
+    text,
+    checks: flipped ? {...checks, index} : ({...checks}..remove(index)),
+  );
+
   @override
-  Map<String, Object?> toJson() => {'type': 'text', 'text': text};
+  Map<String, Object?> toJson() => {
+    'type': 'text',
+    'text': text,
+    if (checks.isNotEmpty) 'checks': [...checks],
+  };
 }
+
+/// Each part's [GaiaTextPart.checks], by its place; null for a part that
+/// isn't text.
+List<Set<int>?> gaiaChecksOf(List<GaiaPart> parts) => [
+  for (final part in parts) part is GaiaTextPart ? part.checks : null,
+];
+
+/// [gaiaChecksOf] for the pipe, back from it with [gaiaChecksFromJson].
+List<List<int>?> gaiaChecksToJson(List<Set<int>?> checks) => [
+  for (final part in checks) part == null ? null : [...part],
+];
+
+List<Set<int>?> gaiaChecksFromJson(Object? json) => [
+  for (final part in json! as List)
+    part == null ? null : {...(part as List).cast<int>()},
+];
+
+/// [parts] with each text part's checks [checks]' at its place, where that
+/// has some: the ticks are the user's, whatever a run writes over them.
+List<GaiaPart> gaiaKeepChecks(List<GaiaPart> parts, List<Set<int>?> checks) => [
+  for (final (i, part) in parts.indexed)
+    switch ((part, checks.elementAtOrNull(i))) {
+      (GaiaTextPart(:final text, checks: final had), final Set<int> checks)
+          when had.length != checks.length || !had.containsAll(checks) =>
+        GaiaTextPart(text, checks: checks),
+      _ => part,
+    },
+];
+
+/// [parts] with task [task] of text part [part] [flipped] or not.
+List<GaiaPart> gaiaWithCheck(
+  List<GaiaPart> parts,
+  int part,
+  int task,
+  bool flipped,
+) => [
+  for (final (i, p) in parts.indexed)
+    i == part ? (p as GaiaTextPart).withCheck(task, flipped) : p,
+];
 
 class GaiaActivityPart extends GaiaPart {
   const GaiaActivityPart(this.tools);

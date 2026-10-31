@@ -1911,9 +1911,15 @@ class _MessageView extends StatelessWidget {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final part in message.parts)
+          for (final (index, part) in message.parts.indexed)
             switch (part) {
-              GaiaTextPart(:final text) => _text(text, markdown: true),
+              GaiaTextPart(:final text, :final checks) => _MessageText(
+                text: text,
+                markdown: true,
+                menu: _menu,
+                checks: checks,
+                onCheck: (task) => controller.toggleCheck(message, index, task),
+              ),
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: GaiaActivityChip(label: _activity(tools)),
@@ -2103,10 +2109,16 @@ class _MessageText extends StatefulWidget {
     required this.text,
     required this.markdown,
     required this.menu,
+    this.checks = const {},
+    this.onCheck,
   });
 
   final String text;
   final bool markdown;
+
+  /// As on [GaiaMarkdown].
+  final Set<int> checks;
+  final ValueChanged<int>? onCheck;
 
   /// Built only when the menu is: it scans the text for code.
   final List<GaiaMenuItem> Function() menu;
@@ -2127,7 +2139,12 @@ class _MessageTextState extends State<_MessageText> {
 
   @override
   Widget build(BuildContext context) => widget.markdown
-      ? GaiaMarkdown(text: widget.text, contextMenuBuilder: _selectionMenu)
+      ? GaiaMarkdown(
+          text: widget.text,
+          contextMenuBuilder: _selectionMenu,
+          checks: widget.checks,
+          onCheck: widget.onCheck,
+        )
       : SelectableText(widget.text, contextMenuBuilder: _contextMenu);
 }
 

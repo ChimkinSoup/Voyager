@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
@@ -142,7 +143,10 @@ class _DebugMenu extends StatelessWidget {
             dense: true,
             contentPadding: EdgeInsets.zero,
             enabled: debug.scriptedReplies && !controller.currentRunning,
-            title: Text(key, style: const TextStyle(fontFamily: 'monospace')),
+            title: Text(
+              key,
+              style: const TextStyle(fontFamily: AppFonts.monoFamily),
+            ),
             subtitle: Text(value.description),
             onTap: () {
               Navigator.of(context).pop();

@@ -530,6 +530,25 @@ class GaiaHost {
     }
   }
 
+  /// A task ticked or unticked on the Gaia page: through the store, one
+  /// write at a time with the companion's, where it's attached. The
+  /// companion takes it up with its next write, as a reply streams, or as it
+  /// loads the chat.
+  Future<void> toggleCheck(
+    GaiaRepository repository,
+    String messageId,
+    int part,
+    int task,
+    bool flipped,
+  ) async => _attached.isCompleted
+      ? await (await _attached.future).toggleCheck(
+          messageId,
+          part,
+          task,
+          flipped,
+        )
+      : await gaiaToggleCheck(repository, messageId, part, task, flipped);
+
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
   void openChat(String chatId) => _sendOrLaunch('openChat', {'chatId': chatId});
@@ -745,8 +764,23 @@ class GaiaHost {
             message.toJson(),
         ];
       case 'putMessage':
-        await store.putMessage(GaiaMessage.fromJson(_map(params['message'])));
-        return null;
+        final written = await store.putMessage(
+          GaiaMessage.fromJson(_map(params['message'])),
+        );
+        // The ticks as stored, which may be the Gaia page's.
+        return written == null
+            ? null
+            : gaiaChecksToJson(gaiaChecksOf(written.parts));
+      case 'toggleCheck':
+        final written = await store.toggleCheck(
+          params['messageId']! as String,
+          params['part']! as int,
+          params['task']! as int,
+          params['flipped']! as bool,
+        );
+        return written == null
+            ? null
+            : gaiaChecksToJson(gaiaChecksOf(written.parts));
       case 'attachImage':
         final media = _media;
         if (media == null) throw GaiaPipeException('no media store');

@@ -76,8 +76,23 @@ class GaiaDevPipe extends GaiaPipe {
             message.toJson(),
         ];
       case 'putMessage':
-        await _store.putMessage(GaiaMessage.fromJson(_map(p['message'])));
-        return null;
+        final written = await _store.putMessage(
+          GaiaMessage.fromJson(_map(p['message'])),
+        );
+        // The ticks as stored, which may be the Gaia page's.
+        return written == null
+            ? null
+            : gaiaChecksToJson(gaiaChecksOf(written.parts));
+      case 'toggleCheck':
+        final written = await _store.toggleCheck(
+          p['messageId']! as String,
+          p['part']! as int,
+          p['task']! as int,
+          p['flipped']! as bool,
+        );
+        return written == null
+            ? null
+            : gaiaChecksToJson(gaiaChecksOf(written.parts));
       case 'rearm':
         _aborted = false;
         return null;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -22,10 +23,24 @@ import 'package:voyager/core/theme/app_fonts.dart';
 ///
 /// Cut into top-level blocks, each built once for its text, so a streaming
 /// reply rebuilds only its last.
+///
+/// Its task-list checkboxes are circles, shown the other way from how
+/// they're written for each task index in [checks] (counted through the
+/// text); tapping one calls [onCheck] with its index.
 class GaiaMarkdown extends StatefulWidget {
-  const GaiaMarkdown({super.key, required this.text, this.contextMenuBuilder});
+  const GaiaMarkdown({
+    super.key,
+    required this.text,
+    this.contextMenuBuilder,
+    this.checks = const {},
+    this.onCheck,
+  });
 
   final String text;
+  final Set<int> checks;
+
+  /// Null where the checkboxes can't be ticked.
+  final ValueChanged<int>? onCheck;
 
   /// The selection's right-click menu; the platform's when null.
   final SelectableRegionContextMenuBuilder? contextMenuBuilder;
@@ -37,7 +52,10 @@ class GaiaMarkdown extends StatefulWidget {
 class _GaiaMarkdownState extends State<GaiaMarkdown> {
   /// The last build's blocks, by their text: the same widget again is one
   /// Flutter doesn't rebuild.
-  var _built = <String, Widget>{};
+  var _built = <String, _Block>{};
+
+  /// How many tasks each block has, by its text.
+  var _tasks = <String, int>{};
   final _selection = _LineSelection();
 
   @override
@@ -48,12 +66,37 @@ class _GaiaMarkdownState extends State<GaiaMarkdown> {
 
   @override
   Widget build(BuildContext context) {
-    final built = <String, Widget>{};
-    final blocks = [
-      for (final source in gaiaMarkdownBlocks(widget.text))
-        built[source] ??= _built[source] ?? _Block(source: source),
-    ];
+    final built = <String, _Block>{};
+    final tasks = <String, int>{};
+    final sources = gaiaMarkdownBlocks(widget.text);
+    var firstTask = 0;
+    final blocks = <Widget>[];
+    for (final (i, source) in sources.indexed) {
+      // Only a later block needs the count: the last, as it streams, isn't
+      // parsed twice.
+      final count = i < sources.length - 1
+          ? tasks[source] ??=
+                _tasks[source] ?? _taskCount(_BlockState._parse(source))
+          : null;
+      final old = built[source] ?? _built[source];
+      final block =
+          old != null &&
+              old.firstTask == firstTask &&
+              old.tickable == (widget.onCheck != null) &&
+              _sameChecks(old, widget.checks, count)
+          ? old
+          : _Block(
+              source: source,
+              firstTask: firstTask,
+              checks: widget.checks,
+              onCheck: widget.onCheck,
+            );
+      built[source] ??= block;
+      blocks.add(block);
+      if (count != null) firstTask += count;
+    }
     _built = built;
+    _tasks = tasks;
     return SelectionArea(
       contextMenuBuilder:
           widget.contextMenuBuilder ??
@@ -69,6 +112,29 @@ class _GaiaMarkdownState extends State<GaiaMarkdown> {
       ),
     );
   }
+}
+
+/// Whether [block] shows the same [checks] as it was built with, among the
+/// [count] tasks it has; all after its first, for the last block's null.
+bool _sameChecks(_Block block, Set<int> checks, int? count) {
+  bool mine(int task) =>
+      task >= block.firstTask &&
+      (count == null || task < block.firstTask + count);
+  return setEquals(
+    block.checks.where(mine).toSet(),
+    checks.where(mine).toSet(),
+  );
+}
+
+/// The task-list checkboxes in [nodes].
+int _taskCount(List<md.Node> nodes) {
+  var count = 0;
+  for (final node in nodes) {
+    if (node is! md.Element) continue;
+    if (node.tag == 'input') count++;
+    count += _taskCount(node.children ?? const []);
+  }
+  return count;
 }
 
 /// Between blocks.
@@ -191,9 +257,21 @@ class _LineSelection extends StaticSelectionContainerDelegate {
 
 /// One top-level block, parsed once for its [source].
 class _Block extends StatefulWidget {
-  const _Block({required this.source});
+  const _Block({
+    required this.source,
+    required this.firstTask,
+    required this.checks,
+    required this.onCheck,
+  });
 
   final String source;
+
+  /// The index, through the whole text, of this block's first task.
+  final int firstTask;
+  final Set<int> checks;
+  final ValueChanged<int>? onCheck;
+
+  bool get tickable => onCheck != null;
 
   @override
   State<_Block> createState() => _BlockState();
@@ -227,8 +305,13 @@ class _BlockState extends State<_Block> {
     super.dispose();
   }
 
+  /// The next task's index through the whole text, as the build meets them
+  /// in reading order.
+  var _task = 0;
+
   @override
   Widget build(BuildContext context) {
+    _task = widget.firstTask;
     final children = _blocks(
       context,
       _nodes,
@@ -394,10 +477,11 @@ class _BlockState extends State<_Block> {
       for (final item in list.children ?? const <md.Node>[])
         if (item is md.Element && item.tag == 'li') item,
     ];
+    final fontSize = style.fontSize ?? 14;
     final markerWidth = ordered
-        ? (style.fontSize ?? 14) *
-              (0.6 * '${start + items.length}'.length + 0.9)
-        : (style.fontSize ?? 14) * 1.2;
+        ? fontSize * (0.6 * '${start + items.length}'.length + 0.9)
+        // A task's checkbox and its gap.
+        : fontSize * 1.5;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: _spaced([
@@ -410,26 +494,38 @@ class _BlockState extends State<_Block> {
                 SelectionContainer.disabled(
                   child: SizedBox(
                     width: markerWidth,
-                    child: Text(
-                      ordered
-                          ? '${start + i}.'
-                          : _bullets[depth % _bullets.length],
-                      style: style,
-                    ),
+                    child: ordered
+                        ? Text('${start + i}.', style: style)
+                        // Centred where a task's checkbox is.
+                        : Padding(
+                            padding: EdgeInsets.only(right: fontSize * 0.4),
+                            child: Text(
+                              _bullets[depth % _bullets.length],
+                              style: style,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                   ),
                 ),
               Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _spaced(
-                    _blocks(
+                  children: _spaced([
+                    for (final (j, block) in _blocks(
                       context,
                       item.children ?? const [],
                       style,
                       depth: depth + 1,
-                    ),
-                    _itemGap,
-                  ),
+                    ).indexed)
+                      // Under a task's text, past its checkbox.
+                      if (j > 0 && item.attributes['class'] == 'task-list-item')
+                        Padding(
+                          padding: EdgeInsets.only(left: fontSize * 1.5),
+                          child: block,
+                        )
+                      else
+                        block,
+                  ], _itemGap),
                 ),
               ),
             ],
@@ -593,10 +689,28 @@ class _BlockState extends State<_Block> {
         case 'img':
           spans.add(TextSpan(text: node.attributes['alt'] ?? '', style: style));
         case 'input':
+          final task = _task++;
+          final checked =
+              (node.attributes['checked'] == 'true') !=
+              widget.checks.contains(task);
           spans.add(
-            TextSpan(
-              text: node.attributes['checked'] == 'true' ? '☑ ' : '☐ ',
-              style: style,
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              // Copies as the box character for how it's shown.
+              child: _SelectableMath(
+                source: checked ? '☑ ' : '☐ ',
+                child: Padding(
+                  padding: EdgeInsets.only(right: (style.fontSize ?? 14) * 0.4),
+                  child: _TaskCircle(
+                    checked: checked,
+                    size: (style.fontSize ?? 14) * 1.1,
+                    onTap: switch (widget.onCheck) {
+                      final onCheck? => () => onCheck(task),
+                      null => null,
+                    },
+                  ),
+                ),
+              ),
             ),
           );
         default:
@@ -646,11 +760,7 @@ class _BlockState extends State<_Block> {
 
   TextStyle _linkStyle(BuildContext context, TextStyle style) {
     final color = Theme.of(context).colorScheme.primary;
-    return style.copyWith(
-      color: color,
-      decoration: TextDecoration.underline,
-      decorationColor: color.withValues(alpha: 0.5),
-    );
+    return style.copyWith(color: color, fontWeight: FontWeight.w500);
   }
 
   TapGestureRecognizer _tap(Uri target) => _taps.putIfAbsent(
@@ -688,11 +798,53 @@ class _BlockState extends State<_Block> {
   static const _bullets = ['•', '◦', '▪'];
 }
 
+/// A task-list checkbox: an outlined circle, filled with a tick once done.
+class _TaskCircle extends StatelessWidget {
+  const _TaskCircle({
+    required this.checked,
+    required this.size,
+    required this.onTap,
+  });
+
+  final bool checked;
+  final double size;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final circle = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: checked ? scheme.primary : null,
+        border: Border.all(
+          color: checked ? scheme.primary : scheme.onSurfaceVariant,
+          width: 1.5,
+        ),
+      ),
+      child: checked
+          ? Icon(Icons.check, size: size * 0.7, color: scheme.onPrimary)
+          : null,
+    );
+    if (onTap == null) return circle;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: circle,
+      ),
+    );
+  }
+}
+
 /// LaTeX in a message: `$$…$$` or `\[…\]` displayed, `\(…\)` or `$…$`
 /// inline. A single `$` opens only before a non-space and closes only after
 /// one and not before a digit, so prices stay text, nor before what continues
 /// a shell variable's name or opens the next, so `$A/$B` does; `\$` is a
-/// dollar sign.
+/// dollar sign. `\[…\]` right before `(` is an escaped link, `\[a\](x)`.
 ///
 /// Matched as the block streams in, so an equation is typeset once it's
 /// closed, before the reply finishes.
@@ -707,7 +859,7 @@ class _MathSyntax extends md.InlineSyntax {
 }
 
 final _mathPattern = RegExp(
-  r'\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)'
+  r'\$\$([\s\S]+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\](?!\()|\\\(([\s\S]+?)\\\)'
   r'|\$(?![\s$])((?:\\.|[^$\\\n])+?)(?<!\s)\$(?![\w{(])',
 );
 
@@ -771,7 +923,7 @@ class _DisplayMathSyntax extends md.BlockSyntax {
 final _displayMathOpen = RegExp(r'^ {0,3}(\$\$|\\\[)');
 
 /// An equation selected whole, copying its [source]: the typeset glyphs
-/// aren't text a selection can take. After Flutter's [SelectableRegion]
+/// aren't text a selection can take. A task's circle copies the same way. After Flutter's [SelectableRegion]
 /// adapter sample.
 class _SelectableMath extends StatefulWidget {
   const _SelectableMath({required this.source, required this.child});
@@ -1191,52 +1343,74 @@ class _GaiaCodeBlockState extends State<GaiaCodeBlock> {
       fontSize: (base.fontSize ?? 14) * 0.92,
       color: root?.color,
     );
-    final muted = style.copyWith(
+    final label = style.copyWith(
       fontFamily: AppFonts.family,
-      color: theme.colorScheme.onSurfaceVariant,
+      fontSize: style.fontSize! * 0.82,
+      color: theme.colorScheme.primary.withValues(alpha: 0.7),
+    );
+    final language = widget.language;
+    final copy = SelectionContainer.disabled(
+      child: IconButton(
+        tooltip: _copied == null ? 'Copy code' : 'Copied',
+        iconSize: 16,
+        visualDensity: VisualDensity.compact,
+        color: theme.colorScheme.onSurfaceVariant,
+        onPressed: _copy,
+        icon: Icon(_copied == null ? Icons.content_copy : Icons.check),
+      ),
+    );
+    final body = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.fromLTRB(12, language == null ? 10 : 0, 12, 10),
+      child: Text.rich(
+        TextSpan(
+          style: style,
+          children: _highlighted(widget.code, language, palette),
+        ),
+        softWrap: false,
+      ),
     );
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: root?.backgroundColor,
+        color: Color.alphaBlend(
+          Colors.black.withValues(alpha: 0.35),
+          root?.backgroundColor ?? theme.colorScheme.surface,
+        ),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.14),
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SelectionContainer.disabled(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
-              child: Row(
-                children: [
-                  Expanded(child: Text(widget.language ?? '', style: muted)),
-                  IconButton(
-                    tooltip: _copied == null ? 'Copy code' : 'Copied',
-                    iconSize: 16,
-                    visualDensity: VisualDensity.compact,
-                    color: theme.colorScheme.onSurfaceVariant,
-                    onPressed: _copy,
-                    icon: Icon(
-                      _copied == null ? Icons.content_copy : Icons.check,
-                    ),
+      // Without a language there's no header line: the copy button sits
+      // beside the code instead.
+      child: language == null
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: body),
+                Padding(padding: const EdgeInsets.all(4), child: copy),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SelectionContainer.disabled(
+                          child: Text(language, style: label),
+                        ),
+                      ),
+                      copy,
+                    ],
                   ),
-                ],
-              ),
+                ),
+                body,
+              ],
             ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Text.rich(
-              TextSpan(
-                style: style,
-                children: _highlighted(widget.code, widget.language, palette),
-              ),
-              softWrap: false,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

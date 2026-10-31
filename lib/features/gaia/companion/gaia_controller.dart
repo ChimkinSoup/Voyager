@@ -2242,7 +2242,7 @@ class GaiaController extends ChangeNotifier {
       if (!builder.apply(event)) return;
       reply = _replace(
         reply,
-        reply.copyWith(parts: builder.parts),
+        reply.copyWith(parts: _keepChecks(reply, builder.parts)),
         textOnly: event is GaiaTextDelta,
       );
       final last = _lastPersist[reply.id];
@@ -2399,14 +2399,14 @@ class GaiaController extends ChangeNotifier {
       // permission's answer, so they're voided; a question stays open and,
       // answered later, goes as the next message.
       cards.voidAll(chatId: chatId);
-      final parts = [
+      final parts = _keepChecks(reply, [
         for (final part in builder.finished)
           part is GaiaCardPart &&
                   part.isOpen &&
                   part.kind != GaiaCardKind.question
               ? part.decided(GaiaCardState.voided)
               : part,
-      ];
+      ]);
       reply = _replace(
         reply,
         result.isError
@@ -2440,12 +2440,12 @@ class GaiaController extends ChangeNotifier {
       reply = _replace(
         reply,
         reply.copyWith(
-          parts: [
+          parts: _keepChecks(reply, [
             for (final part in builder.finished)
               part is GaiaCardPart && part.isOpen
                   ? part.decided(GaiaCardState.voided)
                   : part,
-          ],
+          ]),
           status: aborted
               ? GaiaMessageStatus.aborted
               : _drainCancelled
@@ -2842,6 +2842,79 @@ class GaiaController extends ChangeNotifier {
     return updated;
   }
 
+  /// A streaming reply's [parts] as its run rebuilt them, with the ticks
+  /// the user has made on it meanwhile ([toggleCheck]), part by part.
+  List<GaiaPart> _keepChecks(GaiaMessage reply, List<GaiaPart> parts) =>
+      gaiaKeepChecks(parts, gaiaChecksOf(_shown(reply)?.parts ?? const []));
+
+  /// [message] as it's shown now.
+  GaiaMessage? _shown(GaiaMessage message) =>
+      _messages[message.chatId]?.where((m) => m.id == message.id).firstOrNull;
+
+  /// Ticks or unticks task [task] in [message]'s text part [part], and
+  /// saves it: shown only, never sent to Gaia. Shown at once; stored by the
+  /// main instance, whose ticks a streaming reply's writes keep. Sent as
+  /// the state it's shown in, not a flip, so a tick from the Gaia page this
+  /// hasn't taken up yet isn't undone; shown back as it was if not saved.
+  Future<void> toggleCheck(GaiaMessage message, int part, int task) async {
+    final current = _shown(message);
+    if (current?.parts.elementAtOrNull(part) case final GaiaTextPart text?) {
+      final flipped = !text.checks.contains(task);
+      _replace(
+        current!,
+        current.copyWith(
+          parts: gaiaWithCheck(current.parts, part, task, flipped),
+        ),
+      );
+      final turn = _checkTurns[message.id] =
+          (_checkTurns[message.id] ?? 0) + 1;
+      try {
+        final stored = await _pipe.request('toggleCheck', {
+          'messageId': message.id,
+          'part': part,
+          'task': task,
+          'flipped': flipped,
+        });
+        if (_checkTurns[message.id] == turn) _adoptChecks(message, stored);
+      } on GaiaPipeException catch (error) {
+        debugPrint('[gaia] tick not saved: $error');
+        final shown = _shown(message);
+        if (_checkTurns[message.id] == turn && shown != null) {
+          _replace(
+            shown,
+            shown.copyWith(
+              parts: gaiaWithCheck(shown.parts, part, task, !flipped),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// Ticks sent to the main instance, by message id: what a write gives
+  /// back is taken up only if no tick went after it ([_adoptChecks]).
+  final _checkTurns = <String, int>{};
+
+  /// [message] shown with the ticks the main instance has [stored] for it,
+  /// as [gaiaChecksToJson] made them: the Gaia page's among them.
+  void _adoptChecks(GaiaMessage message, Object? stored) {
+    final current = _shown(message);
+    if (stored == null || current == null) return;
+    final parts = gaiaKeepChecks(current.parts, gaiaChecksFromJson(stored));
+    final was = gaiaChecksOf(current.parts);
+    final now = gaiaChecksOf(parts);
+    if ([
+      for (var i = 0; i < was.length; i++) i,
+    ].every((i) => setEquals(was[i], now[i]))) {
+      return;
+    }
+    _replace(
+      current,
+      current.copyWith(parts: parts, bumpVersion: false, touch: false),
+      textOnly: true,
+    );
+  }
+
   /// Captions [messages]' images that have none (§7.4), a few at a time,
   /// and saves each message they're written to. A message already being
   /// captioned is waited on, not done again; an image that failed isn't
@@ -2941,8 +3014,12 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> _persist(GaiaMessage message) async {
     _lastPersist[message.id] = DateTime.now();
+    final turn = _checkTurns[message.id];
     try {
-      await _pipe.request('putMessage', {'message': message.toJson()});
+      final stored = await _pipe.request('putMessage', {
+        'message': message.toJson(),
+      });
+      if (_checkTurns[message.id] == turn) _adoptChecks(message, stored);
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] message not saved: $error');
     }

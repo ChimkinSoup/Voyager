@@ -76,6 +76,31 @@ void main() {
     expect(messages.last.version, 2);
   });
 
+  test('a tick stays as stored through the streaming writes after it, '
+      'whatever ticks they carry', () async {
+    await store.createChat(_chat('c1'));
+    final streaming = _message(
+      'b',
+      1,
+      status: GaiaMessageStatus.streaming,
+      text: '- [ ] a\n- [ ] b',
+    );
+    await store.putMessage(streaming);
+    expect(await store.toggleCheck('b', 0, 1, true), isNotNull);
+    final written = await store.putMessage(
+      _message('b', 1, text: '- [ ] a\n- [ ] b\n\nDone.').copyWith(
+        parts: [
+          const GaiaTextPart('- [ ] a\n- [ ] b\n\nDone.', checks: {0}),
+        ],
+      ),
+    );
+    expect((written!.parts.single as GaiaTextPart).checks, {1});
+    final stored = (await store.messages('c1')).single;
+    expect((stored.parts.single as GaiaTextPart).text, endsWith('Done.'));
+    expect((stored.parts.single as GaiaTextPart).checks, {1});
+    expect(await store.toggleCheck('missing', 0, 0, true), isNull);
+  });
+
   test('a later message moves its chat to the top', () async {
     await store.createChat(_chat('c1'));
     await store.createChat(

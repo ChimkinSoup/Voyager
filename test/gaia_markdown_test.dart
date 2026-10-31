@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 
 void main() {
@@ -248,6 +249,142 @@ void main() {
     expect(text, isNot(contains('1.')));
   });
 
+  group('task checkboxes', () {
+    final circles = find.byWidgetPredicate(
+      (widget) =>
+          widget is Container &&
+          (widget.decoration as BoxDecoration?)?.shape == BoxShape.circle,
+    );
+
+    testWidgets('nest their items under their text', (tester) async {
+      await pump(tester, '- [ ] Parent:\n  - [x] Child\n  - Bullet');
+      final parent = tester.getTopLeft(circles.first).dx;
+      expect(tester.getTopLeft(circles.last).dx, greaterThan(parent));
+      expect(
+        tester.getTopLeft(find.text('◦')).dx,
+        closeTo(tester.getTopLeft(circles.last).dx, 0.5),
+      );
+    });
+
+    testWidgets('are centred where a bullet is', (tester) async {
+      await pump(tester, '- Bullet\n- [ ] Task');
+      expect(
+        tester.getCenter(find.text('•')).dx,
+        closeTo(tester.getCenter(circles.first).dx, 0.5),
+      );
+      // The task's text follows its checkbox's placeholder in one paragraph.
+      final task = tester.renderObject<RenderParagraph>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText && widget.text.toPlainText().contains('Task'),
+        ),
+      );
+      final taskText = task.localToGlobal(
+        task.getOffsetForCaret(const TextPosition(offset: 1), Rect.zero),
+      );
+      expect(
+        tester.getTopLeft(find.text('Bullet')).dx,
+        closeTo(taskText.dx, 0.5),
+      );
+    });
+    const text = '- [x] one\n- [ ] two\n\nBetween.\n\n- [ ] three';
+
+    Future<void> pumpTasks(
+      WidgetTester tester,
+      Set<int> checks,
+      ValueChanged<int>? onCheck,
+    ) => tester.pumpWidget(
+      MaterialApp(
+        theme: VoyagerTheme.dark(),
+        home: Scaffold(
+          body: GaiaMarkdown(text: text, checks: checks, onCheck: onCheck),
+        ),
+      ),
+    );
+
+    testWidgets('are circles, ticked as written', (tester) async {
+      await pumpTasks(tester, const {}, null);
+      expect(circles, findsNWidgets(3));
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(plain(tester), isNot(contains('☑')));
+    });
+
+    testWidgets('tap with their index through every block', (tester) async {
+      final tapped = <int>[];
+      await pumpTasks(tester, const {}, tapped.add);
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(circles.at(i));
+      }
+      expect(tapped, [0, 1, 2]);
+    });
+
+    testWidgets('show the other way for each index checked', (tester) async {
+      await pumpTasks(tester, const {}, (_) {});
+      await pumpTasks(tester, const {0, 2}, (_) {});
+      // One untick, two left as written, three ticked.
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      final ticked = tester.widget<Container>(circles.at(2));
+      expect((ticked.decoration! as BoxDecoration).color, isNotNull);
+    });
+
+    testWidgets('ticked in a later block leave earlier ones unbuilt', (
+      tester,
+    ) async {
+      RichText between() => tester.widget<RichText>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().contains('Between'),
+        ),
+      );
+      await pumpTasks(tester, const {}, (_) {});
+      final before = between();
+      await pumpTasks(tester, const {2}, (_) {});
+      expect(between(), same(before));
+    });
+
+    testWidgets('copy as the box for how each is shown', (tester) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      await pumpTasks(tester, const {0, 2}, (_) {});
+      await tester.tapAt(
+        tester.getCenter(find.textContaining('Between')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      tester
+          .state<SelectableRegionState>(find.byType(SelectableRegion))
+          .contextMenuButtonItems
+          .firstWhere((button) => button.type == ContextMenuButtonType.copy)
+          .onPressed!();
+      await tester.pump();
+      expect(copied, '☐ one\n☐ two\nBetween.\n☑ three');
+    });
+  });
+
+  test('a text part keeps its checks through JSON', () {
+    final part = const GaiaTextPart(
+      '- [ ] a',
+    ).withCheck(0, true).withCheck(3, true);
+    final back = GaiaPart.fromJson(part.toJson()) as GaiaTextPart;
+    expect(back.checks, {0, 3});
+    expect(back.withCheck(0, false).checks, {3});
+    expect(back.withCheck(3, true).checks, {0, 3});
+    expect(const GaiaTextPart('x').toJson().containsKey('checks'), isFalse);
+  });
+
   testWidgets('a code block copies its code', (tester) async {
     String? copied;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -261,7 +398,7 @@ void main() {
     );
     await pump(tester, 'Run:\n\n```dart\nvoid main() {\n  print(1);\n}\n```');
     expect(find.text('dart'), findsOneWidget);
-    await tester.tap(find.byTooltip('Copy code'));
+    await tester.tap(find.byIcon(Icons.content_copy));
     await tester.pump();
     expect(copied, 'void main() {\n  print(1);\n}');
     expect(find.byIcon(Icons.check), findsOneWidget);
@@ -331,6 +468,12 @@ void main() {
       expect(find.byType(Math), findsNothing);
       expect(plain(tester), contains(r'It costs $5 to $10, or $3 each.'));
       expect(plain(tester), contains(r'echo $HOME $PATH'));
+    });
+
+    testWidgets('leaves an escaped link alone', (tester) async {
+      await pump(tester, r'An \[escaped link\](x) and \[y^2\] after.');
+      expect(typeset(tester), [MathStyle.display]);
+      expect(plain(tester), contains('An [escaped link](x) and'));
     });
 
     testWidgets('leaves shell variables alone', (tester) async {

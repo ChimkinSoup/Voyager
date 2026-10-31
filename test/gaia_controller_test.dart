@@ -142,8 +142,20 @@ class _Main {
           (params['message']! as Map).cast<String, Object?>(),
         );
         puts[message.id] = (puts[message.id] ?? 0) + 1;
-        await store.putMessage(message);
-        return null;
+        final written = await store.putMessage(message);
+        return written == null
+            ? null
+            : gaiaChecksToJson(gaiaChecksOf(written.parts));
+      case 'toggleCheck':
+        final written = await store.toggleCheck(
+          params['messageId']! as String,
+          params['part']! as int,
+          params['task']! as int,
+          params['flipped']! as bool,
+        );
+        return written == null
+            ? null
+            : gaiaChecksToJson(gaiaChecksOf(written.parts));
       case 'rearm':
         aborted = false;
         return null;
@@ -794,6 +806,50 @@ void main() {
       },
       timeout: const Timeout(Duration(seconds: 30)),
     );
+
+    test('a task ticked while the reply streams, here or on the Gaia page, '
+        'stays ticked through the rest of it, and is saved', () async {
+      await debug.setStreamSpeed(400);
+      final sent = controller.send('/msg1');
+      GaiaMessage reply() => controller.messages.last;
+      while (controller.messages.isEmpty ||
+          !_text(reply()).contains('One still to do')) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(reply().status, GaiaMessageStatus.streaming);
+      await controller.toggleCheck(reply(), 0, 1);
+      expect((reply().parts.first as GaiaTextPart).checks, {1});
+      // The Gaia page's, straight to the store, once the page has the task
+      // to tick.
+      while ((await main.messages()).last.text.contains('One still') == false) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(reply().status, GaiaMessageStatus.streaming);
+      expect(await main.store.toggleCheck(reply().id, 0, 0, true), isNotNull);
+      await sent;
+      await settle();
+
+      expect(_text(reply()), endsWith('A closing paragraph after a rule.'));
+      expect((reply().parts.first as GaiaTextPart).checks, {0, 1});
+      final saved = (await main.messages()).last;
+      expect(saved.status, GaiaMessageStatus.complete);
+      expect((saved.parts.first as GaiaTextPart).checks, {0, 1});
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('a tick here on a task the Gaia page ticked unseen saves what this '
+        'shows, not a flip of what the page saved', () async {
+      await controller.send('/msg1');
+      await settle();
+      GaiaMessage reply() => controller.messages.last;
+      // The page unticks task 1; this still shows it as written.
+      expect(await main.store.toggleCheck(reply().id, 0, 1, true), isNotNull);
+      expect((reply().parts.first as GaiaTextPart).checks, isEmpty);
+      await controller.toggleCheck(reply(), 0, 1);
+
+      expect((reply().parts.first as GaiaTextPart).checks, {1});
+      final saved = (await main.messages()).last;
+      expect((saved.parts.first as GaiaTextPart).checks, {1});
+    });
 
     test('an error script ends the reply as an error', () async {
       await controller.send('/error');
