@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -91,15 +92,51 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
   /// one starts, rather than pulling the grid back to its own period.
   var _scrollTurn = 0;
 
+  /// What was pressed while the vault was locked, to carry out on unlock, and
+  /// the vault it was pressed for: none opening a new one, whose photos it
+  /// wasn't about. Dropped on leaving the page, which keeps this state alive.
+  ({VoidCallback retry, String? vaultId})? _afterUnlock;
+
   /// Starts the check-in a notification tap asked for (§13.1) — unless the
   /// vault is locked, when the detail is as far as it goes.
-  void _takeCheckInRequest(PhotoSeries series, List<PhotoSeriesAngle> angles) {
+  void _takeCheckInRequest(PhotoSeries series) {
     if (!mounted || ref.read(photoSeriesCheckInRequestProvider) != series.id) {
       return;
     }
     ref.read(photoSeriesCheckInRequestProvider.notifier).state = null;
-    if (ref.read(secureVaultSessionProvider) != null) _checkIn(series, angles);
+    if (ref.read(secureVaultSessionProvider) != null) _checkIn();
   }
+
+  /// The series as it is now, for what was pressed a while ago; null once
+  /// it's gone. Entries are oldest first.
+  ({
+    PhotoSeries series,
+    List<PhotoSeriesAngle> angles,
+    List<PhotoViewerEntry> entries,
+  })?
+  _current() {
+    final snapshot = ref.read(photoSeriesSnapshotProvider).valueOrNull;
+    final series = snapshot?.series
+        .where((s) => s.id == widget.seriesId)
+        .firstOrNull;
+    if (snapshot == null || series == null) return null;
+    final angles = [
+      for (final angle in snapshot.angles)
+        if (angle.seriesId == series.id) angle,
+    ];
+    return (
+      series: series,
+      angles: angles,
+      entries: [
+        for (final group in _groups(series, snapshot, angles).reversed)
+          ...group.entries.reversed,
+      ],
+    );
+  }
+
+  PhotoViewerEntry? _entry(String checkInId) => _current()?.entries
+      .where((entry) => entry.checkIn.id == checkInId)
+      .firstOrNull;
 
   @override
   void dispose() {
@@ -108,9 +145,16 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
   }
 
   /// Whether the vault is open; when it isn't, points the user at the
-  /// unlock card (§4.1).
-  bool _requireUnlocked() {
+  /// unlock card (§4.1) and has [retry] run once it opens. Only the latest
+  /// control pressed is carried out; one with no [retry] has nothing run.
+  bool _requireUnlocked([VoidCallback? retry]) {
     if (ref.read(secureVaultSessionProvider) != null) return true;
+    _afterUnlock = retry == null
+        ? null
+        : (
+            retry: retry,
+            vaultId: ref.read(secureVaultHeaderProvider).valueOrNull?.vaultId,
+          );
     _unlockFocus.requestFocus();
     return false;
   }
@@ -153,14 +197,78 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     if (mounted) Navigator.of(context).maybePop();
   }
 
-  Future<void> _checkIn(
-    PhotoSeries series,
-    List<PhotoSeriesAngle> angles,
-  ) async {
-    if (!_requireUnlocked()) return;
+  Future<void> _checkIn() async {
+    if (!_requireUnlocked(_checkIn)) return;
+    final current = _current();
+    if (current == null) return;
     // Nothing while one is open: a notification tap mid-check-in asks for
     // another.
-    await showPhotoCheckInDialog(context, series: series, angles: angles);
+    await showPhotoCheckInDialog(
+      context,
+      series: current.series,
+      angles: current.angles,
+    );
+  }
+
+  /// First click reveals, the next opens the viewer (§7.1).
+  void _tapTile(String checkInId) {
+    if (!_requireUnlocked(() => _tapTile(checkInId))) return;
+    final revealed = ref.read(photoRevealedCheckInsProvider);
+    if (!revealed.contains(checkInId)) {
+      ref.read(photoRevealedCheckInsProvider.notifier).state = {
+        ...revealed,
+        checkInId,
+      };
+      return;
+    }
+    final current = _current();
+    final entry = _entry(checkInId);
+    if (current != null && entry != null) _openViewer(current.series, entry);
+  }
+
+  Future<void> _editNote(String checkInId) async {
+    if (!_requireUnlocked(() => _editNote(checkInId))) return;
+    final checkIn = _entry(checkInId)?.checkIn;
+    if (checkIn == null) return;
+    final session = ref.read(secureVaultSessionProvider)!;
+    final current = await PhotoSeriesService.openNote(session, checkIn);
+    if (!mounted) return;
+    final text = await showPhotoNoteDialog(context, current ?? '');
+    final now = ref.read(secureVaultSessionProvider);
+    if (text == null || now == null) return;
+    await ref.read(photoSeriesServiceProvider).setNote(now, checkIn, text);
+  }
+
+  Future<void> _setPhoto(String checkInId, String angleId) async {
+    if (!_requireUnlocked(() => _setPhoto(checkInId, angleId))) return;
+    final current = _current();
+    final checkIn = _entry(checkInId)?.checkIn;
+    final angle = current?.angles.where((a) => a.id == angleId).firstOrNull;
+    if (current == null || checkIn == null || angle == null) return;
+    await showPhotoCheckInDialog(
+      context,
+      series: current.series,
+      angles: [angle],
+      checkIn: checkIn,
+    );
+  }
+
+  /// Not carried out on unlock, unlike the rest: it saves a change rather than
+  /// opening something, and would do so unseen, whenever the vault next opens.
+  void _useAsReference(String checkInId, String angleId) {
+    if (!_requireUnlocked()) return;
+    final image = _entry(checkInId)?.images[angleId];
+    if (image != null) {
+      ref.read(photoSeriesServiceProvider).setReference(image);
+    }
+  }
+
+  void _pickView(_PhotoSeriesView picked) {
+    if (picked != _PhotoSeriesView.grid &&
+        !_requireUnlocked(() => _pickView(picked))) {
+      return;
+    }
+    setState(() => _view = picked);
   }
 
   /// Scrolls the grid to [period]'s newest check-in in [groups].
@@ -260,7 +368,22 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
       );
     }
     ref.listen(secureVaultSessionProvider, (_, session) {
-      if (session == null) setState(() => _view = _PhotoSeriesView.grid);
+      if (session == null) {
+        setState(() => _view = _PhotoSeriesView.grid);
+        return;
+      }
+      final pending = _afterUnlock;
+      _afterUnlock = null;
+      if (pending == null) return;
+      if (pending.vaultId != null && pending.vaultId != session.vaultId) return;
+      // After a frame: the setup dialog unlocks before it pops, which would
+      // pop a dialog opened here instead.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) pending.retry();
+      });
+    });
+    ref.listen(photoSeriesPageVisibleProvider, (_, visible) {
+      if (!visible) _afterUnlock = null;
     });
     final unlocked = ref.watch(
       secureVaultSessionProvider.select((s) => s != null),
@@ -272,7 +395,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
     // Watched, not listened to: one made before the detail opened — the tap
     // that opened it — waits here for the series to load.
     if (ref.watch(photoSeriesCheckInRequestProvider) == series.id) {
-      Future.microtask(() => _takeCheckInRequest(series, angles));
+      Future.microtask(() => _takeCheckInRequest(series));
     }
     final stats = photoSeriesStats(
       series: series,
@@ -316,13 +439,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
           selected: {view},
           // Not disabled while locked: picking Playback or Compare points
           // at the unlock card instead.
-          onSelectionChanged: (selected) {
-            final picked = selected.single;
-            if (picked != _PhotoSeriesView.grid && !_requireUnlocked()) {
-              return;
-            }
-            setState(() => _view = picked);
-          },
+          onSelectionChanged: (selected) => _pickView(selected.single),
         ),
       ),
       const SizedBox(height: 16),
@@ -338,6 +455,70 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
           reference.image.id,
     };
 
+    // Outside the LayoutBuilder below: the same widget each layout, so a new
+    // size doesn't rebuild every tile.
+    final grid = CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+          sliver: SliverList.list(
+            children: [
+              ...header,
+              if (groups.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text(
+                      'No check-ins yet.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        for (final group in groups)
+          SliverPadding(
+            key: _groupKeys.putIfAbsent(group.start, GlobalKey.new),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+            sliver: SliverList.list(
+              children: [
+                if (_gridGroupLabel(group.start, series.cadence)
+                    case final label?) ...[
+                  Text(label, style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                ],
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final entry in group.entries)
+                      _CheckInTile(
+                        key: _tileKeys.putIfAbsent(
+                          entry.checkIn.id,
+                          GlobalKey.new,
+                        ),
+                        series: series,
+                        angles: angles,
+                        entry: entry,
+                        referenceImageIds: referenceImageIds,
+                        onTap: () => _tapTile(entry.checkIn.id),
+                        onEditNote: () => _editNote(entry.checkIn.id),
+                        onSetPhoto: (angleId) =>
+                            _setPhoto(entry.checkIn.id, angleId),
+                        onAlign: (angleId) => _align(entry.checkIn.id, angleId),
+                        onUseAsReference: (angleId) =>
+                            _useAsReference(entry.checkIn.id, angleId),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+
     return VaultActivity(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -350,7 +531,7 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
             GlassButton(
               // Not disabled while locked: pressing it points at the
               // unlock card instead.
-              onPressed: () => _checkIn(series, angles),
+              onPressed: _checkIn,
               icon: const Icon(PhosphorIconsRegular.camera, size: 13),
               label: 'Check in',
               dense: true,
@@ -405,82 +586,41 @@ class _PhotoSeriesDetailState extends ConsumerState<PhotoSeriesDetail> {
                   ),
                 ),
               )
-            : CustomScrollView(
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
-                    sliver: SliverList.list(
-                      children: [
-                        ...header,
-                        if (!unlocked) ...[
-                          PhotoVaultUnlockCard(focusNode: _unlockFocus),
-                          const SizedBox(height: 16),
-                        ],
-                        if (groups.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 32),
-                            child: Center(
-                              child: Text(
-                                'No check-ins yet.',
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  for (final group in groups)
-                    SliverPadding(
-                      key: _groupKeys.putIfAbsent(group.start, GlobalKey.new),
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-                      sliver: SliverList.list(
-                        children: [
-                          if (_gridGroupLabel(group.start, series.cadence)
-                              case final label?) ...[
-                            Text(label, style: theme.textTheme.labelLarge),
-                            const SizedBox(height: 8),
-                          ],
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              for (final entry in group.entries)
-                                _CheckInTile(
-                                  key: _tileKeys.putIfAbsent(
-                                    entry.checkIn.id,
-                                    GlobalKey.new,
-                                  ),
-                                  series: series,
-                                  angles: angles,
-                                  entry: entry,
-                                  onOpen: () => _openViewer(series, entry),
-                                  onAlign: (angle, image) =>
-                                      _align(entries, angle, image),
-                                  referenceImageIds: referenceImageIds,
-                                  requireUnlocked: _requireUnlocked,
-                                ),
-                            ],
-                          ),
-                        ],
+            : LayoutBuilder(
+                builder: (context, box) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Outside the scroll view, so the controls that focus it
+                    // find it however far the grid has scrolled. At most half
+                    // a short page, or one with the keyboard up.
+                    if (!unlocked)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: box.maxHeight / 2,
+                        ),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                          child: PhotoVaultUnlockCard(focusNode: _unlockFocus),
+                        ),
                       ),
-                    ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                ],
+                    Expanded(child: grid),
+                  ],
+                ),
               ),
       ),
     );
   }
 
-  void _align(
-    List<PhotoViewerEntry> entries,
-    PhotoSeriesAngle angle,
-    PhotoCheckInImage image,
-  ) {
-    if (!_requireUnlocked()) return;
+  void _align(String checkInId, String angleId) {
+    if (!_requireUnlocked(() => _align(checkInId, angleId))) return;
+    final current = _current();
+    final angle = current?.angles.where((a) => a.id == angleId).firstOrNull;
+    final image = _entry(checkInId)?.images[angleId];
+    if (current == null || angle == null || image == null) return;
     showPhotoAlignEditor(
       context,
       angle: angle,
-      frames: photoFramesOf(entries, angle.id),
+      frames: photoFramesOf(current.entries, angle.id),
       image: image,
     );
   }
@@ -793,21 +933,28 @@ class _CheckInTile extends ConsumerStatefulWidget {
     required this.series,
     required this.angles,
     required this.entry,
-    required this.onOpen,
-    required this.onAlign,
     required this.referenceImageIds,
-    required this.requireUnlocked,
+    required this.onTap,
+    required this.onEditNote,
+    required this.onSetPhoto,
+    required this.onAlign,
+    required this.onUseAsReference,
   });
 
   final PhotoSeries series;
   final List<PhotoSeriesAngle> angles;
   final PhotoViewerEntry entry;
-  final VoidCallback onOpen;
-  final void Function(PhotoSeriesAngle angle, PhotoCheckInImage image) onAlign;
 
   /// Each angle's reference photo (§10).
   final Set<String> referenceImageIds;
-  final bool Function() requireUnlocked;
+
+  /// Those that need the vault, kept by the detail by id: this tile can be
+  /// gone by the time it opens.
+  final VoidCallback onTap;
+  final VoidCallback onEditNote;
+  final ValueChanged<String> onSetPhoto;
+  final ValueChanged<String> onAlign;
+  final ValueChanged<String> onUseAsReference;
 
   @override
   ConsumerState<_CheckInTile> createState() => _CheckInTileState();
@@ -817,20 +964,6 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
   final _menu = GlobalKey<ContextMenuRegionState>();
 
   PhotoCheckIn get _checkIn => widget.entry.checkIn;
-
-  /// First click reveals, the next opens the viewer (§7.1).
-  void _tap() {
-    if (!widget.requireUnlocked()) return;
-    final revealed = ref.read(photoRevealedCheckInsProvider);
-    if (!revealed.contains(_checkIn.id)) {
-      ref.read(photoRevealedCheckInsProvider.notifier).state = {
-        ...revealed,
-        _checkIn.id,
-      };
-      return;
-    }
-    widget.onOpen();
-  }
 
   Future<void> _editDate() async {
     final now = DateTime.now();
@@ -848,27 +981,6 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
     await ref
         .read(photoSeriesServiceProvider)
         .setDate(_checkIn, DateUtils.dateOnly(picked));
-  }
-
-  Future<void> _editNote() async {
-    if (!widget.requireUnlocked()) return;
-    final session = ref.read(secureVaultSessionProvider)!;
-    final current = await PhotoSeriesService.openNote(session, _checkIn);
-    if (!mounted) return;
-    final text = await showPhotoNoteDialog(context, current ?? '');
-    final now = ref.read(secureVaultSessionProvider);
-    if (text == null || now == null) return;
-    await ref.read(photoSeriesServiceProvider).setNote(now, _checkIn, text);
-  }
-
-  Future<void> _setPhoto(PhotoSeriesAngle angle) async {
-    if (!widget.requireUnlocked()) return;
-    await showPhotoCheckInDialog(
-      context,
-      series: widget.series,
-      angles: [angle],
-      checkIn: _checkIn,
-    );
   }
 
   Future<void> _delete() async {
@@ -932,7 +1044,7 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
       ContextMenuItem(
         label: _checkIn.hasNote ? 'Edit note' : 'Add note',
         icon: PhosphorIconsRegular.note,
-        onTap: _editNote,
+        onTap: widget.onEditNote,
       ),
       ContextMenuItem(
         label: 'Photo',
@@ -943,7 +1055,7 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
               label: images.containsKey(angle.id)
                   ? 'Replace ${angle.name}'
                   : 'Add ${angle.name}',
-              onTap: () => _setPhoto(angle),
+              onTap: () => widget.onSetPhoto(angle.id),
             ),
         ],
       ),
@@ -951,16 +1063,13 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
         'Align',
         PhosphorIconsRegular.frameCorners,
         (_) => true,
-        widget.onAlign,
+        (angle, _) => widget.onAlign(angle.id),
       ),
       perAngle(
         'Use as reference',
         PhosphorIconsRegular.pushPin,
         (image) => !widget.referenceImageIds.contains(image.id),
-        (_, image) {
-          if (!widget.requireUnlocked()) return;
-          ref.read(photoSeriesServiceProvider).setReference(image);
-        },
+        (angle, _) => widget.onUseAsReference(angle.id),
       ),
       ContextMenuItem(
         label: 'Delete check-in',
@@ -1034,7 +1143,7 @@ class _CheckInTileState extends ConsumerState<_CheckInTile> {
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
-              onTap: _tap,
+              onTap: widget.onTap,
               borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

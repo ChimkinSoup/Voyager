@@ -77,7 +77,7 @@ While the vault is locked, everything plain still renders: the list, stats, the 
 
 A single **unlock card** sits above the grid. It holds a password field plus a "Reset vault" link, and reuses the widgets in `secure_vault_dialogs.dart`. If no vault exists, the card reads "Set up a vault to store photos" and opens the existing setup dialog.
 
-Playback, Compare, the alignment tool and **Check in** are disabled while locked. Pressing them focuses the unlock card.
+Playback, Compare, the alignment tool and **Check in** are disabled while locked. Pressing them focuses the unlock card, and the last one pressed goes ahead once the vault opens, unless the page was left first or a reset made the vault a new one. "Use as reference" also focuses the card but doesn't go ahead: it saves a change, which shouldn't happen unseen at a later unlock.
 
 ---
 

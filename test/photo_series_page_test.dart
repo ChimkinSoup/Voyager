@@ -256,6 +256,397 @@ void main() {
     expect(field.focusNode.hasFocus, isTrue);
   });
 
+  group('what was pressed while locked happens on unlock', () {
+    Future<void> enterPassword(WidgetTester tester, String password) async {
+      await tester.enterText(find.byType(TextField), password);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await _drain(tester);
+    }
+
+    /// Lets real I/O run until [done], or long enough that it won't be.
+    Future<void> until(WidgetTester tester, bool Function() done) async {
+      for (var i = 0; i < 20 && !done(); i++) {
+        await _drain(tester);
+      }
+    }
+
+    bool shown(Finder finder) => finder.evaluate().isNotEmpty;
+
+    ScrollPosition gridPosition(WidgetTester tester) => tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+
+    /// Stops the idle timer an unlock from the card starts.
+    Future<void> lockAgain(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _settle(tester);
+    }
+
+    Future<PhotoSeries> pumpLocked(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+      return series;
+    }
+
+    testWidgets('Check in, past a wrong password', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await enterPassword(tester, 'wrong');
+      await until(tester, () => shown(find.text('Wrong password.')));
+      expect(find.text('Wrong password.'), findsOneWidget);
+      expect(find.text('Front · 1 of 1'), findsNothing);
+
+      await enterPassword(tester, _password);
+      await until(tester, () => shown(find.text('Front · 1 of 1')));
+      expect(find.text('Front · 1 of 1'), findsOneWidget);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('Playback', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      await tester.tap(find.text('Playback'));
+      await _settle(tester);
+      await enterPassword(tester, _password);
+      await until(tester, () => shown(find.byType(AlignedPhotoFrame)));
+      expect(find.byType(AlignedPhotoFrame), findsOneWidget);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('a tile reveals', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      await tester.tap(find.text(DateFormat.yMMMd().format(DateTime.now())));
+      await _settle(tester);
+      await enterPassword(tester, _password);
+      await until(
+        tester,
+        () => container.read(photoRevealedCheckInsProvider).isNotEmpty,
+      );
+      expect(container.read(photoRevealedCheckInsProvider), hasLength(1));
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('only the latest pressed', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      await tester.tap(find.text('Check in'));
+      await tester.tap(find.text('Playback'));
+      await _settle(tester);
+      await enterPassword(tester, _password);
+      await until(tester, () => shown(find.byType(AlignedPhotoFrame)));
+      expect(find.byType(AlignedPhotoFrame), findsOneWidget);
+      expect(find.text('Front · 1 of 1'), findsNothing);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('not once the page has been left', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+      final visible = container.read(photoSeriesPageVisibleProvider.notifier);
+      visible.state = true;
+      await _settle(tester);
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      visible.state = false;
+      await _settle(tester);
+      await _unlock(tester, container);
+      await _drain(tester);
+
+      expect(find.text('Front · 1 of 1'), findsNothing);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('not when the vault that opens is a new one', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(tester, container);
+      final key = container.read(secureVaultSessionProvider)!.key;
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+      await tester.runAsync(
+        () => container.read(secureVaultHeaderProvider.future),
+      );
+      await _settle(tester);
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      container
+          .read(secureVaultSessionProvider.notifier)
+          .unlock(key, 'a-new-vault');
+      await _drain(tester);
+
+      expect(find.text('Front · 1 of 1'), findsNothing);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('Check in offers the angles as they are by then', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      final series = await pumpLocked(tester, container);
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await tester.runAsync(() async {
+        final angles = await container
+            .read(photoSeriesRepositoryProvider)
+            .listAngles();
+        await container.read(photoSeriesServiceProvider).saveAngles(series, [
+          for (final angle in angles) (id: angle.id, name: angle.name),
+          (id: null, name: 'Back'),
+        ]);
+      });
+      await _drain(tester);
+      await enterPassword(tester, _password);
+      await until(tester, () => shown(find.text('Front · 1 of 2')));
+
+      expect(find.text('Front · 1 of 2'), findsOneWidget);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('not Align on a check-in deleted since', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      await tester.tap(
+        find.byIcon(PhosphorIconsRegular.lockSimple).last,
+        buttons: kSecondaryButton,
+        warnIfMissed: false,
+      );
+      await _settle(tester);
+      await tester.tap(find.text('Align'));
+      await _settle(tester);
+      await tester.runAsync(() async {
+        final service = container.read(photoSeriesServiceProvider);
+        final checkIns = await container
+            .read(photoSeriesRepositoryProvider)
+            .listCheckIns();
+        for (final checkIn in checkIns) {
+          await service.deleteCheckIn(checkIn);
+        }
+      });
+      await _drain(tester);
+      await enterPassword(tester, _password);
+      await until(
+        tester,
+        () => container.read(secureVaultSessionProvider) != null,
+      );
+      await _drain(tester);
+
+      expect(find.textContaining('Align Front'), findsNothing);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('not Use as reference, nor what was pressed before it', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await tester.tap(
+        // The newest tile: the first is the card's own.
+        find.byIcon(PhosphorIconsRegular.lockSimple).at(1),
+        buttons: kSecondaryButton,
+        warnIfMissed: false,
+      );
+      await _settle(tester);
+      await tester.tap(find.text('Use as reference'));
+      await _settle(tester);
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+
+      await enterPassword(tester, _password);
+      await until(
+        tester,
+        () => container.read(secureVaultSessionProvider) != null,
+      );
+      await _drain(tester);
+
+      final angles = await tester.runAsync(
+        container.read(photoSeriesRepositoryProvider).listAngles,
+      );
+      expect(angles!.single.referenceImageId, isNull);
+      expect(find.text('Front · 1 of 1'), findsNothing);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('a tile scrolled away and back still reveals', (tester) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(
+        tester,
+        container,
+        daysAgo: [for (var i = 0; i < 16; i++) i * 40],
+      );
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+
+      final position = gridPosition(tester)..jumpTo(1500);
+      await _settle(tester);
+      await tester.tap(
+        // The last: the first is the card's own.
+        find.byIcon(PhosphorIconsRegular.lockSimple).hitTestable().last,
+      );
+      await _settle(tester);
+      position.jumpTo(0);
+      await _settle(tester);
+      position.jumpTo(1500);
+      await _settle(tester);
+      await enterPassword(tester, _password);
+      await until(
+        tester,
+        () => container.read(photoRevealedCheckInsProvider).isNotEmpty,
+      );
+
+      expect(container.read(photoRevealedCheckInsProvider), hasLength(1));
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('Check in from far down the grid reaches the password field', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(
+        tester,
+        container,
+        daysAgo: [for (var i = 0; i < 16; i++) i * 40],
+      );
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+
+      final position = gridPosition(tester)..jumpTo(2500);
+      await _settle(tester);
+      expect(position.pixels, greaterThan(1000));
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+
+      final password = find.widgetWithText(TextField, 'Password');
+      expect(password.hitTestable(), findsOneWidget);
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+    });
+
+    testWidgets('a tile far down the grid reveals, and the grid stays there', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      await _unlock(tester, container);
+      final series = await _seed(
+        tester,
+        container,
+        daysAgo: [for (var i = 0; i < 16; i++) i * 40],
+      );
+      container.read(secureVaultSessionProvider.notifier).lock();
+      await _pumpDetail(tester, container, series.id);
+
+      final position = gridPosition(tester)..jumpTo(1500);
+      await _settle(tester);
+      final pixels = position.pixels;
+      expect(pixels, greaterThan(1000));
+
+      await tester.tap(
+        // The last: the first is the card's own.
+        find.byIcon(PhosphorIconsRegular.lockSimple).hitTestable().last,
+      );
+      await _settle(tester);
+      await enterPassword(tester, _password);
+      await until(
+        tester,
+        () => container.read(photoRevealedCheckInsProvider).isNotEmpty,
+      );
+      expect(container.read(photoRevealedCheckInsProvider), hasLength(1));
+      expect(identical(gridPosition(tester), position), isTrue);
+      expect(position.pixels, pixels);
+      await lockAgain(tester, container);
+    });
+
+    testWidgets('the card fits a short window', (tester) async {
+      final container = await _container(tester);
+      await pumpLocked(tester, container);
+
+      tester.view.physicalSize = const Size(600, 240);
+      await _settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Unlock to see photos'), findsOneWidget);
+    });
+
+    testWidgets('Check in survives the setup dialog closing', (tester) async {
+      final container = await _container(tester);
+      late PhotoSeries series;
+      await tester.runAsync(() async {
+        series = await container
+            .read(photoSeriesServiceProvider)
+            .createSeries(
+              name: 'Progress',
+              cadence: TrackerCadence.weekly,
+              sortOrder: 0,
+              angleNames: const ['Front'],
+            );
+      });
+      await _pumpDetail(tester, container, series.id);
+      await tester.runAsync(
+        () => container.read(secureVaultHeaderProvider.future),
+      );
+      await _settle(tester);
+
+      await tester.tap(find.text('Check in'));
+      await _settle(tester);
+      await tester.tap(find.text('Set up vault…'));
+      await _settle(tester);
+      final fields = find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(fields.at(0), _password);
+      await tester.enterText(fields.at(1), _password);
+      await tester.tap(find.text('Create'));
+      await until(tester, () => !shown(find.text('Create')));
+      await _settle(tester);
+
+      expect(find.text('Create'), findsNothing);
+      expect(find.text('Front · 1 of 1'), findsOneWidget);
+      await lockAgain(tester, container);
+    });
+  });
+
   testWidgets('a first click reveals, a second opens the viewer; locking '
       'blurs and closes it', (tester) async {
     final container = await _container(tester);
