@@ -976,6 +976,9 @@ class _MessagesState extends State<_Messages> {
   String? _pinned;
   bool _placing = false;
 
+  /// Scrolled far enough up from the newest to offer a way back down.
+  bool _scrolledUp = false;
+
   @override
   void initState() {
     super.initState();
@@ -1058,7 +1061,13 @@ class _MessagesState extends State<_Messages> {
       _placing = false;
       if (!mounted) return;
       final pinned = _cutOff();
-      if (pinned != _pinned) setState(() => _pinned = pinned);
+      final scrolledUp = _scroll.hasClients && _scroll.offset > 100;
+      if (pinned != _pinned || scrolledUp != _scrolledUp) {
+        setState(() {
+          _pinned = pinned;
+          _scrolledUp = scrolledUp;
+        });
+      }
     });
     // Told of a change after a frame, as of metrics, there may be no next.
     WidgetsBinding.instance.ensureVisualUpdate();
@@ -1136,6 +1145,20 @@ class _MessagesState extends State<_Messages> {
       await glide.done;
     }
     if (mounted) setState(() => _cacheExtent = null);
+  }
+
+  /// Down to the newest message.
+  void _toBottom() {
+    if (!_scroll.hasClients) return;
+    if (MediaQuery.disableAnimationsOf(context)) return _scroll.jumpTo(0);
+    _scroll.animateTo(
+      0,
+      // Longer the further it goes, as in [_reveal].
+      duration: Duration(
+        milliseconds: (250 + _scroll.offset / 8).clamp(250, 600).round(),
+      ),
+      curve: Curves.easeInOutCubic,
+    );
   }
 
   void _edit(GaiaMessage message) => widget.onEdit(message);
@@ -1334,10 +1357,58 @@ class _MessagesState extends State<_Messages> {
                         ),
                 ),
               ),
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  // Not clicked while it fades out.
+                  child: IgnorePointer(
+                    ignoring: !_scrolledUp,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 150),
+                      transitionBuilder: gaiaPinnedFade,
+                      child: _scrolledUp
+                          ? _ToBottom(onTap: _toBottom)
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Back down to the newest message, while scrolled up from it: round, in
+/// the pinned prompt's colours.
+class _ToBottom extends StatelessWidget {
+  const _ToBottom({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: gaiaPromptColor(theme),
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            Icons.keyboard_double_arrow_down_rounded,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      ),
     );
   }
 }

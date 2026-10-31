@@ -334,6 +334,69 @@ void main() {
     expect(marker(32), findsOneWidget);
   });
 
+  testWidgets('scrolled up, a button goes back down to the newest', (
+    tester,
+  ) async {
+    await start(tester);
+    final button = find.byIcon(Icons.keyboard_double_arrow_down_rounded);
+    expect(button, findsNothing);
+
+    await scrollTo(tester, 1500);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(button);
+    await settle(tester);
+
+    expect(scroll(tester).offset, 0);
+    // Through its fade out.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(button, findsNothing);
+  });
+
+  testWidgets('just under 100 px up, there is no button', (tester) async {
+    await start(tester);
+    scroll(tester).jumpTo(100);
+    await settle(tester);
+
+    expect(
+      find.byIcon(Icons.keyboard_double_arrow_down_rounded),
+      findsNothing,
+    );
+  });
+
+  testWidgets('fading out, the button no longer takes clicks', (tester) async {
+    await start(tester);
+    final button = find.byIcon(Icons.keyboard_double_arrow_down_rounded);
+    await scrollTo(tester, 1500);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    scroll(tester).jumpTo(50);
+    // One frame for the list, one for the button to start fading.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(button, findsOneWidget);
+    await tester.tap(button, warnIfMissed: false);
+    await settle(tester);
+
+    expect(scroll(tester).offset, 50);
+  });
+
+  testWidgets('under reduced motion, the button jumps to the newest', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await start(tester);
+    await scrollTo(tester, 1500);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.byIcon(Icons.keyboard_double_arrow_down_rounded));
+    await tester.pump();
+
+    expect(scroll(tester).offset, 0);
+  });
+
   testWidgets('the latest reply kept built off screen still holds its place', (
     tester,
   ) async {
