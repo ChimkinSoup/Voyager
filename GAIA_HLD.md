@@ -399,12 +399,12 @@ existing `CLAUDE_CONFIG_DIR`, with setting sources limited as in §5.2. Codex
 gets a Gaia-owned `CODEX_HOME` per account (§5.2), and Gemini works the same
 way.
 
-Until Phase 7, one synced setting stands in: the **Claude config folder** on
+Until Phase 8, one synced setting stands in: the **Claude config folder** on
 the Setup tab, the `CLAUDE_CONFIG_DIR` every Gaia Claude run gets (chats,
 the setup check, the utility model). Empty, Gaia uses whatever Voyager was
 started with. The user's terminal setup is untouched, since it is set only
 on Gaia's own spawns. A chat started under one folder can't be resumed
-under another until Phase 7's session copy.
+under another until Phase 8's session copy.
 
 ### 6.2 Usage sources
 
@@ -441,13 +441,13 @@ Clicking a dulled ring is not an account switch: switching stays explicit
 As of Phase 2 there is one account per adapter, so there is one ring, for
 Claude only. It reads the `rate_limit_event` Claude Code prints during a
 run (`unifiedWindows.five_hour` / `seven_day`, observed on 2.1.310), kept in
-memory per adapter and cleared when the config dir changes. Phase 7 adds a
+memory per adapter and cleared when the config dir changes. Phase 8 adds a
 ring per account, the dulled inactive ones fed by the polled sources above
 (a passive source only covers the account that just ran), and a Codex ring
 from its `token_count` `rate_limits` once a fixture is recorded.
 
 Because the Phase 2 ring only fills from a run, it's missing until the first
-message after the companion starts. **Phase 7 must fix this:** the Claude
+message after the companion starts. **Phase 8 must fix this:** the Claude
 `oauth/usage` source above is read when the companion starts and every 10
 minutes, so the ring shows from launch. It follows §6.3 (fixtures, strict
 parsing) and §6.4 (endpoint broken vs. signed out) like any other source.
@@ -759,11 +759,14 @@ loop or a listener re-attaching every frame, not normal use. So:
 
 ### 9.1 Keys and Vim
 
-The composer is a Voyager text field, so it gets **Voyager's existing Vim
-engine and snippets** for free (the same-exe payoff from §3.1). Keybinds are
+The composer is a Voyager text field, so it can reuse **Voyager's existing
+Vim engine and snippets** (the same-exe payoff from §3.1). Keybinds are
 customizable on the Gaia page. Defaults: Ctrl+Enter sends, Enter/Shift+Enter
 make a newline (matching `CTRL_ENTER_SUBMIT_HLD.md`), Esc in Vim insert mode
 drops to Normal, and Esc in Normal hides Gaia.
+
+**Correction (2026-10-31): Vim and snippets don't work in the composer
+yet.** It was never wired to either engine; Phase 6 does that (§9.5).
 
 As built in Phase 2: Send (Ctrl+Enter by default, decided 2026-10-25 over
 Phase 1's Enter) and the A, B, G and Abort hotkeys are rebindable on the
@@ -842,7 +845,7 @@ prompt, framed as context (§5.3). Handoffs carry it as a `Quoted (…)` line.
 **Copy code** copies a message's fenced ```` ``` ```` blocks, a blank line
 between them; it appears only when there are some. Messages are shown as
 plain text, so there is no per-block copy button yet, and inline code isn't
-counted. Both are for later, with Markdown rendering.
+counted. Both come with Markdown rendering in Phase 6 (§9.5).
 
 As built (2026-10-28): **each chat has its own draft**: its text (caret
 included), images and files are put away when another chat comes into view
@@ -876,6 +879,32 @@ Clicking a thumbnail opens an editor with pen, line, arrow, rectangle,
 ellipse, highlighter (multiply blend), blur/redact box, crop and undo, all
 drawn as vector ops over the image. The PNG is flattened on send, and the
 original is kept so it can be re-edited.
+
+### 9.5 Text: Markdown, spellcheck, Vim and snippets (Phase 6)
+
+- **Markdown rendering.** Messages render as Markdown, with syntax
+  highlighting in fenced code blocks, a copy button per block, and inline
+  code styled (§9.3). Desktop, the Gaia page and the phone client (Phase 7)
+  share one renderer, so a message looks the same everywhere.
+- **Selection survives rendering.** Part of a rendered message can be
+  selected and copied, across paragraphs and code blocks, not just whole
+  messages or whole blocks.
+- **Streaming.** A reply renders as Markdown while it streams. An unclosed
+  fence or list shows sensibly until it closes, and a chunk doesn't rebuild
+  the whole message (the per-chunk stutter fixed 2026-10-29, §19).
+- **Links.** A URL or file path in a message is clickable. URLs open in the
+  default browser (http and https only, since the text comes from the
+  agent). A file opens in its default app and a folder in Explorer. A path
+  that doesn't exist on this device, such as a desktop path seen on the
+  phone, isn't a link.
+- **Spellcheck and autocorrect** in the composer reuse Voyager's
+  (`lib/core/spellcheck/`). They skip code spans and fences, `/commands`,
+  `[image N]` labels, file paths and URLs.
+- **Vim and snippets** in the composer reuse Voyager's engines (§9.1).
+- **Settings reach the companion.** The composer runs in the companion
+  process (§3), so the user's dictionary words, snippets, and the Vim and
+  autocorrect toggles have to get there from the main instance and stay
+  current when they change.
 
 ---
 
@@ -1341,7 +1370,7 @@ Other additions:
   Windows they're encrypted to the user's account with DPAPI (decided
   2026-10-25, over the Secure Notes vault, which would leave utility jobs
   off whenever the vault is locked). Android gets Keystore storage with the
-  phone client (Phase 6). No API key is used yet: the DPAPI store was built
+  phone client (Phase 7). No API key is used yet: the DPAPI store was built
   for the Gemini key and removed with it, to come back with the first
   API-key provider.
 
@@ -1359,9 +1388,10 @@ Other additions:
 | 4B | Done | `propose_*` tools (todo, calendar event, journal entry; new and changed) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` evaluated |
 | 4C | Done | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
 | 5 | Done | Memory + curator + inbox (below; checked live in the app 2026-10-30) |
-| 6 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
-| 7 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
-| 8 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
+| 6 | | Text (§9.5): Markdown rendering of messages, streamed, one renderer for desktop and phone, with code highlighting, the per-block copy button and inline code from §9.3; partial selection and copy; clickable URLs and file paths; spellcheck + autocorrect in the composer, skipping code, commands, labels, paths and URLs; Voyager's Vim engine and snippets in the composer (§9.1); the user's dictionary, snippets and toggles synced to the companion |
+| 7 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
+| 8 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
+| 9 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
@@ -1410,7 +1440,7 @@ Phase 4A as built (2026-10-28):
   unanswered for the hour expires, denied. Stop, Abort, or a run that dies
   voids its chat's open cards, and the reply keeps them voided. While
   aborted, every tool refuses. The Gaia page shows cards as a record only;
-  answering from the phone comes with Phase 6.
+  answering from the phone comes with Phase 7.
 - **Checked live (2026-10-28)** on the `qa` profile with the debug build:
   - Codex (gpt-6.1-sol) called `voyager_todos` and `ask_user` through the
     shim, and answering the card in the controller reached it.
@@ -1786,7 +1816,7 @@ Phase 1 as built: the drift tables are `gaia_chats`, `gaia_messages` and
 `gaia_settings`, plus an FTS5 table for search. A message uploads once it
 stops streaming. A chat continued on another device starts a new native
 session there, which since Phase 2 gets the earlier turns as a handoff
-preamble (§7.4); the run lease is still Phase 6.
+preamble (§7.4); the run lease is still Phase 7.
 A message whose parts encode to over 800 KB uploads them as JSON pieces in
 `gaia_message_chunks` (`{messageId}_{n}`), written before the message, which
 keeps only `partChunks`. An erase deletes the chunks. The update drain runs
@@ -1847,5 +1877,5 @@ auto-compact override, and the usage calls for
 Codex idle accounts and Gemini CLI (§6.2). Codex `app-server` vs `exec`
 was evaluated in Phase 4B and built on in 4C (§19).
 
-Before Phase 7: re-check each provider's consumer terms on switching between
+Before Phase 8: re-check each provider's consumer terms on switching between
 one person's accounts when one runs low (§6.5), not just on owning several.
