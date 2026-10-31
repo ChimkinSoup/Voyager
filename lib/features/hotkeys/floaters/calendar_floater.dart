@@ -15,8 +15,8 @@ import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 
 /// The calendar hotkey's floater: the calendar's new-event panel, for today,
-/// all day, in the calendar the calendar page last had open — what its "Add
-/// event" button would open. Drafts kept across dismissals, and taken into
+/// all day, in the calendar the calendar page has open — what its "Add event"
+/// button would open. Drafts kept across dismissals, and taken into
 /// the app by the floater's icon.
 class CalendarFloater extends ConsumerStatefulWidget {
   const CalendarFloater({super.key});
@@ -56,12 +56,11 @@ class _CalendarFloaterState extends ConsumerState<CalendarFloater> {
     final container = ProviderScope.containerOf(context, listen: false);
     final settings = ref.read(settingsProvider).valueOrNull;
     final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
+    final selected = ref.read(calendarPageSelectionProvider);
     // Passed over once its calendar is known to be deleted.
-    final lastViewed =
-        settings?.calendarShowAllCalendars == false &&
-            (calendars.isEmpty ||
-                calendars.any((c) => c.id == settings?.lastViewedCalendarId))
-        ? settings?.lastViewedCalendarId
+    final pageCalendar =
+        calendars.isEmpty || calendars.any((c) => c.id == selected)
+        ? selected
         : null;
     // The window is sized to the panel through setHeight; scrollable for the
     // frame between the panel growing and the window growing with it, which
@@ -74,11 +73,12 @@ class _CalendarFloaterState extends ConsumerState<CalendarFloater> {
           initialDate: DateUtils.dateOnly(DateTime.now()),
           calendars: calendars,
           initialCalendarId:
-              lastViewed ??
+              pageCalendar ??
               defaultCalendarIdFor(calendars, settings) ??
               legacyCalendarId,
           focusTitleOnOpen: true,
           draft: ref.read(calendarCaptureDraftProvider),
+          onDraft: (draft) => storeCalendarCaptureDraft(container, draft),
           onSave: (data) => unawaited(() async {
             await container
                 .read(calendarRepositoryProvider)

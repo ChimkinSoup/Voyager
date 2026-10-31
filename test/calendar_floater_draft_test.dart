@@ -194,7 +194,7 @@ void main() {
     await tester.enterText(find.byType(EditableText).at(0), 'Dentist');
     await tester.tap(find.text('Cancel'));
     await tester.pumpWidget(const SizedBox());
-    expect(handed, [null]);
+    expect(handed.last, isNull);
   });
 
   testWidgets('an empty panel hands back no draft', (tester) async {

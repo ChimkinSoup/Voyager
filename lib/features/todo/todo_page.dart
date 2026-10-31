@@ -115,11 +115,18 @@ typedef _RowSignature = ({
 /// Under any jank (slow frames), that lag is long enough to see as a
 /// stutter or a snap after the animation looks like it's finished.
 ///
-/// [_StableViewScrollPosition.correctForNewDimensions] instead corrects the
+/// [_StableViewScrollPosition.applyContentDimensions] instead corrects the
 /// offset synchronously, inside the same layout pass that first discovers
 /// the content grew — before that frame paints — which is the mechanism
 /// `ScrollPosition` itself documents for exactly this purpose.
 class _StableViewScrollController extends ScrollController {
+  _StableViewScrollController({required this.anchorOffset});
+
+  /// The scroll offset of a marker that sits after everything an uncomplete
+  /// can grow — the top of the completed section — or null while it isn't laid
+  /// out. Holding it in place holds everything the user sees below it.
+  final double? Function() anchorOffset;
+
   bool _armed = false;
 
   /// Holds whatever the view is currently showing steady for [duration],
@@ -148,6 +155,7 @@ class _StableViewScrollController extends ScrollController {
       context: context,
       oldPosition: oldPosition,
       isArmed: () => _armed,
+      anchorOffset: anchorOffset,
     );
   }
 }
@@ -158,28 +166,44 @@ class _StableViewScrollPosition extends ScrollPositionWithSingleContext {
     required super.context,
     super.oldPosition,
     required this.isArmed,
+    required this.anchorOffset,
   });
 
   final bool Function() isArmed;
+  final double? Function() anchorOffset;
 
-  /// The extent a correction in this layout has already made up for.
+  /// [anchorOffset] as of the last layout.
   ///
-  /// A correction returns false, so the viewport lays out again, and
-  /// [oldPosition] stays the metrics from before the first try. Measuring
-  /// each retry against that would add the same growth on every pass —
-  /// and the long list's estimated extent moves with the offset, so every
-  /// pass finds some — until the viewport gives up after 20 cycles.
-  double? _correctedMaxScrollExtent;
+  /// Growth is measured as how far the anchor moved, not as a change in
+  /// `maxScrollExtent`: a long list's extent is mostly an estimate for the
+  /// rows that aren't laid out, and that estimate shifts whenever a row
+  /// leaves or joins them, so the extent moved by more than two rows for a
+  /// single row's move and the view jumped by the difference. The anchor
+  /// only moves when what's above it really does. Measured against the last
+  /// layout rather than the first try, so a correction's layout retries don't
+  /// add the same growth again on every pass until the viewport gives up
+  /// after 20 cycles.
+  double? _lastAnchorOffset;
+
+  /// Room this position lets the view scroll past the end of the content.
+  ///
+  /// Uncompleting a task moves its row from the completed section up into
+  /// the active one, so the content's total length comes out the same. Scrolled
+  /// to the bottom, holding the view steady over the regrown row then needs
+  /// `pixels` past `maxScrollExtent`; left out of range, the physics springs
+  /// it back, sliding everything on screen down by a row. The slack covers
+  /// exactly that overhang, so the row's gap closes into blank space at the
+  /// bottom instead. It is only ever taken while armed, and only ever trimmed
+  /// otherwise: scrolling back up gives it back, and it never grows under the
+  /// user afterwards.
+  double _slack = 0;
 
   @override
-  bool correctForNewDimensions(
-    ScrollMetrics oldPosition,
-    ScrollMetrics newPosition,
-  ) {
-    final grew =
-        newPosition.maxScrollExtent -
-        (_correctedMaxScrollExtent ?? oldPosition.maxScrollExtent);
-    _correctedMaxScrollExtent = null;
+  bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    final anchor = anchorOffset();
+    final last = _lastAnchorOffset;
+    final grew = anchor == null || last == null ? 0.0 : anchor - last;
+    _lastAnchorOffset = anchor;
     // Only ever armed for uncompleting (see _TaskRowState._handleToggle),
     // whose regrown row lands at the very top of the whole scrollable. That
     // growth always displaces whatever the user currently sees at the
@@ -189,48 +213,36 @@ class _StableViewScrollPosition extends ScrollPositionWithSingleContext {
     // other scroll position. There is no "already at the top so nothing can
     // grow above me" case to special-case here; growth at position 0 is
     // always before-or-at the viewport's current top, so it always needs
-    // correcting for. (correctPixels is always able to increase pixels to
-    // compensate, even from 0 — maxScrollExtent grows by at least as much in
-    // the same tick, so it's never asked to exceed the new bounds.)
-    final willCorrect = isArmed() && grew > 0;
+    // correcting for. Corrected both ways: the anchor follows the estimates
+    // for rows above it too, and those can settle smaller as well as larger.
+    final willCorrect = isArmed() && grew != 0;
+    // Held at the top rather than past it, which the physics would spring back.
+    if (willCorrect) {
+      correctPixels((pixels + grew).clamp(minScrollExtent, double.infinity));
+    }
     // The toggle is really two animations in sequence: the row's old slot
     // (in the completed section) collapses to nothing first, THEN its new
     // slot (at the top of the active section) grows in. During that first,
-    // shrinking half, maxScrollExtent can dip below the user's current
-    // `pixels` — even though the row shrinking away is well after wherever
-    // they're scrolled — because total content genuinely got shorter for a
-    // moment. Left alone, ScrollPosition's default dimension-change handling
-    // clamps `pixels` down to the new, temporarily-smaller maxScrollExtent to
-    // keep it in bounds. That clamp is only supposed to be transient — the
-    // very next frame's growth is supposed to add back on top of wherever
-    // the user actually was — but it permanently corrupts the baseline: the
-    // growth correction above computes `pixels + grew` using this
-    // already-clamped `pixels`, so the user ends up measurably offset from
-    // where they started instead of back at it. Holding `pixels` steady
-    // through the shrink (instead of letting it clamp) keeps that baseline
-    // intact for the growth correction to build on.
-    final willHoldThroughShrink =
-        isArmed() && grew < 0 && newPosition.maxScrollExtent < pixels;
+    // shrinking half the content's extent can dip below `pixels`, and
+    // ScrollPosition would clamp `pixels` down to it — corrupting the
+    // baseline the growth correction then builds on. The slack holds
+    // `pixels` where it was through the shrink, and past the content's end
+    // after the growth when the view started at the bottom.
+    final overhang = pixels > maxScrollExtent ? pixels - maxScrollExtent : 0.0;
+    _slack = isArmed() || overhang < _slack ? overhang : _slack;
     if (DevFlags.verboseSync) {
       debugPrint(
-        '[scroll] correctForNewDimensions armed=${isArmed()} '
-        'oldMax=${oldPosition.maxScrollExtent} newMax=${newPosition.maxScrollExtent} '
-        'grew=$grew pixels=$pixels willCorrect=$willCorrect '
-        'willHoldThroughShrink=$willHoldThroughShrink '
-        'oldViewport=${oldPosition.viewportDimension} '
-        'newViewport=${newPosition.viewportDimension}',
+        '[scroll] applyContentDimensions armed=${isArmed()} '
+        'contentMax=$maxScrollExtent anchor=$anchor grew=$grew pixels=$pixels '
+        'willCorrect=$willCorrect slack=$_slack',
       );
     }
-    if (willCorrect) {
-      _correctedMaxScrollExtent = newPosition.maxScrollExtent;
-      correctPixels(pixels + grew);
-      return false;
-    }
-    if (willHoldThroughShrink) {
-      correctPixels(pixels);
-      return false;
-    }
-    return super.correctForNewDimensions(oldPosition, newPosition);
+    final accepted = super.applyContentDimensions(
+      minScrollExtent,
+      maxScrollExtent + _slack,
+    );
+    // A corrected offset needs the viewport to lay out again at it.
+    return accepted && !willCorrect;
   }
 }
 
@@ -296,7 +308,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   final _taskController = TextEditingController();
   final _taskFocusNode = FocusNode();
-  final _taskScrollController = _StableViewScrollController();
+  late final _taskScrollController = _StableViewScrollController(
+    anchorOffset: _completedSectionScrollOffset,
+  );
   // Timestamp of the last _taskScrollController position change. Used
   // instead of ScrollPosition.isScrollingNotifier, which reflects Flutter's
   // internal ScrollActivity state machine and can briefly flip back to
@@ -504,11 +518,39 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// Nothing is submitted as a task: the composer is cleared and unfocused, so
   /// everything typed from here lands in the search field instead.
   void _handleComposerTextChanged() {
+    if (_takingDraftTitle) return;
+    final notifier = ref.read(todoCaptureDraftProvider.notifier);
+    if (notifier.state.title != _taskController.text) {
+      if (notifier.state.title.isEmpty) _titleFromBar = false;
+      notifier.state = notifier.state.copyWith(title: _taskController.text);
+    }
     final query = todoSearchCommandQuery(_taskController.text);
     if (query == null) return;
     _taskController.clear();
     _taskFocusNode.unfocus();
     _openListSearch(initialQuery: query);
+  }
+
+  /// Set while the composer takes up the quick-add bar's title, which is no
+  /// typing of its own: `/search` typed in the bar is the bar's text to keep.
+  var _takingDraftTitle = false;
+
+  /// Whether the composer's title started in the quick-add bar, so that the
+  /// bar's due date and list are about it. One started here isn't, and leaves
+  /// them to the next bar.
+  var _titleFromBar = true;
+
+  /// The composer and the quick-add bar hold one title, so what is typed in
+  /// the bar while this page waits behind it is here on the way back.
+  void _takeDraftTitle(String title) {
+    if (title == _taskController.text) return;
+    _titleFromBar = true;
+    _takingDraftTitle = true;
+    _taskController.value = TextEditingValue(
+      text: title,
+      selection: TextSelection.collapsed(offset: title.length),
+    );
+    _takingDraftTitle = false;
   }
 
   /// Esc closes, Enter walks to the next match, Shift+Enter to the previous.
@@ -812,6 +854,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     HardwareKeyboard.instance.addHandler(_handleListSearchShortcut);
     // A controller listener, not the composer field's onChanged: `/search`
     // has to be caught however the text got there, a paste included.
+    _taskController.text = ref.read(todoCaptureDraftProvider).title;
     _taskController.addListener(_handleComposerTextChanged);
     // Set once, here, because FocusNode.onKeyEvent is a single slot and the
     // bar's field is inflated and torn down repeatedly as it opens and closes.
@@ -1188,38 +1231,20 @@ class _TodoPageState extends ConsumerState<TodoPage>
         legacyTodoListId;
   }
 
-  /// The todo hotkey's in-app path: focus the composer, carrying over the
-  /// quick-add bar's unsaved title. Only into an empty composer — text already
-  /// typed here is not the hotkey's to replace — and the title then belongs to
-  /// the composer, so the bar stops offering it.
+  /// The todo hotkey's in-app path: focus the composer, which already holds the
+  /// quick-add bar's unsaved title.
   ///
-  /// The whole draft goes with the title: a list picked on the bar that still
-  /// stands becomes the page's list, and a picked due date is dropped — the
-  /// composer has none, and left in the draft it would apply to the next bar.
+  /// A list picked on the bar that still stands becomes the page's list. The
+  /// due date stays in the draft, for [_addTask] to file the task with.
   Future<void> _takeQuickCaptureDraft() async {
-    final notifier = ref.read(todoCaptureDraftProvider.notifier);
-    final draft = notifier.state;
-    final title = draft.title;
-    final carried = title.isNotEmpty && _taskController.text.isEmpty;
+    final draft = ref.read(todoCaptureDraftProvider);
+    final carried = draft.title.isNotEmpty && _titleFromBar;
     if (carried) {
-      _taskController.value = TextEditingValue(
-        text: title,
-        selection: TextSelection.collapsed(offset: title.length),
-      );
-      notifier.state = const TodoCaptureDraft();
-      final pickedListId = draft.listId;
-      if (pickedListId != null) {
-        // Off disk, as the bar reads it: [settingsProvider] can lag list
-        // touches.
-        final settings = await ref
-            .read(settingsRepositoryProvider)
-            .getSettings();
+      if (draft.listId != null) {
         final lists = await ref.read(todoRepositoryProvider).listLists();
+        final picked = await _pickedListId(draft, lists);
         if (!mounted) return;
-        if (draft.listIdBasis == settings.lastViewedTodoListId &&
-            lists.any((list) => list.id == pickedListId)) {
-          _selectListFromSwitcher(pickedListId);
-        }
+        if (picked != null) _selectListFromSwitcher(picked);
       }
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1255,20 +1280,26 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Future<void> _addTask() {
     final title = _taskController.text.trim();
     if (title.isEmpty) return Future.value();
+    final notifier = ref.read(todoCaptureDraftProvider.notifier);
+    // The due date or list a bar picked for this title goes with it, rather
+    // than onto the next bar.
+    final add = (_titleFromBar ? notifier.state : const TodoCaptureDraft())
+        .copyWith(title: title);
     // Before the awaits, so a quick second Enter can't read the same title.
     _taskController.clear();
+    if (_titleFromBar) notifier.state = const TodoCaptureDraft();
     if (_holdingForPull) {
-      setState(() => _heldForPull.add(title));
+      setState(() => _heldForPull.add(add));
       return Future.value();
     }
-    return _queueInsert(title);
+    return _queueInsert(add);
   }
 
-  Future<void> _queueInsert(String title) {
+  Future<void> _queueInsert(TodoCaptureDraft add) {
     // A failed add still reports to its own caller; the queue carries on.
     return _pendingAdd = _pendingAdd
         .catchError((Object _) {})
-        .then((_) => _insertTask(title));
+        .then((_) => _insertTask(add));
   }
 
   /// Tasks typed while the page had no lists and a sign-in's startup pull was
@@ -1277,7 +1308,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// built-in list renamed back on every device, or a stray "To-do" next to
   /// the user's lists (BUG-221). Held here and added, in order, once the
   /// pull is done.
-  final _heldForPull = <String>[];
+  final _heldForPull = <TodoCaptureDraft>[];
 
   bool get _holdingForPull =>
       ref.read(startupPullPendingProvider) &&
@@ -1287,33 +1318,55 @@ class _TodoPageState extends ConsumerState<TodoPage>
     if (_heldForPull.isEmpty) return;
     // Signed out before the pull finished: kept for the next sign-in's pull.
     if (!ref.read(authNotifierProvider).isAuthenticated) return;
-    final titles = List.of(_heldForPull);
+    final held = List.of(_heldForPull);
     setState(_heldForPull.clear);
-    for (final title in titles) {
-      unawaited(_queueInsert(title));
+    for (final add in held) {
+      unawaited(_queueInsert(add));
     }
   }
 
-  Future<void> _insertTask(String title) async {
+  /// The list a bar picked, while the pick still stands.
+  Future<String?> _pickedListId(
+    TodoCaptureDraft draft,
+    List<TodoListModel> lists,
+  ) async {
+    final picked = draft.listId;
+    if (picked == null || !lists.any((list) => list.id == picked)) return null;
+    // Off disk, as the bar reads it: [settingsProvider] can lag list touches.
+    final settings = await ref.read(settingsRepositoryProvider).getSettings();
+    return draft.listIdBasis == settings.lastViewedTodoListId ? picked : null;
+  }
+
+  Future<void> _insertTask(TodoCaptureDraft add) async {
     try {
       final lists = await _ensureDefaultList();
+      final picked = await _pickedListId(add, lists);
       final repo = ref.read(todoRepositoryProvider);
       final remoteSync = ref.read(remoteSyncServiceProvider);
       final sounds = ref.read(appSoundsProvider);
       final now = utcNow();
-      final listId = _listIdForNewTask(lists);
-      // Adding is a touch too: the todo hotkey's bar defaults to this list.
-      _markListViewed(listId);
+      final listId = picked ?? _listIdForNewTask(lists);
+      if (picked != null && !_showAllTasks && picked != _selectedListId) {
+        // The page follows, so the new task is in view.
+        _selectListFromSwitcher(picked);
+      } else {
+        // Adding is a touch too: the todo hotkey's bar defaults to this list.
+        _markListViewed(listId);
+      }
+      final due = add.dueDate?.toUtc();
       final task = TodoTask(
         id: newId(),
         listId: listId,
-        title: title,
+        title: add.title,
+        dueDate: due,
+        dueHasTime: due != null && add.dueHasTime,
+        dueDateSetAt: due == null ? null : now,
         createdAt: now,
         updatedAt: now,
       );
       final siblings = await repo.listTasks(listId);
       final active = activeTopLevelTasks(siblings);
-      final batch = applyNewUndatedTask(task, active);
+      final batch = applyTaskPlacement(task, active);
       for (final updated in batch.tasks) {
         await repo.upsertTask(updated);
         remoteSync.pushTodoTaskInBackground(updated);
@@ -2260,6 +2313,20 @@ class _TodoPageState extends ConsumerState<TodoPage>
     return viewport.getOffsetToReveal(box, 0.0).offset;
   }
 
+  /// Where the completed section starts in the scrollable, read off its
+  /// sliver's layout rather than through [_activeSectionHeight]: this runs
+  /// inside the viewport's own layout (see [_StableViewScrollController]),
+  /// where reaching into the rows' sizes is off limits.
+  double? _completedSectionScrollOffset() {
+    RenderObject? node = _completedSectionKey.currentContext
+        ?.findRenderObject();
+    while (node != null && node is! RenderSliver) {
+      node = node.parent;
+    }
+    if (node is! RenderSliver || !node.attached) return null;
+    return node.constraints.precedingScrollExtent;
+  }
+
   /// Whether the viewport's top edge is already scrolled past the entire
   /// active section (i.e. the user is looking at the completed section).
   bool _viewportPastActiveSection() {
@@ -2934,6 +3001,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
     ref.listen<int>(remoteTodoTasksEpochProvider, (_, _) {
       setState(_clearSubtaskCaches);
     });
+    ref.listen(
+      todoCaptureDraftProvider.select((draft) => draft.title),
+      (_, title) => _takeDraftTitle(title),
+    );
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind == QuickCaptureKind.todo) {
         unawaited(_takeQuickCaptureDraft());
@@ -4163,7 +4234,7 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
     // starts, not after: by the time widget.onToggle's caller could arm it,
     // this row would already have played its shrink — though that part is
     // never explicitly corrected either way (see
-    // _StableViewScrollPosition.correctForNewDimensions).
+    // _StableViewScrollPosition.applyContentDimensions).
     if (!target) {
       widget.onArmScrollStability();
     }

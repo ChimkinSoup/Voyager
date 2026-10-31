@@ -78,6 +78,7 @@ Future<AppDatabase> pumpTodoPage(
   Future<void> Function(DriftTodoRepository repo)? seedExtra,
   List<Override> extraOverrides = const [],
   Set<String> withNotes = const {},
+  ThemeData? theme,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
@@ -138,7 +139,10 @@ Future<AppDatabase> pumpTodoPage(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: TodoPage())),
+      child: MaterialApp(
+        theme: theme,
+        home: const Scaffold(body: TodoPage()),
+      ),
     ),
   );
   // Not pumpAndSettle: the page keeps animations alive, so settling never

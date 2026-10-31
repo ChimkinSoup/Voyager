@@ -602,9 +602,11 @@ class ScheduledReminderDraft {
 /// Creates a scheduled reminder, or edits [existing]. [draft] prefills a new
 /// one.
 ///
-/// [onDraft] receives the unsaved fields when the editor closes without a
-/// save (null when none moved off a fresh form's), and null once a save
-/// starts.
+/// [onDraft] receives the unsaved fields as they change and when the editor
+/// closes without a save (null when none moved off a fresh form's), and null
+/// once a save starts. An editor given one holds
+/// [scheduledReminderDraftProvider]'s draft, and takes up what the hotkey
+/// floater writes there while the dialog waits behind it.
 Future<void> showScheduledReminderEditor(
   BuildContext context, {
   ScheduledReminderRule? existing,
@@ -698,9 +700,20 @@ class _ScheduledReminderEditorState
   var _saving = false;
 
   /// What a fresh form opens with, for the draft to leave out.
-  late final int _freshMinutes;
-  late final DateTime _freshOnceDate;
-  late final int _freshWeekday;
+  late int _freshMinutes;
+  late DateTime _freshOnceDate;
+  late int _freshWeekday;
+
+  void _setFresh(DateTime now) {
+    // A new reminder starts on the next whole hour.
+    _freshMinutes = ((now.hour + 1) % 24) * 60;
+    _freshOnceDate = DateTime(
+      now.year,
+      now.month,
+      now.day + (now.hour == 23 ? 1 : 0),
+    );
+    _freshWeekday = now.weekday;
+  }
 
   /// Set once a save has written the rule, so closing keeps no draft of it.
   var _saved = false;
@@ -714,14 +727,7 @@ class _ScheduledReminderEditorState
     super.initState();
     final rule = widget.existing;
     final now = DateTime.now();
-    // A new reminder starts on the next whole hour.
-    _freshMinutes = ((now.hour + 1) % 24) * 60;
-    _freshOnceDate = DateTime(
-      now.year,
-      now.month,
-      now.day + (now.hour == 23 ? 1 : 0),
-    );
-    _freshWeekday = now.weekday;
+    _setFresh(now);
     final draft = rule == null ? widget.draft : null;
     _title = TextEditingController(text: rule?.title ?? draft?.title ?? '');
     _body = TextEditingController(text: rule?.body ?? draft?.body ?? '');
@@ -743,6 +749,65 @@ class _ScheduledReminderEditorState
       _minutes = _freshMinutes;
       _onceDate = _freshOnceDate;
     }
+    if (widget.onDraft != null) {
+      _title.addListener(_publishDraft);
+      _body.addListener(_publishDraft);
+    }
+  }
+
+  /// Set while [_takeDraft] fills the form in, which is no edit to publish:
+  /// the fields it has not reached yet would go out stale.
+  var _takingDraft = false;
+
+  /// This form's writes on their way to the provider, whose store is deferred
+  /// by a microtask; they come back through [_takeDraft] with nothing to take.
+  var _ownWrites = 0;
+
+  void _publishDraft() {
+    if (_takingDraft) return;
+    _ownWrites++;
+    widget.onDraft?.call(_unsavedDraft());
+    scheduleMicrotask(() => _ownWrites--);
+  }
+
+  /// Every change to the form's fields goes through here or a controller.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _publishDraft();
+  }
+
+  /// Takes up the shared draft as it was last written. A field that already
+  /// says the same is left as typed, caret included.
+  void _takeDraft(ScheduledReminderDraft? draft) {
+    // Not only behind a floater: one dismissed mid-save hands its fields back
+    // after the form is on screen again.
+    if (_ownWrites > 0 || _saved || _saving) return;
+    void fill(TextEditingController field, String? text) {
+      if (text == trimToNull(field.text)) return;
+      field.value = TextEditingValue(
+        text: text ?? '',
+        selection: TextSelection.collapsed(offset: text?.length ?? 0),
+      );
+    }
+
+    _takingDraft = true;
+    setState(() {
+      // A field the draft leaves out is at the fresh form's value as the writer
+      // had it, which for a form open a while is later than this one's.
+      _setFresh(DateTime.now());
+      fill(_title, draft?.title);
+      fill(_body, draft?.body);
+      _kind = draft?.kind ?? ReminderScheduleKind.once;
+      _minutes = draft?.minutes ?? _freshMinutes;
+      _weekdays = {...(draft?.weekdays ?? {_freshWeekday})};
+      _onceDate = draft?.onceDate ?? _freshOnceDate;
+      _allDevices = draft?.deviceIds == null;
+      _deviceIds = {...?draft?.deviceIds};
+      _enabled = draft?.enabled ?? true;
+      _error = null;
+    });
+    _takingDraft = false;
   }
 
   /// The form's fields that moved off a fresh form's, or null when none did.
@@ -991,6 +1056,12 @@ class _ScheduledReminderEditorState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onDraft != null) {
+      ref.listen(
+        scheduledReminderDraftProvider,
+        (_, draft) => _takeDraft(draft),
+      );
+    }
     final theme = Theme.of(context);
     final existing = widget.existing;
     final loadedDevices = ref

@@ -66,6 +66,11 @@ final todoCaptureDraftProvider = StateProvider<TodoCaptureDraft>(
   (_) => const TodoCaptureDraft(),
 );
 
+/// The calendar the calendar page has open, or null on its all-view and before
+/// it has restored its saved view. The calendar floater files a new event where
+/// the page would, so the two agree on a draft's calendar.
+final calendarPageSelectionProvider = StateProvider<String?>((_) => null);
+
 /// The transaction form's unsaved fields, kept across dismissals until a save
 /// clears them. Session memory only.
 final financeCaptureDraftProvider = StateProvider<FinanceTransactionDraft?>(

@@ -31,6 +31,7 @@ import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/notifications/reminder_bell_button.dart';
 
 /// Geometry of the floating close ✕ and the gap the form leaves under it.
@@ -93,9 +94,11 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
   /// non-null.
   final CalendarEventDraft? draft;
 
-  /// Receives the unsaved fields when the panel closes without a save (null
-  /// when its title and notes are both empty), and null after a save or an
-  /// explicit cancel.
+  /// Receives the unsaved fields as they change and when the panel closes
+  /// without a save (null when its title and notes are both empty), and null
+  /// after a save or an explicit cancel. A panel given one holds
+  /// [calendarCaptureDraftProvider]'s draft, and takes up what the hotkey
+  /// floater writes there while the popover waits behind it.
   final ValueChanged<CalendarEventDraft?>? onDraft;
 
   @override
@@ -278,6 +281,17 @@ class CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       }
       return KeyEventResult.ignored;
     };
+    _loadFields(e);
+    if (draft != null) _loadDraftFields(draft);
+    _isDone = _doneState(e);
+    _scheduleTitleFocusIfNeeded();
+    if (widget.onDraft != null) {
+      _titleController.addListener(_publishDraft);
+      _notesController.addListener(_publishDraft);
+    }
+  }
+
+  void _loadFields(CalendarEvent? e) {
     _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
     _start =
         e?.start.toLocal() ??
@@ -292,24 +306,76 @@ class CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _calendarId = e?.calendarId ?? widget.initialCalendarId;
     _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
     _recurrence = e?.recurrence ?? RecurrenceRule.none;
-    if (draft != null) {
-      if (draft.createdOn == DateUtils.dateOnly(DateTime.now())) {
-        _isFullDay = draft.isFullDay;
-        _start = draft.start;
-        _end = draft.end;
-        // Its rule is anchored to the start it was written with.
-        _recurrence = draft.recurrence;
-      }
-      // An empty list is one not loaded yet, which the basis alone answers.
-      if (draft.calendarIdBasis == widget.initialCalendarId &&
-          (widget.calendars.isEmpty ||
-              widget.calendars.any((c) => c.id == draft.calendarId))) {
-        _calendarId = draft.calendarId;
-        _colorValue = draft.colorValue;
-      }
+  }
+
+  void _loadDraftFields(CalendarEventDraft draft) {
+    if (draft.createdOn == DateUtils.dateOnly(DateTime.now())) {
+      _isFullDay = draft.isFullDay;
+      _start = draft.start;
+      _end = draft.end;
+      // Its rule is anchored to the start it was written with.
+      _recurrence = draft.recurrence;
     }
-    _isDone = _doneState(e);
-    _scheduleTitleFocusIfNeeded();
+    // An empty list is one not loaded yet, which the basis alone answers.
+    if (draft.calendarIdBasis == widget.initialCalendarId &&
+        (widget.calendars.isEmpty ||
+            widget.calendars.any((c) => c.id == draft.calendarId))) {
+      _calendarId = draft.calendarId;
+      _colorValue = draft.colorValue;
+    }
+  }
+
+  /// Set while [_takeDraft] fills the panel in, which is no edit to publish:
+  /// the fields it has not reached yet would go out stale.
+  var _takingDraft = false;
+
+  /// This panel's writes on their way to the provider, whose store is deferred
+  /// by a microtask; they come back through [_takeDraft] with nothing to take.
+  var _ownWrites = 0;
+
+  void _publishDraft() {
+    if (_takingDraft) return;
+    _ownWrites++;
+    widget.onDraft?.call(unsavedDraft());
+    scheduleMicrotask(() => _ownWrites--);
+  }
+
+  /// Whether the fields came from a draft the floater left, rather than being
+  /// started here: see [_handleDismissPop].
+  late var _holdsFloaterDraft = widget.draft != null;
+
+  /// Every change to the panel's fields goes through here or a controller.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _publishDraft();
+  }
+
+  /// Takes up the shared draft as it was last written. A field that already
+  /// says the same is left as typed, caret included.
+  void _takeDraft(CalendarEventDraft? draft) {
+    if (_ownWrites > 0 || _closingAfterSave || _intentionalDiscard) return;
+    if (draft != null) _holdsFloaterDraft = true;
+    void fill(TextEditingController field, String text) {
+      if (field.text == text) return;
+      field.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+
+    _takingDraft = true;
+    setState(() {
+      fill(_titleController, draft?.title ?? '');
+      fill(_notesController, draft?.notes ?? '');
+      _lastNotesText = _notesController.text;
+      _reminderOffset = draft?.reminderOffset;
+      _loadFields(null);
+      if (draft != null) _loadDraftFields(draft);
+      _titleError = null;
+    });
+    _takingDraft = false;
+    ContextualPopoverAccent.update(context, Color(_colorValue));
   }
 
   /// An all-day event starts at midnight, so switching it to timed would
@@ -368,20 +434,7 @@ class CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _titleController.text = e?.title ?? '';
       _notesController.text = e?.notes ?? '';
       _lastNotesText = _notesController.text;
-      _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
-      _start =
-          e?.start.toLocal() ??
-          DateTime(
-            widget.initialDate.year,
-            widget.initialDate.month,
-            widget.initialDate.day,
-            widget.initialDate.hour,
-            widget.initialDate.minute,
-          );
-      _end = e?.end.toLocal() ?? _start.add(const Duration(hours: 1));
-      _calendarId = e?.calendarId ?? widget.initialCalendarId;
-      _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
-      _recurrence = e?.recurrence ?? RecurrenceRule.none;
+      _loadFields(e);
       _isDone = _doneState(e);
       _titleError = null;
     }
@@ -502,8 +555,10 @@ class CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       return;
     }
 
-    // Clicking outside the popup saves valid edits; invalid forms are discarded.
+    // Clicking outside the popup saves valid edits; invalid forms are discarded,
+    // but for what a floater left here, which goes back to it.
     if (!_trySave(showValidationErrors: false)) {
+      _intentionalDiscard = !_holdsFloaterDraft;
       Navigator.of(context).pop();
     }
   }
@@ -594,6 +649,9 @@ class CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onDraft != null) {
+      ref.listen(calendarCaptureDraftProvider, (_, draft) => _takeDraft(draft));
+    }
     final accent = paletteColor(_colorValue, context);
     final baseTheme = Theme.of(context);
     final eventTheme = baseTheme.copyWith(

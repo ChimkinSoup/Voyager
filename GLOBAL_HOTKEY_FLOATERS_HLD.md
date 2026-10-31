@@ -130,6 +130,8 @@ Detection reuses / extends existing window visibility + focus signals (`window_m
 
 Drafts are **not** synced and must not create remote todos/transactions until explicit save.
 
+The main window stays mounted behind a floater, so a new-item form open there and the floater for it hold **one** draft: each form writes the provider as it changes, and one left open in the app takes up what the floater wrote (the todo composer shows the title only, and files the task with the bar's picked due date and list). A calendar popover opened blank while a floater draft waits stays out of it, rather than overwrite that draft on its first keystroke. Editing an existing item never touches a draft.
+
 ---
 
 ## 5. Todo floater

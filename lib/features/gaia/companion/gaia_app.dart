@@ -7,7 +7,11 @@ import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart'
-    show RenderAbstractViewport, ScrollCacheExtent;
+    show
+        RenderAbstractViewport,
+        RenderSliverList,
+        ScrollCacheExtent,
+        SliverGeometry;
 import 'package:intl/intl.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
@@ -1053,21 +1057,31 @@ class _MessagesState extends State<_Messages> {
     final box = _placed[id]?.findRenderObject();
     if (!mounted || box is! RenderBox) return;
     // Reversed, so its top to the list's.
-    final target = RenderAbstractViewport.of(
-      box,
-    ).getOffsetToReveal(box, 1).offset;
+    double offsetOf(RenderBox box) =>
+        RenderAbstractViewport.of(box).getOffsetToReveal(box, 1).offset;
+    var target = offsetOf(box);
     if (MediaQuery.disableAnimationsOf(context)) {
       _scroll.jumpTo(target);
     } else {
-      // Longer the further it goes, so a long way isn't a blur.
-      final distance = (target - _scroll.offset).abs();
-      await _scroll.animateTo(
-        target,
+      final distance = target - _scroll.offset;
+      final position = _scroll.position as ScrollPositionWithSingleContext;
+      final glide = _GlideToMessage(
+        position,
+        target: () {
+          final now = _placed[id]?.findRenderObject();
+          if (now is RenderBox && now.attached) target = offsetOf(now);
+          return target;
+        },
+        distance: distance,
+        // Longer the further it goes, so a long way isn't a blur.
         duration: Duration(
-          milliseconds: (250 + distance / 8).clamp(250, 600).round(),
+          milliseconds: (250 + distance.abs() / 8).clamp(250, 600).round(),
         ),
         curve: Curves.easeInOutCubic,
+        vsync: position.context.vsync,
       );
+      position.beginActivity(glide);
+      await glide.done;
     }
     if (mounted) setState(() => _cacheExtent = null);
   }
@@ -1191,7 +1205,7 @@ class _MessagesState extends State<_Messages> {
         final list = ScrollConfiguration(
           // Scrolls without a bar.
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: ListView.builder(
+          child: _SteadyList.builder(
             controller: _scroll,
             reverse: true,
             scrollCacheExtent: _cacheExtent,
@@ -1255,6 +1269,7 @@ class _MessagesState extends State<_Messages> {
                 right: gutter,
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 150),
+                  transitionBuilder: gaiaPinnedFade,
                   child: pinned == null
                       ? const SizedBox.shrink()
                       // One key for every prompt, so only coming and going
@@ -1321,6 +1336,129 @@ String _pinnedLabel(GaiaMessage message) {
     else if (files.length > 1)
       '${files.length} files',
   ].join(', ');
+}
+
+/// The chat's list. Scrolled up, what's being read stays put as what's below
+/// it changes; at the bottom, it follows the newest.
+class _SteadyList extends ListView {
+  _SteadyList.builder({
+    super.controller,
+    super.reverse,
+    super.scrollCacheExtent,
+    super.padding,
+    super.itemCount,
+    super.findChildIndexCallback,
+    required super.itemBuilder,
+  }) : super.builder();
+
+  @override
+  Widget buildChildLayout(BuildContext context) =>
+      _SteadySliverList(delegate: childrenDelegate);
+}
+
+class _SteadySliverList extends SliverList {
+  const _SteadySliverList({required super.delegate});
+
+  @override
+  RenderSliverList createRenderObject(BuildContext context) =>
+      _RenderSteadySliverList(
+        childManager: context as SliverMultiBoxAdaptorElement,
+      );
+}
+
+/// The list's offset counts from its bottom, so what changes below would move
+/// what's above. It's put right here, in layout: from a frame callback the
+/// moved list would already have been painted, and shake.
+class _RenderSteadySliverList extends RenderSliverList {
+  _RenderSteadySliverList({required super.childManager});
+
+  /// The child across the list's top, and how far along the list its top
+  /// was, while scrolled up.
+  RenderBox? _anchor;
+  double _anchorTop = 0;
+
+  @override
+  void performLayout() {
+    // Scrolled up since the last layout moves the list, not the anchor along
+    // it, so only what's changed below it counts.
+    final anchor = constraints.scrollOffset > 0 ? _anchor : null;
+    final top = anchor == null ? null : _measureTopOf(anchor);
+    if (top != null) {
+      final moved = max(top - _anchorTop, -constraints.scrollOffset);
+      _anchorTop = top;
+      if (moved.abs() > 0.01) {
+        geometry = SliverGeometry(scrollOffsetCorrection: moved);
+        return;
+      }
+    }
+    super.performLayout();
+    final correction = geometry!.scrollOffsetCorrection;
+    if (correction != null) {
+      // Its own, for children it found the list's start isn't where it
+      // thought: that moves every child along it.
+      _anchorTop += correction;
+    } else {
+      _anchorAcrossTop();
+    }
+  }
+
+  /// How far along the list [anchor]'s top is, laying out what's below it
+  /// first, as [anchor] could be dropped as out of view otherwise. Null once
+  /// it's not among the children laid out, as when kept alive off screen.
+  double? _measureTopOf(RenderBox anchor) {
+    final constraints = this.constraints.asBoxConstraints();
+    var child = firstChild;
+    var top = child == null ? null : childScrollOffset(child);
+    if (top == null) return null;
+    while (child != null) {
+      child.layout(constraints, parentUsesSize: true);
+      top = top! + paintExtentOf(child);
+      if (child == anchor) return top;
+      var next = childAfter(child);
+      // A message synced in between, not built yet.
+      if (next != null && indexOf(next) != indexOf(child) + 1) {
+        next = insertAndLayoutChild(
+          constraints,
+          after: child,
+          parentUsesSize: true,
+        );
+      }
+      child = next;
+    }
+    return null;
+  }
+
+  void _anchorAcrossTop() {
+    _anchor = null;
+    if (constraints.scrollOffset <= 0) return;
+    final listTop = constraints.scrollOffset + constraints.remainingPaintExtent;
+    for (var child = firstChild; child != null; child = childAfter(child)) {
+      final top = childScrollOffset(child)! + paintExtentOf(child);
+      _anchor = child;
+      _anchorTop = top;
+      if (top >= listTop) return;
+    }
+  }
+}
+
+/// Scrolling to a message that a reply growing below keeps moving along the
+/// list: what's animated is the distance left to it, as of each frame, rather
+/// than the way to where it was when this started.
+class _GlideToMessage extends DrivenScrollActivity {
+  _GlideToMessage(
+    super.delegate, {
+    required this.target,
+    required double distance,
+    required super.duration,
+    required super.curve,
+    required super.vsync,
+  }) : super(from: distance, to: 0);
+
+  /// The list's offset with the message in place, now.
+  final double Function() target;
+
+  @override
+  bool applyMoveTo(double value) => super.applyMoveTo(target() - value);
 }
 
 /// Keeps [child] built while scrolled out of its list, when [keep].

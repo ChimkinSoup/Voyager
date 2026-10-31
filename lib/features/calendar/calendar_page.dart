@@ -657,6 +657,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     // Captured now: the panel hands its draft back from dispose.
     final container = ProviderScope.containerOf(context, listen: false);
+    // A new event shares the floater's draft, unless it opened blank beside
+    // one left waiting, which its first keystroke would overwrite.
+    final sharesDraft =
+        event == null &&
+        (draft != null || container.read(calendarCaptureDraftProvider) == null);
     await showContextualPopoverAt(
       context: context,
       targetRect: rect,
@@ -676,10 +681,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           focusTitleOnOpen: focusTitle,
           initialIsFullDay: !timedByDefault,
           draft: draft,
-          // Hands a taken-up floater draft back if the popover closes unsaved.
-          onDraft: draft == null
-              ? null
-              : (d) => storeCalendarCaptureDraft(container, d),
+          onDraft: sharesDraft
+              ? (d) => storeCalendarCaptureDraft(container, d)
+              : null,
           onSave: (data) {
             // Close popup first so the user sees immediate feedback, then
             // persist asynchronously.
@@ -3036,12 +3040,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // The calendar hotkey's in-app path.
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind != QuickCaptureKind.calendar) return;
-      // The draft now belongs to the popover, so the floater stops offering
-      // it.
-      final notifier = ref.read(calendarCaptureDraftProvider.notifier);
-      final draft = notifier.state;
-      notifier.state = null;
-      _addEvent(draft: draft);
+      _addEvent(draft: ref.read(calendarCaptureDraftProvider));
     });
     // The page stays mounted, and its cells read the clock only on build, so
     // rebuild when the day turns over to move the "today" marker.
@@ -3085,6 +3084,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       ref.watch(settingsProvider.settled).valueOrNull,
       ref.read(calendarsProvider).valueOrNull,
     );
+    // After the frame: no provider can change during a build.
+    if (_appliedSavedCalendarView &&
+        _selectedCalendarId != ref.read(calendarPageSelectionProvider)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(calendarPageSelectionProvider.notifier).state =
+            _selectedCalendarId;
+      });
+    }
     final weekStartsMonday = settings.weekStartsOnMonday;
     _workoutDays = settings.showWorkoutsOnCalendar
         ? (ref.watch(workoutDaysProvider.settled).valueOrNull ?? const {})

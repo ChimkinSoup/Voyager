@@ -70,6 +70,12 @@ class GaiaPinnedPrompt extends StatelessWidget {
   }
 }
 
+/// An [AnimatedSwitcher]'s fade, unkeyed. The default takes its child's key,
+/// so scrolling back across a prompt before it's faded out would have two
+/// fades with one key.
+Widget gaiaPinnedFade(Widget child, Animation<double> animation) =>
+    FadeTransition(opacity: animation, child: child);
+
 /// The prompt's text: from one prompt to the next, only it crossfades;
 /// the box stays.
 class _Text extends StatelessWidget {
@@ -82,6 +88,7 @@ class _Text extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedSwitcher(
     duration: const Duration(milliseconds: 150),
+    transitionBuilder: gaiaPinnedFade,
     layoutBuilder: (current, previous) => Stack(
       alignment: Alignment.centerLeft,
       children: [...previous, ?current],

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/domain/services/finance_origins.dart';
 import 'package:voyager/features/finance/finance_origin_field.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -66,8 +68,10 @@ class FinanceTransactionDraft {
 /// not run when the sheet is dismissed, and a throw from it is the caller's to
 /// handle.
 ///
-/// [onDraft] receives the unsaved fields when the sheet closes without a save
-/// (null when they are all empty), and null after a save.
+/// [onDraft] receives the unsaved fields as they change and when the sheet
+/// closes without a save (null when they are all empty), and null after a save.
+/// A sheet given one holds [financeCaptureDraftProvider]'s draft, and takes up
+/// what the hotkey floater writes there while the sheet waits behind it.
 Future<void> showFinanceTransactionModal(
   BuildContext context,
   WidgetRef ref, {
@@ -201,9 +205,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     // values are the only sensible starting point.
     final draft = existing == null ? widget.draft : null;
     _type = existing?.type ?? draft?.type ?? TransactionType.expense;
-    final amountCents = existing?.amountCents ?? draft?.amountCents;
     _amountController = TextEditingController(
-      text: amountCents == null ? '' : (amountCents / 100).toStringAsFixed(2),
+      text: _amountText(existing?.amountCents ?? draft?.amountCents),
     );
     _originController = TextEditingController(
       text: existing?.origin ?? draft?.origin ?? '',
@@ -212,9 +215,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       text: existing?.note ?? draft?.note ?? '',
     );
     _tagsController = TextEditingController(
-      text: (existing?.tags ?? draft?.tags ?? const <String>[])
-          .map((t) => '#$t')
-          .join(' '),
+      text: _tagsText(existing?.tags ?? draft?.tags ?? const []),
     );
     final base = existing?.occurredAt ?? draft?.occurredAt ?? DateTime.now();
     _date = DateTime(base.year, base.month, base.day);
@@ -227,6 +228,79 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       date: _date,
     );
     _newId = newId();
+    if (widget.onDraft != null) {
+      for (final field in [
+        _amountController,
+        _originController,
+        _noteController,
+        _tagsController,
+      ]) {
+        field.addListener(_publishDraft);
+      }
+    }
+  }
+
+  static String _amountText(int? cents) =>
+      cents == null ? '' : (cents / 100).toStringAsFixed(2);
+
+  static String _tagsText(List<String> tags) =>
+      tags.map((t) => '#$t').join(' ');
+
+  /// Set while [_takeDraft] fills the form in, which is no edit to publish:
+  /// the fields it has not reached yet would go out stale.
+  var _takingDraft = false;
+
+  /// This form's writes on their way to the provider, whose store is deferred
+  /// by a microtask; they come back through [_takeDraft] with nothing to take.
+  var _ownWrites = 0;
+
+  void _publishDraft() {
+    if (_takingDraft) return;
+    _ownWrites++;
+    widget.onDraft?.call(_unsavedDraft());
+    scheduleMicrotask(() => _ownWrites--);
+  }
+
+  /// Every change to the form's fields goes through here or a controller.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _publishDraft();
+  }
+
+  /// Takes up the shared draft as it was last written. A field that already
+  /// says the same is left as typed: the draft holds "12.5" as cents.
+  void _takeDraft(FinanceTransactionDraft? draft) {
+    // Not only behind a floater: one dismissed mid-save writes after the form
+    // is back on screen.
+    if (_ownWrites > 0 || _saved || _saving) return;
+    void fill(TextEditingController field, String text) {
+      field.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+
+    _takingDraft = true;
+    setState(() {
+      _type = draft?.type ?? TransactionType.expense;
+      if (draft?.amountCents != _parsedCents) {
+        fill(_amountController, _amountText(draft?.amountCents));
+      }
+      if (draft?.origin != trimToNull(_originController.text)) {
+        fill(_originController, draft?.origin ?? '');
+      }
+      if (draft?.note != trimToNull(_noteController.text)) {
+        fill(_noteController, draft?.note ?? '');
+      }
+      final tags = draft?.tags ?? const <String>[];
+      if (!listEquals(tags, _parsedTags)) {
+        fill(_tagsController, _tagsText(tags));
+      }
+      _date = draft?.occurredAt ?? DateUtils.dateOnly(DateTime.now());
+      _saveError = null;
+    });
+    _takingDraft = false;
   }
 
   /// Set once a save has written the transaction, so closing doesn't hand
@@ -468,6 +542,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       await financeRepo.upsertTransaction(transaction);
       written = true;
       _saved = true;
+      _publishDraft();
       if (transaction.roomEventId != null) {
         await syncRoomEventFromTransaction(financeRepo, transaction);
         container.invalidate(assetRoomEventsProvider);
@@ -518,6 +593,9 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onDraft != null) {
+      ref.listen(financeCaptureDraftProvider, (_, draft) => _takeDraft(draft));
+    }
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final isDeposit = _type == TransactionType.deposit;
