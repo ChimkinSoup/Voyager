@@ -487,10 +487,14 @@ class _VimTextScopeState extends State<VimTextScope> {
       // The fresh session starts in Insert, so any overlay from the old one is
       // stale. Assigned directly rather than through [_syncOverlay]: a rebuild
       // already follows didUpdateWidget, so setState here would be redundant
-      // at best and a "called during build" assertion at worst.
+      // at best and a "called during build" assertion at worst. The portal
+      // can't be hidden mid-build either, so it goes after the frame; until
+      // then it builds nothing (see [build]).
       if (_overlayVisible) {
         _overlayVisible = false;
-        _portal.hide();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_overlayVisible) _portal.hide();
+        });
       }
     } else {
       if (oldWidget.snippetsAllowed != widget.snippetsAllowed) {
@@ -588,6 +592,8 @@ class _VimTextScopeState extends State<VimTextScope> {
       snippetExpansionPending: () =>
           _snippetSession?.hasPendingExpansion ?? false,
       snippetIsApplying: () => _snippetSession?.isApplying ?? false,
+      isSkipped: (text, start, end) =>
+          _autocorrectScope.service?.skips(text, start, end) ?? false,
     );
   }
 
@@ -1046,16 +1052,19 @@ class _VimTextScopeState extends State<VimTextScope> {
       focusNode: _scopeNode,
       child: OverlayPortal(
         controller: _portal,
-        // Never built without a Vim session: [_syncOverlay] is the only thing
-        // that shows this portal and it requires one. Kept mounted (hidden) on
-        // a snippet-only field so switching Vim on doesn't change the shape of
+        // Shown only by [_syncOverlay], which requires a Vim session; empty
+        // for the rest of the frame Vim is switched off in, before
+        // [didUpdateWidget]'s deferred hide. Kept mounted (hidden) on a
+        // snippet-only field so switching Vim on doesn't change the shape of
         // the tree above the field — see [_insertOnly].
-        overlayChildBuilder: (context) => _VimFieldOverlay(
-          link: _link,
-          fieldKey: _fieldKey,
-          session: session!,
-          accentColor: accent,
-        ),
+        overlayChildBuilder: (context) => session == null || !_overlayVisible
+            ? const SizedBox.shrink()
+            : _VimFieldOverlay(
+                link: _link,
+                fieldKey: _fieldKey,
+                session: session,
+                accentColor: accent,
+              ),
         child: field,
       ),
     );

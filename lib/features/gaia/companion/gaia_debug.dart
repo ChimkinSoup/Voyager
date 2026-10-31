@@ -613,6 +613,10 @@ const _scripts = {
   '/msg7': GaiaDebugScript('Edge cases: emoji, CJK, RTL, unbroken text', [
     GaiaDebugText(_edges),
   ]),
+  '/msg8': GaiaDebugScript(
+    'Every kind of formatting at once, nested and mixed',
+    [GaiaDebugText(_everything)],
+  ),
   '/card1': GaiaDebugScript('A permission and a question, between text', [
     GaiaDebugText("I'll check the tests before touching anything."),
     GaiaDebugPermission('Bash', {
@@ -935,3 +939,210 @@ Tabs:	one	two	three
 Combining marks: e\u0301 a\u0308 n\u0303, and zero-width joiners: a\u200db.
 
 Symbols: → ← ↑ ↓ ≤ ≥ ≠ ∞ ∑ √ π © ® ™ ° ± × ÷''';
+
+const _everything = r'''# Heading 1
+## Heading 2
+### Heading 3
+#### Heading 4
+##### Heading 5
+###### Heading 6
+
+Setext heading 1
+================
+
+Setext heading 2
+----------------
+
+## Inline
+
+Plain, **bold**, __bold too__, *italic*, _italic too_, ***bold italic***, **bold with *italic* inside**, *italic with **bold** inside*, ~~struck~~, ~~struck with **bold**~~, and **`code in bold`**.
+
+Mid-word: un**believ**able, un*believ*able, and snake_case_names_that_stay_plain.
+
+Code spans: `single`, ``with a ` backtick``, `  padded  `, `$5 is not maths`, `**not bold**`, and `https://example.com` as code.
+
+Escapes that should show literally: \*not italic\*, \_not italic\_, \`not code\`, \# not a heading, \[not a link\](x), 1\. not a list, \$not maths\$, and a backslash \\ on its own.
+
+HTML: <kbd>Ctrl</kbd>+<kbd>C</kbd>, H<sub>2</sub>O, x<sup>2</sup>, <u>underlined</u>, <mark>marked</mark>, and an entity or two: &copy; &amp; &lt;tag&gt; &nbsp;(non-breaking).
+
+A hard break with two trailing spaces
+and one with a backslash\
+and a soft break
+that should join this line.
+
+## Links
+
+An [inline link](https://example.com), one [with a title](https://example.com "The title"), a [reference link][ref], a [collapsed reference][], an autolink <https://example.com/auto>, a bare URL https://example.com/bare, and a bare www.example.com.
+
+[ref]: https://example.com/ref
+[collapsed reference]: https://example.com/collapsed
+
+Links that should stay text: [mailto](mailto:someone@example.com), [javascript](javascript:alert(1)), [relative](docs/notes.md), and an email someone@example.com.
+
+Link text with formatting: [**bold** and `code` link](https://example.com).
+
+Paths: C:\Windows\System32\drivers\etc\hosts, the same with a line C:\Windows\System32\drivers\etc\hosts:1, with a slash C:/Windows/System32, in code `C:\Windows\System32\drivers\etc\hosts`, ending a sentence C:\Windows. And one that doesn't exist, so stays text: C:\nope\missing.txt.
+
+An image, which shows its alt text: ![a mountain at dawn](https://example.com/mountain.png)
+
+## Lists
+
+- Bullet one
+- Bullet two, long enough to wrap onto a second line in the floater so the hanging indent shows
+  - Nested bullet
+    - Third level
+      - Fourth level, which cycles the markers
+  - Back to the second level
+- Bullet three
+* A star bullet starts a new list
++ So does a plus
+
+7. An ordered list starting at seven
+8. Eight
+9. Nine
+10. Ten, where the marker gets wider
+
+1) Parenthesis numbering
+2) Second
+
+1. A loose list item.
+
+   With a second paragraph.
+
+2. Another loose item, holding a code block:
+
+   ```dart
+   final nested = true;
+   ```
+
+3. And a quote:
+
+   > Quoted inside a list.
+
+- Ordered inside bullets:
+  1. One
+  2. Two
+- Maths in a list: $x^2$
+
+- [x] A done task
+- [ ] A task to do, with **bold** and `code`
+- [ ] A task with nested items:
+  - [x] A nested done task
+  - A nested plain bullet
+
+## Quotes
+
+> A quote with **bold**, `code` and a [link](https://example.com).
+>
+> > A nested quote.
+> >
+> > > Three deep.
+>
+> - A list in a quote
+> - Second item
+>
+> ```python
+> print("code in a quote")
+> ```
+>
+> Maths in a quote: $\alpha + \beta$
+
+## Tables
+
+| Left | Centre | Right | Default |
+|:-----|:------:|------:|---------|
+| a | b | c | d |
+| **bold** | *italic* | `code` | ~~struck~~ |
+| [link](https://example.com) | $x^2$ | 1,234.56 | A cell long enough that it has to wrap, past the column's widest width |
+| escaped \| pipe | | empty before | |
+| short row |
+
+| Only a header |
+|---|
+
+| One | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten |
+|---|---|---|---|---|---|---|---|---|---|
+| a wide | table | that | should | scroll | sideways | rather | than | squash | itself |
+
+## Code
+
+```dart
+void main() => print('fenced with a language');
+```
+
+~~~js
+console.log('fenced with tildes');
+~~~
+
+````markdown
+A fence holding a fence:
+```
+inner
+```
+````
+
+    An indented code block,
+    four spaces in.
+
+```
+No language, and a very long line that should scroll sideways rather than wrap: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+```
+
+```unknownlang
+A language the highlighter doesn't know.
+```
+
+## Maths
+
+Inline $a^2 + b^2 = c^2$, inline with parens \(E = mc^2\), Greek $\alpha, \beta, \gamma, \Omega$, fractions $\frac{1}{2}$ and $\tfrac{a}{b}$, roots $\sqrt[3]{x}$, subscripts $x_{i,j}^{2}$, and text in maths $\text{speed} = \frac{d}{t}$.
+
+Maths next to punctuation: ($x$), $y$., "$z$", and **bold $w$ inside**.
+
+Not maths: $5 and $10, a lone $, US$20, and `$code$`.
+
+$$
+\int_0^1 x^2\,dx = \frac{1}{3}
+$$
+
+\[
+\lim_{n \to \infty} \left(1 + \frac{1}{n}\right)^n = e
+\]
+
+$$\sum_{k=0}^{n} \binom{n}{k} = 2^n$$
+
+$$
+\begin{bmatrix} a & b \\ c & d \end{bmatrix}
+\begin{bmatrix} x \\ y \end{bmatrix}
+=
+\begin{bmatrix} ax + by \\ cx + dy \end{bmatrix}
+$$
+
+$$
+\begin{aligned}
+\nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0} \\
+\nabla \times \mathbf{B} &= \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}
+\end{aligned}
+$$
+
+A long display equation, to see whether it scrolls or overflows:
+
+$$
+f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4 + a_5 x^5 + a_6 x^6 + a_7 x^7 + a_8 x^8 + a_9 x^9 + a_{10} x^{10} + a_{11} x^{11}
+$$
+
+Broken maths, which shouldn't break the reply: $\frac{1}{$ and $$\begin{matrix} a & b$$.
+
+## Footnotes and the rest
+
+A sentence with a footnote.[^1] And another.[^note]
+
+[^1]: The first footnote.
+[^note]: A named footnote, with **bold**.
+
+Text and symbols mixed: 🌍 **bold 🚀**, `code 日本語`, *italic שלום*, and $\pi \approx 3.14$ 🎉.
+
+***
+
+___
+
+The end, after two more rules.''';

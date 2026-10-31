@@ -13,6 +13,21 @@ import 'package:voyager/core/spellcheck/word_token.dart';
 /// platform Voyager targets and lets "add custom word" stay a simple local
 /// write instead of an OS dictionary integration.
 class VoyagerSpellCheckService implements SpellCheckService {
+  VoyagerSpellCheckService({this.skipZones});
+
+  /// Stretches of a text that aren't prose, beyond the code, tags and LaTeX
+  /// every field skips: neither flagged nor autocorrected. Gaia's composer
+  /// sets it for its `/commands`, `[image N]` labels, paths and URLs.
+  final List<TextRange> Function(String text)? skipZones;
+
+  /// Whether `[start, end)` of [text] touches one of [skipZones].
+  bool skips(String text, int start, int end) =>
+      _overlapsAny(skipZones?.call(text), start, end);
+
+  static bool _overlapsAny(List<TextRange>? zones, int start, int end) =>
+      zones != null &&
+      zones.any((zone) => start < zone.end && end > zone.start);
+
   Set<String> _dictionary = const {};
   Set<String> _customWords = const {};
   Map<String, String?> _flaggedWords = const {};
@@ -139,7 +154,9 @@ class VoyagerSpellCheckService implements SpellCheckService {
     if (_dictionary.isEmpty) return const []; // not loaded yet: flag nothing
     final known = _known;
     final spans = <SuggestionSpan>[];
+    final skipped = skipZones?.call(text);
     for (final range in tokenizeWords(text)) {
+      if (_overlapsAny(skipped, range.start, range.end)) continue;
       final word = text.substring(range.start, range.end);
       final lower = normalizeCustomWord(word);
       if (isKnownWord(lower, known)) continue;
@@ -182,7 +199,11 @@ class VoyagerSpellCheckService implements SpellCheckService {
     if (oldText == newText) return oldSpans;
 
     final diff = _computeDiff(oldText, newText);
-    if (diff == null || !_isIncrementalSafe(oldText, newText, diff)) {
+    // A skip zone can open or close far from the edit (a fence, a space
+    // ending a path), and the texts these come from are short.
+    if (skipZones != null ||
+        diff == null ||
+        !_isIncrementalSafe(oldText, newText, diff)) {
       return checkTextSync(newText, includeSuggestions: includeSuggestions);
     }
     final (prefix, oldEnd, newEnd) = diff;

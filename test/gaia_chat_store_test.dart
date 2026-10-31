@@ -98,6 +98,25 @@ void main() {
     expect((await store.chats()).map((c) => c.id), ['c1', 'c2']);
   });
 
+  test('setPinned changes only whether the chat is pinned', () async {
+    await store.createChat(_chat('c1'));
+    final stored = (await repository.getChat('c1'))!;
+    await repository.upsertChat(stored.copyWith(title: 'Renamed'));
+
+    await store.setPinned('c1', true);
+    final pinned = (await repository.getChat('c1'))!;
+    expect(pinned.pinned, isTrue);
+    expect(pinned.title, 'Renamed');
+
+    await store.setPinned('c1', false);
+    expect((await repository.getChat('c1'))!.pinned, isFalse);
+  });
+
+  test('setPinned on a chat not stored does nothing', () async {
+    await store.setPinned('missing', true);
+    expect(await repository.getChat('missing'), isNull);
+  });
+
   test('a chat the companion re-sends is left as stored', () async {
     await store.createChat(_chat('c1'));
     final stored = (await repository.getChat('c1'))!;

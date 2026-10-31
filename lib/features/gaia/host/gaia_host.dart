@@ -10,6 +10,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
@@ -49,9 +50,9 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// The pipe protocol, companion to main: `hello` (returns `{aborted, accent,
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, sessionId, lastSeq}`, `setTier {chatId, tier}`,
-/// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `deleteChat
-/// {chatId}` (returns `{mediaDeletedAt}`), `restoreChat {chatId,
-/// mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
+/// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
+/// pinned}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
+/// {chatId, mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `memoryIndex` (§11),
@@ -119,6 +120,7 @@ class GaiaHost {
 
   /// Gaia's memories (§11); null for none, where their tools fail.
   GaiaMemories? _memories;
+  Future<void> Function(String word)? _addWord;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
@@ -134,6 +136,7 @@ class GaiaHost {
   var _companionPid = 0;
   var _aborted = false;
   var _accent = 0xFF7C9EFF;
+  var _text = GaiaTextSettings.off;
 
   /// What a streaming message becomes when its companion goes away: aborted
   /// when Abort killed it, interrupted otherwise.
@@ -193,8 +196,10 @@ class GaiaHost {
     GaiaVoyagerReads? reads,
     GaiaExecutor? executor,
     GaiaMemories? memories,
+    Future<void> Function(String word)? addWord,
   }) {
     if (_attached.isCompleted) return;
+    _addWord = addWord;
     _toast = toast;
     _media = media;
     _reads = reads;
@@ -297,6 +302,14 @@ class GaiaHost {
     if (argb == _accent) return;
     _accent = argb;
     if (_pipe.connected) _pipe.notify('accent', {'argb': argb});
+  }
+
+  /// The composer's share of Voyager's settings (§9.5). Set whenever they
+  /// change; a change goes on to a connected companion.
+  set text(GaiaTextSettings settings) {
+    if (settings.sameAs(_text)) return;
+    _text = settings;
+    if (_pipe.connected) _pipe.notify('text', settings.toJson());
   }
 
   /// Also the tray's and a second launch's way in. [pressed] is the hotkey
@@ -661,6 +674,7 @@ class GaiaHost {
           'accent': _accent,
           'deviceId': store.deviceId,
           'settings': _settings.toJson(),
+          'text': _text.toJson(),
         };
       case 'chats':
         return [for (final chat in await store.chats()) chat.toJson()];
@@ -685,6 +699,12 @@ class GaiaHost {
           params['chatId']! as String,
           params['title']! as String,
           params['from']! as String,
+        );
+        return null;
+      case 'setPinned':
+        await store.setPinned(
+          params['chatId']! as String,
+          params['pinned']! as bool,
         );
         return null;
       case 'deleteChat':
@@ -840,6 +860,14 @@ class GaiaHost {
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }
+      case 'addWord':
+        // The dictionary is Voyager's: added here, it syncs, and comes back
+        // to the companion as `text`.
+        await (_addWord ??
+            (throw GaiaPipeException('Voyager data is not ready')))(
+          params['word']! as String,
+        );
+        return null;
       case 'rearm':
         _aborted = false;
         final flag = await _abortFlag();

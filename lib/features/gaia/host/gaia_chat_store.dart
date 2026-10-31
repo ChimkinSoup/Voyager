@@ -9,7 +9,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 /// The companion sends whole messages but never whole chats after creating
 /// one: a chat it holds may be stale (pinned, renamed or deleted elsewhere),
 /// so it only ever changes the fields it owns, through [setSession],
-/// [setTier] and [setTitle]. The
+/// [setTier], [setTitle] and [setPinned]. The
 /// sync fields are stamped here, against what's stored.
 class GaiaChatStore {
   GaiaChatStore(this._repository, {required this.deviceId});
@@ -65,6 +65,13 @@ class GaiaChatStore {
     final chat = await _repository.getChat(chatId);
     if (chat == null || chat.title != from) return;
     await _repository.upsertChat(chat.copyWith(title: title));
+  }
+
+  /// Pinned or unpinned from Gaia's sidebar, as on the Gaia page.
+  Future<void> setPinned(String chatId, bool pinned) async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.pinned == pinned) return;
+    await _repository.upsertChat(chat.copyWith(pinned: pinned));
   }
 
   /// Deleted from Gaia's sidebar: tombstoned, as on the Gaia page, so

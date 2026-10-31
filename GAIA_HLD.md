@@ -12,7 +12,8 @@ in. Phases 0 to 3 are done (Phase 3 checked live 2026-10-26, §19). Phase 4
 is split in three: 4A (Gaia tools, reads, question and permission cards) is
 done and checked live 2026-10-28; 4B (proposals and the action log) is
 checked live 2026-10-29; 4C (a Codex adapter on `app-server`) is done and
-checked live 2026-10-30, all but the `exec` fallback (§19).
+checked live 2026-10-30, all but the `exec` fallback (§19). Phase 6 (text,
+§9.5) is done and checked live 2026-10-31.
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -765,8 +766,13 @@ customizable on the Gaia page. Defaults: Ctrl+Enter sends, Enter/Shift+Enter
 make a newline (matching `CTRL_ENTER_SUBMIT_HLD.md`), Esc in Vim insert mode
 drops to Normal, and Esc in Normal hides Gaia.
 
-**Correction (2026-10-31): Vim and snippets don't work in the composer
-yet.** It was never wired to either engine; Phase 6 does that (§9.5).
+**Correction (2026-10-31): Vim and snippets didn't work in the composer
+until Phase 6**, which wired it to both engines (§9.5, §19).
+
+**Changed (2026-10-31): a text box eats Esc.** In the composer (or any other
+text box) Esc never hides a floater: in Insert it drops to Normal, in Normal it
+stays there, and without Vim it does nothing. Esc hides a floater only with no
+text box focused.
 
 As built in Phase 2: Send (Ctrl+Enter by default, decided 2026-10-25 over
 Phase 1's Enter) and the A, B, G and Abort hotkeys are rebindable on the
@@ -845,7 +851,8 @@ prompt, framed as context (§5.3). Handoffs carry it as a `Quoted (…)` line.
 **Copy code** copies a message's fenced ```` ``` ```` blocks, a blank line
 between them; it appears only when there are some. Messages are shown as
 plain text, so there is no per-block copy button yet, and inline code isn't
-counted. Both come with Markdown rendering in Phase 6 (§9.5).
+counted. Phase 6 added the per-block copy button and inline code with
+Markdown rendering (§9.5); Copy code stays in the menu.
 
 As built (2026-10-28): **each chat has its own draft**: its text (caret
 included), images and files are put away when another chat comes into view
@@ -894,7 +901,9 @@ original is kept so it can be re-edited.
   the whole message (the per-chunk stutter fixed 2026-10-29, §19).
 - **Links.** A URL or file path in a message is clickable. URLs open in the
   default browser (http and https only, since the text comes from the
-  agent). A file opens in its default app and a folder in Explorer. A path
+  agent). A folder opens in Explorer. A file opens in its default app only if
+  its type is on a list that runs nothing when opened; any other file,
+  programs and scripts included, is shown selected in Explorer instead. A path
   that doesn't exist on this device, such as a desktop path seen on the
   phone, isn't a link.
 - **Spellcheck and autocorrect** in the composer reuse Voyager's
@@ -1388,7 +1397,7 @@ Other additions:
 | 4B | Done | `propose_*` tools (todo, calendar event, journal entry; new and changed) + editor cards + approval tokens + the main instance's executor + `origin: gaia` + action log; Codex `app-server` evaluated |
 | 4C | Done | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
 | 5 | Done | Memory + curator + inbox (below; checked live in the app 2026-10-30) |
-| 6 | | Text (§9.5): Markdown rendering of messages, streamed, one renderer for desktop and phone, with code highlighting, the per-block copy button and inline code from §9.3; partial selection and copy; clickable URLs and file paths; spellcheck + autocorrect in the composer, skipping code, commands, labels, paths and URLs; Voyager's Vim engine and snippets in the composer (§9.1); the user's dictionary, snippets and toggles synced to the companion |
+| 6 | Done | Text (§9.5): Markdown rendering of messages, streamed, one renderer for desktop and phone, with code highlighting, the per-block copy button and inline code from §9.3; partial selection and copy; clickable URLs and file paths; spellcheck + autocorrect in the composer, skipping code, commands, labels, paths and URLs; Voyager's Vim engine and snippets in the composer (§9.1); the user's dictionary, snippets and toggles synced to the companion |
 | 7 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 8 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
 | 9 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
@@ -1614,6 +1623,61 @@ Phase 4C as built (2026-10-30, codex-cli 0.164.0):
   error, "Codex exited (code -1)", with its text kept); a GAIA.md change
   stopping the idle process, the next turn following the new text. Not
   forced live: the fallback to `exec` when `app-server` can't start.
+
+Phase 6 as built (2026-10-31):
+- **One renderer.** `companion/gaia_markdown.dart` parses with the
+  `markdown` package (GitHub-flavoured, added for this) and builds
+  Flutter widgets itself: headings, emphasis, strikethrough, inline code,
+  nested lists, task boxes, quotes, rules, tables with column alignment,
+  and fenced code highlighted by its language (`highlight`, Atom One), with
+  the language and a copy button above it and long lines scrolling
+  sideways. The companion and the Gaia page both use it, and the phone
+  will. Gaia's replies render; the user's own messages stay as typed.
+- **Streaming.** A reply is cut into top-level blocks (at a blank line
+  before an unindented line outside a fence; a list kept whole), and each
+  block's widget is kept by its text, so a chunk rebuilds only the last
+  block. An unclosed fence shows as code until it closes.
+- **Selection.** Each message is one `SelectionArea`, so part of it can be
+  selected across paragraphs, lists and code and copied, a line between
+  blocks (Flutter runs them together). Its texts are ordered as built, not
+  as laid out: screen order needs every text laid out, which a reply
+  streaming while kept alive out of view isn't, and it asserted. The
+  message's actions stay in the selection's right-click menu.
+- **Links.** http and https URLs, in a Markdown link or bare, and Windows
+  paths that exist on this device (checked once each; a `:line` suffix
+  allowed), in prose or a code span. They open in the default browser,
+  the default app, or Explorer. Anything else stays text.
+- **The composer** mounts Voyager's own Vim, snippet and autocorrect
+  sessions (`VimTextScope`), the squiggle and autocorrect-flash layers and
+  Vim's overlay, as Voyager's fields do. Spellcheck and autocorrect skip
+  inline code, fences (an unclosed one to the end), `[image N]`, and any
+  run with a slash in it, which takes in `/commands`, paths and URLs, plus
+  a bare `www.` address (`gaia_composer_text.dart`, through a `skipZones`
+  hook on the shared `VoyagerSpellCheckService`, set only by the
+  companion's). The `/` palette's keys are the field's own, so Enter, Tab,
+  arrows and Esc reach the palette before Vim. Right-clicking a misspelled
+  word offers its corrections and Add to dictionary; Voyager's Flag and
+  Add snippet popovers need its database, so they stay in Voyager.
+- **Settings reach the companion.** The main instance sends
+  `GaiaTextSettings` (Vim and autocorrect toggles, snippets and their
+  expand key, custom and flagged words) in `hello` and as `text` on every
+  change. The companion checks against its own copy of the bundled
+  dictionary. Add to dictionary is the pipe's `addWord`, which the main
+  instance writes as its own menu does (unflagging first), so it syncs and
+  comes back as `text`.
+- **Checked** with unit and widget tests (`gaia_markdown_test.dart`,
+  `gaia_composer_text_test.dart`, host tests), and live on the `qa`
+  profile (2026-10-31, account qa-123), from a copy of the debug build:
+  - the debug scripts' Markdown and code replies rendered in the Gaia
+    window, copy icons and all;
+  - Vim and a snippet turned on in the main instance reached the open
+    companion, as did turning them off;
+  - a word added from the companion came back from qa's dictionary;
+  - squiggles in the composer only under the misspelled prose, not the
+    command, path or label, nor the added word.
+
+  Not checked live: typing in Vim's Normal mode (bg input also types the
+  characters), clicking a link, the phone (Phase 7).
 
 Phase 5 as built (2026-10-30):
 - **Store.** `gaia_memories` (schema 181, synced, in backups): text (at

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,15 +15,24 @@ import 'package:flutter/rendering.dart'
         SliverGeometry;
 import 'package:intl/intl.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'package:voyager/app/providers.dart'
+    show voyagerSpellCheckServiceProvider;
 import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/platform/windows_folder_picker.dart';
+import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/snippets/snippet_index.dart';
+import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
+import 'package:voyager/core/spellcheck/dictionary_loader.dart';
+import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/companion/gaia_composer_text.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
@@ -34,6 +44,7 @@ import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
+import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
@@ -69,6 +80,11 @@ class _GaiaAppState extends State<GaiaApp> {
   final _popups = _Popups();
   late final StreamSubscription<void> _captures;
 
+  /// The composer's own checker (§9.5): Voyager's, on the user's words from
+  /// the main instance, skipping what isn't prose in a prompt.
+  final _spelling = VoyagerSpellCheckService(skipZones: gaiaComposerSkipZones);
+  var _snippets = SnippetScopeData.disabled;
+
   GaiaController get controller => widget.controller;
 
   @override
@@ -77,11 +93,29 @@ class _GaiaAppState extends State<GaiaApp> {
     // The crop overlay is the chat's route turned into the overlay, so any
     // dialog or menu open over the chat would stay on top of it.
     _captures = controller.captures.listen((_) => _popups.dismiss());
+    unawaited(loadDictionaryFromAssets().then(_spelling.updateDictionary));
+    controller.textSettings.addListener(_onTextSettings);
+    _onTextSettings();
+  }
+
+  /// The words and snippets as they now stand; the toggles are read where
+  /// they're built.
+  void _onTextSettings() {
+    final settings = controller.textSettings.value;
+    _spelling
+      ..updateCustomWords(settings.customWords)
+      ..updateFlaggedWords(settings.flaggedWords);
+    _snippets = SnippetScopeData(
+      enabled: settings.snippetsEnabled,
+      expandKey: settings.expandKey,
+      index: SnippetIndex.from(settings.snippets),
+    );
   }
 
   @override
   void dispose() {
     unawaited(_captures.cancel());
+    controller.textSettings.removeListener(_onTextSettings);
     super.dispose();
   }
 
@@ -93,25 +127,47 @@ class _GaiaAppState extends State<GaiaApp> {
           TickerMode(enabled: onScreen, child: child!),
       child: _Ambient(
         focused: controller.focused,
-        child: ValueListenableBuilder(
-          valueListenable: controller.accent,
-          builder: (context, accent, _) => MaterialApp(
-            title: 'Gaia',
-            debugShowCheckedModeBanner: false,
-            theme: _onGaiaSurface(Color(accent)),
-            navigatorObservers: [_popups],
-            home: _RunToasts(
-              controller: controller,
-              child: ListenableBuilder(
-                listenable: Listenable.merge([controller, controller.debug]),
-                builder: (context, _) => _GaiaShell(controller: controller),
+        // Above the app, so its dialogs and menus see them too. The checker
+        // is read from a provider by Voyager's spellcheck layers.
+        child: ProviderScope(
+          overrides: [
+            voyagerSpellCheckServiceProvider.overrideWithValue(_spelling),
+          ],
+          child: ValueListenableBuilder(
+            valueListenable: controller.textSettings,
+            builder: (context, settings, child) => VimEnabledScope(
+              enabled: settings.vim,
+              child: AutocorrectEnabledScope(
+                data: AutocorrectScopeData(
+                  enabled: settings.autocorrect,
+                  service: _spelling,
+                ),
+                child: SnippetEnabledScope(data: _snippets, child: child!),
               ),
             ),
+            child: _app(),
           ),
         ),
       ),
     );
   }
+
+  Widget _app() => ValueListenableBuilder(
+    valueListenable: controller.accent,
+    builder: (context, accent, _) => MaterialApp(
+      title: 'Gaia',
+      debugShowCheckedModeBanner: false,
+      theme: _onGaiaSurface(Color(accent)),
+      navigatorObservers: [_popups],
+      home: _RunToasts(
+        controller: controller,
+        child: ListenableBuilder(
+          listenable: Listenable.merge([controller, controller.debug]),
+          builder: (context, _) => _GaiaShell(controller: controller),
+        ),
+      ),
+    ),
+  );
 
   /// Voyager's dark theme with [accent], on Gaia's own surface tinted by it.
   static ThemeData _onGaiaSurface(Color accent) {
@@ -294,9 +350,15 @@ class _GaiaShell extends StatelessWidget {
         );
     return CallbackShortcuts(
       bindings: {
+        // A text box eats Esc, so it never closes the floater from inside
+        // one, whatever Vim's mode.
         if (floater)
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              controller.dismiss(),
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            final focused = FocusManager.instance.primaryFocus?.context;
+            if (focused?.findAncestorStateOfType<EditableTextState>() == null) {
+              controller.dismiss();
+            }
+          },
         const SingleActivator(LogicalKeyboardKey.keyN, control: true):
             controller.newChat,
         const SingleActivator(
@@ -311,39 +373,43 @@ class _GaiaShell extends StatelessWidget {
         ): () =>
             showGaiaDebugMenu(context, controller),
       },
-      child: Scaffold(
-        body: Stack(
-          children: [
-            // Behind the whole window, so the sidebar coming, going or
-            // resizing covers stars rather than moving them.
-            Positioned.fill(
-              child: GaiaStarfield(
-                active: controller.focused,
-                child: floater
-                    ? chat()
-                    : GaiaSidebarLayout(
-                        sidebar: controller.sidebar,
-                        // A Material, which the sidebar's buttons paint
-                        // their ink on.
-                        side: Material(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          child: _Sidebar(controller: controller),
+      // Focus leaving a text box lands here, under the bindings, so Esc
+      // still reaches them with nothing focused.
+      child: FocusScope(
+        child: Scaffold(
+          body: Stack(
+            children: [
+              // Behind the whole window, so the sidebar coming, going or
+              // resizing covers stars rather than moving them.
+              Positioned.fill(
+                child: GaiaStarfield(
+                  active: controller.focused,
+                  child: floater
+                      ? chat()
+                      : GaiaSidebarLayout(
+                          sidebar: controller.sidebar,
+                          // A Material, which the sidebar's buttons paint
+                          // their ink on.
+                          side: Material(
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                            child: _Sidebar(controller: controller),
+                          ),
+                          chat: (shown, toggle) =>
+                              chat(sidebarShown: shown, toggleSidebar: toggle),
                         ),
-                        chat: (shown, toggle) =>
-                            chat(sidebarShown: shown, toggleSidebar: toggle),
-                      ),
-              ),
-            ),
-            if (controller.debug.showFps)
-              Positioned(
-                // Above the composer, clear of the toasts below the header.
-                bottom: 102,
-                right: 12,
-                child: IgnorePointer(
-                  child: FpsCounterCard(monitor: controller.debug.fps),
                 ),
               ),
-          ],
+              if (controller.debug.showFps)
+                Positioned(
+                  // Above the composer, clear of the toasts below the header.
+                  bottom: 102,
+                  right: 12,
+                  child: IgnorePointer(
+                    child: FpsCounterCard(monitor: controller.debug.fps),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -673,6 +739,11 @@ class _SidebarState extends State<_Sidebar> {
         onPressed: () => _startRename(chat),
       ),
       GaiaMenuItem(
+        label: chat.pinned ? 'Unpin' : 'Pin',
+        icon: chat.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+        onPressed: () => controller.setPinned(chat.id, !chat.pinned),
+      ),
+      GaiaMenuItem(
         label: 'Copy title',
         icon: Icons.content_copy,
         onPressed: () => Clipboard.setData(ClipboardData(text: chat.title)),
@@ -726,8 +797,25 @@ class _SidebarState extends State<_Sidebar> {
                 ),
               )
             : Text(chat.title, overflow: TextOverflow.ellipsis),
-        trailing: running
-            ? const GaiaSpinner(size: 16, label: 'Running')
+        trailing: chat.pinned || running
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 8,
+                children: [
+                  if (chat.pinned)
+                    // Its own context, so the accent changing reaches a tile
+                    // that's given back as it was.
+                    Builder(
+                      builder: (context) => Icon(
+                        Icons.push_pin,
+                        size: 14,
+                        color: Theme.of(context).colorScheme.primary,
+                        semanticLabel: 'Pinned',
+                      ),
+                    ),
+                  if (running) const GaiaSpinner(size: 16, label: 'Running'),
+                ],
+              )
             : null,
         onTap: renaming ? null : () => controller.selectChat(chat.id),
       ),
@@ -1825,7 +1913,7 @@ class _MessageView extends StatelessWidget {
         children: [
           for (final part in message.parts)
             switch (part) {
-              GaiaTextPart(:final text) => _text(text),
+              GaiaTextPart(:final text) => _text(text, markdown: true),
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: GaiaActivityChip(label: _activity(tools)),
@@ -1963,8 +2051,10 @@ class _MessageView extends StatelessWidget {
       ),
   ];
 
-  /// Selectable, with the message's actions in its right-click menu.
-  Widget _text(String text) => _MessageText(text: text, menu: _menu);
+  /// Selectable, with the message's actions in its right-click menu. Gaia's
+  /// as Markdown (§9.5); the user's as they typed it.
+  Widget _text(String text, {bool markdown = false}) =>
+      _MessageText(text: text, markdown: markdown, menu: _menu);
 
   /// Right-clicked off its text, as on the bubble's padding: the message's
   /// actions alone.
@@ -2009,9 +2099,14 @@ class _MessageView extends StatelessWidget {
 /// A message's text, selectable, with [menu] after its own buttons in its
 /// right-click menu.
 class _MessageText extends StatefulWidget {
-  const _MessageText({required this.text, required this.menu});
+  const _MessageText({
+    required this.text,
+    required this.markdown,
+    required this.menu,
+  });
 
   final String text;
+  final bool markdown;
 
   /// Built only when the menu is: it scans the text for code.
   final List<GaiaMenuItem> Function() menu;
@@ -2027,10 +2122,18 @@ class _MessageTextState extends State<_MessageText> {
   Widget _contextMenu(BuildContext context, EditableTextState state) =>
       gaiaTextMenu(context, state, extra: widget.menu());
 
+  Widget _selectionMenu(BuildContext context, SelectableRegionState state) =>
+      gaiaSelectionMenu(context, state, extra: widget.menu());
+
   @override
-  Widget build(BuildContext context) =>
-      SelectableText(widget.text, contextMenuBuilder: _contextMenu);
+  Widget build(BuildContext context) => widget.markdown
+      ? GaiaMarkdown(text: widget.text, contextMenuBuilder: _selectionMenu)
+      : SelectableText(widget.text, contextMenuBuilder: _contextMenu);
 }
+
+/// Where the composer pastes from; a test's stand-in has no platform to read.
+@visibleForTesting
+MediaClipboard gaiaClipboard = const MediaClipboard();
 
 class _Composer extends StatefulWidget {
   const _Composer({required this.controller});
@@ -2043,7 +2146,10 @@ class _Composer extends StatefulWidget {
 
 class _ComposerState extends State<_Composer> {
   TextEditingController get _text => widget.controller.draft;
-  final _focus = FocusNode();
+
+  /// The palette's keys are the field's own: they come to it before
+  /// anything above it, Vim included, sees them.
+  late final _focus = FocusNode(onKeyEvent: _paletteKey);
   late final StreamSubscription<void> _summoned;
   final _vanish = GlobalKey<GaiaVanishState>();
   final _imagesVanish = GlobalKey<GaiaVanishState>();
@@ -2063,7 +2169,6 @@ class _ComposerState extends State<_Composer> {
     super.initState();
     _text.addListener(_onDraft);
     _summoned = widget.controller.summoned.listen((_) => _focus.requestFocus());
-    _portal.show();
   }
 
   void _onDraft() {
@@ -2091,7 +2196,7 @@ class _ComposerState extends State<_Composer> {
   /// Ctrl+V: an image on the clipboard joins the draft (§9.3), unless it
   /// comes with text, which pastes as usual.
   Future<void> _paste() async {
-    const clipboard = MediaClipboard();
+    final clipboard = gaiaClipboard;
     final offer = await clipboard.peek();
     if (!mounted) return;
     switch (routeMediaPaste(
@@ -2112,6 +2217,16 @@ class _ComposerState extends State<_Composer> {
       case MediaPasteRoute.ignore:
         break;
     }
+  }
+
+  /// Ctrl+V in Vim's Normal mode, which keeps the key and pastes the text
+  /// itself: the image [_paste] would have attached, by the same rule.
+  Future<void> _pasteImage() async {
+    final clipboard = gaiaClipboard;
+    final offer = await clipboard.peek();
+    if (!offer.hasImage || offer.hasText || !mounted) return;
+    final bytes = (await clipboard.read()).imageBytes;
+    if (bytes != null) await widget.controller.attachImage(bytes);
   }
 
   /// The palette's rows for the draft; empty when it isn't showing. A
@@ -2179,6 +2294,37 @@ class _ComposerState extends State<_Composer> {
     _focus.requestFocus();
   }
 
+  /// While the palette shows: Enter picks from it, whatever sends, as does
+  /// Tab; Up and Down move along it, and Esc closes it for the draft as it
+  /// stands.
+  KeyEventResult _paletteKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isShiftPressed ||
+        keyboard.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+    final palette = _palette;
+    if (palette.isEmpty) return KeyEventResult.ignored;
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
+        unawaited(_send());
+      case LogicalKeyboardKey.tab:
+        unawaited(_pick(palette[_highlight.clamp(0, palette.length - 1)]));
+      case LogicalKeyboardKey.arrowDown:
+        _move(1);
+      case LogicalKeyboardKey.arrowUp:
+        _move(-1);
+      case LogicalKeyboardKey.escape:
+        setState(() => _paletteClosedFor = _text.text);
+      default:
+        return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
   void _move(int by) {
     final rows = _palette.length;
     if (rows == 0) return;
@@ -2207,7 +2353,9 @@ class _ComposerState extends State<_Composer> {
   /// the message stays in the composer.
   Future<void> _send() async {
     final palette = _palette;
-    if (palette.isNotEmpty) return _pick(palette[_highlight]);
+    if (palette.isNotEmpty) {
+      return _pick(palette[_highlight.clamp(0, palette.length - 1)]);
+    }
     return _submit();
   }
 
@@ -2267,6 +2415,8 @@ class _ComposerState extends State<_Composer> {
       _vanish.currentState!,
     ]);
     _text.clear();
+    // Its undo steps hold the text just sent, whose images have gone with it.
+    controller.draftUndo.reset();
     controller.send(
       text,
       images: controller.takeDraftImages(),
@@ -2299,6 +2449,9 @@ class _ComposerState extends State<_Composer> {
     if (controller.aborted) {
       return _Aborted(controller: controller);
     }
+    // Here, not once in initState: the two above take the portal out of the
+    // tree, and it comes back hidden.
+    if (!_portal.isShowing) _portal.show();
     final running = controller.currentRunning;
     final palette = _palette;
     final send = _sendCombo(controller);
@@ -2310,7 +2463,7 @@ class _ComposerState extends State<_Composer> {
         card != null && card.options.isNotEmpty && _text.text.isEmpty
         ? _digits.length
         : 0;
-    return LayoutBuilder(
+    final composer = LayoutBuilder(
       builder: (context, constraints) {
         // A little wider than the messages' column, as in Claude's apps.
         final side = max(12.0, (constraints.maxWidth - _column) / 2 - 12);
@@ -2324,18 +2477,6 @@ class _ComposerState extends State<_Composer> {
               for (var i = 0; i < pickable; i++)
                 SingleActivator(_digits[i]): () =>
                     controller.pickCardOption(card!, i),
-              if (palette.isNotEmpty) ...{
-                // Enter picks from the palette, whatever sends.
-                const SingleActivator(LogicalKeyboardKey.enter): _send,
-                const SingleActivator(LogicalKeyboardKey.tab): () =>
-                    _pick(palette[_highlight]),
-                const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
-                    _move(1),
-                const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-                    _move(-1),
-                const SingleActivator(LogicalKeyboardKey.escape): () =>
-                    setState(() => _paletteClosedFor = _text.text),
-              },
             },
             child: OverlayPortal(
               controller: _portal,
@@ -2479,6 +2620,9 @@ class _ComposerState extends State<_Composer> {
                                 null => 'Message Gaia',
                               },
                         onPaste: _paste,
+                        undoController: controller.draftUndo,
+                        onAddWord: (word) =>
+                            unawaited(controller.addWord(word)),
                         // The tier picker's notch, opening rightwards from the
                         // field's left edge.
                         leading: Padding(
@@ -2540,6 +2684,7 @@ class _ComposerState extends State<_Composer> {
         );
       },
     );
+    return MediaPasteOwnerScope(pasteImage: _pasteImage, child: composer);
   }
 }
 

@@ -5,6 +5,9 @@ import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/typing_rewrites.dart';
 
+/// A document's undo history while another is in its field.
+typedef SavedUndoHistory = ({List<TextEditingValue> steps, int index});
+
 /// The undo history of a text field another device's text can arrive in
 /// while it is open: the journal and dream bodies and a task's notes.
 ///
@@ -114,6 +117,25 @@ class MergeAwareUndoController extends UndoHistoryController {
       ..add(_text.value);
     _index = 0;
     _report();
+  }
+
+  /// This document's history, for [restoreHistory] once it is back in the
+  /// field. Typing not yet a step becomes one.
+  SavedUndoHistory saveHistory() {
+    _pending?.cancel();
+    _commit();
+    return (steps: [..._steps], index: _index);
+  }
+
+  /// [saved] in place of the history, its document back in the field. Text
+  /// changed while it was away is a step on top, as it would be in view.
+  void restoreHistory(SavedUndoHistory saved) {
+    _pending?.cancel();
+    _steps
+      ..clear()
+      ..addAll(saved.steps);
+    _index = saved.index;
+    _commit();
   }
 
   void _handleTextChanged() {

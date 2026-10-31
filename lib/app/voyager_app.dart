@@ -34,6 +34,8 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
+import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_app_writes.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
@@ -91,6 +93,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       (_, argb) => GaiaHost.instance.accent = argb,
       fireImmediately: true,
     );
+    // And so does its composer's text: the Vim and autocorrect toggles,
+    // snippets and dictionary (§9.5).
+    ref.listenManual(_gaiaTextProvider, (_, text) {
+      if (text != null) GaiaHost.instance.text = text;
+    }, fireImmediately: true);
     // A reminder notification brings its sticky forward — tapped while the
     // app runs, or the tap that launched it.
     final reminderOs = ref.read(reminderOsNotifierProvider);
@@ -173,6 +180,21 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     }
   }
 
+  /// "Add to dictionary" from Gaia's composer, as a field's own menu does
+  /// it: a flag on the word goes, and a word the bundled list already has
+  /// gains no custom row.
+  Future<void> _addWordFromGaia(String raw) async {
+    final word = normalizeCustomWord(raw);
+    final repo = ref.read(settingsRepositoryProvider);
+    final flagged = ref.read(voyagerSpellCheckServiceProvider).isFlagged(word);
+    if (flagged) await repo.unflagWord(word);
+    if (!(await ref.read(dictionaryProvider.future)).contains(word)) {
+      await repo.addCustomWord(word);
+    }
+    ref.invalidate(customWordsProvider);
+    if (flagged) ref.invalidate(flaggedWordsProvider);
+  }
+
   /// Gaia's chats live in this instance's database (GAIA_HLD.md §3.2), and
   /// its notifications go through the reminders' notifier.
   Future<void> _attachGaia(ReminderOsNotifier os) async {
@@ -196,6 +218,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         writes: GaiaAppWrites(ProviderScope.containerOf(context)),
       ),
       memories: GaiaMemories(ref.read(gaiaRepositoryProvider)),
+      addWord: _addWordFromGaia,
       toast: (chatId, title, body) => unawaited(
         os
             .showNow(
@@ -601,3 +624,34 @@ class _NoScrollbarScrollBehavior extends MaterialScrollBehavior {
     return child;
   }
 }
+
+/// What Gaia's composer needs of the settings (§9.5); null until they and
+/// the user's words have loaded.
+final _gaiaTextProvider = Provider<GaiaTextSettings?>((ref) {
+  final settings = ref.watch(
+    settingsProvider.select((async) {
+      final s = async.valueOrNull;
+      return s == null
+          ? null
+          : (
+              vim: s.vimModeEnabled,
+              autocorrect: s.autocorrectEnabled,
+              snippetsEnabled: s.snippetsEnabled,
+              expandKey: s.snippetExpandKey,
+              snippets: s.snippets,
+            );
+    }),
+  );
+  final custom = ref.watch(customWordsProvider).valueOrNull;
+  final flagged = ref.watch(flaggedWordsProvider).valueOrNull;
+  if (settings == null || custom == null || flagged == null) return null;
+  return GaiaTextSettings(
+    vim: settings.vim,
+    autocorrect: settings.autocorrect,
+    snippetsEnabled: settings.snippetsEnabled,
+    expandKey: settings.expandKey,
+    snippets: settings.snippets,
+    customWords: custom,
+    flaggedWords: flagged,
+  );
+});

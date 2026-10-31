@@ -1,10 +1,21 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
+import 'package:voyager/core/text/merge_aware_undo.dart';
+import 'package:voyager/core/text/newline_normalization.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
+import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
+import 'package:voyager/core/widgets/field_hint_style.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 
@@ -27,6 +38,8 @@ class GaiaTextField extends StatefulWidget {
     this.leading,
     this.trailing,
     this.onPaste,
+    this.onAddWord,
+    this.undoController,
   });
 
   final TextEditingController controller;
@@ -46,6 +59,13 @@ class GaiaTextField extends StatefulWidget {
 
   /// Paste from the right-click menu, in place of plain text paste.
   final VoidCallback? onPaste;
+
+  /// "Add to dictionary" on a misspelled word's right-click menu; not
+  /// offered without it.
+  final void Function(String word)? onAddWord;
+
+  /// An undo history its owner can start over; null for the field's own.
+  final MergeAwareUndoController? undoController;
 
   @override
   State<GaiaTextField> createState() => _GaiaTextFieldState();
@@ -112,10 +132,14 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   /// cursor, while the vanish sweeps it away.
   Offset? _sent;
 
+  /// The text [_onEdit] last saw, to tell an edit from a caret move.
+  late String _lastText;
+
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_tick);
+    _lastText = widget.controller.text;
     widget.controller.addListener(_onEdit);
     widget.focusNode.addListener(_onFocus);
     SchedulerBinding.instance.addPostFrameCallback(_afterFrame);
@@ -127,6 +151,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     if (old.controller != widget.controller) {
       old.controller.removeListener(_onEdit);
       widget.controller.addListener(_onEdit);
+      _lastText = widget.controller.text;
     }
     if (old.focusNode != widget.focusNode) {
       old.focusNode.removeListener(_onFocus);
@@ -143,6 +168,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     _shown.dispose();
     _swap.dispose();
     _light.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -172,6 +198,15 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   /// an IME, Vim, autocorrect or code. Where the caret lands is read after
   /// the frame that lays it out.
   void _onEdit() {
+    if (widget.controller.text != _lastText) {
+      _lastText = widget.controller.text;
+      // Only typing scrolls the caret into view by itself: not a draft put
+      // here from code, as switching chat, Edit & resend or the palette do.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) bringCursorIntoView(fieldKey: _fieldKey);
+      });
+      SchedulerBinding.instance.ensureVisualUpdate();
+    }
     if (!widget.focusNode.hasFocus) return;
     _switchTo(_Source.caret);
     SchedulerBinding.instance.ensureVisualUpdate();
@@ -309,10 +344,175 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     _light.value += gap * (1 - math.exp(-dt * _follow));
   }
 
+  final _fieldKey = GlobalKey<State<TextField>>();
+  final _scroll = ScrollController();
+
   /// The same function every build: a different one makes the field build
-  /// its open menu afresh, replaying its entrance, as on every hover.
-  Widget _contextMenu(BuildContext context, EditableTextState state) =>
-      gaiaTextMenu(context, state, onPaste: widget.onPaste);
+  /// its open menu afresh, replaying its entrance, as on every hover. Over a
+  /// misspelled word, its corrections first, then "Add to dictionary".
+  Widget _contextMenu(BuildContext context, EditableTextState state) {
+    final value = state.textEditingValue;
+    final misspelt = AutocorrectEnabledScope.of(context).service == null
+        ? null
+        : misspellingAtCursor(
+            context,
+            value.text,
+            value.selection.extentOffset,
+          );
+    return gaiaTextMenu(
+      context,
+      state,
+      onPaste: widget.onPaste,
+      first: misspelt == null
+          ? const []
+          : [
+              for (final suggestion in misspelt.suggestions.take(5))
+                GaiaMenuItem(
+                  label: suggestion,
+                  icon: Icons.spellcheck,
+                  onPressed: () {
+                    state.userUpdateTextEditingValue(
+                      value.replaced(misspelt.range, suggestion),
+                      SelectionChangedCause.toolbar,
+                    );
+                    state.hideToolbar();
+                  },
+                ),
+              if (widget.onAddWord case final add?)
+                GaiaMenuItem(
+                  label: 'Add to dictionary',
+                  icon: Icons.library_add_outlined,
+                  onPressed: () {
+                    add(misspelt.range.textInside(value.text));
+                    state.hideToolbar();
+                  },
+                ),
+            ],
+    );
+  }
+
+  /// The text itself, and over it what Voyager draws on its fields: the
+  /// squiggles, autocorrect's flash, and Vim's caret and selection.
+  Widget _field(BuildContext context, VimFieldBinding vim) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final style = withSquiggleRoom(
+      theme.textTheme.bodyLarge!.copyWith(color: theme.colorScheme.onSurface),
+    );
+    final padding = EdgeInsets.fromLTRB(
+      widget.leading == null ? 12 : 4,
+      13,
+      12,
+      13,
+    );
+    // Borderless and unfilled, so no input gap: only the density's shift
+    // and the strip kept for the caret.
+    final overlay = withCaretMargin(
+      withDensityShift(padding, theme.visualDensity),
+      cursorWidth: vim.overlayCaretWidth,
+    );
+    final session = vim.session;
+    final snippets = vim.snippetSession;
+    final autocorrect = vim.autocorrectSession;
+    Widget layer(Widget child) => Positioned.fill(
+      child: IgnorePointer(
+        child: Padding(padding: overlay, child: child),
+      ),
+    );
+    final field = Stack(
+      fit: StackFit.passthrough,
+      children: [
+        if (autocorrect != null)
+          layer(
+            AutocorrectFlashLayer(
+              session: autocorrect,
+              controller: widget.controller,
+              style: style,
+              color: accent,
+              scrollController: _scroll,
+            ),
+          ),
+        // The app above provides the checker, as the companion's does.
+        if (AutocorrectEnabledScope.of(context).service != null)
+          layer(
+            SpellCheckSquiggleLayer(
+              controller: widget.controller,
+              focusNode: widget.focusNode,
+              style: style,
+              scrollController: _scroll,
+              suppressActiveWord: vim.suppressSpellcheckActiveWord,
+            ),
+          ),
+        wrapWithSecondaryTapWordSelect(
+          fieldKey: _fieldKey,
+          child: TextField(
+            key: _fieldKey,
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            scrollController: _scroll,
+            autofocus: widget.autofocus,
+            minLines: widget.minLines,
+            maxLines: widget.maxLines,
+            expands: widget.expands,
+            style: style,
+            textAlignVertical: widget.textAlignVertical,
+            contextMenuBuilder: _contextMenu,
+            inputFormatters: [newlineFormatterFor(widget.maxLines)],
+            // Long text paints on through the padding, for the clip below to
+            // cut off at the border along with what's over it.
+            clipBehavior: Clip.none,
+            scrollPhysics: const VoyagerFieldScrollPhysics(),
+            // The squiggles are the layer's: results of the field's own
+            // would have it drop the controller's text span.
+            spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+            // Held back for Vim's overlay, which draws the caret.
+            cursorColor: vim.overlayCaretColor(accent),
+            cursorWidth: vim.overlayCaretWidth,
+            undoController: vim.undoController,
+            decoration: InputDecoration(
+              hintText: widget.hintText,
+              // In the text's own metrics, so Vim's block caret repaints the
+              // hint's first letter at the size it was drawn.
+              hintStyle: fieldHintStyle(context, style),
+              // The field paints its own fill and edge.
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              isDense: true,
+              // Less on the left past a leading button.
+              contentPadding: padding,
+            ),
+          ),
+        ),
+        if (session != null || snippets != null)
+          layer(
+            VimTextOverlay(
+              session: session,
+              snippetSession: snippets,
+              controller: widget.controller,
+              focusNode: widget.focusNode,
+              style: style,
+              accentColor: accent,
+              scrollController: _scroll,
+              hintText: widget.hintText,
+            ),
+          ),
+      ],
+    );
+    // The one clip for the text and every layer: they don't clip themselves.
+    Widget clipped = ClipRect(child: field);
+    if (widget.undoController case final undo?) {
+      clipped = MergeAwareUndoScope(controller: undo, child: clipped);
+    }
+    return session == null
+        ? clipped
+        : vimSelectionTheme(
+            context: context,
+            hideNativeSelection: vim.overlayPaintsSelection,
+            child: clipped,
+          );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -354,31 +554,14 @@ class _GaiaTextFieldState extends State<GaiaTextField>
                   // Long prompts scroll without a bar.
                   child: ScrollConfiguration(
                     behavior: const _NoScrollbars(),
-                    child: TextField(
+                    // Voyager's Vim, snippets and autocorrect (§9.5), as its
+                    // own fields have them.
+                    child: VimTextScope(
+                      enabled: VimEnabledScope.of(context),
                       controller: widget.controller,
-                      focusNode: widget.focusNode,
-                      autofocus: widget.autofocus,
-                      minLines: widget.minLines,
-                      maxLines: widget.maxLines,
-                      expands: widget.expands,
-                      textAlignVertical: widget.textAlignVertical,
-                      contextMenuBuilder: _contextMenu,
-                      decoration: InputDecoration(
-                        hintText: widget.hintText,
-                        // The field paints its own fill and edge.
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        isDense: true,
-                        // Less on the left past a leading button.
-                        contentPadding: EdgeInsets.fromLTRB(
-                          widget.leading == null ? 12 : 4,
-                          13,
-                          12,
-                          13,
-                        ),
-                      ),
+                      undoController: widget.undoController,
+                      multiline: true,
+                      builder: _field,
                     ),
                   ),
                 ),

@@ -71,6 +71,7 @@ class AutocorrectSession {
     required this.snippetIsApplying,
     this.isFieldFocused = _alwaysFocused,
     this.undoController,
+    this.isSkipped = _neverSkipped,
   }) {
     _previous = textController.value;
     textController.addListener(_handleEditingChanged);
@@ -135,6 +136,13 @@ class AutocorrectSession {
   /// because [_wasTyped]'s last resort waves every write through on the
   /// platforms with no hardware keyboard.
   final bool Function() snippetIsApplying;
+
+  /// Whether the field's owner says the word at `[start, end)` isn't prose,
+  /// beyond the zones every field has; see
+  /// [VoyagerSpellCheckService.skipZones].
+  final bool Function(String text, int start, int end) isSkipped;
+
+  static bool _neverSkipped(String text, int start, int end) => false;
 
   /// The last correction, for the layer that flashes it. Null between
   /// corrections and after a revert.
@@ -620,6 +628,7 @@ class AutocorrectSession {
     ).any((zone) => token.start < zone.end && token.end > zone.start)) {
       return;
     }
+    if (isSkipped(text, token.start, token.end)) return;
     final correction = pair ?? autocorrectFor(lower, known);
     if (correction == null) return;
 

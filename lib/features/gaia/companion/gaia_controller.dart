@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart'
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
+import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
@@ -25,6 +26,7 @@ import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
@@ -133,6 +135,11 @@ class GaiaController extends ChangeNotifier {
   /// composer, so it outlives a mode change and a capture can add to it
   /// (§15.1).
   final draft = TextEditingController();
+
+  /// [draft]'s undo history. One controller holds every chat's draft, so each
+  /// chat's history is swapped in with its draft, or undo would put the last
+  /// chat's text in this one.
+  late final draftUndo = MergeAwareUndoController(draft);
 
   /// The draft's images (§9.3), each named in [draft] by its `[image N]`.
   final draftImages = <GaiaDraftImage>[];
@@ -387,6 +394,8 @@ class GaiaController extends ChangeNotifier {
         selection: TextSelection.collapsed(offset: start),
       );
     }
+    // Its undo steps hold the token, of an image that's gone.
+    draftUndo.reset();
     notifyListeners();
   }
 
@@ -463,6 +472,10 @@ class GaiaController extends ChangeNotifier {
   /// [draftFiles]; quotes and the window go with whichever chat is in view.
   final _drafts = <String, _Draft>{};
 
+  /// Each chat's [draftUndo] history while another chat is in view, by
+  /// [_keyOf] its chat. For this run of the app only.
+  final _draftHistories = <String, SavedUndoHistory>{};
+
   /// [chatId]'s draft's key, here and in the main instance's store.
   static String _keyOf(String? chatId) => chatId ?? GaiaDraft.newChatId;
 
@@ -470,6 +483,7 @@ class GaiaController extends ChangeNotifier {
   /// away for when its chat is back.
   void _viewChat(String? chatId) {
     if (chatId == currentChatId) return;
+    _draftHistories[_keyOf(currentChatId)] = draftUndo.saveHistory();
     if (draft.text.isNotEmpty ||
         draftImages.isNotEmpty ||
         draftFiles.isNotEmpty) {
@@ -488,6 +502,8 @@ class GaiaController extends ChangeNotifier {
       ..addAll(next?.files ?? const []);
     currentChatId = chatId;
     draft.value = next?.text ?? TextEditingValue.empty;
+    final history = _draftHistories.remove(_keyOf(chatId));
+    history == null ? draftUndo.reset() : draftUndo.restoreHistory(history);
   }
 
   /// [key]'s draft, in view or put away.
@@ -913,6 +929,10 @@ class GaiaController extends ChangeNotifier {
   /// Voyager's accent, as ARGB: the theme follows it.
   final accent = ValueNotifier(0xFF7C9EFF);
 
+  /// The composer's share of Voyager's settings: Vim, autocorrect,
+  /// snippets and the dictionary (§9.5).
+  final textSettings = ValueNotifier(GaiaTextSettings.off);
+
   /// On screen and in front, from the window's focus and blur; the
   /// starfield drifts only then.
   final focused = ValueNotifier(false);
@@ -1224,6 +1244,9 @@ class GaiaController extends ChangeNotifier {
     final hello = (await _pipe.request('hello'))! as Map;
     aborted = hello['aborted'] == true;
     accent.value = hello['accent']! as int;
+    if (hello['text'] case final Map json) {
+      textSettings.value = GaiaTextSettings.fromJson(json.cast());
+    }
     _deviceId = hello['deviceId']! as String;
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
     await _refresh();
@@ -1332,6 +1355,8 @@ class GaiaController extends ChangeNotifier {
         unawaited(openChat(params['chatId']! as String));
       case 'accent':
         accent.value = params['argb']! as int;
+      case 'text':
+        textSettings.value = GaiaTextSettings.fromJson(params);
       case 'settings':
         unawaited(_applySettings(params));
       case 'changed':
@@ -1397,7 +1422,7 @@ class GaiaController extends ChangeNotifier {
         if (_running.contains(chat.id) && !saved.any((c) => c.id == chat.id))
           chat,
       ...saved,
-    ];
+    ]..sort(_listed);
     final current = currentChatId;
     if (current != null &&
         !_running.contains(current) &&
@@ -1411,6 +1436,10 @@ class GaiaController extends ChangeNotifier {
     }
     _messages.removeWhere(
       (chatId, _) => !_running.contains(chatId) && chatId != currentChatId,
+    );
+    _draftHistories.removeWhere(
+      (key, _) =>
+          key != GaiaDraft.newChatId && !chats.any((chat) => chat.id == key),
     );
     // Not for a refresh that changed nothing shown, as each of a streaming
     // reply's saves brings: it would rebuild all of Gaia every second.
@@ -1604,6 +1633,8 @@ class GaiaController extends ChangeNotifier {
     draftFiles.clear();
     draft.clear();
     newChat();
+    // Its undo steps hold the text that just left, without its images.
+    _draftHistories.remove(from);
     final (text, images) = gaiaRelabelDraft(
       moving.text,
       moving.images,
@@ -1617,6 +1648,7 @@ class GaiaController extends ChangeNotifier {
       text: joined,
       selection: TextSelection.collapsed(offset: joined.length),
     );
+    draftUndo.reset();
     draftImages.addAll(images);
     for (final file in moving.files) {
       if (draftFiles.any((held) => p.equals(held.path, file.path))) continue;
@@ -1647,6 +1679,15 @@ class GaiaController extends ChangeNotifier {
       'title': title,
       'from': from,
     });
+  }
+
+  /// Pins or unpins [chatId], moving it in the list at once.
+  Future<void> setPinned(String chatId, bool pinned) async {
+    chats = [
+      for (final c in chats) c.id == chatId ? c.copyWith(pinned: pinned) : c,
+    ]..sort(_listed);
+    notifyListeners();
+    await _request('setPinned', {'chatId': chatId, 'pinned': pinned});
   }
 
   /// Takes [chatId] off the list at once and deletes it in the main
@@ -1750,6 +1791,22 @@ class GaiaController extends ChangeNotifier {
     }
   }
 
+  /// "Add to dictionary" from the composer: the main instance adds [word]
+  /// to the user's dictionary, which comes back as [textSettings].
+  Future<void> addWord(String word) async {
+    try {
+      await _pipe.request('addWord', {'word': word});
+    } on GaiaPipeException catch (error) {
+      _toasts.add((
+        chatId: '',
+        title: "Couldn't add that word",
+        body: error.message,
+        error: true,
+        question: false,
+      ));
+    }
+  }
+
   /// [text] with a user's command expanded (§9.2); [text] itself when it
   /// doesn't start with one.
   Future<String> _expand(String text) async {
@@ -1839,7 +1896,7 @@ class GaiaController extends ChangeNotifier {
         lastMessageAt: sentAt,
         tier: nextTier,
       );
-      chats = [chat, ...chats];
+      chats = [chat, ...chats]..sort(_listed);
       currentChatId = chatId;
     }
     final list = _messages[chatId] ??= [];
@@ -2752,13 +2809,18 @@ class GaiaController extends ChangeNotifier {
 
   GaiaChat? _chat(String id) => chats.where((c) => c.id == id).firstOrNull;
 
+  /// The main instance's order: pinned first, then the most recent.
+  static int _listed(GaiaChat a, GaiaChat b) {
+    if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+    final recent = b.lastMessageAt.compareTo(a.lastMessageAt);
+    return recent != 0 ? recent : a.id.compareTo(b.id);
+  }
+
+  /// To the top of its own kind: an unpinned chat stays below the pinned.
   void _moveToTop(String chatId, DateTime at) {
-    final chat = _chat(chatId)!;
     chats = [
-      chat.copyWith(lastMessageAt: at),
-      for (final c in chats)
-        if (c.id != chatId) c,
-    ];
+      for (final c in chats) c.id == chatId ? c.copyWith(lastMessageAt: at) : c,
+    ]..sort(_listed);
   }
 
   /// Swaps [updated] in for [old] in its chat's list, and redraws.

@@ -149,4 +149,35 @@ void main() {
     await _ctrl(tester, LogicalKeyboardKey.keyZ);
     expect(text.text, 'second record');
   });
+
+  testWidgets('a saved history comes back, typing not yet a step included', (
+    tester,
+  ) async {
+    await pumpField(tester);
+    await type(tester, 'first');
+    text.text = 'first and more';
+    final saved = undo.saveHistory();
+    text.text = 'other record';
+    undo.reset();
+    text.text = 'first and more';
+    undo.restoreHistory(saved);
+
+    await _ctrl(tester, LogicalKeyboardKey.keyZ);
+    expect(text.text, 'first');
+    await _ctrl(tester, LogicalKeyboardKey.keyZ, shift: true);
+    expect(text.text, 'first and more');
+  });
+
+  testWidgets('text changed while its history was away is a step on top', (
+    tester,
+  ) async {
+    await pumpField(tester);
+    await type(tester, 'first');
+    final saved = undo.saveHistory();
+    text.text = 'changed elsewhere';
+    undo.restoreHistory(saved);
+
+    await _ctrl(tester, LogicalKeyboardKey.keyZ);
+    expect(text.text, 'first');
+  });
 }

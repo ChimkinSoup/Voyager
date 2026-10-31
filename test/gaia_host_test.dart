@@ -8,6 +8,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
@@ -116,6 +117,7 @@ void main() {
     GaiaMedia? media,
     GaiaExecutor? executor,
     GaiaMemories? memories,
+    Future<void> Function(String word)? addWord,
   }) {
     fakeAsync((async) {
       final host = newHost();
@@ -127,6 +129,7 @@ void main() {
         media: media,
         executor: executor,
         memories: memories,
+        addWord: addWord,
       );
       async.flushMicrotasks();
       body(async, host);
@@ -325,6 +328,21 @@ void main() {
         });
       },
     );
+
+    test('setPinned pins and unpins a chat', () {
+      run(show: true, (async, _) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat.toJson()});
+        bool pinned() =>
+            ((request(async, 'chats')! as List).single as Map)['pinned'] ==
+            true;
+
+        request(async, 'setPinned', {'chatId': 'c1', 'pinned': true});
+        expect(pinned(), isTrue);
+        request(async, 'setPinned', {'chatId': 'c1', 'pinned': false});
+        expect(pinned(), isFalse);
+      });
+    });
 
     test('deleteChat deletes a chat whose images could not be taken off', () {
       run(show: true, media: _FailingMedia(), (async, _) {
@@ -584,6 +602,31 @@ void main() {
         final hello = connect(async);
         expect(hello['deviceId'], 'laptop');
         expect(hello['settings'], GaiaSettings.initial().toJson());
+      });
+    });
+
+    test("the composer's text settings: in hello, then as they change", () {
+      run(show: true, (async, host) {
+        host.text = const GaiaTextSettings(vim: true);
+        final hello = connect(async);
+        expect(hello['text'], const GaiaTextSettings(vim: true).toJson());
+        // The same again sends nothing.
+        host.text = const GaiaTextSettings(vim: true);
+        host.text = const GaiaTextSettings(vim: true, customWords: {'gaia'});
+        async.flushMicrotasks();
+        expect(
+          companions.single.events.where((e) => e.startsWith('text')),
+          hasLength(1),
+        );
+      });
+    });
+
+    test('addWord goes to the app', () {
+      final added = <String>[];
+      run(show: true, addWord: (word) async => added.add(word), (async, _) {
+        connect(async);
+        request(async, 'addWord', {'word': 'Codex'});
+        expect(added, ['Codex']);
       });
     });
 

@@ -113,6 +113,12 @@ class _Main {
           params['from']! as String,
         );
         return null;
+      case 'setPinned':
+        await store.setPinned(
+          params['chatId']! as String,
+          params['pinned']! as bool,
+        );
+        return null;
       case 'deleteChat':
         await store.deleteChat(params['chatId']! as String);
         return {'mediaDeletedAt': null};
@@ -322,6 +328,51 @@ void main() {
       await settle();
       expect(controller.chats.single.title, 'Renamed');
       expect((await main.chat()).title, 'Renamed');
+    });
+
+    test(
+      'Pin moves the chat up at once and saves it; Unpin undoes it',
+      () async {
+        await main.store.createChat(
+          GaiaChat(
+            id: 'c2',
+            title: 'Newer',
+            createdAt: DateTime.utc(2026, 10, 25),
+            updatedAt: DateTime.utc(2026, 10, 25),
+            lastMessageAt: DateTime.utc(2026, 10, 25),
+          ),
+        );
+        await startCompanion();
+        expect(controller.chats.map((c) => c.id), ['c2', 'c1']);
+
+        final pinned = controller.setPinned('c1', true);
+        expect(controller.chats.map((c) => c.id), ['c1', 'c2']);
+        await pinned;
+        await settle();
+        expect(controller.chats.map((c) => c.id), ['c1', 'c2']);
+        expect(controller.chats.first.pinned, isTrue);
+        expect((await main.store.chats()).first.pinned, isTrue);
+
+        final unpinned = controller.setPinned('c1', false);
+        expect(controller.chats.map((c) => c.id), ['c2', 'c1']);
+        await unpinned;
+        await settle();
+        expect((await main.repository.getChat('c1'))!.pinned, isFalse);
+      },
+    );
+
+    test('A new chat and its replies stay below a pinned chat', () async {
+      await startCompanion();
+      await controller.setPinned('c1', true);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+
+      final sent = controller.send('Hi');
+      expect(controller.chats.first.id, 'c1');
+      await sent;
+      expect(controller.chats.first.id, 'c1');
+      await settle();
+      expect(controller.chats.first.id, 'c1');
+      expect(controller.chats, hasLength(2));
     });
 
     test(

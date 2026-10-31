@@ -44,13 +44,14 @@ void showGaiaMenu(
   );
 }
 
-/// An [EditableText.contextMenuBuilder] for Gaia: the field's own buttons
-/// as a [GaiaMenu], then [extra]. With an [onPaste], Paste is always
+/// An [EditableText.contextMenuBuilder] for Gaia: [first], the field's own
+/// buttons as a [GaiaMenu], then [extra]. With an [onPaste], Paste is always
 /// offered and runs it, so it can take what plain text paste can't, such
 /// as an image.
 Widget gaiaTextMenu(
   BuildContext context,
   EditableTextState state, {
+  List<GaiaMenuItem> first = const [],
   List<GaiaMenuItem> extra = const [],
   VoidCallback? onPaste,
 }) {
@@ -77,10 +78,26 @@ Widget gaiaTextMenu(
   }
   return GaiaMenu(
     anchor: state.contextMenuAnchors.primaryAnchor,
-    items: [...items, ...extra],
+    items: [...first, ...items, ...extra],
     onClose: state.hideToolbar,
   );
 }
+
+/// A [SelectionArea.contextMenuBuilder] for Gaia: [gaiaTextMenu]'s, for
+/// selectable text that isn't a field, such as a rendered message.
+Widget gaiaSelectionMenu(
+  BuildContext context,
+  SelectableRegionState state, {
+  List<GaiaMenuItem> extra = const [],
+}) => GaiaMenu(
+  anchor: state.contextMenuAnchors.primaryAnchor,
+  items: [
+    for (final button in state.contextMenuButtonItems)
+      _fromButton(context, button),
+    ...extra,
+  ],
+  onClose: state.hideToolbar,
+);
 
 GaiaMenuItem _fromButton(BuildContext context, ContextMenuButtonItem button) {
   final (icon, shortcut) = switch (button.type) {

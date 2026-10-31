@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/code_line_comment.dart';
+import 'package:voyager/core/text/newline_normalization.dart';
 import 'package:voyager/core/text/typing_rewrites.dart';
 import 'package:voyager/core/vim/vim_text_ops.dart';
 
@@ -2185,8 +2186,8 @@ class VimSession {
         searchListenable.value != null) {
       return;
     }
-    final payload = data?.text;
-    if (payload != null && payload.isNotEmpty) {
+    final payload = normalizeNewlines(data?.text ?? '');
+    if (payload.isNotEmpty) {
       _paste(
         before: false,
         source: payload,

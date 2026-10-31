@@ -20,6 +20,7 @@ import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
@@ -846,7 +847,7 @@ class _GaiaTranscript extends ConsumerWidget {
                   children: [
                     for (final part in message.parts)
                       switch (part) {
-                        GaiaTextPart(:final text) => SelectableText(text),
+                        GaiaTextPart(:final text) => GaiaMarkdown(text: text),
                         GaiaActivityPart(:final tools) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           child: GaiaActivityChip(

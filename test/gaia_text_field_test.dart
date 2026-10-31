@@ -4,7 +4,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/app/providers.dart'
+    show voyagerSpellCheckServiceProvider;
+import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
+import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
@@ -524,6 +529,192 @@ void main() {
       await buildField(tester, width: 500, maxLines: 3);
       await settle(tester);
       await expectUnderCursor();
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  group('long misspelled text scrolled in the field', () {
+    const lines = 40;
+    const padding = 60.0;
+
+    /// A field in the middle of a [boundary] with [padding] clear around it,
+    /// spellchecked, holding [lines] lines of misspellings scrolled to the
+    /// middle, with a line's bottom just above the viewport.
+    Future<Rect> pumpScrolled(WidgetTester tester) async {
+      await loadRealFonts(tester);
+      text = TextEditingController(
+        text: List.filled(lines, 'zzqxv').join('\n'),
+      );
+      focus = FocusNode();
+      addTearDown(text.dispose);
+      addTearDown(focus.dispose);
+      final service = VoyagerSpellCheckService()..updateDictionary({'the'});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            voyagerSpellCheckServiceProvider.overrideWithValue(service),
+          ],
+          child: AutocorrectEnabledScope(
+            data: AutocorrectScopeData(enabled: false, service: service),
+            child: MaterialApp(
+              theme: VoyagerTheme.dark(),
+              home: Scaffold(
+                body: Center(
+                  child: RepaintBoundary(
+                    key: boundary,
+                    child: Padding(
+                      padding: const EdgeInsets.all(padding),
+                      child: SizedBox(
+                        width: 400,
+                        child: GaiaTextField(
+                          controller: text,
+                          focusNode: focus,
+                          minLines: 1,
+                          maxLines: 4,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final editable = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .renderEditable;
+      tester
+          .state<ScrollableState>(find.byType(Scrollable))
+          .position
+          .jumpTo(editable.preferredLineHeight * lines / 2);
+      await tester.pump();
+      final size = tester.getSize(find.byType(GaiaTextField));
+      return const Offset(padding, padding) & size;
+    }
+
+    /// How many pixels of [boundary] pass [test].
+    Future<int> countPixels(
+      WidgetTester tester,
+      bool Function(Offset at, int r, int g, int b) test,
+    ) async {
+      final box =
+          boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final (width, bytes) = (await tester.runAsync(() async {
+        final image = await box.toImage();
+        final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        final width = image.width;
+        image.dispose();
+        return (width, data!.buffer.asUint8List());
+      }))!;
+      var count = 0;
+      for (var i = 0; i < bytes.length; i += 4) {
+        final at = Offset(
+          (i ~/ 4 % width).toDouble(),
+          (i ~/ 4 ~/ width).toDouble(),
+        );
+        if (test(at, bytes[i], bytes[i + 1], bytes[i + 2])) count++;
+      }
+      return count;
+    }
+
+    // Thin and antialiased, so never full strength.
+    bool squiggle(int r, int g, int b) => r > 90 && r > 2 * g && r > 2 * b;
+
+    testWidgets(
+      'its underlines stop at the border',
+      (tester) async {
+        final field = await pumpScrolled(tester);
+        expect(
+          await countPixels(
+            tester,
+            (at, r, g, b) => field.contains(at) && squiggle(r, g, b),
+          ),
+          greaterThan(0),
+          reason: 'the underlines should show inside the field',
+        );
+        expect(
+          await countPixels(
+            tester,
+            (at, r, g, b) => !field.contains(at) && squiggle(r, g, b),
+          ),
+          0,
+        );
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
+
+    testWidgets(
+      'its letters read up to the border with their underlines',
+      (tester) async {
+        final field = await pumpScrolled(tester);
+        // The padding above the viewport, inside the field's own edge.
+        final strip = Rect.fromLTRB(
+          field.left + 2,
+          field.top + 3,
+          field.right - 2,
+          field.top + 8,
+        );
+        expect(
+          await countPixels(
+            tester,
+            (at, r, g, b) =>
+                strip.contains(at) && r > 150 && g > 150 && b > 150,
+          ),
+          greaterThan(0),
+        );
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
+  });
+
+  testWidgets(
+    'a pasted Windows line ending comes in as a plain newline',
+    (tester) async {
+      await pumpField(tester, maxLines: 8);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => switch (call.method) {
+          'Clipboard.getData' => {'text': 'one\r\ntwo'},
+          'Clipboard.hasStrings' => {'value': true},
+          _ => null,
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      focus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(text.text, 'one\ntwo');
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'text set from code shows its caret, as a chat switched to has it',
+    (tester) async {
+      await pumpField(tester, maxLines: 4);
+      final long = List.filled(30, 'line').join('\n');
+      text.value = TextEditingValue(
+        text: long,
+        selection: TextSelection.collapsed(offset: long.length),
+      );
+      await tester.pump();
+      await tester.pump();
+      final editable = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .renderEditable;
+      expect(
+        editable.getLocalRectForCaret(text.selection.extent).bottom,
+        lessThanOrEqualTo(editable.size.height + 1),
+      );
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

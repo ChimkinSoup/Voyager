@@ -59,6 +59,9 @@ class GaiaDevPipe extends GaiaPipe {
           adapter: p['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
         );
         return null;
+      case 'setPinned':
+        await _store.setPinned(p['chatId']! as String, p['pinned']! as bool);
+        return null;
       case 'deleteChat':
         await _store.deleteChat(p['chatId']! as String);
         await _store.deleteDraft(p['chatId']! as String);
