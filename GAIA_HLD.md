@@ -1676,9 +1676,18 @@ Phase 5 as built (2026-10-30):
   migration on a real database (qa-122's 23 chats). That pass found the
   resume behaviour above, the `GaiaPipeException:` prefix on pipe errors
   (now sent as the message alone), `/remember` saving while aborted,
-  third-person curator text and tags with spaces; the fixes since are
-  checked by unit tests and the contract checks, not a second in-app
-  pass.
+  third-person curator text and tags with spaces.
+
+  Those fixes checked live (2026-10-31, profile qa): `/remember` while
+  aborted refused with "Gaia is aborted. Rearm to save memories." (no
+  prefix), nothing saved, and the text back in the draft for after
+  Rearm; a Claude Code `memory_propose` with tags `Tea Time` and
+  `#Afternoon Drinks` stored as `tea-time` and `afternoon-drinks`; a
+  curator run on its timer saving first-person facts ("I am allergic to
+  peanuts."). It also showed that duplicates are only caught word for
+  word: the curator saved "I drink oolong tea every afternoon." beside a
+  proposed "I drink oolong every afternoon". Every `/remember` toast is
+  previewed in the debug menu's Remember toasts.
 
 Phase 3 as built:
 - **Images.** A user message keeps its whole text, `[image N]` tokens

@@ -19,6 +19,7 @@ import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast_icon_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
 /// replies, toast and loading-animation previews and display toggles, kept
@@ -244,6 +245,29 @@ class _DebugMenu extends StatelessWidget {
             ),
           ],
         ),
+        heading('Remember toasts'),
+        Text(
+          'Each toast /remember can show, as its text says it. Saved and '
+          'refused alike, none of them opens a chat.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final (label, title, body, mark) in _rememberToasts)
+              GaiaButton(
+                label: label,
+                onPressed: () => showGaiaToast(
+                  context,
+                  mark: mark,
+                  title: title,
+                  body: body,
+                ),
+              ),
+          ],
+        ),
         heading('Offline icon'),
         Text(
           "In the header once the next tier's CLI has failed to reach its "
@@ -284,6 +308,53 @@ class _DebugMenu extends StatelessWidget {
     );
   }
 }
+
+/// [GaiaController.remember]'s toasts: saved, a duplicate, nothing typed,
+/// and each refusal the main instance or the pipe gives.
+const _rememberToasts = [
+  (
+    'Remembered',
+    'Remembered',
+    'I take my tea without sugar',
+    GaiaToastMark.done,
+  ),
+  (
+    'Already remembered',
+    'Already remembered',
+    'I take my tea without sugar',
+    GaiaToastMark.done,
+  ),
+  (
+    'Nothing typed',
+    'Nothing to remember',
+    'Type it after /remember.',
+    GaiaToastMark.done,
+  ),
+  (
+    'Aborted',
+    "Couldn't remember that",
+    'Gaia is aborted. Rearm to save memories.',
+    GaiaToastMark.error,
+  ),
+  (
+    'Too long',
+    "Couldn't remember that",
+    'A memory is one short fact, at most $kGaiaMemoryMaxLength characters.',
+    GaiaToastMark.error,
+  ),
+  (
+    'Data not ready',
+    "Couldn't remember that",
+    'Voyager data is not ready',
+    GaiaToastMark.error,
+  ),
+  (
+    'Voyager not running',
+    "Couldn't remember that",
+    'not connected',
+    GaiaToastMark.error,
+  ),
+];
 
 /// Attached to the previews' messages: never read, so they needn't exist.
 const _files = [
