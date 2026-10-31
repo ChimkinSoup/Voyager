@@ -1100,6 +1100,23 @@ void main() {
       expect(controller.cropping, isNull);
     });
 
+    test('C over the annotation editor stays on the overlay as the editor '
+        'closes, and a cancel goes back to the small floater', () async {
+      await controller.onHotkey('small');
+      expect(await controller.enlargeForEditor(), isTrue);
+      expect(window.shown, GaiaMode.large);
+      main.companion.onEvent!('capture', capture('region', 'shot.bmp'));
+      await settle();
+      // The editor, closed by the capture.
+      await controller.restoreSmall();
+      expect(window.shown, GaiaMode.overlay);
+      expect(controller.layout, GaiaMode.overlay);
+
+      await controller.dismiss();
+      await settle();
+      expect(window.shown, GaiaMode.small);
+    });
+
     test('a hotkey opening Gaia summons the composer; one closing it '
         'does not', () async {
       var summons = 0;

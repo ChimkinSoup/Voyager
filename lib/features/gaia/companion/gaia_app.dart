@@ -56,10 +56,34 @@ import 'package:window_manager/window_manager.dart';
 
 /// The companion's UI (GAIA_HLD.md §3.3): the small and large floaters show
 /// the whole chat, and the Gaia window adds a chat sidebar.
-class GaiaApp extends StatelessWidget {
+class GaiaApp extends StatefulWidget {
   const GaiaApp({super.key, required this.controller});
 
   final GaiaController controller;
+
+  @override
+  State<GaiaApp> createState() => _GaiaAppState();
+}
+
+class _GaiaAppState extends State<GaiaApp> {
+  final _popups = _Popups();
+  late final StreamSubscription<void> _captures;
+
+  GaiaController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // The crop overlay is the chat's route turned into the overlay, so any
+    // dialog or menu open over the chat would stay on top of it.
+    _captures = controller.captures.listen((_) => _popups.dismiss());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_captures.cancel());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +99,7 @@ class GaiaApp extends StatelessWidget {
             title: 'Gaia',
             debugShowCheckedModeBanner: false,
             theme: _onGaiaSurface(Color(accent)),
+            navigatorObservers: [_popups],
             home: _RunToasts(
               controller: controller,
               child: ListenableBuilder(
@@ -101,6 +126,33 @@ class GaiaApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
       ),
     );
+  }
+}
+
+/// The routes pushed over the chat's: dialogs and menus.
+class _Popups extends NavigatorObserver {
+  final _routes = <Route<dynamic>>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute != null) _routes.add(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _routes.remove(route);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _routes.remove(route);
+
+  /// Gone at once, no exit animation; whoever awaits one gets null. The
+  /// right-click menu too, an overlay entry rather than a route.
+  void dismiss() {
+    ContextMenuController.removeAny();
+    for (final route in _routes.reversed.toList()) {
+      navigator!.removeRoute(route);
+    }
   }
 }
 

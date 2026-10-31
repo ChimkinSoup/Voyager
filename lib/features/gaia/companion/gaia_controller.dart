@@ -218,6 +218,11 @@ class GaiaController extends ChangeNotifier {
   /// there rather than in front.
   var _cropBehind = false;
 
+  /// Each capture that brings Gaia up with it, over which no dialog or menu
+  /// is left open. Sync, so they're gone before the overlay's first frame.
+  Stream<void> get captures => _captures.stream;
+  final _captures = StreamController<void>.broadcast(sync: true);
+
   /// A capture from the main instance (§15.1): C crops it on the overlay,
   /// D attaches it whole. Either way Gaia ends up on screen with it in the
   /// draft.
@@ -233,11 +238,17 @@ class GaiaController extends ChangeNotifier {
     if (params['kind'] == 'region' && cropping?.frame == frame) {
       return _deleteQuietly(path);
     }
+    _captures.add(null);
     // Over a crop's overlay, what the window was is still what was before it.
     final overCrop = cropping != null;
     _discardCrop();
     _dropPickUp();
-    final shown = overCrop ? _beforeCrop : _window.shown;
+    final shown = overCrop
+        ? _beforeCrop
+        : _enlargedForEditor
+        ? GaiaMode.small
+        : _window.shown;
+    _enlargedForEditor = false;
     if (params['kind'] == 'screen') {
       _attachFile(await _intoDrafts(path));
       return _show(shown ?? GaiaMode.small);
@@ -308,11 +319,21 @@ class GaiaController extends ChangeNotifier {
   /// on the large one. True when it grew, for [restoreSmall] after.
   Future<bool> enlargeForEditor() async {
     if (_window.shown != GaiaMode.small) return false;
+    _enlargedForEditor = true;
     await _show(GaiaMode.large);
     return true;
   }
 
-  Future<void> restoreSmall() => _show(GaiaMode.small);
+  /// Unless a capture has taken the window since: it closed the editor,
+  /// and goes back to the small floater itself.
+  Future<void> restoreSmall() async {
+    if (!_enlargedForEditor) return;
+    _enlargedForEditor = false;
+    await _show(GaiaMode.small);
+  }
+
+  /// Large only for the annotation editor, small underneath.
+  var _enlargedForEditor = false;
 
   /// The annotation editor's [edits] (§9.4) for the draft's [label],
   /// rendered for its thumbnail.
