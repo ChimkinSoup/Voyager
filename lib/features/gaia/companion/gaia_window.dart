@@ -119,7 +119,7 @@ class GaiaWindow {
     // Already up in this mode, as a hotkey pressed again finds it: only
     // brought to the front. Going through the hide and re-show would flash.
     if (mode == shown && mode != GaiaMode.overlay && IsIconic(hwnd) == 0) {
-      if (!pill) SetForegroundWindow(hwnd);
+      if (!pill) _takeForeground(hwnd);
       return;
     }
     _showing = true;
@@ -248,7 +248,7 @@ class GaiaWindow {
       }
     }
     _cloak(hwnd, false);
-    if (!pill && !behind) SetForegroundWindow(hwnd);
+    if (!pill && !behind) _takeForeground(hwnd);
     shown = mode;
     _showing = false;
   }
@@ -519,6 +519,33 @@ class GaiaWindow {
       );
     } finally {
       free(value);
+    }
+  }
+
+  /// The right to the foreground the hotkey passed on is gone if the user
+  /// typed on in their app before it was used: Windows then shows the window
+  /// inactive, the composer drawn focused while the keys go to that app.
+  /// Joined to the foreground window's input, the switch isn't refused.
+  static void _takeForeground(int hwnd) {
+    if (SetForegroundWindow(hwnd) != 0 && GetForegroundWindow() == hwnd) {
+      return;
+    }
+    final front = GetForegroundWindow();
+    final frontThread = front == 0
+        ? 0
+        : GetWindowThreadProcessId(front, nullptr);
+    final ownThread = GetCurrentThreadId();
+    // Not to a hung app's thread: joining its input queue can block ours.
+    final attached =
+        frontThread != 0 &&
+        frontThread != ownThread &&
+        IsHungAppWindow(front) == 0 &&
+        AttachThreadInput(ownThread, frontThread, TRUE) != 0;
+    try {
+      BringWindowToTop(hwnd);
+      SetForegroundWindow(hwnd);
+    } finally {
+      if (attached) AttachThreadInput(ownThread, frontThread, FALSE);
     }
   }
 

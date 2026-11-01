@@ -387,9 +387,6 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
   var _tickerModeEnabled = true;
   final _time = ValueNotifier<double>(0);
 
-  /// The vsync time of the last frame; null until the first since starting.
-  double? _lastTick;
-
   _Scene? _scene;
   Timer? _resizeSettle;
 
@@ -451,6 +448,7 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
     }
     if (old.replayCount != widget.replayCount && _weeks > 0) {
       _fallStart = _time.value;
+      AmbientClock.instance.wake();
     }
   }
 
@@ -489,6 +487,9 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
     if (!_weekFallPlayed && weeks > 0) {
       _weekFallPlayed = true;
       _fallStart = _time.value;
+      // The weeks can arrive from sync long after the last input, when the
+      // clock has idled; a fall then needs it running until it settles.
+      AmbientClock.instance.wake();
     }
   }
 
@@ -512,20 +513,17 @@ class _WeepingCherryCanvasState extends State<WeepingCherryCanvas>
     if (run == _subscribed) return;
     _subscribed = run;
     if (run) {
-      _lastTick = null;
       AmbientClock.instance.subscribe(_tick);
     } else {
       AmbientClock.instance.unsubscribe(_tick);
     }
   }
 
-  void _tick(Duration timeStamp) {
-    final now = timeStamp.inMicroseconds / 1e6;
-    final last = _lastTick;
+  void _tick(Duration step) {
     // Accumulated, so resuming after a pause doesn't jump the cycle.
-    if (last != null) _time.value += math.min(math.max(now - last, 0), 0.1);
-    _lastTick = now;
+    _time.value += step.inMicroseconds / 1e6;
     final start = _fallStart;
+    if (start != null) AmbientClock.instance.wake();
     if (start != null && _time.value - start > _fallEnd) {
       setState(() {
         _fallStart = null;

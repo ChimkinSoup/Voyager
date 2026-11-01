@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/text/newline_normalization.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
@@ -40,6 +41,7 @@ class GaiaTextField extends StatefulWidget {
     this.onPaste,
     this.onAddWord,
     this.undoController,
+    this.lists = false,
   });
 
   final TextEditingController controller;
@@ -66,6 +68,11 @@ class GaiaTextField extends StatefulWidget {
 
   /// An undo history its owner can start over; null for the field's own.
   final MergeAwareUndoController? undoController;
+
+  /// `-` and `1.` lists as in Voyager's notes: Enter continues one and
+  /// numbers follow every edit. Tab and Backspace are the owner's to wire,
+  /// on its focus node.
+  final bool lists;
 
   @override
   State<GaiaTextField> createState() => _GaiaTextFieldState();
@@ -135,11 +142,14 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   /// The text [_onEdit] last saw, to tell an edit from a caret move.
   late String _lastText;
 
+  /// The text before the edit [_lastText] holds, for the list editing.
+  late String _beforeEdit;
+
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_tick);
-    _lastText = widget.controller.text;
+    _lastText = _beforeEdit = widget.controller.text;
     widget.controller.addListener(_onEdit);
     widget.focusNode.addListener(_onFocus);
     SchedulerBinding.instance.addPostFrameCallback(_afterFrame);
@@ -151,7 +161,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     if (old.controller != widget.controller) {
       old.controller.removeListener(_onEdit);
       widget.controller.addListener(_onEdit);
-      _lastText = widget.controller.text;
+      _lastText = _beforeEdit = widget.controller.text;
     }
     if (old.focusNode != widget.focusNode) {
       old.focusNode.removeListener(_onFocus);
@@ -199,6 +209,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   /// the frame that lays it out.
   void _onEdit() {
     if (widget.controller.text != _lastText) {
+      _beforeEdit = _lastText;
       _lastText = widget.controller.text;
       // Only typing scrolls the caret into view by itself: not a draft put
       // here from code, as switching chat, Edit & resend or the palette do.
@@ -449,6 +460,13 @@ class _GaiaTextFieldState extends State<GaiaTextField>
             key: _fieldKey,
             controller: widget.controller,
             focusNode: widget.focusNode,
+            // Typed edits only: a draft put here from code is left as it is.
+            onChanged: widget.lists
+                ? (_) => applyListEditing(
+                    controller: widget.controller,
+                    previousText: _beforeEdit,
+                  )
+                : null,
             scrollController: _scroll,
             autofocus: widget.autofocus,
             minLines: widget.minLines,
@@ -504,6 +522,10 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     Widget clipped = ClipRect(child: field);
     if (widget.undoController case final undo?) {
       clipped = MergeAwareUndoScope(controller: undo, child: clipped);
+    } else if (widget.lists) {
+      // Flutter's own undo then restores the text, which list editing
+      // mustn't rewrite mid-restore; see [ListEditingUndoGuard].
+      clipped = ListEditingUndoGuard(child: clipped);
     }
     return session == null
         ? clipped

@@ -428,7 +428,6 @@ class _GeometricTextureState extends State<GeometricTexture>
     with WindowVisibility<GeometricTexture> {
   FragmentShader? _shader;
   var _subscribed = false;
-  final Stopwatch _clock = Stopwatch();
   Duration _elapsed = Duration.zero;
 
   // The wave is driven by a plain [Timer] rather than a [Ticker] on purpose.
@@ -507,15 +506,13 @@ class _GeometricTextureState extends State<GeometricTexture>
     if (run == _subscribed) return;
     _subscribed = run;
     if (run) {
-      _clock.start();
       AmbientClock.instance.subscribe(_tick);
     } else {
       AmbientClock.instance.unsubscribe(_tick);
-      _clock.stop();
     }
   }
 
-  void _tick(Duration _) => setState(() => _elapsed = _clock.elapsed);
+  void _tick(Duration step) => setState(() => _elapsed += step);
 
   @override
   void dispose() {

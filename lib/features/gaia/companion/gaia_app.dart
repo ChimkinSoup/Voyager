@@ -25,8 +25,10 @@ import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
 import 'package:voyager/core/spellcheck/dictionary_loader.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
@@ -2313,9 +2315,10 @@ class _ComposerState extends State<_Composer> {
 
   /// While the palette shows: Enter picks from it, whatever sends, as does
   /// Tab; Up and Down move along it, and Esc closes it for the draft as it
-  /// stands.
+  /// stands. Otherwise the keys go to list editing ([_listKey]).
   KeyEventResult _paletteKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
+    if (_palette.isEmpty) return _listKey(node, event);
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
         keyboard.isAltPressed ||
@@ -2324,7 +2327,6 @@ class _ComposerState extends State<_Composer> {
       return KeyEventResult.ignored;
     }
     final palette = _palette;
-    if (palette.isEmpty) return KeyEventResult.ignored;
     switch (event.logicalKey) {
       case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
         unawaited(_send());
@@ -2340,6 +2342,27 @@ class _ComposerState extends State<_Composer> {
         return KeyEventResult.ignored;
     }
     return KeyEventResult.handled;
+  }
+
+  /// Without the palette: Tab and Shift+Tab indent and outdent a list line,
+  /// unless a snippet wants Tab, and Backspace just past a marker takes it
+  /// away, as in Voyager's notes.
+  KeyEventResult _listKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+    final handled = switch (event.logicalKey) {
+      LogicalKeyboardKey.tab =>
+        !VimTextScope.snippetWantsTab(node.context) &&
+            handleListTab(controller: _text, outdent: keyboard.isShiftPressed),
+      LogicalKeyboardKey.backspace => handleListBackspace(controller: _text),
+      _ => false,
+    };
+    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   void _move(int by) {
@@ -2679,6 +2702,7 @@ class _ComposerState extends State<_Composer> {
                               },
                         onPaste: _paste,
                         undoController: controller.draftUndo,
+                        lists: true,
                         onAddWord: (word) =>
                             unawaited(controller.addWord(word)),
                         // The tier picker's notch, opening rightwards from the

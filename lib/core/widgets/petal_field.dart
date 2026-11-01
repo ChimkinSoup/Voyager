@@ -329,9 +329,7 @@ class _PetalFieldState extends State<PetalField>
   final math.Random _random = math.Random(20260723);
 
   var _subscribed = false;
-  final Stopwatch _clock = Stopwatch();
   double _time = 0;
-  double _lastTick = 0;
   double _nextSpawnAt = 0;
   double _nextGustAt = 0;
   var _tickerModeEnabled = true;
@@ -353,7 +351,6 @@ class _PetalFieldState extends State<PetalField>
   @override
   void initState() {
     super.initState();
-    _clock.start();
     _syncTimer();
     widget.controller?.addListener(_onControllerBurst);
   }
@@ -379,10 +376,6 @@ class _PetalFieldState extends State<PetalField>
     if (shouldRun == _subscribed) return;
     _subscribed = shouldRun;
     if (shouldRun) {
-      // The stopwatch runs through the pause, so restart the simulation from
-      // now rather than from whenever it last ticked — otherwise coming back
-      // from a minimised window spends its first frame on one huge step.
-      _lastTick = _clock.elapsedMicroseconds / 1e6;
       AmbientClock.instance.subscribe(_tick);
     } else {
       AmbientClock.instance.unsubscribe(_tick);
@@ -426,16 +419,14 @@ class _PetalFieldState extends State<PetalField>
     _gusts.addAll(widget.controller!._drainPending());
   }
 
-  void _tick(Duration _) {
+  // The clock caps the step, so a stalled or backgrounded app doesn't resume
+  // with one enormous step that teleports every petal off screen.
+  void _tick(Duration step) {
     if (!mounted) return;
     if (DevFlags.disablePetalField) return;
-    final now = _clock.elapsedMicroseconds / 1e6;
-    // Clamp so a stalled or backgrounded app doesn't resume with one enormous
-    // step that teleports every petal off screen.
-    final dt = math.min(now - _lastTick, 0.1);
-    _lastTick = now;
-    _time = now;
+    final dt = step.inMicroseconds / 1e6;
     if (dt <= 0) return;
+    _time += dt;
 
     _advance(dt);
     _repaint.value++;

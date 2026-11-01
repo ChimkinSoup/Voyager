@@ -177,8 +177,11 @@ void main() {
           ),
         );
 
-    LogicalKeyboardKey keyFor(String ch) => LogicalKeyboardKey.knownLogicalKeys
-        .firstWhere((key) => key.keyLabel.toLowerCase() == ch.toLowerCase());
+    LogicalKeyboardKey keyFor(String ch) => ch == '\n'
+        ? LogicalKeyboardKey.enter
+        : LogicalKeyboardKey.knownLogicalKeys.firstWhere(
+            (key) => key.keyLabel.toLowerCase() == ch.toLowerCase(),
+          );
 
     /// Typed as a keyboard does it: the key, then the character it puts in.
     Future<void> type(WidgetTester tester, String input) async {
@@ -437,6 +440,68 @@ void main() {
       await tester.pump();
       expect(controller.draft.text, 'onetwo');
       await settle(tester);
+    });
+
+    group('lists, as in the notes', () {
+      testWidgets('Enter continues a numbered list and leaves it empty', (
+        tester,
+      ) async {
+        await start(tester, GaiaTextSettings.off);
+        await type(tester, '1. one\n');
+        expect(controller.draft.text, '1. one\n2. ');
+        await type(tester, 'two\n\n');
+        expect(controller.draft.text, '1. one\n2. two\n');
+        await settle(tester);
+      });
+
+      testWidgets('a bullet continues too', (tester) async {
+        await start(tester, GaiaTextSettings.off);
+        await type(tester, '- a\n');
+        expect(controller.draft.text, '- a\n- ');
+        await settle(tester);
+      });
+
+      testWidgets('Tab and Shift+Tab indent a list line', (tester) async {
+        await start(tester, GaiaTextSettings.off);
+        await type(tester, '- one\ntwo');
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(controller.draft.text, '- one\n  - two');
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+        expect(controller.draft.text, '- one\n- two');
+        await settle(tester);
+      });
+
+      testWidgets('Backspace just past a marker takes it away', (tester) async {
+        await start(tester, GaiaTextSettings.off);
+        await type(tester, '- a\n');
+        await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+        await tester.pump();
+        expect(controller.draft.text, '- a\n');
+        await settle(tester);
+      });
+
+      testWidgets('a draft put in from code is left as it is', (tester) async {
+        await start(tester, GaiaTextSettings.off);
+        controller.draft.text = '3. c\n';
+        await tester.pump();
+        expect(controller.draft.text, '3. c\n');
+        await settle(tester);
+      });
+
+      testWidgets('undo steps back over a continued line', (tester) async {
+        await start(tester, GaiaTextSettings.off);
+        await type(tester, '1. one');
+        await tester.pump(const Duration(seconds: 1));
+        await type(tester, '\n');
+        await tester.pump(const Duration(seconds: 1));
+        await pressUndo(tester);
+        expect(controller.draft.text, '1. one');
+        await settle(tester);
+      });
     });
 
     testWidgets("Vim's u doesn't cross chats either, and works within one", (
