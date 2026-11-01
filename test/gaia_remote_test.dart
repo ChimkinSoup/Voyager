@@ -638,6 +638,73 @@ void main() {
       stop();
     });
 
+    test('past the day\'s write budget text stops, but a card still goes to '
+        'the watcher, and comes off once decided', () async {
+      await beacon.setUser('u');
+      final stop = phone.watch('c');
+      await settle();
+      // A change of cards is written at once, so this spends the budget.
+      for (var i = 0; !beacon.livePaused; i++) {
+        beacon.onMessage(
+          reply(
+            '',
+            parts: [
+              const GaiaTextPart('Busy'),
+              if (i.isOdd)
+                GaiaCardPart(
+                  id: 'spend$i',
+                  kind: GaiaCardKind.permission,
+                  tool: 'Bash',
+                  input: const {'command': 'ls'},
+                ),
+            ],
+          ),
+        );
+      }
+      // Finish on a write with no card open.
+      beacon.onMessage(reply('Busy'));
+      await settle();
+      expect(
+        (await doc(FirestoreCollections.gaiaBeacons, 'laptop'))!['livePaused'],
+        isTrue,
+      );
+      Future<GaiaLive> live() async => GaiaLive.fromFirestore(
+        'c',
+        (await doc(FirestoreCollections.gaiaLive, 'c'))!,
+      );
+      final before = await live();
+      expect(before.cards, isEmpty);
+
+      now = now.add(const Duration(seconds: 2));
+      beacon.onMessage(reply('Busy, still'));
+      await settle();
+      expect((await live()).text, before.text);
+
+      const card = GaiaCardPart(
+        id: 'k',
+        kind: GaiaCardKind.question,
+        question: 'Which list?',
+      );
+      beacon.onMessage(
+        reply('', parts: const [GaiaTextPart('Busy, still'), card]),
+      );
+      await settle();
+      expect((await live()).cards.single.id, 'k');
+
+      beacon.onMessage(
+        reply(
+          '',
+          parts: [
+            const GaiaTextPart('Busy, still'),
+            card.decided(GaiaCardState.accepted),
+          ],
+        ),
+      );
+      await settle();
+      expect((await live()).cards, isEmpty);
+      stop();
+    });
+
     test('the status line counts tool calls and names the current tool, '
         'never what it ran', () {
       final message = reply(

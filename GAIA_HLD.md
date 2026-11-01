@@ -1762,8 +1762,17 @@ Phase 7 as built (2026-10-31):
   by the chat's last message as saved: two desktops send each prompt once,
   and neither goes on after a reply another stopped.
 
-  Not checked live: the tray's Cancel item, and real sleep, shutdown and lid
-  changes (dev profiles don't).
+  Not checked live: real sleep, shutdown and lid changes (dev profiles
+  don't).
+
+  The tray's Cancel item, checked live 2026-11-01 (profile p7a, account
+  qa-127, the emulator): a shutdown sent from the phone put "Cancel
+  shutdown (asked from your phone)" at the top of the real tray menu
+  (opened by a posted tray message); picking it ended the countdown, the
+  phone's row went back to "Online", and nothing ran when the 30 s were
+  up. Cards past the day's write budget have their own test now
+  (`gaia_remote_test.dart`, which fails on the old `if (livePaused)
+  return`).
 
   **Pushes and the security follow-up, live the same day** (real FCM through
   the deployed function to an Android emulator with Play services): a reply
@@ -1830,7 +1839,16 @@ Phase 6 as built (2026-10-31):
     command, path or label, nor the added word.
 
   Not checked live: typing in Vim's Normal mode (bg input also types the
-  characters), clicking a link, the phone (Phase 7).
+  characters), clicking a link.
+
+  The phone, checked live 2026-11-01 (profile p7a from a copy of the debug
+  build, account qa-127, Android emulator): `/msg1` and `/msg3` sent from
+  the phone rendered while streaming (from `gaia_live`) and once saved:
+  headings, emphasis, strikethrough, inline code, a link, nested, numbered
+  and task lists, a quote, a table with right-aligned cells, highlighted
+  code with its language and copy button, an unclosed fence shown as code.
+  A long code line scrolls sideways, and its copy button put the line on
+  the phone's clipboard.
 
 Phase 5 as built (2026-10-30):
 - **Store.** `gaia_memories` (schema 181, synced, in backups): text (at
