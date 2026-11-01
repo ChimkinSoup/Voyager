@@ -89,6 +89,7 @@ class _Main {
       case 'chats':
         return [for (final chat in await store.chats()) chat.toJson()];
       case 'putChat':
+        await holdPutChat?.future;
         await store.createChat(
           GaiaChat.fromJson((params['chat']! as Map).cast<String, Object?>()),
         );
@@ -162,8 +163,10 @@ class _Main {
         return null;
       case 'takeLease':
         leases.add(params['chatId']! as String);
+        await holdLease?.future;
         return {'heldBy': heldBy};
       case 'releaseLease':
+        released.add(params['chatId']! as String);
         return null;
       case 'queue':
         return [for (final item in await store.allQueued()) item.toJson()];
@@ -267,6 +270,15 @@ class _Main {
   /// Each `takeLease`'s chat, and who holds every lease: null for none.
   final leases = <String>[];
   String? heldBy;
+
+  /// Each `releaseLease`'s chat, in order.
+  final released = <String>[];
+
+  /// Each `takeLease` waits on it while it's set.
+  Completer<void>? holdLease;
+
+  /// Each `putChat` waits on it while it's set.
+  Completer<void>? holdPutChat;
 
   /// Each `attachImage`, in order.
   final attached = <({String chatId, String path})>[];
@@ -1138,6 +1150,65 @@ void main() {
 
       expectGivenBack();
       expect(await main.store.chats(), isEmpty);
+    });
+
+    test('a stop while the images upload takes the send back at once, and '
+        'the image attached after is taken off again', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await sendHeld();
+      await controller.stop(controller.currentChatId!);
+      expect(controller.currentRunning, isFalse);
+      expect(controller.messages, isEmpty);
+      expect(controller.draft.text, 'Look [image 1]');
+
+      main.holdImages!.complete();
+      await held;
+      await settle();
+      expectGivenBack();
+      expect(controller.uploadingImages, isEmpty);
+      expect(main.leases, isEmpty);
+      expect(await main.store.chats(), isEmpty);
+    });
+
+    test('a stop while the lease is taken, then a resend to the chat, '
+        "leaves the resend's lease held", () async {
+      runner.turns
+        ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+        ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('One');
+      await settle();
+      final chatId = controller.currentChatId!;
+      main.holdLease = Completer();
+      final first = controller.send('Look');
+      await settle();
+      await controller.stop(chatId);
+      expect(controller.draft.text, 'Look');
+      controller.draft.clear();
+      final second = controller.send('Look');
+      await settle();
+      main.holdLease!.complete();
+      await Future.wait([first, second]);
+      await settle();
+
+      expect(controller.currentChatId, chatId);
+      expect(main.released, isEmpty);
+      expect(runner.sent.map((s) => s.prompt), ['One', 'Look']);
+    });
+
+    test('a stop while a new chat is saved ends its run cancelled, before '
+        'any agent hears it', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      main.holdPutChat = Completer();
+      final sending = controller.send('Look');
+      await settle();
+      await controller.stop(controller.currentChatId!);
+      main.holdPutChat!.complete();
+      await sending;
+      await settle();
+
+      expect(runner.sent, isEmpty);
+      expect(controller.messages.last.status, GaiaMessageStatus.cancelled);
+      expect(controller.currentRunning, isFalse);
     });
 
     test("a later message's images number on from the chat's", () async {

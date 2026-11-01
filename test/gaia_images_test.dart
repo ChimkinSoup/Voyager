@@ -241,6 +241,18 @@ void main() {
       });
     });
 
+    testWidgets('each upload of a capture is its own file', (tester) async {
+      await tester.runAsync(() async {
+        final path = await capture(2, 2);
+        final first = await gaiaUploadablePath(path);
+        final second = await gaiaUploadablePath(path);
+        expect(second, isNot(first));
+        // One send's cleanup leaves the other's.
+        await File(first).delete();
+        expect(File(second).existsSync(), isTrue);
+      });
+    });
+
     testWidgets('a PNG without edits goes as it is', (tester) async {
       await tester.runAsync(() async {
         final path = '${dir.path}/pasted.png';

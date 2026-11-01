@@ -1028,6 +1028,10 @@ class GaiaController extends ChangeNotifier {
   GaiaMode? _returnTo;
 
   final _stopping = <String>{};
+
+  /// A send still attaching its images, picking its tier or taking its
+  /// lease, by chat: no run to stop yet, so a stop takes the send back.
+  final _cancelSend = <String, void Function()>{};
   final _running = <String>{};
   final _lastPersist = <String, DateTime>{};
 
@@ -2244,11 +2248,17 @@ class GaiaController extends ChangeNotifier {
     final imageInputs = <GaiaImageInput>[];
     final referenceIds = <String>[];
     final uploads = <String>[];
+    // This send's entry in [_cancelSend], set below.
+    void Function()? cancel;
 
     // The send didn't happen: the question comes off the chat, and a new
     // chat with it, and it all goes back in the draft; a remote one's
     // sender is told [why].
     void undo([String why = "It didn't start.", bool giveBack = true]) {
+      // Only its own: a resend after a stop has its own.
+      if (identical(_cancelSend[chatId], cancel)) _cancelSend.remove(chatId);
+      // A stop that came once the run was to have it: there's no run.
+      _stopping.remove(chatId);
       notStarted(why);
       for (final referenceId in referenceIds) {
         unawaited(_request('detachImage', {'referenceId': referenceId}));
@@ -2287,6 +2297,15 @@ class GaiaController extends ChangeNotifier {
       _settleDrain();
     }
 
+    // Stopped before its run started: undone at once, and each step still
+    // under way when it was quits once it's done, leaving nothing behind.
+    var stopped = false;
+    _cancelSend[chatId] = cancel = () {
+      stopped = true;
+      undo('Stopped.');
+      notifyListeners();
+    };
+
     // Before anything is saved: an image that can't be attached stops the
     // send.
     for (final image in labeled) {
@@ -2294,16 +2313,24 @@ class GaiaController extends ChangeNotifier {
         if (debug.attachDelay > Duration.zero) {
           await Future<void>.delayed(debug.attachDelay);
         }
+        if (stopped) break;
         // Edits are flattened now (§9.4), and a capture is a BMP, which the
         // media module doesn't take.
         final upload = await gaiaUploadablePath(image.path, edits: image.edits);
         if (upload != image.path) uploads.add(upload);
+        if (stopped) break;
         final stored =
             (await _pipe.request('attachImage', {
                   'chatId': chatId,
                   'path': upload,
                 }))!
                 as Map;
+        if (stopped) {
+          unawaited(
+            _request('detachImage', {'referenceId': stored['referenceId']}),
+          );
+          break;
+        }
         final mediaId = stored['mediaId']! as String;
         final path = stored['path']! as String;
         _imageFiles[mediaId] = Future.value(path);
@@ -2323,6 +2350,7 @@ class GaiaController extends ChangeNotifier {
         ));
       } catch (error) {
         uploads.forEach(_deleteQuietly);
+        if (stopped) return;
         _toasts.add((
           chatId: '',
           title: "Couldn't attach ${gaiaImageToken(image.label)}",
@@ -2334,6 +2362,7 @@ class GaiaController extends ChangeNotifier {
       }
     }
     uploads.forEach(_deleteQuietly);
+    if (stopped) return;
     if (labeled.isNotEmpty) {
       uploadingImages.removeAll(uploading);
       // A lightbox opened on one while it uploaded still asks by it.
@@ -2376,11 +2405,22 @@ class GaiaController extends ChangeNotifier {
       );
     }
     debugPrint('[gaia] router: sending on ${tier.name}');
+    if (stopped) return;
     // Aborted, or the drain cancelled, while its images uploaded or its tier
     // was picked: no run starts.
     if (aborted || _drainCancelled) return undo('Gaia is aborted.');
     // One device runs a chat at a time (§8): another running it keeps it.
-    if (await _takeLease(chatId) case final heldBy?) {
+    final heldBy = await _takeLease(chatId);
+    if (stopped) {
+      // Not if a resend since has the chat running on the same lease.
+      if (heldBy == null && !_running.contains(chatId)) {
+        unawaited(_request('releaseLease', {'chatId': chatId}));
+      }
+      return;
+    }
+    // Past here a stop is the run's.
+    _cancelSend.remove(chatId);
+    if (heldBy != null) {
       // It waits in the chat's queue instead (§8, §13), text alone: images,
       // files, quotes and the summon's window belong to this device's draft,
       // which gets them back.
@@ -2687,6 +2727,9 @@ class GaiaController extends ChangeNotifier {
     );
 
     try {
+      // Stopped while its chat was saved or its context gathered: no runner
+      // had started to hear it, so it ends here, cancelled.
+      if (_stopping.contains(chatId)) throw StateError('Stopped.');
       var result = script != null
           ? await _scripted.send(
               chatId: chatId,
@@ -3107,6 +3150,7 @@ class GaiaController extends ChangeNotifier {
   }
 
   Future<void> stop(String chatId) async {
+    if (_cancelSend.remove(chatId) case final cancel?) return cancel();
     if (!_running.contains(chatId)) return;
     _stopping.add(chatId);
     cards.voidAll(chatId: chatId);

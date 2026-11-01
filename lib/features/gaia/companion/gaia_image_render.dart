@@ -236,7 +236,12 @@ Future<String> gaiaUploadablePath(
   GaiaImageEdits edits = GaiaImageEdits.none,
 }) async {
   if (edits.isEmpty && !await _isBmp(path)) return path;
-  final png = File('${p.withoutExtension(path)}-upload.png');
+  // Its own per call: a send stopped mid-upload deletes its file as a resend
+  // of the same image writes one.
+  final png = File(
+    '${p.withoutExtension(path)}-upload-'
+    '${DateTime.now().microsecondsSinceEpoch}.png',
+  );
   await png.writeAsBytes(await gaiaRenderPng(path, edits: edits));
   return png.path;
 }

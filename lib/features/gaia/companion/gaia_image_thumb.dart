@@ -45,10 +45,16 @@ class GaiaImageThumb extends StatelessWidget {
     if (path == null || !context.mounted) return;
     final ratio = MediaQuery.devicePixelRatioOf(context);
     await precacheImage(
-      ResizeImage(FileImage(File(path)), height: (height * ratio).round()),
+      ResizeImage(FileImage(File(path)), height: _decodeHeight(height, ratio)),
       context,
     );
   }
+
+  /// Four times what's shown: the decoder shrinks without mipmaps, so a
+  /// screenshot taken straight to thumbnail size aliases its fine detail
+  /// into moiré. From here the draw's mipmaps take it the rest of the way.
+  static int _decodeHeight(double height, double ratio) =>
+      (height * ratio * 4).round();
 
   /// One function, so the switcher doesn't rebuild its transitions on every
   /// build; and driven, so it adds no listeners to dispose.
@@ -90,7 +96,7 @@ class GaiaImageThumb extends StatelessWidget {
                 File(path),
                 height: height,
                 fit: BoxFit.contain,
-                cacheHeight: (height * ratio).round(),
+                cacheHeight: _decodeHeight(height, ratio),
                 // The draft's file swapped for the stored one once uploaded,
                 // without a blank frame between.
                 gaplessPlayback: true,
