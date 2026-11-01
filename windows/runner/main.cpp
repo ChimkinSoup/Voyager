@@ -157,6 +157,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  // window_manager's destroy only posts WM_QUIT, leaving the window alive. Tear
+  // down now, while FlutterWindow is intact: left to ~FlutterWindow, destroying
+  // the view notifies this window, which forwards it to the dying controller.
+  window.Destroy();
+
   ::CoUninitialize();
-  return EXIT_SUCCESS;
+  // Not a return: the CRT would run static destructors, freeing the Firebase
+  // SDK's globals while its Firestore thread is still terminating on them.
+  ::ExitProcess(EXIT_SUCCESS);
 }

@@ -1,0 +1,6 @@
+final repo = c.read(gaiaRepositoryProvider);
+final s = await repo.watchSettings().first;
+await repo.upsertSettings(s.copyWith(
+  agents: [...s.agents, const GaiaAgent(id: 'sol', label: 'Codex Sol', adapter: kGaiaCodexAdapter, model: 'gpt-6.1-sol')],
+  tiers: {...s.tiers, GaiaTier.deep: 'sol'},
+));

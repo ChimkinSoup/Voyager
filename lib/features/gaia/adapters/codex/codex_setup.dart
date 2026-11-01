@@ -5,6 +5,8 @@
 
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
@@ -35,18 +37,22 @@ bool? parseCodexLoginStatus(String output) {
 }
 
 /// Runs `codex --version`, then `codex login status`. Neither costs tokens.
-/// The login read is the user's own Codex home, which Gaia copies from.
-Future<CodexSetup> probeCodex() async {
+/// The login read is [account]'s folder, which Gaia copies from.
+Future<CodexSetup> probeCodex(GaiaAccount account) async {
   final version = await codexVersion();
   if (version == null) return const CodexSetup();
   try {
     // Through cmd, as the runner: an npm install's `codex` is a .cmd shim.
-    final result = await Process.run('cmd', ['/c', 'codex', 'login', 'status']);
+    final result = await Process.run(
+      'cmd',
+      ['/c', 'codex', 'login', 'status'],
+      environment: {'CODEX_HOME': codexLoginHome(account)},
+    );
     return CodexSetup(
       version: version,
       loggedIn: parseCodexLoginStatus('${result.stdout}\n${result.stderr}'),
       sandboxReady: await codexSandboxReady(
-        codexHome: await defaultGaiaCodexHome(),
+        codexHome: p.join(await gaiaCodexHomesRoot(), account.id),
       ),
     );
   } on ProcessException {

@@ -1,0 +1,7 @@
+final repo = c.read(gaiaRepositoryProvider);
+final s = await repo.watchSettings().first;
+await repo.upsertSettings(s.copyWith(accounts: [
+  ...s.accounts,
+  const GaiaAccount(id: kGaiaDefaultAccountId, label: 'Codex main', adapter: kGaiaCodexAdapter, dir: ''),
+  const GaiaAccount(id: 'c2', label: 'Codex second', adapter: kGaiaCodexAdapter, dir: r'C:\Users\Juno\.codex'),
+]));

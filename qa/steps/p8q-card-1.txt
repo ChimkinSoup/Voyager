@@ -1,0 +1,9 @@
+# case 3 on screen: Esc dismisses, composer back with the focus
+key esc
+wait 800
+shot p8q-card-esc
+field
+type focus-check
+wait 300
+field
+shot p8q-card-esc-typed

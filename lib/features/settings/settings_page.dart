@@ -40,6 +40,7 @@ import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/settings/account_section.dart';
 import 'package:voyager/features/settings/backup_list_dialog.dart';
 import 'package:voyager/features/settings/folder_backup_section.dart';
+import 'package:voyager/features/settings/heat_watch_section.dart';
 import 'package:voyager/features/trash/trash_dialog.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
@@ -76,6 +77,7 @@ const _settingsTabs = [
 ];
 final _dataTab = _settingsTabs.indexOf('Data');
 final _pagesTab = _settingsTabs.indexOf('Pages');
+final _aboutTab = _settingsTabs.indexOf('About');
 
 class _SettingsPageState extends ConsumerState<SettingsPage>
     with SingleTickerProviderStateMixin {
@@ -91,6 +93,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         ? _dataTab
         : ref.read(revealWeatherLocationRequestProvider)
         ? _pagesTab
+        : ref.read(revealHeatWatchRequestProvider)
+        ? _aboutTab
         : math.max(0, _settingsTabs.indexOf(SettingsTabMemory.lastTab ?? '')),
   );
 
@@ -129,6 +133,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     });
     ref.listen<bool>(revealWeatherLocationRequestProvider, (_, next) {
       if (next) _showTab(_pagesTab);
+    });
+    ref.listen<bool>(revealHeatWatchRequestProvider, (_, next) {
+      if (next) _showTab(_aboutTab);
     });
     final settingsAsync = ref.watch(settingsProvider.settled);
     final takenHotkeys = ref.watch(unavailableHotkeysProvider);
@@ -1075,6 +1082,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           mode: LaunchMode.externalApplication,
                         ),
                       ),
+                      if (isWindows) const HeatWatchSection(),
                     ],
                   ),
                 ],

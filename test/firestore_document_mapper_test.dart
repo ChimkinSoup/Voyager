@@ -44,11 +44,16 @@ void main() {
       origin: 'gaia',
     );
     expect(
-      mergeCalendarEventFromRemote(calendarEventToFirestore(event), 'e1').origin,
+      mergeCalendarEventFromRemote(
+        calendarEventToFirestore(event),
+        'e1',
+      ).origin,
       'gaia',
     );
     expect(
-      calendarEventToFirestore(event.copyWith(title: 'x')).containsKey('origin'),
+      calendarEventToFirestore(
+        event.copyWith(title: 'x'),
+      ).containsKey('origin'),
       isTrue,
     );
     final mine = CalendarEvent(
@@ -409,6 +414,35 @@ void main() {
 
   test("a remote Gaia default tier this build can't read keeps the local "
       'one, and an explicit null still clears it', () {
+    const account = GaiaAccount(
+      id: 'b',
+      label: 'B',
+      adapter: kGaiaCodexAdapter,
+      dir: r'C:\codex-2',
+    );
+    final withAccounts = GaiaSettings.initial().copyWith(
+      accounts: [account],
+      currentAccounts: {kGaiaCodexAdapter: 'b'},
+    );
+    final written = gaiaSettingsToFirestore(withAccounts);
+    expect(
+      mergeGaiaSettingsFromRemote(written).accountsFor(kGaiaCodexAdapter),
+      [account],
+    );
+    expect(
+      mergeGaiaSettingsFromRemote(written).currentAccount(kGaiaCodexAdapter),
+      account,
+    );
+    // An older build's write, which doesn't know them, keeps the local ones.
+    final older = mergeGaiaSettingsFromRemote(
+      {...written, 'version': withAccounts.version + 1}
+        ..remove('accounts')
+        ..remove('currentAccounts'),
+      local: withAccounts,
+    );
+    expect(older.accounts, [account]);
+    expect(older.currentAccounts, {kGaiaCodexAdapter: 'b'});
+
     final local = GaiaSettings.initial().copyWith(defaultTier: GaiaTier.deep);
     final remote = {
       ...gaiaSettingsToFirestore(local),

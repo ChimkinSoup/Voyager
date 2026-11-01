@@ -93,6 +93,8 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/photo_series/photo_series_providers.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
+import 'package:voyager/features/settings/services/heat_watch_log.dart';
+import 'package:voyager/features/settings/services/heat_watch_monitor.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/color_replacement_service.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
@@ -530,6 +532,26 @@ final folderBackupServiceProvider = ChangeNotifierProvider<FolderBackupService>(
     );
   },
 );
+
+/// Alerts when the HeatWatch logger stops recording. Windows only; started by
+/// [VoyagerApp].
+final heatWatchMonitorProvider = Provider<HeatWatchMonitor>((ref) {
+  final monitor = HeatWatchMonitor(
+    read: () => readHeatWatchHealth(heatWatchLogDir()),
+    notify: (key, title, body) => ref
+        .read(reminderOsNotifierProvider)
+        .showNow(
+          PlannedReminderAlert(
+            sourceKey: key,
+            title: title,
+            body: body,
+            fireAt: DateTime.now(),
+          ),
+        ),
+  );
+  ref.onDispose(monitor.dispose);
+  return monitor;
+});
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return FirebaseAuthRepository(

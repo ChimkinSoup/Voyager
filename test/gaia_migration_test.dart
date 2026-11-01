@@ -296,6 +296,82 @@ void main() {
     expect((await repo.getMemory('m1'))!.text, 'Fact');
   });
 
+  test(
+    '182→183 adds accounts, leaving old chats and settings working',
+    () async {
+      final seed = AppDatabase(NativeDatabase(file));
+      final seedRepo = DriftGaiaRepository(seed);
+      final at = DateTime.utc(2026, 11, 1);
+      await seedRepo.upsertSettings(
+        (await seedRepo.getSettings()).copyWith(claudeConfigDir: r'C:\c1'),
+      );
+      await seedRepo.upsertChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Kept',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          agentSessions: const {
+            'laptop/claude_code': GaiaAgentSession(sessionId: 's1', lastSeq: 1),
+          },
+        ),
+      );
+      await seed.customStatement(
+        'ALTER TABLE gaia_settings_table DROP COLUMN accounts_json',
+      );
+      await seed.customStatement(
+        'ALTER TABLE gaia_settings_table DROP COLUMN current_accounts_json',
+      );
+      await seed.customStatement(
+        'ALTER TABLE gaia_messages_table DROP COLUMN account',
+      );
+      await seed.customStatement('PRAGMA user_version = 182');
+      await seed.close();
+
+      final upgraded = AppDatabase(NativeDatabase(file));
+      addTearDown(upgraded.close);
+      final repo = DriftGaiaRepository(upgraded);
+      final settings = await repo.getSettings();
+      expect(settings.accounts, isEmpty);
+      expect(settings.accountsFor(kGaiaClaudeCodeAdapter).single.dir, r'C:\c1');
+      final chat = (await repo.getChat('c1'))!;
+      // The key from before accounts is the default account's.
+      expect(chat.sessionOn('laptop'), 's1');
+      expect(chat.sessionOn('laptop', account: 'b'), isNull);
+
+      const b = GaiaAccount(
+        id: 'b',
+        label: 'B',
+        adapter: kGaiaClaudeCodeAdapter,
+        dir: r'C:\c2',
+      );
+      await repo.upsertSettings(
+        settings.copyWith(
+          accounts: [b],
+          currentAccounts: {kGaiaClaudeCodeAdapter: 'b'},
+        ),
+      );
+      final saved = await repo.getSettings();
+      expect(saved.accountsFor(kGaiaClaudeCodeAdapter), [b]);
+      expect(saved.currentAccount(kGaiaClaudeCodeAdapter), b);
+      await repo.upsertMessage(
+        GaiaMessage(
+          id: 'm1',
+          chatId: 'c1',
+          seq: 1,
+          role: GaiaMessageRole.assistant,
+          parts: const [],
+          status: GaiaMessageStatus.complete,
+          createdAt: at,
+          updatedAt: at,
+          account: 'b',
+        ),
+      );
+      expect((await repo.listMessages('c1')).single.account, 'b');
+    },
+  );
+
   test('181→182 adds the queue and drain mode', () async {
     final seed = AppDatabase(NativeDatabase(file));
     final seedRepo = DriftGaiaRepository(seed);
@@ -310,7 +386,9 @@ void main() {
       ),
     );
     await seed.customStatement('DROP TABLE gaia_queue_table');
-    await seed.customStatement('ALTER TABLE gaia_chats_table DROP COLUMN drain');
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN drain',
+    );
     await seed.customStatement('PRAGMA user_version = 181');
     await seed.close();
 

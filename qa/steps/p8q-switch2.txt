@@ -1,0 +1,16 @@
+click 1929 1589
+wait 700
+find Juno
+click 2106 1560
+wait 800
+tap Switch
+wait 1200
+shot p8q-c-switched
+click 760 1503
+wait 300
+type What codeword did I give you? Reply with only the codeword.
+wait 300
+key ctrl+enter
+wait 25000
+shot p8q-c-copied
+find

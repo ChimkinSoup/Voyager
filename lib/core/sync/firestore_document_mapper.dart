@@ -4499,6 +4499,7 @@ Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'status': message.status.name,
   'model': message.model,
   'adapter': message.adapter,
+  'account': message.account,
   'error': message.error,
   'needsInput': message.needsInput,
   'contextTokens': message.contextTokens,
@@ -4533,6 +4534,7 @@ GaiaMessage mergeGaiaMessageFromRemote(
     ),
     model: data['model'] as String?,
     adapter: data['adapter'] as String?,
+    account: data['account'] as String?,
     error: data['error'] as String?,
     needsInput: data['needsInput'] as bool? ?? false,
     contextTokens: (data['contextTokens'] as num?)?.toInt(),
@@ -4622,6 +4624,8 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'lastTier': settings.lastTier.name,
   'defaultTier': settings.defaultTier?.name,
   'claudeConfigDir': settings.claudeConfigDir,
+  'accounts': [for (final account in settings.accounts) account.toJson()],
+  'currentAccounts': settings.currentAccounts,
   'utilityModel': settings.utilityModel,
   'autoRoute': settings.autoRoute,
   'routerRubric': settings.routerRubric,
@@ -4669,6 +4673,13 @@ GaiaSettings mergeGaiaSettingsFromRemote(
     },
     claudeConfigDir:
         data['claudeConfigDir'] as String? ?? local?.claudeConfigDir ?? '',
+    // Absent from an older build's write: the local ones stay.
+    accounts: data['accounts'] is List
+        ? gaiaAccountsFromJson(data['accounts'])
+        : local?.accounts ?? const [],
+    currentAccounts: data['currentAccounts'] is Map
+        ? gaiaCurrentAccountsFromJson(data['currentAccounts'])
+        : local?.currentAccounts ?? const {},
     utilityModel:
         data['utilityModel'] as String? ??
         local?.utilityModel ??

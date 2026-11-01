@@ -1,0 +1,11 @@
+tap New chat
+wait 800
+shot p8q-c-tworings
+click 760 1503
+wait 300
+type Remember the codeword ORCHID-7. Reply with only the word: stored
+wait 300
+key ctrl+enter
+wait 20000
+shot p8q-c-first-reply
+find

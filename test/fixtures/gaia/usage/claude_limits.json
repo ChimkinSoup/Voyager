@@ -1,0 +1,22 @@
+{
+  "limits": [
+    {
+      "kind": "session",
+      "group": "session",
+      "percent": 6,
+      "severity": "normal",
+      "resets_at": "2026-11-01T22:49:59.827582+00:00",
+      "scope": null,
+      "is_active": false
+    },
+    {
+      "kind": "weekly_all",
+      "group": "weekly",
+      "percent": 54,
+      "severity": "normal",
+      "resets_at": "2026-11-05T20:59:59.827599+00:00",
+      "scope": null,
+      "is_active": true
+    }
+  ]
+}

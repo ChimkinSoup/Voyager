@@ -739,6 +739,42 @@ void main() {
       });
     });
 
+    test('setCurrentAccount and an account\'s setSession are kept', () {
+      run(show: true, (async, _) {
+        connect(async);
+        final now = DateTime.utc(2026, 11, 1);
+        request(async, 'putChat', {
+          'chat': GaiaChat(
+            id: 'c1',
+            title: 'Hi',
+            createdAt: now,
+            updatedAt: now,
+            lastMessageAt: now,
+          ).toJson(),
+        });
+        request(async, 'setSession', {
+          'chatId': 'c1',
+          'adapter': kGaiaClaudeCodeAdapter,
+          'account': 'b',
+          'sessionId': 's1',
+          'lastSeq': 3,
+        });
+        final chat = GaiaChat.fromJson(
+          ((request(async, 'chats')! as List).single as Map)
+              .cast<String, Object?>(),
+        );
+        expect(chat.sessionOn('laptop', account: 'b'), 's1');
+        expect(chat.sessionOn('laptop'), isNull);
+
+        request(async, 'setCurrentAccount', {
+          'adapter': kGaiaClaudeCodeAdapter,
+          'account': 'b',
+        });
+        final settings = (request(async, 'hello')! as Map)['settings'] as Map;
+        expect(settings['currentAccounts'], {kGaiaClaudeCodeAdapter: 'b'});
+      });
+    });
+
     test('setSession records the session for this device', () {
       run(show: true, (async, _) {
         connect(async);

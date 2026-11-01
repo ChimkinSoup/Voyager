@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -219,9 +220,41 @@ typedef FakeClaudeSend = ({
 /// hangs after its events until [stop] or [killAll], which fail it as a
 /// killed process does, or [finish] ends it. [sent] keeps each turn's
 /// tools, for a test to call as the agent would.
-class FakeClaudeRunner implements GaiaAgentRunner {
+class FakeClaudeRunner
+    implements GaiaAgentRunner, GaiaSessionCopier, GaiaAccountKeeper {
   /// Every GAIA.md the companion set, in order.
   final instructions = <String>[];
+
+  /// The accounts settings last said to keep.
+  var kept = const <GaiaAccount>[];
+
+  @override
+  Future<void> keepAccounts(Iterable<GaiaAccount> accounts) async =>
+      kept = accounts.toList();
+
+  /// Each turn's account, in order.
+  final accounts = <GaiaAccount?>[];
+
+  /// Every session copied, in order; [copyFails] says none is found.
+  final copies = <({String sessionId, GaiaAccount from, GaiaAccount to})>[];
+  var copyFails = false;
+
+  /// Thrown by the next copies, for one the copier didn't foresee.
+  Object? copyError;
+
+  /// Thrown by the next sends, as when a server refuses the thread.
+  Object? sendError;
+
+  @override
+  Future<bool> copySession({
+    required String sessionId,
+    required GaiaAccount from,
+    required GaiaAccount to,
+  }) async {
+    if (copyError case final error?) throw error;
+    copies.add((sessionId: sessionId, from: from, to: to));
+    return !copyFails;
+  }
 
   @override
   Future<void> setInstructions(String text) async => instructions.add(text);
@@ -247,8 +280,10 @@ class FakeClaudeRunner implements GaiaAgentRunner {
     Set<String> directories = const {},
     GaiaTurnTools? tools,
     String sessionInstructions = '',
+    GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
+    accounts.add(account);
     sent.add((
       chatId: chatId,
       sessionId: sessionId,
@@ -259,6 +294,7 @@ class FakeClaudeRunner implements GaiaAgentRunner {
       tools: tools,
       sessionInstructions: sessionInstructions,
     ));
+    if (sendError case final error?) throw error;
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);
     final turn = _active[chatId] = Completer<GaiaTurnResult>();

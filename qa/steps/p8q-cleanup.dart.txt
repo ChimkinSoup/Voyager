@@ -1,0 +1,3 @@
+final repo = c.read(gaiaRepositoryProvider);
+final s = await repo.watchSettings().first;
+await repo.upsertSettings(s.copyWith(accounts: const [], currentAccounts: const {}));

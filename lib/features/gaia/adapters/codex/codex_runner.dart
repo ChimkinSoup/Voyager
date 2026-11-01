@@ -49,6 +49,7 @@ class CodexRunner implements GaiaAgentRunner {
     required this.workingDirectory,
     required this.codexHome,
     String? userCodexHome,
+    this.sandboxHome,
     this.toolPipe,
     String? executable,
     this.onLine,
@@ -58,6 +59,9 @@ class CodexRunner implements GaiaAgentRunner {
   final String workingDirectory;
   final String codexHome;
   final String userCodexHome;
+
+  /// Whose config names the Windows sandbox; null for [userCodexHome].
+  final String? sandboxHome;
 
   /// Where the shims connect; null offers Codex no Gaia tools.
   final GaiaToolPipe? toolPipe;
@@ -69,6 +73,9 @@ class CodexRunner implements GaiaAgentRunner {
   final void Function(String line)? onLine;
 
   final _live = <String, _CodexProcess>{};
+
+  /// Whether any turn is running.
+  bool get busy => _live.isNotEmpty;
 
   @override
   Future<GaiaTurnResult> send({
@@ -82,11 +89,14 @@ class CodexRunner implements GaiaAgentRunner {
     GaiaTurnTools? tools,
     // `exec` has nowhere to put them: GAIA.md alone is its AGENTS.md.
     String sessionInstructions = '',
+    // Its home is the account: [CodexAccountRunners] picks the runner.
+    GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (:notReady, :sandbox) = await readyCodexHome(
       codexHome,
       userCodexHome,
+      sandboxHome: sandboxHome,
     );
     if (notReady != null) return notReady;
     final pipe = toolPipe;
@@ -175,19 +185,26 @@ String defaultUserCodexHome() =>
     Platform.environment['CODEX_HOME'] ??
     p.join(Platform.environment['USERPROFILE'] ?? '', '.codex');
 
-/// Gaia's own Codex home (§5.2). One per account from Phase 7.
-Future<String> defaultGaiaCodexHome() async =>
-    p.join((await appSupportRoot()).path, 'gaia', 'codex', 'default');
+/// Where Gaia's own Codex homes are (§5.2), one per account by its id.
+Future<String> gaiaCodexHomesRoot() async =>
+    p.join((await appSupportRoot()).path, 'gaia', 'codex');
+
+/// The Codex home [account] logs in from: its folder, or the user's own.
+String codexLoginHome(GaiaAccount account) =>
+    account.dir.trim().isEmpty ? defaultUserCodexHome() : account.dir.trim();
 
 /// Readies Gaia's Codex home for a turn: the user's login copied in, and the
 /// user's Windows sandbox, if any, to run it under. [notReady] is the turn's
-/// result when that sandbox isn't set up for Gaia yet.
+/// result when that sandbox isn't set up for Gaia yet. A second account's
+/// folder may hold only a login: [sandboxHome] is whose config names the
+/// sandbox, by default [userCodexHome].
 Future<({GaiaTurnResult? notReady, String? sandbox})> readyCodexHome(
   String codexHome,
-  String userCodexHome,
-) async {
+  String userCodexHome, {
+  String? sandboxHome,
+}) async {
   await _prepareCodexHome(codexHome, userCodexHome);
-  final sandbox = await _windowsSandbox(userCodexHome);
+  final sandbox = await _windowsSandbox(sandboxHome ?? userCodexHome);
   if (sandbox != null && !await _sandboxSetUp(codexHome)) {
     return (
       notReady: const GaiaTurnResult(
@@ -243,14 +260,16 @@ Future<bool> codexSandboxReady({
 /// Sets up the Windows sandbox for Gaia's Codex home by running one trivial
 /// command in it: Windows shows its approval prompt now, while the user is
 /// looking, rather than in the middle of a chat. True once it's set up.
+/// [loginHome] is whose login the home copies, by default [userCodexHome].
 Future<bool> setUpCodexSandbox({
   required String codexHome,
   String? userCodexHome,
+  String? loginHome,
 }) async {
   final userHome = userCodexHome ?? defaultUserCodexHome();
   final sandbox = await _windowsSandbox(userHome);
   if (sandbox == null) return true;
-  await _prepareCodexHome(codexHome, userHome);
+  await _prepareCodexHome(codexHome, loginHome ?? userHome);
   try {
     await Process.run(
       'cmd',

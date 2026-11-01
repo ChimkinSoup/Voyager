@@ -1,0 +1,7 @@
+final repo = c.read(gaiaRepositoryProvider);
+final s = await repo.watchSettings().first;
+await repo.upsertSettings(s.copyWith(accounts: [
+  ...s.accounts,
+  const GaiaAccount(id: 'limited', label: 'Limited', adapter: kGaiaClaudeCodeAdapter, dir: r'C:\Users\Juno\AppData\Local\Temp\claude\C--Users-Juno-Code-Voyager\d232b884-7a6b-4652-b5cc-6485b48b1cad\scratchpad\limit-login'),
+  const GaiaAccount(id: 'nologin', label: 'NoLogin', adapter: kGaiaClaudeCodeAdapter, dir: r'C:\Users\Juno\AppData\Local\Temp\claude\C--Users-Juno-Code-Voyager\d232b884-7a6b-4652-b5cc-6485b48b1cad\scratchpad\empty-login'),
+]));

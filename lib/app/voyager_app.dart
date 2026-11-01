@@ -57,6 +57,7 @@ import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
+import 'package:voyager/features/settings/services/heat_watch_monitor.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/features/notifications/secure_vault_session.dart';
 import 'package:voyager/features/photo_series/photo_capture_screen.dart';
@@ -156,6 +157,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     // normal instance backs up to.
     if (isWindows && devProfile == null) {
       ref.read(folderBackupServiceProvider).start();
+      ref.read(heatWatchMonitorProvider).start();
     }
     _selectionOnResume.install();
     WindowsKeyboardReconciler.instance.install();
@@ -323,6 +325,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     // the folder-backup section instead (FOLDER_BACKUP_HLD.md §10.2).
     if (sourceKey.startsWith(FolderBackupService.notificationKeyPrefix)) {
       ref.read(revealFolderBackupsRequestProvider.notifier).state = true;
+      ref.read(routerProvider).go('/settings');
+      return;
+    }
+    if (sourceKey.startsWith(HeatWatchMonitor.notificationKeyPrefix)) {
+      ref.read(revealHeatWatchRequestProvider.notifier).state = true;
       ref.read(routerProvider).go('/settings');
       return;
     }

@@ -1,0 +1,7 @@
+click 2106 1560
+wait 800
+shot p8q-c-confirm
+find Switch
+key esc
+wait 800
+shot p8q-c-confirm-esc

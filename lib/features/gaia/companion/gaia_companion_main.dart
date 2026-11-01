@@ -13,6 +13,8 @@ import 'package:voyager/features/gaia/adapters/codex/codex_app_server.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/usage/sources/claude_oauth_usage.dart';
+import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
@@ -65,7 +67,11 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   );
   await sidebar.load();
   final window = GaiaWindow();
-  final codexHome = await defaultGaiaCodexHome();
+  final codex = CodexAccountRunners(
+    workingDirectory: p.join(root.path, 'gaia', 'ws'),
+    homesRoot: await gaiaCodexHomesRoot(),
+    toolPipe: GaiaToolPipe(),
+  );
   final controller = GaiaController(
     debug: debug,
     sidebar: sidebar,
@@ -84,15 +90,11 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
         workingDirectory: p.join(root.path, 'gaia', 'ws'),
         instructionsFile: p.join(root.path, 'gaia', 'GAIA.md'),
       ),
-      kGaiaCodexAdapter: CodexAppServerRunner(
-        workingDirectory: p.join(root.path, 'gaia', 'ws'),
-        codexHome: codexHome,
-        fallback: CodexRunner(
-          workingDirectory: p.join(root.path, 'gaia', 'ws'),
-          codexHome: codexHome,
-          toolPipe: GaiaToolPipe(),
-        ),
-      ),
+      kGaiaCodexAdapter: codex,
+    },
+    usageSources: {
+      kGaiaClaudeCodeAdapter: ClaudeOAuthUsageSource(),
+      kGaiaCodexAdapter: CodexRateLimitsSource(codex.readRateLimits),
     },
     utility: GaiaUtility(
       ClaudeUtilityRunner(

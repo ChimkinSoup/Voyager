@@ -1,0 +1,10 @@
+{
+  "rateLimits": {
+    "limitId": "codex",
+    "tiers": [
+      {
+        "used": 0.1
+      }
+    ]
+  }
+}

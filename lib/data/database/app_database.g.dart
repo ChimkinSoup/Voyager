@@ -58137,8 +58137,8 @@ class GaiaChatsTableData extends DataClass
   final DateTime lastMessageAt;
   final bool pinned;
 
-  /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device
-  /// and adapter — see `gaiaSessionKey`.
+  /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device,
+  /// adapter and account — see `gaiaSessionKey`.
   final String agentSessionsJson;
 
   /// The tier it last used (`GaiaTier.name`); null before its first message.
@@ -58609,6 +58609,17 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _accountMeta = const VerificationMeta(
+    'account',
+  );
+  @override
+  late final GeneratedColumn<String> account = GeneratedColumn<String>(
+    'account',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _errorMeta = const VerificationMeta('error');
   @override
   late final GeneratedColumn<String> error = GeneratedColumn<String>(
@@ -58699,6 +58710,7 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     status,
     model,
     adapter,
+    account,
     error,
     needsInput,
     contextTokens,
@@ -58774,6 +58786,12 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
       context.handle(
         _adapterMeta,
         adapter.isAcceptableOrUnknown(data['adapter']!, _adapterMeta),
+      );
+    }
+    if (data.containsKey('account')) {
+      context.handle(
+        _accountMeta,
+        account.isAcceptableOrUnknown(data['account']!, _accountMeta),
       );
     }
     if (data.containsKey('error')) {
@@ -58866,6 +58884,10 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         DriftSqlType.string,
         data['${effectivePrefix}adapter'],
       ),
+      account: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account'],
+      ),
       error: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}error'],
@@ -58917,6 +58939,9 @@ class GaiaMessagesTableData extends DataClass
 
   /// The adapter that wrote a reply.
   final String? adapter;
+
+  /// The account that wrote a reply; null from before accounts.
+  final String? account;
   final String? error;
   final bool needsInput;
 
@@ -58935,6 +58960,7 @@ class GaiaMessagesTableData extends DataClass
     required this.status,
     this.model,
     this.adapter,
+    this.account,
     this.error,
     required this.needsInput,
     this.contextTokens,
@@ -58957,6 +58983,9 @@ class GaiaMessagesTableData extends DataClass
     }
     if (!nullToAbsent || adapter != null) {
       map['adapter'] = Variable<String>(adapter);
+    }
+    if (!nullToAbsent || account != null) {
+      map['account'] = Variable<String>(account);
     }
     if (!nullToAbsent || error != null) {
       map['error'] = Variable<String>(error);
@@ -58988,6 +59017,9 @@ class GaiaMessagesTableData extends DataClass
       adapter: adapter == null && nullToAbsent
           ? const Value.absent()
           : Value(adapter),
+      account: account == null && nullToAbsent
+          ? const Value.absent()
+          : Value(account),
       error: error == null && nullToAbsent
           ? const Value.absent()
           : Value(error),
@@ -59018,6 +59050,7 @@ class GaiaMessagesTableData extends DataClass
       status: serializer.fromJson<String>(json['status']),
       model: serializer.fromJson<String?>(json['model']),
       adapter: serializer.fromJson<String?>(json['adapter']),
+      account: serializer.fromJson<String?>(json['account']),
       error: serializer.fromJson<String?>(json['error']),
       needsInput: serializer.fromJson<bool>(json['needsInput']),
       contextTokens: serializer.fromJson<int?>(json['contextTokens']),
@@ -59039,6 +59072,7 @@ class GaiaMessagesTableData extends DataClass
       'status': serializer.toJson<String>(status),
       'model': serializer.toJson<String?>(model),
       'adapter': serializer.toJson<String?>(adapter),
+      'account': serializer.toJson<String?>(account),
       'error': serializer.toJson<String?>(error),
       'needsInput': serializer.toJson<bool>(needsInput),
       'contextTokens': serializer.toJson<int?>(contextTokens),
@@ -59058,6 +59092,7 @@ class GaiaMessagesTableData extends DataClass
     String? status,
     Value<String?> model = const Value.absent(),
     Value<String?> adapter = const Value.absent(),
+    Value<String?> account = const Value.absent(),
     Value<String?> error = const Value.absent(),
     bool? needsInput,
     Value<int?> contextTokens = const Value.absent(),
@@ -59074,6 +59109,7 @@ class GaiaMessagesTableData extends DataClass
     status: status ?? this.status,
     model: model.present ? model.value : this.model,
     adapter: adapter.present ? adapter.value : this.adapter,
+    account: account.present ? account.value : this.account,
     error: error.present ? error.value : this.error,
     needsInput: needsInput ?? this.needsInput,
     contextTokens: contextTokens.present
@@ -59094,6 +59130,7 @@ class GaiaMessagesTableData extends DataClass
       status: data.status.present ? data.status.value : this.status,
       model: data.model.present ? data.model.value : this.model,
       adapter: data.adapter.present ? data.adapter.value : this.adapter,
+      account: data.account.present ? data.account.value : this.account,
       error: data.error.present ? data.error.value : this.error,
       needsInput: data.needsInput.present
           ? data.needsInput.value
@@ -59119,6 +59156,7 @@ class GaiaMessagesTableData extends DataClass
           ..write('status: $status, ')
           ..write('model: $model, ')
           ..write('adapter: $adapter, ')
+          ..write('account: $account, ')
           ..write('error: $error, ')
           ..write('needsInput: $needsInput, ')
           ..write('contextTokens: $contextTokens, ')
@@ -59140,6 +59178,7 @@ class GaiaMessagesTableData extends DataClass
     status,
     model,
     adapter,
+    account,
     error,
     needsInput,
     contextTokens,
@@ -59160,6 +59199,7 @@ class GaiaMessagesTableData extends DataClass
           other.status == this.status &&
           other.model == this.model &&
           other.adapter == this.adapter &&
+          other.account == this.account &&
           other.error == this.error &&
           other.needsInput == this.needsInput &&
           other.contextTokens == this.contextTokens &&
@@ -59179,6 +59219,7 @@ class GaiaMessagesTableCompanion
   final Value<String> status;
   final Value<String?> model;
   final Value<String?> adapter;
+  final Value<String?> account;
   final Value<String?> error;
   final Value<bool> needsInput;
   final Value<int?> contextTokens;
@@ -59196,6 +59237,7 @@ class GaiaMessagesTableCompanion
     this.status = const Value.absent(),
     this.model = const Value.absent(),
     this.adapter = const Value.absent(),
+    this.account = const Value.absent(),
     this.error = const Value.absent(),
     this.needsInput = const Value.absent(),
     this.contextTokens = const Value.absent(),
@@ -59214,6 +59256,7 @@ class GaiaMessagesTableCompanion
     required String status,
     this.model = const Value.absent(),
     this.adapter = const Value.absent(),
+    this.account = const Value.absent(),
     this.error = const Value.absent(),
     this.needsInput = const Value.absent(),
     this.contextTokens = const Value.absent(),
@@ -59239,6 +59282,7 @@ class GaiaMessagesTableCompanion
     Expression<String>? status,
     Expression<String>? model,
     Expression<String>? adapter,
+    Expression<String>? account,
     Expression<String>? error,
     Expression<bool>? needsInput,
     Expression<int>? contextTokens,
@@ -59257,6 +59301,7 @@ class GaiaMessagesTableCompanion
       if (status != null) 'status': status,
       if (model != null) 'model': model,
       if (adapter != null) 'adapter': adapter,
+      if (account != null) 'account': account,
       if (error != null) 'error': error,
       if (needsInput != null) 'needs_input': needsInput,
       if (contextTokens != null) 'context_tokens': contextTokens,
@@ -59277,6 +59322,7 @@ class GaiaMessagesTableCompanion
     Value<String>? status,
     Value<String?>? model,
     Value<String?>? adapter,
+    Value<String?>? account,
     Value<String?>? error,
     Value<bool>? needsInput,
     Value<int?>? contextTokens,
@@ -59295,6 +59341,7 @@ class GaiaMessagesTableCompanion
       status: status ?? this.status,
       model: model ?? this.model,
       adapter: adapter ?? this.adapter,
+      account: account ?? this.account,
       error: error ?? this.error,
       needsInput: needsInput ?? this.needsInput,
       contextTokens: contextTokens ?? this.contextTokens,
@@ -59332,6 +59379,9 @@ class GaiaMessagesTableCompanion
     }
     if (adapter.present) {
       map['adapter'] = Variable<String>(adapter.value);
+    }
+    if (account.present) {
+      map['account'] = Variable<String>(account.value);
     }
     if (error.present) {
       map['error'] = Variable<String>(error.value);
@@ -59371,6 +59421,7 @@ class GaiaMessagesTableCompanion
           ..write('status: $status, ')
           ..write('model: $model, ')
           ..write('adapter: $adapter, ')
+          ..write('account: $account, ')
           ..write('error: $error, ')
           ..write('needsInput: $needsInput, ')
           ..write('contextTokens: $contextTokens, ')
@@ -59481,6 +59532,30 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _accountsJsonMeta = const VerificationMeta(
+    'accountsJson',
+  );
+  @override
+  late final GeneratedColumn<String> accountsJson = GeneratedColumn<String>(
+    'accounts_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _currentAccountsJsonMeta =
+      const VerificationMeta('currentAccountsJson');
+  @override
+  late final GeneratedColumn<String> currentAccountsJson =
+      GeneratedColumn<String>(
+        'current_accounts_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
   static const VerificationMeta _utilityModelMeta = const VerificationMeta(
     'utilityModel',
   );
@@ -59640,6 +59715,8 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     lastTier,
     defaultTier,
     claudeConfigDir,
+    accountsJson,
+    currentAccountsJson,
     utilityModel,
     autoRoute,
     routerRubric,
@@ -59718,6 +59795,24 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         claudeConfigDir.isAcceptableOrUnknown(
           data['claude_config_dir']!,
           _claudeConfigDirMeta,
+        ),
+      );
+    }
+    if (data.containsKey('accounts_json')) {
+      context.handle(
+        _accountsJsonMeta,
+        accountsJson.isAcceptableOrUnknown(
+          data['accounts_json']!,
+          _accountsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('current_accounts_json')) {
+      context.handle(
+        _currentAccountsJsonMeta,
+        currentAccountsJson.isAcceptableOrUnknown(
+          data['current_accounts_json']!,
+          _currentAccountsJsonMeta,
         ),
       );
     }
@@ -59859,6 +59954,14 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}claude_config_dir'],
       )!,
+      accountsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}accounts_json'],
+      )!,
+      currentAccountsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}current_accounts_json'],
+      )!,
       utilityModel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}utility_model'],
@@ -59932,6 +60035,12 @@ class GaiaSettingsTableData extends DataClass
   /// Null for the last used tier.
   final String? defaultTier;
   final String claudeConfigDir;
+
+  /// `[GaiaAccount]` as JSON (§6.1).
+  final String accountsJson;
+
+  /// `{adapter: accountId}` as JSON (§6.5).
+  final String currentAccountsJson;
   final String utilityModel;
   final bool autoRoute;
   final String routerRubric;
@@ -59959,6 +60068,8 @@ class GaiaSettingsTableData extends DataClass
     required this.lastTier,
     this.defaultTier,
     required this.claudeConfigDir,
+    required this.accountsJson,
+    required this.currentAccountsJson,
     required this.utilityModel,
     required this.autoRoute,
     required this.routerRubric,
@@ -59989,6 +60100,8 @@ class GaiaSettingsTableData extends DataClass
       map['default_tier'] = Variable<String>(defaultTier);
     }
     map['claude_config_dir'] = Variable<String>(claudeConfigDir);
+    map['accounts_json'] = Variable<String>(accountsJson);
+    map['current_accounts_json'] = Variable<String>(currentAccountsJson);
     map['utility_model'] = Variable<String>(utilityModel);
     map['auto_route'] = Variable<bool>(autoRoute);
     map['router_rubric'] = Variable<String>(routerRubric);
@@ -60024,6 +60137,8 @@ class GaiaSettingsTableData extends DataClass
           ? const Value.absent()
           : Value(defaultTier),
       claudeConfigDir: Value(claudeConfigDir),
+      accountsJson: Value(accountsJson),
+      currentAccountsJson: Value(currentAccountsJson),
       utilityModel: Value(utilityModel),
       autoRoute: Value(autoRoute),
       routerRubric: Value(routerRubric),
@@ -60057,6 +60172,10 @@ class GaiaSettingsTableData extends DataClass
       lastTier: serializer.fromJson<String>(json['lastTier']),
       defaultTier: serializer.fromJson<String?>(json['defaultTier']),
       claudeConfigDir: serializer.fromJson<String>(json['claudeConfigDir']),
+      accountsJson: serializer.fromJson<String>(json['accountsJson']),
+      currentAccountsJson: serializer.fromJson<String>(
+        json['currentAccountsJson'],
+      ),
       utilityModel: serializer.fromJson<String>(json['utilityModel']),
       autoRoute: serializer.fromJson<bool>(json['autoRoute']),
       routerRubric: serializer.fromJson<String>(json['routerRubric']),
@@ -60085,6 +60204,8 @@ class GaiaSettingsTableData extends DataClass
       'lastTier': serializer.toJson<String>(lastTier),
       'defaultTier': serializer.toJson<String?>(defaultTier),
       'claudeConfigDir': serializer.toJson<String>(claudeConfigDir),
+      'accountsJson': serializer.toJson<String>(accountsJson),
+      'currentAccountsJson': serializer.toJson<String>(currentAccountsJson),
       'utilityModel': serializer.toJson<String>(utilityModel),
       'autoRoute': serializer.toJson<bool>(autoRoute),
       'routerRubric': serializer.toJson<String>(routerRubric),
@@ -60111,6 +60232,8 @@ class GaiaSettingsTableData extends DataClass
     String? lastTier,
     Value<String?> defaultTier = const Value.absent(),
     String? claudeConfigDir,
+    String? accountsJson,
+    String? currentAccountsJson,
     String? utilityModel,
     bool? autoRoute,
     String? routerRubric,
@@ -60132,6 +60255,8 @@ class GaiaSettingsTableData extends DataClass
     lastTier: lastTier ?? this.lastTier,
     defaultTier: defaultTier.present ? defaultTier.value : this.defaultTier,
     claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
+    accountsJson: accountsJson ?? this.accountsJson,
+    currentAccountsJson: currentAccountsJson ?? this.currentAccountsJson,
     utilityModel: utilityModel ?? this.utilityModel,
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
@@ -60165,6 +60290,12 @@ class GaiaSettingsTableData extends DataClass
       claudeConfigDir: data.claudeConfigDir.present
           ? data.claudeConfigDir.value
           : this.claudeConfigDir,
+      accountsJson: data.accountsJson.present
+          ? data.accountsJson.value
+          : this.accountsJson,
+      currentAccountsJson: data.currentAccountsJson.present
+          ? data.currentAccountsJson.value
+          : this.currentAccountsJson,
       utilityModel: data.utilityModel.present
           ? data.utilityModel.value
           : this.utilityModel,
@@ -60205,6 +60336,8 @@ class GaiaSettingsTableData extends DataClass
           ..write('lastTier: $lastTier, ')
           ..write('defaultTier: $defaultTier, ')
           ..write('claudeConfigDir: $claudeConfigDir, ')
+          ..write('accountsJson: $accountsJson, ')
+          ..write('currentAccountsJson: $currentAccountsJson, ')
           ..write('utilityModel: $utilityModel, ')
           ..write('autoRoute: $autoRoute, ')
           ..write('routerRubric: $routerRubric, ')
@@ -60222,7 +60355,7 @@ class GaiaSettingsTableData extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     gaiaMd,
     notifyOnDone,
@@ -60231,6 +60364,8 @@ class GaiaSettingsTableData extends DataClass
     lastTier,
     defaultTier,
     claudeConfigDir,
+    accountsJson,
+    currentAccountsJson,
     utilityModel,
     autoRoute,
     routerRubric,
@@ -60243,7 +60378,7 @@ class GaiaSettingsTableData extends DataClass
     updatedAt,
     version,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -60256,6 +60391,8 @@ class GaiaSettingsTableData extends DataClass
           other.lastTier == this.lastTier &&
           other.defaultTier == this.defaultTier &&
           other.claudeConfigDir == this.claudeConfigDir &&
+          other.accountsJson == this.accountsJson &&
+          other.currentAccountsJson == this.currentAccountsJson &&
           other.utilityModel == this.utilityModel &&
           other.autoRoute == this.autoRoute &&
           other.routerRubric == this.routerRubric &&
@@ -60280,6 +60417,8 @@ class GaiaSettingsTableCompanion
   final Value<String> lastTier;
   final Value<String?> defaultTier;
   final Value<String> claudeConfigDir;
+  final Value<String> accountsJson;
+  final Value<String> currentAccountsJson;
   final Value<String> utilityModel;
   final Value<bool> autoRoute;
   final Value<String> routerRubric;
@@ -60302,6 +60441,8 @@ class GaiaSettingsTableCompanion
     this.lastTier = const Value.absent(),
     this.defaultTier = const Value.absent(),
     this.claudeConfigDir = const Value.absent(),
+    this.accountsJson = const Value.absent(),
+    this.currentAccountsJson = const Value.absent(),
     this.utilityModel = const Value.absent(),
     this.autoRoute = const Value.absent(),
     this.routerRubric = const Value.absent(),
@@ -60325,6 +60466,8 @@ class GaiaSettingsTableCompanion
     this.lastTier = const Value.absent(),
     this.defaultTier = const Value.absent(),
     this.claudeConfigDir = const Value.absent(),
+    this.accountsJson = const Value.absent(),
+    this.currentAccountsJson = const Value.absent(),
     this.utilityModel = const Value.absent(),
     this.autoRoute = const Value.absent(),
     this.routerRubric = const Value.absent(),
@@ -60350,6 +60493,8 @@ class GaiaSettingsTableCompanion
     Expression<String>? lastTier,
     Expression<String>? defaultTier,
     Expression<String>? claudeConfigDir,
+    Expression<String>? accountsJson,
+    Expression<String>? currentAccountsJson,
     Expression<String>? utilityModel,
     Expression<bool>? autoRoute,
     Expression<String>? routerRubric,
@@ -60373,6 +60518,9 @@ class GaiaSettingsTableCompanion
       if (lastTier != null) 'last_tier': lastTier,
       if (defaultTier != null) 'default_tier': defaultTier,
       if (claudeConfigDir != null) 'claude_config_dir': claudeConfigDir,
+      if (accountsJson != null) 'accounts_json': accountsJson,
+      if (currentAccountsJson != null)
+        'current_accounts_json': currentAccountsJson,
       if (utilityModel != null) 'utility_model': utilityModel,
       if (autoRoute != null) 'auto_route': autoRoute,
       if (routerRubric != null) 'router_rubric': routerRubric,
@@ -60399,6 +60547,8 @@ class GaiaSettingsTableCompanion
     Value<String>? lastTier,
     Value<String?>? defaultTier,
     Value<String>? claudeConfigDir,
+    Value<String>? accountsJson,
+    Value<String>? currentAccountsJson,
     Value<String>? utilityModel,
     Value<bool>? autoRoute,
     Value<String>? routerRubric,
@@ -60422,6 +60572,8 @@ class GaiaSettingsTableCompanion
       lastTier: lastTier ?? this.lastTier,
       defaultTier: defaultTier ?? this.defaultTier,
       claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
+      accountsJson: accountsJson ?? this.accountsJson,
+      currentAccountsJson: currentAccountsJson ?? this.currentAccountsJson,
       utilityModel: utilityModel ?? this.utilityModel,
       autoRoute: autoRoute ?? this.autoRoute,
       routerRubric: routerRubric ?? this.routerRubric,
@@ -60465,6 +60617,14 @@ class GaiaSettingsTableCompanion
     }
     if (claudeConfigDir.present) {
       map['claude_config_dir'] = Variable<String>(claudeConfigDir.value);
+    }
+    if (accountsJson.present) {
+      map['accounts_json'] = Variable<String>(accountsJson.value);
+    }
+    if (currentAccountsJson.present) {
+      map['current_accounts_json'] = Variable<String>(
+        currentAccountsJson.value,
+      );
     }
     if (utilityModel.present) {
       map['utility_model'] = Variable<String>(utilityModel.value);
@@ -60521,6 +60681,8 @@ class GaiaSettingsTableCompanion
           ..write('lastTier: $lastTier, ')
           ..write('defaultTier: $defaultTier, ')
           ..write('claudeConfigDir: $claudeConfigDir, ')
+          ..write('accountsJson: $accountsJson, ')
+          ..write('currentAccountsJson: $currentAccountsJson, ')
           ..write('utilityModel: $utilityModel, ')
           ..write('autoRoute: $autoRoute, ')
           ..write('routerRubric: $routerRubric, ')
@@ -90445,6 +90607,7 @@ typedef $$GaiaMessagesTableTableCreateCompanionBuilder =
       required String status,
       Value<String?> model,
       Value<String?> adapter,
+      Value<String?> account,
       Value<String?> error,
       Value<bool> needsInput,
       Value<int?> contextTokens,
@@ -90464,6 +90627,7 @@ typedef $$GaiaMessagesTableTableUpdateCompanionBuilder =
       Value<String> status,
       Value<String?> model,
       Value<String?> adapter,
+      Value<String?> account,
       Value<String?> error,
       Value<bool> needsInput,
       Value<int?> contextTokens,
@@ -90520,6 +90684,11 @@ class $$GaiaMessagesTableTableFilterComposer
 
   ColumnFilters<String> get adapter => $composableBuilder(
     column: $table.adapter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get account => $composableBuilder(
+    column: $table.account,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -90608,6 +90777,11 @@ class $$GaiaMessagesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get account => $composableBuilder(
+    column: $table.account,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get error => $composableBuilder(
     column: $table.error,
     builder: (column) => ColumnOrderings(column),
@@ -90676,6 +90850,9 @@ class $$GaiaMessagesTableTableAnnotationComposer
 
   GeneratedColumn<String> get adapter =>
       $composableBuilder(column: $table.adapter, builder: (column) => column);
+
+  GeneratedColumn<String> get account =>
+      $composableBuilder(column: $table.account, builder: (column) => column);
 
   GeneratedColumn<String> get error =>
       $composableBuilder(column: $table.error, builder: (column) => column);
@@ -90751,6 +90928,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String?> model = const Value.absent(),
                 Value<String?> adapter = const Value.absent(),
+                Value<String?> account = const Value.absent(),
                 Value<String?> error = const Value.absent(),
                 Value<bool> needsInput = const Value.absent(),
                 Value<int?> contextTokens = const Value.absent(),
@@ -90768,6 +90946,7 @@ class $$GaiaMessagesTableTableTableManager
                 status: status,
                 model: model,
                 adapter: adapter,
+                account: account,
                 error: error,
                 needsInput: needsInput,
                 contextTokens: contextTokens,
@@ -90787,6 +90966,7 @@ class $$GaiaMessagesTableTableTableManager
                 required String status,
                 Value<String?> model = const Value.absent(),
                 Value<String?> adapter = const Value.absent(),
+                Value<String?> account = const Value.absent(),
                 Value<String?> error = const Value.absent(),
                 Value<bool> needsInput = const Value.absent(),
                 Value<int?> contextTokens = const Value.absent(),
@@ -90804,6 +90984,7 @@ class $$GaiaMessagesTableTableTableManager
                 status: status,
                 model: model,
                 adapter: adapter,
+                account: account,
                 error: error,
                 needsInput: needsInput,
                 contextTokens: contextTokens,
@@ -90852,6 +91033,8 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<String> lastTier,
       Value<String?> defaultTier,
       Value<String> claudeConfigDir,
+      Value<String> accountsJson,
+      Value<String> currentAccountsJson,
       Value<String> utilityModel,
       Value<bool> autoRoute,
       Value<String> routerRubric,
@@ -90876,6 +91059,8 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String> lastTier,
       Value<String?> defaultTier,
       Value<String> claudeConfigDir,
+      Value<String> accountsJson,
+      Value<String> currentAccountsJson,
       Value<String> utilityModel,
       Value<bool> autoRoute,
       Value<String> routerRubric,
@@ -90937,6 +91122,16 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<String> get claudeConfigDir => $composableBuilder(
     column: $table.claudeConfigDir,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountsJson => $composableBuilder(
+    column: $table.accountsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get currentAccountsJson => $composableBuilder(
+    column: $table.currentAccountsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -91050,6 +91245,16 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get accountsJson => $composableBuilder(
+    column: $table.accountsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get currentAccountsJson => $composableBuilder(
+    column: $table.currentAccountsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get utilityModel => $composableBuilder(
     column: $table.utilityModel,
     builder: (column) => ColumnOrderings(column),
@@ -91152,6 +91357,16 @@ class $$GaiaSettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get accountsJson => $composableBuilder(
+    column: $table.accountsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get currentAccountsJson => $composableBuilder(
+    column: $table.currentAccountsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get utilityModel => $composableBuilder(
     column: $table.utilityModel,
     builder: (column) => column,
@@ -91251,6 +91466,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> lastTier = const Value.absent(),
                 Value<String?> defaultTier = const Value.absent(),
                 Value<String> claudeConfigDir = const Value.absent(),
+                Value<String> accountsJson = const Value.absent(),
+                Value<String> currentAccountsJson = const Value.absent(),
                 Value<String> utilityModel = const Value.absent(),
                 Value<bool> autoRoute = const Value.absent(),
                 Value<String> routerRubric = const Value.absent(),
@@ -91273,6 +91490,8 @@ class $$GaiaSettingsTableTableTableManager
                 lastTier: lastTier,
                 defaultTier: defaultTier,
                 claudeConfigDir: claudeConfigDir,
+                accountsJson: accountsJson,
+                currentAccountsJson: currentAccountsJson,
                 utilityModel: utilityModel,
                 autoRoute: autoRoute,
                 routerRubric: routerRubric,
@@ -91297,6 +91516,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String> lastTier = const Value.absent(),
                 Value<String?> defaultTier = const Value.absent(),
                 Value<String> claudeConfigDir = const Value.absent(),
+                Value<String> accountsJson = const Value.absent(),
+                Value<String> currentAccountsJson = const Value.absent(),
                 Value<String> utilityModel = const Value.absent(),
                 Value<bool> autoRoute = const Value.absent(),
                 Value<String> routerRubric = const Value.absent(),
@@ -91319,6 +91540,8 @@ class $$GaiaSettingsTableTableTableManager
                 lastTier: lastTier,
                 defaultTier: defaultTier,
                 claudeConfigDir: claudeConfigDir,
+                accountsJson: accountsJson,
+                currentAccountsJson: currentAccountsJson,
                 utilityModel: utilityModel,
                 autoRoute: autoRoute,
                 routerRubric: routerRubric,

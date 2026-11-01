@@ -1,0 +1,13 @@
+click 400 780
+wait 300
+type Juno
+click 1500 780
+wait 300
+type C:\Users\Juno\.claude-1
+wait 400
+field
+shot p8q-b-add-typed
+tap Add
+wait 3000
+shot p8q-b-added
+find

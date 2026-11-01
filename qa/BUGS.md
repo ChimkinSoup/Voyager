@@ -3625,4 +3625,22 @@ Entry format:
 - Actual: "already seen" was kept only in memory, and the signature stays valid under its own id.
 - Notes (fixed): `GaiaCommandLog` appends each id to `gaia_commands_run.log` before it runs, flushed; if that write fails the command doesn't run. Entries past the age limit go at the next load. Live: a real command run, desktop restarted, put back to pending 68 s after it was sent: rejected "already ran this command".
 
-<!-- Last ID: BUG-333. -->
+### BUG-334 [GAIA-P8] Codex 0.166.0 is shown as untested, though Phase 8 was built and checked on it
+- Severity: Minor
+- Found: 2026-11-01, Phase 8A-8C in-app pass
+- Actual: Setup says "Untested version: Gaia is tested with 0.164.0 up to 0.165.0" and the chat header shows "Untested Codex 0.166.0", while GAIA_HLD.md §6.2 and §19 say the usage call and session copy were confirmed on 0.166.0. `kCodexTestedVersions` in `codex_events.dart` still ends at 0.165.0; its comment asks for the fixtures to be re-recorded when it moves.
+- Notes: open.
+
+### BUG-335 [GAIA-P8] A chat whose first reply hits a limit keeps its raw prompt as its title, even after the resend succeeds
+- Severity: Minor
+- Found: 2026-11-01, Phase 8A-8C in-app pass
+- Actual: titling runs only when the reply at seq 1 completes (`gaia_controller.dart`, after `_reportDone`). A limit stops that reply, and the resend's successful reply is at seq 3, so the title stays the prompt text for good.
+- Notes: open. Any failed first reply does this; the §6.5 resend makes it a normal path. Seen with the stand-in CLI's limit error, then a real reply on another account.
+
+### BUG-336 [GAIA-P8] A signed-out account says so twice on the Setup tab
+- Severity: Cosmetic
+- Found: 2026-11-01, Phase 8A-8C in-app pass
+- Actual: its row shows "Not logged in" with the login command, then "<account> is signed out. Log in with…" with the same folder, from the login check and the usage row.
+- Notes: open.
+
+<!-- Last ID: BUG-336. -->

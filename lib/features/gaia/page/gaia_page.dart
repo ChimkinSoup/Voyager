@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/app/providers.dart';
@@ -24,6 +25,8 @@ import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage_bar.dart';
 import 'package:voyager/features/gaia/page/gaia_remote_chat.dart';
 import 'package:voyager/features/gaia/page/gaia_queue_tab.dart';
 import 'package:voyager/features/gaia/page/gaia_status_tab.dart';
@@ -780,7 +783,6 @@ class _ClaudeSetup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final setup = ref.watch(gaiaClaudeSetupProvider);
-    final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
     final (low, high) = kClaudeCodeTestedVersions;
     String v((int, int, int) version) =>
         '${version.$1}.${version.$2}.${version.$3}';
@@ -794,7 +796,9 @@ class _ClaudeSetup extends ConsumerWidget {
             GlassButton(
               onPressed: setup.isLoading
                   ? null
-                  : () => ref.invalidate(gaiaClaudeSetupProvider),
+                  : () => ref
+                      ..invalidate(gaiaClaudeSetupProvider)
+                      ..invalidate(gaiaClaudeAccountProvider),
               icon: const Icon(PhosphorIconsRegular.arrowClockwise, size: 13),
               label: 'Check again',
               dense: true,
@@ -824,16 +828,6 @@ class _ClaudeSetup extends ConsumerWidget {
                       : 'Untested version: Gaia is tested with '
                             '${v(low)} up to ${v(high)}. Chats still run.',
                 ),
-                _CheckRow(
-                  ok: value.loggedIn == true,
-                  label: switch (value.loggedIn) {
-                    true =>
-                      'Logged in${value.email == null ? '' : ' as ${value.email}'}',
-                    false => 'Not logged in',
-                    null => "Couldn't read the login status",
-                  },
-                  fix: value.loggedIn == true ? null : 'claude auth login',
-                ),
               ],
             ],
           ),
@@ -846,93 +840,8 @@ class _ClaudeSetup extends ConsumerWidget {
             child: LinearProgressIndicator(),
           ),
         },
-        if (settings != null) ...[
-          const SizedBox(height: 8),
-          _ClaudeConfigDir(settings: settings),
-        ],
-      ],
-    );
-  }
-}
-
-/// Which Claude account Gaia runs on (§6.1): a `CLAUDE_CONFIG_DIR`, until
-/// accounts can be switched in Gaia itself.
-class _ClaudeConfigDir extends ConsumerStatefulWidget {
-  const _ClaudeConfigDir({required this.settings});
-
-  final GaiaSettings settings;
-
-  @override
-  ConsumerState<_ClaudeConfigDir> createState() => _ClaudeConfigDirState();
-}
-
-class _ClaudeConfigDirState extends ConsumerState<_ClaudeConfigDir> {
-  final _dir = TextEditingController();
-  String? _saved;
-
-  @override
-  void dispose() {
-    _dir.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final settings = widget.settings;
-    // As GAIA.md's field: loaded once, and again on a change from another
-    // device while nothing here is unsaved.
-    if (_saved == null ||
-        (_dir.text == _saved && _saved != settings.claudeConfigDir)) {
-      _saved = settings.claudeConfigDir;
-      _dir.text = settings.claudeConfigDir;
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: VoyagerTextField(
-                controller: _dir,
-                decoration: const InputDecoration(
-                  labelText: 'Config folder',
-                  hintText: r'e.g. C:\Users\you\.claude-1',
-                  isDense: true,
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GlassButton(
-              onPressed: _dir.text.trim() == _saved
-                  ? null
-                  : () async {
-                      final dir = _dir.text.trim();
-                      await ref
-                          .read(gaiaRepositoryProvider)
-                          .upsertSettings(
-                            settings.copyWith(claudeConfigDir: dir),
-                          );
-                      setState(() {
-                        _saved = dir;
-                        _dir.text = dir;
-                      });
-                    },
-              label: 'Save',
-              dense: true,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "The CLAUDE_CONFIG_DIR of the login Gaia uses, for Gaia's runs "
-          'only. Empty for the one Voyager was started with. Chats started '
-          "on another folder can't be continued. Synced to all your devices.",
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
+        if (setup.valueOrNull?.installed ?? false)
+          const _Accounts(adapter: kGaiaClaudeCodeAdapter),
       ],
     );
   }
@@ -958,7 +867,9 @@ class _CodexSetup extends ConsumerWidget {
             GlassButton(
               onPressed: setup.isLoading
                   ? null
-                  : () => ref.invalidate(gaiaCodexSetupProvider),
+                  : () => ref
+                      ..invalidate(gaiaCodexSetupProvider)
+                      ..invalidate(gaiaCodexAccountProvider),
               icon: const Icon(PhosphorIconsRegular.arrowClockwise, size: 13),
               label: 'Check again',
               dense: true,
@@ -986,35 +897,6 @@ class _CodexSetup extends ConsumerWidget {
                       : 'Untested version: Gaia is tested with '
                             '${v(low)} up to ${v(high)}. Chats still run.',
                 ),
-                _CheckRow(
-                  ok: value.loggedIn == true,
-                  label: switch (value.loggedIn) {
-                    true => 'Logged in',
-                    false => 'Not logged in',
-                    null => "Couldn't read the login status",
-                  },
-                  fix: value.loggedIn == true ? null : 'codex login',
-                ),
-                if (value.sandboxReady case final ready?)
-                  _CheckRow(
-                    ok: ready,
-                    label: ready
-                        ? 'Sandbox set up for Gaia'
-                        : "Codex's Windows sandbox needs setting up once for "
-                              'Gaia. Windows will ask you to approve it.',
-                    action: ready
-                        ? null
-                        : GlassButton(
-                            onPressed: () async {
-                              await setUpCodexSandbox(
-                                codexHome: await defaultGaiaCodexHome(),
-                              );
-                              ref.invalidate(gaiaCodexSetupProvider);
-                            },
-                            label: 'Set up',
-                            dense: true,
-                          ),
-                  ),
               ],
             ],
           ),
@@ -1027,7 +909,404 @@ class _CodexSetup extends ConsumerWidget {
             child: LinearProgressIndicator(),
           ),
         },
+        if (setup.valueOrNull?.installed ?? false)
+          const _Accounts(adapter: kGaiaCodexAdapter),
       ],
+    );
+  }
+}
+
+/// An adapter's accounts in order (§6.1), the first being the default, each
+/// with its login and usage. Switching between them is the composer's (§6.5).
+class _Accounts extends ConsumerWidget {
+  const _Accounts({required this.adapter});
+
+  final String adapter;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
+    if (settings == null) return const SizedBox.shrink();
+    final accounts = settings.accountsFor(adapter);
+    Future<void> save(List<GaiaAccount> list) => ref
+        .read(gaiaRepositoryProvider)
+        .upsertSettings(
+          settings.copyWith(
+            accounts: [
+              for (final account in settings.accounts)
+                if (account.adapter != adapter) account,
+              ...list,
+            ],
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, account) in accounts.indexed)
+          _AccountRow(
+            key: ValueKey(account.id),
+            account: account,
+            several: accounts.length > 1,
+            onRename: (label) => save([
+              for (final other in accounts)
+                other == account ? other.copyWith(label: label) : other,
+            ]),
+            onUp: index == 0
+                ? null
+                : () => save(
+                    [...accounts]
+                      ..removeAt(index)
+                      ..insert(index - 1, account),
+                  ),
+            onDown: index == accounts.length - 1
+                ? null
+                : () => save(
+                    [...accounts]
+                      ..removeAt(index)
+                      ..insert(index + 1, account),
+                  ),
+            onRemove: accounts.length == 1
+                ? null
+                : () => save([...accounts]..removeAt(index)),
+          ),
+        const SizedBox(height: 12),
+        _AddAccount(
+          adapter: adapter,
+          onAdd: (label, dir) => save([
+            ...accounts,
+            GaiaAccount(
+              id: const Uuid().v4(),
+              label: label,
+              adapter: adapter,
+              dir: dir,
+            ),
+          ]),
+          taken: {for (final account in accounts) account.dir},
+        ),
+      ],
+    );
+  }
+}
+
+class _AccountRow extends ConsumerStatefulWidget {
+  const _AccountRow({
+    super.key,
+    required this.account,
+    required this.several,
+    required this.onRename,
+    required this.onUp,
+    required this.onDown,
+    required this.onRemove,
+  });
+
+  final GaiaAccount account;
+  final bool several;
+  final void Function(String label) onRename;
+  final VoidCallback? onUp;
+  final VoidCallback? onDown;
+  final VoidCallback? onRemove;
+
+  @override
+  ConsumerState<_AccountRow> createState() => _AccountRowState();
+}
+
+class _AccountRowState extends ConsumerState<_AccountRow> {
+  late final _label = TextEditingController(text: widget.account.label);
+
+  @override
+  void didUpdateWidget(_AccountRow old) {
+    super.didUpdateWidget(old);
+    // Renamed on another device, while nothing here is unsaved.
+    if (_label.text == old.account.label) _label.text = widget.account.label;
+  }
+
+  @override
+  void dispose() {
+    _label.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final account = widget.account;
+    final label = _label.text.trim();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 160,
+                child: VoyagerTextField(
+                  controller: _label,
+                  decoration: const InputDecoration(
+                    labelText: 'Account',
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (label.isNotEmpty && label != account.label) ...[
+                const SizedBox(width: 8),
+                GlassButton(
+                  onPressed: () => widget.onRename(label),
+                  label: 'Save',
+                  dense: true,
+                ),
+              ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  account.dir.isEmpty
+                      ? 'The folder Voyager was started with'
+                      : account.dir,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (widget.several) ...[
+                IconButton(
+                  tooltip: 'Move up',
+                  onPressed: widget.onUp,
+                  icon: const Icon(PhosphorIconsRegular.arrowUp, size: 14),
+                ),
+                IconButton(
+                  tooltip: 'Move down',
+                  onPressed: widget.onDown,
+                  icon: const Icon(PhosphorIconsRegular.arrowDown, size: 14),
+                ),
+                IconButton(
+                  tooltip: 'Remove',
+                  onPressed: widget.onRemove,
+                  icon: const Icon(PhosphorIconsRegular.trash, size: 14),
+                ),
+              ],
+            ],
+          ),
+          if (account.adapter == kGaiaCodexAdapter)
+            _CodexAccountChecks(account: account)
+          else
+            _ClaudeAccountChecks(account: account),
+          _UsageRow(account: account),
+        ],
+      ),
+    );
+  }
+}
+
+/// A login's check, once there's an answer: a CLI that hasn't said shouldn't
+/// hold the page up.
+class _ClaudeAccountChecks extends ConsumerWidget {
+  const _ClaudeAccountChecks({required this.account});
+
+  final GaiaAccount account;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = ref.watch(gaiaClaudeAccountProvider(account.dir)).valueOrNull;
+    if (value == null) return const SizedBox.shrink();
+    return _CheckRow(
+      ok: value.loggedIn == true,
+      label: switch (value.loggedIn) {
+        true => 'Logged in${value.email == null ? '' : ' as ${value.email}'}',
+        false => 'Not logged in',
+        null => "Couldn't read the login status",
+      },
+      fix: value.loggedIn == true
+          ? null
+          : account.dir.isEmpty
+          ? 'claude auth login'
+          : '\$env:CLAUDE_CONFIG_DIR="${account.dir}"; claude auth login',
+    );
+  }
+}
+
+class _CodexAccountChecks extends ConsumerWidget {
+  const _CodexAccountChecks({required this.account});
+
+  final GaiaAccount account;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = ref.watch(gaiaCodexAccountProvider(account)).valueOrNull;
+    if (value == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CheckRow(
+          ok: value.loggedIn == true,
+          label: switch (value.loggedIn) {
+            true => 'Logged in',
+            false => 'Not logged in',
+            null => "Couldn't read the login status",
+          },
+          fix: value.loggedIn == true
+              ? null
+              : account.dir.isEmpty
+              ? 'codex login'
+              : '\$env:CODEX_HOME="${account.dir}"; codex login',
+        ),
+        if (value.sandboxReady case final ready?)
+          _CheckRow(
+            ok: ready,
+            label: ready
+                ? 'Sandbox set up for Gaia'
+                : "Codex's Windows sandbox needs setting up once for this "
+                      'account. Windows will ask you to approve it.',
+            action: ready
+                ? null
+                : GlassButton(
+                    onPressed: () async {
+                      await setUpCodexSandbox(
+                        codexHome: p.join(
+                          await gaiaCodexHomesRoot(),
+                          account.id,
+                        ),
+                        loginHome: codexLoginHome(account),
+                      );
+                      ref.invalidate(gaiaCodexAccountProvider(account));
+                    },
+                    label: 'Set up',
+                    dense: true,
+                  ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A new account's name and folder (§6.1). A folder is fixed once it's added:
+/// its sessions, and a Codex account's home, belong to that login.
+class _AddAccount extends StatefulWidget {
+  const _AddAccount({
+    required this.adapter,
+    required this.onAdd,
+    required this.taken,
+  });
+
+  final String adapter;
+  final void Function(String label, String dir) onAdd;
+  final Set<String> taken;
+
+  @override
+  State<_AddAccount> createState() => _AddAccountState();
+}
+
+class _AddAccountState extends State<_AddAccount> {
+  final _label = TextEditingController();
+  final _dir = TextEditingController();
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _dir.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final codex = widget.adapter == kGaiaCodexAdapter;
+    final label = _label.text.trim();
+    final dir = _dir.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            SizedBox(
+              width: 160,
+              child: VoyagerTextField(
+                controller: _label,
+                decoration: const InputDecoration(
+                  labelText: 'New account',
+                  hintText: 'e.g. Work',
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: VoyagerTextField(
+                controller: _dir,
+                decoration: InputDecoration(
+                  labelText: 'Folder',
+                  hintText: codex
+                      ? r'e.g. C:\Users\you\.codex-2'
+                      : r'e.g. C:\Users\you\.claude-2',
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GlassButton(
+              onPressed:
+                  label.isEmpty || dir.isEmpty || widget.taken.contains(dir)
+                  ? null
+                  : () {
+                      widget.onAdd(label, dir);
+                      _label.clear();
+                      _dir.clear();
+                      setState(() {});
+                    },
+              label: 'Add',
+              dense: true,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          codex
+              ? 'A folder is a CODEX_HOME holding a login, which Gaia copies '
+                    'into a Codex home of its own. The first account is the '
+                    'default. Synced to all your devices.'
+              : "A folder is a CLAUDE_CONFIG_DIR, used on Gaia's runs only. "
+                    'The first account is the default. Synced to all your '
+                    'devices.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// An account's usage (§6.4): its bars, or what's wrong with reading them.
+class _UsageRow extends ConsumerWidget {
+  const _UsageRow({required this.account});
+
+  final GaiaAccount account;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final read = ref.watch(gaiaUsageProvider)[account.key];
+    if (read == null) return const SizedBox.shrink();
+    final health = read.health;
+    if (health != null && health != GaiaUsageHealth.ok) {
+      return _CheckRow(
+        ok: false,
+        warnOnly: true,
+        label: gaiaUsageMessage(
+          account.adapter,
+          health,
+          read.checkedAt,
+          account: account,
+        ),
+      );
+    }
+    final usage = read.usage;
+    if (usage == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(spacing: 20, runSpacing: 10, children: gaiaUsageBars(usage)),
     );
   }
 }

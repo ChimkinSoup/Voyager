@@ -8,6 +8,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -100,6 +101,13 @@ class _Main {
           params['sessionId'] as String?,
           params['lastSeq']! as int,
           adapter: params['adapter']! as String,
+          account: params['account']! as String,
+        );
+        return null;
+      case 'setCurrentAccount':
+        await store.setCurrentAccount(
+          params['adapter']! as String,
+          params['account']! as String,
         );
         return null;
       case 'setTier':
@@ -333,11 +341,17 @@ void main() {
     Duration cardHold = const Duration(hours: 1),
     Duration curateAfter = kGaiaCurateAfter,
     Future<void> Function(String host)? reach,
+    Map<String, GaiaUsageSource> usageSources = const {},
+    Duration usageEvery = const Duration(hours: 1),
+    Duration runWorkedFor = const Duration(hours: 1),
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
       cardHold: cardHold,
       curateAfter: curateAfter,
+      usageSources: usageSources,
+      usageEvery: usageEvery,
+      runWorkedFor: runWorkedFor,
       pipe: main.companion,
       window: window,
       runners: {kGaiaClaudeCodeAdapter: runner, ...otherRunners},
@@ -2127,7 +2141,16 @@ void main() {
     test('a stopped turn keeps the usage it reported', () async {
       final at = DateTime(2026, 10, 25, 16);
       runner.turns.add([
-        ClaudeRateLimit(GaiaUsage(fiveHour: (used: 0.95, resetsAt: at))),
+        ClaudeRateLimit(
+          GaiaUsage([
+            GaiaUsageWindow(
+              kind: GaiaUsageKind.session,
+              used: 0.95,
+              resetsAt: at,
+              observedAt: at,
+            ),
+          ]),
+        ),
         const ClaudeTextStart(),
       ]);
       final sending = controller.send('Hi');
@@ -3778,4 +3801,626 @@ void main() {
       },
     );
   });
+
+  group('accounts (GAIA_HLD.md §6.1, §6.5)', () {
+    const a = GaiaAccount(
+      id: kGaiaDefaultAccountId,
+      label: 'A',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: r'C:\a',
+    );
+    const b = GaiaAccount(
+      id: 'b',
+      label: 'B',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: r'C:\b',
+    );
+    final accounts = [a.toJson(), b.toJson()];
+    final at = DateTime.now().add(const Duration(hours: 2));
+    GaiaUsage numbers(double used) => GaiaUsage([
+      GaiaUsageWindow(
+        kind: GaiaUsageKind.session,
+        used: used,
+        resetsAt: at,
+        observedAt: DateTime.now(),
+      ),
+    ]);
+
+    Future<void> start({Map<String, GaiaUsageSource>? usageSources}) {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'accounts': accounts,
+      };
+      return startCompanion(usageSources: usageSources ?? const {});
+    }
+
+    Future<void> turn(String prompt) async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(prompt);
+      await settle();
+    }
+
+    test('a turn runs on the first account until switched', () async {
+      await start();
+      expect(controller.currentAccount(kGaiaClaudeCodeAdapter), a);
+      await turn('Hi');
+      expect(runner.accounts.single, a);
+      expect(controller.messages.last.account, kGaiaDefaultAccountId);
+      // The key from before accounts, so nothing stored had to migrate.
+      expect((await main.chat()).agentSessions.keys, [
+        gaiaSessionKey('laptop'),
+      ]);
+      expect(gaiaSessionKey('laptop'), 'laptop/$kGaiaClaudeCodeAdapter');
+    });
+
+    test('a switch copies the session over and resumes it', () async {
+      await start();
+      await turn('Hi');
+      final first = (await main.chat()).sessionOn('laptop')!;
+
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await settle();
+      expect((await main.repository.getSettings()).currentAccounts, {
+        kGaiaClaudeCodeAdapter: 'b',
+      });
+      await turn('Again');
+
+      expect(runner.copies.single.sessionId, first);
+      expect(runner.copies.single.from, a);
+      expect(runner.copies.single.to, b);
+      expect(runner.accounts.last, b);
+      expect(runner.sent.last.sessionId, first);
+      // A resume: no handoff, and the session keeps the index it started with.
+      expect(runner.sent.last.prompt, 'Again');
+      expect(controller.messages.last.account, 'b');
+      final chat = await main.chat();
+      expect(chat.sessionOn('laptop', account: 'b'), isNotNull);
+      expect(chat.sessionOn('laptop'), first, reason: 'kept to switch back to');
+      expect(
+        chat.agentSessions[gaiaSessionKey('laptop', account: 'b')]!.lastSeq,
+        3,
+      );
+    });
+
+    test('a session that can\'t be copied starts one from a handoff', () async {
+      await start();
+      await turn('Hi');
+      runner.copyFails = true;
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await turn('Again');
+
+      expect(runner.copies, hasLength(1));
+      expect(runner.sent.last.sessionId, isNull);
+      expect(runner.sent.last.prompt, contains('Hi'));
+      expect(runner.sent.last.prompt, endsWith('Again'));
+      expect(controller.messages.last.status, GaiaMessageStatus.complete);
+    });
+
+    test('switching back resumes the original, caught up', () async {
+      await start();
+      await turn('One');
+      final original = (await main.chat()).sessionOn('laptop')!;
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await turn('Two');
+      controller.switchAccount(kGaiaClaudeCodeAdapter, a);
+      await turn('Three');
+
+      expect(runner.copies, hasLength(1), reason: 'A already has a session');
+      expect(runner.sent.last.sessionId, original);
+      expect(runner.sent.last.prompt, contains('Two'));
+      expect(runner.sent.last.prompt, isNot(contains('One')));
+      expect(runner.sent.last.prompt, endsWith('Three'));
+    });
+
+    test(
+      'an unforeseen failure copying fails the turn, not the chat',
+      () async {
+        await start();
+        await turn('Hi');
+        runner.copyError = StateError('corrupt');
+        controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+        await controller.send('Again');
+        await settle();
+        expect(controller.messages.last.status, GaiaMessageStatus.error);
+        expect(controller.currentRunning, isFalse);
+
+        runner.copyError = null;
+        await turn('Once more');
+        expect(controller.messages.last.status, GaiaMessageStatus.complete);
+      },
+    );
+
+    test('a chat with no session on this account copies nothing', () async {
+      await start();
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await turn('Hi');
+      expect(runner.copies, isEmpty);
+      expect(runner.sent.single.sessionId, isNull);
+      expect(runner.accounts.single, b);
+    });
+
+    test('a switch is sticky: new chats start on it', () async {
+      await start();
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      controller.newChat();
+      expect(controller.currentAccount(kGaiaClaudeCodeAdapter), b);
+    });
+
+    test('a removed account falls back to the first', () async {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'accounts': accounts,
+        'currentAccounts': {kGaiaClaudeCodeAdapter: 'gone'},
+      };
+      await startCompanion();
+      expect(controller.currentAccount(kGaiaClaudeCodeAdapter), a);
+    });
+
+    group('a run a usage limit stops (§6.5)', () {
+      const limit = "You've hit your session limit · resets 4pm";
+
+      Future<void> limited(String prompt, {bool partial = true}) async {
+        runner.turns.add([
+          if (partial) ...const [
+            ClaudeTextStart(),
+            ClaudeTextDelta('The plan so'),
+          ],
+          const ClaudeResult(sessionId: 's1', isError: true, text: limit),
+        ]);
+        await controller.send(prompt);
+        await settle();
+      }
+
+      test('keeps the partial answer and marks the account out', () async {
+        await start();
+        await limited('Write the plan');
+
+        final reply = controller.messages.last;
+        expect(reply.status, GaiaMessageStatus.error);
+        expect(reply.error, limit);
+        expect(reply.text, 'The plan so');
+        final card = controller.limitCard!;
+        expect(card.account, a);
+        expect(card.accounts, [b]);
+        expect(card.resend, isTrue);
+      });
+
+      test('with no numbers, stays out until a run on it works', () async {
+        await start();
+        await limited('One');
+        expect(controller.limitCard, isNotNull);
+
+        await turn('Two');
+        expect(controller.limitCard, isNull);
+      });
+
+      test('with no numbers, a later read gives the hit its reset', () async {
+        final source = _FakeUsageSource()
+          ..reply = const GaiaUsageRead(GaiaUsageHealth.stale);
+        await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+        source.reply = GaiaUsageRead(
+          GaiaUsageHealth.ok,
+          usage: GaiaUsage([
+            GaiaUsageWindow(
+              kind: GaiaUsageKind.session,
+              used: 0.2,
+              resetsAt: DateTime.now().add(const Duration(seconds: 1)),
+              observedAt: DateTime.now(),
+            ),
+          ]),
+        );
+        await limited('One');
+        expect(controller.limitCard, isNotNull);
+
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        expect(controller.limitCard, isNull);
+      });
+
+      test('dismissed, the card stays away while the account is out', () async {
+        await start();
+        await limited('One');
+        controller.dismissLimitCard();
+        expect(controller.limitCard, isNull);
+      });
+
+      test('hitting it again brings a dismissed card back', () async {
+        await start();
+        await limited('One');
+        controller.dismissLimitCard();
+        await limited('Two');
+        expect(controller.limitCard, isNotNull);
+      });
+
+      test('resend sends the prompt on the switched account', () async {
+        await start();
+        await limited('Write the plan');
+        controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+        expect(controller.limitCard, isNull);
+
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.resendInterrupted();
+        await settle();
+
+        expect(runner.accounts.last, b);
+        expect(runner.sent.last.prompt, endsWith('Write the plan'));
+        expect(controller.messages.map((message) => message.role).toList(), [
+          GaiaMessageRole.user,
+          GaiaMessageRole.assistant,
+          GaiaMessageRole.user,
+          GaiaMessageRole.assistant,
+        ]);
+        expect(controller.messages.first.text, 'Write the plan');
+        expect(controller.messages[2].text, 'Write the plan');
+        expect(controller.messages.last.status, GaiaMessageStatus.complete);
+      });
+
+      test('resend keeps the draft, and is not expanded again', () async {
+        await start();
+        await limited('/not-a-builtin text');
+        controller.draft.text = 'half typed';
+        controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.resendInterrupted();
+        await settle();
+        expect(controller.draft.text, 'half typed');
+        expect(runner.sent.last.prompt, endsWith('/not-a-builtin text'));
+      });
+
+      test('another error marks nothing', () async {
+        await start();
+        runner.turns.add(const [
+          ClaudeResult(sessionId: 's1', isError: true, text: 'Overloaded'),
+        ]);
+        await controller.send('Hi');
+        await settle();
+        expect(controller.limitCard, isNull);
+      });
+
+      test('a stale reader still leaves the run error in charge', () async {
+        final source = _FakeUsageSource()
+          ..reply = const GaiaUsageRead(GaiaUsageHealth.stale);
+        await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+        await limited('One');
+        expect(controller.limitCard, isNotNull);
+      });
+    });
+
+    test(
+      'numbers past their floor mark the account, untracked ones not',
+      () async {
+        final source = _PerAccountUsageSource({
+          a.id: GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(1)),
+          b.id: const GaiaUsageRead(GaiaUsageHealth.signedOut),
+        });
+        await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+        // A signed out account couldn't take it.
+        final card = controller.limitCard!;
+        expect(card.accounts, isEmpty);
+        expect(card.resets?.account, a);
+        expect(card.resets?.at, at);
+      },
+    );
+
+    test('a used-up window ends the card as it resets', () async {
+      final soon = DateTime.now().add(const Duration(milliseconds: 300));
+      final source = _PerAccountUsageSource({
+        a.id: GaiaUsageRead(
+          GaiaUsageHealth.ok,
+          usage: GaiaUsage([
+            GaiaUsageWindow(
+              kind: GaiaUsageKind.session,
+              used: 1,
+              resetsAt: soon,
+              observedAt: DateTime.now(),
+            ),
+          ]),
+        ),
+        b.id: GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2)),
+      });
+      await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+      expect(controller.limitCard, isNotNull);
+      var heard = false;
+      controller.addListener(() => heard = true);
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(heard, isTrue);
+      expect(controller.limitCard, isNull);
+    });
+
+    test('every account is read, each kept apart', () async {
+      final source = _FakeUsageSource()
+        ..reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+      expect(source.reads.map((read) => read.account), unorderedEquals([a, b]));
+      expect(controller.usage.keys, unorderedEquals([a.key, b.key]));
+      expect(b.key, '$kGaiaClaudeCodeAdapter/b');
+
+      // A run says only of the account it ran on.
+      source.reads.clear();
+      await turn('Hi');
+      expect(source.reads.single.account, a);
+      expect(source.reads.single.runs, GaiaRunAuth.working);
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      source.reads.clear();
+      await turn('Again');
+      expect(source.reads.single.account, b);
+      expect(source.reads.single.runs, GaiaRunAuth.working);
+    });
+
+    test(
+      'a signed-out account names itself, and only it is untracked',
+      () async {
+        final source = _PerAccountUsageSource({
+          a.id: GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2)),
+          b.id: const GaiaUsageRead(GaiaUsageHealth.signedOut),
+        });
+        await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+        expect(controller.usageUntracked(kGaiaClaudeCodeAdapter), isNull);
+        expect(
+          controller.usageUntracked(kGaiaClaudeCodeAdapter, b),
+          allOf(contains('B is signed out'), contains(r'C:\b')),
+        );
+      },
+    );
+
+    test('settings with no accounts stored drop no login', () async {
+      await start();
+      expect(runner.kept, [a, b]);
+      main.companion.onEvent!('settings', {...main.settings, 'accounts': []});
+      await settle();
+      expect(runner.kept, [a, b]);
+    });
+
+    test('a removed account\'s usage is forgotten', () async {
+      final source = _FakeUsageSource()
+        ..reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start(usageSources: {kGaiaClaudeCodeAdapter: source});
+      expect(runner.kept, [a, b]);
+      main.companion.onEvent!('settings', {
+        ...main.settings,
+        'accounts': [a.toJson()],
+      });
+      await settle();
+      expect(controller.usage.keys, [a.key]);
+      expect(runner.kept, [a]);
+    });
+  });
+
+  group('usage reads (GAIA_HLD.md §6.2, §6.4)', () {
+    final at = DateTime.now().add(const Duration(hours: 2));
+    GaiaUsage numbers(double used) => GaiaUsage([
+      GaiaUsageWindow(
+        kind: GaiaUsageKind.session,
+        used: used,
+        resetsAt: at,
+        observedAt: DateTime.now(),
+      ),
+    ]);
+    late _FakeUsageSource source;
+
+    setUp(() => source = _FakeUsageSource());
+
+    Future<void> start({
+      Duration usageEvery = const Duration(hours: 1),
+      Future<(int, int, int)?> Function()? cliVersion,
+    }) => startCompanion(
+      usageSources: {kGaiaClaudeCodeAdapter: source},
+      usageEvery: usageEvery,
+      cliVersion: cliVersion,
+    );
+
+    test('a read that throws counts as offline', () async {
+      source.error = const FileSystemException('in use');
+      await start();
+      expect(source.reads, hasLength(1));
+      expect(
+        controller.usageHealth[kGaiaClaudeCodeAdapter],
+        GaiaUsageHealth.offline,
+      );
+    });
+
+    test('a run that worked stops counting once its time is up', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await startCompanion(
+        usageSources: {kGaiaClaudeCodeAdapter: source},
+        runWorkedFor: Duration.zero,
+      );
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(source.reads.last.runs, GaiaRunAuth.unknown);
+    });
+
+    test('a run that throws over its login marks the runs failing', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(source.reads.last.runs, GaiaRunAuth.working);
+
+      runner.sendError = GaiaRunException(
+        'Codex refused the thread: authentication required',
+      );
+      await controller.send('Again');
+      await settle();
+      expect(source.reads.last.runs, GaiaRunAuth.failing);
+    });
+
+    test('the ring shows from launch, before any run', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      expect(source.reads, hasLength(1));
+      expect(controller.usage[kGaiaClaudeCodeAdapter]!.fiveHour!.used, 0.2);
+      expect(controller.usageUntracked(kGaiaClaudeCodeAdapter), isNull);
+      final sent = main.events.lastWhere((event) => event.$1 == 'usage').$2;
+      final account = GaiaAccountUsage.fromJson(
+        (sent[kGaiaClaudeCodeAdapter]! as Map).cast(),
+      );
+      expect(account.health, GaiaUsageHealth.ok);
+      expect(account.usage!.fiveHour!.used, 0.2);
+      expect(account.usage!.fiveHour!.resetsAt!.difference(at).inSeconds, 0);
+    });
+
+    test('it reads again on its interval', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start(usageEvery: const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(source.reads.length, greaterThan(1));
+    });
+
+    test('a run reads again, telling the source how the login did', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      expect(source.reads.single.runs, GaiaRunAuth.unknown);
+
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(source.reads.last.runs, GaiaRunAuth.working);
+
+      runner.turns.add([
+        const ClaudeResult(
+          sessionId: 's',
+          isError: true,
+          text: 'Not logged in · Please run /login',
+        ),
+      ]);
+      await controller.send('Again');
+      await settle();
+      expect(source.reads.last.runs, GaiaRunAuth.failing);
+    });
+
+    test('another failed turn says nothing of the login', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      runner.turns.add([
+        const ClaudeResult(sessionId: 's', isError: true, text: 'Overloaded'),
+      ]);
+      await controller.send('Hi');
+      await settle();
+      expect(source.reads.last.runs, GaiaRunAuth.unknown);
+    });
+
+    test('a broken source says untracked rather than old numbers', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      source.reply = const GaiaUsageRead(GaiaUsageHealth.endpointChanged);
+      runner.turns.add([
+        const ClaudeResult(sessionId: 's', isError: false, text: 'Done'),
+      ]);
+      await controller.send('Hi');
+      await settle();
+      expect(controller.usage[kGaiaClaudeCodeAdapter], isNull);
+      expect(
+        controller.usageUntracked(kGaiaClaudeCodeAdapter),
+        contains('not your account'),
+      );
+    });
+
+    test('a blip keeps recent numbers; with none, it says offline', () async {
+      source.reply = const GaiaUsageRead(GaiaUsageHealth.offline);
+      await start();
+      expect(
+        controller.usageUntracked(kGaiaClaudeCodeAdapter),
+        startsWith('Offline'),
+      );
+
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      runner.turns.add([
+        const ClaudeResult(sessionId: 's', isError: false, text: 'Done'),
+      ]);
+      await controller.send('Hi');
+      await settle();
+      expect(controller.usageUntracked(kGaiaClaudeCodeAdapter), isNull);
+
+      source.reply = const GaiaUsageRead(GaiaUsageHealth.offline);
+      runner.turns.add([
+        const ClaudeResult(sessionId: 's', isError: false, text: 'Done'),
+      ]);
+      await controller.send('Again');
+      await settle();
+      expect(controller.usage[kGaiaClaudeCodeAdapter], isNotNull);
+      expect(controller.usageUntracked(kGaiaClaudeCodeAdapter), isNull);
+    });
+
+    test('stale names when it was last checked', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      source.reply = const GaiaUsageRead(GaiaUsageHealth.stale);
+      runner.turns.add([
+        const ClaudeResult(sessionId: 's', isError: false, text: 'Done'),
+      ]);
+      await controller.send('Hi');
+      await settle();
+      expect(
+        controller.usageUntracked(kGaiaClaudeCodeAdapter),
+        startsWith('Not checked since'),
+      );
+    });
+
+    test('another account is read at once, forgetting the last', () async {
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      await start();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.7));
+      main.companion.onEvent!('settings', {
+        ...main.settings,
+        'claudeConfigDir': r'C:\other',
+      });
+      await settle();
+      expect(source.reads.last.account.dir, r'C:\other');
+      expect(source.reads.last.runs, GaiaRunAuth.unknown);
+      expect(controller.usage[kGaiaClaudeCodeAdapter]!.fiveHour!.used, 0.7);
+    });
+
+    test('no CLI means no read', () async {
+      await start(cliVersion: () async => null);
+      expect(source.reads, isEmpty);
+    });
+
+    test('no agent on the adapter means no read', () async {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'agents': <Object?>[],
+      };
+      await start();
+      expect(source.reads, isEmpty);
+    });
+
+    test('aborted reads nothing', () async {
+      main.aborted = true;
+      await start();
+      expect(source.reads, isEmpty);
+    });
+  });
+}
+
+class _PerAccountUsageSource implements GaiaUsageSource {
+  _PerAccountUsageSource(this.replies);
+
+  final Map<String, GaiaUsageRead> replies;
+
+  @override
+  Future<GaiaUsageRead> read({
+    required GaiaRunAuth runs,
+    required GaiaAccount account,
+  }) async => replies[account.id]!;
+}
+
+class _FakeUsageSource implements GaiaUsageSource {
+  final reads = <({GaiaRunAuth runs, GaiaAccount account})>[];
+  GaiaUsageRead reply = const GaiaUsageRead(GaiaUsageHealth.offline);
+  Object? error;
+
+  @override
+  Future<GaiaUsageRead> read({
+    required GaiaRunAuth runs,
+    required GaiaAccount account,
+  }) async {
+    reads.add((runs: runs, account: account));
+    if (error case final error?) throw error;
+    return reply;
+  }
 }

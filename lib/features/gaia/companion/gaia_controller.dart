@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart'
     show TextEditingController, TextEditingValue, TextSelection;
@@ -11,7 +12,6 @@ import 'package:uuid/uuid.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +29,8 @@ import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
 const _uuid = Uuid();
@@ -87,6 +89,9 @@ class GaiaController extends ChangeNotifier {
     Future<String> Function()? clipboard,
     String? draftDirectory,
     this._reach,
+    this._usageSources = const {},
+    @visibleForTesting this._usageEvery = const Duration(minutes: 10),
+    @visibleForTesting this._runWorkedFor = const Duration(hours: 1),
     @visibleForTesting this._cardHold = kGaiaCardHold,
     @visibleForTesting this._curateAfter = kGaiaCurateAfter,
   }) : _clipboard = clipboard ?? _readClipboard,
@@ -1276,6 +1281,11 @@ class GaiaController extends ChangeNotifier {
     }
     _deviceId = hello['deviceId']! as String;
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
+    if (_usageSources.isNotEmpty) {
+      _usageTimer ??= Timer.periodic(_usageEvery, (_) {
+        _usageSources.keys.expand(accountsFor).forEach(_readUsage);
+      });
+    }
     await _refresh();
     await _loadDrafts();
     unawaited(_loadQueue());
@@ -1289,6 +1299,7 @@ class GaiaController extends ChangeNotifier {
     };
     cliChecked = true;
     notifyListeners();
+    _readMissingUsage();
   }
 
   Future<void> _applySettings(Map<String, Object?> settings) async {
@@ -1300,13 +1311,34 @@ class GaiaController extends ChangeNotifier {
     defaultTier = gaiaTierFromName(settings['defaultTier']);
     commands = gaiaCommandsFromJson(settings['commands']);
     keybinds = gaiaKeybindsFromJson(settings['keybinds']);
-    final configDir = settings['claudeConfigDir'] as String? ?? '';
-    // Another account's usage is unknown until it runs.
-    if (configDir != _claudeConfigDir) usage.remove(kGaiaClaudeCodeAdapter);
-    _claudeConfigDir = configDir;
+    _claudeConfigDir = settings['claudeConfigDir'] as String? ?? '';
+    accounts = gaiaAccountsFromJson(settings['accounts']);
+    _currentAccounts = gaiaCurrentAccountsFromJson(settings['currentAccounts']);
+    final dirs = {
+      for (final adapter in const [kGaiaClaudeCodeAdapter, kGaiaCodexAdapter])
+        for (final account in accountsFor(adapter)) account.key: account.dir,
+    };
+    // A login no longer here, or on another folder: unknown until it's read.
+    for (final MapEntry(:key, :value) in _usageDirs.entries) {
+      if (dirs[key] == value) continue;
+      usage.remove(key);
+      usageHealth.remove(key);
+      _usageCheckedAt.remove(key);
+      _runAuth.remove(key);
+      _runWorkedAt.remove(key);
+      _limitHits.remove(key);
+    }
+    _usageDirs = dirs;
+    _settingsApplied = true;
     notifyListeners();
-    if (_runners[kGaiaClaudeCodeAdapter] case final ClaudeCodeRunner claude) {
-      claude.setConfigDir(configDir);
+    _readMissingUsage();
+    for (final MapEntry(key: adapter, value: runner) in _runners.entries) {
+      // None stored isn't a removal, as the last account can't be removed:
+      // settings that lost the list mustn't cost every other account's login.
+      if (runner case final GaiaAccountKeeper keeper
+          when accounts.any((account) => account.adapter == adapter)) {
+        unawaited(keeper.keepAccounts(accountsFor(adapter)));
+      }
     }
     final instructions = settings['gaiaMd'] as String? ?? '';
     await Future.wait([
@@ -1315,10 +1347,390 @@ class GaiaController extends ChangeNotifier {
     ]);
   }
 
-  /// Each adapter's account usage as its last run that said left it (§6.2);
-  /// one account per adapter until accounts come in Phase 7.
+  /// Every adapter's stored accounts; read through [accountsFor].
+  var accounts = const <GaiaAccount>[];
+  var _currentAccounts = const <String, String>{};
+
+  /// [adapter]'s accounts in order (§6.1).
+  List<GaiaAccount> accountsFor(String adapter) =>
+      gaiaAccountsFor(adapter, accounts, _claudeConfigDir);
+
+  /// The account [adapter]'s next message runs on (§6.5).
+  GaiaAccount currentAccount(String adapter) =>
+      gaiaCurrentAccount(adapter, accounts, _currentAccounts, _claudeConfigDir);
+
+  /// Moves [adapter] to [account], for every chat: each resumes a copy of its
+  /// session there on its next message (§6.5). A run already going finishes
+  /// where it started.
+  void switchAccount(String adapter, GaiaAccount account) {
+    if (currentAccount(adapter) == account) return;
+    _currentAccounts = {..._currentAccounts, adapter: account.id};
+    notifyListeners();
+    unawaited(
+      _request('setCurrentAccount', {
+        'adapter': adapter,
+        'account': account.id,
+      }),
+    );
+  }
+
+  /// Whether switching accounts needs the user's yes: the current chat has a
+  /// reply, whose prompt cache would be lost (§6.5).
+  bool get accountSwitchNeedsConfirm =>
+      messages.any((message) => message.role == GaiaMessageRole.assistant);
+
+  /// Each account's usage by [GaiaAccount.key], as last read or as its last
+  /// run said (§6.2).
   final usage = <String, GaiaUsage>{};
+
+  /// How each account's last read ended (§6.4); none before the first.
+  final usageHealth = <String, GaiaUsageHealth>{};
+  final _usageCheckedAt = <String, DateTime>{};
+  final _runAuth = <String, GaiaRunAuth>{};
+  final _runWorkedAt = <String, DateTime>{};
+  final Duration _runWorkedFor;
+  final _usageReading = <String>{};
+  final Map<String, GaiaUsageSource> _usageSources;
+  final Duration _usageEvery;
+  Timer? _usageTimer;
+
+  /// Which accounts to read aren't known before the first settings.
+  var _settingsApplied = false;
   var _claudeConfigDir = '';
+
+  /// Each account's folder by [GaiaAccount.key], to tell when it changes.
+  var _usageDirs = const <String, String>{};
+
+  /// How long a failed read may leave the last numbers up before they're
+  /// called offline: a blip, or the endpoint's own 429s, shouldn't take the
+  /// ring away.
+  static const _usageGrace = Duration(minutes: 30);
+
+  /// What to say instead of the numbers of [account], by default [adapter]'s
+  /// current one (§6.4); null while they're current.
+  String? usageUntracked(String adapter, [GaiaAccount? account]) {
+    final shown = account ?? currentAccount(adapter);
+    final health = usageHealth[shown.key];
+    if (health == null || health == GaiaUsageHealth.ok) return null;
+    return gaiaUsageMessage(
+      adapter,
+      health,
+      _usageCheckedAt[shown.key],
+      account: accountsFor(adapter).length > 1 ? shown : null,
+    );
+  }
+
+  /// Reads every account whose adapter has an agent and that has no reading
+  /// yet.
+  void _readMissingUsage() {
+    for (final account in _usageSources.keys.expand(accountsFor)) {
+      if (!usageHealth.containsKey(account.key)) {
+        unawaited(_readUsage(account));
+      }
+    }
+  }
+
+  /// What [key]'s runs say of its login. One that worked says so only for a
+  /// while: the login may have lapsed since (§6.4).
+  GaiaRunAuth _runsSay(String key) {
+    final runs = _runAuth[key] ?? GaiaRunAuth.unknown;
+    final worked = _runWorkedAt[key];
+    return runs == GaiaRunAuth.working &&
+            worked != null &&
+            DateTime.now().difference(worked) >= _runWorkedFor
+        ? GaiaRunAuth.unknown
+        : runs;
+  }
+
+  Future<void> _readUsage(GaiaAccount account) async {
+    final adapter = account.adapter;
+    final key = account.key;
+    final source = _usageSources[adapter];
+    if (source == null ||
+        !_settingsApplied ||
+        aborted ||
+        !cliChecked ||
+        cliVersions[adapter] == null ||
+        agents.every((agent) => agent.adapter != adapter) ||
+        !_usageReading.add(key)) {
+      return;
+    }
+    GaiaUsageRead read;
+    try {
+      read = await source.read(runs: _runsSay(key), account: account);
+    } catch (error) {
+      // Nothing a source didn't foresee says anything of the account.
+      debugPrint('[gaia] $adapter usage read failed: $error');
+      read = const GaiaUsageRead(GaiaUsageHealth.offline);
+    } finally {
+      _usageReading.remove(key);
+    }
+    // On another folder by now, or removed: this says nothing of what's there.
+    if (_usageDirs[key] != account.dir) {
+      for (final now in accountsFor(adapter)) {
+        if (now.key == key) return _readUsage(now);
+      }
+      return;
+    }
+    final now = DateTime.now();
+    final checkedAt = _usageCheckedAt[key];
+    if (read.usage case final fresh?) {
+      usage[key] = fresh;
+      usageHealth[key] = GaiaUsageHealth.ok;
+      _usageCheckedAt[key] = now;
+      if (_limitHits.containsKey(key) && _limitHits[key] == null) {
+        _limitHits[key] = _soonestReset(key);
+      }
+    } else if (read.health == GaiaUsageHealth.offline &&
+        usageHealth[key] == GaiaUsageHealth.ok &&
+        checkedAt != null &&
+        now.difference(checkedAt) < _usageGrace) {
+      return;
+    } else {
+      usage.remove(key);
+      usageHealth[key] = read.health;
+    }
+    _usageChanged();
+  }
+
+  void _usageChanged() {
+    _limitDismissed.removeWhere((key) => !_limitReached(key));
+    _watchResets();
+    notifyListeners();
+    if (!_pipe.connected) return;
+    _pipe.notify('usage', {
+      for (final key in {...usage.keys, ...usageHealth.keys})
+        key: GaiaAccountUsage(
+          health: usageHealth[key],
+          usage: usage[key],
+          checkedAt: _usageCheckedAt[key],
+        ).toJson(),
+    });
+  }
+
+  /// Accounts a run failed on with the provider's limit error (§6.5), until
+  /// the time given, the account's soonest reset. With none known, the first
+  /// read that gives one sets it; until then, or a run on it working, it's out.
+  final _limitHits = <String, DateTime?>{};
+
+  /// Accounts whose decision card was dismissed, until a limit is hit again or
+  /// they recover.
+  final _limitDismissed = <String>{};
+  Timer? _resetTimer;
+
+  bool _hitLimit(String key) {
+    if (!_limitHits.containsKey(key)) return false;
+    final until = _limitHits[key];
+    return until == null || DateTime.now().isBefore(until);
+  }
+
+  /// Whether anything still says account [key] is out, for any model.
+  bool _limitReached(String key) =>
+      _hitLimit(key) ||
+      (usage[key]?.windows.any((window) => window.usedNow >= 1) ?? false);
+
+  DateTime? _soonestReset(String key) {
+    final now = DateTime.now();
+    return usage[key]?.windows
+        .map((window) => window.resetsAt)
+        .nonNulls
+        .where((at) => at.isAfter(now))
+        .minOrNull;
+  }
+
+  void _recordLimitHit(GaiaAccount account) {
+    _limitHits[account.key] = _soonestReset(account.key);
+    _limitDismissed.remove(account.key);
+    _watchResets();
+  }
+
+  /// Wakes at the next reset of a used-up window or limit hit, so a card
+  /// goes when it does rather than at the next poll.
+  void _watchResets() {
+    _resetTimer?.cancel();
+    final now = DateTime.now();
+    final next = [
+      ..._limitHits.values.nonNulls,
+      for (final known in usage.values)
+        for (final window in known.windows)
+          if (window.used >= 1) ?window.resetsAt,
+    ].where((at) => at.isAfter(now)).minOrNull;
+    if (next == null) return;
+    _resetTimer = Timer(next.difference(now), _usageChanged);
+  }
+
+  /// [account]'s numbers while they can be believed (§6.4).
+  GaiaUsage? _trackedUsage(GaiaAccount account) =>
+      usageUntracked(account.adapter, account) == null
+      ? usage[account.key]
+      : null;
+
+  /// Whether [account] can't run [model] (§6.5).
+  bool _exhausted(GaiaAccount account, String model) {
+    if (_hitLimit(account.key)) return true;
+    final known = _trackedUsage(account);
+    return known != null && gaiaFullWindows(known, model).isNotEmpty;
+  }
+
+  bool _low(GaiaAccount account, String model) {
+    final known = _trackedUsage(account);
+    return known != null && gaiaLowWindow(known, model) != null;
+  }
+
+  /// [from]'s adapter's other accounts that could run [model], those known to
+  /// have headroom first, then those with no numbers, then the low. A signed
+  /// out one couldn't run anything.
+  List<GaiaAccount> _withHeadroom(GaiaAccount from, String model) {
+    int rank(GaiaAccount account) => _low(account, model)
+        ? 2
+        : _trackedUsage(account) == null
+        ? 1
+        : 0;
+    return [
+      for (final account in accountsFor(from.adapter))
+        if (account != from &&
+            !_exhausted(account, model) &&
+            usageHealth[account.key] != GaiaUsageHealth.signedOut)
+          account,
+    ]..sort((a, b) => rank(a) - rank(b));
+  }
+
+  /// The warning over the composer, when the next message's account is low
+  /// but not out (§6.5).
+  GaiaLowUsage? get lowUsage {
+    final agent = agentFor(nextTier);
+    if (agent == null) return null;
+    final account = currentAccount(agent.adapter);
+    final known = _trackedUsage(account);
+    if (known == null || _exhausted(account, agent.model)) return null;
+    final window = gaiaLowWindow(known, agent.model);
+    if (window == null) return null;
+    final name = accountsFor(agent.adapter).length > 1
+        ? '${agent.label} (${account.label})'
+        : agent.label;
+    final left = ((1 - window.usedNow) * 100).round();
+    final resets = window.resetsAt;
+    return GaiaLowUsage(
+      adapter: agent.adapter,
+      text:
+          '$name is low: $left% of the ${gaiaLimitName(window)} limit left'
+          '${resets == null ? '' : ', resets ${gaiaResetTime(resets)}'}.',
+      switchTo: _withHeadroom(
+        account,
+        agent.model,
+      ).where((other) => !_low(other, agent.model)).firstOrNull,
+    );
+  }
+
+  /// The decision card in place of the composer, when the next message's
+  /// account is out (§6.5). Never mid-run: that run finishes on its account.
+  GaiaLimitCard? get limitCard {
+    final agent = agentFor(nextTier);
+    if (agent == null || currentRunning) return null;
+    final account = currentAccount(agent.adapter);
+    if (_limitDismissed.contains(account.key) ||
+        !_exhausted(account, agent.model)) {
+      return null;
+    }
+    final accounts = _withHeadroom(account, agent.model);
+    final tiers = accounts.isNotEmpty
+        ? const <GaiaTier>[]
+        : [
+            for (final tier in GaiaTier.values)
+              if (agentFor(tier) case final other?
+                  when other.adapter != agent.adapter &&
+                      _runners.containsKey(other.adapter) &&
+                      cliVersions[other.adapter] != null &&
+                      usageHealth[currentAccount(other.adapter).key] !=
+                          GaiaUsageHealth.signedOut &&
+                      !_exhausted(currentAccount(other.adapter), other.model))
+                tier,
+          ];
+    ({GaiaAccount account, DateTime at})? resets;
+    for (final each in accountsFor(agent.adapter)) {
+      final at = _resetOf(each, agent.model);
+      if (at != null && (resets == null || at.isBefore(resets.at))) {
+        resets = (account: each, at: at);
+      }
+    }
+    return GaiaLimitCard(
+      agent: agent,
+      account: account,
+      named: accountsFor(agent.adapter).length > 1,
+      accounts: accounts,
+      tiers: tiers,
+      resets: resets,
+      resend: _interruptedQuestion != null,
+    );
+  }
+
+  /// When [account] can run [model] again, if it's out and that's known: once
+  /// every used-up window has reset.
+  DateTime? _resetOf(GaiaAccount account, String model) {
+    final full = switch (_trackedUsage(account)) {
+      final known? => gaiaFullWindows(known, model),
+      null => const <GaiaUsageWindow>[],
+    };
+    return full.map((window) => window.resetsAt).nonNulls.maxOrNull ??
+        (_hitLimit(account.key) ? _limitHits[account.key] : null);
+  }
+
+  void dismissLimitCard() {
+    final agent = agentFor(nextTier);
+    if (agent == null) return;
+    _limitDismissed.add(currentAccount(agent.adapter).key);
+    notifyListeners();
+  }
+
+  /// The prompt of the run a limit stopped, when that's the current chat's
+  /// last reply.
+  GaiaMessage? get _interruptedQuestion {
+    final list = messages;
+    if (list.length < 2) return null;
+    final reply = list.last;
+    final question = list[list.length - 2];
+    return reply.role == GaiaMessageRole.assistant &&
+            reply.status == GaiaMessageStatus.error &&
+            gaiaRunLimited(reply.error ?? '') &&
+            question.role == GaiaMessageRole.user
+        ? question
+        : null;
+  }
+
+  /// Sends the prompt the interrupted run was answering again, as it went
+  /// (§6.5), leaving the draft alone.
+  Future<void> resendInterrupted() async {
+    final question = _interruptedQuestion;
+    if (question == null) return;
+    final images = <GaiaDraftImage>[];
+    for (final image in question.parts.whereType<GaiaImagePart>()) {
+      final path = await imageFile(image.mediaId);
+      if (path == null) {
+        for (final copied in images) {
+          unawaited(_deleteQuietly(copied.path));
+        }
+        return _note(
+          "Couldn't send it again",
+          'An image in it is not on this device.',
+          error: true,
+        );
+      }
+      // A send deletes its images' files once it's done.
+      final copy = p.join(_draftDirectory, '${_uuid.v4()}.img');
+      await Directory(_draftDirectory).create(recursive: true);
+      await File(path).copy(copy);
+      images.add(GaiaDraftImage(label: image.label, path: copy));
+    }
+    await send(
+      question.text,
+      images: images,
+      files: question.parts.whereType<GaiaFilePart>().toList(),
+      resent: (
+        quotes: question.parts.whereType<GaiaQuotePart>().toList(),
+        context: question.parts.whereType<GaiaContextPart>().firstOrNull,
+      ),
+    );
+  }
 
   /// The current chat's context at its last reply that said (§7.5).
   int? get contextTokens => messages.reversed
@@ -2093,7 +2505,9 @@ class GaiaController extends ChangeNotifier {
   /// window, leaves the chat in view as it is, and goes on [remote]'s tier
   /// if it names one. [started] completes once its reply is under way, with
   /// null, or with why it didn't start. [fromQueue] is a prompt just taken
-  /// off its queue: if it has to wait, it waits at the front.
+  /// off its queue: if it has to wait, it waits at the front. [resent] is a
+  /// prompt being sent again, already expanded, with its own quotes and window
+  /// in place of the draft's.
   Future<void> send(
     String text, {
     List<GaiaDraftImage> images = const [],
@@ -2102,20 +2516,23 @@ class GaiaController extends ChangeNotifier {
     Completer<String?>? started,
     void Function()? onQueued,
     bool fromQueue = false,
+    ({List<GaiaQuotePart> quotes, GaiaContextPart? context})? resent,
   }) async {
     void notStarted(String why) {
       if (started != null && !started.isCompleted) started.complete(why);
     }
 
-    if (remote == null) {
+    if (remote == null && resent == null) {
       if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
       if (gaiaRememberText(text) case final memory?) return remember(memory);
     }
-    var prompt = (await _expand(text.trim())).trim();
+    var prompt = resent != null
+        ? text.trim()
+        : (await _expand(text.trim())).trim();
     if (prompt.isEmpty &&
         images.isEmpty &&
         files.isEmpty &&
-        (remote != null || draftQuotes.isEmpty)) {
+        (remote != null || (resent?.quotes ?? draftQuotes).isEmpty)) {
       return notStarted('There is nothing to send.');
     }
     final targetId = remote?.chatId ?? currentChatId;
@@ -2178,12 +2595,18 @@ class GaiaController extends ChangeNotifier {
         ? prompt
         : files.isNotEmpty
         ? files.map((file) => p.basename(file.path)).join(', ')
-        : draftQuotes.first.text;
+        : (resent?.quotes ?? draftQuotes).first.text;
     // The summon's window goes with this message only. A remote one has
     // neither, nor quotes: they're the desktop's draft's.
-    final context = remote == null ? windowContext : null;
-    final quotes = remote == null ? [...draftQuotes] : <GaiaQuotePart>[];
-    if (remote == null) {
+    final context = resent != null
+        ? resent.context
+        : remote == null
+        ? windowContext
+        : null;
+    final quotes =
+        resent?.quotes ??
+        (remote == null ? [...draftQuotes] : <GaiaQuotePart>[]);
+    if (remote == null && resent == null) {
       windowContext = null;
       draftQuotes.clear();
     }
@@ -2516,6 +2939,8 @@ class GaiaController extends ChangeNotifier {
     }
     final script = debug.scriptFor(prompt);
     final runner = agent == null ? null : _runners[agent.adapter];
+    // Fixed for the run: a switch while it goes applies to the next message.
+    final account = agent == null ? null : currentAccount(agent.adapter);
     var reply = GaiaMessage(
       id: _uuid.v4(),
       chatId: chatId,
@@ -2527,6 +2952,7 @@ class GaiaController extends ChangeNotifier {
       updatedAt: now,
       model: script == null ? agent?.model : 'gaia-debug-script',
       adapter: script == null ? agent?.adapter : null,
+      account: script == null ? account?.id : null,
     );
     list.add(reply);
     _moveToTop(chatId, now);
@@ -2543,11 +2969,19 @@ class GaiaController extends ChangeNotifier {
     final builder = GaiaTurnBuilder();
     var session = agent == null
         ? null
-        : chat.agentSessions[gaiaSessionKey(_deviceId, adapter: agent.adapter)];
+        : chat.agentSessions[gaiaSessionKey(
+            _deviceId,
+            adapter: agent.adapter,
+            account: account!.id,
+          )];
     // Here at once, so a next message straight away resumes it; the main
     // instance's copy follows. A null [sessionId] drops the chat's.
     void recordSession(String adapter, String? sessionId) {
-      final key = gaiaSessionKey(_deviceId, adapter: adapter);
+      final key = gaiaSessionKey(
+        _deviceId,
+        adapter: adapter,
+        account: account!.id,
+      );
       if (_chat(chatId) case final current?) {
         final updated = current.copyWith(
           agentSessions: sessionId == null
@@ -2566,6 +3000,7 @@ class GaiaController extends ChangeNotifier {
         _request('setSession', {
           'chatId': chatId,
           'adapter': adapter,
+          'account': account.id,
           'sessionId': sessionId,
           'lastSeq': reply.seq,
         }),
@@ -2611,24 +3046,11 @@ class GaiaController extends ChangeNotifier {
       return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: imagePaths)}\n$asked';
     }
 
-    final sent = await handedOver();
-    // Where every file the chat has attached is, not just this message's:
-    // the agent may go back to one. Those from another device aren't here.
-    // Checked off the UI thread: an offline drive can take seconds to say.
-    final directories = {
-      for (final directory in {
-        for (final message in _messages[chatId] ?? list)
-          for (final file in message.parts.whereType<GaiaFilePart>())
-            file.folder ? file.path : p.dirname(file.path),
-      })
-        if (await Directory(directory).exists()) directory,
-    };
     var retried = false;
     String failed(Object error) => retried
         ? "This chat's earlier session wasn't found, and starting a new one "
               'failed too: $error'
         : '$error';
-    final configDir = _claudeConfigDir;
     // Set once the reply is settled: a card voided as its run ends comes
     // too late to change it.
     var ended = false;
@@ -2638,9 +3060,11 @@ class GaiaController extends ChangeNotifier {
       // run on the account before a config dir change isn't this one's.
       if (event case GaiaUsageUpdate(
         usage: final turnUsage,
-      ) when agent != null && configDir == _claudeConfigDir) {
-        usage[agent.adapter] = turnUsage;
-        notifyListeners();
+      ) when account != null && _usageDirs[account.key] == account.dir) {
+        usage[account.key] =
+            usage[account.key]?.updatedBy(turnUsage) ?? turnUsage;
+        _usageCheckedAt[account.key] = DateTime.now();
+        _usageChanged();
       }
       if (!builder.apply(event)) return;
       reply = _replace(
@@ -2727,6 +3151,24 @@ class GaiaController extends ChangeNotifier {
     );
 
     try {
+      // Moved here from another account (§6.5): a copy of its newest session
+      // here, caught up from there, rather than a transcript. Back on an
+      // account it already has one on, it resumes that (§7.4).
+      if (session == null && script == null && runner != null) {
+        session = await _followSession(chatId, runner, account!);
+      }
+      final sent = await handedOver();
+      // Where every file the chat has attached is, not just this message's:
+      // the agent may go back to one. Those from another device aren't here.
+      // Checked off the UI thread: an offline drive can take seconds to say.
+      final directories = {
+        for (final directory in {
+          for (final message in _messages[chatId] ?? list)
+            for (final file in message.parts.whereType<GaiaFilePart>())
+              file.folder ? file.path : p.dirname(file.path),
+        })
+          if (await Directory(directory).exists()) directory,
+      };
       // Stopped while its chat was saved or its context gathered: no runner
       // had started to hear it, so it ends here, cancelled.
       if (_stopping.contains(chatId)) throw StateError('Stopped.');
@@ -2763,6 +3205,7 @@ class GaiaController extends ChangeNotifier {
               tools: tools,
               // A resumed session keeps the index it started with.
               sessionInstructions: session == null ? await _memoryIndex() : '',
+              account: account,
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
@@ -2783,6 +3226,7 @@ class GaiaController extends ChangeNotifier {
           directories: directories,
           tools: tools,
           sessionInstructions: await _memoryIndex(),
+          account: account,
           onEvent: onEvent,
         );
       }
@@ -2800,6 +3244,20 @@ class GaiaController extends ChangeNotifier {
         recordSession(agent.adapter, keep ? result.sessionId : null);
       }
       ended = true;
+      if (account != null && runner != null && script == null) {
+        // Compared with a usage source's 401 (§6.4).
+        if (!result.isError) {
+          _runAuth[account.key] = GaiaRunAuth.working;
+          _runWorkedAt[account.key] = DateTime.now();
+          _limitHits.remove(account.key);
+          _limitDismissed.remove(account.key);
+        } else if (gaiaRunAuthFailed(result.text)) {
+          _runAuth[account.key] = GaiaRunAuth.failing;
+        } else if (gaiaRunLimited(result.text)) {
+          _recordLimitHit(account);
+        }
+        unawaited(_readUsage(account));
+      }
       // A turn can end with a call still held: Codex stops waiting on a
       // tool after about 30 s. Nothing is left to take a proposal's or a
       // permission's answer, so they're voided; a question stays open and,
@@ -2842,6 +3300,15 @@ class GaiaController extends ChangeNotifier {
       final stopped = _stopping.contains(chatId);
       // Its open cards go with it: nothing is left to answer them.
       ended = true;
+      if (account != null && script == null) {
+        if (gaiaRunLimited('$error')) {
+          _recordLimitHit(account);
+        } else if (gaiaRunAuthFailed('$error')) {
+          // Compared with a usage source's 401 (§6.4).
+          _runAuth[account.key] = GaiaRunAuth.failing;
+          unawaited(_readUsage(account));
+        }
+      }
       cards.voidAll(chatId: chatId);
       reply = _replace(
         reply,
@@ -2883,6 +3350,46 @@ class GaiaController extends ChangeNotifier {
     }
     _settleDrain();
     _drainNext(chatId, reply);
+  }
+
+  /// Copies [chatId]'s newest session on another of [to]'s adapter's accounts
+  /// into [to]; the session to resume, or null when there's none to follow,
+  /// and the chat is handed over to a new one (§7.4).
+  Future<GaiaAgentSession?> _followSession(
+    String chatId,
+    GaiaAgentRunner runner,
+    GaiaAccount to,
+  ) async {
+    final chat = _chat(chatId);
+    if (chat == null || runner is! GaiaSessionCopier) return null;
+    GaiaAccount? from;
+    GaiaAgentSession? newest;
+    for (final account in accountsFor(to.adapter)) {
+      final session =
+          chat.agentSessions[gaiaSessionKey(
+            _deviceId,
+            adapter: to.adapter,
+            account: account.id,
+          )];
+      if (session != null &&
+          account.id != to.id &&
+          (newest == null || session.lastSeq > newest.lastSeq)) {
+        from = account;
+        newest = session;
+      }
+    }
+    if (from == null || newest == null) return null;
+    try {
+      final copied = await (runner as GaiaSessionCopier).copySession(
+        sessionId: newest.sessionId,
+        from: from,
+        to: to,
+      );
+      return copied ? newest : null;
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] session not copied to ${to.label}: $error');
+      return null;
+    }
   }
 
   /// Curates [chatId] after [wait], in place of any wait it had.

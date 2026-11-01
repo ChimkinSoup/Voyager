@@ -55,17 +55,18 @@ class GaiaChatStore {
   });
 
   /// Records the native session [chatId] resumes on this device with
-  /// [adapter], and the last message it took part in; a null [sessionId]
-  /// forgets it.
+  /// [adapter] and [account], and the last message it took part in; a null
+  /// [sessionId] forgets it.
   Future<void> setSession(
     String chatId,
     String? sessionId,
     int lastSeq, {
     String adapter = kGaiaClaudeCodeAdapter,
+    String account = kGaiaDefaultAccountId,
   }) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
-    final key = gaiaSessionKey(deviceId, adapter: adapter);
+    final key = gaiaSessionKey(deviceId, adapter: adapter, account: account);
     await _repository.upsertChat(
       chat.copyWith(
         agentSessions: sessionId == null
@@ -167,6 +168,17 @@ class GaiaChatStore {
   Future<void> deleteChat(String chatId) => _repository.softDeleteChat(chatId);
 
   Future<void> restoreChat(String chatId) => _repository.restoreChat(chatId);
+
+  /// The account [adapter]'s next messages run on (§6.5).
+  Future<void> setCurrentAccount(String adapter, String account) async {
+    final settings = await _repository.getSettings();
+    if (settings.currentAccounts[adapter] == account) return;
+    await _repository.upsertSettings(
+      settings.copyWith(
+        currentAccounts: {...settings.currentAccounts, adapter: account},
+      ),
+    );
+  }
 
   /// The tier a new chat starts on (§7.2).
   Future<void> setLastTier(GaiaTier tier) async {

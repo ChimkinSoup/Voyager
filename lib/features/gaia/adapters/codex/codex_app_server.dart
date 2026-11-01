@@ -18,6 +18,7 @@
 //     new ones given on a resume (checked on 0.164.0)
 //   turn/start {threadId, model, input: [text | localImage]} -> {turn: {id}}
 //   turn/interrupt {threadId, turnId}
+//   account/rateLimits/read {} (see usage/sources/codex_rate_limits.dart)
 // What it reads:
 //   item/started, item/completed {threadId, item: {id, type, …}}: types
 //     agentMessage {text}, commandExecution, fileChange {changes: [{path,
@@ -27,6 +28,8 @@
 //   error {threadId, error: {message}, willRetry}
 //   turn/completed {threadId, turn: {status: completed | failed |
 //     interrupted, error: {message}?}}
+//   account/rateLimits/updated {rateLimits}: not strict, since only a usage
+//     ring hangs on it, and the next read reports a changed shape
 // What it answers (server requests, by their JSON-RPC id):
 //   item/tool/call {threadId, tool, arguments} -> {contentItems: [{type:
 //     "inputText", text}], success}
@@ -48,10 +51,13 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
+import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 
 /// Gaia's tools as Codex's client-hosted tools (§5.3).
 final _dynamicTools = [
@@ -283,6 +289,17 @@ class CodexAppServerClient {
   }
 
   void _notification(String method, Map<String, Object?> params, String line) {
+    if (method == 'account/rateLimits/updated') {
+      // Other limit ids are a model's own, not the account's windows.
+      if (params['rateLimits'] case {'limitId': 'codex'} && final limits) {
+        if (codexUsage(limits, DateTime.now()) case final usage?) {
+          for (final turn in _turns.values) {
+            turn.onEvent(GaiaUsageUpdate(usage));
+          }
+        }
+      }
+      return;
+    }
     if (!const {
       'item/started',
       'item/completed',
@@ -462,6 +479,16 @@ class CodexAppServerClient {
     _send({'id': id, 'result': result});
   }
 
+  /// The account's usage windows (§6.2). Throws a [GaiaRunException] when
+  /// the server refuses.
+  Future<Map<String, Object?>> readRateLimits() async {
+    try {
+      return await _request('account/rateLimits/read', {});
+    } on _RpcError catch (error) {
+      throw GaiaRunException(error.message);
+    }
+  }
+
   Future<Map<String, Object?>> _request(
     String method,
     Map<String, Object?> params,
@@ -515,12 +542,16 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required this.codexHome,
     required this.fallback,
     String? userCodexHome,
+    this.sandboxHome,
     this.onLine,
   }) : userCodexHome = userCodexHome ?? defaultUserCodexHome();
 
   final String workingDirectory;
   final String codexHome;
   final String userCodexHome;
+
+  /// Whose config names the Windows sandbox; null for [userCodexHome].
+  final String? sandboxHome;
   final CodexRunner fallback;
 
   /// Every line the server prints, before it's parsed.
@@ -557,6 +588,8 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     Set<String> directories = const {},
     GaiaTurnTools? tools,
     String sessionInstructions = '',
+    // Its home is the account: [CodexAccountRunners] picks the runner.
+    GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     Future<GaiaTurnResult> fallBack() => fallback.send(
@@ -573,6 +606,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     final (:notReady, :sandbox) = await readyCodexHome(
       codexHome,
       userCodexHome,
+      sandboxHome: sandboxHome,
     );
     if (notReady != null) return notReady;
     final threadTools = await (_threadToolsRead ??= _readThreadTools());
@@ -608,14 +642,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
           _threads[chatId] = threadId;
           if (_stopped.remove(chatId)) process.client.stop(threadId);
         },
-        onNewThread: (threadId) {
-          threadTools[threadId] = kCodexToolsHash;
-          final json = jsonEncode(threadTools);
-          // One write at a time: each holds every thread recorded so far.
-          return _threadToolsWrite = _threadToolsWrite
-              .catchError((_) {})
-              .then((_) => _threadTools.writeAsString(json));
-        },
+        onNewThread: (threadId) => _recordThread(threadId, kCodexToolsHash),
       );
     } finally {
       _threads.remove(chatId);
@@ -634,11 +661,81 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     }
   }
 
+  /// `account/rateLimits/read`, on the process turns use so the home's login
+  /// has one owner. One started just for this goes straight after, so idle
+  /// polling leaves no server running. Throws a [GaiaRunException] when
+  /// refused or when the server won't start.
+  Future<Map<String, Object?>> readRateLimits() async {
+    final running = _process;
+    final wasRunning = running != null && !running.exited;
+    // Reading needs no sandbox set up, unlike a turn.
+    final (notReady: _, :sandbox) = await readyCodexHome(
+      codexHome,
+      userCodexHome,
+      sandboxHome: sandboxHome,
+    );
+    final process = await (_starting ??= _start(sandbox));
+    _starting = null;
+    if (process == null) throw GaiaRunException('app-server unavailable');
+    try {
+      // Here, not just the caller's: a hung read must still reach the kill.
+      return await process.client.readRateLimits().timeout(
+        const Duration(seconds: 30),
+      );
+    } finally {
+      if (!wasRunning && _sending.isEmpty && _process == process) {
+        unawaited(process.kill());
+      }
+    }
+  }
+
+  Future<void> _recordThread(String threadId, Object? tools) async {
+    final threadTools = await (_threadToolsRead ??= _readThreadTools());
+    threadTools[threadId] = tools;
+    final json = jsonEncode(threadTools);
+    // One write at a time: each holds every thread recorded so far.
+    return _threadToolsWrite = _threadToolsWrite
+        .catchError((_) {})
+        .then((_) => _threadTools.parent.create(recursive: true))
+        .then((_) => _threadTools.writeAsString(json));
+  }
+
+  /// Takes in [source]'s thread: its rollout, at the same place under
+  /// `sessions`, and the tools it was started with, or a resume here would
+  /// hand it over to a new thread. A server already running here finds it
+  /// (checked on 0.166.0). False when [source] doesn't have it.
+  Future<bool> copyThreadFrom(
+    CodexAppServerRunner source,
+    String threadId,
+  ) async {
+    final sessions = Directory(p.join(source.codexHome, 'sessions'));
+    if (!await sessions.exists()) return false;
+    await for (final entry in sessions.list(recursive: true)) {
+      if (entry is! File || !entry.path.endsWith('-$threadId.jsonl')) continue;
+      final copy = File(
+        p.join(
+          codexHome,
+          'sessions',
+          p.relative(entry.path, from: sessions.path),
+        ),
+      );
+      await copy.parent.create(recursive: true);
+      await entry.copy(copy.path);
+      final tools = await (source._threadToolsRead ??= source
+          ._readThreadTools());
+      if (tools[threadId] case final hash?) {
+        await _recordThread(threadId, hash);
+      }
+      return true;
+    }
+    return false;
+  }
+
   Future<Map<String, Object?>> _readThreadTools() async {
     if (!await _threadTools.exists()) return {};
     try {
-      return (jsonDecode(await _threadTools.readAsString()) as Map)
-          .cast<String, Object?>();
+      final json = jsonDecode(await _threadTools.readAsString());
+      return json is Map ? json.cast<String, Object?>() : {};
     } on FormatException {
       return {};
     }
@@ -670,6 +767,9 @@ class CodexAppServerRunner implements GaiaAgentRunner {
   @override
   bool isRunning(String chatId) =>
       _sending.contains(chatId) || fallback.isRunning(chatId);
+
+  /// Whether any turn is running, here or on [fallback].
+  bool get busy => _sending.isNotEmpty || fallback.busy;
 
   /// GAIA.md becomes the Codex home's AGENTS.md, which a thread reads when
   /// it's loaded: the process goes, now or once its turns end, and the
@@ -705,6 +805,156 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     _threads.clear();
     _stopped.clear();
     await Future.wait([?_process?.kill(), fallback.killAll()]);
+  }
+}
+
+/// Codex on every account (§6.1): each its own [CodexAppServerRunner], so
+/// its own Gaia-owned home under [homesRoot], `app-server` process and
+/// `gaia-threads.json`. The login is copied from the account's folder; the
+/// Windows sandbox is the machine's, from the user's own Codex config.
+class CodexAccountRunners
+    implements GaiaAgentRunner, GaiaSessionCopier, GaiaAccountKeeper {
+  CodexAccountRunners({
+    required this.workingDirectory,
+    required this.homesRoot,
+    this.toolPipe,
+  });
+
+  final String workingDirectory;
+  final String homesRoot;
+  final GaiaToolPipe? toolPipe;
+
+  final _runners = <String, CodexAppServerRunner>{};
+  String? _instructions;
+
+  /// The accounts settings last named; null before they've said.
+  Set<String>? _kept;
+
+  @override
+  Future<void> keepAccounts(Iterable<GaiaAccount> accounts) {
+    _kept = {for (final account in accounts) account.id};
+    return _prune();
+  }
+
+  /// Every home on disk, not just the runners here: an account may have gone
+  /// while the companion wasn't running. Only the login goes: its threads
+  /// stay. Called again as a run or read ends, which may have copied it back,
+  /// and a file that won't delete waits for the next call.
+  Future<void> _prune() async {
+    final kept = _kept;
+    final homes = Directory(homesRoot);
+    if (kept == null || !await homes.exists()) return;
+    try {
+      await for (final home in homes.list()) {
+        final id = p.basename(home.path);
+        if (home is! Directory || kept.contains(id)) continue;
+        final runner = _runners[id];
+        if (runner != null && runner.busy) continue;
+        _runners.remove(id);
+        await runner?.killAll();
+        final login = File(p.join(home.path, 'auth.json'));
+        if (await login.exists()) await login.delete();
+      }
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] removed Codex login not dropped yet: $error');
+    }
+  }
+
+  Future<CodexAppServerRunner> _runner(GaiaAccount? account) async {
+    final id = account?.id ?? kGaiaDefaultAccountId;
+    final runner = _runners[id];
+    if (runner != null) return runner;
+    final login = account == null
+        ? defaultUserCodexHome()
+        : codexLoginHome(account);
+    final home = p.join(homesRoot, id);
+    final created = _runners[id] = CodexAppServerRunner(
+      workingDirectory: workingDirectory,
+      codexHome: home,
+      userCodexHome: login,
+      sandboxHome: defaultUserCodexHome(),
+      fallback: CodexRunner(
+        workingDirectory: workingDirectory,
+        codexHome: home,
+        userCodexHome: login,
+        sandboxHome: defaultUserCodexHome(),
+        toolPipe: toolPipe,
+      ),
+    );
+    if (_instructions case final text?) await created.setInstructions(text);
+    return created;
+  }
+
+  @override
+  Future<GaiaTurnResult> send({
+    required String chatId,
+    required String? sessionId,
+    required String model,
+    required String prompt,
+    List<GaiaImageInput> images = const [],
+    Set<String> directories = const {},
+    GaiaTurnTools? tools,
+    String sessionInstructions = '',
+    GaiaAccount? account,
+    required void Function(GaiaAgentEvent event) onEvent,
+  }) async {
+    try {
+      return await (await _runner(account)).send(
+        chatId: chatId,
+        sessionId: sessionId,
+        model: model,
+        prompt: prompt,
+        images: images,
+        directories: directories,
+        tools: tools,
+        sessionInstructions: sessionInstructions,
+        onEvent: onEvent,
+      );
+    } finally {
+      await _prune();
+    }
+  }
+
+  /// [account]'s usage; see [CodexAppServerRunner.readRateLimits].
+  Future<Map<String, Object?>> readRateLimits(GaiaAccount account) async {
+    try {
+      return await (await _runner(account)).readRateLimits();
+    } finally {
+      await _prune();
+    }
+  }
+
+  @override
+  Future<bool> copySession({
+    required String sessionId,
+    required GaiaAccount from,
+    required GaiaAccount to,
+  }) async =>
+      (await _runner(to)).copyThreadFrom(await _runner(from), sessionId);
+
+  @override
+  bool isRunning(String chatId) =>
+      _runners.values.any((runner) => runner.isRunning(chatId));
+
+  /// A home made later gets it when it's first used.
+  @override
+  Future<void> setInstructions(String text) async {
+    _instructions = text;
+    await Future.wait([
+      for (final runner in _runners.values) runner.setInstructions(text),
+    ]);
+  }
+
+  @override
+  Future<void> stop(String chatId) async {
+    await Future.wait([
+      for (final runner in _runners.values) runner.stop(chatId),
+    ]);
+  }
+
+  @override
+  Future<void> killAll() async {
+    await Future.wait([for (final runner in _runners.values) runner.killAll()]);
   }
 }
 

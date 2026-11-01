@@ -1,0 +1,21 @@
+# rename the implied default
+click 400 490
+wait 300
+key ctrl+a
+type Darren
+wait 400
+shot p8q-b-rename-typed
+tap Save
+wait 1500
+# a folder already taken: Add must stay disabled
+click 400 1074
+wait 300
+type Dup
+click 1500 1074
+wait 300
+type C:\Users\Juno\.claude-1
+wait 400
+shot p8q-b-dup
+tap Add
+wait 1200
+shot p8q-b-dup-after

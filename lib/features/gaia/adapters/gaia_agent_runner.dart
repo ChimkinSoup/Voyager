@@ -1,5 +1,6 @@
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 
 /// What every adapter reports of a turn (GAIA_HLD.md §5.1), whatever its
 /// CLI or API prints: the agent's text and the tools it called.
@@ -65,18 +66,6 @@ class GaiaTurnResult {
   final int? contextTokens;
 }
 
-/// One usage window (§6.2): the share of its limit used, 0 to 1, and when
-/// it resets.
-typedef GaiaUsageWindow = ({double used, DateTime resetsAt});
-
-/// An account's usage, by window.
-class GaiaUsage {
-  const GaiaUsage({this.fiveHour, this.weekly});
-
-  final GaiaUsageWindow? fiveHour;
-  final GaiaUsageWindow? weekly;
-}
-
 /// A turn that ended without a result: the process died, or its output
 /// couldn't be read.
 class GaiaRunException implements Exception {
@@ -103,8 +92,9 @@ abstract interface class GaiaAgentRunner {
   /// prompts (§5.3); null offers none. [sessionInstructions] go after
   /// GAIA.md in a new session's system prompt (the memory index, §11); a
   /// resumed session keeps those it started with, since neither CLI takes
-  /// new ones on a resume. [onEvent] gets each event of the turn; the future completes with
-  /// its result, or throws a [GaiaRunException].
+  /// new ones on a resume. [account] is the login it runs on (§6.1); null for
+  /// the one Voyager was started with. [onEvent] gets each event of the turn;
+  /// the future completes with its result, or throws a [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
@@ -114,6 +104,7 @@ abstract interface class GaiaAgentRunner {
     Set<String> directories = const {},
     GaiaTurnTools? tools,
     String sessionInstructions = '',
+    GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   });
 
@@ -127,6 +118,25 @@ abstract interface class GaiaAgentRunner {
 
   /// Kills every run this runner started.
   Future<void> killAll();
+}
+
+/// A runner holding its own copy of each account's login (§6.1).
+abstract interface class GaiaAccountKeeper {
+  /// Stops what's running for, and drops the login of, any account but
+  /// [accounts]. A run going finishes first.
+  Future<void> keepAccounts(Iterable<GaiaAccount> accounts);
+}
+
+/// A runner whose native sessions can follow a chat to another account
+/// (§6.5).
+abstract interface class GaiaSessionCopier {
+  /// Copies [sessionId] from [from]'s store into [to]'s, so a turn on [to]
+  /// can resume it. False when [from] doesn't have it.
+  Future<bool> copySession({
+    required String sessionId,
+    required GaiaAccount from,
+    required GaiaAccount to,
+  });
 }
 
 typedef GaiaCliVersion = (int, int, int);

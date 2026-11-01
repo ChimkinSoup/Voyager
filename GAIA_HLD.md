@@ -16,6 +16,10 @@ checked live 2026-10-30, all but the `exec` fallback (§19). Phase 6 (text,
 §9.5) is done and checked live 2026-10-31. Phase 7 (remote use) is built
 and checked live 2026-10-31 on a desktop and an Android emulator; the push
 notifications' Cloud Function is deployed, and pushes checked live (§19).
+Phase 8A (usage) and 8B (accounts) are done; 8B's Claude path is checked live
+2026-11-01 across two real logins, its Codex turn on a second account isn't
+(§19). Phase 8C (low and exhausted) is done and checked live 2026-11-01 with
+forced numbers; no real limit has been hit (§19).
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -302,7 +306,10 @@ should replace those with its own synced `GAIA.md`, edited on the Gaia page:
   (`%APPDATA%\Voyager\gaia\codex\<account>`, §6.1) with its own `AGENTS.md`
   and `config.toml`. `auth.json` is **copied**, not symlinked (symlinks need
   Developer Mode or admin rights on Windows), when the account is linked. It
-  is copied again when Gaia sees an auth failure.
+  is copied again when Gaia sees an auth failure. When an account is removed,
+  its server stops and this copy is deleted, on every device as settings reach
+  it; the home's sessions stay. Settings with no Codex accounts stored delete
+  nothing, as the last account can't be removed.
 - **Gemini CLI:** `GEMINI_SYSTEM_MD` / a Gaia-owned settings dir.
 
 **Workspace chats.** A chat can be bound to a project folder, chosen when the
@@ -402,12 +409,17 @@ existing `CLAUDE_CONFIG_DIR`, with setting sources limited as in §5.2. Codex
 gets a Gaia-owned `CODEX_HOME` per account (§5.2), and Gemini works the same
 way.
 
-Until Phase 8, one synced setting stands in: the **Claude config folder** on
-the Setup tab, the `CLAUDE_CONFIG_DIR` every Gaia Claude run gets (chats,
-the setup check, the utility model). Empty, Gaia uses whatever Voyager was
-started with. The user's terminal setup is untouched, since it is set only
-on Gaia's own spawns. A chat started under one folder can't be resumed
-under another until Phase 8's session copy.
+The list lives in `gaia_settings`, synced, and is edited on the Setup tab: an
+account's name, order and removal. Its folder is fixed once added, since its
+sessions and a Codex account's home belong to that login: changing one means
+adding the new folder and removing the old. Folders are set only on Gaia's own
+spawns, so the user's terminal setup is untouched. The utility model follows
+the current Claude account.
+
+An adapter with none stored has one implied account, id `default`. Claude's
+takes its folder from the older `claudeConfigDir` setting, which Phase 8B
+replaces on the Setup tab and keeps only for this. Empty, Gaia uses whatever
+Voyager was started with.
 
 ### 6.2 Usage sources
 
@@ -423,13 +435,16 @@ UsageWindow { kind: session | weekly | weeklyModel | daily,
 | Provider | Source | Windows |
 |---|---|---|
 | Claude | `GET api.anthropic.com/api/oauth/usage` with the account's OAuth token from `<config dir>/.credentials.json` (undocumented) | 5-hour, weekly, weekly per model |
-| Codex | `rate_limits` in the `token_count` events of every `codex exec --json` run (passive, free). Idle accounts: the usage endpoint the CLI calls internally (undocumented) | primary (≈5-hour), secondary (weekly) |
+| Codex | `account/rateLimits/read` on `codex app-server` (confirmed in Phase 8A on 0.166.0: costs no tokens and works idle), plus `account/rateLimits/updated` during a turn. Both undocumented as a usage API. Gaia handles no token: the server calls on its home's login | by duration: 300 min (5-hour), 10080 min (weekly) |
 | Gemini CLI (Google login) | the quota data behind `/stats` (an internal Code Assist endpoint, undocumented; confirm the call at phase start) | daily requests |
 | Gemini API key | No usage endpoint exists. Gaia counts its own requests against the published free-tier limits, and a `429 RESOURCE_EXHAUSTED` marks the key exhausted. Shown as "estimate" in the UI. | daily / per-minute requests |
 
-None of these costs tokens. Polling: Claude every 10 minutes per account and
-after each run. Codex per run, and idle accounts every 10 minutes. Gemini
-after each run.
+None of these costs tokens. Polling: Claude and Codex every 10 minutes per
+account and after each run, only for an adapter that has an agent and an
+installed CLI, and not while aborted. Gemini after each run. A Codex read uses
+the process turns use, so the home's login has one owner; a process started
+just for a read goes straight after it, so idle polling leaves no server
+running.
 
 **Usage rings under the composer.** The row under the composer shows the
 chat's context, then a small usage ring per account, then the tier picker.
@@ -444,13 +459,14 @@ Clicking a dulled ring is not an account switch: switching stays explicit
 As of Phase 2 there is one account per adapter, so there is one ring, for
 Claude only. It reads the `rate_limit_event` Claude Code prints during a
 run (`unifiedWindows.five_hour` / `seven_day`, observed on 2.1.310), kept in
-memory per adapter and cleared when the config dir changes. Phase 8 adds a
-ring per account, the dulled inactive ones fed by the polled sources above
-(a passive source only covers the account that just ran), and a Codex ring
-from its `token_count` `rate_limits` once a fixture is recorded.
+memory per adapter and cleared when the config dir changes. Phase 8A adds a
+Codex ring (§19). Phase 8B adds a ring per account, the dulled inactive ones fed by the polled
+sources above (a passive source only covers the account that just ran). An
+inactive account with no numbers keeps a dulled empty ring whose tooltip says
+why. The active one with none says "Usage untracked", as before.
 
 Because the Phase 2 ring only fills from a run, it's missing until the first
-message after the companion starts. **Phase 8 must fix this:** the Claude
+message after the companion starts. **Phase 8A must fix this:** the Claude
 `oauth/usage` source above is read when the companion starts and every 10
 minutes, so the ring shows from launch. It follows §6.3 (fixtures, strict
 parsing) and §6.4 (endpoint broken vs. signed out) like any other source.
@@ -494,6 +510,17 @@ Two details:
 While a source isn't `ok`, the chat says that account's usage is
 **untracked** rather than showing old numbers as current. §6.5 then relies on
 run errors alone: a rate-limit error still marks the account exhausted.
+
+Decided in Phase 8A, where the table leaves it open:
+- A 401/403 with no run to compare with (none since the companion started) is
+  `stale`: nothing yet says which side is wrong.
+- A run that worked counts as the comparison for an hour. Past that there's
+  no run to compare with, since the login may have lapsed since.
+- A 429 or 5xx is `offline`, since neither says the endpoint changed.
+- An `offline` read keeps numbers under 30 minutes old on the ring, with no
+  chip. A blip, or the endpoint's own rate limit, shouldn't take the ring away.
+- Gaia never refreshes a Claude token, since the CLI owns it. An expired one
+  makes no call and is `stale` until the account's next run writes a new one.
 
 ### 6.5 Low and exhausted
 
@@ -541,6 +568,17 @@ JSONL under `<config dir>/projects/<cwd-slug>/<session>.jsonl`. Gaia copies
 that file into the other account's config dir and `--resume`s it there. Codex
 sessions (`<CODEX_HOME>/sessions`) are copied the same way. The chat shows a
 "switched to account B" divider.
+
+**The manual switch (Phase 8B, decided 2026-11-01).** The current account is
+**per adapter and sticky**, not per chat: `currentAccounts` in `gaia_settings`,
+synced. New chats start on it, and other chats move on their next message,
+each with its own copy and divider. So one switch gets every chat off a low
+account, and 8C's banner and card need no per-chat state. The cost is that a
+chat the user didn't touch loses its prompt cache on its next message, which
+the confirmation says. It's picked from an account item beside the tier in the
+composer's notch, shown once the adapter has two accounts. It asks first when
+the current chat has a reply, with the §7.5 wording. A run already going
+finishes on the account it started on.
 
 ---
 
@@ -598,6 +636,9 @@ through the confirmation in §7.5. The command works at any point in the chat.
   image tool when the caption isn't enough (Phase 3 as built, §19).
   Each chat tracks native sessions per device, adapter and account
   (`agentSessions` in §8), so switching back resumes the original session.
+  The default account's key stays `<device>/<adapter>`, and another's is
+  `<device>/<adapter>/<account>`, so entries from before accounts need no
+  migration and an older build still reads them.
 - **Catching a session up.** A native session lives on the machine that ran
   it, and only knows the turns it took part in. Every resume compares the
   session's `lastSeq` with the chat's head. Turns in between come from:
@@ -648,7 +689,7 @@ Branches (§18) are sibling messages sharing a `parentId`, and the chat's
 | `gaia_notify` | one per notification | chatId, kind (`done`/`question`/`card`), text, createdAt |
 | `gaia_queue` | queued prompt | chatId (null = global), text, order, consumedAt |
 | `gaia_memories` | one per memory | text, tags, links, sourceChatId, status (`proposed`/`active`/`archived`) |
-| `gaia_settings` | singleton | tiers, agents, GAIA.md, commands, keybinds, auto-compact, thresholds |
+| `gaia_settings` | singleton | tiers, agents, accounts, currentAccounts {adapter → account id}, GAIA.md, commands, keybinds, auto-compact, thresholds |
 
 **Your doc-size concern:** one document per message, linked by `chatId` +
 `seq`, which is what you suggested. A message over about 800 KB (≈200k
@@ -1402,11 +1443,31 @@ Other additions:
 | 5 | Done | Memory + curator + inbox (below; checked live in the app 2026-10-30) |
 | 6 | Done | Text (§9.5): Markdown rendering of messages, streamed, one renderer for desktop and phone, with code highlighting, the per-block copy button and inline code from §9.3; partial selection and copy; clickable URLs and file paths; spellcheck + autocorrect in the composer, skipping code, commands, labels, paths and URLs; Voyager's Vim engine and snippets in the composer (§9.1); the user's dictionary, snippets and toggles synced to the companion |
 | 7 | Done | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
-| 8 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
+| 8A | Done | Usage reading on today's single accounts: `UsageSource` for Claude and Codex with fragile-endpoint fixtures and strict parsing (§6.3), health states (§6.4), a composer usage ring polled from launch rather than the first run (§6.2), and a Codex ring (checked live 2026-11-01, except the Codex passive update during a turn: its shape is tested from the recorded fixture) |
+| 8B | Done | Accounts: the ordered account list and per-spawn config (§6.1), native sessions tracked per account (§7.4), account-switch session copy and `--resume`, a manual switch with its divider (§6.5), a ring per account with inactive ones dulled (§6.2). Claude checked live 2026-11-01 across two logins; a Codex turn on a second account is not (below) |
+| 8C | Done | Low and exhausted (§6.5): floors, the low banner, the exhausted decision card and its three cases, the interrupted run's partial answer kept and marked, the resend checkbox, the card replacing the §7.5 confirmation. Checked live 2026-11-01 with forced numbers across two logins; the limit errors themselves come from the CLIs' binaries, not a real limit (below) |
 | 9 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
+
+**Phase 8 is split in three (decided 2026-11-01)**, built in order, so the
+risky session change is tested apart from the read-only usage work and the
+card logic on top of both.
+- **8A** changes no session behaviour. Its Codex source is confirmed:
+  `account/rateLimits/read` on `app-server` replaces both `rate_limits` from
+  `exec --json` and the idle-account call (§6.2, §20). On the `exec` fallback
+  there is no source, so Codex reads as `offline`.
+- **8B** is the risky part. Session keys are only device and adapter today,
+  and they're stored in synced chats, so existing entries need a compatible
+  migration. The Claude runner holds one config dir and the Codex runner one
+  home, with one `app-server` process and its `gaia-threads.json` in that
+  home. The utility model and session catch-up are affected too. The terms
+  re-check in §20 came first: checked by Juno, green light given (2026-11-01).
+- **8C** needs 8A's numbers and 8B's switch.
+
+Gemini's usage sources (§6.2) are out of scope while Gemini stays skipped
+(below), and come back with its adapter.
 
 **Gemini skipped completely for now (2026-10-25).** Neither the Google
 login nor an API key works with the installed Gemini CLI (0.65.0), so no
@@ -1626,6 +1687,87 @@ Phase 4C as built (2026-10-30, codex-cli 0.164.0):
   error, "Codex exited (code -1)", with its text kept); a GAIA.md change
   stopping the idle process, the next turn following the new text. Not
   forced live: the fallback to `exec` when `app-server` can't start.
+
+Phase 8C as built (2026-11-01):
+- **Where it lives.** The rules and the CLIs' wording are in
+  `usage/gaia_usage_limits.dart`; the state is the controller's (`lowUsage`,
+  `limitCard`); the banner and card are in `gaia_app.dart`, the card standing in
+  for the composer as `_Draining` and `_Aborted` do.
+- **Floors are constants** (decided 2026-11-01), the §6.5 defaults, not the
+  `thresholds` setting §8 lists: nothing asks to change them yet, and a setting
+  needs a schema change and a Setup row. There's no daily floor until Gemini.
+- **A per-model window** limits only its own model: Opus out leaves Sonnet on
+  that account alone, so the same account can be out for one tier and not
+  another.
+- **A limit error** is recognised by the CLI's words (`FRAGILE(usage)`), as
+  observed in the binaries of Claude Code 2.1.316 and Codex 0.166.0. A transient
+  429 doesn't count: it's an ordinary error, and says nothing of the account's
+  limits. The account stays out until its soonest reset, or with no numbers
+  until a run on it works. This is in memory only: after a restart, only the
+  numbers say.
+- **The mark** is the error status the reply already had, shown as "Stopped at
+  the usage limit: …" under what it wrote. So failure toasts, the phone and the
+  drain, which stops at an unclean reply, carry on as for any error, and the
+  resend finds its prompt from the saved reply.
+- **Case 1** lists every other account that isn't out or signed out: those
+  known to have headroom, then those with no numbers, then the low. The banner's
+  button skips the low. **Case 2** goes by each tier's current account, so a
+  provider whose other account has headroom isn't offered while its current one
+  is out.
+- **Resend** adds the prompt as a new message with its images, files, quotes and
+  window, unexpanded, leaving the draft alone. It doesn't replace the stopped
+  reply, which stays in the chat. Unticked, or with no interrupted reply in this
+  chat, nothing is sent.
+- **Dismissed** lasts for the account until it recovers or hits a limit again.
+  The next message goes, and fails if the account is still out.
+- **Focus.** The card takes the focus when it appears, on a summon, and when the
+  window regains it: one raised while the user is in another app otherwise has
+  no keys on their return.
+- **Only the desktop composer** shows these. The phone sees the failed reply and
+  its error, with no banner or card.
+- **Live check** (profile gaiaqa, Haiku, Juno's and Darren's logins, usage and
+  the failed reply forced by eval): the banner with its button, the card, Esc,
+  and Ctrl+Enter resending a prompt that a real session copied to the other
+  login answered, with its divider. **Not run live:** a real limit error, since
+  no account was out; that path has tests quoting the CLIs' words. Case 2 and 3
+  on screen (widget tests only). Ctrl+Enter after regaining the window: posted
+  Ctrl chords don't land on a window without the foreground, so Esc checked the
+  focus live and a widget test the chord.
+
+Phase 8B as built (2026-11-01):
+- **Runners.** A turn is told its account. Claude Code's runner restarts a
+  chat's process when its config dir differs, as for a model change. Codex gets
+  `CodexAccountRunners`: per account, its own `CodexAppServerRunner` with a home
+  at `gaia/codex/<account id>`, process and `gaia-threads.json`. `default` is
+  the home from before, so its threads carry on. The login is copied from the
+  account's folder; the Windows sandbox setting always comes from the user's
+  own Codex config, since a second folder may hold only a login. Each home
+  needs its own sandbox setup, behind one Windows approval.
+- **Session copy.** On a turn with no session on this account, the chat's newest
+  session on another of the adapter's accounts on this device is copied in and
+  resumed, with `lastSeq` carried so the delta preamble covers what it missed.
+  No session, or a failed copy, is the §7.4 full handoff. An account the chat
+  already has a session on resumes that one, caught up, rather than copying
+  again.
+- **Claude Code** finds `<id>.jsonl` under `projects/*` rather than working out
+  the slug, and takes the `<id>/` folder beside it too. Checked on 2.1.316:
+  resuming a copy on another login works, thinking signatures included, in both
+  directions.
+- **Codex** copies the rollout to the same path under `sessions` and adds the
+  thread to the target's `gaia-threads.json`, without which it would read as
+  another set of tools and be handed over. Checked on 0.166.0, on one login in
+  two homes: `thread/resume` finds a copied rollout, even on a server already
+  running. Across two real Codex logins it's unchecked, since only one exists.
+- **Usage** is keyed per account (`<adapter>` for the default, as before), each
+  with its own polling, health and run-auth comparison.
+- **Replies** record their account (`gaia_messages.account`, schema 183), which
+  places the divider on any device.
+- **Live check** (profile gaiaqa, Haiku): Juno's and Darren's logins, a codeword
+  given on the first was answered from a copied session on the second; back on
+  the first, its original session answered with one given in between, from the
+  catch-up. All four accounts read their own usage, and the composer and Setup
+  tab were seen working. **Not run live:** a Codex turn on a second account,
+  which needs a Windows sandbox approval.
 
 Phase 7 as built (2026-10-31):
 - **Where it lives.** `features/gaia/remote/`: `gaia_remote.dart` (the
@@ -2108,9 +2250,10 @@ No open questions remain.
 
 To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's
-auto-compact override, and the usage calls for
-Codex idle accounts and Gemini CLI (§6.2). Codex `app-server` vs `exec`
-was evaluated in Phase 4B and built on in 4C (§19).
+auto-compact override, and the usage call for
+Gemini CLI (§6.2). Codex's usage call was confirmed in Phase 8A. Codex
+`app-server` vs `exec` was evaluated in Phase 4B and built on in 4C (§19).
 
-Before Phase 8: re-check each provider's consumer terms on switching between
+Checked before Phase 8B: each provider's consumer terms on switching between
 one person's accounts when one runs low (§6.5), not just on owning several.
+Juno checked them and gave the green light (2026-11-01).

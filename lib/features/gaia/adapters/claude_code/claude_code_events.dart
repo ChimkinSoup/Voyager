@@ -11,6 +11,7 @@
 import 'dart:convert';
 
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// The Claude Code versions the adapter is tested against: at least the
@@ -203,26 +204,29 @@ ClaudeEvent parseClaudeLine(String line) {
 GaiaUsage? claudeUsage(Object? info) {
   if (info is! Map || info['unifiedWindows'] is! Map) return null;
   final windows = info['unifiedWindows'] as Map;
-  GaiaUsageWindow? window(String key) {
+  final now = DateTime.now();
+  GaiaUsageWindow? window(String key, GaiaUsageKind kind) {
     final window = windows[key];
     if (window is! Map) return null;
     if (window['utilization'] case final num used) {
       if (window['resetsAt'] case final num resetsAt) {
-        return (
+        return GaiaUsageWindow(
+          kind: kind,
           used: used.toDouble(),
           resetsAt: DateTime.fromMillisecondsSinceEpoch(
             resetsAt.toInt() * 1000,
           ),
+          observedAt: now,
         );
       }
     }
     return null;
   }
 
-  final fiveHour = window('five_hour');
-  final weekly = window('seven_day');
+  final fiveHour = window('five_hour', GaiaUsageKind.session);
+  final weekly = window('seven_day', GaiaUsageKind.weekly);
   if (fiveHour == null && weekly == null) return null;
-  return GaiaUsage(fiveHour: fiveHour, weekly: weekly);
+  return GaiaUsage([?fiveHour, ?weekly]);
 }
 
 /// `usage.iterations`' last entry (one per model call in the turn; observed

@@ -22,6 +22,7 @@ import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_power.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
 import 'package:win32/win32.dart';
@@ -52,7 +53,7 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 ///
 /// The pipe protocol, companion to main: `hello` (returns `{aborted, accent,
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
-/// {chatId, adapter, sessionId, lastSeq}`, `setTier {chatId, tier}`,
+/// {chatId, adapter, account, sessionId, lastSeq}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
 /// pinned}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
 /// {chatId, mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
@@ -108,6 +109,9 @@ class GaiaHost {
 
   /// Chats in progress, for the tray and the Gaia page.
   final runs = ValueNotifier<List<GaiaRun>>(const []);
+
+  /// Each adapter's usage (§6.4), as the companion reports it.
+  final usage = ValueNotifier<Map<String, GaiaAccountUsage>>(const {});
 
   final _attached = Completer<GaiaChatStore>();
   void Function(String chatId, String title, String body)? _toast;
@@ -635,6 +639,7 @@ class GaiaHost {
   /// Also a companion that exited before it connected.
   void _onDisconnected() {
     runs.value = const [];
+    usage.value = const {};
     // Its runs died with it: the phone stops showing them and their leases
     // go. Quitting, the beacon has already said it's offline.
     if (!_quitting) _beacon?.setRuns(const []);
@@ -694,6 +699,11 @@ class GaiaHost {
               (chatId: chatId, title: title),
         ];
         _beacon?.setRuns(runs.value);
+      case 'usage':
+        usage.value = {
+          for (final MapEntry(:key, :value) in params.entries)
+            key: GaiaAccountUsage.fromJson((value! as Map).cast()),
+        };
       case 'localRun':
         _beacon?.onLocalRun(params['chatId']! as String);
       case 'runDone':
@@ -744,6 +754,13 @@ class GaiaHost {
           params['sessionId'] as String?,
           params['lastSeq']! as int,
           adapter: params['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
+          account: params['account'] as String? ?? kGaiaDefaultAccountId,
+        );
+        return null;
+      case 'setCurrentAccount':
+        await store.setCurrentAccount(
+          params['adapter']! as String,
+          params['account']! as String,
         );
         return null;
       case 'setTier':

@@ -2196,8 +2196,8 @@ class GaiaChatsTable extends Table {
   DateTimeColumn get lastMessageAt => dateTime()();
   BoolColumn get pinned => boolean().withDefault(const Constant(false))();
 
-  /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device
-  /// and adapter — see `gaiaSessionKey`.
+  /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device,
+  /// adapter and account — see `gaiaSessionKey`.
   TextColumn get agentSessionsJson =>
       text().withDefault(const Constant('{}'))();
 
@@ -2251,6 +2251,9 @@ class GaiaMessagesTable extends Table {
 
   /// The adapter that wrote a reply.
   TextColumn get adapter => text().nullable()();
+
+  /// The account that wrote a reply; null from before accounts.
+  TextColumn get account => text().nullable()();
   TextColumn get error => text().nullable()();
   BoolColumn get needsInput => boolean().withDefault(const Constant(false))();
 
@@ -2282,6 +2285,13 @@ class GaiaSettingsTable extends Table {
   /// Null for the last used tier.
   TextColumn get defaultTier => text().nullable()();
   TextColumn get claudeConfigDir => text().withDefault(const Constant(''))();
+
+  /// `[GaiaAccount]` as JSON (§6.1).
+  TextColumn get accountsJson => text().withDefault(const Constant('[]'))();
+
+  /// `{adapter: accountId}` as JSON (§6.5).
+  TextColumn get currentAccountsJson =>
+      text().withDefault(const Constant('{}'))();
   TextColumn get utilityModel =>
       text().withDefault(const Constant(kGaiaDefaultUtilityModel))();
   BoolColumn get autoRoute => boolean().withDefault(const Constant(true))();
@@ -2441,7 +2451,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 182;
+  int get schemaVersion => 183;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4506,6 +4516,26 @@ class AppDatabase extends _$AppDatabase {
       if (from < 182) {
         // Gaia's prompt queue (GAIA_HLD.md §13).
         await migrator.createTable(gaiaQueueTable);
+      }
+      if (from >= 169 && from < 183) {
+        // Gaia Phase 8B: accounts (GAIA_HLD.md §6.1).
+        for (final column in [
+          gaiaSettingsTable.accountsJson,
+          gaiaSettingsTable.currentAccountsJson,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'gaia_settings_table',
+            gaiaSettingsTable,
+            column,
+          );
+        }
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_messages_table',
+          gaiaMessagesTable,
+          gaiaMessagesTable.account,
+        );
       }
     },
   );

@@ -13,7 +13,6 @@ import 'package:flutter/rendering.dart'
         RenderSliverList,
         ScrollCacheExtent,
         SliverGeometry;
-import 'package:intl/intl.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart'
     show voyagerSpellCheckServiceProvider;
@@ -37,6 +36,9 @@ import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_composer_text.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage_bar.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
@@ -1384,6 +1386,9 @@ class _MessagesState extends State<_Messages> {
               final i = messages.length - 1 - index;
               final message = messages[i];
               final switched = _switchedFrom(messages, i);
+              final moved = switched == null
+                  ? _movedAccount(messages, i, widget.controller)
+                  : null;
               final view = _view(
                 message,
                 gutter: gutter,
@@ -1400,12 +1405,18 @@ class _MessagesState extends State<_Messages> {
                 child: _Placed(
                   id: message.id,
                   placed: _placed,
-                  child: switched == null
+                  child: switched == null && moved == null
                       ? view
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _VendorDivider(to: message.adapter!),
+                            _VendorDivider(
+                              text: moved == null
+                                  ? 'Switched to '
+                                        '${kGaiaClis[message.adapter]?.name ?? message.adapter} '
+                                        '· a transcript carried over'
+                                  : 'Switched to $moved',
+                            ),
                             view,
                           ],
                         ),
@@ -1720,10 +1731,40 @@ String? _switchedFrom(List<GaiaMessage> messages, int index) {
   return null;
 }
 
-class _VendorDivider extends StatelessWidget {
-  const _VendorDivider({required this.to});
+/// The name of [index]'s account when it's a reply on another account than
+/// the reply before it, on the same adapter: the point a chat moved (§6.5).
+String? _movedAccount(
+  List<GaiaMessage> messages,
+  int index,
+  GaiaController controller,
+) {
+  final message = messages[index];
+  final adapter = message.adapter;
+  if (message.role != GaiaMessageRole.assistant || adapter == null) return null;
+  final account = message.account ?? kGaiaDefaultAccountId;
+  for (var i = index - 1; i >= 0; i--) {
+    final earlier = messages[i];
+    if (earlier.role != GaiaMessageRole.assistant || earlier.adapter == null) {
+      continue;
+    }
+    if (earlier.adapter != adapter ||
+        (earlier.account ?? kGaiaDefaultAccountId) == account) {
+      return null;
+    }
+    return controller
+            .accountsFor(adapter)
+            .where((known) => known.id == account)
+            .firstOrNull
+            ?.label ??
+        'another account';
+  }
+  return null;
+}
 
-  final String to;
+class _VendorDivider extends StatelessWidget {
+  const _VendorDivider({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
@@ -1736,11 +1777,7 @@ class _VendorDivider extends StatelessWidget {
           const Expanded(child: Divider()),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              'Switched to ${kGaiaClis[to]?.name ?? to} · a transcript '
-              'carried over',
-              style: muted,
-            ),
+            child: Text(text, style: muted),
           ),
           const Expanded(child: Divider()),
         ],
@@ -1890,6 +1927,9 @@ class _MessageView extends StatelessWidget {
     }
     final status = switch (message.status) {
       GaiaMessageStatus.streaming || GaiaMessageStatus.complete => null,
+      // What it got as far as stays above this (§6.5).
+      GaiaMessageStatus.error when gaiaRunLimited(message.error ?? '') =>
+        'Stopped at the usage limit${_detail(message.error)}',
       GaiaMessageStatus.error => 'Error${_detail(message.error)}',
       GaiaMessageStatus.cancelled => 'Stopped',
       GaiaMessageStatus.interrupted => 'Interrupted',
@@ -2494,7 +2534,25 @@ class _ComposerState extends State<_Composer> {
     if (controller.aborted) {
       return _Aborted(controller: controller);
     }
-    // Here, not once in initState: the two above take the portal out of the
+    if (controller.limitCard case final limit?) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          // In line with the composer it stands in for.
+          final side = max(12.0, (constraints.maxWidth - _column) / 2 - 12);
+          return Padding(
+            padding: EdgeInsets.fromLTRB(side, 8, side, 8),
+            child: _LimitDecision(
+              controller: controller,
+              card: limit,
+              onDone: () => WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _focus.requestFocus();
+              }),
+            ),
+          );
+        },
+      );
+    }
+    // Here, not once in initState: the ones above take the portal out of the
     // tree, and it comes back hidden.
     if (!_portal.isShowing) _portal.show();
     final running = controller.currentRunning;
@@ -2567,6 +2625,8 @@ class _ComposerState extends State<_Composer> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (controller.lowUsage case final low?)
+                      _LowUsageBanner(controller: controller, low: low),
                     // The chat's queue and drain mode (§13); clicking it
                     // loads the next prompt to review.
                     if (controller.queueFor(controller.currentChatId).length
@@ -2770,6 +2830,231 @@ class _ComposerState extends State<_Composer> {
   }
 }
 
+/// The next message's account is low (§6.5). Never in the way: the composer
+/// stays, and the button only offers.
+class _LowUsageBanner extends StatelessWidget {
+  const _LowUsageBanner({required this.controller, required this.low});
+
+  final GaiaController controller;
+  final GaiaLowUsage low;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final other = low.switchTo;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber, size: 16, color: kGaiaStatusRose),
+          const SizedBox(width: 8),
+          Expanded(child: Text(low.text, style: theme.textTheme.bodySmall)),
+          if (other != null) ...[
+            const SizedBox(width: 8),
+            GaiaButton(
+              label: 'Switch to ${other.label}',
+              size: 28,
+              padding: 10,
+              still: true,
+              onPressed: () =>
+                  switchGaiaAccount(context, controller, low.adapter, other),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// In place of the composer while the next message's account is out (§6.5):
+/// what the user has configured instead, for them to pick. It carries what a
+/// switch costs, so no §7.5 dialog follows. The send keybind takes the first
+/// option, Esc dismisses it.
+class _LimitDecision extends StatefulWidget {
+  const _LimitDecision({
+    required this.controller,
+    required this.card,
+    required this.onDone,
+  });
+
+  final GaiaController controller;
+  final GaiaLimitCard card;
+
+  /// It's gone: the composer takes the focus back.
+  final VoidCallback onDone;
+
+  @override
+  State<_LimitDecision> createState() => _LimitDecisionState();
+}
+
+class _LimitDecisionState extends State<_LimitDecision> {
+  final _focus = FocusNode(debugLabel: 'gaia limit card');
+  late final StreamSubscription<void> _summoned;
+  var _resend = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _summoned = widget.controller.summoned.listen((_) => _focus.requestFocus());
+    widget.controller.focused.addListener(_onWindowFocus);
+  }
+
+  /// A limit can be hit with the user in another app. Coming back without a
+  /// summon, nothing else gives the card the focus its keys need.
+  void _onWindowFocus() {
+    if (widget.controller.focused.value) _focus.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    unawaited(_summoned.cancel());
+    widget.controller.focused.removeListener(_onWindowFocus);
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _accept(void Function() choose) {
+    final resend = widget.card.resend && _resend;
+    choose();
+    if (resend) unawaited(widget.controller.resendInterrupted());
+    widget.onDone();
+  }
+
+  void _dismiss() {
+    widget.controller.dismissLimitCard();
+    widget.onDone();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final card = widget.card;
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final name = card.named
+        ? '${card.agent.label} (${card.account.label})'
+        : card.agent.label;
+    final cli = kGaiaClis[card.agent.adapter]?.name ?? card.agent.adapter;
+    final send = _sendCombo(controller);
+    final reply = controller.accountSwitchNeedsConfirm;
+
+    final options = <({String label, VoidCallback pick})>[
+      for (final account in card.accounts)
+        (
+          label: 'Switch to ${account.label}',
+          pick: () => _accept(
+            () => controller.switchAccount(card.agent.adapter, account),
+          ),
+        ),
+      for (final tier in card.tiers)
+        (
+          label: switch (controller.agentFor(tier)) {
+            final agent? => '${tier.label} (${agent.label})',
+            null => tier.label,
+          },
+          pick: () => _accept(() => controller.pickTier(tier)),
+        ),
+    ];
+    final String? resets = switch (card.resets) {
+      null => null,
+      (:final account, :final at) =>
+        '${card.named ? '${account.label} resets' : 'Resets'} at '
+            '${gaiaResetTime(at)}.',
+    };
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _dismiss,
+        if (options.isNotEmpty) send.activator: options.first.pick,
+      },
+      child: Focus(
+        focusNode: _focus,
+        autofocus: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                options.isEmpty ? 'Usage has run out' : '$name is out of usage',
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  if (options.isEmpty)
+                    resets ?? "It isn't known when $name resets."
+                  else ...[
+                    ?resets,
+                    if (reply)
+                      'The prompt cache is lost, so the next message re-reads '
+                          'the whole context and uses extra tokens.',
+                    if (reply && controller.contextTokens != null)
+                      'Current context: '
+                          '${(controller.contextTokens! / 1000).round()}k '
+                          'tokens.',
+                    if (card.accounts.isNotEmpty)
+                      'Your other chats on ${card.account.label} move too, on '
+                          'their next message.',
+                    if (card.tiers.isNotEmpty && reply)
+                      "Only a transcript carries over. $cli's tool history "
+                          "doesn't.",
+                  ],
+                ].join(' '),
+                style: muted,
+              ),
+              if (card.resend && options.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                InkWell(
+                  onTap: () => setState(() => _resend = !_resend),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IgnorePointer(
+                        child: Checkbox(value: _resend, onChanged: (_) {}),
+                      ),
+                      Text(
+                        'Resend my last message',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final (index, option) in options.indexed)
+                    GaiaButton(
+                      label: option.label,
+                      // The first is the one the keybind takes: only it has
+                      // the moving light.
+                      still: index > 0,
+                      onPressed: option.pick,
+                    ),
+                  GaiaButton(
+                    label: 'Dismiss',
+                    still: options.isNotEmpty,
+                    color: theme.colorScheme.error,
+                    onPressed: _dismiss,
+                  ),
+                  if (options.isNotEmpty)
+                    Text('$send takes the first', style: muted),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The window the next message says it was asked from (§15.4), or a
 /// message attached to it (§9.3), which the user can take off it.
 class _ContextChip extends StatelessWidget {
@@ -2827,8 +3112,11 @@ class _ComposerStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = controller.contextTokens;
-    final usage =
-        controller.usage[controller.agentFor(controller.nextTier)?.adapter];
+    final adapter = controller.agentFor(controller.nextTier)?.adapter;
+    final accounts = adapter == null
+        ? const <GaiaAccount>[]
+        : controller.accountsFor(adapter);
+    final current = adapter == null ? null : controller.currentAccount(adapter);
     return Row(
       children: [
         const SizedBox(width: 4),
@@ -2840,8 +3128,35 @@ class _ComposerStatus extends StatelessWidget {
             ),
           ),
         ),
-        if (usage != null) ...[
-          _UsageRing(usage: usage),
+        // One per account, its own in order; dulled unless the next message
+        // runs on it (§6.2).
+        for (final account in accounts) ...[
+          if (controller.usageUntracked(adapter!, account)
+              case final untracked?)
+            if (account == current)
+              Tooltip(
+                message: untracked,
+                child: Text(
+                  'Usage untracked',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              _UsageRing(dull: true, label: account.label, message: untracked)
+          else if (controller.usage[account.key] case final usage?)
+            _UsageRing(
+              usage: usage,
+              dull: account != current,
+              label: accounts.length > 1 ? account.label : null,
+            )
+          else if (account != current)
+            _UsageRing(
+              dull: true,
+              label: account.label,
+              message: 'Not read yet',
+            ),
           const SizedBox(width: 8),
         ],
         // The notch opens up and to the left, so it ends the row.
@@ -2853,98 +3168,56 @@ class _ComposerStatus extends StatelessWidget {
 
 /// An account's five-hour usage as a ring filling clockwise from the top,
 /// with a bar for every window in its tooltip.
+///
+/// [dull] for an account the next message doesn't run on, which clicking
+/// doesn't switch to: that's the tier picker's account item (§6.5). [label]
+/// names the account when there are several; [message] stands in for numbers
+/// it doesn't have.
 class _UsageRing extends StatelessWidget {
-  const _UsageRing({required this.usage});
+  const _UsageRing({this.usage, this.dull = false, this.label, this.message});
 
-  final GaiaUsage usage;
+  final GaiaUsage? usage;
+  final bool dull;
+  final String? label;
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
+    final usage = this.usage;
+    final ring = CustomPaint(
+      size: const Size.square(14),
+      painter: _RingPainter(
+        // A plan with no 5-hour window has only its weekly one to show.
+        used: (usage?.fiveHour ?? usage?.weekly)?.usedNow ?? 0,
+        track: Colors.white.withValues(alpha: 0.15),
+        fill: Theme.of(context).colorScheme.primary,
+      ),
+    );
     return Tooltip(
       richMessage: WidgetSpan(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _UsageBar(name: '5-hour', window: usage.fiveHour),
-            const SizedBox(height: 10),
-            _UsageBar(name: 'Weekly', window: usage.weekly),
+            if (label case final label?) ...[
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 10),
+            ],
+            if (message case final message?)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 260),
+                child: Text(message),
+              ),
+            if (usage != null)
+              for (final (index, bar) in gaiaUsageBars(usage).indexed) ...[
+                if (index > 0) const SizedBox(height: 10),
+                bar,
+              ],
           ],
         ),
       ),
       padding: const EdgeInsets.all(10),
-      child: CustomPaint(
-        size: const Size.square(14),
-        painter: _RingPainter(
-          used: _usedNow(usage.fiveHour),
-          track: Colors.white.withValues(alpha: 0.15),
-          fill: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
-  }
-}
-
-/// [window]'s share used, 0 once it has reset since it was read.
-double _usedNow(GaiaUsageWindow? window) =>
-    window == null || !window.resetsAt.isAfter(DateTime.now())
-    ? 0
-    : window.used.clamp(0.0, 1.0);
-
-/// One usage window in the ring's tooltip: its name and share used over a
-/// bar, and when it resets.
-class _UsageBar extends StatelessWidget {
-  const _UsageBar({required this.name, required this.window});
-
-  final String name;
-  final GaiaUsageWindow? window;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final window = this.window;
-    final used = _usedNow(window);
-    final String detail;
-    if (window == null) {
-      detail = 'Unknown';
-    } else {
-      final resets = window.resetsAt;
-      final at = DateUtils.isSameDay(resets, DateTime.now())
-          ? DateFormat.jm().format(resets)
-          : DateFormat.E().add_jm().format(resets);
-      // Its next reset isn't known until the account runs again.
-      detail = resets.isAfter(DateTime.now()) ? 'Resets $at' : 'Reset at $at';
-    }
-    return SizedBox(
-      width: 180,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text(name, style: theme.textTheme.bodySmall)),
-              if (window != null)
-                Text(
-                  '${(used * 100).round()}%',
-                  style: theme.textTheme.bodySmall,
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          LinearProgressIndicator(
-            value: used,
-            minHeight: 4,
-            borderRadius: BorderRadius.circular(2),
-            backgroundColor: Colors.white.withValues(alpha: 0.15),
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(height: 4),
-          Text(detail, style: muted),
-        ],
-      ),
+      child: dull ? Opacity(opacity: 0.4, child: ring) : ring,
     );
   }
 }
@@ -2986,7 +3259,8 @@ class _RingPainter extends CustomPainter {
 }
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that
-/// opens onto all three.
+/// opens onto all three; before it, once its adapter has several, the account
+/// (§6.5).
 class _TierPicker extends StatelessWidget {
   const _TierPicker({required this.controller});
 
@@ -2994,8 +3268,29 @@ class _TierPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final adapter = controller.agentFor(controller.nextTier)?.adapter;
+    final accounts = adapter == null
+        ? const <GaiaAccount>[]
+        : controller.accountsFor(adapter);
     return GaiaNotch(
       items: [
+        if (accounts.length > 1)
+          GaiaNotchItem<GaiaAccount>(
+            options: [
+              for (final account in accounts)
+                GaiaNotchOption(
+                  value: account,
+                  label: account.label,
+                  detail: switch (controller.usage[account.key]?.fiveHour) {
+                    final window? => '${(window.usedNow * 100).round()}% used',
+                    null => null,
+                  },
+                ),
+            ],
+            value: controller.currentAccount(adapter!),
+            onChanged: (account) =>
+                switchGaiaAccount(context, controller, adapter, account),
+          ),
         GaiaNotchItem<GaiaTier>(
           options: [
             for (final tier in GaiaTier.values)
@@ -3040,28 +3335,73 @@ Future<bool> switchGaiaTier(
       fromAgent != null &&
       toAgent != null &&
       fromAgent.adapter != toAgent.adapter;
+  final confirmed = await _confirmSwitch(
+    context,
+    controller,
+    title:
+        'Switch from ${name(from, fromAgent)} to '
+        '${name(tier, toAgent)}?',
+    note: crossVendor
+        ? 'Only a transcript carries over to ${cli(toAgent)}. '
+              "${cli(fromAgent)}'s tool history doesn't."
+        : null,
+  );
+  if (confirmed != true) return false;
+  controller.pickTier(tier);
+  return true;
+}
+
+/// Switches [adapter]'s next messages to [account], for every chat: silently
+/// with no reply here to lose the cache of, after the user's yes otherwise,
+/// as [switchGaiaTier] (§6.5). Never by itself: not on a low account, and
+/// not from a usage ring.
+Future<void> switchGaiaAccount(
+  BuildContext context,
+  GaiaController controller,
+  String adapter,
+  GaiaAccount account,
+) async {
+  final from = controller.currentAccount(adapter);
+  if (from == account) return;
+  if (controller.accountSwitchNeedsConfirm) {
+    final confirmed = await _confirmSwitch(
+      context,
+      controller,
+      title: 'Switch from ${from.label} to ${account.label}?',
+      note:
+          'Your other chats on ${from.label} move too, on their next '
+          'message.',
+    );
+    if (confirmed != true) return;
+  }
+  controller.switchAccount(adapter, account);
+}
+
+/// What a switch costs (§7.5), with [note] for what's particular to it. The
+/// send keybind confirms; Esc doesn't.
+Future<bool?> _confirmSwitch(
+  BuildContext context,
+  GaiaController controller, {
+  required String title,
+  String? note,
+}) {
   final tokens = controller.contextTokens;
   final send = _sendCombo(controller);
-  final confirmed = await showDialog<bool>(
+  return showDialog<bool>(
     context: context,
     builder: (context) => CallbackShortcuts(
       bindings: {send.activator: () => Navigator.of(context).pop(true)},
       child: Focus(
         autofocus: true,
         child: AlertDialog(
-          title: Text(
-            'Switch from ${name(from, fromAgent)} to '
-            '${name(tier, toAgent)}?',
-          ),
+          title: Text(title),
           content: Text(
             [
               'The prompt cache is lost, so the next message re-reads the '
                   'whole context and uses extra tokens.',
               if (tokens != null)
                 'Current context: ${(tokens / 1000).round()}k tokens.',
-              if (crossVendor)
-                'Only a transcript carries over to ${cli(toAgent)}. '
-                    "${cli(fromAgent)}'s tool history doesn't.",
+              ?note,
               'Press $send to switch.',
             ].join('\n\n'),
           ),
@@ -3080,9 +3420,6 @@ Future<bool> switchGaiaTier(
       ),
     ),
   );
-  if (confirmed != true) return false;
-  controller.pickTier(tier);
-  return true;
 }
 
 /// 1 to 9, which pick a question card's options.

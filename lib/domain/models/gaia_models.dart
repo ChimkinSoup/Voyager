@@ -33,12 +33,125 @@ const kGaiaDefaultRouterRubric =
     'deep: hard reasoning, a large or subtle coding task, careful analysis '
     'of something long, or anything the user says matters a lot.';
 
+/// The account every install starts with (§6.1). Its session keys and usage
+/// keys are the ones from before accounts, so nothing stored needs migrating.
+const kGaiaDefaultAccountId = 'default';
+
 /// The key a chat's native session on [deviceId] is kept under. A session
-/// lives on the machine that ran it, so each device has its own (§7.4).
+/// lives on the machine that ran it and in its account's folder, so each
+/// device and account has its own (§7.4).
 String gaiaSessionKey(
   String deviceId, {
   String adapter = kGaiaClaudeCodeAdapter,
-}) => '$deviceId/$adapter';
+  String account = kGaiaDefaultAccountId,
+}) => account == kGaiaDefaultAccountId
+    ? '$deviceId/$adapter'
+    : '$deviceId/$adapter/$account';
+
+/// A login on an adapter (§6.1).
+class GaiaAccount {
+  const GaiaAccount({
+    required this.id,
+    required this.label,
+    required this.adapter,
+    required this.dir,
+  });
+
+  factory GaiaAccount.fromJson(Map<String, Object?> json) => GaiaAccount(
+    id: json['id']! as String,
+    label: json['label']! as String,
+    adapter: json['adapter']! as String,
+    dir: json['dir'] as String? ?? '',
+  );
+
+  /// Names its Gaia-owned Codex home, and its sessions in a chat's keys.
+  final String id;
+  final String label;
+
+  /// One of the `kGaia…Adapter` ids.
+  final String adapter;
+
+  /// Claude Code's `CLAUDE_CONFIG_DIR`, or the Codex home its login is copied
+  /// from; empty for the one Voyager was started with. Fixed once added: its
+  /// sessions, and a Codex account's home, belong to this login.
+  final String dir;
+
+  /// What its usage is kept under: the adapter alone for the default account.
+  String get key => id == kGaiaDefaultAccountId ? adapter : '$adapter/$id';
+
+  GaiaAccount copyWith({String? label}) => GaiaAccount(
+    id: id,
+    label: label ?? this.label,
+    adapter: adapter,
+    dir: dir,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is GaiaAccount &&
+      other.id == id &&
+      other.label == label &&
+      other.adapter == adapter &&
+      other.dir == dir;
+
+  @override
+  int get hashCode => Object.hash(id, label, adapter, dir);
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'label': label,
+    'adapter': adapter,
+    'dir': dir,
+  };
+}
+
+List<GaiaAccount> gaiaAccountsFromJson(Object? json) => [
+  if (json is List)
+    for (final account in json)
+      GaiaAccount.fromJson((account! as Map).cast<String, Object?>()),
+];
+
+Map<String, String> gaiaCurrentAccountsFromJson(Object? json) => {
+  if (json is Map)
+    for (final MapEntry(:key, :value) in json.entries)
+      if (value is String) key as String: value,
+};
+
+/// [adapter]'s accounts in order (§6.1). One none are stored for has the
+/// default account, on the Claude config folder set before accounts existed.
+List<GaiaAccount> gaiaAccountsFor(
+  String adapter,
+  List<GaiaAccount> accounts,
+  String claudeConfigDir,
+) {
+  final stored = [
+    for (final account in accounts)
+      if (account.adapter == adapter) account,
+  ];
+  return stored.isNotEmpty
+      ? stored
+      : [
+          GaiaAccount(
+            id: kGaiaDefaultAccountId,
+            label: 'Default',
+            adapter: adapter,
+            dir: adapter == kGaiaClaudeCodeAdapter ? claudeConfigDir : '',
+          ),
+        ];
+}
+
+/// The account [adapter]'s next message runs on (§6.5): the one switched to,
+/// or the first while none is, or it was removed.
+GaiaAccount gaiaCurrentAccount(
+  String adapter,
+  List<GaiaAccount> accounts,
+  Map<String, String> current,
+  String claudeConfigDir,
+) {
+  final all = gaiaAccountsFor(adapter, accounts, claudeConfigDir);
+  return all.where((account) => account.id == current[adapter]).firstOrNull ??
+      all.first;
+}
 
 /// How much model a message wants (§7.1), each pointing at an agent.
 enum GaiaTier {
@@ -55,7 +168,6 @@ enum GaiaTier {
 }
 
 /// A configured model on an adapter (§2), e.g. "Sonnet 5.5 via Claude Code".
-/// Accounts come in Phase 7.
 class GaiaAgent {
   const GaiaAgent({
     required this.id,
@@ -184,12 +296,19 @@ class GaiaChat extends SoftDeletable {
   /// The last message the memory curator has read (§11); -1 for none.
   final int curatedSeq;
 
-  /// The session this chat resumes on [deviceId] with [adapter], or null to
-  /// start one.
+  /// The session this chat resumes on [deviceId] with [adapter] and
+  /// [account], or null to start one.
   String? sessionOn(
     String deviceId, {
     String adapter = kGaiaClaudeCodeAdapter,
-  }) => agentSessions[gaiaSessionKey(deviceId, adapter: adapter)]?.sessionId;
+    String account = kGaiaDefaultAccountId,
+  }) =>
+      agentSessions[gaiaSessionKey(
+            deviceId,
+            adapter: adapter,
+            account: account,
+          )]
+          ?.sessionId;
 
   /// [touch] off leaves [updatedAt] where it was; [bumpVersion] off leaves
   /// [version], unless one is given.
@@ -971,6 +1090,7 @@ class GaiaMessage extends SoftDeletable {
     required this.status,
     this.model,
     this.adapter,
+    this.account,
     this.error,
     this.needsInput = false,
     this.contextTokens,
@@ -986,6 +1106,10 @@ class GaiaMessage extends SoftDeletable {
   /// The adapter that wrote a reply, so a switch to another vendor knows
   /// which turns its session never saw (§7.4).
   final String? adapter;
+
+  /// The id of the account that wrote a reply, for the divider where a chat
+  /// moved to another (§6.5); null from before accounts, on the default one.
+  final String? account;
 
   /// What went wrong, for [GaiaMessageStatus.error].
   final String? error;
@@ -1025,6 +1149,7 @@ class GaiaMessage extends SoftDeletable {
     status: status ?? this.status,
     model: model,
     adapter: adapter,
+    account: account,
     error: error ?? this.error,
     needsInput: needsInput ?? this.needsInput,
     contextTokens: contextTokens ?? this.contextTokens,
@@ -1043,6 +1168,7 @@ class GaiaMessage extends SoftDeletable {
     'deletedAt': deletedAt?.toIso8601String(),
     'model': model,
     'adapter': adapter,
+    'account': account,
     'error': error,
     'needsInput': needsInput,
     'contextTokens': contextTokens,
@@ -1063,6 +1189,7 @@ class GaiaMessage extends SoftDeletable {
       deletedAt: _date(json['deletedAt']),
       model: json['model'] as String?,
       adapter: json['adapter'] as String?,
+      account: json['account'] as String?,
       error: json['error'] as String?,
       needsInput: json['needsInput'] == true,
       contextTokens: (json['contextTokens'] as num?)?.toInt(),
@@ -1144,6 +1271,8 @@ class GaiaSettings extends SoftDeletable {
     this.lastTier = GaiaTier.standard,
     this.defaultTier,
     this.claudeConfigDir = '',
+    this.accounts = const [],
+    this.currentAccounts = const {},
     this.utilityModel = kGaiaDefaultUtilityModel,
     this.autoRoute = true,
     this.routerRubric = '',
@@ -1180,9 +1309,22 @@ class GaiaSettings extends SoftDeletable {
   /// unsure (§7.2); null for [lastTier].
   final GaiaTier? defaultTier;
 
-  /// The `CLAUDE_CONFIG_DIR` Gaia's Claude Code runs use, which picks the
-  /// account (§6.1); empty for the one Voyager was started with.
+  /// The default Claude account's `CLAUDE_CONFIG_DIR` until [accounts] holds
+  /// one for Claude Code (§6.1); empty for the one Voyager was started with.
   final String claudeConfigDir;
+
+  /// Every adapter's accounts, each adapter's in order; read through
+  /// [accountsFor].
+  final List<GaiaAccount> accounts;
+
+  /// The account id each adapter was last switched to (§6.5).
+  final Map<String, String> currentAccounts;
+
+  List<GaiaAccount> accountsFor(String adapter) =>
+      gaiaAccountsFor(adapter, accounts, claudeConfigDir);
+
+  GaiaAccount currentAccount(String adapter) =>
+      gaiaCurrentAccount(adapter, accounts, currentAccounts, claudeConfigDir);
 
   /// The utility model (§5.1), on Claude Code.
   final String utilityModel;
@@ -1224,6 +1366,8 @@ class GaiaSettings extends SoftDeletable {
     GaiaTier? defaultTier,
     bool clearDefaultTier = false,
     String? claudeConfigDir,
+    List<GaiaAccount>? accounts,
+    Map<String, String>? currentAccounts,
     String? utilityModel,
     bool? autoRoute,
     String? routerRubric,
@@ -1243,6 +1387,8 @@ class GaiaSettings extends SoftDeletable {
     lastTier: lastTier ?? this.lastTier,
     defaultTier: clearDefaultTier ? null : defaultTier ?? this.defaultTier,
     claudeConfigDir: claudeConfigDir ?? this.claudeConfigDir,
+    accounts: accounts ?? this.accounts,
+    currentAccounts: currentAccounts ?? this.currentAccounts,
     utilityModel: utilityModel ?? this.utilityModel,
     autoRoute: autoRoute ?? this.autoRoute,
     routerRubric: routerRubric ?? this.routerRubric,
@@ -1262,6 +1408,8 @@ class GaiaSettings extends SoftDeletable {
     'lastTier': lastTier.name,
     'defaultTier': defaultTier?.name,
     'claudeConfigDir': claudeConfigDir,
+    'accounts': [for (final account in accounts) account.toJson()],
+    'currentAccounts': currentAccounts,
     'utilityModel': utilityModel,
     'autoRoute': autoRoute,
     'routerRubric': routerRubric,

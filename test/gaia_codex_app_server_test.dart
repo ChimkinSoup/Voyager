@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_app_server.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
@@ -301,11 +302,212 @@ void main() {
     });
   });
 
+  test("a turn hears the account's windows, not a model's own", () async {
+    final replay = _Replay('tools.jsonl');
+    unawaited(replay.client.initialize());
+    final events = <GaiaAgentEvent>[];
+    unawaited(
+      replay.client
+          .send(
+            threadId: null,
+            model: 'gpt-6.1-sol',
+            input: _text('Hi'),
+            tools: _Tools(),
+            onEvent: events.add,
+          )
+          .then<void>((_) {}, onError: (_) {}),
+    );
+    await replay.feedThrough('turn/started');
+    void limits(String id) => replay.client.onLine(
+      jsonEncode({
+        'method': 'account/rateLimits/updated',
+        'params': {
+          'rateLimits': {
+            'limitId': id,
+            'primary': {
+              'usedPercent': 10,
+              'windowDurationMins': 300,
+              'resetsAt': 1793347092,
+            },
+          },
+        },
+      }),
+    );
+    events.clear();
+    limits('codex_other_model');
+    expect(events, isEmpty);
+    limits('codex');
+    final usage = (events.single as GaiaUsageUpdate).usage;
+    expect(usage.fiveHour!.used, 0.1);
+    replay.client.stop(_thread);
+  });
+
+  test('a rate limit read returns the result, or the refusal', () async {
+    final replay = _Replay('tools.jsonl');
+    final read = replay.client.readRateLimits();
+    final id = replay.sentFor('account/rateLimits/read')['id'];
+    replay.client.onLine(
+      jsonEncode({
+        'id': id,
+        'result': {'rateLimits': <String, Object?>{}},
+      }),
+    );
+    expect(await read, containsPair('rateLimits', isEmpty));
+
+    final refused = replay.client.readRateLimits();
+    final next = replay.sent.last['id'];
+    replay.client.onLine(
+      jsonEncode({
+        'id': next,
+        'error': {
+          'code': -32600,
+          'message': 'codex account authentication required',
+        },
+      }),
+    );
+    await expectLater(
+      refused,
+      throwsA(
+        isA<GaiaRunException>().having(
+          (error) => error.message,
+          'message',
+          contains('authentication'),
+        ),
+      ),
+    );
+  });
+
   test('a line that is not JSON is a parse failure', () {
     expect(
       () => CodexAppServerClient((_) {}).onLine('not json'),
       throwsA(isA<CodexParseException>()),
     );
+  });
+
+  test(
+    'a thread copied to another account keeps its place and tools',
+    () async {
+      final root = Directory.systemTemp.createTempSync('gaia_codex_copy_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      const from = GaiaAccount(
+        id: kGaiaDefaultAccountId,
+        label: 'A',
+        adapter: kGaiaCodexAdapter,
+        dir: '',
+      );
+      final to = GaiaAccount(
+        id: 'b',
+        label: 'B',
+        adapter: kGaiaCodexAdapter,
+        dir: p.join(root.path, 'login-b'),
+      );
+      final rollout = File(
+        p.join(
+          root.path,
+          'homes',
+          from.id,
+          'sessions',
+          '2026',
+          '11',
+          '01',
+          'rollout-2026-11-01T13-32-09-thread-1.jsonl',
+        ),
+      )..createSync(recursive: true);
+      rollout.writeAsStringSync('{"line":1}');
+      File(
+        p.join(root.path, 'homes', from.id, 'gaia-threads.json'),
+      ).writeAsStringSync(jsonEncode({'thread-1': kCodexToolsHash}));
+      final runners = CodexAccountRunners(
+        workingDirectory: p.join(root.path, 'ws'),
+        homesRoot: p.join(root.path, 'homes'),
+      );
+
+      expect(
+        await runners.copySession(sessionId: 'nope', from: from, to: to),
+        isFalse,
+      );
+      expect(
+        await runners.copySession(sessionId: 'thread-1', from: from, to: to),
+        isTrue,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        File(
+          p.join(
+            root.path,
+            'homes',
+            'b',
+            'sessions',
+            '2026',
+            '11',
+            '01',
+            'rollout-2026-11-01T13-32-09-thread-1.jsonl',
+          ),
+        ).readAsStringSync(),
+        '{"line":1}',
+      );
+      expect(
+        jsonDecode(
+          File(
+            p.join(root.path, 'homes', 'b', 'gaia-threads.json'),
+          ).readAsStringSync(),
+        ),
+        {'thread-1': kCodexToolsHash},
+      );
+    },
+  );
+
+  test('a removed account loses its login but keeps its threads', () async {
+    final root = Directory.systemTemp.createTempSync('gaia_codex_homes_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File home(String id, String name) =>
+        File(p.join(root.path, id, name))..createSync(recursive: true);
+    final keptLogin = home('kept', 'auth.json');
+    final removedLogin = home('removed', 'auth.json');
+    final removedThreads = home('removed', 'gaia-threads.json');
+    final runners = CodexAccountRunners(
+      workingDirectory: p.join(root.path, 'ws'),
+      homesRoot: root.path,
+    );
+
+    await runners.keepAccounts(const [
+      GaiaAccount(
+        id: 'kept',
+        label: 'Kept',
+        adapter: kGaiaCodexAdapter,
+        dir: '',
+      ),
+    ]);
+
+    expect(keptLogin.existsSync(), isTrue);
+    expect(removedLogin.existsSync(), isFalse);
+    expect(removedThreads.existsSync(), isTrue);
+  });
+
+  test('a threads file that is not a map counts as no threads', () async {
+    final root = Directory.systemTemp.createTempSync('gaia_codex_tools_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final home = p.join(root.path, 'home');
+    Directory(home).createSync();
+    File(p.join(home, 'gaia-threads.json')).writeAsStringSync('[]');
+    final runner = CodexAppServerRunner(
+      workingDirectory: p.join(root.path, 'ws'),
+      codexHome: home,
+      userCodexHome: p.join(root.path, 'user'),
+      fallback: CodexRunner(
+        workingDirectory: p.join(root.path, 'ws'),
+        codexHome: home,
+      ),
+    );
+    final result = await runner.send(
+      chatId: 'chat',
+      sessionId: 'old',
+      model: 'gpt-6.1-sol',
+      prompt: 'Hi',
+      onEvent: (_) {},
+    );
+    expect(result.sessionFound, isFalse);
   });
 
   test('a thread started with other tools is handed over without starting '

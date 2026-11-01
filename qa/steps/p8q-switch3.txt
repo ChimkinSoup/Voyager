@@ -1,0 +1,11 @@
+# on Juno: a new fact, then back to Darren, whose session never saw it
+click 760 1503
+wait 300
+type Second codeword: LANTERN-3. Reply with only the word: stored
+wait 300
+key ctrl+enter
+wait 18000
+click 1941 1589
+wait 700
+find Darren
+shot p8q-c-notch2

@@ -1,0 +1,29 @@
+# back to Darren; his session only knows the first codeword unless caught up
+click 2119 1474
+wait 800
+tap Switch
+wait 1200
+click 760 1503
+wait 300
+type List both codewords I gave you, comma separated, nothing else.
+wait 300
+key ctrl+enter
+wait 22000
+shot p8q-c-back
+find codeword
+# chat B, on Darren
+tap New chat
+wait 800
+click 760 1503
+wait 300
+type Reply with only the word: bravo
+wait 300
+key ctrl+enter
+wait 22000
+shot p8q-c-chatb
+find bravo
+# an empty chat: switching there must not ask
+tap New chat
+wait 800
+shot p8q-c-empty-chat
+find used

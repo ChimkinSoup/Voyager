@@ -1,0 +1,19 @@
+# empty chat: pick Juno, no dialog expected
+click 1929 1589
+wait 700
+find Juno
+click 2106 1560
+wait 1000
+shot p8q-c-empty-switched
+find Switch from
+# chat B was on Darren and hasn't been touched since
+tap Bravo Single-Word Reply Exchange
+wait 1200
+click 760 1503
+wait 300
+type Reply with only the word: charlie
+wait 300
+key ctrl+enter
+wait 22000
+shot p8q-c-chatb-moved
+find

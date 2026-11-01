@@ -26,6 +26,7 @@ class _Streaming extends FakeClaudeRunner {
     Set<String> directories = const {},
     GaiaTurnTools? tools,
     String sessionInstructions = '',
+    GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) {
     emit = onEvent;

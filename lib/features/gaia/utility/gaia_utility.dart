@@ -20,8 +20,8 @@ typedef GaiaFoundMemory = ({String text, List<String> tags});
 
 /// Gaia's small internal jobs on the utility model (GAIA_HLD.md §5.1): the
 /// tier router, chat titles, handoff summaries and image captions, and the
-/// memory curator (§11). Haiku on Claude Code, on the account Gaia's chats
-/// use.
+/// memory curator (§11). Haiku on Claude Code, on the Claude account Gaia's
+/// chats are on (§6.5).
 ///
 /// Any failure is a null: the caller falls back to what Gaia does with no
 /// utility model.
@@ -42,7 +42,12 @@ class GaiaUtility {
     final model = (settings['utilityModel'] as String? ?? '').trim();
     _runner.configure(
       model: model.isEmpty ? kGaiaDefaultUtilityModel : model,
-      configDir: settings['claudeConfigDir'] as String? ?? '',
+      configDir: gaiaCurrentAccount(
+        kGaiaClaudeCodeAdapter,
+        gaiaAccountsFromJson(settings['accounts']),
+        gaiaCurrentAccountsFromJson(settings['currentAccounts']),
+        settings['claudeConfigDir'] as String? ?? '',
+      ).dir,
     );
     autoRoute = settings['autoRoute'] != false;
     rubric = settings['routerRubric'] as String? ?? '';

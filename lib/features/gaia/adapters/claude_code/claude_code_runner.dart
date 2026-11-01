@@ -37,6 +37,17 @@ Map<String, String> claudeEnvironment(String configDir) {
   };
 }
 
+/// The folder [configDir] means: itself, or with none set, the one the CLI
+/// falls back on.
+String claudeConfigRoot(String configDir) {
+  final dir = configDir.trim();
+  final environment = Platform.environment;
+  return dir.isNotEmpty
+      ? dir
+      : environment['CLAUDE_CONFIG_DIR'] ??
+            p.join(environment['USERPROFILE'] ?? '', '.claude');
+}
+
 /// A user message's `content` (§9.3): [prompt] alone, or with [images] as
 /// content blocks interleaved where their `[image N]` tokens are, each after
 /// the text that ends in its token. An image whose token isn't in [prompt]
@@ -104,7 +115,7 @@ const _mcpConfig =
 /// prompts the CLI would show come the same way, for a card. The turn's
 /// [GaiaTurnTools] answers each. Claude Code's own `AskUserQuestion` is
 /// left out, for `ask_user` (§10.1): as a host, Gaia would be offered it.
-class ClaudeCodeRunner implements GaiaAgentRunner {
+class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
   ClaudeCodeRunner({
     required this.workingDirectory,
     required this.instructionsFile,
@@ -117,9 +128,6 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
   /// rather than the text itself, which `cmd /c` would mangle.
   final String instructionsFile;
   var _instructions = '';
-
-  /// The account's `CLAUDE_CONFIG_DIR` (§6.1); empty for Voyager's own.
-  var _configDir = '';
 
   /// Every line the CLI prints, before it's parsed: for the CLI contract
   /// check (`qa/harness/gaia_cli_check.ps1`).
@@ -138,6 +146,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     Set<String> directories = const {},
     GaiaTurnTools? tools,
     String sessionInstructions = '',
+    GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (result, started) = await _send(
@@ -150,6 +159,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       directories: directories,
       tools: tools,
       sessionInstructions: sessionInstructions,
+      configDir: account?.dir ?? '',
       onEvent: (event) {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
@@ -174,6 +184,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     List<GaiaImageInput> images = const [],
     GaiaTurnTools? tools,
     String sessionInstructions = '',
+    String configDir = '',
     required void Function(ClaudeEvent event) onEvent,
   }) async => (await _send(
     chatId: chatId,
@@ -185,6 +196,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     directories: const {},
     tools: tools,
     sessionInstructions: sessionInstructions,
+    configDir: configDir,
     onEvent: onEvent,
   )).$1;
 
@@ -200,6 +212,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     required Set<String> directories,
     required GaiaTurnTools? tools,
     required String sessionInstructions,
+    required String configDir,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     final content = await claudeUserContent(prompt, images);
@@ -209,9 +222,12 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     // its way out. Directories are fixed per process too: one that can't
     // read a newly attached file restarts, resuming the session. A
     // session's own instructions aren't: a resume keeps those it started
-    // with, whatever file it's given (checked on 2.1.314).
+    // with, whatever file it's given (checked on 2.1.314). The account is
+    // fixed too: a chat that moved to another resumes its copy of the session
+    // there (§6.5).
     if (process != null &&
         (process.model != model ||
+            process.configDir != configDir ||
             !process.started ||
             !process.directories.containsAll(directories))) {
       // Gone before another resumes its session.
@@ -233,7 +249,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
       process = await _ClaudeProcess.start(
         workingDirectory: workingDirectory,
         model: model,
-        configDir: _configDir,
+        configDir: configDir,
         onLine: onLine,
         directories: directories,
         sessionArgs: [
@@ -311,12 +327,46 @@ class ClaudeCodeRunner implements GaiaAgentRunner {
     _releaseIdle();
   }
 
-  /// Another account (§6.1): as for GAIA.md, processes between turns are
-  /// let go. A chat started on the old one can't be resumed on the new.
-  void setConfigDir(String dir) {
-    if (dir == _configDir) return;
-    _configDir = dir;
-    _releaseIdle();
+  /// Claude Code keeps a session at `<config dir>/projects/<cwd slug>/<id>.jsonl`,
+  /// with its subagents' and tools' files in `<id>/` beside it. The slug is
+  /// taken from where the session is rather than worked out here. Resuming a
+  /// copy on another login works, signed thinking included (checked both ways
+  /// on 2.1.316).
+  @override
+  Future<bool> copySession({
+    required String sessionId,
+    required GaiaAccount from,
+    required GaiaAccount to,
+  }) async {
+    final fromRoot = claudeConfigRoot(from.dir);
+    final toRoot = claudeConfigRoot(to.dir);
+    if (p.equals(fromRoot, toRoot)) return true;
+    final projects = Directory(p.join(fromRoot, 'projects'));
+    if (!await projects.exists()) return false;
+    await for (final project in projects.list()) {
+      final file = File(p.join(project.path, '$sessionId.jsonl'));
+      if (!await file.exists()) continue;
+      final target = p.join(toRoot, 'projects', p.basename(project.path));
+      await Directory(target).create(recursive: true);
+      await file.copy(p.join(target, '$sessionId.jsonl'));
+      final extras = Directory(p.join(project.path, sessionId));
+      if (await extras.exists()) {
+        await for (final entry in extras.list(recursive: true)) {
+          if (entry is! File) continue;
+          final copy = File(
+            p.join(
+              target,
+              sessionId,
+              p.relative(entry.path, from: extras.path),
+            ),
+          );
+          await copy.parent.create(recursive: true);
+          await entry.copy(copy.path);
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   void _releaseIdle() {
@@ -342,6 +392,7 @@ class _ClaudeProcess {
   _ClaudeProcess._(
     this._process,
     this.model,
+    this.configDir,
     this.directories,
     this._onRawLine,
   ) {
@@ -419,6 +470,7 @@ class _ClaudeProcess {
         includeParentEnvironment: false,
       ),
       model,
+      configDir,
       directories,
       onLine,
     );
@@ -434,6 +486,7 @@ class _ClaudeProcess {
 
   final Process _process;
   final String model;
+  final String configDir;
   final Set<String> directories;
   final void Function(String line)? _onRawLine;
   final _stderr = StringBuffer();

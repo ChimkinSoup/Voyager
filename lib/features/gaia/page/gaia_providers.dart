@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote_client.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 
 /// Live chats, pinned first, then the most recent.
 final gaiaChatsProvider = StreamProvider<List<GaiaChat>>(
@@ -79,16 +82,35 @@ final gaiaRunsProvider = Provider.autoDispose<List<GaiaRun>>((ref) {
   return runs.value;
 });
 
-/// The setup checklist's probe; invalidated to re-check.
+/// Each adapter's usage on this desktop (§6.4), as the companion reports it.
+final gaiaUsageProvider = Provider.autoDispose<Map<String, GaiaAccountUsage>>((
+  ref,
+) {
+  final usage = GaiaHost.instance.usage;
+  usage.addListener(ref.invalidateSelf);
+  ref.onDispose(() => usage.removeListener(ref.invalidateSelf));
+  return usage.value;
+});
+
+/// The setup checklist's version check; invalidated to re-check. Each
+/// account's login is its own provider's, below.
 final gaiaClaudeSetupProvider = FutureProvider.autoDispose<ClaudeCodeSetup>(
-  (ref) async => probeClaudeCode(
-    configDir: (await ref.watch(gaiaSettingsProvider.future)).claudeConfigDir,
-  ),
+  (ref) async => ClaudeCodeSetup(version: await claudeCodeVersion()),
 );
 
 final gaiaCodexSetupProvider = FutureProvider.autoDispose<CodexSetup>(
-  (ref) => probeCodex(),
+  (ref) async => CodexSetup(version: await codexVersion()),
 );
+
+/// A Claude account's login, by its config folder (§6.1).
+final gaiaClaudeAccountProvider = FutureProvider.autoDispose
+    .family<ClaudeCodeSetup, String>(
+      (ref, dir) => probeClaudeCode(configDir: dir),
+    );
+
+/// A Codex account's login and sandbox (§6.1).
+final gaiaCodexAccountProvider = FutureProvider.autoDispose
+    .family<CodexSetup, GaiaAccount>((ref, account) => probeCodex(account));
 
 /// The signed-in account, whose Firestore remote use goes through; null
 /// signed out.
