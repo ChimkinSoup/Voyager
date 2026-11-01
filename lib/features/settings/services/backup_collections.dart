@@ -1547,5 +1547,19 @@ List<BackupCollection> buildBackupCollections({
         return memory;
       },
     ),
+    BackupCollection(
+      name: FirestoreCollections.gaiaQueue,
+      read: () async => [
+        for (final item in await gaiaRepository.listQueue(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: item.id, data: gaiaQueueItemToFirestore(item)),
+      ],
+      restore: (id, data) async {
+        final item = mergeGaiaQueueItemFromRemote(data, id);
+        await gaiaRepository.upsertQueueItem(item, recordLocalActivity: false);
+        return item;
+      },
+    ),
   ];
 }

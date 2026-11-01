@@ -11,6 +11,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
+import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
@@ -159,6 +160,27 @@ class _Main {
       case 'rearm':
         aborted = false;
         return null;
+      case 'takeLease':
+        leases.add(params['chatId']! as String);
+        return {'heldBy': heldBy};
+      case 'releaseLease':
+        return null;
+      case 'queue':
+        return [for (final item in await store.allQueued()) item.toJson()];
+      case 'enqueue':
+        return (await store.enqueue(
+          params['chatId'] as String?,
+          params['text']! as String,
+          front: params['front'] == true,
+        )).toJson();
+      case 'queuePop':
+        return (await store.queuePop(params['chatId'] as String?))?.toJson();
+      case 'setDrain':
+        await store.setDrain(
+          params['chatId']! as String,
+          params['drain']! as bool,
+        );
+        return null;
       case 'voyagerRead':
         reads.add(params['tool']! as String);
         return 'read ${params['tool']}';
@@ -241,6 +263,10 @@ class _Main {
     }
     throw StateError('unknown method $method');
   }
+
+  /// Each `takeLease`'s chat, and who holds every lease: null for none.
+  final leases = <String>[];
+  String? heldBy;
 
   /// Each `attachImage`, in order.
   final attached = <({String chatId, String path})>[];
@@ -3041,6 +3067,29 @@ void main() {
       expect(_text(stored[2]), 'Re: Which day?\nFriday');
     });
 
+    test('a late answer from the phone settles once its reply is under way, '
+        'not when it ends', () async {
+      final tools = await hanging();
+      final result = tools.call('ask_user', {'question': 'Which day?'});
+      await settle();
+      final open = controller.openCard!;
+      expect((await result).text, startsWith('pending:${open.id}'));
+      final chatId = controller.currentChatId!;
+      runner.finish(chatId);
+      await settle();
+
+      await main.pipe.request('remote', {
+        'type': 'answer',
+        'chatId': chatId,
+        'payload': {'cardId': open.id, 'text': 'Friday'},
+      });
+      expect(controller.currentRunning, isTrue);
+      await settle();
+      expect(runner.sent.last.prompt, 'Re: Which day?\nFriday');
+      runner.finish(chatId);
+      await settle();
+    });
+
     test('reads go through the main instance', () async {
       final tools = await hanging();
       expect(await tools.call('voyager_calendar', {'from': 'x'}), (
@@ -3289,5 +3338,373 @@ void main() {
       await controller.dismiss();
       expect(window.shown, isNull);
     });
+  });
+
+  group('remote (§12.2)', () {
+    Future<Object?> remote(Map<String, Object?> params) =>
+        main.pipe.request('remote', params);
+
+    test('a prompt from the phone starts the chat by its id and runs it, '
+        'leaving the chat in view as it was', () async {
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      controller.draft.text = 'half typed';
+
+      final started = await remote({
+        'type': 'prompt',
+        'chatId': 'phone-chat',
+        'payload': {'text': 'Hi from the phone', 'tier': 'quick'},
+      });
+      expect(started, {'started': true});
+      await settle();
+
+      expect(controller.currentChatId, isNull);
+      expect(controller.draft.text, 'half typed');
+      expect(runner.sent.single.chatId, 'phone-chat');
+      expect(runner.sent.single.prompt, 'Hi from the phone');
+      expect(runner.sent.single.model, 'claude-haiku-5-5');
+      expect(main.leases, ['phone-chat']);
+      final chat = (await main.store.chats()).single;
+      expect(chat.id, 'phone-chat');
+      expect(chat.tier, GaiaTier.quick);
+      final messages = await main.store.messages('phone-chat');
+      expect(_text(messages.first), 'Hi from the phone');
+      expect(messages.last.status, GaiaMessageStatus.complete);
+    });
+
+    test('a chat another device holds the lease of is refused, from the '
+        'phone and from here', () async {
+      await startCompanion();
+      main.heldBy = 'DESKTOP';
+
+      await expectLater(
+        remote({
+          'type': 'prompt',
+          'chatId': 'phone-chat',
+          'payload': {'text': 'Hi'},
+        }),
+        throwsA(
+          isA<GaiaPipeException>().having(
+            (e) => e.message,
+            'message',
+            'This chat is running on DESKTOP.',
+          ),
+        ),
+      );
+      expect(runner.sent, isEmpty);
+      expect(await main.store.chats(), isEmpty);
+
+      final toasts = <GaiaRunToast>[];
+      final sub = controller.toasts.listen(toasts.add);
+      await controller.send('Hello');
+      await settle();
+      expect(runner.sent, isEmpty);
+      expect(controller.draft.text, 'Hello');
+      expect(toasts.single.title, 'Running on DESKTOP');
+      await sub.cancel();
+    });
+
+    test('a prompt while aborted, or a cancel with nothing running, is '
+        'refused with why', () async {
+      main.aborted = true;
+      await startCompanion();
+      await expectLater(
+        remote({
+          'type': 'prompt',
+          'chatId': 'c',
+          'payload': {'text': 'Hi'},
+        }),
+        throwsA(
+          isA<GaiaPipeException>().having(
+            (e) => e.message,
+            'message',
+            'Gaia is aborted.',
+          ),
+        ),
+      );
+      await expectLater(
+        remote({'type': 'cancel', 'chatId': 'c'}),
+        throwsA(isA<GaiaPipeException>()),
+      );
+    });
+  });
+
+  group('queue (§13)', () {
+    final at = DateTime.utc(2026, 10, 31);
+
+    Future<void> withChat() async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plan',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          tier: GaiaTier.quick,
+        ),
+      );
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+    }
+
+    test('/queue adds the text to the chat in view; /queue-pop puts the '
+        'next back in the draft, sent no more', () async {
+      await withChat();
+      await controller.enqueue('first');
+      await controller.enqueue('second');
+      expect(controller.queueFor('c1').map((i) => i.text), ['first', 'second']);
+
+      await controller.popQueue(send: false);
+      await settle();
+      expect(controller.draft.text, 'first');
+      expect(controller.queueFor('c1').map((i) => i.text), ['second']);
+      expect(runner.sent, isEmpty);
+    });
+
+    test('with drain on, each queued prompt goes as the reply before it '
+        'finishes', () async {
+      await withChat();
+      await controller.enqueue('second');
+      await controller.toggleDrain();
+      runner.turns
+        ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+        ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('first');
+      for (var i = 0; i < 10 && runner.sent.length < 2; i++) {
+        await settle();
+      }
+      expect(runner.sent.map((s) => s.prompt), ['first', 'second']);
+      expect(controller.queueFor('c1'), isEmpty);
+      expect((await main.store.queue('c1')), isEmpty);
+    });
+
+    test('drain switched on from another device starts an idle chat\'s '
+        'queue', () async {
+      await withChat();
+      await main.store.enqueue('c1', 'queued on the phone');
+      await main.store.setDrain('c1', true);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      main.pipe
+        ..notify('queue')
+        ..notify('changed');
+      for (var i = 0; i < 10 && runner.sent.isEmpty; i++) {
+        await settle();
+      }
+      expect(runner.sent.single.prompt, 'queued on the phone');
+      expect(controller.currentChatId, 'c1');
+    });
+
+    test('drain leaves the queue alone while another device runs the chat, '
+        'and takes it up once that device lets go', () async {
+      await withChat();
+      main.heldBy = 'DESKTOP';
+      await main.store.enqueue('c1', 'queued on the phone');
+      await main.store.setDrain('c1', true);
+      main.pipe
+        ..notify('queue')
+        ..notify('changed');
+      for (var i = 0; i < 10; i++) {
+        await settle();
+      }
+      // Not popped and queued again, over and over: one prompt, still
+      // waiting, and no run.
+      expect(runner.sent, isEmpty);
+      expect((await main.store.queue('c1')).single.text, 'queued on the phone');
+      expect(
+        await main.repository.listQueue(includeDeleted: true),
+        hasLength(1),
+      );
+
+      main.heldBy = null;
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      main.pipe.notify('changed');
+      for (var i = 0; i < 10 && runner.sent.isEmpty; i++) {
+        await settle();
+      }
+      expect(runner.sent.single.prompt, 'queued on the phone');
+      expect(await main.store.queue('c1'), isEmpty);
+    });
+
+    test('drain stops for a reply another device stopped, and for one still '
+        'running there', () async {
+      await withChat();
+      GaiaMessage message(int seq, GaiaMessageRole role, GaiaMessageStatus s) =>
+          GaiaMessage(
+            id: 'm$seq',
+            chatId: 'c1',
+            seq: seq,
+            role: role,
+            parts: const [GaiaTextPart('hi')],
+            status: s,
+            createdAt: at,
+            updatedAt: at,
+          );
+      Future<void> kick() async {
+        main.pipe.notify('changed');
+        for (var i = 0; i < 6; i++) {
+          await settle();
+        }
+      }
+
+      await main.store.enqueue('c1', 'queued');
+      await main.store.setDrain('c1', true);
+      // Only the question has synced: the reply is running elsewhere.
+      await main.store.putMessage(
+        message(0, GaiaMessageRole.user, GaiaMessageStatus.complete),
+      );
+      await kick();
+      expect(runner.sent, isEmpty);
+
+      await main.store.putMessage(
+        message(1, GaiaMessageRole.assistant, GaiaMessageStatus.cancelled),
+      );
+      await kick();
+      expect(runner.sent, isEmpty);
+      expect((await main.store.queue('c1')).single.text, 'queued');
+    });
+
+    test('a phone prompt to a chat another device runs says it was queued, '
+        'and is queued once', () async {
+      await withChat();
+      main.heldBy = 'DESKTOP';
+      final queued = await main.pipe.request('remote', {
+        'type': 'prompt',
+        'chatId': 'c1',
+        'payload': {'text': 'from the phone'},
+      });
+      expect(queued, {'queued': true});
+      await settle();
+      expect((await main.store.queue('c1')).single.text, 'from the phone');
+    });
+
+    test('a phone prompt to a chat with no tier runs on the default', () async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Old',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+        ),
+      );
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      final started = await main.pipe.request('remote', {
+        'type': 'prompt',
+        'chatId': 'c1',
+        'payload': {'text': 'Hi'},
+      });
+      expect(started, {'started': true});
+      await settle();
+      expect(runner.sent.single.prompt, 'Hi');
+    });
+
+    test('a popped prompt that does not start goes back at the front of the '
+        'queue', () async {
+      main.aborted = true;
+      await withChat();
+      await main.store.enqueue('c1', 'first');
+      await main.store.enqueue('c1', 'second');
+      await expectLater(
+        main.pipe.request('remote', {'type': 'queuePop', 'chatId': 'c1'}),
+        throwsA(isA<GaiaPipeException>()),
+      );
+      await settle();
+      expect((await main.store.queue('c1')).map((i) => i.text), [
+        'first',
+        'second',
+      ]);
+    });
+
+    test('a popped prompt that has to wait keeps its place', () async {
+      await withChat();
+      await main.store.enqueue('c1', 'first');
+      await main.store.enqueue('c1', 'second');
+      main.heldBy = 'DESKTOP';
+      await expectLater(
+        main.pipe.request('remote', {'type': 'queuePop', 'chatId': 'c1'}),
+        throwsA(isA<GaiaPipeException>()),
+      );
+      await settle();
+      expect((await main.store.queue('c1')).map((i) => i.text), [
+        'first',
+        'second',
+      ]);
+    });
+
+    test('a message with a quote to a chat another device runs stays in the '
+        'draft, quote and all', () async {
+      await withChat();
+      main.heldBy = 'DESKTOP';
+      controller.attachMessage(
+        GaiaMessage(
+          id: 'm0',
+          chatId: 'elsewhere',
+          seq: 1,
+          role: GaiaMessageRole.assistant,
+          parts: const [GaiaTextPart('Use a mutex.')],
+          status: GaiaMessageStatus.complete,
+          createdAt: at,
+          updatedAt: at,
+        ),
+      );
+      await controller.send('Why?');
+      await settle();
+      expect(controller.draftQuotes, hasLength(1));
+      expect(controller.draft.text, 'Why?');
+      expect(await main.store.queue('c1'), isEmpty);
+    });
+
+    test(
+      'only a send from this desktop says so to the main instance',
+      () async {
+        await withChat();
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await main.pipe.request('remote', {
+          'type': 'prompt',
+          'chatId': 'c1',
+          'payload': {'text': 'from the phone'},
+        });
+        await settle();
+        expect(main.events.where((e) => e.$1 == 'localRun'), isEmpty);
+
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('from here');
+        await settle();
+        expect(main.events.where((e) => e.$1 == 'localRun').single.$2, {
+          'chatId': 'c1',
+        });
+      },
+    );
+
+    test(
+      'a message to a chat another device runs waits in its queue',
+      () async {
+        await withChat();
+        main.heldBy = 'DESKTOP';
+        await controller.send('later please');
+        await settle();
+        expect(runner.sent, isEmpty);
+        expect(controller.draft.text, isEmpty);
+        expect((await main.store.queue('c1')).single.text, 'later please');
+
+        // From the phone too, to a chat running here.
+        main.heldBy = null;
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        final sent = controller.send('now');
+        final queued = await main.pipe.request('remote', {
+          'type': 'prompt',
+          'chatId': 'c1',
+          'payload': {'text': 'from the phone'},
+        });
+        expect(queued, {'queued': true});
+        await sent;
+        expect((await main.store.queue('c1')).map((i) => i.text), [
+          'later please',
+          'from the phone',
+        ]);
+      },
+    );
   });
 }

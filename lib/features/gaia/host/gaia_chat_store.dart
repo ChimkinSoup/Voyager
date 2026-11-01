@@ -1,7 +1,10 @@
+import 'package:uuid/uuid.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+
+const _uuid = Uuid();
 
 /// Sets task [task] in text part [part] of message [messageId] [flipped]
 /// or not in [repository]; gives back what was written, or null for
@@ -96,6 +99,67 @@ class GaiaChatStore {
     final chat = await _repository.getChat(chatId);
     if (chat == null || chat.pinned == pinned) return;
     await _repository.upsertChat(chat.copyWith(pinned: pinned));
+  });
+
+  /// Drain mode on or off for [chatId] (§13).
+  Future<void> setDrain(String chatId, bool drain) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.drain == drain) return;
+    await _repository.upsertChat(chat.copyWith(drain: drain));
+  });
+
+  /// Drain mode off everywhere: Abort stops it (§13).
+  Future<void> stopDraining() => _serial(() async {
+    for (final chat in await _repository.listChats()) {
+      if (chat.drain) await _repository.upsertChat(chat.copyWith(drain: false));
+    }
+  });
+
+  /// Every waiting prompt, in order.
+  Future<List<GaiaQueueItem>> allQueued() => _repository.listQueue();
+
+  /// [chatId]'s waiting prompts in order, the global queue's for null.
+  Future<List<GaiaQueueItem>> queue(String? chatId) async => [
+    for (final item in await _repository.listQueue())
+      if (item.chatId == chatId) item,
+  ];
+
+  /// [text] at the end of [chatId]'s queue (§13), or the [front] of it for
+  /// a popped prompt that didn't go.
+  Future<GaiaQueueItem> enqueue(
+    String? chatId,
+    String text, {
+    bool front = false,
+  }) => _serial(() async {
+    final waiting = [
+      for (final item in await _repository.listQueue())
+        if (item.chatId == chatId) item,
+    ];
+    final now = utcNow();
+    final item = GaiaQueueItem(
+      id: _uuid.v4(),
+      chatId: chatId,
+      text: text,
+      order: front
+          ? (waiting.firstOrNull?.order ?? 1) - 1
+          : (waiting.lastOrNull?.order ?? 0) + 1,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    );
+    await _repository.upsertQueueItem(item);
+    return item;
+  });
+
+  /// Takes [chatId]'s next waiting prompt off its queue, marked sent, so no
+  /// device sends it again; null when there's none.
+  Future<GaiaQueueItem?> queuePop(String? chatId) => _serial(() async {
+    final next = (await _repository.listQueue())
+        .where((item) => item.chatId == chatId)
+        .firstOrNull;
+    if (next == null) return null;
+    await _repository.upsertQueueItem(next.copyWith(consumedAt: utcNow()));
+    return next;
   });
 
   /// Deleted from Gaia's sidebar: tombstoned, as on the Gaia page, so

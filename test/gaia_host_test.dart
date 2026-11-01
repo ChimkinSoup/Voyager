@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Directory, File;
 
 import 'package:fake_async/fake_async.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:file/memory.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -14,6 +17,8 @@ import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
+import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
+import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
@@ -118,6 +123,7 @@ void main() {
     GaiaExecutor? executor,
     GaiaMemories? memories,
     Future<void> Function(String word)? addWord,
+    GaiaBeaconService? beacon,
   }) {
     fakeAsync((async) {
       final host = newHost();
@@ -130,6 +136,7 @@ void main() {
         executor: executor,
         memories: memories,
         addWord: addWord,
+        beacon: beacon,
       );
       async.flushMicrotasks();
       body(async, host);
@@ -252,6 +259,71 @@ void main() {
         host.shutdown();
         async.elapse(const Duration(minutes: 2));
         expect(pipe.launches, hasLength(1));
+      });
+    });
+  });
+
+  group('a lost companion and the beacon', () {
+    late FakeFirebaseFirestore firestore;
+    late GaiaBeaconService beacon;
+
+    setUp(() async {
+      final dir = await Directory.systemTemp.createTemp('gaia_host');
+      addTearDown(() => dir.delete(recursive: true));
+      firestore = FakeFirebaseFirestore();
+      beacon = GaiaBeaconService(
+        firestore: firestore,
+        deviceId: 'laptop',
+        name: 'LAPTOP',
+        adapters: const [],
+        trust: GaiaTrustStore(File(p.join(dir.path, 'trusted.json'))),
+        commandLog: await GaiaCommandLog.load(
+          file: File(p.join(dir.path, 'commands.log')),
+        ),
+      );
+    });
+
+    Map<String, dynamic>? read(FakeAsync async, String path) {
+      Map<String, dynamic>? data;
+      firestore.doc('users/u/$path').get().then((doc) => data = doc.data());
+      async.flushMicrotasks();
+      return data;
+    }
+
+    void running(FakeAsync async) {
+      unawaited(beacon.setUser('u'));
+      async.flushMicrotasks();
+      connect(async);
+      companions.last.pipe.notify('runs', {
+        'runs': [
+          {'chatId': 'c1', 'title': 'Hi'},
+        ],
+      });
+      async.flushMicrotasks();
+      beacon.takeLease('c1');
+      async.flushMicrotasks();
+      expect(read(async, 'gaia_beacons/laptop')!['runs'], hasLength(1));
+      expect(read(async, 'gaia_leases/c1'), isNotNull);
+    }
+
+    test('its runs stop being advertised, and their leases go', () {
+      run(show: true, beacon: beacon, (async, host) {
+        running(async);
+        companions.last.pipe.disconnect();
+        async.flushMicrotasks();
+        expect(read(async, 'gaia_beacons/laptop')!['runs'], isEmpty);
+        expect(read(async, 'gaia_leases/c1'), isNull);
+        host.shutdown();
+        async.elapse(const Duration(seconds: 3));
+      });
+    });
+
+    test('quitting leaves the beacon offline', () {
+      run(show: true, beacon: beacon, (async, host) {
+        running(async);
+        host.shutdown();
+        async.elapse(const Duration(seconds: 3));
+        expect(read(async, 'gaia_beacons/laptop')!['heartbeatAt'], 0);
       });
     });
   });

@@ -184,7 +184,10 @@ void main() {
             ),
           ),
         );
-    final summary = find.textContaining('Title: Buy stamps', findRichText: true);
+    final summary = find.textContaining(
+      'Title: Buy stamps',
+      findRichText: true,
+    );
 
     await pump(card, waiting: true);
     expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
@@ -195,6 +198,34 @@ void main() {
     );
     expect(find.byType(TextField), findsNothing);
     expect(summary, findsOneWidget);
+  });
+
+  testWidgets('with no editor, as on the phone, it can still be saved or '
+      'turned down', (tester) async {
+    var accepted = 0;
+    var rejected = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GaiaCardView(
+            card: const GaiaCardPart(
+              id: 'c1',
+              kind: GaiaCardKind.proposal,
+              tool: 'propose_todo',
+              proposal: todo,
+            ),
+            waiting: true,
+            onAllow: () => accepted++,
+            onReject: () => rejected++,
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('No longer waiting'), findsNothing);
+    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Turn down'));
+    expect((accepted, rejected), (1, 1));
   });
 
   testWidgets('decided, it is a record of what came of it', (tester) async {

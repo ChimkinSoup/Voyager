@@ -101,6 +101,8 @@ Future<void> _showMoreSheet(
   final theme = Theme.of(context);
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: theme.colorScheme.surface,
     // The paper texture is painted behind the whole app, so the sheet stays
     // just shy of opaque for the same reason every other surface does.
@@ -124,16 +126,26 @@ Future<void> _showMoreSheet(
               ),
             ),
           ),
-          for (final item in overflow)
-            _MoreSheetRow(
-              destination: item.dest,
-              selected: item.originalIndex == selectedIndex,
-              accent: accent,
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                onDestinationSelected(item.originalIndex);
-              },
+          // Scrolls once the rows outgrow the screen, as they do on a
+          // phone with every page in the app.
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              children: [
+                for (final item in overflow)
+                  _MoreSheetRow(
+                    destination: item.dest,
+                    selected: item.originalIndex == selectedIndex,
+                    accent: accent,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      onDestinationSelected(item.originalIndex);
+                    },
+                  ),
+              ],
             ),
+          ),
           const SizedBox(height: VoyagerSpacing.sm),
         ],
       ),

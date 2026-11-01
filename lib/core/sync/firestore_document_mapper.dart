@@ -4381,6 +4381,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'agentSessions': chat.toJson()['agentSessions'],
   'tier': chat.tier?.name,
   'curatedSeq': chat.curatedSeq,
+  'drain': chat.drain,
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4428,6 +4429,57 @@ GaiaChat mergeGaiaChatFromRemote(
       final remote? => max(remote, local?.curatedSeq ?? -1),
       null => local?.curatedSeq ?? -1,
     },
+    drain: data['drain'] as bool? ?? local?.drain ?? false,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> gaiaQueueItemToFirestore(GaiaQueueItem item) => {
+  'id': item.id,
+  'chatId': item.chatId,
+  'text': item.text,
+  'order': item.order,
+  'consumedAt': _dateToFirestore(item.consumedAt),
+  'createdAt': _dateToFirestoreRequired(item.createdAt),
+  'updatedAt': _dateToFirestoreRequired(item.updatedAt),
+  'version': item.version,
+  'deletedAt': _dateToFirestore(item.deletedAt),
+};
+
+/// [mergeGaiaChatFromRemote] for a queued prompt (§13). Once sent anywhere
+/// it stays sent, whichever copy wins, so no device sends it twice.
+GaiaQueueItem mergeGaiaQueueItemFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaQueueItem? local,
+}) {
+  final consumedAt =
+      parseFirestoreDate(data['consumedAt']) ?? local?.consumedAt;
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return consumedAt == local!.consumedAt
+        ? local
+        : local.copyWith(consumedAt: consumedAt);
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaQueueItem(
+    id: id,
+    chatId: data.containsKey('chatId')
+        ? data['chatId'] as String?
+        : local?.chatId,
+    text: data['text'] as String? ?? local?.text ?? '',
+    order: (data['order'] as num?)?.toDouble() ?? local?.order ?? 0,
+    consumedAt: consumedAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

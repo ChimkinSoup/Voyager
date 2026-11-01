@@ -296,6 +296,46 @@ void main() {
     expect((await repo.getMemory('m1'))!.text, 'Fact');
   });
 
+  test('181→182 adds the queue and drain mode', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    final seedRepo = DriftGaiaRepository(seed);
+    final at = DateTime.utc(2026, 10, 31);
+    await seedRepo.upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Kept',
+        createdAt: at,
+        updatedAt: at,
+        lastMessageAt: at,
+      ),
+    );
+    await seed.customStatement('DROP TABLE gaia_queue_table');
+    await seed.customStatement('ALTER TABLE gaia_chats_table DROP COLUMN drain');
+    await seed.customStatement('PRAGMA user_version = 181');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.title, 'Kept');
+    expect(chat.drain, isFalse);
+    await repo.upsertChat(chat.copyWith(drain: true));
+    expect((await repo.getChat('c1'))!.drain, isTrue);
+    expect(await repo.listQueue(), isEmpty);
+    await repo.upsertQueueItem(
+      GaiaQueueItem(
+        id: 'q1',
+        chatId: 'c1',
+        text: 'Next',
+        order: 1,
+        createdAt: at,
+        updatedAt: at,
+      ),
+    );
+    expect((await repo.listQueue()).single.text, 'Next');
+  });
+
   test('175→176 adds the Claude config folder and moves off Gemini', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());

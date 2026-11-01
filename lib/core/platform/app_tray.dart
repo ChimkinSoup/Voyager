@@ -14,6 +14,8 @@ class AppTray with TrayListener {
     this.onOpenGaia,
     this.gaiaRuns,
     this.onStopGaiaRun,
+    this.gaiaPower,
+    this.onCancelGaiaPower,
   });
 
   final Future<void> Function() onOpen;
@@ -22,24 +24,41 @@ class AppTray with TrayListener {
   final ValueListenable<List<({String chatId, String title})>>? gaiaRuns;
   final Future<void> Function(String chatId)? onStopGaiaRun;
 
+  /// A sleep or shutdown a paired phone asked for, counting down
+  /// (GAIA_HLD.md §12.2), with its cancel.
+  final ValueListenable<({String kind, DateTime at})?>? gaiaPower;
+  final void Function()? onCancelGaiaPower;
+
   static const _openKey = 'open';
   static const _openGaiaKey = 'openGaia';
   static const _quitKey = 'quit';
   static const _stopRunPrefix = 'stopRun:';
+  static const _cancelPowerKey = 'cancelPower';
 
   Future<void> install() async {
     trayManager.addListener(this);
     await trayManager.setIcon('assets/app_icon.ico');
     await trayManager.setToolTip('Voyager$devProfileSuffix');
     gaiaRuns?.addListener(_setMenu);
+    gaiaPower?.addListener(_setMenu);
     await _setMenu();
   }
 
   Future<void> _setMenu() async {
     final runs = gaiaRuns?.value ?? const [];
+    final power = gaiaPower?.value;
     await trayManager.setContextMenu(
       Menu(
         items: [
+          if (power != null) ...[
+            MenuItem(
+              key: _cancelPowerKey,
+              label: power.kind == 'sleep'
+                  ? 'Cancel sleep (asked from your phone)'
+                  : 'Cancel shutdown (asked from your phone)',
+            ),
+            MenuItem.separator(),
+          ],
           MenuItem(key: _openKey, label: 'Open Voyager'),
           if (onOpenGaia != null)
             MenuItem(key: _openGaiaKey, label: 'Open Gaia'),
@@ -66,6 +85,7 @@ class AppTray with TrayListener {
 
   Future<void> dispose() async {
     gaiaRuns?.removeListener(_setMenu);
+    gaiaPower?.removeListener(_setMenu);
     trayManager.removeListener(this);
     await trayManager.destroy();
   }
@@ -90,6 +110,8 @@ class AppTray with TrayListener {
         onOpenGaia?.call();
       case _quitKey:
         onQuit();
+      case _cancelPowerKey:
+        onCancelGaiaPower?.call();
       default:
         if (key.startsWith(_stopRunPrefix)) {
           onStopGaiaRun?.call(key.substring(_stopRunPrefix.length));

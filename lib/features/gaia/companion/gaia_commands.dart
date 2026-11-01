@@ -10,7 +10,13 @@ enum GaiaBuiltin {
   stop('stop', 'Stop the reply in progress'),
 
   /// Takes the rest of the draft: see [gaiaRememberText].
-  remember('remember', 'Remember something about you in every new chat');
+  remember('remember', 'Remember something about you in every new chat'),
+
+  /// Takes the rest of the draft too: see [gaiaQueueText] (§13).
+  queue('queue', "Queue the draft for this chat, to send later"),
+  queuePop('queue-pop', "Load this chat's next queued prompt to review"),
+  queuePopSend('queue-pop!', "Send this chat's next queued prompt now"),
+  drain('drain', 'Send queued prompts one after another, on or off');
 
   const GaiaBuiltin(this.name, this.description);
 
@@ -149,6 +155,13 @@ String? expandGaiaCommand(
 /// null when the draft doesn't start with `/remember` and some text.
 String? gaiaRememberText(String draft) {
   final match = RegExp(r'^/remember\s+(\S[\s\S]*)$').firstMatch(draft.trim());
+  return match?.group(1)!.trim();
+}
+
+/// What `/queue <text>` in [draft] queues (§13): the text after it, or null
+/// when the draft doesn't start with `/queue` and some text.
+String? gaiaQueueText(String draft) {
+  final match = RegExp(r'^/queue\s+(\S[\s\S]*)$').firstMatch(draft.trim());
   return match?.group(1)!.trim();
 }
 

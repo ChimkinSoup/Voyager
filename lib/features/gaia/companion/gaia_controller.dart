@@ -1088,7 +1088,14 @@ class GaiaController extends ChangeNotifier {
   /// Answers question [card] with its picked options and [text]. Its tool
   /// call gets them; one no longer waiting gets them as the next message,
   /// and the card is marked answered. False when there's nothing to send.
-  Future<bool> answerCard(GaiaCardPart card, {String text = ''}) async {
+  ///
+  /// [remoteChat] is the card's chat when the phone answers it (§12.2):
+  /// a late answer goes there, not to the chat in view.
+  Future<bool> answerCard(
+    GaiaCardPart card, {
+    String text = '',
+    String? remoteChat,
+  }) async {
     final selected = [
       for (final index in cardPicks(card.id).toList()..sort())
         card.options[index].label,
@@ -1101,17 +1108,33 @@ class GaiaController extends ChangeNotifier {
       return true;
     }
     // What send would give back: the card stays open, its picks kept.
-    if (aborted || draining != null || currentRunning) return false;
+    if (aborted ||
+        draining != null ||
+        (remoteChat == null ? currentRunning : _running.contains(remoteChat))) {
+      return false;
+    }
     _cardPicks.remove(card.id);
     await _decideStored(card.decided(GaiaCardState.accepted, answer));
-    await send(
-      [
-        'Re: ${card.question}',
-        if (selected.isNotEmpty) selected.join(', '),
-        if (text.trim().isNotEmpty) text.trim(),
-      ].join('\n'),
+    final reply = [
+      'Re: ${card.question}',
+      if (selected.isNotEmpty) selected.join(', '),
+      if (text.trim().isNotEmpty) text.trim(),
+    ].join('\n');
+    if (remoteChat == null) {
+      await send(reply);
+      return true;
+    }
+    // The phone's command settles once the reply is under way, not when it
+    // ends. Not sent, it isn't answered: the card opens again.
+    var queued = false;
+    final why = await _sendRemote(
+      reply,
+      chatId: remoteChat,
+      onQueued: () => queued = true,
     );
-    return true;
+    if (why == null || queued) return true;
+    await _decideStored(card);
+    throw GaiaPipeException(why);
   }
 
   /// Turns [card] down: a question dismissed, a permission denied with
@@ -1251,6 +1274,7 @@ class GaiaController extends ChangeNotifier {
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
     await _refresh();
     await _loadDrafts();
+    unawaited(_loadQueue());
     unawaited(_curateMissed());
   }
 
@@ -1360,9 +1384,15 @@ class GaiaController extends ChangeNotifier {
       case 'settings':
         unawaited(_applySettings(params));
       case 'changed':
-        unawaited(_refresh());
+        unawaited(_refresh().then((_) => _drainIdle()));
       case 'drafts':
         unawaited(_loadDrafts());
+      case 'queue':
+        unawaited(_loadQueue());
+      // Rearmed from the phone (§12.2).
+      case 'rearmed':
+        aborted = false;
+        notifyListeners();
     }
   }
 
@@ -1376,6 +1406,8 @@ class GaiaController extends ChangeNotifier {
         return null;
       case 'drain':
         return _drain();
+      case 'remote':
+        return _onRemote(params);
       default:
         throw GaiaPipeException('unknown method $method');
     }
@@ -1759,6 +1791,230 @@ class GaiaController extends ChangeNotifier {
         if (currentChatId case final chatId?) await stop(chatId);
       case GaiaBuiltin.remember:
         await remember('');
+      case GaiaBuiltin.queue:
+        await enqueue('');
+      case GaiaBuiltin.queuePop:
+        await popQueue(send: false);
+      case GaiaBuiltin.queuePopSend:
+        await popQueue(send: true);
+      case GaiaBuiltin.drain:
+        await toggleDrain();
+    }
+  }
+
+  /// Every waiting prompt (§13), in order; the global queue's have no chat.
+  var queue = const <GaiaQueueItem>[];
+
+  /// [chatId]'s waiting prompts, in order.
+  List<GaiaQueueItem> queueFor(String? chatId) => [
+    for (final item in queue)
+      if (item.chatId == chatId) item,
+  ];
+
+  Future<void> _loadQueue() async {
+    try {
+      final listed = await _pipe.request('queue', {'all': true});
+      if (listed is! List) return;
+      queue = [
+        for (final json in listed)
+          GaiaQueueItem.fromJson((json as Map).cast<String, Object?>()),
+      ];
+      notifyListeners();
+      _drainIdle();
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] queue not read: $error');
+    }
+  }
+
+  void _note(String title, String body, {bool error = false}) => _toasts.add((
+    chatId: '',
+    title: title,
+    body: body,
+    error: error,
+    question: false,
+  ));
+
+  /// `/queue <text>` (§13): [text] at the end of [chatId]'s queue, the
+  /// chat in view's by default, or the global one before a chat starts.
+  Future<void> enqueue(String text, {String? chatId}) async {
+    if (text.trim().isEmpty) {
+      return _note('Nothing to queue', 'Type it after /queue.');
+    }
+    final to = chatId ?? currentChatId;
+    try {
+      await _pipe.request('enqueue', {'chatId': to, 'text': text.trim()});
+      await _loadQueue();
+      final waiting = queueFor(to).length;
+      _note(
+        'Queued',
+        waiting == 1 ? '1 prompt waiting.' : '$waiting prompts waiting.',
+      );
+    } on GaiaPipeException catch (error) {
+      if (draft.text.isEmpty) draft.text = '/queue $text';
+      _note("Couldn't queue that", error.message, error: true);
+    }
+  }
+
+  /// `/queue-pop` puts the chat in view's next prompt in the composer to
+  /// review; `/queue-pop!` sends it (§13).
+  Future<void> popQueue({required bool send}) async {
+    final GaiaQueueItem? next;
+    try {
+      next = switch (await _pipe.request('queuePop', {
+        'chatId': currentChatId,
+      })) {
+        final Map json => GaiaQueueItem.fromJson(json.cast()),
+        _ => null,
+      };
+    } on GaiaPipeException catch (error) {
+      return _note("Couldn't read the queue", error.message, error: true);
+    }
+    unawaited(_loadQueue());
+    if (next == null) return _note('Nothing queued', 'This chat has no queue.');
+    if (send) return this.send(next.text);
+    draft.text = draft.text.isEmpty ? next.text : '${draft.text}\n${next.text}';
+    notifyListeners();
+  }
+
+  /// `/drain` (§13): the chat in view's drain mode on or off.
+  Future<void> toggleDrain() async {
+    final chat = currentChat;
+    if (chat == null) {
+      return _note('No chat yet', 'Drain mode is for a chat that has begun.');
+    }
+    final drain = !chat.drain;
+    chats = [
+      for (final c in chats) c.id == chat.id ? c.copyWith(drain: drain) : c,
+    ];
+    notifyListeners();
+    await _request('setDrain', {'chatId': chat.id, 'drain': drain});
+    _note(
+      drain ? 'Drain mode on' : 'Drain mode off',
+      drain
+          ? 'Queued prompts go one after another as replies finish.'
+          : 'Queued prompts wait to be sent.',
+    );
+    if (drain && !_running.contains(chat.id)) _drainNext(chat.id);
+  }
+
+  /// In drain mode, [chatId]'s next prompt goes once its reply finished
+  /// cleanly (§13): not after an error, a stop or Abort, nor while a card
+  /// waits on the user.
+  void _drainNext(String chatId, [GaiaMessage? reply]) {
+    final chat = _chat(chatId);
+    if (chat == null || !chat.drain || aborted || draining != null) return;
+    if (_running.contains(chatId) || queueFor(chatId).isEmpty) return;
+    if (reply != null && !_endedCleanly(reply)) return;
+    if (!_drainPopping.add(chatId)) return;
+    unawaited(() async {
+      try {
+        // The lease first: a prompt popped for a chat another desktop runs
+        // would only go back in the queue, which starts this over. That
+        // desktop drains the chat itself; if it lets go first, its reply
+        // syncing here brings this back.
+        if (await _takeLease(chatId) != null) return;
+        // Idle, it goes by the chat's last message as saved: what's in
+        // memory here may not have the reply another device stopped.
+        final clean = reply != null || await _lastEndedCleanly(chatId);
+        final popped = !clean || aborted || _running.contains(chatId)
+            ? null
+            : await _pipe
+                  .request('queuePop', {'chatId': chatId})
+                  .catchError((Object _) => null);
+        if (popped is! Map) {
+          if (!_running.contains(chatId)) {
+            unawaited(_request('releaseLease', {'chatId': chatId}));
+          }
+          return;
+        }
+        unawaited(_loadQueue());
+        await _sendPopped(GaiaQueueItem.fromJson(popped.cast()), chatId);
+      } finally {
+        _drainPopping.remove(chatId);
+      }
+    }());
+  }
+
+  /// [send] for a message that isn't this desktop's draft. Gives back null
+  /// once its reply is under way, or why it didn't start.
+  Future<String?> _sendRemote(
+    String text, {
+    required String chatId,
+    GaiaTier? tier,
+    bool fromQueue = false,
+    void Function()? onQueued,
+  }) {
+    final started = Completer<String?>();
+    unawaited(
+      send(
+        text,
+        remote: (chatId: chatId, tier: tier),
+        started: started,
+        fromQueue: fromQueue,
+        onQueued: onQueued,
+      ).catchError((Object error) {
+        debugPrint('[gaia] send to $chatId failed: $error');
+        if (!started.isCompleted) started.complete('$error');
+      }),
+    );
+    return started.future;
+  }
+
+  /// Sends [item], just taken off [chatId]'s queue. One that doesn't start
+  /// goes back at the front (§13): it's marked sent, which stays, so nothing
+  /// else would ever send it. Gives back why it didn't start.
+  Future<String?> _sendPopped(GaiaQueueItem item, String chatId) async {
+    var queued = false;
+    final why = await _sendRemote(
+      item.text,
+      chatId: chatId,
+      fromQueue: true,
+      onQueued: () => queued = true,
+    );
+    if (why != null && !queued && item.text.trim().isNotEmpty) {
+      try {
+        await _pipe.request('enqueue', {
+          'chatId': chatId,
+          'text': item.text,
+          'front': true,
+        });
+        unawaited(_loadQueue());
+      } on GaiaPipeException catch (error) {
+        debugPrint('[gaia] queued prompt not put back: $error');
+      }
+    }
+    return why;
+  }
+
+  /// A reply that finished as it should, with no card waiting.
+  bool _endedCleanly(GaiaMessage reply) =>
+      reply.status == GaiaMessageStatus.complete &&
+      !reply.parts.any((p) => p is GaiaCardPart && p.isOpen);
+
+  /// Whether [chatId] may go on: no messages, or a last reply that ended
+  /// cleanly. A question last means its reply is still running somewhere.
+  Future<bool> _lastEndedCleanly(String chatId) async {
+    try {
+      final list =
+          (await _pipe.request('messages', {'chatId': chatId}))! as List;
+      if (list.isEmpty) return true;
+      final last = GaiaMessage.fromJson(
+        (list.last as Map).cast<String, Object?>(),
+      );
+      return last.role == GaiaMessageRole.assistant && _endedCleanly(last);
+    } on GaiaPipeException {
+      return false;
+    }
+  }
+
+  /// Chats [_drainNext] is taking a prompt off the queue for.
+  final _drainPopping = <String>{};
+
+  /// Drain mode switched on from another device, or a prompt queued from
+  /// one, for a chat sitting idle here: it starts without a reply ending.
+  void _drainIdle() {
+    for (final chat in chats) {
+      if (chat.drain) _drainNext(chat.id);
     }
   }
 
@@ -1827,33 +2083,80 @@ class GaiaController extends ChangeNotifier {
 
   /// Sends [text] with [images] (§9.3), which this send now owns, and
   /// [files].
+  ///
+  /// [remote] is a message a paired device sent (§12.2), to that chat, a
+  /// new one by that id when there's none: it has no draft, quotes or
+  /// window, leaves the chat in view as it is, and goes on [remote]'s tier
+  /// if it names one. [started] completes once its reply is under way, with
+  /// null, or with why it didn't start. [fromQueue] is a prompt just taken
+  /// off its queue: if it has to wait, it waits at the front.
   Future<void> send(
     String text, {
     List<GaiaDraftImage> images = const [],
     List<GaiaFilePart> files = const [],
+    ({String chatId, GaiaTier? tier})? remote,
+    Completer<String?>? started,
+    void Function()? onQueued,
+    bool fromQueue = false,
   }) async {
-    if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
-    if (gaiaRememberText(text) case final memory?) return remember(memory);
+    void notStarted(String why) {
+      if (started != null && !started.isCompleted) started.complete(why);
+    }
+
+    if (remote == null) {
+      if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
+      if (gaiaRememberText(text) case final memory?) return remember(memory);
+    }
     var prompt = (await _expand(text.trim())).trim();
     if (prompt.isEmpty &&
         images.isEmpty &&
         files.isEmpty &&
-        draftQuotes.isEmpty) {
-      return;
+        (remote != null || draftQuotes.isEmpty)) {
+      return notStarted('There is nothing to send.');
     }
+    final targetId = remote?.chatId ?? currentChatId;
     // A chat sent to before its messages came: they're numbered on from.
-    if (currentChatId case final id?
+    if (targetId case final id?
         when !_messages.containsKey(id) && !_running.contains(id)) {
       await _load(id);
     }
-    if (aborted || draining != null || currentRunning) {
+    // A remote message to a chat that's running, or just starting, waits
+    // in its queue (§13).
+    if (remote != null &&
+        !aborted &&
+        _running.contains(remote.chatId) &&
+        prompt.isNotEmpty) {
+      try {
+        await _pipe.request('enqueue', {
+          'chatId': remote.chatId,
+          'text': prompt,
+          'front': fromQueue,
+        });
+      } on GaiaPipeException catch (error) {
+        return notStarted(error.message);
+      }
+      unawaited(_loadQueue());
+      onQueued?.call();
+      return notStarted('Queued.');
+    }
+    if (aborted ||
+        draining != null ||
+        (targetId != null && _running.contains(targetId))) {
+      notStarted(
+        aborted
+            ? 'Gaia is aborted.'
+            : draining != null
+            ? 'Gaia is closing for an update.'
+            : 'This chat is already running.',
+      );
+      if (remote != null) return;
       return _giveBack(currentChatId, text, images, files);
     }
-    var chat = currentChat;
+    var chat = remote == null ? currentChat : _chat(remote.chatId);
     final isNew = chat == null;
     // Claimed now, so a second send can't start while this one's images
     // upload or its tier is picked.
-    final chatId = chat?.id ?? _uuid.v4();
+    final chatId = chat?.id ?? remote?.chatId ?? _uuid.v4();
     _running.add(chatId);
     // Read once it's idle again.
     _curateSoon.remove(chatId)?.cancel();
@@ -1872,11 +2175,14 @@ class GaiaController extends ChangeNotifier {
         : files.isNotEmpty
         ? files.map((file) => p.basename(file.path)).join(', ')
         : draftQuotes.first.text;
-    // The summon's window goes with this message only.
-    final context = windowContext;
-    windowContext = null;
-    final quotes = [...draftQuotes];
-    draftQuotes.clear();
+    // The summon's window goes with this message only. A remote one has
+    // neither, nor quotes: they're the desktop's draft's.
+    final context = remote == null ? windowContext : null;
+    final quotes = remote == null ? [...draftQuotes] : <GaiaQuotePart>[];
+    if (remote == null) {
+      windowContext = null;
+      draftQuotes.clear();
+    }
     final sentAt = utcNow();
     if (chat == null) {
       // No utility model yet: the title is the first line (§5.1). Its
@@ -1894,10 +2200,13 @@ class GaiaController extends ChangeNotifier {
         createdAt: sentAt,
         updatedAt: sentAt,
         lastMessageAt: sentAt,
-        tier: nextTier,
+        tier:
+            remote?.tier ??
+            (remote == null ? nextTier : defaultTier ?? lastTier),
       );
       chats = [chat, ...chats]..sort(_listed);
-      currentChatId = chatId;
+      // A remote chat is listed, but the one in view stays.
+      if (remote == null) currentChatId = chatId;
     }
     final list = _messages[chatId] ??= [];
     // Shown at once, its images from the draft's own files while they're
@@ -1937,8 +2246,10 @@ class GaiaController extends ChangeNotifier {
     final uploads = <String>[];
 
     // The send didn't happen: the question comes off the chat, and a new
-    // chat with it, and it all goes back in the draft.
-    void undo() {
+    // chat with it, and it all goes back in the draft; a remote one's
+    // sender is told [why].
+    void undo([String why = "It didn't start.", bool giveBack = true]) {
+      notStarted(why);
       for (final referenceId in referenceIds) {
         unawaited(_request('detachImage', {'referenceId': referenceId}));
       }
@@ -1957,6 +2268,10 @@ class GaiaController extends ChangeNotifier {
         if (_drafts.remove(chatId) case final typed?) {
           _giveBack(null, typed.text.text, typed.images, typed.files);
         }
+      }
+      if (remote != null || !giveBack) {
+        _reportRuns();
+        return _settleDrain();
       }
       windowContext = context;
       // Less any attached again meanwhile.
@@ -2040,10 +2355,14 @@ class GaiaController extends ChangeNotifier {
         ),
       );
     }
-    var tier = nextTier;
+    var tier = remote == null
+        ? nextTier
+        : remote.tier ?? chat.tier ?? defaultTier ?? lastTier;
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
-    if (isNew && pickedTier == null && !debug.dummyMode) {
+    if (isNew &&
+        (remote == null ? pickedTier == null : remote.tier == null) &&
+        !debug.dummyMode) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
       tier = await _utility?.route(topic) ?? tier;
     } else {
@@ -2053,16 +2372,56 @@ class GaiaController extends ChangeNotifier {
             ? 'dummy mode'
             : !isNew
             ? 'not a new chat'
-            : 'tier picked: ${pickedTier!.name}'}',
+            : 'tier picked: ${(remote?.tier ?? pickedTier)!.name}'}',
       );
     }
     debugPrint('[gaia] router: sending on ${tier.name}');
     // Aborted, or the drain cancelled, while its images uploaded or its tier
     // was picked: no run starts.
-    if (aborted || _drainCancelled) return undo();
+    if (aborted || _drainCancelled) return undo('Gaia is aborted.');
+    // One device runs a chat at a time (§8): another running it keeps it.
+    if (await _takeLease(chatId) case final heldBy?) {
+      // It waits in the chat's queue instead (§8, §13), text alone: images,
+      // files, quotes and the summon's window belong to this device's draft,
+      // which gets them back.
+      if (!isNew &&
+          images.isEmpty &&
+          files.isEmpty &&
+          quotes.isEmpty &&
+          context == null &&
+          prompt.isNotEmpty) {
+        try {
+          await _pipe.request('enqueue', {
+            'chatId': chatId,
+            'text': prompt,
+            'front': fromQueue,
+          });
+          unawaited(_loadQueue());
+          // Before undo says it didn't start, so the sender hears it's queued.
+          onQueued?.call();
+          undo('This chat is running on $heldBy.', false);
+          _note(
+            'Queued: running on $heldBy',
+            'It goes once $heldBy finishes, or send it from the queue.',
+          );
+          return;
+        } on GaiaPipeException catch (error) {
+          debugPrint('[gaia] not queued: $error');
+        }
+      }
+      if (remote == null) {
+        _note(
+          'Running on $heldBy',
+          'This chat is running on another device. Send again once it '
+              'finishes.',
+          error: true,
+        );
+      }
+      return undo('This chat is running on $heldBy.');
+    }
     // After the router, so the reply's orb doesn't count it as bloom time.
     final now = utcNow();
-    pickedTier = null;
+    if (remote == null) pickedTier = null;
     final agent = agentFor(tier);
     // Saved stamped with the reply, as it always was: a message later than
     // its chat's last has the main instance write the chat again, which
@@ -2089,6 +2448,7 @@ class GaiaController extends ChangeNotifier {
       } on GaiaPipeException catch (error) {
         // The main instance is going away: no run whose chat can't be kept.
         debugPrint('[gaia] chat not saved, not sending: $error');
+        unawaited(_request('releaseLease', {'chatId': chatId}));
         _toasts.add((
           chatId: '',
           title: "Couldn't start the chat",
@@ -2096,7 +2456,7 @@ class GaiaController extends ChangeNotifier {
           error: true,
           question: false,
         ));
-        return undo();
+        return undo(error.message);
       }
     }
     // Sent: the main instance keeps its own copies.
@@ -2131,9 +2491,12 @@ class GaiaController extends ChangeNotifier {
     list.add(reply);
     _moveToTop(chatId, now);
     _reportRuns();
+    // Sent from this desktop: the chat's no longer a phone's to hear about.
+    if (remote == null) _pipe.notify('localRun', {'chatId': chatId});
     notifyListeners();
     unawaited(_persist(question));
     unawaited(_persist(reply));
+    if (started != null && !started.isCompleted) started.complete(null);
     // Ready for a later handoff; this turn's agent sees the images.
     if (script == null) unawaited(_caption([question]));
 
@@ -2476,6 +2839,7 @@ class GaiaController extends ChangeNotifier {
       _curateLater(chatId, _curateAfter);
     }
     _settleDrain();
+    _drainNext(chatId, reply);
   }
 
   /// Curates [chatId] after [wait], in place of any wait it had.
@@ -2634,6 +2998,112 @@ class GaiaController extends ChangeNotifier {
       ),
     );
     notifyListeners();
+  }
+
+  /// Takes [chatId]'s run lease (§8) through the main instance: null when
+  /// this device may run it, else the name of the one running it. A main
+  /// instance that can't say lets the run go ahead.
+  Future<String?> _takeLease(String chatId) async {
+    try {
+      final reply = await _pipe.request('takeLease', {'chatId': chatId});
+      return (reply as Map?)?['heldBy'] as String?;
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] lease not checked: $error');
+      return null;
+    }
+  }
+
+  /// A command from a paired device (§12.2), verified and claimed by the
+  /// main instance. Throws a [GaiaPipeException] saying why it can't run.
+  Future<Object?> _onRemote(Map<String, Object?> params) async {
+    final chatId = params['chatId'] as String?;
+    final payload =
+        (params['payload'] as Map?)?.cast<String, Object?>() ??
+        const <String, Object?>{};
+    switch (params['type']) {
+      case 'prompt':
+        final text = payload['text'] as String? ?? '';
+        if (chatId == null) throw GaiaPipeException('No chat given.');
+        var queued = false;
+        final why = await _sendRemote(
+          text,
+          chatId: chatId,
+          tier: gaiaTierFromName(payload['tier']),
+          onQueued: () => queued = true,
+        );
+        if (why != null && !queued) throw GaiaPipeException(why);
+        return queued ? {'queued': true} : {'started': true};
+      case 'queuePop':
+        if (chatId == null || _running.contains(chatId)) {
+          throw GaiaPipeException('That chat is running; it goes next.');
+        }
+        final popped = await _pipe.request('queuePop', {'chatId': chatId});
+        if (popped is! Map) throw GaiaPipeException('Nothing is queued.');
+        unawaited(_loadQueue());
+        final item = GaiaQueueItem.fromJson(popped.cast());
+        if (await _sendPopped(item, chatId) case final why?) {
+          throw GaiaPipeException(why);
+        }
+        return {'started': true};
+      case 'answer':
+        return _remoteAnswer(chatId, payload);
+      case 'cancel':
+        if (chatId == null || !_running.contains(chatId)) {
+          throw GaiaPipeException('Nothing is running in that chat.');
+        }
+        await stop(chatId);
+        return null;
+      default:
+        throw GaiaPipeException('Unknown command ${params['type']}.');
+    }
+  }
+
+  /// A card answered on the phone (§12.2): as its own buttons would. A
+  /// proposal is accepted as proposed: the phone has no editor.
+  Future<Object?> _remoteAnswer(
+    String? chatId,
+    Map<String, Object?> payload,
+  ) async {
+    final cardId = payload['cardId'] as String?;
+    if (chatId != null && !_messages.containsKey(chatId)) await _load(chatId);
+    final card = [
+      for (final message in _messages[chatId] ?? const <GaiaMessage>[])
+        ...message.parts.whereType<GaiaCardPart>(),
+    ].where((card) => card.id == cardId).firstOrNull;
+    if (card == null || !card.isOpen) {
+      throw GaiaPipeException('That card was already decided.');
+    }
+    final text = payload['text'] as String? ?? '';
+    if (payload['decision'] == 'reject') {
+      rejectCard(card, message: text);
+      return null;
+    }
+    switch (card.kind) {
+      case GaiaCardKind.question:
+        final selected = {
+          ...((payload['selected'] as List?) ?? const []).cast<String>(),
+        };
+        _cardPicks[card.id] = {
+          for (final (i, option) in card.options.indexed)
+            if (selected.contains(option.label)) i,
+        };
+        if (!await answerCard(card, text: text, remoteChat: chatId)) {
+          throw GaiaPipeException('Pick an option or write an answer.');
+        }
+      case GaiaCardKind.permission:
+        if (!cards.isWaiting(card.id)) {
+          throw GaiaPipeException('That request is no longer waiting.');
+        }
+        allowCard(card);
+      case GaiaCardKind.proposal:
+        if (!acceptProposal(card)) {
+          throw GaiaPipeException(
+            gaiaProposalProblem(card.proposal!, proposalFields(card)) ??
+                'That proposal is no longer waiting.',
+          );
+        }
+    }
+    return null;
   }
 
   Future<void> stop(String chatId) async {
@@ -2866,8 +3336,7 @@ class GaiaController extends ChangeNotifier {
           parts: gaiaWithCheck(current.parts, part, task, flipped),
         ),
       );
-      final turn = _checkTurns[message.id] =
-          (_checkTurns[message.id] ?? 0) + 1;
+      final turn = _checkTurns[message.id] = (_checkTurns[message.id] ?? 0) + 1;
       try {
         final stored = await _pipe.request('toggleCheck', {
           'messageId': message.id,

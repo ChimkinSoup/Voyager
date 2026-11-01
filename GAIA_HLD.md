@@ -13,7 +13,9 @@ is split in three: 4A (Gaia tools, reads, question and permission cards) is
 done and checked live 2026-10-28; 4B (proposals and the action log) is
 checked live 2026-10-29; 4C (a Codex adapter on `app-server`) is done and
 checked live 2026-10-30, all but the `exec` fallback (§19). Phase 6 (text,
-§9.5) is done and checked live 2026-10-31.
+§9.5) is done and checked live 2026-10-31. Phase 7 (remote use) is built
+and checked live 2026-10-31 on a desktop and an Android emulator; the push
+notifications' Cloud Function is deployed, and pushes checked live (§19).
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -642,6 +644,7 @@ Branches (§18) are sibling messages sharing a `parentId`, and the chat's
 | `gaia_commands` | remote → beacon | type, chatId, payload, fromDevice, targetDevice?, signature, claimedBy, status |
 | `gaia_beacons` | one per desktop | deviceId, heartbeatAt, accounts, capabilities, beaconMode, watchers [{deviceId, chatId, expiresAt}] |
 | `gaia_devices` | one per paired device | deviceId, publicKey, fcmToken?, pairedAt, revokedAt? |
+| `gaia_revoked` | one per revoked key, only ever added to | publicKey, revokedAt |
 | `gaia_notify` | one per notification | chatId, kind (`done`/`question`/`card`), text, createdAt |
 | `gaia_queue` | queued prompt | chatId (null = global), text, order, consumedAt |
 | `gaia_memories` | one per memory | text, tags, links, sourceChatId, status (`proposed`/`active`/`archived`) |
@@ -1398,7 +1401,7 @@ Other additions:
 | 4C | Done | Codex adapter on `app-server` (recorded fixtures + contract scenario): permission cards and `ask_user` for Codex, client-hosted tools replacing the `--gaia-mcp` shim, one long-lived process with threads and turns; `exec` stays as the fallback. The trash shows `origin: gaia` (left from 4B) |
 | 5 | Done | Memory + curator + inbox (below; checked live in the app 2026-10-30) |
 | 6 | Done | Text (§9.5): Markdown rendering of messages, streamed, one renderer for desktop and phone, with code highlighting, the per-block copy button and inline code from §9.3; partial selection and copy; clickable URLs and file paths; spellcheck + autocorrect in the composer, skipping code, commands, labels, paths and URLs; Voyager's Vim engine and snippets in the composer (§9.1); the user's dictionary, snippets and toggles synced to the companion |
-| 7 | | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
+| 7 | Done | Beacon, device pairing + signed commands, run lease + session catch-up, phone client, FCM, live streaming, commands, queue + drain, remote power |
 | 8 | | Accounts, usage sources + health states, low/exhausted cards, account-switch session copy, a composer usage ring per account with inactive ones dulled, polled from launch rather than the first run (§6.2) |
 | 9 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
 
@@ -1623,6 +1626,156 @@ Phase 4C as built (2026-10-30, codex-cli 0.164.0):
   error, "Codex exited (code -1)", with its text kept); a GAIA.md change
   stopping the idle process, the next turn following the new text. Not
   forced live: the fallback to `exec` when `app-server` can't start.
+
+Phase 7 as built (2026-10-31):
+- **Where it lives.** `features/gaia/remote/`: `gaia_remote.dart` (the
+  documents and the signed command), `gaia_device_keys.dart` (keys, the
+  trust store), `gaia_beacon_service.dart` (the desktop's half, in the main
+  instance), `gaia_remote_client.dart` (the phone's), `gaia_push.dart`,
+  `gaia_power.dart`. The Gaia page gains Queue and Status tabs, and on
+  Android a chat opens in `page/gaia_remote_chat.dart`, a full client, in
+  place of the read-only transcript.
+- **Remote documents are Firestore only**, never mirrored in drift:
+  `gaia_beacons`, `gaia_devices`, `gaia_commands`, `gaia_live`, and three
+  the table in §8 doesn't have: `gaia_watch/{deviceId}` (who watches which
+  chat, in place of a `watchers` list on each beacon doc, so a phone needn't
+  know which beacon streams), `gaia_leases/{chatId}` (in place of a
+  `runLease` field on the chat: the outbox writes the whole chat, which
+  would land over a lease taken in a transaction) and `gaia_notify`. The
+  queue is a synced drift table (`gaia_queue`, schema 182, in backups), as
+  is the chat's new `drain` column.
+- **Pairing, per desktop (decided 2026-10-31, deviating from §12.2's "once
+  on a desktop").** Firestore can't be the trust anchor: anyone who can
+  write `gaia_devices` could add or swap a key, which is what pairing is
+  meant to stop. So the phone makes an Ed25519 key (kept in its app data,
+  not Keystore: no API key is stored yet), writes a request with its public
+  key, and shows a 16-character code, 80 bits of the key's hash, too long
+  for someone who can write there to find a key showing the same one (six
+  digits were, until 2026-10-31). Each desktop that
+  should take its commands shows the same code under Status; the user
+  checks they match and pairs, and that desktop pins the key in a local
+  file (`gaia_trusted_devices.json`), never synced. A second desktop is
+  paired the same way. Revoke on any desktop writes `revokedAt` and adds the
+  key to `gaia_revoked`, and every desktop drops the pinned key for good, so a
+  document written back without `revokedAt` doesn't restore it. The list
+  outlasts the device's document, so a desktop that was off hears of it even
+  after a Remove or a new pairing, and a beacon reads it from the server
+  before it claims a command. Pairing again after a revoke makes a new
+  key. No QR code: comparing codes needs no camera or scanner package.
+- **Commands** are signed over a canonical JSON of their id, type, chat,
+  payload, sender, target and time, so a copy under another id doesn't
+  verify. The phone always names its target: the beacon running the chat,
+  else the one picked in the chat's menu, else the one whose session ran it
+  last (`gaiaBeaconFor`). A beacon refuses a command not signed by a key it
+  pinned, or older than 10 minutes, or already in its local log of commands
+  run, and claims the rest in a transaction, so each runs once. `prompt`, `answer`, `cancel` and `queuePop` run in the
+  companion (launched first if it's down); `abort`, `rearm`, `sleep`,
+  `shutdown` and `cancelPower` in the main instance. The phone follows each
+  command to `done`, `failed` (with why) or `rejected`, then deletes it.
+- **A remote prompt** runs as the desktop's own send would, on the chat by
+  the phone's id (a new chat made with it), without touching the draft, the
+  chat in view, quotes or window context, on the phone's tier or the
+  chat's. A new chat with no tier picked goes through the router.
+- **Run lease.** The companion asks the main instance for the chat's lease
+  before each run; it's taken in a transaction, renewed every minute, and
+  lets go when the run ends (3 minutes if the holder dies). Offline or
+  signed out, the run goes ahead. Held elsewhere, a message (text only)
+  goes into the chat's queue with a "Queued: running on Laptop" toast;
+  one with images or files goes back in the draft. Catch-up is §7.4's
+  handoff, unchanged.
+- **Live streaming** as §8.1: written only while a device watches the chat
+  (registered for 60 s, renewed every 30 s), one catch-up write when a
+  watcher arrives mid-run, text at most once a second, the status line
+  alone at most every 30 s, deleted when the reply ends. **Unlike §8.1, open
+  cards ride along** (written at once): a streaming reply syncs only once it
+  ends, so without them the phone never saw the card a tool call waits on.
+  The phone answers them there: options and Allow, Deny and Dismiss on the
+  card, a typed answer or reason in the composer. A proposal is accepted as
+  proposed; the phone has no editor. Writes are counted per day; past 15k
+  live text stops and the beacon says "live view paused".
+- **Queue and drain** (§13): `/queue <text>` and Ctrl+Q queue the draft for
+  the chat in view, `/queue-pop` loads the next into the composer,
+  `/queue-pop!` sends it, `/drain` toggles drain mode; a chip above the
+  composer shows the count. A popped prompt is marked consumed (kept, not
+  deleted) so no other device sends it again; one that then doesn't start
+  goes back at the front of the queue as a new item. Drain sends the next prompt
+  when a reply finishes cleanly (not after an error, a stop or with a card
+  open), and also when drain is switched on, or a prompt queued, from
+  another device while the chat is idle, and when a desktop starts. Abort
+  turns drain off everywhere. A phone message to a chat that's running waits
+  in its queue ("Queued: it goes after this reply"); the phone's chat shows
+  the queue with Send next, and with no desktop online its composer queues
+  instead (an existing chat only). The Queue tab lists every chat's queue
+  and the global one: drag to reorder, tap to copy, edit, delete, and each
+  chat's drain switch.
+- **Push notifications** (§14): `firebase_messaging` 16.4.1 (held: 16.4.2+
+  doesn't compile against our firebase_core_platform_interface 7.x). The
+  phone asks for the notification permission only once it has asked to
+  pair, and keeps its FCM token on its device document. A beacon writes a
+  `gaia_notify` document for chats a phone drove (its last prompt, answer or
+  queue-pop came from it): once per new open card, and once when the reply
+  ends, unless that chat is being watched. `functions/src/gaia_notify.ts`
+  sends it to the device's token and deletes it, dropping tokens FCM says
+  are gone. A tapped notification opens the chat. A phone that dies or loses
+  signal never deletes its watch, so a one-minute check notifies its open
+  cards, and a reply that ended under it, once the watch runs out unrenewed.
+  Deployed 2026-10-31 on its own (Node 24), leaving the weather functions on
+  Node 20 for now, though `package.json` now says 24 for the next deploy of
+  them.
+- **Remote power** (§12.2): `sleep` and `shutdown` count down 30 s, shown
+  on the phone and in the desktop's tray with Cancel, and cancellable from
+  the phone; the phone's confirm says it can't wake the desktop again.
+  Beacon mode (Status → This desktop) keeps the system awake with the
+  display allowed off, and sets the lid's AC action to do nothing, saving
+  the old value to put back when it's turned off or Voyager quits, and at
+  the next start after a crash (`gaia_beacon_mode.json`). The heartbeat says
+  whether it's on battery, where the lid still sleeps it. **A dev profile
+  never sleeps, shuts down or changes the power plan**: it logs what it
+  would do.
+- **Also fixed:** the phone's More sheet overflowed on a 1080×2400 phone,
+  leaving Gaia (and Settings) unreachable; it now scrolls.
+- **Checked** with tests (`gaia_remote_test.dart`: signing, pairing, trust,
+  revoke, claims, staleness, live text and cards, leases, notifications,
+  power; `gaia_controller_test.dart`: remote prompts, leases, queue, drain;
+  the 181→182 migration; the backup round trip), and live (2026-10-31,
+  profile qa, account qa-124, with an Android 17 emulator signed into the
+  same account): pairing with matching codes; a new chat started from the
+  phone (routed to Quick, retitled); live text and the status line while
+  tools ran; Stop from the phone; a permission allowed and a question
+  answered from the phone, each reaching the run; Abort and Rearm from the
+  phone; a message queued behind a running reply and sent with Send next;
+  drain switched on from the phone's Queue tab, its prompt sent when the
+  desktop restarted; a sleep counted down and run (logged only), and one
+  cancelled from the phone; beacon mode shown on the phone; the phone's FCM
+  token stored. That pass found the cards gap above and the More sheet.
+
+  Retested end to end (2026-10-31, two desktop profiles and the emulator,
+  account qa-125), which found and fixed BUG-321 to BUG-329 (`qa/BUGS.md`).
+  Pairing and revoke across two desktops; forged, tampered, copied, stale and
+  future-dated commands; every card kind from the phone with the desktop
+  looking elsewhere; a contended lease, and one taken over once a killed
+  holder's ran out; Abort and Rearm; sleep and shutdown countdowns (logged);
+  beacon mode reading this laptop's hidden lid setting, restored after a
+  crash; offline queueing; the composer's queue commands; `gaia_notify`
+  documents, and `functions/src/gaia_notify.ts` run locally with Firebase
+  mocked. **Drain now takes the lease before it pops**, and when idle goes
+  by the chat's last message as saved: two desktops send each prompt once,
+  and neither goes on after a reply another stopped.
+
+  Not checked live: the tray's Cancel item, and real sleep, shutdown and lid
+  changes (dev profiles don't).
+
+  **Pushes and the security follow-up, live the same day** (real FCM through
+  the deployed function to an Android emulator with Play services): a reply
+  and a question delivered with their text; a tap opening the chat from the
+  background and from a killed process, its card answerable; none while
+  watching; none to a revoked device; an uninstalled app's token dropped; a
+  phone losing signal while watching a card or mid-reply told once its watch
+  ran out and it reconnected. A pushed message that arrives while the app is
+  in front isn't shown. The pairing code is now 80 bits (above). A beacon
+  notes each command's id in `gaia_commands_run.log`, flushed before it runs,
+  so a copy put back after a restart is refused: checked with a real command,
+  68 s after it was sent.
 
 Phase 6 as built (2026-10-31):
 - **One renderer.** `companion/gaia_markdown.dart` parses with the
@@ -1880,7 +2033,7 @@ Phase 1 as built: the drift tables are `gaia_chats`, `gaia_messages` and
 `gaia_settings`, plus an FTS5 table for search. A message uploads once it
 stops streaming. A chat continued on another device starts a new native
 session there, which since Phase 2 gets the earlier turns as a handoff
-preamble (§7.4); the run lease is still Phase 7.
+preamble (§7.4); the run lease came with Phase 7.
 A message whose parts encode to over 800 KB uploads them as JSON pieces in
 `gaia_message_chunks` (`{messageId}_{n}`), written before the message, which
 keeps only `partChunks`. An erase deletes the chunks. The update drain runs

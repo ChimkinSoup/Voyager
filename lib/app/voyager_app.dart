@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +43,13 @@ import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
+import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
+import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
+import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
+import 'package:voyager/features/gaia/remote/gaia_power.dart';
+import 'package:voyager/features/gaia/remote/gaia_push.dart';
+import 'package:voyager/features/gaia/page/gaia_providers.dart';
+import 'package:voyager/features/gaia/page/gaia_remote_chat.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/hotkeys/floaters/main_window_cover.dart';
@@ -78,6 +86,9 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   final _selectionOnResume = PreserveSelectionOnAppResume();
 
   AppTray? _tray;
+
+  /// Gaia's remote power and beacon mode (GAIA_HLD.md §12); desktop only.
+  final _gaiaPower = isWindows ? GaiaPower() : null;
   StreamSubscription<String>? _reminderTaps;
   StreamSubscription<MediaReference>? _rankingImages;
 
@@ -108,6 +119,29 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       }),
     );
     if (isWindows) unawaited(_attachGaia(reminderOs));
+    // Gaia's pushes (§14), once this phone has asked to pair: a user who
+    // never does isn't asked for the notification permission.
+    if (isAndroid) {
+      void startPush() {
+        final client = ref.read(gaiaRemoteClientProvider).valueOrNull;
+        if (client == null) return;
+        final me = ref
+            .read(gaiaDevicesProvider)
+            .valueOrNull
+            ?.where((d) => d.deviceId == client.deviceId && !d.revoked)
+            .firstOrNull;
+        if (me == null) return;
+        unawaited(GaiaPush.start(client, open: _openGaiaChat));
+      }
+
+      ref
+        ..listenManual(
+          gaiaDevicesProvider,
+          (_, _) => startPush(),
+          fireImmediately: true,
+        )
+        ..listenManual(gaiaRemoteClientProvider, (_, _) => startPush());
+    }
     // For as long as the app runs: an image attach can outlive the editor it
     // was started from.
     final rankings = RankingsActions.detached(
@@ -136,6 +170,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
             : null,
         gaiaRuns: isWindows ? GaiaHost.instance.runs : null,
         onStopGaiaRun: GaiaHost.instance.stop,
+        gaiaPower: _gaiaPower?.countdown,
+        onCancelGaiaPower: () => _gaiaPower?.cancelCountdown(),
       );
       _tray = tray;
       quitApp = _quit;
@@ -199,8 +235,26 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   /// its notifications go through the reminders' notifier.
   Future<void> _attachGaia(ReminderOsNotifier os) async {
     final deviceId = await ensureDeviceId(ref.read(settingsRepositoryProvider));
+    final trust = await GaiaTrustStore.load();
+    final commandLog = await GaiaCommandLog.load();
     if (!mounted) return;
+    // Remote use (§12.2), under whichever account is signed in.
+    final beacon = GaiaBeaconService(
+      firestore: ref.read(firestoreProvider),
+      deviceId: deviceId,
+      name: Platform.localHostname,
+      adapters: kGaiaClis.keys.toList(),
+      trust: trust,
+      commandLog: commandLog,
+    );
+    ref.listenManual(
+      authNotifierProvider.select((auth) => auth.userId),
+      (_, uid) => unawaited(beacon.setUser(uid)),
+      fireImmediately: true,
+    );
     GaiaHost.instance.attach(
+      beacon: beacon,
+      power: _gaiaPower,
       repository: ref.read(gaiaRepositoryProvider),
       deviceId: deviceId,
       media: GaiaMedia(ref.read(mediaServiceProvider)),
@@ -239,6 +293,19 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
             }),
       ),
     );
+  }
+
+  /// A Gaia push tapped on the phone: its chat, on the Gaia page.
+  void _openGaiaChat(String chatId) {
+    final router = ref.read(routerProvider);
+    router.go('/gaia');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      router.routerDelegate.navigatorKey.currentState?.push(
+        MaterialPageRoute<void>(
+          builder: (_) => GaiaRemoteChatPage(chatId: chatId),
+        ),
+      );
+    });
   }
 
   void _focusReminder(String sourceKey) {

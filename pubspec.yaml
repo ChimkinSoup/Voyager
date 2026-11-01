@@ -67,6 +67,11 @@ dependencies:
   camera: ^0.12.1
   audioplayers: ^6.8.1
   markdown: ^7.3.1
+  # Gaia push notifications on the phone (GAIA_HLD.md §14); Android only.
+  # Held at 16.4.1 for the same reason as firebase_storage below: 16.4.2+
+  # resolves against firebase_core_platform_interface 7.x but extends
+  # `FirebasePlugin`, which only 8.x has, and fails to compile.
+  firebase_messaging: 16.4.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

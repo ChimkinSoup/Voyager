@@ -19,6 +19,9 @@ import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
+import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
+import 'package:voyager/features/gaia/remote/gaia_power.dart';
+import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
 import 'package:win32/win32.dart';
@@ -120,10 +123,16 @@ class GaiaHost {
 
   /// Gaia's memories (§11); null for none, where their tools fail.
   GaiaMemories? _memories;
+
+  /// Remote use (§12.2): the heartbeat, commands, live text and leases;
+  /// null for none, where every run is local.
+  GaiaBeaconService? _beacon;
+  GaiaBeaconService? get beacon => _beacon;
   Future<void> Function(String word)? _addWord;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
+  StreamSubscription<void>? _queueChanges;
   Timer? _changedSoon;
   var _settings = GaiaSettings.initial();
 
@@ -197,9 +206,19 @@ class GaiaHost {
     GaiaExecutor? executor,
     GaiaMemories? memories,
     Future<void> Function(String word)? addWord,
+    GaiaBeaconService? beacon,
+    GaiaPower? power,
   }) {
     if (_attached.isCompleted) return;
     _addWord = addWord;
+    _beacon = beacon
+      ?..onCommand = _runCommand
+      ..setAborted(_aborted)
+      ..onBatteryNow = power == null ? null : () => power.onBattery;
+    _power = power
+      ?..countdown.addListener(_onPowerCountdown)
+      ..beaconMode.addListener(_onBeaconMode);
+    if (power != null) unawaited(power.restore());
     _toast = toast;
     _media = media;
     _reads = reads;
@@ -215,6 +234,10 @@ class GaiaHost {
     // Each save of the companion's comes back too, which it knows as its own.
     _draftChanges = repository.watchDrafts().listen((_) {
       if (_pipe.connected) _pipe.notify('drafts');
+    });
+    // The queue changes here, on the Gaia page and from other devices (§13).
+    _queueChanges = repository.watchQueue().listen((_) {
+      if (_pipe.connected) _pipe.notify('queue');
     });
     _settingsChanges = repository.watchSettings().listen((settings) {
       _settings = settings;
@@ -263,6 +286,9 @@ class GaiaHost {
     unawaited(_changes?.cancel());
     unawaited(_settingsChanges?.cancel());
     unawaited(_draftChanges?.cancel());
+    unawaited(_queueChanges?.cancel());
+    await _power?.shutdown();
+    await _beacon?.dispose();
     if (_started) await _pipe.close();
   }
 
@@ -609,6 +635,9 @@ class GaiaHost {
   /// Also a companion that exited before it connected.
   void _onDisconnected() {
     runs.value = const [];
+    // Its runs died with it: the phone stops showing them and their leases
+    // go. Quitting, the beacon has already said it's offline.
+    if (!_quitting) _beacon?.setRuns(const []);
     _drained?.complete();
     _drained = null;
     unawaited(_endStreaming());
@@ -621,6 +650,7 @@ class GaiaHost {
     _lostRunStatus = GaiaMessageStatus.interrupted;
     final store = await _attached.future;
     await store.endStreaming(status);
+    _beacon?.endAllLive();
   }
 
   /// The kill switch (§15.7), for runs. Persisted first, so a restart comes
@@ -628,6 +658,11 @@ class GaiaHost {
   /// killed with its whole tree and relaunched aborted.
   Future<void> _abort() async {
     _aborted = true;
+    _beacon?.setAborted(true);
+    // And drain mode, everywhere (§13).
+    if (_attached.isCompleted) {
+      unawaited(_attached.future.then((store) => store.stopDraining()));
+    }
     // Capture stops too (§15.7).
     unawaited(_armPickUp(false));
     try {
@@ -658,6 +693,9 @@ class GaiaHost {
             })
               (chatId: chatId, title: title),
         ];
+        _beacon?.setRuns(runs.value);
+      case 'localRun':
+        _beacon?.onLocalRun(params['chatId']! as String);
       case 'runDone':
         _toast?.call(
           params['chatId']! as String,
@@ -767,6 +805,8 @@ class GaiaHost {
         final written = await store.putMessage(
           GaiaMessage.fromJson(_map(params['message'])),
         );
+        // A reply another device watches streams to it (§8.1).
+        if (written != null) _beacon?.onMessage(written);
         // The ticks as stored, which may be the Gaia page's.
         return written == null
             ? null
@@ -903,13 +943,132 @@ class GaiaHost {
         );
         return null;
       case 'rearm':
-        _aborted = false;
-        final flag = await _abortFlag();
-        if (await flag.exists()) await flag.delete();
+        await _rearm();
+        return null;
+      case 'takeLease':
+        return {
+          'heldBy': await _beacon?.takeLease(params['chatId']! as String),
+        };
+      case 'releaseLease':
+        await _beacon?.releaseLease(params['chatId']! as String);
+        return null;
+      case 'queue':
+        return [
+          for (final item
+              in params['all'] == true
+                  ? await store.allQueued()
+                  : await store.queue(params['chatId'] as String?))
+            item.toJson(),
+        ];
+      case 'enqueue':
+        return (await store.enqueue(
+          params['chatId'] as String?,
+          params['text']! as String,
+          front: params['front'] == true,
+        )).toJson();
+      case 'queuePop':
+        return (await store.queuePop(params['chatId'] as String?))?.toJson();
+      case 'setDrain':
+        await store.setDrain(
+          params['chatId']! as String,
+          params['drain']! as bool,
+        );
         return null;
       default:
         throw GaiaPipeException('unknown method $method');
     }
+  }
+
+  Future<void> _rearm() async {
+    _aborted = false;
+    _beacon?.setAborted(false);
+    final flag = await _abortFlag();
+    if (await flag.exists()) await flag.delete();
+  }
+
+  /// A command from a paired device (§12.2), its signature checked and the
+  /// command claimed by [_beacon]. Abort and Rearm are the main instance's
+  /// own; the rest run in the companion, launched first if it's down.
+  Future<Map<String, Object?>?> _runCommand(GaiaRemoteCommand command) async {
+    switch (command.type) {
+      case GaiaRemoteCommandType.abort:
+        await _abort();
+        return null;
+      case GaiaRemoteCommandType.rearm:
+        await _rearm();
+        if (_pipe.connected) _pipe.notify('rearmed');
+        return null;
+      case GaiaRemoteCommandType.prompt ||
+          GaiaRemoteCommandType.answer ||
+          GaiaRemoteCommandType.cancel ||
+          GaiaRemoteCommandType.queuePop:
+        if (_aborted && command.type != GaiaRemoteCommandType.cancel) {
+          throw GaiaRemoteException('Gaia is aborted. Rearm it first.');
+        }
+        await _companionUp();
+        try {
+          final result = await _pipe.request('remote', {
+            'type': command.type.name,
+            'chatId': command.chatId,
+            'payload': command.payload,
+            'fromDevice': command.fromDevice,
+          });
+          return (result as Map?)?.cast<String, Object?>();
+        } on GaiaPipeException catch (error) {
+          throw GaiaRemoteException(error.message);
+        }
+      case GaiaRemoteCommandType.sleep || GaiaRemoteCommandType.shutdown:
+        final power =
+            _power ?? (throw GaiaRemoteException('This desktop cannot.'));
+        final kind = command.type.name;
+        power.startCountdown(kind);
+        _toast?.call(
+          '',
+          kind == 'sleep' ? 'Going to sleep in 30 s' : 'Shutting down in 30 s',
+          'Asked from your phone. Cancel it from the tray icon.',
+        );
+        return {'at': power.countdown.value!.at.millisecondsSinceEpoch};
+      case GaiaRemoteCommandType.cancelPower:
+        if (!(_power?.cancelCountdown() ?? false)) {
+          throw GaiaRemoteException('Nothing was counting down.');
+        }
+        return null;
+    }
+  }
+
+  /// Remote power and beacon mode (§12.1, §12.2); null for none.
+  GaiaPower? _power;
+  GaiaPower? get power => _power;
+
+  void _onPowerCountdown() {
+    final countdown = _power?.countdown.value;
+    _beacon?.setPower(
+      countdown == null
+          ? null
+          : (kind: countdown.kind, at: countdown.at.millisecondsSinceEpoch),
+    );
+  }
+
+  void _onBeaconMode() => _beacon?.setBeaconMode(
+    on: _power?.beaconMode.value ?? false,
+    onBattery: _power?.onBattery ?? false,
+  );
+
+  /// Launches the companion if it's down, and waits until it's connected.
+  Future<void> _companionUp() async {
+    if (_pipe.connected) return;
+    _relaunch?.cancel();
+    _backoff = _minBackoff;
+    unawaited(_launch());
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (!_pipe.connected) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw GaiaRemoteException('Gaia did not start on this desktop.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    // Its `hello` comes first.
+    await Future<void>.delayed(const Duration(seconds: 1));
   }
 
   GaiaExecutor _executorOrThrow() =>

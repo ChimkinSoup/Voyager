@@ -927,6 +927,18 @@ abstract class GaiaRepository {
 
   /// [listMemories] as it changes.
   Stream<List<GaiaMemory>> watchMemories();
+
+  /// The prompt queue (§13), in order: waiting items only, unless
+  /// [includeDeleted], which adds sent and deleted ones.
+  Future<List<GaiaQueueItem>> listQueue({bool includeDeleted = false});
+  Future<GaiaQueueItem?> getQueueItem(String id);
+  Future<void> upsertQueueItem(
+    GaiaQueueItem item, {
+    bool recordLocalActivity = true,
+  });
+
+  /// [listQueue] as it changes.
+  Stream<List<GaiaQueueItem>> watchQueue();
 }
 
 /// Metadata half of the media module: asset rows and the references that

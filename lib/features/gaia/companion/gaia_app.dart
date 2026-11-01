@@ -2280,10 +2280,10 @@ class _ComposerState extends State<_Composer> {
   /// for its arguments.
   Future<void> _pick(GaiaPaletteItem item) async {
     final controller = widget.controller;
-    if (item.builtin == GaiaBuiltin.remember) {
-      // What else the draft held becomes what's remembered.
+    if (item.builtin case GaiaBuiltin.remember || GaiaBuiltin.queue) {
+      // What else the draft held becomes what's remembered, or queued.
       _cutToken();
-      final text = '/remember ${_text.text.trim()}';
+      final text = '/${item.builtin!.name} ${_text.text.trim()}';
       _text.value = TextEditingValue(
         text: text,
         selection: TextSelection.collapsed(offset: text.length),
@@ -2388,6 +2388,11 @@ class _ComposerState extends State<_Composer> {
       _text.clear();
       return widget.controller.remember(memory);
     }
+    // And /queue (§13), which waits its turn.
+    if (gaiaQueueText(_text.text) case final queued?) {
+      _text.clear();
+      return widget.controller.enqueue(queued);
+    }
     // An open card takes the draft (§10, §10.1): a question's answer, a
     // permission's "why not", or a proposal's correction. Sent empty, a
     // permission is allowed and a proposal saved as its editor has it.
@@ -2491,6 +2496,16 @@ class _ComposerState extends State<_Composer> {
               send.activator: _send,
               const SingleActivator(LogicalKeyboardKey.keyV, control: true):
                   _paste,
+              // Queues the draft for later rather than sending it (§13).
+              const SingleActivator(
+                LogicalKeyboardKey.keyQ,
+                control: true,
+              ): () {
+                final text = _text.text.trim();
+                if (text.isEmpty) return;
+                _text.clear();
+                unawaited(controller.enqueue(text));
+              },
               for (var i = 0; i < pickable; i++)
                 SingleActivator(_digits[i]): () =>
                     controller.pickCardOption(card!, i),
@@ -2529,6 +2544,32 @@ class _ComposerState extends State<_Composer> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // The chat's queue and drain mode (§13); clicking it
+                    // loads the next prompt to review.
+                    if (controller.queueFor(controller.currentChatId).length
+                        case final queued
+                        when queued > 0 ||
+                            (controller.currentChat?.drain ?? false))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _ContextChip(
+                            label: [
+                              if (queued == 1)
+                                '1 queued'
+                              else if (queued > 1)
+                                '$queued queued',
+                              if (controller.currentChat?.drain ?? false)
+                                'drain on',
+                            ].join(' · '),
+                            icon: Icons.queue,
+                            onRemove: queued == 0
+                                ? null
+                                : () => controller.popQueue(send: false),
+                          ),
+                        ),
+                      ),
                     if (controller.windowContext case final window?)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),

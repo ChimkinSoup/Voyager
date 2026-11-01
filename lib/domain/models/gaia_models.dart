@@ -164,9 +164,14 @@ class GaiaChat extends SoftDeletable {
     this.agentSessions = const {},
     this.tier,
     this.curatedSeq = -1,
+    this.drain = false,
   });
 
   final String title;
+
+  /// Drain mode (§13): when a reply finishes, the chat's next queued
+  /// prompt goes on its own.
+  final bool drain;
   final DateTime lastMessageAt;
   final bool pinned;
 
@@ -195,12 +200,14 @@ class GaiaChat extends SoftDeletable {
     Map<String, GaiaAgentSession>? agentSessions,
     GaiaTier? tier,
     int? curatedSeq,
+    bool? drain,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
     bool bumpVersion = true,
     bool touch = true,
   }) => GaiaChat(
+    drain: drain ?? this.drain,
     id: id,
     createdAt: createdAt,
     updatedAt: touch ? utcNow() : updatedAt,
@@ -219,6 +226,7 @@ class GaiaChat extends SoftDeletable {
     'title': title,
     'tier': tier?.name,
     'curatedSeq': curatedSeq,
+    'drain': drain,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'version': version,
@@ -245,6 +253,76 @@ class GaiaChat extends SoftDeletable {
       agentSessions: gaiaAgentSessionsFromJson(json['agentSessions']),
       tier: gaiaTierFromName(json['tier']),
       curatedSeq: (json['curatedSeq'] as num?)?.toInt() ?? -1,
+      drain: json['drain'] == true,
+    );
+  }
+}
+
+/// A prompt waiting its turn (§13): in [chatId]'s queue, or the global one
+/// when that's null. [order] places it; [consumedAt] marks one sent, kept
+/// so another device doesn't send it again.
+class GaiaQueueItem extends SoftDeletable {
+  const GaiaQueueItem({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.text,
+    required this.order,
+    this.chatId,
+    this.consumedAt,
+  });
+
+  final String? chatId;
+  final String text;
+  final double order;
+  final DateTime? consumedAt;
+
+  bool get waiting => consumedAt == null && !isDeleted;
+
+  GaiaQueueItem copyWith({
+    String? text,
+    double? order,
+    DateTime? consumedAt,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+  }) => GaiaQueueItem(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version + 1,
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    chatId: chatId,
+    text: text ?? this.text,
+    order: order ?? this.order,
+    consumedAt: consumedAt ?? this.consumedAt,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'chatId': chatId,
+    'text': text,
+    'order': order,
+    'consumedAt': consumedAt?.toIso8601String(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory GaiaQueueItem.fromJson(Map<String, Object?> json) {
+    final createdAt = DateTime.parse(json['createdAt']! as String);
+    return GaiaQueueItem(
+      id: json['id']! as String,
+      chatId: json['chatId'] as String?,
+      text: json['text']! as String,
+      order: (json['order']! as num).toDouble(),
+      consumedAt: _date(json['consumedAt']),
+      createdAt: createdAt,
+      updatedAt: _date(json['updatedAt']) ?? createdAt,
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      deletedAt: _date(json['deletedAt']),
     );
   }
 }

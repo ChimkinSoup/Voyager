@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
+import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
+import 'package:voyager/features/gaia/remote/gaia_remote.dart';
+import 'package:voyager/features/gaia/remote/gaia_remote_client.dart';
 
 /// Live chats, pinned first, then the most recent.
 final gaiaChatsProvider = StreamProvider<List<GaiaChat>>(
@@ -83,4 +88,79 @@ final gaiaClaudeSetupProvider = FutureProvider.autoDispose<ClaudeCodeSetup>(
 
 final gaiaCodexSetupProvider = FutureProvider.autoDispose<CodexSetup>(
   (ref) => probeCodex(),
+);
+
+/// The signed-in account, whose Firestore remote use goes through; null
+/// signed out.
+final _gaiaUidProvider = Provider<String?>(
+  (ref) => ref.watch(authNotifierProvider.select((auth) => auth.userId)),
+);
+
+/// Every desktop's heartbeat (§12.2).
+final gaiaBeaconsProvider = StreamProvider<List<GaiaBeacon>>((ref) {
+  final uid = ref.watch(_gaiaUidProvider);
+  if (uid == null) return Stream.value(const []);
+  return gaiaBeacons(ref.watch(firestoreProvider), uid);
+});
+
+/// Every device that asked to pair (§12.2).
+final gaiaDevicesProvider = StreamProvider<List<GaiaDevice>>((ref) {
+  final uid = ref.watch(_gaiaUidProvider);
+  if (uid == null) return Stream.value(const []);
+  return gaiaDevices(ref.watch(firestoreProvider), uid);
+});
+
+/// A chat's live text while a beacon streams it to this device (§8.1).
+final gaiaLiveProvider = StreamProvider.autoDispose.family<GaiaLive?, String>((
+  ref,
+  chatId,
+) {
+  final uid = ref.watch(_gaiaUidProvider);
+  if (uid == null) return Stream.value(null);
+  return gaiaLive(ref.watch(firestoreProvider), uid, chatId);
+});
+
+/// The time, every 30 s: whether a beacon counts as online moves with it.
+final gaiaClockProvider = StreamProvider.autoDispose<DateTime>(
+  (ref) => _timeEvery(ref, const Duration(seconds: 30)),
+);
+
+/// The time, every second, for what counts down on screen.
+final gaiaTickProvider = StreamProvider.autoDispose<DateTime>(
+  (ref) => _timeEvery(ref, const Duration(seconds: 1)),
+);
+
+/// The time, every [period], until [ref] is disposed. Not `Stream.periodic`:
+/// a provider disposed before its first event leaves that one's timer running.
+Stream<DateTime> _timeEvery(Ref ref, Duration period) {
+  final times = StreamController<DateTime>();
+  final timer = Timer.periodic(period, (_) => times.add(DateTime.now()));
+  ref.onDispose(() {
+    timer.cancel();
+    unawaited(times.close());
+  });
+  return times.stream;
+}
+
+/// This device's signing key (§12.2); invalidated after [GaiaDeviceKey.reset].
+final gaiaDeviceKeyProvider = FutureProvider<GaiaDeviceKey>(
+  (ref) => GaiaDeviceKey.load(),
+);
+
+/// The phone's way to its beacons; null signed out.
+final gaiaRemoteClientProvider = FutureProvider<GaiaRemoteClient?>((ref) async {
+  final uid = ref.watch(_gaiaUidProvider);
+  if (uid == null) return null;
+  final key = await ref.watch(gaiaDeviceKeyProvider.future);
+  return GaiaRemoteClient(
+    firestore: ref.watch(firestoreProvider),
+    uid: uid,
+    deviceId: await ensureDeviceId(ref.read(settingsRepositoryProvider)),
+    key: key,
+  );
+});
+
+/// Every waiting prompt (§13), in order.
+final gaiaQueueProvider = StreamProvider<List<GaiaQueueItem>>(
+  (ref) => ref.watch(gaiaRepositoryProvider).watchQueue(),
 );

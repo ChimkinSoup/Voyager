@@ -8,6 +8,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
@@ -714,6 +715,46 @@ void main() {
         uploader.records[FirestoreCollections.todoTaskCompletions],
         hasLength(2),
       );
+    });
+
+    test('a chat takes its queued prompts, sent or not, when erased; other '
+        "chats' stay", () async {
+      final gaia = DriftGaiaRepository(db);
+      await gaia.upsertChat(
+        GaiaChat(
+          id: 'chat',
+          title: 'Plan',
+          createdAt: created,
+          updatedAt: created,
+          lastMessageAt: created,
+          deletedAt: utcNow(),
+        ),
+      );
+      GaiaQueueItem item(String id, String chatId, {DateTime? consumedAt}) =>
+          GaiaQueueItem(
+            id: id,
+            chatId: chatId,
+            text: 'secret',
+            order: 1,
+            consumedAt: consumedAt,
+            createdAt: created,
+            updatedAt: created,
+            version: 1,
+          );
+      await gaia.upsertQueueItem(item('waiting', 'chat'));
+      await gaia.upsertQueueItem(item('sent', 'chat', consumedAt: created));
+      await gaia.upsertQueueItem(item('other', 'another'));
+
+      await trash.erase(await trash.list());
+
+      for (final id in ['waiting', 'sent']) {
+        final erased = (await gaia.getQueueItem(id))!;
+        expect(erased.text, isEmpty);
+        expect(isErasedAt(erased.deletedAt), isTrue);
+      }
+      expect((await gaia.getQueueItem('other'))!.text, 'secret');
+      await trash.uploads;
+      expect(uploader.records[FirestoreCollections.gaiaQueue], hasLength(2));
     });
 
     test('an erased row is not listed or erased again', () async {

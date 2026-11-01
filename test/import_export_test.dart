@@ -1050,6 +1050,17 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertQueueItem(
+    GaiaQueueItem(
+      id: 'gaia-queue-1',
+      chatId: 'gaia-chat-1',
+      text: 'Then summarise it',
+      order: 1,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1427,6 +1438,7 @@ void main() {
         'gaia_settings_table',
         'gaia_drafts_table',
         'gaia_memories_table',
+        'gaia_queue_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };

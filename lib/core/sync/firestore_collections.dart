@@ -128,10 +128,29 @@ abstract final class FirestoreCollections {
   /// What Gaia remembers about the user (§11).
   static const gaiaMemories = 'gaia_memories';
 
+  /// Prompts waiting their turn (§13).
+  static const gaiaQueue = 'gaia_queue';
+
   /// A message's parts when they're too big for its own document (§8), as
   /// pieces of their JSON at `{messageId}_{n}`. Read with the message, never
   /// pulled on their own.
   static const gaiaMessageChunks = 'gaia_message_chunks';
+
+  /// Gaia's remote use (§12.2), read and written straight through
+  /// Firestore, never mirrored in drift: each desktop's heartbeat, paired
+  /// devices, the keys revoked for good, signed commands for a beacon, the
+  /// live text of a watched run, who's watching which chat, each chat's run
+  /// lease, and notifications for the phone (§8, §14). Not in [records]: none
+  /// is user data to back up, and each document is short-lived or rewritten
+  /// in place, bar the revoked keys, which are only ever added to.
+  static const gaiaBeacons = 'gaia_beacons';
+  static const gaiaDevices = 'gaia_devices';
+  static const gaiaRevoked = 'gaia_revoked';
+  static const gaiaCommands = 'gaia_commands';
+  static const gaiaLive = 'gaia_live';
+  static const gaiaWatch = 'gaia_watch';
+  static const gaiaLeases = 'gaia_leases';
+  static const gaiaNotify = 'gaia_notify';
   static const syncOperations = 'sync_operations';
 
   /// One record per document `permanentlyDeleteFromRemote` purged, written
@@ -228,6 +247,7 @@ abstract final class FirestoreCollections {
     gaiaSettings,
     gaiaDrafts,
     gaiaMemories,
+    gaiaQueue,
   };
 
   /// The only collections whose documents carry text two devices can edit at

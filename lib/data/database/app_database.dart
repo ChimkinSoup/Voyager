@@ -2206,6 +2206,26 @@ class GaiaChatsTable extends Table {
 
   /// The last message the memory curator read (GAIA_HLD.md §11).
   IntColumn get curatedSeq => integer().withDefault(const Constant(-1))();
+
+  /// Drain mode (GAIA_HLD.md §13).
+  BoolColumn get drain => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A queued Gaia prompt (GAIA_HLD.md §13): a chat's, or the global queue's
+/// when [chatId] is null.
+class GaiaQueueTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get chatId => text().nullable()();
+  TextColumn get body => text()();
+  RealColumn get sortOrder => real()();
+  DateTimeColumn get consumedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2414,13 +2434,14 @@ class GaiaMemoriesTable extends Table {
     GaiaSettingsTable,
     GaiaDraftsTable,
     GaiaMemoriesTable,
+    GaiaQueueTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 181;
+  int get schemaVersion => 182;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4472,6 +4493,19 @@ class AppDatabase extends _$AppDatabase {
       if (from < 181) {
         // Gaia's memories (GAIA_HLD.md §11).
         await migrator.createTable(gaiaMemoriesTable);
+      }
+      if (from >= 169 && from < 182) {
+        // Gaia Phase 7: drain mode (GAIA_HLD.md §13).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.drain,
+        );
+      }
+      if (from < 182) {
+        // Gaia's prompt queue (GAIA_HLD.md §13).
+        await migrator.createTable(gaiaQueueTable);
       }
     },
   );

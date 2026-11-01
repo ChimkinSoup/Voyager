@@ -43,8 +43,15 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
 
   GaiaProposal get _proposal => widget.card.proposal!;
 
-  bool get _editing =>
-      widget.card.isOpen && widget.waiting && widget.onEdit != null;
+  /// A tool call waits on it, and it can be answered here.
+  bool get _answerable =>
+      widget.card.isOpen &&
+      widget.waiting &&
+      (widget.onEdit != null || widget.onAccept != null);
+
+  /// Without [GaiaProposalCard.onEdit], as on the phone, it's accepted as
+  /// proposed or turned down: a summary with the buttons.
+  bool get _editing => _answerable && widget.onEdit != null;
 
   @override
   void dispose() {
@@ -67,7 +74,7 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
         ? ((widget.card.answer?['fields'] as Map?)?.cast<String, Object?>() ??
               widget.fields)
         : widget.fields;
-    final problem = _editing ? gaiaProposalProblem(_proposal, fields) : null;
+    final problem = _answerable ? gaiaProposalProblem(_proposal, fields) : null;
     return Container(
       constraints: const BoxConstraints(maxWidth: 520),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -75,10 +82,10 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: (_editing ? accent : theme.colorScheme.outlineVariant)
-              .withValues(alpha: _editing ? 0.7 : 0.4),
+          color: (_answerable ? accent : theme.colorScheme.outlineVariant)
+              .withValues(alpha: _answerable ? 0.7 : 0.4),
         ),
-        color: accent.withValues(alpha: _editing ? 0.08 : 0.03),
+        color: accent.withValues(alpha: _answerable ? 0.08 : 0.03),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,7 +112,7 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
             for (final key in gaiaProposalChanged(_proposal, fields))
               _summary(context, key, fields),
           const SizedBox(height: 8),
-          if (_editing) ...[
+          if (_answerable) ...[
             if (problem != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),

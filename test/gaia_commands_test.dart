@@ -94,6 +94,10 @@ void main() {
       'new',
       'stop',
       'remember',
+      'queue',
+      'queue-pop',
+      'queue-pop!',
+      'drain',
       'quick',
       'std',
       'deep',
@@ -109,6 +113,9 @@ void main() {
     expect(filterGaiaPalette(items, 'ee').map((i) => i.name), [
       'deep',
       'remember',
+      'queue',
+      'queue-pop',
+      'queue-pop!',
     ]);
     expect(filterGaiaPalette(items, 'xpl').single.name, 'explain');
     expect(filterGaiaPalette(items, 'tdy').single.name, 'tidy');

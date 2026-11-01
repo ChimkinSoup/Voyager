@@ -10075,7 +10075,75 @@ class DriftGaiaRepository implements GaiaRepository {
   @override
   Stream<List<GaiaMemory>> watchMemories() =>
       _memories().watch().map((rows) => rows.map(_mapGaiaMemory).toList());
+
+  SimpleSelectStatement<$GaiaQueueTableTable, GaiaQueueTableData> _queue({
+    bool includeDeleted = false,
+  }) => _db.select(_db.gaiaQueueTable)
+    ..where(
+      (t) => includeDeleted
+          ? const Constant(true)
+          : t.deletedAt.isNull() & t.consumedAt.isNull(),
+    )
+    ..orderBy([
+      (t) => OrderingTerm.asc(t.sortOrder),
+      (t) => OrderingTerm.asc(t.createdAt),
+    ]);
+
+  @override
+  Future<List<GaiaQueueItem>> listQueue({bool includeDeleted = false}) async =>
+      (await _queue(
+        includeDeleted: includeDeleted,
+      ).get()).map(_mapGaiaQueueItem).toList();
+
+  @override
+  Future<GaiaQueueItem?> getQueueItem(String id) async {
+    final row = await (_db.select(
+      _db.gaiaQueueTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaQueueItem(row);
+  }
+
+  @override
+  Future<void> upsertQueueItem(
+    GaiaQueueItem item, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaQueueTable)
+        .insertOnConflictUpdate(
+          GaiaQueueTableCompanion(
+            id: Value(item.id),
+            chatId: Value(item.chatId),
+            body: Value(item.text),
+            sortOrder: Value(item.order),
+            consumedAt: Value(item.consumedAt),
+            createdAt: Value(item.createdAt),
+            updatedAt: Value(item.updatedAt),
+            version: Value(item.version),
+            deletedAt: Value(item.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaQueue, item);
+    }
+  }
+
+  @override
+  Stream<List<GaiaQueueItem>> watchQueue() =>
+      _queue().watch().map((rows) => rows.map(_mapGaiaQueueItem).toList());
 }
+
+GaiaQueueItem _mapGaiaQueueItem(GaiaQueueTableData row) => GaiaQueueItem(
+  id: row.id,
+  chatId: row.chatId,
+  text: row.body,
+  order: row.sortOrder,
+  consumedAt: row.consumedAt,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
 
 GaiaMemory _mapGaiaMemory(GaiaMemoriesTableData row) => GaiaMemory(
   id: row.id,
@@ -10109,6 +10177,7 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   agentSessions: gaiaAgentSessionsFromJson(jsonDecode(row.agentSessionsJson)),
   tier: gaiaTierFromName(row.tier),
   curatedSeq: row.curatedSeq,
+  drain: row.drain,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10124,6 +10193,7 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       agentSessionsJson: Value(jsonEncode(chat.toJson()['agentSessions'])),
       tier: Value(chat.tier?.name),
       curatedSeq: Value(chat.curatedSeq),
+      drain: Value(chat.drain),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),

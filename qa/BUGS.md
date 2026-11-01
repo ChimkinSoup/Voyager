@@ -3536,4 +3536,93 @@ Entry format:
 - Notes: the card otherwise works (allow, typed deny, Deny button; see the pass notes in PROGRESS.md).
 - Notes (2026-10-28, fixed in the working tree, uncommitted): the `SelectableText` now has `minLines: 1`, so the box grows with the command up to eight lines. Not yet checked in the app.
 
-<!-- Last ID: BUG-320. -->
+### BUG-321 [GAIA-P7] With two desktops online, drain loops: one queued prompt becomes hundreds of queue rows and repeated real sends
+- Severity: Critical
+- Found: 2026-10-31, Gaia Phase 7 full retest, qa-125 on p7a + p7b + Android emulator
+- Steps to reproduce: two desktops online, a chat with drain on, one prompt queued from the phone.
+- Expected: it's sent once (§13).
+- Actual: 203 rows in about two minutes, with the same prompt sent again and again, until Abort. `_drainNext` popped, `send` found the lease held and queued a copy, and the new item triggered `_drainNext` again. It needs no race, only drain on while another desktop runs the chat. A unit test of it hung in the same loop.
+- Notes (fixed, uncommitted): `_drainNext` takes the lease before it pops. Live: each prompt sent once, one row each, and nothing popped while another desktop holds the lease.
+
+### BUG-322 [GAIA-P7] A proposal can't be accepted from the phone: "No longer waiting", no buttons
+- Severity: Major
+- Found: 2026-10-31, same pass
+- Steps to reproduce: from the phone, run `/propose1` in a chat (with a todo list existing).
+- Expected: Save and Turn down on the card (§12.2, "a proposal is accepted as proposed").
+- Actual: `GaiaProposalCard` was interactive only with `onEdit`, which the phone doesn't pass. Of stacked cards, only the last took an answer.
+- Notes (fixed, uncommitted): a card with no editor shows its summary and the buttons, and every open live card takes an answer. Live: Save committed the task with `origin: gaia`; two stacked proposals each answered.
+
+### BUG-323 [GAIA-P7] Beacon mode never overrides the lid on a machine where Windows hides the setting, this laptop included
+- Severity: Major
+- Found: 2026-10-31, same pass
+- Steps to reproduce: `powercfg /q SCHEME_CURRENT SUB_BUTTONS LIDACTION` on the ZephyrusG14 prints only the scheme header. Turn beacon mode on.
+- Expected: the AC lid action saved and set to do nothing (§12.1).
+- Actual: `gaiaParseLidAc` got null, so `savedLidAc` stayed null with nothing said; the lid would still act (here its AC action is Shut down).
+- Notes (fixed, uncommitted): reads with `/qh`. Live on a dev profile: `savedLidAc: 3`, "would set … to 0", then "to 3" on quit. The real `/setacvalueindex` hasn't been run: dev profiles don't change the power plan.
+
+### BUG-324 [GAIA-P7] After Decline, or Revoke then Remove, the phone can't pair again, and says it did
+- Severity: Major
+- Found: 2026-10-31, same pass
+- Steps to reproduce: Decline a request on a desktop (or Revoke, then the X), Pair on the phone, Pair and "They match" on the desktop.
+- Expected: paired, or told why not.
+- Actual: the phone re-used a key the desktop had blacklisted. `trust` did nothing but `trustedBy` was still written, so the phone said "Paired with …" and its commands came back "not paired". Only clearing the app's data got out of it.
+- Notes (fixed, uncommitted): with no request on file the phone makes a new key; a desktop refuses a blacklisted key, says so, and writes no `trustedBy`. Live: new code 862 031, paired with both desktops. Forged key checks still reject.
+
+### BUG-325 [GAIA-P7] Commands sent from the phone's Status tab are never deleted, and their errors never shown
+- Severity: Minor
+- Found: 2026-10-31, same pass
+- Steps to reproduce: Abort, Rearm, Sleep, Shut down or Cancel on the phone's Status tab, then read `gaia_commands`.
+- Actual: each stays forever, against §19's "then deletes it". A chat left before its command settled left it behind too.
+- Notes (fixed, uncommitted): `sendAndSettle` follows and deletes, and a failure shows in a snackbar; the chat page keeps following after it closes. Commands orphaned before the fix stay.
+
+### BUG-326 [GAIA-P7] After a Stop on one desktop, the other desktop's drain sends the next prompt
+- Severity: Major
+- Found: 2026-10-31, regression check of BUG-321
+- Steps to reproduce: two desktops, drain on, a prompt queued while the first runs the chat; Stop it there.
+- Expected: drain stops (§13).
+- Actual: the second judged by the messages it had in memory, which didn't have the stopped reply.
+- Notes (fixed, uncommitted): idle, it reads the last saved message, and a question with no reply yet also holds it. Live: held after a stopped reply, resumed once after a clean one.
+
+### BUG-327 [GAIA-P7] The phone's power countdown stays on "30 s" until it's over
+- Severity: Minor
+- Found: 2026-10-31, same pass
+- Actual: the row used the 30-second clock.
+- Notes (fixed, uncommitted): a per-second tick while a countdown runs. Live: 28, 23, 18 s.
+
+### BUG-328 [GAIA-P7] An empty signature throws, and the command stays pending; a future-dated one is accepted
+- Severity: Minor
+- Found: 2026-10-31, same pass
+- Actual: `Ed25519.verify` throws a StateError for a wrong-length signature, uncaught in `_handle`; nothing ran, but it was never settled. A correctly signed command dated a day ahead ran: only age was checked.
+- Notes (fixed, uncommitted): both rejected, with a message that also covers clocks that disagree.
+
+### BUG-329 [GAIA-P7] A card the phone saw and then left is never notified; a phone in the background counts as watching; past the write budget cards stop too
+- Severity: Minor
+- Found: 2026-10-31, same pass
+- Actual: a card raised while watched was marked notified, so no push followed once the phone left. A pocketed phone stayed a watcher for up to 60 s. Once `livePaused`, `_writeLive` dropped cards as well as text, leaving a tool call waiting unseen.
+- Notes (fixed, uncommitted): notified when the watcher leaves; the chat stops watching when the app is hidden and resumes when shown; cards still go past the budget. Live: background raised a `card` document and the card could be answered on return. The budget path was changed by reading the code, with no test of its own.
+
+### BUG-330 [GAIA-P7] A phone that dies or loses signal while watching a card never hears about it
+- Severity: Major
+- Found: 2026-10-31, real push pass (`gaiaNotify` deployed, account qa-126)
+- Actual: a dead phone never deletes its watch, so no snapshot says it left and nothing rechecks once the watch runs out. Seen live: the emulator died with a question open; the watch expired, and no `gaia_notify` was written.
+- Notes (fixed, uncommitted): `notifyLapsedWatchers` runs on the one-minute timer. Live: signal cut while watching, the notify document was written 113 s later and the push arrived on reconnecting.
+
+### BUG-331 [GAIA-P7] A reply that ends in the 60 s after a phone died is never notified
+- Severity: Major
+- Found: 2026-10-31, same pass, by reading the code; the failing test came first
+- Actual: `_notifyFor` marked the reply notified and returned while the dead phone's watch still stood.
+- Notes (fixed, uncommitted): the reply is kept with that watch's end. A renewal or a clean delete means the phone saw it; a watch that just runs out notifies. Live: signal cut mid-reply, "Gaia replied" arrived on reconnecting.
+
+### BUG-332 [GAIA-P7] The pairing code was 20 bits, so anyone able to write to the user's Firestore could search for a key showing the same code
+- Severity: Major (security)
+- Found: 2026-10-31, Phase 7 retest; left open for a decision, then closed on request
+- Actual: six digits from the key's hash; about a million key generations finds a match, and the user would confirm the attacker's key as their phone's.
+- Notes (fixed, uncommitted): 16 characters, 80 bits of the hash, no ambiguous letters. The flow and pinned keys are unchanged. Live: both devices showed `8XRH T6BS D0J3 5MED`, and it fits one line on the phone.
+
+### BUG-333 [GAIA-P7] A signed command put back after a desktop restart runs again while it's under 10 minutes old
+- Severity: Major (security)
+- Found: 2026-10-31, Phase 7 retest; left open for a decision, then closed on request
+- Actual: "already seen" was kept only in memory, and the signature stays valid under its own id.
+- Notes (fixed, uncommitted): `GaiaCommandLog` appends each id to `gaia_commands_run.log` before it runs, flushed; if that write fails the command doesn't run. Entries past the age limit go at the next load. Live: a real command run, desktop restarted, put back to pending 68 s after it was sent: rejected "already ran this command".
+
+<!-- Last ID: BUG-333. -->

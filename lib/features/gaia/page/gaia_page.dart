@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -18,26 +17,24 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
-import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
-import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
-import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
-import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
-import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
+import 'package:voyager/features/gaia/page/gaia_remote_chat.dart';
+import 'package:voyager/features/gaia/page/gaia_queue_tab.dart';
+import 'package:voyager/features/gaia/page/gaia_status_tab.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
-enum _GaiaTab { chats, actions, memories, setup, settings }
+enum _GaiaTab { chats, actions, memories, queue, status, setup, settings }
 
 /// The Gaia page (GAIA_HLD.md §17): chats with search, the action log,
-/// memories and their inbox, the setup checklist, and Gaia's settings. On the desktop a chat opens in Gaia itself; on
-/// Android, until a phone can run agents (Phases 2 and 6), its transcript
-/// opens read-only.
+/// memories and their inbox, desktops and paired devices, the setup
+/// checklist, and Gaia's settings. On the desktop a chat opens in Gaia
+/// itself; on Android it opens here, and runs on a paired desktop (§12.2).
 class GaiaPage extends ConsumerStatefulWidget {
   const GaiaPage({super.key});
 
@@ -76,8 +73,8 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             child: SegmentedButton<_GaiaTab>(
               showSelectedIcon: false,
               style: SegmentedButton.styleFrom(
@@ -101,6 +98,16 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
                   icon: const Icon(PhosphorIconsRegular.brain, size: 15),
                   label: Text(inbox == 0 ? 'Memories' : 'Memories ($inbox)'),
                 ),
+                const ButtonSegment(
+                  value: _GaiaTab.queue,
+                  icon: Icon(PhosphorIconsRegular.queue, size: 15),
+                  label: Text('Queue'),
+                ),
+                const ButtonSegment(
+                  value: _GaiaTab.status,
+                  icon: Icon(PhosphorIconsRegular.broadcast, size: 15),
+                  label: Text('Status'),
+                ),
                 // The CLIs run on the desktop only.
                 if (isWindows)
                   const ButtonSegment(
@@ -123,6 +130,8 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
             _GaiaTab.chats => const _ChatsTab(),
             _GaiaTab.actions => const _ActionsTab(),
             _GaiaTab.memories => const _MemoriesTab(),
+            _GaiaTab.queue => const GaiaQueueTab(),
+            _GaiaTab.status => const GaiaStatusTab(),
             _GaiaTab.setup => const _SetupTab(),
             _GaiaTab.settings => const _SettingsTab(),
           },
@@ -154,7 +163,14 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
     final theme = Theme.of(context);
     final chats = ref.watch(gaiaChatsProvider).valueOrNull ?? const [];
     final runs = isWindows ? ref.watch(gaiaRunsProvider) : const <GaiaRun>[];
-    final running = {for (final run in runs) run.chatId};
+    // On the phone, what every desktop says it's running (§12.2).
+    final running = isWindows
+        ? {for (final run in runs) run.chatId}
+        : {
+            for (final beacon
+                in ref.watch(gaiaBeaconsProvider).valueOrNull ?? const [])
+              for (final run in beacon.runs) run.chatId,
+          };
     final query = _query.trim();
     final matches = query.isEmpty
         ? null
@@ -203,14 +219,38 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
             ),
           const SizedBox(height: 16),
         ],
-        VoyagerTextField(
-          controller: _search,
-          decoration: const InputDecoration(
-            hintText: 'Search chats',
-            prefixIcon: Icon(PhosphorIconsRegular.magnifyingGlass, size: 16),
-            isDense: true,
-          ),
-          onChanged: (text) => setState(() => _query = text),
+        Row(
+          children: [
+            Expanded(
+              child: VoyagerTextField(
+                controller: _search,
+                decoration: const InputDecoration(
+                  hintText: 'Search chats',
+                  prefixIcon: Icon(
+                    PhosphorIconsRegular.magnifyingGlass,
+                    size: 16,
+                  ),
+                  isDense: true,
+                ),
+                onChanged: (text) => setState(() => _query = text),
+              ),
+            ),
+            // On the phone a chat starts here and runs on a desktop.
+            if (!isWindows) ...[
+              const SizedBox(width: 8),
+              GlassButton(
+                dense: true,
+                label: 'New chat',
+                icon: const Icon(PhosphorIconsRegular.plus, size: 13),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        GaiaRemoteChatPage(chatId: const Uuid().v4()),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 12),
         if (chats.isEmpty)
@@ -219,8 +259,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
             child: Text(
               isWindows
                   ? 'No chats yet. Open Gaia to start one.'
-                  : 'No chats yet. Chats you have with Gaia on your '
-                        'desktop show up here.',
+                  : 'No chats yet. Start one, and it runs on your desktop.',
               style: muted,
             ),
           )
@@ -650,7 +689,9 @@ class _ChatRow extends ConsumerWidget {
       GaiaHost.instance.openChat(chat.id);
     } else {
       Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => _GaiaTranscript(chat: chat)),
+        MaterialPageRoute<void>(
+          builder: (_) => GaiaRemoteChatPage(chatId: chat.id),
+        ),
       );
     }
   }
@@ -715,194 +756,6 @@ class _ChatRow extends ConsumerWidget {
     return at.year == now.year
         ? DateFormat.MMMd().format(at)
         : DateFormat.yMMMd().format(at);
-  }
-}
-
-/// An image on a user's message (§9.3), as a thumbnail.
-class _GaiaPageImage extends ConsumerStatefulWidget {
-  const _GaiaPageImage({required this.part});
-
-  final GaiaImagePart part;
-
-  @override
-  ConsumerState<_GaiaPageImage> createState() => _GaiaPageImageState();
-}
-
-class _GaiaPageImageState extends ConsumerState<_GaiaPageImage> {
-  // Kept across rebuilds, which a streaming reply makes many of.
-  late var _asset = ref.read(mediaServiceProvider).asset(widget.part.mediaId);
-
-  @override
-  void didUpdateWidget(_GaiaPageImage old) {
-    super.didUpdateWidget(old);
-    if (old.part.mediaId != widget.part.mediaId) {
-      _asset = ref.read(mediaServiceProvider).asset(widget.part.mediaId);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final part = widget.part;
-    const height = 120.0;
-    final width = part.height == 0
-        ? height
-        : (height * part.width / part.height).clamp(40.0, 320.0);
-    return FutureBuilder(
-      future: _asset,
-      builder: (context, snapshot) {
-        final asset = snapshot.data;
-        return SizedBox(
-          width: width,
-          height: height,
-          child: asset == null
-              ? Center(child: Text(gaiaImageToken(part.label)))
-              : MediaImage(
-                  asset: asset,
-                  width: width,
-                  height: height,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-        );
-      },
-    );
-  }
-}
-
-/// A chat's transcript, read-only: Android's view until a phone can run
-/// agents.
-class _GaiaTranscript extends ConsumerWidget {
-  const _GaiaTranscript({required this.chat});
-
-  final GaiaChat chat;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final messages =
-        ref.watch(gaiaMessagesProvider(chat.id)).valueOrNull ?? const [];
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return Scaffold(
-      appBar: AppBar(title: Text(chat.title, overflow: TextOverflow.ellipsis)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          for (final message in messages)
-            if (message.role == GaiaMessageRole.user)
-              Align(
-                alignment: Alignment.centerRight,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12, left: 48),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: gaiaPromptColor(theme),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (message.parts.whereType<GaiaContextPart>().firstOrNull
-                          case final window?) ...[
-                        Text(window.label, style: muted),
-                        const SizedBox(height: 4),
-                      ],
-                      for (final quote
-                          in message.parts.whereType<GaiaQuotePart>()) ...[
-                        Text(
-                          quote.label,
-                          style: muted,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                      ],
-                      SelectableText(message.text),
-                      // By path: the file is on the device it came from.
-                      for (final file
-                          in message.parts.whereType<GaiaFilePart>())
-                        Text(file.reference, style: muted),
-                      if (message.parts.whereType<GaiaImagePart>()
-                          case final images when images.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final image in images)
-                              _GaiaPageImage(part: image),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final (index, part) in message.parts.indexed)
-                      switch (part) {
-                        GaiaTextPart(:final text, :final checks) =>
-                          GaiaMarkdown(
-                            text: text,
-                            checks: checks,
-                            onCheck: (task) => GaiaHost.instance.toggleCheck(
-                              ref.read(gaiaRepositoryProvider),
-                              message.id,
-                              index,
-                              task,
-                              !checks.contains(task),
-                            ),
-                          ),
-                        GaiaActivityPart(:final tools) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: GaiaActivityChip(
-                            label: 'Used ${tools.toSet().join(', ')}',
-                          ),
-                        ),
-                        // A record: cards are answered in Gaia itself.
-                        GaiaCardPart() => GaiaCardView(card: part),
-                        // Only the user's messages carry attachments and
-                        // context.
-                        GaiaImagePart() ||
-                        GaiaFilePart() ||
-                        GaiaContextPart() ||
-                        GaiaQuotePart() ||
-                        GaiaUnknownPart() => const SizedBox.shrink(),
-                      },
-                    if (message.status != GaiaMessageStatus.complete)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          switch (message.status) {
-                            GaiaMessageStatus.streaming => 'Still running',
-                            GaiaMessageStatus.error => 'Error',
-                            GaiaMessageStatus.cancelled => 'Stopped',
-                            GaiaMessageStatus.interrupted => 'Interrupted',
-                            GaiaMessageStatus.aborted => 'Aborted',
-                            GaiaMessageStatus.complete => '',
-                          },
-                          style: switch (message.status) {
-                            GaiaMessageStatus.streaming => muted,
-                            GaiaMessageStatus.error => muted?.copyWith(
-                              color: theme.colorScheme.error,
-                            ),
-                            _ => muted?.copyWith(color: kGaiaStatusRose),
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-        ],
-      ),
-    );
   }
 }
 
