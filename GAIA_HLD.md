@@ -453,8 +453,8 @@ window with its reset. The rings are for the next message's agent: one per
 account that agent's adapter has, in account order. The account the next
 message runs on is drawn at full strength; the others are dulled, so a
 glance shows which account is in use and whether another has headroom.
-Clicking a dulled ring is not an account switch: switching stays explicit
-(§6.5).
+Clicking a dulled ring switches to that account, the same as the account item
+in the composer's notch (§6.5).
 
 As of Phase 2 there is one account per adapter, so there is one ring, for
 Claude only. It reads the `rate_limit_event` Claude Code prints during a
@@ -552,8 +552,9 @@ case that applies:
    and Sonnet out, only Quick (Gemini) is offered. Opus is the same provider
    and isn't.
 3. Otherwise (all tiers on one provider, or the alternatives are out too):
-   "Usage has run out", with the soonest reset across this provider's
-   accounts ("Account A resets at 6:40 PM"). With one account, it's that
+   "Usage has run out", with each of this provider's accounts that's out on a
+   line of its own, soonest reset first ("Account A resets at 6:40 PM"). Case 2
+   lists them the same way when no account is left. With one account, it's that
    account's reset.
 
 The first option is highlighted. **Ctrl+Enter accepts it**, a click picks any
@@ -567,7 +568,7 @@ answering.
 JSONL under `<config dir>/projects/<cwd-slug>/<session>.jsonl`. Gaia copies
 that file into the other account's config dir and `--resume`s it there. Codex
 sessions (`<CODEX_HOME>/sessions`) are copied the same way. The chat shows a
-"switched to account B" divider.
+"switched to account B" divider before the prompt whose reply moved.
 
 **The manual switch (Phase 8B, decided 2026-11-01).** The current account is
 **per adapter and sticky**, not per chat: `currentAccounts` in `gaia_settings`,
@@ -576,7 +577,10 @@ each with its own copy and divider. So one switch gets every chat off a low
 account, and 8C's banner and card need no per-chat state. The cost is that a
 chat the user didn't touch loses its prompt cache on its next message, which
 the confirmation says. It's picked from an account item beside the tier in the
-composer's notch, shown once the adapter has two accounts. It asks first when
+composer's notch, shown once the adapter has two accounts, or by clicking the
+account's usage ring. Either item opens one panel, the accounts above the tiers,
+side by side when there are two and listed when there are more, and a pick
+closes it. It asks first when
 the current chat has a reply, with the §7.5 wording. A run already going
 finishes on the account it started on.
 
@@ -630,7 +634,8 @@ through the confirmation in §7.5. The command works at any point in the chat.
 - **Cross vendor** (Gemini → Claude): the new agent gets a **handoff
   preamble**. That's a Gaia-rendered transcript of recent turns plus a
   utility-model summary of older ones. Tool-call internals of the other vendor
-  don't carry over, which is lossy but honest, and Gaia shows a divider.
+  don't carry over, which is lossy but honest, and Gaia shows a divider before
+  the prompt whose reply moved.
   Images don't go in as images. Each goes as a utility-model caption plus
   the path of its local file, which the agent opens with its own file or
   image tool when the caption isn't enough (Phase 3 as built, §19).
@@ -848,6 +853,20 @@ be picked there, the `/word` taken out of the draft; the user's commands
 only when the `/word` is the whole draft, since they take the rest as
 arguments. `/new` takes what's left of the draft into the new chat, as
 Ctrl+Shift+N does (§9.3).
+
+As built (2026-11-01): an account can have an alias, set on the Setup tab, and
+`/alias` switches to it through the same flow as the picker (§6.5), asking
+first once the chat has a reply. It works like a tier command: from the palette
+anywhere in the draft, or inline once completed. Inline it always asks, since a
+user-chosen name can be ordinary text (`/tmp`): it comes out of the draft only
+on a yes, a word turned down isn't asked about again while the draft holds it,
+and the alias of the account already current stays as written. Aliases share one
+namespace across adapters, with the built-ins and the user's commands, and name
+an account whichever adapter the next message is on. An alias for another
+adapter switches that adapter and leaves this chat's next message where it is,
+which the dialog says, without the cache warning; the palette names each alias's
+CLI. A name typed in full comes first in the palette, so a short alias isn't
+lost under a longer command.
 
 ### 9.3 Attachments and the "[image N]" question
 

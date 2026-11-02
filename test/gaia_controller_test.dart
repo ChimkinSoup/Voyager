@@ -4086,6 +4086,60 @@ void main() {
     });
 
     test(
+      'with every account out, the card lists them by when they reset',
+      () async {
+        GaiaUsageRead full(DateTime? resetsAt) => GaiaUsageRead(
+          GaiaUsageHealth.ok,
+          usage: GaiaUsage([
+            GaiaUsageWindow(
+              kind: GaiaUsageKind.session,
+              used: 1,
+              resetsAt: resetsAt,
+              observedAt: DateTime.now(),
+            ),
+          ]),
+        );
+        final soon = at.subtract(const Duration(hours: 1));
+        await start(
+          usageSources: {
+            kGaiaClaudeCodeAdapter: _PerAccountUsageSource({
+              a.id: full(at),
+              b.id: full(soon),
+            }),
+          },
+        );
+        expect(controller.limitCard!.resets, [
+          (account: b, at: soon),
+          (account: a, at: at),
+        ]);
+      },
+    );
+
+    test('an account whose reset is not known is listed last', () async {
+      await start(
+        usageSources: {
+          kGaiaClaudeCodeAdapter: _PerAccountUsageSource({
+            a.id: GaiaUsageRead(
+              GaiaUsageHealth.ok,
+              usage: GaiaUsage([
+                GaiaUsageWindow(
+                  kind: GaiaUsageKind.session,
+                  used: 1,
+                  observedAt: DateTime.now(),
+                ),
+              ]),
+            ),
+            b.id: GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(1)),
+          }),
+        },
+      );
+      expect(controller.limitCard!.resets, [
+        (account: b, at: at),
+        (account: a, at: null),
+      ]);
+    });
+
+    test(
       'numbers past their floor mark the account, untracked ones not',
       () async {
         final source = _PerAccountUsageSource({
@@ -4096,8 +4150,7 @@ void main() {
         // A signed out account couldn't take it.
         final card = controller.limitCard!;
         expect(card.accounts, isEmpty);
-        expect(card.resets?.account, a);
-        expect(card.resets?.at, at);
+        expect(card.resets, [(account: a, at: at)]);
       },
     );
 

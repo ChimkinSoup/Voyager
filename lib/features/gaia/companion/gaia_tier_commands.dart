@@ -5,6 +5,9 @@ import 'package:voyager/domain/models/gaia_models.dart';
 /// the tier, and the text with the command taken out.
 typedef GaiaTierCommand = ({GaiaTier tier, TextEditingValue value});
 
+/// An account's alias used as a command (§9.2), found the same way.
+typedef GaiaAccountCommand = ({GaiaAccount account, TextEditingValue value});
+
 final _commands = {for (final tier in GaiaTier.values) tier.command: tier};
 
 /// The first completed `/quick`, `/std` or `/deep` in [value]: a whole token
@@ -18,9 +21,39 @@ GaiaTierCommand? findGaiaTierCommand(
   TextEditingValue value, {
   bool atEnd = false,
 }) {
+  final found = _findCommand(value, _commands.keys, atEnd: atEnd);
+  return found == null
+      ? null
+      : (tier: _commands[found.command]!, value: found.value);
+}
+
+/// The first completed alias of [accounts] in [value], by the same rules as
+/// [findGaiaTierCommand]. Null when there's none.
+GaiaAccountCommand? findGaiaAccountCommand(
+  TextEditingValue value,
+  List<GaiaAccount> accounts, {
+  bool atEnd = false,
+}) {
+  final byCommand = {
+    for (final account in accounts)
+      if (account.alias.isNotEmpty) '/${account.alias}': account,
+  };
+  if (byCommand.isEmpty) return null;
+  final found = _findCommand(value, byCommand.keys, atEnd: atEnd);
+  return found == null
+      ? null
+      : (account: byCommand[found.command]!, value: found.value);
+}
+
+({String command, TextEditingValue value})? _findCommand(
+  TextEditingValue value,
+  Iterable<String> commands, {
+  required bool atEnd,
+}) {
   final text = value.text;
+  final names = commands.map(RegExp.escape).join('|');
   final pattern = RegExp(
-    atEnd ? r'(^|\s)(/quick|/std|/deep)(\s|$)' : r'(^|\s)(/quick|/std|/deep)\s',
+    atEnd ? '(^|\\s)($names)(\\s|\$)' : '(^|\\s)($names)\\s',
   );
   for (final match in pattern.allMatches(text)) {
     final start = match.start + match.group(1)!.length;
@@ -48,7 +81,7 @@ GaiaTierCommand? findGaiaTierCommand(
           )
         : TextSelection.collapsed(offset: updated.length);
     return (
-      tier: _commands[match.group(2)]!,
+      command: match.group(2)!,
       value: TextEditingValue(text: updated, selection: selection),
     );
   }

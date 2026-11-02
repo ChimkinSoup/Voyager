@@ -947,9 +947,19 @@ class _Accounts extends ConsumerWidget {
             key: ValueKey(account.id),
             account: account,
             several: accounts.length > 1,
-            onRename: (label) => save([
+            // Every adapter's accounts share the composer's `/` palette.
+            takenAliases: {
+              ..._reservedCommandNames,
+              for (final command in settings.commands) command.name,
+              for (final other in settings.accounts)
+                if (other.id != account.id || other.adapter != adapter)
+                  other.alias,
+            },
+            onSave: (label, alias) => save([
               for (final other in accounts)
-                other == account ? other.copyWith(label: label) : other,
+                other == account
+                    ? other.copyWith(label: label, alias: alias)
+                    : other,
             ]),
             onUp: index == 0
                 ? null
@@ -993,7 +1003,8 @@ class _AccountRow extends ConsumerStatefulWidget {
     super.key,
     required this.account,
     required this.several,
-    required this.onRename,
+    required this.takenAliases,
+    required this.onSave,
     required this.onUp,
     required this.onDown,
     required this.onRemove,
@@ -1001,7 +1012,10 @@ class _AccountRow extends ConsumerStatefulWidget {
 
   final GaiaAccount account;
   final bool several;
-  final void Function(String label) onRename;
+
+  /// Names its alias can't take.
+  final Set<String> takenAliases;
+  final void Function(String label, String alias) onSave;
   final VoidCallback? onUp;
   final VoidCallback? onDown;
   final VoidCallback? onRemove;
@@ -1012,18 +1026,31 @@ class _AccountRow extends ConsumerStatefulWidget {
 
 class _AccountRowState extends ConsumerState<_AccountRow> {
   late final _label = TextEditingController(text: widget.account.label);
+  late final _alias = TextEditingController(text: widget.account.alias);
 
   @override
   void didUpdateWidget(_AccountRow old) {
     super.didUpdateWidget(old);
     // Renamed on another device, while nothing here is unsaved.
     if (_label.text == old.account.label) _label.text = widget.account.label;
+    if (_alias.text == old.account.alias) _alias.text = widget.account.alias;
   }
 
   @override
   void dispose() {
     _label.dispose();
+    _alias.dispose();
     super.dispose();
+  }
+
+  String? get _aliasError {
+    final alias = _alias.text.trim();
+    if (alias.isEmpty) return null;
+    if (!RegExp(r'^[\w-]+$').hasMatch(alias)) {
+      return 'Letters, digits, - and _ only';
+    }
+    if (widget.takenAliases.contains(alias)) return 'Already a command';
+    return null;
   }
 
   @override
@@ -1031,6 +1058,7 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
     final theme = Theme.of(context);
     final account = widget.account;
     final label = _label.text.trim();
+    final alias = _alias.text.trim();
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
@@ -1049,10 +1077,27 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
                   onChanged: (_) => setState(() {}),
                 ),
               ),
-              if (label.isNotEmpty && label != account.label) ...[
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 150,
+                child: VoyagerTextField(
+                  controller: _alias,
+                  decoration: InputDecoration(
+                    labelText: 'Alias',
+                    prefixText: '/',
+                    isDense: true,
+                    errorText: _aliasError,
+                    errorMaxLines: 2,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (label.isNotEmpty &&
+                  _aliasError == null &&
+                  (label != account.label || alias != account.alias)) ...[
                 const SizedBox(width: 8),
                 GlassButton(
-                  onPressed: () => widget.onRename(label),
+                  onPressed: () => widget.onSave(label, alias),
                   label: 'Save',
                   dense: true,
                 ),
@@ -1988,6 +2033,7 @@ class _CommandsSection extends ConsumerWidget {
         command: command,
         taken: {
           ..._reservedCommandNames,
+          for (final account in settings.accounts) account.alias,
           for (final c in settings.commands)
             if (c.name != command?.name) c.name,
         },

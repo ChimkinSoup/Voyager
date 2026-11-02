@@ -55,6 +55,14 @@ String gaiaResetTime(DateTime at) => DateUtils.isSameDay(at, DateTime.now())
     ? DateFormat.jm().format(at)
     : DateFormat.E().add_jm().format(at);
 
+/// The low banner's sentence for [name]'s [window].
+String gaiaLowText(String name, GaiaUsageWindow window) {
+  final left = ((1 - window.usedNow) * 100).round();
+  final resets = window.resetsAt;
+  return '$name is low: $left% of the ${gaiaLimitName(window)} limit left'
+      '${resets == null ? '' : ', resets ${gaiaResetTime(resets)}'}.';
+}
+
 // FRAGILE(usage): the words a CLI's failed turn uses for a used-up limit are
 // not a stable API. Observed in the binaries: Claude Code 2.1.316 "You've hit
 // your session limit · resets 4pm", "You've reached your …", "You're out of
@@ -96,7 +104,7 @@ class GaiaLimitCard {
     required this.named,
     this.accounts = const [],
     this.tiers = const [],
-    this.resets,
+    this.resets = const [],
     this.resend = false,
   });
 
@@ -108,8 +116,9 @@ class GaiaLimitCard {
   final List<GaiaAccount> accounts;
   final List<GaiaTier> tiers;
 
-  /// The soonest reset across this provider's accounts, if one is known.
-  final ({GaiaAccount account, DateTime at})? resets;
+  /// The adapter's accounts that are out, soonest reset first, then those whose
+  /// reset isn't known.
+  final List<({GaiaAccount account, DateTime? at})> resets;
 
   /// Whether this chat's last reply was the run a limit stopped, so there's a
   /// prompt to send again.

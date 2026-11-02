@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 
 /// Gaia's own commands (GAIA_HLD.md §9.2) that run rather than expand. The
@@ -24,22 +25,28 @@ enum GaiaBuiltin {
   final String description;
 }
 
-/// One row of the `/` palette: a built-in, a tier, or a user's command.
+/// One row of the `/` palette: a built-in, a tier, an account's alias, or a
+/// user's command.
 typedef GaiaPaletteItem = ({
   String name,
   String description,
   GaiaBuiltin? builtin,
   GaiaTier? tier,
+  GaiaAccount? account,
   GaiaCommand? command,
 });
 
-List<GaiaPaletteItem> gaiaPaletteItems(List<GaiaCommand> commands) => [
+List<GaiaPaletteItem> gaiaPaletteItems(
+  List<GaiaCommand> commands, {
+  List<GaiaAccount> accounts = const [],
+}) => [
   for (final builtin in GaiaBuiltin.values)
     (
       name: builtin.name,
       description: builtin.description,
       builtin: builtin,
       tier: null,
+      account: null,
       command: null,
     ),
   for (final tier in GaiaTier.values)
@@ -48,8 +55,21 @@ List<GaiaPaletteItem> gaiaPaletteItems(List<GaiaCommand> commands) => [
       description: 'Switch to ${tier.label}',
       builtin: null,
       tier: tier,
+      account: null,
       command: null,
     ),
+  for (final account in accounts)
+    if (account.alias.isNotEmpty)
+      (
+        name: account.alias,
+        description:
+            'Switch to ${account.label} '
+            '(${kGaiaClis[account.adapter]?.name ?? account.adapter})',
+        builtin: null,
+        tier: null,
+        account: account,
+        command: null,
+      ),
   for (final command in commands)
     (
       name: command.name,
@@ -58,18 +78,22 @@ List<GaiaPaletteItem> gaiaPaletteItems(List<GaiaCommand> commands) => [
           : command.description,
       builtin: null,
       tier: null,
+      account: null,
       command: command,
     ),
 ];
 
 /// [items] that fuzzily match [query] (what's typed after the slash),
-/// best first: a prefix, then a substring, then the letters in order.
+/// best first: the very name, a prefix, then a substring, then the letters in
+/// order.
 List<GaiaPaletteItem> filterGaiaPalette(
   List<GaiaPaletteItem> items,
   String query,
 ) {
   final q = query.toLowerCase();
   int? score(String name) {
+    // So an alias like `q` isn't lost under the `/queue` it's a prefix of.
+    if (name == query) return -1;
     final n = name.toLowerCase();
     if (n.startsWith(q)) return 0;
     if (n.contains(q)) return 1;
@@ -89,7 +113,7 @@ List<GaiaPaletteItem> filterGaiaPalette(
 
 /// The `/word` being typed at the caret, for the palette: its query (what's
 /// after the slash) and where it is. [whole] when it's the whole draft, as
-/// a user's command must be; a built-in or a tier can be anywhere.
+/// a user's command must be; a built-in, a tier or an alias can be anywhere.
 typedef GaiaPaletteToken = ({String query, int start, int end, bool whole});
 
 /// [value]'s [GaiaPaletteToken]: a whole token, at the start or after

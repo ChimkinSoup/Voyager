@@ -55,6 +55,7 @@ class GaiaAccount {
     required this.label,
     required this.adapter,
     required this.dir,
+    this.alias = '',
   });
 
   factory GaiaAccount.fromJson(Map<String, Object?> json) => GaiaAccount(
@@ -62,6 +63,7 @@ class GaiaAccount {
     label: json['label']! as String,
     adapter: json['adapter']! as String,
     dir: json['dir'] as String? ?? '',
+    alias: json['alias'] as String? ?? '',
   );
 
   /// Names its Gaia-owned Codex home, and its sessions in a chat's keys.
@@ -76,14 +78,18 @@ class GaiaAccount {
   /// sessions, and a Codex account's home, belong to this login.
   final String dir;
 
+  /// The name of its `/` command (§9.2), which switches to it; empty for none.
+  final String alias;
+
   /// What its usage is kept under: the adapter alone for the default account.
   String get key => id == kGaiaDefaultAccountId ? adapter : '$adapter/$id';
 
-  GaiaAccount copyWith({String? label}) => GaiaAccount(
+  GaiaAccount copyWith({String? label, String? alias}) => GaiaAccount(
     id: id,
     label: label ?? this.label,
     adapter: adapter,
     dir: dir,
+    alias: alias ?? this.alias,
   );
 
   @override
@@ -92,16 +98,18 @@ class GaiaAccount {
       other.id == id &&
       other.label == label &&
       other.adapter == adapter &&
-      other.dir == dir;
+      other.dir == dir &&
+      other.alias == alias;
 
   @override
-  int get hashCode => Object.hash(id, label, adapter, dir);
+  int get hashCode => Object.hash(id, label, adapter, dir, alias);
 
   Map<String, Object?> toJson() => {
     'id': id,
     'label': label,
     'adapter': adapter,
     'dir': dir,
+    if (alias.isNotEmpty) 'alias': alias,
   };
 }
 

@@ -5,9 +5,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
 /// The streaming speeds the debug menu offers, in characters a second.
 const kGaiaDebugStreamSpeeds = [25, 50, 100, 200, 400, 800, 1600, 6400];
@@ -160,6 +163,261 @@ class GaiaDebug extends ChangeNotifier {
     fps.dispose();
     super.dispose();
   }
+}
+
+/// One case of the low banner or the exhausted card (GAIA_HLD.md §6.5), made
+/// up for the debug menu to show in the live composer. What the card would
+/// otherwise read from the open chat comes with it, so each looks the same in
+/// any chat.
+class GaiaLimitPreview {
+  const GaiaLimitPreview(
+    this.label, {
+    this.low,
+    this.card,
+    this.reply = false,
+    this.contextTokens,
+    this.tierAgents = const {},
+  });
+
+  /// Unique across the cases: it says which is showing.
+  final String label;
+  final GaiaLowUsage? low;
+  final GaiaLimitCard? card;
+
+  /// Whether the chat has a reply, whose prompt cache a switch would lose.
+  final bool reply;
+  final int? contextTokens;
+
+  /// The agents of [card]'s tiers.
+  final Map<GaiaTier, GaiaAgent> tierAgents;
+}
+
+/// Every case of the banner and the card, by group, with resets counted from
+/// now.
+Map<String, List<GaiaLimitPreview>> gaiaLimitPreviews() {
+  const a = GaiaAccount(
+    id: 'preview-a',
+    label: 'Account A',
+    adapter: kGaiaClaudeCodeAdapter,
+    dir: '',
+  );
+  const b = GaiaAccount(
+    id: 'preview-b',
+    label: 'Account B',
+    adapter: kGaiaClaudeCodeAdapter,
+    dir: '',
+  );
+  const c = GaiaAccount(
+    id: 'preview-c',
+    label: 'Account C',
+    adapter: kGaiaClaudeCodeAdapter,
+    dir: '',
+  );
+  const sonnet = GaiaAgent(
+    id: 'preview-sonnet',
+    label: 'Sonnet 5.5',
+    adapter: kGaiaClaudeCodeAdapter,
+    model: 'sonnet',
+  );
+  const sol = GaiaAgent(
+    id: 'preview-sol',
+    label: 'Codex Sol',
+    adapter: kGaiaCodexAdapter,
+    model: 'sol',
+  );
+  const mini = GaiaAgent(
+    id: 'preview-mini',
+    label: 'Codex Mini',
+    adapter: kGaiaCodexAdapter,
+    model: 'mini',
+  );
+  final now = DateTime.now();
+  final soon = now.add(const Duration(hours: 2));
+  final later = now.add(const Duration(hours: 4));
+
+  GaiaLimitPreview low(
+    String label, {
+    required String name,
+    required GaiaUsageKind kind,
+    required double used,
+    DateTime? resetsAt,
+    String? model,
+    GaiaAccount? switchTo,
+  }) => GaiaLimitPreview(
+    label,
+    low: GaiaLowUsage(
+      adapter: kGaiaClaudeCodeAdapter,
+      switchTo: switchTo,
+      text: gaiaLowText(
+        name,
+        GaiaUsageWindow(
+          kind: kind,
+          used: used,
+          observedAt: now,
+          resetsAt: resetsAt,
+          model: model,
+        ),
+      ),
+    ),
+  );
+
+  GaiaLimitPreview card(
+    String label, {
+    bool named = true,
+    List<GaiaAccount> accounts = const [],
+    List<GaiaTier> tiers = const [],
+    List<({GaiaAccount account, DateTime? at})> resets = const [],
+    bool resend = false,
+    bool reply = false,
+    int? contextTokens,
+  }) => GaiaLimitPreview(
+    label,
+    reply: reply,
+    contextTokens: contextTokens,
+    tierAgents: const {GaiaTier.quick: mini, GaiaTier.deep: sol},
+    card: GaiaLimitCard(
+      agent: sonnet,
+      account: a,
+      named: named,
+      accounts: accounts,
+      tiers: tiers,
+      resets: resets,
+      resend: resend,
+    ),
+  );
+
+  return {
+    'Low banner': [
+      low(
+        'Low: one account',
+        name: 'Sonnet 5.5',
+        kind: GaiaUsageKind.session,
+        used: 0.93,
+        resetsAt: soon,
+      ),
+      low(
+        'Low: another account free',
+        name: 'Sonnet 5.5 (Account A)',
+        kind: GaiaUsageKind.session,
+        used: 0.93,
+        resetsAt: soon,
+        switchTo: b,
+      ),
+      low(
+        'Low: every account low',
+        name: 'Sonnet 5.5 (Account A)',
+        kind: GaiaUsageKind.weekly,
+        used: 0.97,
+        resetsAt: now.add(const Duration(days: 3)),
+      ),
+      low(
+        'Low: per-model weekly',
+        name: 'Sonnet 5.5 (Account A)',
+        kind: GaiaUsageKind.weeklyModel,
+        model: 'Sonnet',
+        used: 0.97,
+        resetsAt: now.add(const Duration(days: 3)),
+        switchTo: b,
+      ),
+      low(
+        'Low: no reset known',
+        name: 'Sonnet 5.5',
+        kind: GaiaUsageKind.weekly,
+        used: 0.97,
+      ),
+    ],
+    'Exhausted, case 1: another account': [
+      card(
+        '1: one account, interrupted',
+        accounts: const [b],
+        resets: [(account: a, at: soon)],
+        resend: true,
+        reply: true,
+        contextTokens: 84000,
+      ),
+      card(
+        '1: several accounts',
+        accounts: const [b, c],
+        resets: [(account: a, at: soon)],
+        resend: true,
+        reply: true,
+        contextTokens: 84000,
+      ),
+      card(
+        '1: nothing interrupted',
+        accounts: const [b],
+        resets: [(account: a, at: soon)],
+        reply: true,
+        contextTokens: 84000,
+      ),
+      card(
+        '1: context unknown',
+        accounts: const [b],
+        resets: [(account: a, at: soon)],
+        reply: true,
+      ),
+      card('1: new chat, no reset known', accounts: const [b]),
+    ],
+    'Exhausted, case 2: another provider': [
+      card(
+        '2: one tier, interrupted',
+        named: false,
+        tiers: const [GaiaTier.deep],
+        resets: [(account: a, at: soon)],
+        resend: true,
+        reply: true,
+        contextTokens: 84000,
+      ),
+      card(
+        '2: two tiers',
+        named: false,
+        tiers: const [GaiaTier.quick, GaiaTier.deep],
+        resets: [(account: a, at: soon)],
+        reply: true,
+        contextTokens: 84000,
+      ),
+      card(
+        '2: every account out',
+        tiers: const [GaiaTier.deep],
+        resets: [(account: b, at: soon), (account: a, at: later)],
+        reply: true,
+        contextTokens: 84000,
+      ),
+      card(
+        '2: new chat, no reset known',
+        named: false,
+        tiers: const [GaiaTier.deep],
+      ),
+    ],
+    'Exhausted, case 3: run out': [
+      card('3: one account', named: false, resets: [(account: a, at: soon)]),
+      card(
+        '3: several accounts',
+        resets: [
+          (account: b, at: soon),
+          (account: a, at: later),
+          (account: c, at: now.add(const Duration(days: 3))),
+        ],
+      ),
+      card(
+        '3: several accounts, one reset unknown',
+        resets: [
+          (account: b, at: soon),
+          (account: a, at: later),
+          (account: c, at: null),
+        ],
+      ),
+      card(
+        '3: one account, no reset known',
+        named: false,
+        resets: [(account: a, at: null)],
+      ),
+      card(
+        '3: several accounts, no reset known',
+        resets: [(account: a, at: null), (account: b, at: null)],
+      ),
+    ],
+  };
 }
 
 /// A canned reply: what it shows off, and the steps it plays.

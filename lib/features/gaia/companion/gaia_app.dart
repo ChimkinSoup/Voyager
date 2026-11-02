@@ -1385,10 +1385,13 @@ class _MessagesState extends State<_Messages> {
             itemBuilder: (context, index) {
               final i = messages.length - 1 - index;
               final message = messages[i];
-              final switched = _switchedFrom(messages, i);
-              final moved = switched == null
-                  ? _movedAccount(messages, i, widget.controller)
-                  : null;
+              final movedReply = _replyHeadedBy(messages, i);
+              final switched = movedReply == null
+                  ? null
+                  : _switchedFrom(messages, movedReply);
+              final moved = movedReply == null || switched != null
+                  ? null
+                  : _movedAccount(messages, movedReply, widget.controller);
               final view = _view(
                 message,
                 gutter: gutter,
@@ -1405,21 +1408,22 @@ class _MessagesState extends State<_Messages> {
                 child: _Placed(
                   id: message.id,
                   placed: _placed,
-                  child: switched == null && moved == null
-                      ? view
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _VendorDivider(
-                              text: moved == null
-                                  ? 'Switched to '
-                                        '${kGaiaClis[message.adapter]?.name ?? message.adapter} '
-                                        '· a transcript carried over'
-                                  : 'Switched to $moved',
-                            ),
-                            view,
-                          ],
+                  // A Column with or without a divider, since a prompt gets its
+                  // divider once its reply starts: its view must carry on.
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (switched != null || moved != null)
+                        _VendorDivider(
+                          text: moved == null
+                              ? 'Switched to '
+                                    '${kGaiaClis[messages[movedReply!].adapter]?.name ?? messages[movedReply].adapter} '
+                                    '· a transcript carried over'
+                              : 'Switched to $moved',
                         ),
+                      view,
+                    ],
+                  ),
                 ),
               );
             },
@@ -1759,6 +1763,19 @@ String? _movedAccount(
         'another account';
   }
   return null;
+}
+
+/// The reply whose divider, if it has one, would go before [index] (§6.5,
+/// §7.4): a prompt carries its reply's, and a reply only its own when it has no
+/// prompt.
+int? _replyHeadedBy(List<GaiaMessage> messages, int index) {
+  bool isPrompt(int i) => messages[i].role == GaiaMessageRole.user;
+  if (isPrompt(index)) {
+    return index + 1 < messages.length && !isPrompt(index + 1)
+        ? index + 1
+        : null;
+  }
+  return index > 0 && isPrompt(index - 1) ? null : index;
 }
 
 class _VendorDivider extends StatelessWidget {
@@ -2231,7 +2248,7 @@ class _ComposerState extends State<_Composer> {
   }
 
   void _onDraft() {
-    unawaited(_takeTierCommand());
+    unawaited(_takeCommands());
     // The palette follows the draft.
     setState(() => _highlight = 0);
   }
@@ -2294,7 +2311,10 @@ class _ComposerState extends State<_Composer> {
     final token = gaiaPaletteToken(_text.value);
     if (token == null || _text.text == _paletteClosedFor) return const [];
     return filterGaiaPalette([
-      for (final item in gaiaPaletteItems(widget.controller.commands))
+      for (final item in gaiaPaletteItems(
+        widget.controller.commands,
+        accounts: widget.controller.accounts,
+      ))
         if (token.whole || item.command == null) item,
     ], token.query);
   }
@@ -2317,8 +2337,8 @@ class _ComposerState extends State<_Composer> {
     );
   }
 
-  /// A palette row picked (§9.2): a built-in runs, a tier switches, a
-  /// standalone command sends, and any other command, or `/remember`, waits
+  /// A palette row picked (§9.2): a built-in runs, a tier or an account
+  /// switches, a standalone command sends, and any other command, or `/remember`, waits
   /// for its arguments.
   Future<void> _pick(GaiaPaletteItem item) async {
     final controller = widget.controller;
@@ -2336,6 +2356,9 @@ class _ComposerState extends State<_Composer> {
     } else if (item.tier case final tier?) {
       _cutToken();
       await switchGaiaTier(context, controller, tier);
+    } else if (item.account case final account?) {
+      _cutToken();
+      await switchGaiaAccount(context, controller, account.adapter, account);
     } else if (item.command case final command?) {
       // Closed over a standalone command left unsent mid-reply, so it
       // waits like any other draft.
@@ -2429,6 +2452,61 @@ class _ComposerState extends State<_Composer> {
     return switchGaiaTier(context, widget.controller, command.tier);
   }
 
+  /// Aliases turned down, while the draft still holds them: the word was just
+  /// a word, so it isn't asked about again.
+  final _declinedAliases = <GaiaAccount>{};
+
+  /// An account's alias, once completed. It may be a path's `/tmp` rather than
+  /// the alias, so it always asks, and comes out only on a yes (§9.2). One
+  /// already current is left as written.
+  Future<bool> _takeAccountCommand({bool atEnd = false}) async {
+    final controller = widget.controller;
+    _declinedAliases.removeWhere(
+      (account) => !_text.text.contains('/${account.alias}'),
+    );
+    final command = findGaiaAccountCommand(_text.value, [
+      for (final account in controller.accounts)
+        if (!_declinedAliases.contains(account) &&
+            account != controller.currentAccount(account.adapter))
+          account,
+    ], atEnd: atEnd);
+    if (command == null) return true;
+    final account = command.account;
+    final confirmed = await switchGaiaAccount(
+      context,
+      controller,
+      account.adapter,
+      account,
+      ask: true,
+    );
+    if (confirmed) {
+      _text.value = command.value;
+    } else {
+      _declinedAliases.add(account);
+    }
+    return confirmed;
+  }
+
+  /// Taking the draft's commands: each cut re-enters [_onDraft].
+  var _takingCommands = false;
+
+  /// Every command in the draft, one at a time, so their dialogs don't stack.
+  /// False when the user turned one down, or some are already being taken.
+  Future<bool> _takeCommands({bool atEnd = false}) async {
+    if (_takingCommands) return false;
+    _takingCommands = true;
+    try {
+      while (true) {
+        final before = _text.text;
+        if (!await _takeTierCommand(atEnd: atEnd) || !mounted) return false;
+        if (!await _takeAccountCommand(atEnd: atEnd) || !mounted) return false;
+        if (_text.text == before) return true;
+      }
+    } finally {
+      _takingCommands = false;
+    }
+  }
+
   /// A command ending the message switches before it's sent; turned down,
   /// the message stays in the composer.
   Future<void> _send() async {
@@ -2482,15 +2560,15 @@ class _ComposerState extends State<_Composer> {
       }
       return;
     }
-    if (!await _takeTierCommand(atEnd: true) || !mounted) return;
     final controller = widget.controller;
-    final attached =
-        controller.draftImages.isNotEmpty || controller.draftFiles.isNotEmpty;
     // Mid-reply, send is the stop button's, as the button is; the draft
-    // waits.
+    // waits, commands and all.
     if (controller.currentRunning) {
       return controller.stop(controller.currentChatId!);
     }
+    if (!await _takeCommands(atEnd: true) || !mounted) return;
+    final attached =
+        controller.draftImages.isNotEmpty || controller.draftFiles.isNotEmpty;
     if (controller.draftIsEmpty) return;
     if (!controller.readyToSend()) return;
     // After: it may take tokens out.
@@ -2542,6 +2620,8 @@ class _ComposerState extends State<_Composer> {
           return Padding(
             padding: EdgeInsets.fromLTRB(side, 8, side, 8),
             child: _LimitDecision(
+              // Each preview starts afresh, with its checkbox ticked.
+              key: ValueKey(controller.limitPreview?.label),
               controller: controller,
               card: limit,
               onDone: () => WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2835,6 +2915,10 @@ class _ComposerState extends State<_Composer> {
 class _LowUsageBanner extends StatelessWidget {
   const _LowUsageBanner({required this.controller, required this.low});
 
+  /// Its button's height, kept without one so the text doesn't move when the
+  /// button comes or goes.
+  static const _height = 28.0;
+
   final GaiaController controller;
   final GaiaLowUsage low;
 
@@ -2844,23 +2928,32 @@ class _LowUsageBanner extends StatelessWidget {
     final other = low.switchTo;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.warning_amber, size: 16, color: kGaiaStatusRose),
-          const SizedBox(width: 8),
-          Expanded(child: Text(low.text, style: theme.textTheme.bodySmall)),
-          if (other != null) ...[
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _height),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber, size: 16, color: kGaiaStatusRose),
             const SizedBox(width: 8),
-            GaiaButton(
-              label: 'Switch to ${other.label}',
-              size: 28,
-              padding: 10,
-              still: true,
-              onPressed: () =>
-                  switchGaiaAccount(context, controller, low.adapter, other),
-            ),
+            Expanded(child: Text(low.text, style: theme.textTheme.bodySmall)),
+            if (other != null) ...[
+              const SizedBox(width: 8),
+              GaiaButton(
+                label: 'Switch to ${other.label}',
+                size: _height,
+                padding: 10,
+                still: true,
+                onPressed: () => controller.limitPreview != null
+                    ? controller.previewLimit(null)
+                    : switchGaiaAccount(
+                        context,
+                        controller,
+                        low.adapter,
+                        other,
+                      ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -2872,6 +2965,7 @@ class _LowUsageBanner extends StatelessWidget {
 /// option, Esc dismisses it.
 class _LimitDecision extends StatefulWidget {
   const _LimitDecision({
+    super.key,
     required this.controller,
     required this.card,
     required this.onDone,
@@ -2914,6 +3008,7 @@ class _LimitDecisionState extends State<_LimitDecision> {
   }
 
   void _accept(void Function() choose) {
+    if (widget.controller.limitPreview != null) return _dismiss();
     final resend = widget.card.resend && _resend;
     choose();
     if (resend) unawaited(widget.controller.resendInterrupted());
@@ -2938,7 +3033,11 @@ class _LimitDecisionState extends State<_LimitDecision> {
         : card.agent.label;
     final cli = kGaiaClis[card.agent.adapter]?.name ?? card.agent.adapter;
     final send = _sendCombo(controller);
-    final reply = controller.accountSwitchNeedsConfirm;
+    final preview = controller.limitPreview;
+    final reply = preview?.reply ?? controller.accountSwitchNeedsConfirm;
+    final tokens = preview == null
+        ? controller.contextTokens
+        : preview.contextTokens;
 
     final options = <({String label, VoidCallback pick})>[
       for (final account in card.accounts)
@@ -2950,19 +3049,50 @@ class _LimitDecisionState extends State<_LimitDecision> {
         ),
       for (final tier in card.tiers)
         (
-          label: switch (controller.agentFor(tier)) {
+          label: switch (preview?.tierAgents[tier] ??
+              controller.agentFor(tier)) {
             final agent? => '${tier.label} (${agent.label})',
             null => tier.label,
           },
           pick: () => _accept(() => controller.pickTier(tier)),
         ),
     ];
-    final String? resets = switch (card.resets) {
-      null => null,
-      (:final account, :final at) =>
-        '${card.named ? '${account.label} resets' : 'Resets'} at '
-            '${gaiaResetTime(at)}.',
-    };
+    String resetLine(({GaiaAccount account, DateTime? at}) reset) =>
+        switch (reset.at) {
+          null =>
+            "It isn't known when "
+                '${card.named ? reset.account.label : name} resets.',
+          final at =>
+            '${card.named ? '${reset.account.label} resets' : 'Resets'} at '
+                '${gaiaResetTime(at)}.',
+        };
+    // With no account left to switch to, each that's out has a line of its own.
+    final listed = card.named && card.accounts.isEmpty;
+    // Otherwise the line is the account that's out here: its reset is what
+    // decides between waiting and switching.
+    final own = listed
+        ? null
+        : card.resets
+              .where(
+                (reset) =>
+                    reset.account == card.account &&
+                    (options.isEmpty || reset.at != null),
+              )
+              .firstOrNull;
+    final detail = [
+      if (own != null) resetLine(own),
+      if (options.isNotEmpty) ...[
+        if (reply)
+          'The prompt cache is lost, so the next message re-reads '
+              'the whole context and uses extra tokens.',
+        if (card.accounts.isNotEmpty)
+          'Your other chats on ${card.account.label} move too, on '
+              'their next message.',
+        if (card.tiers.isNotEmpty && reply)
+          "Only a transcript carries over. $cli's tool history "
+              "doesn't.",
+      ],
+    ].join(' ');
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): _dismiss,
@@ -2971,7 +3101,8 @@ class _LimitDecisionState extends State<_LimitDecision> {
       child: Focus(
         focusNode: _focus,
         autofocus: true,
-        child: Padding(
+        child: Container(
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2981,45 +3112,47 @@ class _LimitDecisionState extends State<_LimitDecision> {
                 options.isEmpty ? 'Usage has run out' : '$name is out of usage',
                 style: theme.textTheme.titleSmall,
               ),
-              const SizedBox(height: 4),
-              Text(
-                [
-                  if (options.isEmpty)
-                    resets ?? "It isn't known when $name resets."
-                  else ...[
-                    ?resets,
-                    if (reply)
-                      'The prompt cache is lost, so the next message re-reads '
-                          'the whole context and uses extra tokens.',
-                    if (reply && controller.contextTokens != null)
-                      'Current context: '
-                          '${(controller.contextTokens! / 1000).round()}k '
-                          'tokens.',
-                    if (card.accounts.isNotEmpty)
-                      'Your other chats on ${card.account.label} move too, on '
-                          'their next message.',
-                    if (card.tiers.isNotEmpty && reply)
-                      "Only a transcript carries over. $cli's tool history "
-                          "doesn't.",
-                  ],
-                ].join(' '),
-                style: muted,
-              ),
+              if (listed && card.resets.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                for (final reset in card.resets)
+                  Text(resetLine(reset), style: muted),
+              ],
+              if (detail.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(detail, style: muted),
+              ],
+              if (options.isNotEmpty && reply && tokens != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Current context: ${(tokens / 1000).round()}k tokens.',
+                  style: muted,
+                ),
+              ],
               if (card.resend && options.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 InkWell(
+                  borderRadius: BorderRadius.circular(6),
                   onTap: () => setState(() => _resend = !_resend),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IgnorePointer(
-                        child: Checkbox(value: _resend, onChanged: (_) {}),
-                      ),
-                      Text(
-                        'Resend my last message',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IgnorePointer(
+                          child: Checkbox(
+                            value: _resend,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            onChanged: (_) {},
+                          ),
+                        ),
+                        Text(
+                          'Resend my last message',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -3117,6 +3250,9 @@ class _ComposerStatus extends StatelessWidget {
         ? const <GaiaAccount>[]
         : controller.accountsFor(adapter);
     final current = adapter == null ? null : controller.currentAccount(adapter);
+    VoidCallback? switchTo(GaiaAccount account) => account == current
+        ? null
+        : () => switchGaiaAccount(context, controller, adapter!, account);
     return Row(
       children: [
         const SizedBox(width: 4),
@@ -3129,36 +3265,49 @@ class _ComposerStatus extends StatelessWidget {
           ),
         ),
         // One per account, its own in order; dulled unless the next message
-        // runs on it (§6.2).
+        // runs on it, and clicking a dulled one switches to it (§6.2). Each
+        // has [_UsageRing.margin] to click in, within the gap they'd otherwise
+        // leave, so the row's spacing is 8 between them.
         for (final account in accounts) ...[
           if (controller.usageUntracked(adapter!, account)
               case final untracked?)
             if (account == current)
-              Tooltip(
-                message: untracked,
-                child: Text(
-                  'Usage untracked',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+              Padding(
+                padding: const EdgeInsets.all(_UsageRing.margin),
+                child: Tooltip(
+                  message: untracked,
+                  child: Text(
+                    'Usage untracked',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               )
             else
-              _UsageRing(dull: true, label: account.label, message: untracked)
+              _UsageRing(
+                dull: true,
+                label: account.label,
+                message: untracked,
+                onTap: switchTo(account),
+              )
           else if (controller.usage[account.key] case final usage?)
             _UsageRing(
               usage: usage,
               dull: account != current,
               label: accounts.length > 1 ? account.label : null,
+              onTap: switchTo(account),
             )
           else if (account != current)
             _UsageRing(
               dull: true,
               label: account.label,
               message: 'Not read yet',
+              onTap: switchTo(account),
             ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 8 - 2 * _UsageRing.margin),
         ],
+        const SizedBox(width: _UsageRing.margin),
         // The notch opens up and to the left, so it ends the row.
         _TierPicker(controller: controller),
       ],
@@ -3169,17 +3318,27 @@ class _ComposerStatus extends StatelessWidget {
 /// An account's five-hour usage as a ring filling clockwise from the top,
 /// with a bar for every window in its tooltip.
 ///
-/// [dull] for an account the next message doesn't run on, which clicking
-/// doesn't switch to: that's the tier picker's account item (§6.5). [label]
-/// names the account when there are several; [message] stands in for numbers
-/// it doesn't have.
+/// [dull] for an account the next message doesn't run on, and [onTap] switches
+/// to it, as the tier picker's account item does (§6.5). [label] names the
+/// account when there are several; [message] stands in for numbers it doesn't
+/// have.
 class _UsageRing extends StatelessWidget {
-  const _UsageRing({this.usage, this.dull = false, this.label, this.message});
+  const _UsageRing({
+    this.usage,
+    this.dull = false,
+    this.label,
+    this.message,
+    this.onTap,
+  });
+
+  /// Around the ring on every side, for a target bigger than its 14 px.
+  static const margin = 3.0;
 
   final GaiaUsage? usage;
   final bool dull;
   final String? label;
   final String? message;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -3217,7 +3376,14 @@ class _UsageRing extends StatelessWidget {
         ),
       ),
       padding: const EdgeInsets.all(10),
-      child: dull ? Opacity(opacity: 0.4, child: ring) : ring,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(margin),
+          child: dull ? Opacity(opacity: 0.4, child: ring) : ring,
+        ),
+      ),
     );
   }
 }
@@ -3260,7 +3426,7 @@ class _RingPainter extends CustomPainter {
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that
 /// opens onto all three; before it, once its adapter has several, the account
-/// (§6.5).
+/// (§6.5), whose options open above the tiers' from either.
 class _TierPicker extends StatelessWidget {
   const _TierPicker({required this.controller});
 
@@ -3353,28 +3519,39 @@ Future<bool> switchGaiaTier(
 
 /// Switches [adapter]'s next messages to [account], for every chat: silently
 /// with no reply here to lose the cache of, after the user's yes otherwise,
-/// as [switchGaiaTier] (§6.5). Never by itself: not on a low account, and
-/// not from a usage ring.
-Future<void> switchGaiaAccount(
+/// as [switchGaiaTier] (§6.5), or always with [ask]. Never by itself: not on a
+/// low account. An adapter this chat's next message isn't on costs this chat
+/// nothing, and the dialog says so. False when the user turned the switch down.
+Future<bool> switchGaiaAccount(
   BuildContext context,
   GaiaController controller,
   String adapter,
-  GaiaAccount account,
-) async {
+  GaiaAccount account, {
+  bool ask = false,
+}) async {
   final from = controller.currentAccount(adapter);
-  if (from == account) return;
-  if (controller.accountSwitchNeedsConfirm) {
+  if (from == account) return true;
+  final reply = controller.accountSwitchNeedsConfirm;
+  if (ask || reply) {
+    final next = controller.agentFor(controller.nextTier)?.adapter;
+    final elsewhere = next != null && next != adapter;
+    String cli(String adapter) => kGaiaClis[adapter]?.name ?? adapter;
     final confirmed = await _confirmSwitch(
       context,
       controller,
-      title: 'Switch from ${from.label} to ${account.label}?',
-      note:
-          'Your other chats on ${from.label} move too, on their next '
-          'message.',
+      title: elsewhere
+          ? 'Switch ${cli(adapter)} from ${from.label} to ${account.label}?'
+          : 'Switch from ${from.label} to ${account.label}?',
+      note: [
+        if (elsewhere) "This chat's next message stays on ${cli(next)}.",
+        'Your other chats on ${from.label} move too, on their next message.',
+      ].join(' '),
+      losesCache: reply && !elsewhere,
     );
-    if (confirmed != true) return;
+    if (confirmed != true) return false;
   }
   controller.switchAccount(adapter, account);
+  return true;
 }
 
 /// What a switch costs (§7.5), with [note] for what's particular to it. The
@@ -3384,6 +3561,7 @@ Future<bool?> _confirmSwitch(
   GaiaController controller, {
   required String title,
   String? note,
+  bool losesCache = true,
 }) {
   final tokens = controller.contextTokens;
   final send = _sendCombo(controller);
@@ -3397,10 +3575,12 @@ Future<bool?> _confirmSwitch(
           title: Text(title),
           content: Text(
             [
-              'The prompt cache is lost, so the next message re-reads the '
-                  'whole context and uses extra tokens.',
-              if (tokens != null)
-                'Current context: ${(tokens / 1000).round()}k tokens.',
+              if (losesCache) ...[
+                'The prompt cache is lost, so the next message re-reads the '
+                    'whole context and uses extra tokens.',
+                if (tokens != null)
+                  'Current context: ${(tokens / 1000).round()}k tokens.',
+              ],
               ?note,
               'Press $send to switch.',
             ].join('\n\n'),

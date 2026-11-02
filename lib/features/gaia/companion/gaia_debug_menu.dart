@@ -280,6 +280,46 @@ class _DebugMenu extends StatelessWidget {
           style: muted,
         ),
         const _OfflinePreview(),
+        heading('Usage limits'),
+        Text(
+          'Each case of the low banner and the exhausted card, shown in the '
+          'real composer with made-up accounts. Its buttons, Ctrl+Enter and '
+          'Esc only close it: no account switches and nothing is resent. Real '
+          'usage and the rings stay as they are.',
+          style: muted,
+        ),
+        for (final MapEntry(key: group, value: previews)
+            in gaiaLimitPreviews().entries) ...[
+          const SizedBox(height: 8),
+          Text(group, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final preview in previews)
+                ChoiceChip(
+                  label: Text(preview.label),
+                  selected: controller.limitPreview?.label == preview.label,
+                  onSelected: (_) {
+                    Navigator.of(context).pop();
+                    controller.previewLimit(preview);
+                  },
+                ),
+            ],
+          ),
+        ],
+        if (controller.limitPreview != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GaiaButton(
+              icon: Icons.close,
+              label: 'Close the preview',
+              onPressed: () => controller.previewLimit(null),
+            ),
+          ),
+        ],
         heading('Display'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

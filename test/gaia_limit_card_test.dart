@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,9 +7,13 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
 import 'fakes/gaia_fakes.dart';
+import 'narrow_window_harness.dart' show loadRealFonts;
 
 class _Source implements GaiaUsageSource {
   _Source(this.used);
@@ -378,15 +384,309 @@ void main() {
     await finish(tester);
   });
 
+  GaiaLimitPreview previewNamed(String label) => gaiaLimitPreviews().values
+      .expand((previews) => previews)
+      .singleWhere((preview) => preview.label == label);
+
+  test('every preview has a label of its own', () {
+    final labels = [
+      for (final previews in gaiaLimitPreviews().values)
+        for (final preview in previews) preview.label,
+    ];
+    expect(labels.toSet(), hasLength(labels.length));
+  });
+
+  testWidgets('every preview shows in the composer without overflowing', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    for (final previews in gaiaLimitPreviews().values) {
+      for (final preview in previews) {
+        controller.previewLimit(preview);
+        await tester.pump(const Duration(seconds: 1));
+        expect(tester.takeException(), isNull, reason: preview.label);
+        expect(
+          composer(),
+          preview.card == null ? findsOneWidget : findsNothing,
+          reason: preview.label,
+        );
+        expect(
+          find.textContaining(' is low: '),
+          preview.low == null ? findsNothing : findsOneWidget,
+          reason: preview.label,
+        );
+      }
+    }
+    await finish(tester);
+  });
+
+  testWidgets('each card preview says what its case calls for', (tester) async {
+    final (controller, _) = await pump(tester, used: const {});
+    Future<void> show(String label) async {
+      controller.previewLimit(previewNamed(label));
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    await show('1: several accounts');
+    expect(find.text('Switch to Account B'), findsOneWidget);
+    expect(find.text('Switch to Account C'), findsOneWidget);
+    expect(find.text('Resend my last message'), findsOneWidget);
+    expect(find.textContaining('Current context: 84k'), findsOneWidget);
+
+    await show('2: two tiers');
+    expect(find.text('Quick (Codex Mini)'), findsOneWidget);
+    expect(find.text('Deep (Codex Sol)'), findsOneWidget);
+    expect(find.textContaining('tool history'), findsOneWidget);
+
+    await show('3: several accounts');
+    expect(find.text('Usage has run out'), findsOneWidget);
+    expect(find.textContaining('Account B resets at'), findsOneWidget);
+
+    await show('3: one account, no reset known');
+    expect(find.textContaining("It isn't known when"), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('picked from the menu, a card shows and has the keys', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    await tester.tap(composer());
+    await tester.pump();
+    unawaited(
+      showGaiaDebugMenu(
+        tester.element(find.byType(Scaffold).first),
+        controller,
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    final chip = find.widgetWithText(ChoiceChip, '3: several accounts');
+    await tester.dragUntilVisible(
+      chip,
+      find
+          .descendant(
+            of: find.byType(Dialog),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+      const Offset(0, -400),
+      maxIteration: 100,
+    );
+    await tester.ensureVisible(chip);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(chip);
+    // One frame to start the dialog's closing, one to finish it.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('Usage has run out'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(seconds: 1));
+    expect(controller.limitPreview, isNull);
+    expect(composer(), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('the banner text stays put when its button comes and goes', (
+    tester,
+  ) async {
+    // The test font is wide enough to wrap the text, which would move it.
+    await loadRealFonts(tester);
+    final (controller, _) = await pump(tester, used: const {});
+    Future<double> textY(String label) async {
+      controller.previewLimit(previewNamed(label));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      return tester.getCenter(find.textContaining(' is low: ')).dy;
+    }
+
+    final without = await textY('Low: every account low');
+    expect(find.textContaining('Switch to'), findsNothing);
+    final withButton = await textY('Low: another account free');
+    expect(find.textContaining('Switch to'), findsOneWidget);
+    expect(withButton, without);
+    await finish(tester);
+  });
+
+  testWidgets('every account out: a line each, soonest at the top', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    controller.previewLimit(previewNamed('3: several accounts'));
+    await tester.pump(const Duration(seconds: 1));
+    double y(String text) => tester.getTopLeft(find.textContaining(text)).dy;
+    expect(y('Account B resets at'), lessThan(y('Account A resets at')));
+    expect(y('Account A resets at'), lessThan(y('Account C resets at')));
+
+    controller.previewLimit(previewNamed('2: every account out'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(y('Account B resets at'), lessThan(y('Account A resets at')));
+    expect(y('Account A resets at'), lessThan(y('prompt cache is lost')));
+    await finish(tester);
+  });
+
+  testWidgets("another account free: the line is the current account's reset", (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    const account = GaiaAccount(
+      id: 'a',
+      label: 'Account A',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: '',
+    );
+    const other = GaiaAccount(
+      id: 'b',
+      label: 'Account B',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: '',
+    );
+    const free = GaiaAccount(
+      id: 'c',
+      label: 'Account C',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: '',
+    );
+    final now = DateTime.now();
+    controller.previewLimit(
+      GaiaLimitPreview(
+        'A and B out, C free',
+        card: GaiaLimitCard(
+          agent: const GaiaAgent(
+            id: 'sonnet',
+            label: 'Sonnet',
+            adapter: kGaiaClaudeCodeAdapter,
+            model: 'sonnet',
+          ),
+          account: account,
+          named: true,
+          accounts: const [free],
+          tiers: const [],
+          resets: [
+            (account: other, at: now.add(const Duration(hours: 2))),
+            (account: account, at: now.add(const Duration(hours: 4))),
+          ],
+          resend: false,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.textContaining('Account A resets at'), findsOneWidget);
+    expect(find.textContaining('Account B resets at'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('the context has a line of its own, under the warning', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    controller.previewLimit(previewNamed('1: one account, interrupted'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Current context: 84k tokens.'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Current context: 84k tokens.')).dy,
+      greaterThan(tester.getBottomLeft(find.textContaining('cache')).dy - 1),
+    );
+    await finish(tester);
+  });
+
+  testWidgets('the resend row hovers as a rounded box around its text', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    controller.previewLimit(previewNamed('1: one account, interrupted'));
+    await tester.pump(const Duration(seconds: 1));
+    final label = find.text('Resend my last message');
+    final row = find.ancestor(of: label, matching: find.byType(InkWell)).first;
+    expect(tester.widget<InkWell>(row).borderRadius, BorderRadius.circular(6));
+    // The same gap either side: a checkbox draws 18 px in the middle of its box.
+    final box = find.descendant(of: row, matching: find.byType(Checkbox));
+    expect(
+      tester.getTopRight(row).dx - tester.getTopRight(label).dx,
+      (tester.getSize(box).width - 18) / 2,
+    );
+    await finish(tester);
+  });
+
+  testWidgets('a short card lines up with a long one', (tester) async {
+    final (controller, _) = await pump(tester, used: const {});
+    Future<double> titleLeft(String label, String title) async {
+      controller.previewLimit(previewNamed(label));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      return tester.getTopLeft(find.textContaining(title)).dx;
+    }
+
+    final long = await titleLeft('1: several accounts', 'is out of usage');
+    expect(await titleLeft('3: one account', 'Usage has run out'), long);
+    expect(
+      await titleLeft('1: new chat, no reset known', 'is out of usage'),
+      long,
+    );
+    await finish(tester);
+  });
+
+  testWidgets('a card with nothing to explain has no empty line', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(tester, used: const {});
+    controller.previewLimit(previewNamed('2: new chat, no reset known'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.textContaining('is out of usage'), findsOneWidget);
+    expect(find.text(''), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('a preview takes no action: it only closes', (tester) async {
+    final (controller, runner) = await pump(
+      tester,
+      used: const {},
+      messages: [asked('Write the plan'), interrupted('The plan so')],
+    );
+    final account = controller.currentAccount(kGaiaClaudeCodeAdapter);
+    final tier = controller.nextTier;
+    Future<void> expectClosed() async {
+      await tester.pump(const Duration(seconds: 1));
+      expect(controller.limitPreview, isNull);
+      expect(controller.currentAccount(kGaiaClaudeCodeAdapter), account);
+      expect(controller.nextTier, tier);
+      expect(runner.sent, isEmpty);
+    }
+
+    controller.previewLimit(previewNamed('Low: another account free'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Switch to Account B'));
+    await expectClosed();
+
+    controller.previewLimit(previewNamed('1: one account, interrupted'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Switch to Account B'));
+    await expectClosed();
+
+    controller.previewLimit(previewNamed('2: one tier, interrupted'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await expectClosed();
+
+    controller.previewLimit(previewNamed('3: one account'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await expectClosed();
+    // Not dismissed for real: a limit on the account would still show its card.
+    await finish(tester);
+  });
+
   testWidgets('with two accounts out, the soonest reset is named', (
     tester,
   ) async {
     await pump(tester, used: {kGaiaDefaultAccountId: 1, 'b': 1});
     expect(find.text('Usage has run out'), findsOneWidget);
-    expect(
-      find.textContaining(RegExp('(Alpha|Beta) resets at')),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Alpha resets at'), findsOneWidget);
+    expect(find.textContaining('Beta resets at'), findsOneWidget);
     await finish(tester);
   });
 }

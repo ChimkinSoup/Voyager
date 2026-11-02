@@ -83,13 +83,16 @@ class GaiaNotchItem<T> {
 }
 
 /// Gaia's notch (after the shadcn-style Notch): a bar of triggers in a
-/// [GaiaGlowRing], as Gaia's buttons are, that morphs on a spring into the
-/// options of the one clicked. Opening, the selection rises out of its
-/// trigger into its row while the other options come in one by one out of
-/// a blur. Closing runs it backwards: the option picked (or the selected
-/// one, on Esc or a click outside) settles back into the trigger, and the
-/// rest blur out bottom first, drawn in toward it as the ring shrinks. Up
-/// and Down or Tab move between options, Enter or Space picks.
+/// [GaiaGlowRing], as Gaia's buttons are, that morphs on a spring into every
+/// item's options, whichever was clicked: with several items, the first's side
+/// by side along the top, the others' listed under them, and never narrower
+/// than the bar. Opening, the clicked one's
+/// selection rises out of its trigger into its row while the other options
+/// come in one by one out of a blur. Closing runs it backwards: the option
+/// picked (or that selected one, on Esc or a click outside) settles back into
+/// its trigger, and the rest blur out bottom first, each drawn in toward its
+/// own trigger as the ring shrinks. Up and Down or Tab move between options,
+/// Enter or Space picks.
 ///
 /// Open, it grows up and to the left from its bottom right corner (to the
 /// right from its bottom left, when it [opensRight]), over whatever is
@@ -130,6 +133,11 @@ const _muted = Color(0xFFA3A3A3);
 const _dim = Color(0xFFD4D4D4);
 const _textStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
 
+/// Whether item [item] of [items] shows as tabs, which have no selected dot.
+/// Only two: three or more can run wider than the window.
+bool _isTabs(List<GaiaNotchItem<Object?>> items, int item) =>
+    items.length > 1 && item == 0 && items[0].options.length <= 2;
+
 /// The closed bar's, smaller than the open options'.
 const _triggerStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w500);
 const _radius = 12.0;
@@ -145,6 +153,7 @@ class _Flight {
     required this.border,
     required this.label,
     required this.detail,
+    required this.dot,
   });
 
   final int item;
@@ -153,17 +162,21 @@ class _Flight {
   final Color border;
   final Color label;
   final Color detail;
+
+  /// Whether the row shows the selected dot.
+  final bool dot;
 }
 
 class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
   final _link = LayerLink();
   final _portal = OverlayPortalController();
 
-  /// The open item's index; null while the bar shows.
+  /// The clicked item's index, while the options are open; null while the
+  /// bar shows.
   int? _open;
 
-  /// The item whose options are drawn: the open one, or the one closing.
-  /// While there is one, the shell is in the overlay.
+  /// The item clicked, open or closing. While there is one, the shell is in
+  /// the overlay.
   int? _shown;
 
   /// The options fading in, and the bar out.
@@ -193,14 +206,38 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
   /// while it resizes, unlike positions on screen through the overlay.
   final _frame = GlobalKey();
 
-  /// The shown options' rows and texts, and the triggers and theirs.
-  final _rows = <int, GlobalKey>{};
-  final _texts = <int, GlobalKey>{};
+  /// The options' rows and texts by (item, option), and the triggers and
+  /// theirs by item.
+  final _rows = <(int, int), GlobalKey>{};
+  final _texts = <(int, int), GlobalKey>{};
   final _triggers = <int, GlobalKey>{};
   final _triggerTexts = <int, GlobalKey>{};
 
   /// What had the focus when the notch opened, which gets it back on close.
   FocusNode? _returnFocus;
+
+  /// The bar's width inside the ring, measured as it opens.
+  var _barWidth = 0.0;
+
+  /// Items coming or going, as the tier picker's account does when a tier
+  /// moves to another adapter, leave every index held here on the wrong item,
+  /// so whatever's running stops and the bar shows.
+  @override
+  void didUpdateWidget(GaiaNotch old) {
+    super.didUpdateWidget(old);
+    if (widget.items.length == old.items.length || _shown == null) return;
+    _move.stop();
+    _open = null;
+    _shown = null;
+    _flight = null;
+    _pending = null;
+    // Not while building; until then the overlay holds nothing.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _shown == null) _portal.hide();
+    });
+    _returnFocus?.requestFocus();
+    _returnFocus = null;
+  }
 
   @override
   void dispose() {
@@ -220,6 +257,7 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
 
   void _openItem(int index) {
     _returnFocus = FocusManager.instance.primaryFocus;
+    _barWidth = (context.findRenderObject()! as RenderBox).size.width - 2;
     final selected = _current(index);
     setState(() {
       _open = index;
@@ -273,6 +311,7 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
           : Colors.transparent,
       label: Colors.white,
       detail: active ? Colors.white.withValues(alpha: 0.75) : _muted,
+      dot: active && !_isTabs(widget.items, item),
     );
   }
 
@@ -301,27 +340,27 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final shown = _shown != null && _shown! < widget.items.length
-        ? _shown
-        : null;
+    final shown = _shown;
     final corner = _corner;
     return OverlayPortal(
       controller: _portal,
-      overlayChildBuilder: (context) => Align(
-        alignment: Alignment.topLeft,
-        child: CompositedTransformFollower(
-          link: _link,
-          showWhenUnlinked: false,
-          targetAnchor: corner,
-          followerAnchor: corner,
-          child: TapRegion(
-            onTapOutside: (_) => _close(),
-            // Inside a text field's group too, so a notch in a field's
-            // trailing (as in Gaia's composer) doesn't take its focus.
-            child: TextFieldTapRegion(child: _shell(shown)),
-          ),
-        ),
-      ),
+      overlayChildBuilder: (context) => shown == null
+          ? const SizedBox.shrink()
+          : Align(
+              alignment: Alignment.topLeft,
+              child: CompositedTransformFollower(
+                link: _link,
+                showWhenUnlinked: false,
+                targetAnchor: corner,
+                followerAnchor: corner,
+                child: TapRegion(
+                  onTapOutside: (_) => _close(),
+                  // Inside a text field's group too, so a notch in a field's
+                  // trailing (as in Gaia's composer) doesn't take its focus.
+                  child: TextFieldTapRegion(child: _shell(shown)),
+                ),
+              ),
+            ),
       child: CompositedTransformTarget(
         link: _link,
         child: shown == null
@@ -441,20 +480,17 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
                           opacity: open ? _panel : kAlwaysCompleteAnimation,
                           child: _Options(
                             key: ValueKey(shown),
-                            item: widget.items[shown],
+                            items: widget.items,
+                            focused: shown,
+                            minWidth: _barWidth,
                             frame: _frame,
                             rows: _rows,
                             texts: _texts,
-                            trigger: _triggerTexts.putIfAbsent(
-                              shown,
-                              GlobalKey.new,
-                            ),
-                            hidden: flight?.item == shown
-                                ? flight!.option
-                                : null,
+                            triggers: _triggerTexts,
+                            hidden: flight,
                             leaving: open ? null : _move,
                             drawnIn: open ? null : _moved,
-                            onSelect: (index) => _select(shown, index),
+                            onSelect: _select,
                             onClose: _close,
                           ),
                         ),
@@ -472,7 +508,7 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
 
 /// [child], counting toward its parent's size only while it [sizes]. When
 /// it doesn't, it hangs from its parent's bottom right corner (bottom left,
-/// for [left]), still painted but taking no room, and not hit.
+/// for [left]), still painted but taking no room.
 class _Ghost extends SingleChildRenderObjectWidget {
   const _Ghost({required this.sizes, required this.left, required super.child});
 
@@ -547,8 +583,8 @@ class _Bar extends StatelessWidget {
   final GlobalKey? frame;
   final Map<int, GlobalKey>? triggers;
   final Map<int, GlobalKey>? triggerTexts;
-  final Map<int, GlobalKey>? rows;
-  final Map<int, GlobalKey>? texts;
+  final Map<(int, int), GlobalKey>? rows;
+  final Map<(int, int), GlobalKey>? texts;
   final _Flight? flight;
 
   /// Where [flight] is: 1 in the trigger, 0 in the row (and a little past
@@ -583,6 +619,7 @@ class _Bar extends StatelessWidget {
   }
 
   Widget _trigger(int index, GaiaNotchItem<Object?> item, bool highlighted) {
+    final flight = this.flight?.item == index ? this.flight : null;
     if (item.trigger case final trigger?) {
       return AnimatedContainer(
         key: triggers?.putIfAbsent(index, GlobalKey.new),
@@ -601,9 +638,8 @@ class _Bar extends StatelessWidget {
         ? picked.option
         : item._selected;
     final option = selected < 0 ? null : item.options[selected];
-    final flight = this.flight?.item == index ? this.flight : null;
     final t = at.value.clamp(0.0, 1.0);
-    Widget text = Text.rich(
+    Widget label(TextStyle style) => Text.rich(
       TextSpan(
         children: [
           TextSpan(text: option?.label ?? 'None'),
@@ -618,11 +654,39 @@ class _Bar extends StatelessWidget {
             ),
         ],
       ),
-      style: _triggerStyle.copyWith(
+      style: style.copyWith(
         color: flight == null ? _bright : Color.lerp(flight.label, _bright, t),
       ),
       maxLines: 1,
     );
+    Widget text = label(_triggerStyle);
+    if (flight != null) {
+      // Flying, it's its row's text, shrunk to fit the trigger toward there:
+      // so at the row it's that text exactly, and nothing jumps as the row
+      // takes over. The trigger's own, unseen, keeps the bar's size.
+      text = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Visibility.maintain(visible: false, child: text),
+          Positioned.fill(
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              maxWidth: double.infinity,
+              maxHeight: double.infinity,
+              child: Transform.scale(
+                scale: lerpDouble(
+                  1,
+                  _triggerStyle.fontSize! / _textStyle.fontSize!,
+                  t,
+                ),
+                alignment: Alignment.centerLeft,
+                child: label(_textStyle),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     text = _withIcon(
       option,
       text,
@@ -636,7 +700,7 @@ class _Bar extends StatelessWidget {
     if (flight != null) {
       text = _Fly(
         frame: frame!,
-        from: texts![flight.option],
+        from: texts![(index, flight.option)],
         at: at,
         child: text,
       );
@@ -652,7 +716,7 @@ class _Bar extends StatelessWidget {
     if (flight != null) {
       trigger = _Fly(
         frame: frame!,
-        from: rows![flight.option],
+        from: rows![(index, flight.option)],
         at: at,
         pill: flight,
         child: trigger,
@@ -734,6 +798,10 @@ class _RenderFly extends RenderProxyBox {
     return box != null && box.attached && box.hasSize ? box : null;
   }
 
+  /// [box]'s point at [at], its size's fraction along each side, in [frame].
+  static Offset _in(RenderBox frame, RenderBox box, Alignment at) =>
+      box.localToGlobal(at.alongSize(box.size), ancestor: frame);
+
   @override
   void paint(PaintingContext context, Offset offset) {
     final t = _at.value;
@@ -743,10 +811,10 @@ class _RenderFly extends RenderProxyBox {
     if (t == 1 || frame == null || from == null || anchor == null) {
       return super.paint(context, offset);
     }
-    final gap =
-        from.localToGlobal(Offset.zero, ancestor: frame) -
-        anchor.localToGlobal(Offset.zero, ancestor: frame);
     final pill = this.pill;
+    // Texts line up by their middles: their line heights differ.
+    final corner = pill == null ? Alignment.centerLeft : Alignment.topLeft;
+    final gap = _in(frame, from, corner) - _in(frame, anchor, corner);
     if (pill == null) {
       super.paint(context, offset + gap * (1 - t));
       return;
@@ -765,8 +833,17 @@ class _RenderFly extends RenderProxyBox {
         rrect.deflate(0.5),
         Paint()
           ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
           ..color = pill.border.withValues(alpha: pill.border.a * (1 - clear)),
       );
+    if (pill.dot) {
+      // Where the row's is: inside its 12px padding and 1px border.
+      context.canvas.drawCircle(
+        rrect.outerRect.centerRight - const Offset(16, 0),
+        3,
+        Paint()..color = Colors.white.withValues(alpha: 1 - clear),
+      );
+    }
     super.paint(context, offset);
   }
 }
@@ -783,13 +860,19 @@ class _Divider extends StatelessWidget {
   }
 }
 
-/// A 1px dot every 4px, down the middle.
+/// A 1px dot every 4px, along its longer side.
 class _DottedLine extends CustomPainter {
   const _DottedLine();
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.white.withValues(alpha: 0.35);
+    if (size.width > size.height) {
+      for (var x = 0.0; x < size.width; x += 4) {
+        canvas.drawRect(Rect.fromLTWH(x, 0, 1, size.height), paint);
+      }
+      return;
+    }
     for (var y = 0.0; y < size.height; y += 4) {
       canvas.drawRect(Rect.fromLTWH(0, y, size.width, 1), paint);
     }
@@ -799,19 +882,22 @@ class _DottedLine extends CustomPainter {
   bool shouldRepaint(_DottedLine old) => false;
 }
 
-/// An open item's options, the selected one focused, as wide as the widest.
-/// [rows] and [texts] get keys for each option to be measured by; the
-/// [hidden] one is in flight. While [leaving] runs, the others blur out
-/// bottom first and are drawn in toward the [trigger]'s text as [drawnIn]
-/// goes to 1.
+/// Every item's options with a dotted divider between items, at least
+/// [minWidth] wide: with several items, the first's two side by side, as tabs. The
+/// [focused] item's selected one has the focus. [rows] and [texts] get keys
+/// for each option to be measured by; [hidden]'s is in flight, and needs no
+/// entrance if it was at the start. While [leaving] runs, the others blur out bottom first and are
+/// drawn in toward their item's text in [triggers] as [drawnIn] goes to 1.
 class _Options extends StatefulWidget {
   const _Options({
     super.key,
-    required this.item,
+    required this.items,
+    required this.focused,
+    required this.minWidth,
     required this.frame,
     required this.rows,
     required this.texts,
-    required this.trigger,
+    required this.triggers,
     required this.hidden,
     required this.leaving,
     required this.drawnIn,
@@ -819,15 +905,17 @@ class _Options extends StatefulWidget {
     required this.onClose,
   });
 
-  final GaiaNotchItem<Object?> item;
+  final List<GaiaNotchItem<Object?>> items;
+  final int focused;
+  final double minWidth;
   final GlobalKey frame;
-  final Map<int, GlobalKey> rows;
-  final Map<int, GlobalKey> texts;
-  final GlobalKey trigger;
-  final int? hidden;
+  final Map<(int, int), GlobalKey> rows;
+  final Map<(int, int), GlobalKey> texts;
+  final Map<int, GlobalKey> triggers;
+  final _Flight? hidden;
   final Animation<double>? leaving;
   final Animation<double>? drawnIn;
-  final ValueChanged<int> onSelect;
+  final void Function(int item, int option) onSelect;
   final VoidCallback onClose;
 
   @override
@@ -836,13 +924,25 @@ class _Options extends StatefulWidget {
 
 class _OptionsState extends State<_Options>
     with SingleTickerProviderStateMixin {
+  /// The rows above [item]'s.
+  int _rowsBefore(int item) => widget.items
+      .take(item)
+      .fold(0, (rows, item) => rows + item.options.length);
+
+  int get _rowCount => _rowsBefore(widget.items.length);
+
+  /// The option rising into its row as it opens. It's already there when it
+  /// lands, so nothing moves as it takes over from the flight.
+  late final _rising = widget.hidden;
+
+  /// The rows it opened with come in one by one; any more, as a tier's new
+  /// adapter brings another account's, come in with the last of them.
+  late final _rowsAtOpen = _rowCount;
+
   /// Runs, linearly, until the last option has settled.
   late final _entrance = AnimationController(
     vsync: this,
-    duration:
-        _optionsDelay +
-        _optionsStagger * (widget.item.options.length - 1) +
-        _springTime,
+    duration: _optionsDelay + _optionsStagger * (_rowsAtOpen - 1) + _springTime,
   )..forward();
 
   @override
@@ -851,11 +951,21 @@ class _OptionsState extends State<_Options>
     super.dispose();
   }
 
+  /// When row [row] of [rows] starts leaving, behind those below it that do.
+  Duration _leaveDelay(int row, int rows) {
+    final hidden = widget.hidden;
+    final flying = hidden == null
+        ? -1
+        : _rowsBefore(hidden.item) + hidden.option;
+    return _leaveStagger * (rows - 1 - row - (flying > row ? 1 : 0));
+  }
+
+  Duration _enterDelay(int row) =>
+      _optionsDelay + _optionsStagger * row.clamp(0, _rowsAtOpen - 1);
+
   @override
   Widget build(BuildContext context) {
-    final options = widget.item.options;
-    final selected = widget.item._selected;
-    final drawnIn = widget.drawnIn;
+    final rows = _rowCount;
     // A scope of its own, so Tab and the arrows stay among the options.
     return FocusScope(
       child: CallbackShortcuts(
@@ -866,56 +976,100 @@ class _OptionsState extends State<_Options>
           const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
               FocusManager.instance.primaryFocus?.previousFocus(),
         },
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: IntrinsicWidth(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: widget.minWidth),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: IntrinsicWidth(child: _lists(rows)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lists(int rows) {
+    final items = widget.items;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < items.length; index++) ...[
+          if (index > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: _divider(_rowsBefore(index), rows),
+            ),
+          if (_isTabs(items, index))
+            Row(
               children: [
-                for (final (index, option) in options.indexed) ...[
-                  if (index > 0) const SizedBox(height: 6),
-                  Opacity(
-                    opacity: index == widget.hidden ? 0 : 1,
-                    child: _Fly(
-                      frame: widget.frame,
-                      from: widget.trigger,
-                      anchor: widget.texts.putIfAbsent(index, GlobalKey.new),
-                      at: drawnIn == null
-                          ? kAlwaysCompleteAnimation
-                          : ReverseAnimation(drawnIn),
-                      child: _Entering(
-                        entrance: _entrance,
-                        delay: _optionsDelay + _optionsStagger * index,
-                        leaving: widget.leaving,
-                        // Counting only the options leaving.
-                        leaveDelay:
-                            _leaveStagger *
-                            [
-                              for (
-                                var below = index + 1;
-                                below < options.length;
-                                below++
-                              )
-                                if (below != widget.hidden) below,
-                            ].length,
-                        child: _Pressable(
-                          // The first when none is, so the keys work at once.
-                          autofocus: index == (selected < 0 ? 0 : selected),
-                          selected: index == selected,
-                          onPressed: () => widget.onSelect(index),
-                          builder: (highlighted) => _option(
-                            index,
-                            option,
-                            index == selected,
-                            highlighted,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                for (
+                  var option = 0;
+                  option < items[0].options.length;
+                  option++
+                ) ...[
+                  if (option > 0) const SizedBox(width: 6),
+                  Expanded(child: _row(0, option, rows, dot: false)),
                 ],
               ],
+            )
+          else
+            ..._section(index, rows),
+        ],
+      ],
+    );
+  }
+
+  /// A dotted line, coming in with row [row].
+  Widget _divider(int row, int rows) => _Entering(
+    entrance: _entrance,
+    delay: _enterDelay(row),
+    leaving: widget.leaving,
+    leaveDelay: _leaveDelay(row - 1, rows),
+    child: const CustomPaint(size: Size.fromHeight(1), painter: _DottedLine()),
+  );
+
+  /// The rows of item [item], [rows] being how many there are in all.
+  List<Widget> _section(int item, int rows) => [
+    for (var index = 0; index < widget.items[item].options.length; index++) ...[
+      if (index > 0) const SizedBox(height: 6),
+      _row(item, index, rows),
+    ],
+  ];
+
+  Widget _row(int item, int index, int rows, {bool dot = true}) {
+    final selected = widget.items[item]._selected;
+    final hidden = widget.hidden;
+    final drawnIn = widget.drawnIn;
+    final before = _rowsBefore(item);
+    return Opacity(
+      opacity: hidden?.item == item && hidden?.option == index ? 0 : 1,
+      child: _Fly(
+        frame: widget.frame,
+        from: widget.triggers.putIfAbsent(item, GlobalKey.new),
+        anchor: widget.texts.putIfAbsent((item, index), GlobalKey.new),
+        at: drawnIn == null
+            ? kAlwaysCompleteAnimation
+            : ReverseAnimation(drawnIn),
+        child: _Entering(
+          entrance: _entrance,
+          delay: _enterDelay(before + index),
+          entered: _rising?.item == item && _rising?.option == index,
+          leaving: widget.leaving,
+          leaveDelay: _leaveDelay(before + index, rows),
+          child: _Pressable(
+            // The first when none is, so the keys work at once.
+            autofocus:
+                item == widget.focused &&
+                index == (selected < 0 ? 0 : selected),
+            selected: index == selected,
+            onPressed: () => widget.onSelect(item, index),
+            builder: (highlighted) => _option(
+              item,
+              index,
+              widget.items[item].options[index],
+              index == selected,
+              highlighted,
+              dot: dot,
             ),
           ),
         ),
@@ -924,14 +1078,16 @@ class _OptionsState extends State<_Options>
   }
 
   Widget _option(
+    int item,
     int index,
     GaiaNotchOption<Object?> option,
     bool active,
-    bool lit,
-  ) {
+    bool lit, {
+    required bool dot,
+  }) {
     final accent = Theme.of(context).colorScheme.primary;
     return AnimatedContainer(
-      key: widget.rows.putIfAbsent(index, GlobalKey.new),
+      key: widget.rows.putIfAbsent((item, index), GlobalKey.new),
       duration: _fade,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -954,7 +1110,7 @@ class _OptionsState extends State<_Options>
               heightFactor: 1,
               child: _withIcon(
                 option,
-                key: widget.texts.putIfAbsent(index, GlobalKey.new),
+                key: widget.texts.putIfAbsent((item, index), GlobalKey.new),
                 color: active || lit ? Colors.white : _muted,
                 lit: active || lit,
                 Text.rich(
@@ -980,20 +1136,22 @@ class _OptionsState extends State<_Options>
               ),
             ),
           ),
-          const SizedBox(width: 24),
-          // White, where the accent's own colour would vanish on the
-          // accent fill.
-          SizedBox.square(
-            dimension: 6,
-            child: active
-                ? const DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  )
-                : null,
-          ),
+          if (dot) ...[
+            const SizedBox(width: 24),
+            // White, where the accent's own colour would vanish on the
+            // accent fill.
+            SizedBox.square(
+              dimension: 6,
+              child: active
+                  ? const DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                  : null,
+            ),
+          ],
         ],
       ),
     );
@@ -1001,12 +1159,13 @@ class _OptionsState extends State<_Options>
 }
 
 /// [child] dropping in from 10px up, out of a blur, on [_optionSpring],
-/// [delay] into [entrance]; and, [leaveDelay] into [leaving], going back
-/// the way it came.
+/// [delay] into [entrance], unless it's already [entered]; and, [leaveDelay]
+/// into [leaving], going back the way it came.
 class _Entering extends StatelessWidget {
   const _Entering({
     required this.entrance,
     required this.delay,
+    this.entered = false,
     required this.leaving,
     required this.leaveDelay,
     required this.child,
@@ -1014,6 +1173,7 @@ class _Entering extends StatelessWidget {
 
   final AnimationController entrance;
   final Duration delay;
+  final bool entered;
   final Animation<double>? leaving;
   final Duration leaveDelay;
   final Widget child;
@@ -1041,7 +1201,7 @@ class _Entering extends StatelessWidget {
       child: child,
       builder: (context, child) {
         final t =
-            _in(entrance, entrance.duration!, delay) *
+            (entered ? 1.0 : _in(entrance, entrance.duration!, delay)) *
             (leaving == null
                 ? 1
                 : 1 - _in(leaving, _springTime * _leaveSpeed, leaveDelay));
@@ -1111,13 +1271,17 @@ class _PressableState extends State<_Pressable> {
   }
 }
 
-/// A curve tracing [spring] from 0 to 1 over [_springTime].
+/// A curve tracing [spring] from 0 to 1 over [_springTime], eased onto 1 by
+/// the end, where the spring alone is still a little off it and would jump.
 class _SpringCurve extends Curve {
   const _SpringCurve(this.spring);
 
   final SpringDescription spring;
 
   @override
-  double transformInternal(double t) =>
-      SpringSimulation(spring, 0, 1, 0).x(t * _springTime.inMicroseconds / 1e6);
+  double transformInternal(double t) {
+    final simulation = SpringSimulation(spring, 0, 1, 0);
+    final seconds = _springTime.inMicroseconds / 1e6;
+    return simulation.x(t * seconds) - (simulation.x(seconds) - 1) * t;
+  }
 }

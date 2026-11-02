@@ -88,6 +88,40 @@ void main() {
     expect(at('`hi /ne'), isNull);
   });
 
+  group('account aliases', () {
+    const aliased = GaiaAccount(
+      id: 'b',
+      label: 'Beta',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: '',
+      alias: 'q',
+    );
+    const plain = GaiaAccount(
+      id: 'c',
+      label: 'Gamma',
+      adapter: kGaiaCodexAdapter,
+      dir: '',
+    );
+
+    test('only an account with one gets a row, switching to it', () {
+      final items = gaiaPaletteItems(commands, accounts: [aliased, plain]);
+      final rows = items.where((i) => i.account != null);
+      expect(rows.single.account, aliased);
+      expect(rows.single.description, 'Switch to Beta (Claude Code)');
+    });
+
+    test('typed in full, it beats a longer name it starts', () {
+      final items = gaiaPaletteItems(commands, accounts: [aliased]);
+      expect(filterGaiaPalette(items, 'q').first.account, aliased);
+    });
+
+    test('survives a round trip, and is left out when empty', () {
+      expect(GaiaAccount.fromJson(aliased.toJson()), aliased);
+      expect(plain.toJson().containsKey('alias'), isFalse);
+      expect(GaiaAccount.fromJson(plain.toJson()).alias, isEmpty);
+    });
+  });
+
   test('palette matches: prefix, then substring, then letters in order', () {
     final items = gaiaPaletteItems(commands);
     expect(items.map((i) => i.name), [

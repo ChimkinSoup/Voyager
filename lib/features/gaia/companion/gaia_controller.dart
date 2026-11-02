@@ -1595,9 +1595,19 @@ class GaiaController extends ChangeNotifier {
     ]..sort((a, b) => rank(a) - rank(b));
   }
 
+  /// The debug menu's made-up banner or card, in place of the real ones until
+  /// it's closed. Never saved, and nothing it offers is acted on.
+  GaiaLimitPreview? limitPreview;
+
+  void previewLimit(GaiaLimitPreview? preview) {
+    limitPreview = preview;
+    notifyListeners();
+  }
+
   /// The warning over the composer, when the next message's account is low
   /// but not out (§6.5).
   GaiaLowUsage? get lowUsage {
+    if (limitPreview case final preview?) return preview.low;
     final agent = agentFor(nextTier);
     if (agent == null) return null;
     final account = currentAccount(agent.adapter);
@@ -1608,13 +1618,9 @@ class GaiaController extends ChangeNotifier {
     final name = accountsFor(agent.adapter).length > 1
         ? '${agent.label} (${account.label})'
         : agent.label;
-    final left = ((1 - window.usedNow) * 100).round();
-    final resets = window.resetsAt;
     return GaiaLowUsage(
       adapter: agent.adapter,
-      text:
-          '$name is low: $left% of the ${gaiaLimitName(window)} limit left'
-          '${resets == null ? '' : ', resets ${gaiaResetTime(resets)}'}.',
+      text: gaiaLowText(name, window),
       switchTo: _withHeadroom(
         account,
         agent.model,
@@ -1625,6 +1631,7 @@ class GaiaController extends ChangeNotifier {
   /// The decision card in place of the composer, when the next message's
   /// account is out (§6.5). Never mid-run: that run finishes on its account.
   GaiaLimitCard? get limitCard {
+    if (limitPreview case final preview?) return preview.card;
     final agent = agentFor(nextTier);
     if (agent == null || currentRunning) return null;
     final account = currentAccount(agent.adapter);
@@ -1646,13 +1653,14 @@ class GaiaController extends ChangeNotifier {
                       !_exhausted(currentAccount(other.adapter), other.model))
                 tier,
           ];
-    ({GaiaAccount account, DateTime at})? resets;
-    for (final each in accountsFor(agent.adapter)) {
-      final at = _resetOf(each, agent.model);
-      if (at != null && (resets == null || at.isBefore(resets.at))) {
-        resets = (account: each, at: at);
-      }
-    }
+    final resets = <({GaiaAccount account, DateTime? at})>[
+      for (final each in accountsFor(agent.adapter))
+        if (_exhausted(each, agent.model))
+          (account: each, at: _resetOf(each, agent.model)),
+    ];
+    int unknownLast(DateTime? a, DateTime? b) =>
+        a == null ? (b == null ? 0 : 1) : (b == null ? -1 : a.compareTo(b));
+    resets.sort((a, b) => unknownLast(a.at, b.at));
     return GaiaLimitCard(
       agent: agent,
       account: account,
@@ -1676,6 +1684,7 @@ class GaiaController extends ChangeNotifier {
   }
 
   void dismissLimitCard() {
+    if (limitPreview != null) return previewLimit(null);
     final agent = agentFor(nextTier);
     if (agent == null) return;
     _limitDismissed.add(currentAccount(agent.adapter).key);

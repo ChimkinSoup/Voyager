@@ -36,6 +36,45 @@ TextEditingValue _typed(String text) => TextEditingValue(
 );
 
 void main() {
+  group('inline account aliases', () {
+    const account = GaiaAccount(
+      id: 'b',
+      label: 'Beta',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: '',
+      alias: 'second',
+    );
+    GaiaAccountCommand? find(String text, {bool atEnd = false}) =>
+        findGaiaAccountCommand(_typed(text), const [account], atEnd: atEnd);
+
+    test('fire once completed, and come out of the text', () {
+      expect(find('/second'), isNull);
+      final command = find('hi /second there')!;
+      expect(command.account, account);
+      expect(command.value.text, 'hi there');
+    });
+
+    test('or ending a sent message', () {
+      expect(find('hi /second', atEnd: true)!.value.text, 'hi');
+    });
+
+    test('not inside a longer word, or code', () {
+      expect(find('/second/notes.txt '), isNull);
+      expect(find('/seconds '), isNull);
+      expect(find('run `x /second y` '), isNull);
+    });
+
+    test('an account without one has none', () {
+      const plain = GaiaAccount(
+        id: 'c',
+        label: 'Gamma',
+        adapter: kGaiaClaudeCodeAdapter,
+        dir: '',
+      );
+      expect(findGaiaAccountCommand(_typed('/ x'), const [plain]), isNull);
+    });
+  });
+
   group('inline tier commands', () {
     test('fire once completed, and come out of the text', () {
       expect(findGaiaTierCommand(_typed('/dee')), isNull);
