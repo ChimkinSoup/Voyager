@@ -16,6 +16,8 @@ import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
+import 'package:voyager/features/gaia/host/gaia_os_control.dart';
+import 'package:voyager/features/gaia/host/gaia_os_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
@@ -63,7 +65,11 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `memoryIndex` (§11),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
-/// `remember {chatId, text}`, `curated {chatId, seq, memories}`, `rearm`,
+/// `remember {chatId, text}`, `curated {chatId, seq, memories}`, `setSeeScreen
+/// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
+/// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
+/// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
+/// `osStop {chatId}`, `rearm`,
 /// and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
@@ -92,7 +98,24 @@ class GaiaHost {
       required bool gaiaRight,
     })?
     splitWindows,
+    GaiaCursorTarget? Function()? cursorTarget,
+    Future<GaiaPointedControl?> Function(GaiaCursorTarget target)? readControl,
+    Future<String?> Function(
+      String path,
+      GaiaCursorTarget target,
+      GaiaScreenRect control,
+    )?
+    captureControl,
+    GaiaOsReads? osReads,
+    GaiaOsControl? osControl,
+    Future<void> Function(String? label)? showBorder,
   }) : _pipe = pipe ?? GaiaPipe(),
+       _osReadsOverride = osReads,
+       _osControlOverride = osControl,
+       _showBorder = showBorder ?? _showBorderWindows,
+       _cursorTarget = cursorTarget ?? gaiaCursorTarget,
+       _readControl = readControl ?? gaiaReadControl,
+       _captureControl = captureControl ?? gaiaCaptureElement,
        _splitWindows = splitWindows ?? gaiaSplitWindows,
        _copySelection = copySelection ?? gaiaCopySelection,
        _abortFlag = abortFlag ?? _defaultAbortFlag,
@@ -105,11 +128,53 @@ class GaiaHost {
   static final instance = GaiaHost();
 
   final GaiaPipe _pipe;
+  final GaiaOsReads? _osReadsOverride;
+
+  /// The `os_*` read tools (§15.6).
+  late final _osReads =
+      _osReadsOverride ??
+      GaiaOsReads(
+        companionPid: () => _companionPid,
+        exclusions: () => _settings.contextExclusions,
+        vaultUnlocked: () => _vaultUnlocked(),
+      );
+
+  final GaiaOsControl? _osControlOverride;
+
+  /// The `os_*` action tools (§15.6).
+  late final _osControl =
+      _osControlOverride ??
+      GaiaOsControl(
+        companionPid: () => _companionPid,
+        exclusions: () => _settings.contextExclusions,
+        vaultUnlocked: () => _vaultUnlocked(),
+      );
+
+  /// The "Gaia is in control" border (§15.6), with its label; off for null.
+  final Future<void> Function(String? label) _showBorder;
+
+  static const _borderChannel = MethodChannel('voyager/gaia_border');
+
+  static Future<void> _showBorderWindows(String? label) =>
+      _borderChannel.invokeMethod<void>('show', label);
+
+  /// Whether the Secure Notes vault is unlocked. The `os_*` reads wait for
+  /// [attach], so this is always the app's by then.
+  bool Function() _vaultUnlocked = () => true;
   final Future<File> Function() _abortFlag;
   final Future<void> Function(int pid) _killCompanion;
   final Future<Directory> Function() _captureDirectory;
   final Future<GaiaScreenCapture?> Function(String path) _captureScreenTo;
   final GaiaForegroundWindow? Function() _foregroundWindow;
+  final GaiaCursorTarget? Function() _cursorTarget;
+  final Future<GaiaPointedControl?> Function(GaiaCursorTarget target)
+  _readControl;
+  final Future<String?> Function(
+    String path,
+    GaiaCursorTarget target,
+    GaiaScreenRect control,
+  )
+  _captureControl;
   final Future<String?> Function(GaiaForegroundWindow window) _copySelection;
   final Future<GaiaWindowUia> Function(
     GaiaForegroundWindow window, {
@@ -202,6 +267,8 @@ class GaiaHost {
     _started = true;
     if (show) _pendingEvents.add(('hotkey', {'key': GaiaHotkey.window.name}));
     _aborted = await (await _abortFlag()).exists();
+    // A crash between the flag and the revoke: Re-arm must find them off (§15.7).
+    if (_aborted) unawaited(_revokeGrants());
     _pipe
       ..onRequest = _onRequest
       ..onEvent = _onEvent
@@ -231,8 +298,10 @@ class GaiaHost {
     Future<void> Function(String word)? addWord,
     GaiaBeaconService? beacon,
     GaiaPower? power,
+    bool Function()? vaultUnlocked,
   }) {
     if (_attached.isCompleted) return;
+    if (vaultUnlocked != null) _vaultUnlocked = vaultUnlocked;
     _addWord = addWord;
     _beacon = beacon
       ?..onCommand = _runCommand
@@ -247,11 +316,16 @@ class GaiaHost {
     _reads = reads;
     _executor = executor;
     _memories = memories;
-    _attached.complete(GaiaChatStore(repository, deviceId: deviceId));
+    final store = GaiaChatStore(repository, deviceId: deviceId);
+    _attached.complete(store);
+    // A grant left on before a restart still counts.
+    unawaited(_syncBorder(store));
     _changes = repository.watchChanges().listen((_) {
       _changedSoon ??= Timer(_changedDelay, () {
         _changedSoon = null;
         if (_pipe.connected) _pipe.notify('changed');
+        // A grant or title can change by sync or restore too.
+        unawaited(_syncBorder(store));
       });
     });
     // Each save of the companion's comes back too, which it knows as its own.
@@ -384,6 +458,7 @@ class GaiaHost {
       } else {
         _pendingEvents.add(('summon', summon));
       }
+      if (!_aborted) unawaited(_sendPointedControl());
     }
     switch (hotkey) {
       case GaiaHotkey.region || GaiaHotkey.screen:
@@ -473,6 +548,86 @@ class GaiaHost {
           : null,
       'selection': uia.selection,
     });
+  }
+
+  /// Which [_sendPointedControl] is the latest: an older one still reading
+  /// says nothing once a newer summon has come.
+  var _pointedRead = 0;
+
+  /// What `/this` would attach (§15.5), read on every summon and thrown away
+  /// unless it's used: the control under the cursor, or why there isn't one.
+  /// Goes by the window under the cursor, which may not be the one in front,
+  /// so the exclusion list (§15.4) covers what's actually read. The summon
+  /// never waits on it.
+  Future<void> _sendPointedControl() async {
+    final read = ++_pointedRead;
+    void tell(Map<String, Object?> params) {
+      if (read != _pointedRead || _aborted) {
+        if (params['crop'] case final String crop) {
+          File(crop).delete().ignore();
+        }
+        return;
+      }
+      if (_pipe.connected) {
+        _pipe.notify('pointed', params);
+      } else {
+        _pendingEvents.add(('pointed', params));
+      }
+    }
+
+    final target = _cursorTarget();
+    if (target == null || target.window.pid == _companionPid) return tell({});
+    final window = target.window;
+    bool excluded(String? url) => gaiaContextExcluded(
+      _settings.contextExclusions,
+      exe: window.exe,
+      app: window.app,
+      url: url,
+    );
+    // Refused as the os_* tools refuse them (§15.6): Voyager's window with the
+    // vault unlocked, and what can't be checked against the list.
+    bool vaultOpen() => window.pid == pid && _vaultUnlocked();
+    if (excluded(null)) return tell({'refused': 'excluded'});
+    if (window.exe.isEmpty) return tell({'refused': 'unknown'});
+    if (vaultOpen()) return tell({'refused': 'vault'});
+    final control = await _readControl(target);
+    if (control == null) return tell({});
+    if (excluded(control.url)) return tell({'refused': 'excluded'});
+    if (gaiaIsBrowser(window.exe) &&
+        control.url == null &&
+        _settings.contextExclusions.any((e) => e.contains('.'))) {
+      return tell({'refused': 'unknown'});
+    }
+    if (control.sensitive) return tell({'refused': 'sensitive'});
+    // Again: it may have been unlocked during the read.
+    if (vaultOpen()) return tell({'refused': 'vault'});
+    // The crop scans the whole window, which can take a while: `/this` waits.
+    tell({'reading': true});
+    final dir = await _captureDirectory();
+    final crop = await _captureControl(
+      p.join(dir.path, 'control-${DateTime.now().microsecondsSinceEpoch}.bmp'),
+      target,
+      (
+        left: control.left,
+        top: control.top,
+        width: control.width,
+        height: control.height,
+      ),
+    );
+    tell({
+      'control': GaiaElementPart(
+        controlType: control.type,
+        name: control.name,
+        value: control.value,
+        app: window.app,
+        left: control.left,
+        top: control.top,
+        width: control.width,
+        height: control.height,
+      ).toJson(),
+      'crop': ?crop,
+    });
+    unawaited(_sweepCaptures(dir));
   }
 
   /// C and D (§15.1): the monitor under the cursor, captured here and now,
@@ -688,6 +843,7 @@ class GaiaHost {
 
   /// Also a companion that exited before it connected.
   void _onDisconnected() {
+    _osControl.stop('Gaia went away.');
     _cropping = false;
     runs.value = const [];
     usage.value = const {};
@@ -714,11 +870,16 @@ class GaiaHost {
   /// killed with its whole tree and relaunched aborted.
   Future<void> _abort() async {
     _aborted = true;
+    // Synthetic input first: mid-sequence, with key-ups for anything held.
+    _osControl.stop('Gaia is aborted.');
     _beacon?.setAborted(true);
     // And drain mode, everywhere (§13).
     if (_attached.isCompleted) {
       unawaited(_attached.future.then((store) => store.stopDraining()));
     }
+    // And screen access, once there's a store if there isn't yet: Re-arm leaves
+    // it off (§15.7).
+    unawaited(_revokeGrants());
     // Capture stops too (§15.7).
     unawaited(_armPickUp(false));
     try {
@@ -736,6 +897,37 @@ class GaiaHost {
       _lostRunStatus = GaiaMessageStatus.aborted;
       await _killCompanion(_companionPid);
     }
+  }
+
+  Future<void> _revokeGrants() async {
+    final store = await _attached.future;
+    await store.revokeGrants();
+    await _syncBorder(store);
+  }
+
+  var _borderSynced = false;
+  String? _borderLabel;
+
+  /// The border shows while any chat here has *can control* on (§15.6), and
+  /// names it, for finding the toggle again.
+  Future<void> _syncBorder(GaiaChatStore store) async {
+    final titles = await store.controlledChatTitles();
+    final label = switch (titles) {
+      [] => null,
+      [final title] =>
+        title.isEmpty ? 'Gaia is in control' : 'Gaia is in control: $title',
+      _ => 'Gaia is in control: ${titles.length} chats',
+    };
+    // Showing rebuilds its windows, and most changes don't touch it.
+    if (_borderSynced && label == _borderLabel) return;
+    _borderSynced = true;
+    _borderLabel = label;
+    // Not waited for: a chat's save doesn't hang on a window.
+    unawaited(
+      Future.sync(() => _showBorder(label)).catchError((Object error) {
+        debugPrint('[gaia] border not shown: $error');
+      }),
+    );
   }
 
   void _onEvent(String event, Map<String, Object?> params) {
@@ -800,6 +992,7 @@ class GaiaHost {
         return [for (final chat in await store.chats()) chat.toJson()];
       case 'putChat':
         await store.createChat(GaiaChat.fromJson(_map(params['chat'])));
+        await _syncBorder(store);
         return null;
       case 'setSession':
         await store.setSession(
@@ -836,7 +1029,9 @@ class GaiaHost {
         return null;
       case 'deleteChat':
         final chatId = params['chatId']! as String;
+        _osControl.stop('The chat was deleted.', chatId: chatId);
         await store.deleteChat(chatId);
+        await _syncBorder(store);
         await store.deleteDraft(chatId);
         // Deleted either way: its images just don't follow it if this fails.
         DateTime? at;
@@ -850,6 +1045,7 @@ class GaiaHost {
       case 'restoreChat':
         final chatId = params['chatId']! as String;
         await store.restoreChat(chatId);
+        await _syncBorder(store);
         if (params['mediaDeletedAt'] case final String at) {
           await _media?.restoreChat(chatId, DateTime.parse(at));
         }
@@ -938,6 +1134,65 @@ class GaiaHost {
           // The pipe would carry it as `GaiaReadException: …`.
           throw GaiaPipeException(error.message);
         }
+      case 'setSeeScreen':
+        final on = params['on']! as bool;
+        if (on && _aborted) throw GaiaPipeException('Gaia is aborted.');
+        await store.setSeeScreen(params['chatId']! as String, on);
+        return null;
+      case 'osRead':
+        return _osRead(
+          store,
+          params['chatId']! as String,
+          params['tool']! as String,
+          _map(params['arguments']),
+        );
+      case 'setCanControl':
+        final chatId = params['chatId']! as String;
+        final on = params['on']! as bool;
+        if (on && _aborted) throw GaiaPipeException('Gaia is aborted.');
+        if (!on) {
+          _osControl.stop('The user turned off "can control".', chatId: chatId);
+        }
+        await store.setCanControl(chatId, on);
+        await _syncBorder(store);
+        return null;
+      case 'osPlan':
+        final chatId = params['chatId']! as String;
+        await _checkControl(store, chatId);
+        try {
+          return await _osControl.plan(
+            chatId,
+            params['cardId']! as String,
+            params['tool']! as String,
+            _map(params['arguments']),
+          );
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'osRun':
+        final chatId = params['chatId']! as String;
+        try {
+          return await _osControl.run(
+            params['cardId']! as String,
+            once: params['once'] == true,
+            check: () => _checkControl(store, chatId).catchError(
+              (Object error) =>
+                  throw GaiaReadException((error as GaiaPipeException).message),
+              test: (error) => error is GaiaPipeException,
+            ),
+          );
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'osDrop':
+        _osControl.drop(params['cardId']! as String);
+        return null;
+      case 'osStop':
+        _osControl.stop(
+          'The user stopped the reply.',
+          chatId: params['chatId']! as String,
+        );
+        return null;
       case 'memoryIndex':
         return await _memories?.index() ?? '';
       case 'memoryTool':
@@ -1046,6 +1301,52 @@ class GaiaHost {
         return null;
       default:
         throw GaiaPipeException('unknown method $method');
+    }
+  }
+
+  /// An `os_*` read (§15.6), checked here whatever the companion did: Abort and
+  /// this device's grant, again once it's read, so taking the grant back or
+  /// pressing Abort mid-read keeps what it got from the agent.
+  Future<Map<String, Object?>> _osRead(
+    GaiaChatStore store,
+    String chatId,
+    String tool,
+    Map<String, Object?> arguments,
+  ) async {
+    Future<void> check() async {
+      if (_aborted) throw GaiaPipeException('aborted: Gaia is aborted.');
+      if (!await store.canSeeScreen(chatId)) {
+        throw GaiaPipeException(
+          'The user hasn\'t turned on "can see screen" for this chat. They can, '
+          'with the eye button under the composer.',
+        );
+      }
+    }
+
+    await check();
+    final GaiaOsAnswer answer;
+    try {
+      answer = await _osReads.read(tool, arguments);
+    } on GaiaReadException catch (error) {
+      throw GaiaPipeException(error.message);
+    }
+    await check();
+    return {
+      'text': answer.text,
+      'image': answer.image,
+      'mimeType': answer.mimeType,
+    };
+  }
+
+  /// Whether [chatId] may send input now (§15.6), asked here before every step,
+  /// whatever the companion did.
+  Future<void> _checkControl(GaiaChatStore store, String chatId) async {
+    if (_aborted) throw GaiaPipeException('aborted: Gaia is aborted.');
+    if (!await store.canControl(chatId)) {
+      throw GaiaPipeException(
+        'The user hasn\'t turned on "can control" for this chat. They can, with '
+        'the hand button under the composer.',
+      );
     }
   }
 

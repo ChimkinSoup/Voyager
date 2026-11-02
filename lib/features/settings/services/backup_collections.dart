@@ -5,6 +5,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -1501,7 +1502,18 @@ List<BackupCollection> buildBackupCollections({
           BackupRecord(id: chat.id, data: gaiaChatToFirestore(chat)),
       ],
       restore: (id, data) async {
-        final chat = mergeGaiaChatFromRemote(data, id);
+        // A restore doesn't bring screen access back (§15.7). Off and stamped
+        // rather than absent: with no entry, a copy still synced from another
+        // device would turn this device's grant back on (gaiaMergeGrants).
+        final deviceId = (await settingsRepository.getSettings()).deviceId;
+        final chat = mergeGaiaChatFromRemote(data, id).copyWith(
+          grants: {
+            if (deviceId != null && deviceId.isNotEmpty)
+              deviceId: GaiaGrant(seeScreen: false, at: utcNow()),
+          },
+          bumpVersion: false,
+          touch: false,
+        );
         await gaiaRepository.upsertChat(chat, recordLocalActivity: false);
         return chat;
       },

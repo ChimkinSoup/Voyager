@@ -2209,6 +2209,9 @@ class GaiaChatsTable extends Table {
 
   /// Drain mode (GAIA_HLD.md §13).
   BoolColumn get drain => boolean().withDefault(const Constant(false))();
+
+  /// `{deviceId: {seeScreen, at}}` (GAIA_HLD.md §8, §15.6).
+  TextColumn get grantsJson => text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2453,7 +2456,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 184;
+  int get schemaVersion => 185;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4546,6 +4549,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_settings_table',
           gaiaSettingsTable,
           gaiaSettingsTable.splitGaiaRight,
+        );
+      }
+      if (from >= 169 && from < 185) {
+        // Gaia Phase 9B: per-device grants (GAIA_HLD.md §15.6).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.grantsJson,
         );
       }
     },

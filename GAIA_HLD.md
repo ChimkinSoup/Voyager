@@ -19,7 +19,9 @@ notifications' Cloud Function is deployed, and pushes checked live (§19).
 Phase 8A (usage) and 8B (accounts) are done; 8B's Claude path is checked live
 2026-11-01 across two real logins, its Codex turn on a second account isn't
 (§19). Phase 8C (low and exhausted) is done and checked live 2026-11-01 with
-forced numbers; no real limit has been hit (§19).
+forced numbers; no real limit has been hit (§19). Phase 9A (`/this`) is built
+and checked live 2026-11-02 (§19). Phase 9B (agent reads) is done and checked live
+2026-11-02 (§19). Phase 9C (agent control) is done and checked live 2026-11-02 (§19).
 **Gemini is skipped
 completely for now** (2026-10-25): no Gemini CLI adapter and no Gemini API
 utility model; the Gemini mentions below are the design for when it comes
@@ -683,7 +685,7 @@ Branches (§18) are sibling messages sharing a `parentId`, and the chat's
 
 | Collection | Doc | Key fields |
 |---|---|---|
-| `gaia_chats` | one per chat | title, tier, workspace? {deviceId → path}, `agentSessions` {deviceId+adapter+account → {sessionId, lastSeq}}, `runLease` {deviceId, runId, expiresAt}?, activeLeafId, grants {deviceId → {seeScreen, control}}, drain, approvalMode, voyagerReads, pinned, lastMessageAt, deletedAt |
+| `gaia_chats` | one per chat | title, tier, workspace? {deviceId → path}, `agentSessions` {deviceId+adapter+account → {sessionId, lastSeq}}, `runLease` {deviceId, runId, expiresAt}?, activeLeafId, grants {deviceId → {seeScreen, canControl, at}}, drain, approvalMode, voyagerReads, pinned, lastMessageAt, deletedAt |
 | `gaia_messages` | one per message | chatId, seq, parentId, role, `parts[]`, agent, model, account, usage {in, out, cacheRead}, status (`streaming`/`complete`/`error`/`cancelled`/`interrupted`/`aborted`), needsInput, compactionBoundary? |
 | `gaia_message_chunks` | overflow only | messageId, n, text |
 | `gaia_live` | one per chat while streaming | messageId, text so far, seq, updatedAt |
@@ -712,7 +714,10 @@ CLI session.
   goes into the chat's queue (§13) with a "running on Laptop" chip. Only the
   lease holder assigns `seq`.
 - **`grants`.** Grants sync, but only apply on the device that gave them, so a
-  phone can't grant screen control on the laptop.
+  phone can't grant screen control on the laptop. Each device's entry merges on
+  its own, newest `at` first, and a revoked one is kept, off: the chat's document
+  is last-write-wins as a whole, so a stale copy would otherwise turn a revoked
+  grant back on.
 - **Cards** (proposals, questions, permissions; §10) are a message part
   `card {kind, payload, state: open|accepted|rejected|voided|expired,
   decidedBy}`. So they survive a companion restart and render on the phone.
@@ -1259,13 +1264,21 @@ nus-desktop does this as a hotkey: point at a control, press Ctrl+Shift+T,
 then type a question. The pointing has to happen *before* Gaia takes focus, so
 Gaia splits it in two:
 - Every summon also records the UI Automation element under the cursor
-  (name, type, value, bounds) and a crop around it. That's one UIA call, and
-  the result is discarded unless used.
+  (name, type, value, bounds) and a crop around it. The element is one UIA call.
+  The crop is cut from a print of that window alone, with its sensitive fields
+  blacked out, as `os.screenshot` is (§15.6), so nothing beside the control or
+  over the window gets in. That takes a scan of its tree, in the background,
+  and `/this` waits for it. With no scan or print, the chip comes with no crop.
+  All of it is discarded unless used.
 - Typing `/this` in the composer attaches it as a chip: "Button · Submit
   assignment · in Chrome".
 
 So it's a typed command, as long as the cursor was on the control when Gaia
-was summoned. Sensitive fields are refused (§15.6).
+was summoned. Sensitive fields are refused (§15.6), and so is a window on the
+exclusion list (§15.4): the window under the cursor, which may not be the one
+in front. As with the `os.*` tools, so is a window whose app or browser address
+can't be read to check against the list, and Voyager's own while its vault is
+unlocked.
 
 ### 15.6 OS actions: reading and controlling
 
@@ -1300,8 +1313,19 @@ Safety, partly borrowed from nus-desktop:
 - **Sensitive-field refusal enforced locally**, not by prompt (port of
   `guide/sensitive.js`): never type into or read password, card or OTP
   fields.
+- **The exclusion list (§15.4) applies (decided 2026-11-01).** No `os.*` tool
+  reads or acts on an excluded app or site, as the summon-time context doesn't.
+  A browser is checked against its URL too.
+- **Voyager's vault (decided 2026-11-01).** No `os.*` tool reads or acts on
+  Voyager's own windows while its vault is unlocked.
+- **Turning on *can see screen* shows a one-line warning (decided 2026-11-01)**,
+  each time and in every chat, beside the toggle: an agent with its CLI's shell
+  or web tools could send screen text elsewhere, or be steered by it. The grant
+  stays one click.
 - Each action batch shows as a step list, approved once or step-by-step, the
-  OS-level equivalent of §10.
+  OS-level equivalent of §10. **Approving once needs every step's target shown
+  (decided 2026-11-01):** its window and resolved control, or its coordinates.
+  A run stops if the window changes.
 - Prefer UIA targeting over pixel coordinates. It survives DPI and layout
   changes, and a model can name a control far more reliably than a pixel
   location.
@@ -1476,9 +1500,9 @@ Other additions:
 | 8A | Done | Usage reading on today's single accounts: `UsageSource` for Claude and Codex with fragile-endpoint fixtures and strict parsing (§6.3), health states (§6.4), a composer usage ring polled from launch rather than the first run (§6.2), and a Codex ring (checked live 2026-11-01, except the Codex passive update during a turn: its shape is tested from the recorded fixture) |
 | 8B | Done | Accounts: the ordered account list and per-spawn config (§6.1), native sessions tracked per account (§7.4), account-switch session copy and `--resume`, a manual switch with its divider (§6.5), a ring per account with inactive ones dulled (§6.2). Claude checked live 2026-11-01 across two logins; a Codex turn on a second account is not (below) |
 | 8C | Done | Low and exhausted (§6.5): floors, the low banner, the exhausted decision card and its three cases, the interrupted run's partial answer kept and marked, the resend checkbox, the card replacing the §7.5 confirmation. Checked live 2026-11-01 with forced numbers across two logins; the limit errors themselves come from the CLIs' binaries, not a real limit (below) |
-| 9A | | `/this` (§15.5): the summon-time capture of the element under the cursor, the chip, the refusal while aborted, and the sensitive-field refusal in code (§15.6) |
-| 9B | | Agent reads (§15.6): per-chat, per-device grants, the target window rule, `os.read_screen`, `os.screenshot`, `os.focused_window`, and Abort revoking grants, with Re-arm leaving them off (§15.7) |
-| 9C | | Agent control (§15.6): `os.click`, `os.scroll`, `os.type`, `os.key`, step-list approval, the "Gaia is in control" border, Esc to stop, Abort stopping input mid-sequence with key-ups (§15.7), the action log |
+| 9A | Done | `/this` (§15.5): the summon-time capture of the element under the cursor, the chip, the refusal while aborted, and the sensitive-field refusal in code (§15.6). Checked live 2026-11-02 with a real summon, on Chrome and Electron too; BUG-339 and BUG-340 fixed and re-run in the app (below) |
+| 9B | Done | Agent reads (§15.6): per-chat, per-device grants, the target window rule, `os.read_screen`, `os.screenshot`, `os.focused_window`, and Abort revoking grants, with Re-arm leaving them off (§15.7). Checked live 2026-11-02 with real turns on both CLIs; BUG-338 and BUG-341 fixed, first shots re-checked live (below) |
+| 9C | Done | Agent control (§15.6): `os.click`, `os.scroll`, `os.type`, `os.key`, step-list approval, the "Gaia is in control" border, Esc to stop, Abort stopping input mid-sequence with key-ups (§15.7), the action log. Checked live 2026-11-02 with real turns on both CLIs, the border and the phone; BUG-337 and BUG-343 fixed and re-run in the app (below) |
 | Later | | Push-to-talk (§18) |
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
@@ -1508,7 +1532,7 @@ Abort ships with the part it protects rather than as a step of its own.
   refusal is what 9B's reads rely on.
 - **9B** sends no input. Its grants are new: stored on the chat, synced, and
   applied only on the device that gave them (§8), so it needs a migration.
-  The open questions marked for 9B in §20 come first.
+  The questions §20 marked for 9B and 9C are settled (§15.6).
 - **9C** needs 9B's grants and its UI Automation tree for targeting. It's the
   one part that has to be checked live with a real foreground window, not
   with background input or while locked.
@@ -1737,6 +1761,278 @@ Phase 4C as built (2026-10-30, codex-cli 0.164.0):
   error, "Codex exited (code -1)", with its text kept); a GAIA.md change
   stopping the idle process, the next turn following the new text. Not
   forced live: the fallback to `exec` when `app-server` can't start.
+
+Phase 9C as built (2026-11-01):
+- **Where it lives.** The tools are `os_click`, `os_scroll`, `os_type`, `os_key`,
+  and `os_steps` for a list of them, at most 20; each of the four is a list of one.
+  The main instance resolves and sends them (`host/gaia_os_control.dart`), and
+  holds the plan, so the companion only says "next" or "the rest". It checks Abort
+  and this device's grant itself before every step.
+- **The card** is a new `control` kind (`gaia_card_view.dart`): the window, then
+  each step with its target. Run all, Next step, Deny; send with an empty composer
+  runs all when it can, otherwise the next step, and a typed reason denies. A
+  control named but not on screen yet, as in a menu an earlier step opens, shows
+  so, and then Run all isn't offered: that's §15.6's rule. Each step is resolved
+  again before it's offered, and again as it's sent. **An older build can't read
+  this kind**, so a phone needs updating before it opens a chat with one.
+- **Targets.** By name, and type if given, as `os_read_screen` shows them, from the
+  same scan (`gaiaScanWindow`'s `find`), on-screen controls only. Several of a name
+  need a point inside the one meant. Coordinates must be inside the window. The
+  click itself is always real mouse input at the control's middle, not UI
+  Automation's Invoke, which can block on a modal dialog and can't be stopped.
+- **Each step, before it's sent:** the check above; Esc; no modifier held; the same
+  window in front; the same process behind that hwnd; the exclusion list, with a
+  browser's address read again; the vault; and for a click or scroll, that the
+  window at the point is the target, so nothing covering it, Gaia's floater
+  included, takes the click. **A held modifier waits, up to 3 s**: approving with
+  Ctrl+Enter leaves Ctrl down, which would turn the first click into a Ctrl+click.
+- **The window changing.** The target is an hwnd, so a step that opens a dialog ends
+  the run, and the agent reads again and sends the rest as a new list. Gaia in front
+  is fine for the first step of a run, and for every step-by-step one, where the
+  user has just clicked it. It passes on its right to the foreground as it approves
+  (`AllowSetForegroundWindow`), and the switch is watched for up to 2 s, as Windows
+  makes it a moment after agreeing to. Later in a run, Gaia in front is the window
+  changing.
+- **Typing** goes as Unicode, so no layout or Caps Lock changes it, four characters
+  at a time with a look between them, at most 2000. Enter and Tab are real keys.
+  Focus is checked for a sensitive field before a step types, not between its
+  characters; the window in front is checked throughout. Not knowing what has focus
+  is a refusal. **UI Automation's focused element proves nothing about a sleeping
+  page** (BUG-343): its first answer is an unnamed Pane that doesn't hold the focus. So
+  a page is asked through its tree, by `HasKeyboardFocus`, once that shows the page
+  (`gaiaSettleFocus`); elsewhere, an answer that doesn't hold focus is asked again, and
+  then the tree is. Still not knowing refuses if the window has a sensitive field. Keys that type, Ctrl+V among them, are refused in a sensitive field;
+  Tab, Enter and Esc there go. **The Windows key is refused**: it acts on Windows,
+  not the window, and Win+R's dialog would be out of the list's sight.
+- **Key-ups.** A chord's presses and releases go in one `SendInput`, so Abort can't
+  land between them and nothing is held between calls. Only a short count from
+  Windows can leave a key down, and the run's end lets go of those.
+- **Esc** is polled with `GetAsyncKeyState` every 20 ms during a run, not a global
+  hotkey, which would take Esc from every app, and the target gets the press too. A
+  chord Gaia sends can't trip it, being up again before the next look.
+- **Stopping.** Esc, Abort, Stop, the grant turned off, the chat deleted and the
+  companion going away all end the run at the next look. The agent is told how far
+  it got, and that the user stopped it. A result of "sent" says the input went, not
+  that it worked: the tool's text tells the agent to read the screen.
+- **The border** is native (`gaia_control_border.cpp`), in the main instance: four
+  thin strips per monitor and a label on the primary, topmost, click-through, and
+  left out of captures. Strips rather than one window with a hole, since a topmost
+  window the size of a monitor reads as a full screen app. It shows while any chat
+  here has the grant, across hides and restarts, as §15.6 says. **The label names
+  the chat (decided 2026-11-01)**, or how many, or a forgotten grant would leave a
+  border nothing explains. It goes with Abort.
+- **The toggle** is the hand beside the eye, per chat. The grants are separate: with
+  only *can control*, the agent can act but not read, and gets the eye's refusal if
+  it tries to. Turning it on shows no warning: the step list and the border are the
+  boundary.
+- **The phone can deny, not approve (decided 2026-11-01).** Approving takes someone
+  at the screen, who can see the border and press Esc. A prompt from the phone that
+  reaches a step list waits for the desktop.
+- **The action log** lists a step list that sent anything, however it ended, as "Ran
+  2 of 3 steps in Notepad", with no Undo. The card in the chat has the steps. A
+  card's labels sync with its message, window title, control names and typed text
+  included, as the §15.4 chip's do.
+- **Limits.** Windows blocks input to an elevated window without saying so (UIPI), so
+  such a run reports "sent" and nothing happens; reading the screen shows it. A
+  Codex turn that stops waiting on a tool (Phase 4C's 30 s) would leave a held card
+  voided, as for a proposal.
+- **Checked live (2026-11-01)**, with real input through the real Win32 backend,
+  against a probe-owned WinForms window on a 200% display, three runs in a row
+  (`test/tool/gaia_os_control_live_test.dart`): lookup by name and type, a wrong type
+  not found, the password field marked sensitive; a named field clicked, then text
+  with a line break and an emoji typed; Ctrl+A received as a chord; a named button
+  clicked; typing into the password field refused, by name and by focus, with it
+  still empty; `stop()` and a real Esc each ending 1500 characters partway, with no
+  modifier left down; another window in front stopping a run with nothing sent. **A
+  probe must be DPI aware as the app's manifest makes it:** `flutter_tester` isn't,
+  so UI Automation's bounds came back scaled against the physical frame, and the run
+  refused the click as outside the window. Windows can refuse a test the foreground,
+  which then fails before sending anything. The native border compiles and links in
+  a profile build. **Not checked live:** the probe starts with its window in front,
+  so a target brought up from behind Gaia isn't. Nor an app other than the probe, the
+  border on screen, the toggle and
+  card on screen, `AllowSetForegroundWindow` from a real approval, or a real agent
+  turn through them on either CLI. All of these were run on 2026-11-02 (next).
+- **Checked live (2026-11-02)**, unlocked, on real main and companion instances at
+  schema 185, with a probe, a scratch Chrome, Firefox and Electron app, and an
+  Android emulator. **Works:** a real turn on Claude Code and Codex to a card, the
+  run, and the result; Run all, Next step, Deny and a typed reason; a control not on
+  screen yet; a dialog ending the run; a held modifier waiting, and refused past
+  3 s; Esc, Abort, Stop, the grant off, the chat deleted, the companion killed and
+  another window in front all stopping 1500 characters partway with no key left
+  down; a floater covering the target; an exclusion or a site added between plan and
+  run; sensitive fields by name and focus, on the web too; Ctrl+V refused in one,
+  Tab allowed; the Windows key; the vault; the border's strips, label (the chat, or
+  "2 chats"), click-through and capture exclusion, across hides and restarts, and
+  gone with Abort; the action log; on the phone, Deny only, with "Waiting for approval
+  at the desktop", and Abort and Rearm. `test/tool/gaia_os_control_live_test.dart`
+  passes three in a row with Gaia hidden and its window raised by a real click. **Fails:
+  BUG-337**, the one real approval path: from Gaia, 5 of 5 stop with "Windows
+  wouldn't bring it to the front". So every run above started with the target in
+  front, approved by `approveControl`. **Not checked live:** a run after a real
+  activation (BUG-337), an elevated target, several monitors, an unlocked vault other
+  than by forcing its flag, an empty send on the phone with a card open (by the code,
+  it does nothing), and Codex's 30 s wait voiding a card. **BUG-337 fixed
+  2026-11-02:** the live test now brings a real target up from behind another
+  process's window and clicks it, and in the app a real card's Run, Ctrl+Enter and
+  Next step each brought up a target behind Gaia and sent. **BUG-343 fixed 2026-11-02:**
+  typing into what has focus reached a password field on a sleeping page, on Chrome and
+  Firefox; re-run in the app with real cards, refused on the password field and typed
+  into Notes on both. Still not checked live are the items above, an Electron app's
+  sensitive field, and a Codex card since these fixes (those cards ran on the quick tier).
+
+Phase 9B as built (2026-11-01):
+- **Where it lives.** The tools are `os_focused_window`, `os_read_screen` and
+  `os_screenshot`. The main instance answers them (`host/gaia_os_reads.dart`) and
+  checks for itself, whatever the companion did: Abort and this device's grant,
+  before the read and again after it, so Abort or the toggle mid-read keeps what
+  it got from the agent. The results aren't synced: a message keeps only the
+  tool's name.
+- **The target** is `gaiaOsTarget`: the window in front, or with Gaia's or the
+  shell's in front, the next app window under it. An always-on-top window isn't
+  one. Nothing in front, as on a locked session, is a refusal.
+- **Refusals, failing closed.** An app that can't be named can't be checked
+  against the list, so it's refused. Nor is a browser read if its address can't
+  be and the list has a site on it, which means an entry with a dot; an app's name
+  has none, and without a site the address can't matter. So by default Firefox and
+  a new tab are read, and with a site on the list they aren't: Firefox's address
+  bar didn't show in UI Automation in two reads.
+- **The tree** is one fetch of the window's subtree through a cache request
+  (`gaiaScanWindow`), at most 60k characters: under 100 ms on most windows tried,
+  about 300 ms on Firefox and 1 s at worst, for a first read of one app. Sensitive
+  fields are decided first (§15.5's rule), from cached name and id, with the value
+  never in the cache: a field's value is asked for only once it has passed, and a
+  sensitive field's children aren't looked into, since a web field's text can be
+  one. A leaf with a TextPattern and no value gives its text, as a terminal's. A
+  document with children doesn't, as its text would hold the fields'. Names and
+  values go as JSON strings, so a page can't fake a line. Over 8 s, or while an
+  earlier read is stuck, is a refusal to try again.
+- **The screenshot** is `PrintWindow` of that window alone, not the screen, so an
+  excluded app on top of it can't get in. A window with a display affinity is
+  refused, as `PrintWindow` wouldn't honour one. Sensitive fields are blacked out
+  first, and with no tree there's no screenshot. **One read isn't enough**
+  (`gaiaSettleScan`): a Chromium page enters the tree about 300 ms after the first
+  read, and not at all while its tab is hidden. So it takes two reads that agree, and
+  for a browser or a window with a Chromium page, one with a Document, up to about
+  4 s, after which it's refused. **`PrintWindow`
+  draws an app that isn't per-monitor aware at its own DPI**, in the bitmap's top
+  left, while UI Automation's bounds are physical, so `gaiaWindowPrintScale` maps
+  them: without it, the bars missed the fields on a 200% display (found live, which
+  no test here could). At most 1568 px on the long side, a PNG, or a JPEG past
+  3.5 MB; the text gives its place and scale on screen, for 9C.
+- **Images in tool results.** `GaiaToolResult` carries one, as an MCP `image` item
+  or Codex's `inputImage`. Both have a contract scenario against the real CLIs.
+  **Codex runs Gaia's tools from a script** (code mode), where the result is a
+  string ending in the data URL, not an image the model sees; it had to be told to
+  pass that line to `image()`, in `os_screenshot`'s description. Without that it
+  answered "none", or retyped the data wrong. A script that prints the result puts
+  the base64 in its context as text instead. The `exec` fallback's images are
+  untested.
+- **The toggle** is the eye under the composer, per chat, one click. Turning it on
+  shows the warning beside it until the next message, in the words "Agent tools
+  could leak or obey screen text", to fit one line at the small floater's width; the
+  tooltip has the full sentence. On a new chat it waits for the first message and
+  goes with it. There's none on the phone. A prompt sent from the phone runs on the
+  laptop under the laptop's grant.
+- **Abort** revokes through `revokeGrants`, chats in the trash too; a flag found at
+  startup revokes again, for a crash between the two. A backup's restore drops
+  grants.
+- **Voyager's own windows and the vault (decided 2026-11-01).** While this
+  instance's vault is unlocked, every `os_*` tool refuses a window of Voyager's
+  process, checked before the read and after it, since they can show decrypted notes
+  and photos (§5.3). It refuses rather than moving on to the next window. Another
+  profile's instance has its own vault, which this one can't see.
+- **Checked live (2026-11-01)**, with the session locked: the real scan against
+  probe-owned WinForms windows, one DPI-unaware and one per-monitor aware (no
+  secret value in the tree, both fields found and blacked out, in the picture by
+  eye); scans and shots of the app windows open at the time, Chrome, Firefox and
+  Obsidian among them, by counts only; images reaching the model on Claude Code 2.1.316
+  and Codex 0.166.0; and on a real main instance and companion over the pipe, at
+  schema 185: refused with the grant off, on and stored, refused as aborted,
+  stored off by Abort, turning it on refused while aborted, still off after Re-arm,
+  and on again by hand. **Not checked live:** `gaiaOsTarget` with a real foreground
+  window (it's 0 while locked, so the reads ended at "no window"), a real agent turn
+  through them, and the toggle on screen beyond a rendered test frame. All were run
+  on 2026-11-02 (next).
+- **Checked live (2026-11-02)**, unlocked. **Works:** all three tools in a real turn
+  on Claude Code and Codex, with no secret in either session's file; the target with
+  Gaia, an always-on-top window or the taskbar in front; refused with the grant off,
+  and with only *can control*; the eye, its warning until the next message, a new
+  chat's grant going with its first message; a prompt from the phone reading under the
+  laptop's grant, with no eye there; a DPI-unaware window's bars, by eye; a region;
+  an app, exe or site excluded, and Firefox refused with a site on the list; a display
+  affinity refusing the picture (`os_read_screen` still reads that window, as built);
+  the vault, by forcing its flag; a hung window refused at 8 s, a stuck read refusing
+  the next, and recovery; the grant off and Abort mid-read keeping the answer from
+  the agent; Abort, chats in the trash too, Re-arm leaving them off, from the phone
+  too, and a flag found at startup revoking. No screen text is in stored messages.
+  **Fails: BUG-338**, a first `os_screenshot` of a browser whose tree is asleep has
+  no bars: a card number went out in clear on Chrome. **BUG-341**, the eye takes the
+  focus from the composer. **Not checked live:** a real vault unlock, Firefox's page
+  fields (its welcome dialog covered them), and the `exec` fallback's images.
+  **BUG-338 and BUG-341 fixed 2026-11-02.** First shots of fresh scratch windows:
+  Chrome and Firefox with both fields barred, a hidden Chrome tab refused, and Electron
+  (Cursor) not refused, with no sensitive field to bar.
+
+Phase 9A as built (2026-11-01):
+- **The read.** Every hotkey but Abort, with Gaia not in front, starts it, and
+  the summon doesn't wait on it (`_sendPointedControl` in `gaia_host.dart`). One
+  `ElementFromPoint` on its own worker isolate, under §15.2's 250 ms budget, gives
+  the control's type, name, value and bounds, and for a browser the URL. A later
+  summon replaces a read still going. Aborted, nothing is read.
+- **Which window.** The one under the cursor, not the one in front, since they
+  can differ: the exclusion list is checked against it, by exe and app before any
+  UI Automation call and by URL after. Under the cursor being Gaia's own says
+  nothing. A summon from Gaia's own window keeps what the companion has.
+- **Sensitive fields.** `gaiaSensitiveControl` in `gaia_window_context.dart`,
+  a port of `guide/sensitive.js`: UI Automation's password flag, or an edit or
+  combo box named for a password, card, one-time code or identity number. It goes
+  by name and id and is decided before the value is touched, so a refused field's
+  value is never read, its name doesn't leave the worker, and it has no crop. 9B's
+  reads are to use the same rule.
+- **The crop** is the control's bounds and 48 px around them, kept to its monitor,
+  at most 1000 x 700 around the cursor for a control the size of a page. It goes to
+  the captures folder, swept with the others, and is deleted when the next summon
+  replaces it unused. A crop can still show what's beside the control, including a
+  sensitive field: only the control itself is checked.
+- **The chip.** `/this` alone, from the palette or sent, or `/this <question>`,
+  which sends at once. It's a new `element` part on the message (no schema change;
+  older builds keep it as an unknown part), with a `<pointed_control>` block ahead
+  of the prompt, framed as reference. The crop joins the draft as an ordinary
+  `[image N]`, so it uploads and syncs like any other and can be removed apart from
+  the chip. Name and value are capped (200 and 500 characters), since parts sync.
+  Used once: pointing again takes another summon.
+- **Refusals** are toasts, and `/this <question>` stays in the draft unsent: Gaia is
+  aborted; a sensitive field; an excluded app or site; nothing under the cursor.
+- **win32 5.15's `currentBoundingRectangle` is a use-after-free**: it returns a view
+  of memory it has freed, which gave random bounds. `_boundsOf` reads through its
+  own buffer. 9B and 9C's tree walks must use it too.
+- **Checked live (2026-11-01)**, with the session locked: the real read against a
+  probe-owned window's button, edit, password field and card field, at known
+  coordinates. Type, name and bounds right, a long value capped, both sensitive
+  fields refused with no value read, 40 to 60 ms for a first read and about 6 ms
+  after. **Not checked live:** a real hotkey summon, `gaiaCursorTarget`, the crop
+  and the chip on screen, which all need an unlocked session (`GetCursorPos` and
+  `BitBlt` fail while locked). A locked read gives no control or no crop, and the
+  chip without an image. Nor Chrome's or Electron's trees, whose first read may
+  show less while their accessibility tree wakes. All were run on 2026-11-02 (next).
+- **Checked live (2026-11-02)**, unlocked, with the real hotkey on combos of the QA
+  profile's own. **Works:** a summon in 100 to 200 ms, and about 320 ms over a
+  suspended window, whose read then gives nothing and recovers; the chip and crop;
+  `/this` from the palette, alone or with a question; password, card and one-time
+  code refused, on the web too, with the question left unsent; the value capped;
+  chip and image removed apart; used once; an unused crop replaced by the next
+  summon; the cursor over Gaia giving nothing, and a summon from Gaia keeping what it
+  had; the window under the cursor, not in front, deciding the exclusion, by app,
+  exe and site; aborted, nothing read and `/this` refused; `<pointed_control>`
+  reaching the CLI. **First reads, as feared:** Chrome gives an unnamed Pane and
+  Electron an unnamed Document, the next read the real button, and a page-sized
+  control's crop stays under 1000 x 700. So a first `/this` in a browser is a large
+  crop. **A neighbour's value does get out**, the limit above: a one-time code beside
+  the field went to the agent in the crop, and into the image's synced caption.
+  **BUG-339 and BUG-340 fixed 2026-11-02** and re-run in the app. A first read of a
+  sleeping page now wakes the tree and reads again, and a page still not in it gives no
+  control and no crop (BUG-343), so a sensitive field can't pass as a big unnamed Pane.
 
 Phase 8C as built (2026-11-01):
 - **Where it lives.** The rules and the CLIs' wording are in
@@ -2300,18 +2596,19 @@ Decided for Phase 9 (2026-11-01):
 - The Phase 9 split (§19).
 - `os.*` tools never target Gaia. If Gaia is in the foreground, they use the
   next window in Z-order (§15.6).
-
-Open, to settle before Phase 9B and 9C:
-- **Does the focused-window exclusion list (§15.4) apply to `os.*`?** §15.6
-  only refuses sensitive fields. Recommended: yes, so an agent can't read a
-  window the summon-time context refuses to touch. Settle before 9B.
-- **Screen text as prompt injection.** With *can control* on, text on a web
-  page can steer an agent that can click, and §5.3's framing is only a
-  mitigation, so the step list (§15.6) is the real boundary. Recommended: no
-  "approve once" for a batch unless it shows each step's target. Settle before
-  9C. Screen reads in workspace chats with Bash or web access have the same
-  exposure as `voyager.*` reads, which are off there by default (§5.3). Settle
-  whether *can see screen* needs a further warning there before 9B.
+- The focused-window exclusion list (§15.4) applies to `os.*`, so an agent can't
+  read a window the summon-time context refuses to touch (§15.6).
+- Screen text as prompt injection. With *can control* on, text on a web page can
+  steer an agent that can click, and §5.3's framing is only a mitigation, so the
+  step list is the real boundary. A batch can be approved once only if it shows
+  each step's window and resolved control, or its coordinates, and a run stops if
+  the window changes (§15.6).
+- `os_*` tools refuse Voyager's own windows while its vault is unlocked (§19).
+- Turning on *can see screen* shows a one-line warning, each time and in every
+  chat, since no chat is kept from its CLI's shell or web tools: workspace chats
+  don't exist yet, so §5.3's default-off doesn't apply here (§15.6).
+- A phone can deny a step list but not approve one, and the border's label names
+  the chat (§19).
 
 To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's

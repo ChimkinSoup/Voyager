@@ -78,19 +78,38 @@ typedef GaiaProposalHost = ({
   void Function(String cardId) drop,
 });
 
+/// The main instance's side of a step list (§15.6): [plan] resolves an `os_*`
+/// action call into card `cardId`'s `{window, app, steps}`, [run] sends its
+/// next step, or with `once` all that are left, and gives `{ran, stopped?,
+/// steps}`, and [drop] forgets one that won't run. [plan] and [run] throw a
+/// [GaiaToolException] the agent is shown.
+typedef GaiaControlHost = ({
+  Future<Map<String, Object?>> Function(
+    String cardId,
+    String tool,
+    Map<String, Object?> arguments,
+  )
+  plan,
+  Future<Map<String, Object?>> Function(String cardId, {required bool once})
+  run,
+  void Function(String cardId) drop,
+});
+
 /// One turn's Gaia tools (§5.3), bound to its chat: `ask_user`, the CLI's
-/// permission prompts and the `propose_*` tools raise cards in the reply
-/// through [onCard] and wait in [cards]; the `voyager_*` reads and the
-/// `memory_*` tools (§11) go to the main instance through [read], and
-/// proposals through [proposals]. While
-/// [aborted], every tool refuses (§15.7).
+/// permission prompts, the `propose_*` tools and the `os_*` actions raise cards
+/// in the reply through [onCard] and wait in [cards]; the `voyager_*` reads and
+/// the `memory_*` tools (§11) go to the main instance through [read], the
+/// `os_*` reads through [screen], proposals through [proposals], and step lists
+/// through [control]. While [aborted], every tool refuses (§15.7).
 class GaiaChatTools implements GaiaTurnTools {
   GaiaChatTools({
     required this.chatId,
     required this.cards,
     required this.onCard,
     required this.read,
+    required this.screen,
     required this.proposals,
+    required this.control,
     required this.aborted,
     this.hold = kGaiaCardHold,
   });
@@ -100,11 +119,22 @@ class GaiaChatTools implements GaiaTurnTools {
   final void Function(GaiaCardPart card) onCard;
   final Future<String> Function(String tool, Map<String, Object?> arguments)
   read;
+
+  /// An `os_*` read (§15.6), which the main instance answers and refuses.
+  final Future<GaiaToolResult> Function(
+    String tool,
+    Map<String, Object?> arguments,
+  )
+  screen;
   final GaiaProposalHost proposals;
+  final GaiaControlHost control;
   final bool Function() aborted;
   final Duration hold;
 
-  static const _aborted = (text: 'aborted: Gaia is aborted.', isError: true);
+  static const _aborted = GaiaToolResult(
+    text: 'aborted: Gaia is aborted.',
+    isError: true,
+  );
 
   @override
   Future<GaiaToolResult> call(
@@ -114,20 +144,31 @@ class GaiaChatTools implements GaiaTurnTools {
     if (aborted()) return _aborted;
     if (name == 'ask_user') return _ask(arguments);
     if (kGaiaProposalTools.containsKey(name)) return _propose(name, arguments);
-    if (isGaiaVoyagerRead(name) || isGaiaMemoryTool(name)) {
+    if (isGaiaOsControl(name)) return _control(name, arguments);
+    if (isGaiaOsRead(name)) {
       try {
-        return (text: await read(name, arguments), isError: false);
+        return await screen(name, arguments);
       } catch (error) {
-        return (text: '$error', isError: true);
+        return GaiaToolResult(text: '$error', isError: true);
       }
     }
-    return (text: 'Unknown tool: $name', isError: true);
+    if (isGaiaVoyagerRead(name) || isGaiaMemoryTool(name)) {
+      try {
+        return GaiaToolResult(
+          text: await read(name, arguments),
+          isError: false,
+        );
+      } catch (error) {
+        return GaiaToolResult(text: '$error', isError: true);
+      }
+    }
+    return GaiaToolResult(text: 'Unknown tool: $name', isError: true);
   }
 
   Future<GaiaToolResult> _ask(Map<String, Object?> arguments) async {
     final question = arguments['question'];
     if (question is! String || question.trim().isEmpty) {
-      return (text: 'ask_user needs a question.', isError: true);
+      return GaiaToolResult(text: 'ask_user needs a question.', isError: true);
     }
     final options = <GaiaCardOption>[
       if (arguments['options'] case final List list)
@@ -144,7 +185,10 @@ class GaiaChatTools implements GaiaTurnTools {
             ),
     ];
     if (options.length > 9) {
-      return (text: 'ask_user takes at most 9 options.', isError: true);
+      return GaiaToolResult(
+        text: 'ask_user takes at most 9 options.',
+        isError: true,
+      );
     }
     final recommended = options.indexWhere(
       (option) => option.label == arguments['recommended'],
@@ -161,7 +205,7 @@ class GaiaChatTools implements GaiaTurnTools {
     final answer = await cards.wait(chatId, card, hold);
     if (answer == null) {
       // Left open: answered later, it goes as the next message.
-      return (
+      return GaiaToolResult(
         text:
             "pending:${card.id} The user hasn't answered yet. End your turn "
             'now without guessing; their answer will come as their next '
@@ -172,11 +216,11 @@ class GaiaChatTools implements GaiaTurnTools {
     final decided = card.decided(answer.state, answer.answer);
     onCard(decided);
     return switch (decided.state) {
-      GaiaCardState.accepted => (
+      GaiaCardState.accepted => GaiaToolResult(
         text: gaiaQuestionAnswerText(decided.answer),
         isError: false,
       ),
-      GaiaCardState.rejected => (
+      GaiaCardState.rejected => GaiaToolResult(
         text: 'The user dismissed the question without answering.',
         isError: false,
       ),
@@ -197,7 +241,7 @@ class GaiaChatTools implements GaiaTurnTools {
     try {
       proposal = await proposals.prepare(id, tool, arguments);
     } catch (error) {
-      return (text: '$error', isError: true);
+      return GaiaToolResult(text: '$error', isError: true);
     }
     final card = GaiaCardPart(
       id: id,
@@ -210,7 +254,7 @@ class GaiaChatTools implements GaiaTurnTools {
     if (answer == null) {
       proposals.drop(id);
       onCard(card.decided(GaiaCardState.expired));
-      return (
+      return GaiaToolResult(
         text:
             "The user didn't answer within an hour, so nothing was written. "
             'End your turn; they can ask again.',
@@ -231,10 +275,10 @@ class GaiaChatTools implements GaiaTurnTools {
               'committed': committed.record,
             }),
           );
-          return (text: committed.text, isError: false);
+          return GaiaToolResult(text: committed.text, isError: false);
         } catch (error) {
           onCard(card.decided(GaiaCardState.voided, {'error': '$error'}));
-          return (
+          return GaiaToolResult(
             text: 'The user accepted, but it could not be saved: $error',
             isError: true,
           );
@@ -243,7 +287,7 @@ class GaiaChatTools implements GaiaTurnTools {
         proposals.drop(id);
         final decided = card.decided(answer.state, answer.answer);
         onCard(decided);
-        return (
+        return GaiaToolResult(
           text: switch (decided.answer?['message']) {
             final String message when message.trim().isNotEmpty =>
               'rejected: the user wants changes: ${message.trim()}\n'
@@ -257,6 +301,106 @@ class GaiaChatTools implements GaiaTurnTools {
         onCard(card.decided(answer.state));
         return _aborted;
     }
+  }
+
+  /// An `os_*` action (§15.6): the main instance resolves it into steps, the
+  /// card holds them until the user approves all at once or the next one, and
+  /// the main instance sends them. The agent is told how far it got.
+  Future<GaiaToolResult> _control(
+    String tool,
+    Map<String, Object?> arguments,
+  ) async {
+    final id = _uuid.v4();
+    Map<String, Object?> plan;
+    try {
+      plan = await control.plan(id, tool, arguments);
+    } catch (error) {
+      return GaiaToolResult(text: '$error', isError: true);
+    }
+    final total = (plan['steps']! as List).length;
+    GaiaCardPart cardWith(
+      GaiaCardState state, {
+      required int ran,
+      String? stopped,
+      String? message,
+    }) => GaiaCardPart(
+      id: id,
+      kind: GaiaCardKind.control,
+      state: state,
+      tool: tool,
+      input: plan,
+      answer: {
+        'ran': ran,
+        'stopped': ?stopped,
+        'message': ?message,
+        if (ran > 0) 'committed': {'steps': ran},
+      },
+    );
+    var ran = 0;
+    var once = false;
+    while (ran < total) {
+      if (!once) {
+        final open = cardWith(GaiaCardState.open, ran: ran);
+        onCard(open);
+        final answer = await cards.wait(chatId, open, hold);
+        if (answer == null) {
+          control.drop(id);
+          onCard(cardWith(GaiaCardState.expired, ran: ran));
+          return GaiaToolResult(
+            text:
+                "The user didn't answer within an hour. Ran $ran of $total "
+                'steps. End your turn; they can ask again.',
+            isError: false,
+          );
+        }
+        if (answer.state != GaiaCardState.accepted) {
+          control.drop(id);
+          final message = (answer.answer?['message'] as String? ?? '').trim();
+          onCard(
+            cardWith(
+              answer.state,
+              ran: ran,
+              message: message.isEmpty ? null : message,
+            ),
+          );
+          if (answer.state != GaiaCardState.rejected) return _aborted;
+          return GaiaToolResult(
+            text: [
+              'The user declined. Ran $ran of $total steps.',
+              if (message.isNotEmpty) 'They said: $message',
+            ].join(' '),
+            isError: false,
+          );
+        }
+        once = answer.answer?['once'] == true;
+      }
+      try {
+        final result = await control.run(id, once: once);
+        ran = (result['ran']! as num).toInt();
+        plan = {...plan, 'steps': result['steps']};
+        if (result['stopped'] case final String stopped) {
+          onCard(cardWith(GaiaCardState.accepted, ran: ran, stopped: stopped));
+          return GaiaToolResult(
+            text:
+                'Stopped after $ran of $total steps: $stopped Nothing more was '
+                'sent. Read the screen before assuming anything, and if the '
+                "user stopped it, don't start again unless they ask.",
+            isError: false,
+          );
+        }
+      } catch (error) {
+        control.drop(id);
+        onCard(cardWith(GaiaCardState.voided, ran: ran, stopped: '$error'));
+        return GaiaToolResult(text: '$error', isError: true);
+      }
+    }
+    onCard(cardWith(GaiaCardState.accepted, ran: ran));
+    return GaiaToolResult(
+      text:
+          'Sent all $total steps. That says the input went, not that it '
+          'worked: read the screen to see.',
+      isError: false,
+    );
   }
 
   @override

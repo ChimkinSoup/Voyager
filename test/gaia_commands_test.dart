@@ -55,6 +55,10 @@ void main() {
 
   test('built-ins, alone', () {
     expect(gaiaBuiltinIn('/new'), GaiaBuiltin.newChat);
+    expect(gaiaBuiltinIn('/this'), GaiaBuiltin.thisControl);
+    expect(gaiaThisRest('/this what does it do?'), 'what does it do?');
+    expect(gaiaThisRest('/this'), isNull);
+    expect(gaiaThisRest('about /this one'), isNull);
     expect(gaiaBuiltinIn(' /stop '), GaiaBuiltin.stop);
     expect(gaiaBuiltinIn('/stop now'), isNull);
   });
@@ -132,6 +136,7 @@ void main() {
       'queue-pop',
       'queue-pop!',
       'drain',
+      'this',
       'quick',
       'std',
       'deep',
@@ -143,6 +148,7 @@ void main() {
       'stop',
       'std',
       'swap',
+      'this',
     ]);
     expect(filterGaiaPalette(items, 'ee').map((i) => i.name), [
       'deep',

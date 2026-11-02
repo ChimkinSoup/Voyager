@@ -461,6 +461,35 @@ void main() {
     expect((await repo.getSettings()).splitGaiaRight, isTrue);
   });
 
+  test('184→185 adds grants, off in old chats', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Old',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN grants_json',
+    );
+    await seed.customStatement('PRAGMA user_version = 184');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.grants, isEmpty);
+
+    await repo.upsertChat(
+      chat.copyWith(grants: {'laptop': GaiaGrant(seeScreen: true, at: now)}),
+    );
+    expect((await repo.getChat('c1'))!.grants['laptop']!.seeScreen, isTrue);
+  });
+
   test('177→178 adds the drafts table', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());

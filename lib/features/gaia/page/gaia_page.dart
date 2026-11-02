@@ -301,7 +301,7 @@ class _ActionsTab extends ConsumerWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Text(
-          "Nothing yet. What Gaia saves after you accept it shows here.",
+          "Nothing yet. What Gaia saves or does after you accept it shows here.",
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -347,6 +347,29 @@ class _ActionRowState extends State<_ActionRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final (:chat, :message, :card) = widget.action;
+    // Input can't be taken back, so no Undo (§15.6). The chat has every step.
+    if (card.kind == GaiaCardKind.control) {
+      final steps = card.input['steps'] as List? ?? const [];
+      final ran = (card.answer?['ran'] as num?)?.toInt() ?? 0;
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(PhosphorIconsRegular.cursorClick, size: 20),
+        title: Text(
+          'Ran $ran of ${steps.length} ${steps.length == 1 ? 'step' : 'steps'} '
+          "in ${card.input['app'] ?? 'a window'}",
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          [
+            chat.title,
+            DateFormat.yMMMd().add_Hm().format(message.createdAt.toLocal()),
+            if (card.answer?['stopped'] != null) 'stopped',
+          ].join(' · '),
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall,
+        ),
+      );
+    }
     final proposal = card.proposal!;
     final fields =
         (card.answer?['fields'] as Map?)?.cast<String, Object?>() ??

@@ -247,6 +247,40 @@ void main() {
     expect((await repository.getDraft('c1'))!.deletedAt, isNull);
   });
 
+  group('grants (§15.6)', () {
+    setUp(() async {
+      await store.createChat(_chat('c1'));
+      await store.setSeeScreen('c1', true);
+    });
+
+    test('only count on the device that gave them', () async {
+      expect(await store.canSeeScreen('c1'), isTrue);
+      final phone = GaiaChatStore(repository, deviceId: 'phone');
+      expect(await phone.canSeeScreen('c1'), isFalse);
+    });
+
+    test('revoking leaves another device\'s alone', () async {
+      await GaiaChatStore(
+        repository,
+        deviceId: 'phone',
+      ).setSeeScreen('c1', true);
+      await store.revokeGrants();
+      expect(await store.canSeeScreen('c1'), isFalse);
+      expect(
+        await GaiaChatStore(repository, deviceId: 'phone').canSeeScreen('c1'),
+        isTrue,
+      );
+    });
+
+    test('a chat in the trash has none, and restored, still none', () async {
+      await store.deleteChat('c1');
+      expect(await store.canSeeScreen('c1'), isFalse);
+      await store.revokeGrants();
+      await store.restoreChat('c1');
+      expect(await store.canSeeScreen('c1'), isFalse);
+    });
+  });
+
   group('search', () {
     setUp(() async {
       await store.createChat(_chat('c1'));
@@ -440,9 +474,23 @@ void main() {
         card(GaiaCardState.accepted),
       ]).copyWith(deletedAt: _created),
     );
+    await repository.upsertMessage(
+      withParts('steps declined partway', 5, [
+        const GaiaCardPart(
+          id: 'steps',
+          kind: GaiaCardKind.control,
+          state: GaiaCardState.rejected,
+          tool: 'os_steps',
+          answer: {
+            'ran': 1,
+            'committed': {'steps': 1},
+          },
+        ),
+      ]),
+    );
     final found = await repository.listMessagesWithCommits();
     // Text's quotes are escaped in the JSON, so words alone don't match.
-    expect(found.map((m) => m.id), ['kept']);
+    expect(found.map((m) => m.id), ['kept', 'steps declined partway']);
   });
 
   test('a question is told apart from a statement', () {

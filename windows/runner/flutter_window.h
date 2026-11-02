@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "gaia_control_border.h"
 #include "gaia_pipe.h"
 #include "gaia_tool_pipe.h"
 #include "win32_window.h"
@@ -68,6 +69,11 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<GaiaToolPipe> gaia_tool_pipe_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       gaia_tool_pipe_channel_;
+
+  // The "Gaia is in control" border, and its Dart side.
+  GaiaControlBorder gaia_border_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      gaia_border_channel_;
 
   // Whether another window covers this one, for Dart to recheck.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>

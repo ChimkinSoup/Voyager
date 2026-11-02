@@ -3643,4 +3643,52 @@ Entry format:
 - Actual: its row shows "Not logged in" with the login command, then "<account> is signed out. Log in with…" with the same folder, from the login check and the usage row.
 - Notes: open.
 
-<!-- Last ID: BUG-336. -->
+### BUG-337 [GAIA-P9C] Approving a step list from Gaia always fails: "Windows wouldn't bring it to the front"
+- Severity: Major
+- Found: 2026-11-02, Phase 9 unlocked live pass
+- Steps: floater in front with the target behind it, a real agent turn calling `os_click`, then the card's real Run button or Ctrl+Enter.
+- Actual: 5 of 5 ended "Stopped after 0 of 1 steps: Windows wouldn't bring Windows PowerShell to the front", with nothing sent, while the target window did come to the front moments later. `_Win32InputBackend.activate` (`gaia_os_control.dart:896`) checks `GetForegroundWindow() == hwnd` right after `SetForegroundWindow`, which for another process's window hasn't finished switching. The plan is dropped, so the approval is lost.
+- Expected: the target comes up and the step runs. This is the normal way to approve (§15.6), and also the Next step path.
+- Notes (fixed 2026-11-02): `activate` only asks now, and `_bringInFront` watches the foreground for up to 2 s. Another app taking the front in that time still stops the run, Esc too, and a refusal or a switch that never comes still stops with nothing sent. New in `test/tool/gaia_os_control_live_test.dart`: a real target brought up from behind another process's real window, then clicked; with the old check it fails with this bug's message. Re-run in the app the same day, with a real agent turn and the target behind Gaia: a real click on Run, Ctrl+Enter from the composer, and a two-step list by Next step then Run. All sent, with the target in front after each. That build's native code predates the border, so the border wasn't part of this run; it was checked in the Phase 9 pass.
+
+### BUG-338 [GAIA-P9B] `os_screenshot` leaves sensitive fields visible while a browser's accessibility tree is asleep
+- Severity: Major (security)
+- Found: 2026-11-02, Phase 9 unlocked live pass
+- Steps: a freshly started Chrome (scratch profile) on a page with a password and a card field; `os_screenshot` as the first read of that window.
+- Actual: the answer had no "sensitive field(s) are blacked out" line, and the picture has the card number in clear. The same call again, after the first scan woke the tree, says "2 sensitive field(s) are blacked out", with the bars on the fields. The scan finds no fields in a sleeping tree, and no fields counts as nothing to hide. Electron's and Chrome's first `/this` reads show the same sleeping tree (an unnamed Pane or Document), so Electron is likely affected too; only Chrome's screenshot was tested.
+- Expected: §15.6 "never read": a picture of an app whose tree may not be awake isn't sent with its fields unchecked.
+- Notes (fixed 2026-11-02): `gaiaSettleScan` takes two reads that agree, and for a browser or a window with a Chromium page, one showing a Document; otherwise the shot is refused. Measured on scratch windows: a visible Chrome's page enters the tree about 300 ms after the first read, whatever that read was, and **a Chrome whose tab is hidden (fully covered) never shows it**, so waiting alone wouldn't do. Live first shots through `gaiaShootWindow`: Chrome 2 hidden, with the bars on the fields in the picture; hidden tab refused in about 4.5 s; Firefox 2 hidden, its tree awake from the first read; Electron (Cursor) detected and not refused, with no sensitive field on screen to hide. `os_read_screen` is safe, as it shows no values it can't see. The same sleeping tree let typing through: BUG-343.
+
+### BUG-339 [GAIA-P9A] A `/this` message loses its control chip when its crop finishes uploading
+- Severity: Minor
+- Found: 2026-11-02, Phase 9 unlocked live pass
+- Actual: the `element` part is on the message while the crop uploads, then gone: the rebuild after upload (`gaia_controller.dart:3113`) lists text, images, files, quotes and context, not `?control`. Every `/this` with a crop hits this, and tests pass because they send without one. The CLI does get `<pointed_control>` (read from its session file); the bubble and the stored, synced message don't have it, so a resend or edit loses it too.
+- Notes (fixed 2026-11-02): the rebuild keeps `?control`. Controller test with a crop. Re-run in the app with a real read and crop: the message has its text, image and element parts after the upload.
+
+### BUG-340 [GAIA-P9A] A `/this` crop isn't kept with the draft
+- Severity: Minor
+- Found: 2026-11-02, Phase 9 unlocked live pass
+- Actual: `companion.log` says "draft image not kept: That does not look like a PNG, JPEG, WebP or HEIC image" for each crop: it's a BMP, and `ingestImage` refuses those. It still sends. By the code, it stays in this draft alone, so a restart before sending would lose it. Hotkey D's capture takes the same path, unchecked.
+- Notes (fixed 2026-11-02): a capture goes in as a PNG, as its send does, through `gaiaUploadablePath`, and the temporary file goes after. Both `/this` and D. Controller test with a real BMP. Re-run in the app for `/this`: the crop has a media id, and `companion.log` has no new "not kept" line. D wasn't re-run; it takes the same path.
+
+### BUG-341 [GAIA-P9B] Clicking the eye or hand takes the focus off the composer
+- Severity: Minor
+- Found: 2026-11-02, Phase 9 unlocked live pass
+- Actual: after a real click on the eye, the caret is gone, and typed text and Ctrl+Enter went nowhere, so the message wasn't sent. It takes a click back in the composer. Seen on the eye; the hand was only clicked with a composer click after it.
+- Notes (fixed 2026-11-02): a click outside a text field unfocuses it on desktop, so both are in a `TextFieldTapRegion`. Widget test on both, which fails without the fix. **Not re-run with real clicks:** at the floater's saved place the row was under the taskbar, and the clicks didn't register after moving it.
+
+### BUG-342 [GAIA-P9C] The action log says "Ran 1 of 1 steps"
+- Severity: Cosmetic
+- Found: 2026-11-02, Phase 9 unlocked live pass
+- Actual: the plural is fixed (`gaia_page.dart:358`).
+- Notes (fixed 2026-11-02): "1 step". No test: nothing pumps the Gaia page, and it wasn't looked at in the app. The agent's own tool text says "1 steps" too (`gaia_chat_tools.dart`), left as it is.
+
+### BUG-343 [GAIA-P9C] `os_type` into what has focus typed into password and card fields on a page whose tree was asleep
+- Severity: Major (security)
+- Found: 2026-11-02, while fixing BUG-338
+- Steps: a freshly started Chrome or Firefox with a password field focused and nothing having read it; a real plan and run of `os_type` with no target.
+- Actual: "canary" went into the password field, on both browsers. Waiting 5 s between plan and run didn't help, as the plan's address read doesn't wake what the focus read gets. `gaiaFocusSensitive` asked UI Automation once, whose first answer about a web page is an unnamed Pane that doesn't hold keyboard focus, whatever does, and that isn't sensitive by name. `/this` could pass the same way: its first read of a sleeping page is an unnamed Pane or Document.
+- Expected: §15.6 "never types", and "Not knowing what has focus is a refusal".
+- Notes (fixed 2026-11-02): `gaiaSettleFocus`. A page (a browser, or a window with a Chromium page) is asked through its tree, once that shows the page, by the `HasKeyboardFocus` of each control. Elsewhere, and if the tree doesn't say, an answer that doesn't hold focus is asked again, for 2 s, and then the tree is. Still not knowing refuses if the window has a sensitive field. `/this` wakes the tree and reads again; a page still not in it gives no control and no crop. Live, in the app, a real turn and card against a fresh scratch browser: password refused and Notes typed on Chrome and Firefox; a real plan and run outside the app: password and card refused and Notes typed on Chrome. `/this` first read on a sleeping Chrome: Edit, sensitive, refused. Native windows: the live test passes. **Not checked:** an Electron app's sensitive field, as none was to hand, and `/this` on Firefox. **Under `flutter_tester` only**, a fresh Firefox's UI Automation calls could block for 30 s or more, which refuses, safely; the app didn't show it, and why isn't known. A stuck read also refuses the reads after it until it returns.
+
+<!-- Last ID: BUG-343. -->

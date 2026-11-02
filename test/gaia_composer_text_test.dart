@@ -206,6 +206,84 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     }
 
+    group('/this (§15.5)', () {
+      const button = GaiaElementPart(
+        controlType: 'Button',
+        name: 'Submit assignment',
+        app: 'Google Chrome',
+        left: 1,
+        top: 2,
+        width: 3,
+        height: 4,
+      );
+
+      Future<void> send(WidgetTester tester, String text) async {
+        await tester.enterText(
+          find.descendant(
+            of: find.byType(GaiaTextField),
+            matching: find.byType(EditableText),
+          ),
+          text,
+        );
+        await tester.pump();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+        // In real time: a send's first steps aren't all in fake time.
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 200)),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+
+      testWidgets('alone, it shows as a chip the user can take off', (
+        tester,
+      ) async {
+        await start(tester, const GaiaTextSettings());
+        companion.onEvent!('pointed', {'control': button.toJson()});
+        await tester.pump();
+        await send(tester, '/this');
+        expect(controller.draftControl?.label, button.label);
+        expect(find.text(button.label), findsOneWidget);
+        expect(controller.draft.text, isEmpty);
+        await settle(tester);
+      });
+
+      testWidgets('with a question after it, the question goes with the '
+          'control on it', (tester) async {
+        await start(tester, const GaiaTextSettings());
+        companion.onEvent!('pointed', {'control': button.toJson()});
+        await tester.pump();
+        await send(tester, '/this what does it do?');
+        final question = controller.messages.first;
+        expect(question.text, 'what does it do?');
+        expect(
+          question.parts.whereType<GaiaElementPart>().single.name,
+          button.name,
+        );
+        expect(controller.draftControl, isNull);
+        expect(find.text(button.label), findsOneWidget);
+        await settle(tester);
+      });
+
+      testWidgets('refused, the typed question stays in the draft, unsent', (
+        tester,
+      ) async {
+        await start(tester, const GaiaTextSettings());
+        companion.onEvent!('pointed', {'refused': 'sensitive'});
+        await tester.pump();
+        final toasts = <GaiaRunToast>[];
+        final listening = controller.toasts.listen(toasts.add);
+        addTearDown(listening.cancel);
+        await send(tester, '/this what is it?');
+        expect(toasts.single.body, contains('password'));
+        expect(controller.draft.text, '/this what is it?');
+        expect(controller.messages, isEmpty);
+        await settle(tester);
+      });
+    });
+
     testWidgets('Vim from the settings: Esc to Normal, x deletes', (
       tester,
     ) async {

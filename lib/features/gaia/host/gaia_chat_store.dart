@@ -116,6 +116,90 @@ class GaiaChatStore {
     }
   });
 
+  /// Whether [chatId] may see the screen on this device (§15.6): a grant from
+  /// another device doesn't count here.
+  Future<bool> canSeeScreen(String chatId) async {
+    final chat = await _repository.getChat(chatId);
+    return chat != null &&
+        !chat.isDeleted &&
+        (chat.grants[deviceId]?.seeScreen ?? false);
+  }
+
+  /// *Can see screen* on or off for [chatId], on this device (§15.6).
+  Future<void> setSeeScreen(String chatId, bool on) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || (chat.grants[deviceId]?.seeScreen ?? false) == on) {
+      return;
+    }
+    await _repository.upsertChat(
+      chat.copyWith(
+        grants: {
+          ...chat.grants,
+          deviceId: GaiaGrant(
+            seeScreen: on,
+            canControl: chat.grants[deviceId]?.canControl ?? false,
+            at: utcNow(),
+          ),
+        },
+      ),
+    );
+  });
+
+  /// Whether [chatId] may send input on this device (§15.6): a grant from
+  /// another device doesn't count here.
+  Future<bool> canControl(String chatId) async {
+    final chat = await _repository.getChat(chatId);
+    return chat != null &&
+        !chat.isDeleted &&
+        (chat.grants[deviceId]?.canControl ?? false);
+  }
+
+  /// *Can control* on or off for [chatId], on this device (§15.6).
+  Future<void> setCanControl(String chatId, bool on) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || (chat.grants[deviceId]?.canControl ?? false) == on) {
+      return;
+    }
+    await _repository.upsertChat(
+      chat.copyWith(
+        grants: {
+          ...chat.grants,
+          deviceId: GaiaGrant(
+            seeScreen: chat.grants[deviceId]?.seeScreen ?? false,
+            canControl: on,
+            at: utcNow(),
+          ),
+        },
+      ),
+    );
+  });
+
+  /// The titles of live chats with *can control* on, on this device: what the
+  /// border names (§15.6).
+  Future<List<String>> controlledChatTitles() async => [
+    for (final chat in await _repository.listChats())
+      if (!chat.isDeleted && (chat.grants[deviceId]?.canControl ?? false))
+        chat.title,
+  ];
+
+  /// Every chat's grants on this device off: Abort (§15.7), and Re-arm leaves
+  /// them so.
+  Future<void> revokeGrants() => _serial(() async {
+    // Those in the trash too, or a restore would bring theirs back.
+    for (final chat in await _repository.listChats(includeDeleted: true)) {
+      final grant = chat.grants[deviceId];
+      if (grant == null || !(grant.seeScreen || grant.canControl)) continue;
+      await _repository.upsertChat(
+        chat.copyWith(
+          grants: {
+            ...chat.grants,
+            deviceId: GaiaGrant(seeScreen: false, at: utcNow()),
+          },
+        ),
+      );
+    }
+  });
+
   /// Every waiting prompt, in order.
   Future<List<GaiaQueueItem>> allQueued() => _repository.listQueue();
 

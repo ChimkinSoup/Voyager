@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
@@ -54,11 +55,13 @@ class _ContractTools implements GaiaTurnTools {
     Map<String, Object?> arguments,
   ) async {
     calls.add(name);
-    if (name != 'ask_user') return (text: 'unexpected tool', isError: true);
+    if (name != 'ask_user') {
+      return const GaiaToolResult(text: 'unexpected tool', isError: true);
+    }
     asked.add(arguments);
     final options = (arguments['options'] as List?) ?? const [];
     final last = options.isEmpty ? 'Blue' : (options.last as Map)['label'];
-    return (text: 'The user chose: "$last".', isError: false);
+    return GaiaToolResult(text: 'The user chose: "$last".', isError: false);
   }
 
   @override
@@ -70,6 +73,35 @@ class _ContractTools implements GaiaTurnTools {
     permits.add(tool);
     return (allow: false, message: 'The user declined.');
   }
+}
+
+/// `os_screenshot` answered with a solid green picture, which a model can only
+/// describe if the image reached it (§15.6).
+class _ScreenshotTools implements GaiaTurnTools {
+  final calls = <String>[];
+
+  @override
+  Future<GaiaToolResult> call(
+    String name,
+    Map<String, Object?> arguments,
+  ) async {
+    calls.add(name);
+    final picture = img.Image(width: 64, height: 64);
+    img.fill(picture, color: img.ColorRgb8(0, 200, 0));
+    return GaiaToolResult(
+      text: 'The window, as a picture.',
+      isError: false,
+      image: base64Encode(img.encodePng(picture)),
+      mimeType: 'image/png',
+    );
+  }
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) async => (allow: false, message: 'The user declined.');
 }
 
 String _text(List<ClaudeEvent> events) {
@@ -300,6 +332,35 @@ void main() {
         expect(result.text, contains('Mochi'));
       } finally {
         await second.killAll();
+      }
+    },
+  );
+
+  test(
+    "an image in a Gaia tool's result reaches the model",
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final cli = runner('tool_image');
+      final tools = _ScreenshotTools();
+      try {
+        final result = await cli.sendRaw(
+          chatId: 'contract',
+          sessionId: null,
+          newSessionId: _uuid.v4(),
+          model: _model,
+          prompt:
+              'Call the gaia os_screenshot tool once. What colour fills the '
+              'image it returns? Answer in one word, from what you see: if '
+              'you received no image, say "none".',
+          tools: tools,
+          onEvent: (_) {},
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        expect(tools.calls, ['os_screenshot']);
+        expect(result.text.toLowerCase(), contains('green'));
+      } finally {
+        await cli.killAll();
       }
     },
   );

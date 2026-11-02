@@ -9810,7 +9810,9 @@ class DriftGaiaRepository implements GaiaRepository {
       (await (_db.select(_db.gaiaMessagesTable)..where(
                 (t) =>
                     t.deletedAt.isNull() &
-                    t.partsJson.like('%"state":"accepted"%') &
+                    // A step list declined partway still sent what it sent.
+                    (t.partsJson.like('%"state":"accepted"%') |
+                        t.partsJson.like('%"kind":"control"%')) &
                     t.partsJson.like('%"committed":%'),
               ))
               .get())
@@ -10185,6 +10187,7 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   tier: gaiaTierFromName(row.tier),
   curatedSeq: row.curatedSeq,
   drain: row.drain,
+  grants: gaiaGrantsFromJson(jsonDecode(row.grantsJson)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10201,6 +10204,7 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       tier: Value(chat.tier?.name),
       curatedSeq: Value(chat.curatedSeq),
       drain: Value(chat.drain),
+      grantsJson: Value(jsonEncode(chat.toJson()['grants'])),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),

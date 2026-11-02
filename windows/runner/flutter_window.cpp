@@ -123,6 +123,33 @@ bool FlutterWindow::OnCreate() {
           result->NotImplemented();
         }
       });
+  gaia_border_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "voyager/gaia_border",
+          &flutter::StandardMethodCodec::GetInstance());
+  gaia_border_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() != "show") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* label = std::get_if<std::string>(call.arguments());
+        if (label) {
+          const int size = ::MultiByteToWideChar(
+              CP_UTF8, 0, label->data(), static_cast<int>(label->size()),
+              nullptr, 0);
+          std::wstring wide(size, L'\0');
+          ::MultiByteToWideChar(CP_UTF8, 0, label->data(),
+                                static_cast<int>(label->size()), wide.data(),
+                                size);
+          gaia_border_.Show(wide);
+        } else {
+          gaia_border_.Hide();
+        }
+        result->Success();
+      });
   g_cover_window = GetHandle();
   cover_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -161,6 +188,8 @@ bool FlutterWindow::OnCreate() {
 void FlutterWindow::OnDestroy() {
   WatchCover(false);
   g_cover_window = nullptr;
+  gaia_border_channel_ = nullptr;
+  gaia_border_.Hide();
   cover_channel_ = nullptr;
   instance_channel_ = nullptr;
   gaia_pipe_channel_ = nullptr;

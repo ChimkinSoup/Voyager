@@ -24,7 +24,34 @@ abstract interface class GaiaTurnTools {
   });
 }
 
-typedef GaiaToolResult = ({String text, bool isError});
+/// A tool's answer: its text, whether it's an error the agent should see as
+/// one, and any image, as `os_screenshot` has.
+class GaiaToolResult {
+  const GaiaToolResult({
+    required this.text,
+    required this.isError,
+    this.image,
+    this.mimeType,
+  });
+
+  final String text;
+  final bool isError;
+
+  /// In base64.
+  final String? image;
+  final String? mimeType;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GaiaToolResult &&
+      other.text == text &&
+      other.isError == isError &&
+      other.image == image &&
+      other.mimeType == mimeType;
+
+  @override
+  int get hashCode => Object.hash(text, isError, image, mimeType);
+}
 
 /// A tool call that failed in a way the agent should be told, in [message].
 class GaiaToolException implements Exception {
@@ -321,13 +348,210 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       'required': ['text'],
     },
   },
+  {
+    'name': 'os_focused_window',
+    'description':
+        "Say which window the os_ tools read: the app in front of the user, "
+        "or the one under Gaia when Gaia is in front. Gaia's own windows are "
+        'never read. Works only if the user has turned on "can see screen" '
+        "for this chat; if it hasn't, tell them they can, with the eye button "
+        'under the composer.',
+    'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
+  },
+  {
+    'name': 'os_read_screen',
+    'description':
+        "Read that window's controls as text: each one's type, name, value "
+        'and position. Exact, cheap, and it shows what can be clicked, so try '
+        'this before os_screenshot. Password, card and one-time code fields '
+        'are never read. Refused for apps and sites the user has excluded, '
+        'and unless "can see screen" is on for this chat.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'region': {
+          'type': 'object',
+          'description':
+              'Only controls touching this rectangle, in physical screen '
+              'pixels. Leave out for the whole window.',
+          'properties': {
+            'left': {'type': 'integer'},
+            'top': {'type': 'integer'},
+            'width': {'type': 'integer'},
+            'height': {'type': 'integer'},
+          },
+          'required': ['left', 'top', 'width', 'height'],
+        },
+      },
+    },
+  },
+  {
+    'name': 'os_screenshot',
+    'description':
+        "Take a picture of that window, for what os_read_screen can't "
+        'describe: canvases, images, games, some Electron apps. Password, card '
+        'and one-time code fields are blacked out. Refused for apps and sites '
+        'the user has excluded, and unless "can see screen" is on for this '
+        'chat. Called from a script, its result is a string whose last line '
+        'is a data: URL. To see it, pass that line to image() in the same '
+        'script, as image(r.split("\\n").pop()); never retype the data.',
+    'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
+  },
+  {
+    'name': 'os_click',
+    'description':
+        'Click in the window the os_ tools work on. Name the control as '
+        "os_read_screen shows it; use x and y alone only for what it can't "
+        'describe. The user sees and approves it first, and the result says '
+        'what ran. Works only if the user has turned on "can control" for this '
+        'chat, with the hand button under the composer. After any action, read '
+        'the screen again rather than assuming it worked.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        ..._controlTarget,
+        'button': {
+          'type': 'string',
+          'enum': ['left', 'right'],
+          'description': 'Left if left out.',
+        },
+        'double': {'type': 'boolean', 'description': 'A double click.'},
+      },
+    },
+  },
+  {
+    'name': 'os_scroll',
+    'description':
+        'Scroll the mouse wheel over a control or point, or over the middle of '
+        'the window with neither. Approved by the user first, like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        ..._controlTarget,
+        'direction': {
+          'type': 'string',
+          'enum': ['up', 'down', 'left', 'right'],
+        },
+        'amount': {
+          'type': 'integer',
+          'minimum': 1,
+          'maximum': 50,
+          'description': 'Wheel notches. 3 if left out.',
+        },
+      },
+      'required': ['direction'],
+    },
+  },
+  {
+    'name': 'os_type',
+    'description':
+        'Type text, at most 2000 characters, into a named control, which is '
+        'clicked first, or with none, into whatever has focus. Password, card '
+        'and one-time code fields are refused. Approved by the user first, '
+        'like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        ..._controlTarget,
+        'text': {'type': 'string'},
+      },
+      'required': ['text'],
+    },
+  },
+  {
+    'name': 'os_key',
+    'description':
+        'Press a key or a chord in that window: "Enter", "Ctrl+S", "Alt+F4", '
+        '"Shift+Tab". The Windows key is refused, as it acts on Windows rather '
+        'than the window. Approved by the user first, like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'keys': {'type': 'string'},
+      },
+      'required': ['keys'],
+    },
+  },
+  {
+    'name': 'os_steps',
+    'description':
+        'Several actions in one list, at most 20, that the user approves '
+        'together or one at a time. Prefer this to calling os_click and the '
+        "others in turn. A control that isn't on screen yet, as in a menu an "
+        'earlier step opens, can be named too, but then each step needs its '
+        'own approval. A run stops if the window in front changes, as when a '
+        'step opens a dialog: read the screen and send the rest as a new list.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'steps': {
+          'type': 'array',
+          'items': {
+            'type': 'object',
+            'properties': {
+              'action': {
+                'type': 'string',
+                'enum': ['click', 'scroll', 'type', 'key'],
+              },
+              ..._controlTarget,
+              'button': {
+                'type': 'string',
+                'enum': ['left', 'right'],
+              },
+              'double': {'type': 'boolean'},
+              'direction': {
+                'type': 'string',
+                'enum': ['up', 'down', 'left', 'right'],
+              },
+              'amount': {'type': 'integer'},
+              'text': {'type': 'string'},
+              'keys': {'type': 'string'},
+            },
+            'required': ['action'],
+          },
+        },
+      },
+      'required': ['steps'],
+    },
+  },
 ];
+
+/// What an action tool can aim at. With a name and a point, the point picks
+/// among controls of that name.
+const _controlTarget = <String, Object?>{
+  'name': {
+    'type': 'string',
+    'description': "The control's name, as os_read_screen shows it.",
+  },
+  'type': {
+    'type': 'string',
+    'description': "The control's type, as os_read_screen shows it: Button.",
+  },
+  'x': {'type': 'integer', 'description': 'Physical screen pixels.'},
+  'y': {'type': 'integer', 'description': 'Physical screen pixels.'},
+};
 
 /// The `voyager_*` read tools: the main instance answers them.
 bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
 
 /// The `memory_*` tools (§11): the main instance answers them too.
 bool isGaiaMemoryTool(String name) => name.startsWith('memory_');
+
+/// The `os_*` read tools (§15.6): the main instance answers them too.
+bool isGaiaOsRead(String name) => const {
+  'os_focused_window',
+  'os_read_screen',
+  'os_screenshot',
+}.contains(name);
+
+/// The `os_*` action tools (§15.6): each is a step list the user approves.
+bool isGaiaOsControl(String name) => const {
+  'os_click',
+  'os_scroll',
+  'os_type',
+  'os_key',
+  'os_steps',
+}.contains(name);
 
 /// The protocol version answered when the client names none.
 const _protocolVersion = '2025-06-18';
@@ -362,9 +586,9 @@ Future<Map<String, Object?>?> gaiaMcpAnswer(
       final GaiaToolResult answer;
       if (name is! String ||
           !kGaiaToolDefinitions.any((tool) => tool['name'] == name)) {
-        answer = (text: 'Unknown tool: $name', isError: true);
+        answer = GaiaToolResult(text: 'Unknown tool: $name', isError: true);
       } else if (tools == null) {
-        answer = (text: 'No Gaia run is active.', isError: true);
+        answer = GaiaToolResult(text: 'No Gaia run is active.', isError: true);
       } else {
         answer = await tools.call(
           name,
@@ -374,6 +598,8 @@ Future<Map<String, Object?>?> gaiaMcpAnswer(
       return result({
         'content': [
           {'type': 'text', 'text': answer.text},
+          if (answer.image case final image?)
+            {'type': 'image', 'data': image, 'mimeType': answer.mimeType},
         ],
         'isError': answer.isError,
       });

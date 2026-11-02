@@ -429,7 +429,14 @@ class CodexAppServerClient {
           result = {
             'contentItems': [
               for (final content in called['content']! as List)
-                {'type': 'inputText', 'text': (content as Map)['text']},
+                if ((content as Map)['type'] == 'image')
+                  {
+                    'type': 'inputImage',
+                    'imageUrl':
+                        'data:${content['mimeType']};base64,${content['data']}',
+                  }
+                else
+                  {'type': 'inputText', 'text': content['text']},
             ],
             'success': called['isError'] != true,
           };

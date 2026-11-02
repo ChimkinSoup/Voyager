@@ -1870,6 +1870,7 @@ class _MessageView extends StatelessWidget {
       final images = message.parts.whereType<GaiaImagePart>();
       final files = message.parts.whereType<GaiaFilePart>();
       final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
+      final control = message.parts.whereType<GaiaElementPart>().firstOrNull;
       final quotes = message.parts.whereType<GaiaQuotePart>();
       // Images and files float on their own above the prompt's bubble; a
       // message of only those has no bubble. Just sent, its text and
@@ -1928,7 +1929,10 @@ class _MessageView extends StatelessWidget {
                   ),
                 ),
               ),
-            if (window != null || quotes.isNotEmpty || message.text.isNotEmpty)
+            if (window != null ||
+                control != null ||
+                quotes.isNotEmpty ||
+                message.text.isNotEmpty)
               _bubble(
                 gaiaPromptColor(theme),
                 Alignment.centerRight,
@@ -1938,6 +1942,13 @@ class _MessageView extends StatelessWidget {
                     children: [
                       if (window != null) ...[
                         _ContextChip(label: window.label),
+                        const SizedBox(height: 6),
+                      ],
+                      if (control != null) ...[
+                        _ContextChip(
+                          label: control.label,
+                          icon: Icons.ads_click,
+                        ),
                         const SizedBox(height: 6),
                       ],
                       for (final quote in quotes) ...[
@@ -2021,12 +2032,15 @@ class _MessageView extends StatelessWidget {
                   onAcceptAll: controller.openProposals.length > 1
                       ? controller.acceptAllProposals
                       : null,
+                  onRunAll: () => controller.approveControl(part, once: true),
+                  onRunNext: () => controller.approveControl(part, once: false),
                 ),
               ),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
               GaiaFilePart() ||
               GaiaContextPart() ||
+              GaiaElementPart() ||
               GaiaQuotePart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },
@@ -2535,6 +2549,21 @@ class _ComposerState extends State<_Composer> {
 
   /// [_send] without the palette.
   Future<void> _submit() async {
+    // `/this` with the question after it: the same as picking it first.
+    if (gaiaThisRest(_text.text) case final rest?) {
+      final typed = _text.value;
+      _text.text = rest;
+      if (!await widget.controller.attachThis()) {
+        _text.value = typed;
+        return;
+      }
+      // Changing the draft set off its own check for commands, which would
+      // have this send's turned away.
+      while (_takingCommands) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      if (!mounted) return;
+    }
     // A built-in runs even mid-reply: /stop is for exactly then.
     if (gaiaBuiltinIn(_text.text) case final builtin?) {
       _text.clear();
@@ -2569,6 +2598,13 @@ class _ComposerState extends State<_Composer> {
         case GaiaCardKind.proposal:
           if (text.trim().isEmpty) {
             controller.acceptProposal(card);
+          } else {
+            controller.rejectCard(card, message: text);
+            _text.clear();
+          }
+        case GaiaCardKind.control:
+          if (text.trim().isEmpty) {
+            controller.approveControl(card, once: gaiaControlCanRunAll(card));
           } else {
             controller.rejectCard(card, message: text);
             _text.clear();
@@ -2760,6 +2796,18 @@ class _ComposerState extends State<_Composer> {
                           ),
                         ),
                       ),
+                    if (controller.draftControl case final control?)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _ContextChip(
+                            label: control.label,
+                            icon: Icons.ads_click,
+                            onRemove: controller.dropDraftControl,
+                          ),
+                        ),
+                      ),
                     if (controller.draftQuotes.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -2854,6 +2902,8 @@ class _ComposerState extends State<_Composer> {
                                   'Send to allow, or say why not',
                                 GaiaCardKind.proposal =>
                                   'Send to save, or say what to change',
+                                GaiaCardKind.control =>
+                                  'Send to run, or say why not',
                                 null => 'Message Gaia',
                               },
                         onPaste: _paste,
@@ -3274,12 +3324,70 @@ class _ComposerStatus extends StatelessWidget {
         const SizedBox(width: 4),
         Expanded(
           child: Text(
-            tokens == null ? '' : '${(tokens / 1000).round()}k context',
+            controller.seeScreenWarning
+                ? 'Agent tools could leak or obey screen text.'
+                : tokens == null
+                ? ''
+                : '${(tokens / 1000).round()}k context',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+              color: controller.seeScreenWarning
+                  ? kGaiaStatusRose
+                  : theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ),
+        const SizedBox(width: 4),
+        // Per chat, on this device (§15.6): off by default. Clicking one leaves
+        // the caret in the composer.
+        TextFieldTapRegion(
+          child: Tooltip(
+            message: controller.canSeeScreen
+                ? 'Can see screen: on. An agent with its CLI\'s shell or web tools '
+                      'could send screen text elsewhere, or be steered by it.'
+                : 'Can see screen: off',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: controller.toggleSeeScreen,
+              child: Padding(
+                padding: const EdgeInsets.all(_UsageRing.margin),
+                child: Icon(
+                  controller.canSeeScreen
+                      ? Icons.visibility
+                      : Icons.visibility_off_outlined,
+                  size: 14,
+                  color: controller.canSeeScreen
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+        TextFieldTapRegion(
+          child: Tooltip(
+            message: controller.canControl
+                ? 'Can control: on. Gaia asks before each step list, and the '
+                      'border shows while this is on. Esc stops a run.'
+                : 'Can control: off',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: controller.toggleCanControl,
+              child: Padding(
+                padding: const EdgeInsets.all(_UsageRing.margin),
+                child: Icon(
+                  controller.canControl
+                      ? Icons.pan_tool_alt
+                      : Icons.pan_tool_alt_outlined,
+                  size: 14,
+                  color: controller.canControl
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8 - 2 * _UsageRing.margin),
         // One per account, its own in order; dulled unless the next message
         // runs on it, and clicking a dulled one switches to it (§6.2). Each
         // has [_UsageRing.margin] to click in, within the gap they'd otherwise

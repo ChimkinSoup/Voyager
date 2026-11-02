@@ -581,6 +581,7 @@ class GaiaBeaconService {
           GaiaCardKind.question => 'Gaia has a question',
           GaiaCardKind.permission => 'Gaia asks to use ${card.tool}',
           GaiaCardKind.proposal => 'Gaia proposes a change',
+          GaiaCardKind.control => 'Gaia asks to control the screen',
         },
         text: card.kind == GaiaCardKind.question ? card.question : name,
       );

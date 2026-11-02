@@ -57907,6 +57907,18 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _grantsJsonMeta = const VerificationMeta(
+    'grantsJson',
+  );
+  @override
+  late final GeneratedColumn<String> grantsJson = GeneratedColumn<String>(
+    'grants_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -57962,6 +57974,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     tier,
     curatedSeq,
     drain,
+    grantsJson,
     createdAt,
     updatedAt,
     version,
@@ -58036,6 +58049,12 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         drain.isAcceptableOrUnknown(data['drain']!, _drainMeta),
       );
     }
+    if (data.containsKey('grants_json')) {
+      context.handle(
+        _grantsJsonMeta,
+        grantsJson.isAcceptableOrUnknown(data['grants_json']!, _grantsJsonMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58105,6 +58124,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.bool,
         data['${effectivePrefix}drain'],
       )!,
+      grantsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}grants_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58149,6 +58172,9 @@ class GaiaChatsTableData extends DataClass
 
   /// Drain mode (GAIA_HLD.md §13).
   final bool drain;
+
+  /// `{deviceId: {seeScreen, at}}` (GAIA_HLD.md §8, §15.6).
+  final String grantsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58162,6 +58188,7 @@ class GaiaChatsTableData extends DataClass
     this.tier,
     required this.curatedSeq,
     required this.drain,
+    required this.grantsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58180,6 +58207,7 @@ class GaiaChatsTableData extends DataClass
     }
     map['curated_seq'] = Variable<int>(curatedSeq);
     map['drain'] = Variable<bool>(drain);
+    map['grants_json'] = Variable<String>(grantsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58199,6 +58227,7 @@ class GaiaChatsTableData extends DataClass
       tier: tier == null && nullToAbsent ? const Value.absent() : Value(tier),
       curatedSeq: Value(curatedSeq),
       drain: Value(drain),
+      grantsJson: Value(grantsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58222,6 +58251,7 @@ class GaiaChatsTableData extends DataClass
       tier: serializer.fromJson<String?>(json['tier']),
       curatedSeq: serializer.fromJson<int>(json['curatedSeq']),
       drain: serializer.fromJson<bool>(json['drain']),
+      grantsJson: serializer.fromJson<String>(json['grantsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58240,6 +58270,7 @@ class GaiaChatsTableData extends DataClass
       'tier': serializer.toJson<String?>(tier),
       'curatedSeq': serializer.toJson<int>(curatedSeq),
       'drain': serializer.toJson<bool>(drain),
+      'grantsJson': serializer.toJson<String>(grantsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58256,6 +58287,7 @@ class GaiaChatsTableData extends DataClass
     Value<String?> tier = const Value.absent(),
     int? curatedSeq,
     bool? drain,
+    String? grantsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58269,6 +58301,7 @@ class GaiaChatsTableData extends DataClass
     tier: tier.present ? tier.value : this.tier,
     curatedSeq: curatedSeq ?? this.curatedSeq,
     drain: drain ?? this.drain,
+    grantsJson: grantsJson ?? this.grantsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58290,6 +58323,9 @@ class GaiaChatsTableData extends DataClass
           ? data.curatedSeq.value
           : this.curatedSeq,
       drain: data.drain.present ? data.drain.value : this.drain,
+      grantsJson: data.grantsJson.present
+          ? data.grantsJson.value
+          : this.grantsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58308,6 +58344,7 @@ class GaiaChatsTableData extends DataClass
           ..write('tier: $tier, ')
           ..write('curatedSeq: $curatedSeq, ')
           ..write('drain: $drain, ')
+          ..write('grantsJson: $grantsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58326,6 +58363,7 @@ class GaiaChatsTableData extends DataClass
     tier,
     curatedSeq,
     drain,
+    grantsJson,
     createdAt,
     updatedAt,
     version,
@@ -58343,6 +58381,7 @@ class GaiaChatsTableData extends DataClass
           other.tier == this.tier &&
           other.curatedSeq == this.curatedSeq &&
           other.drain == this.drain &&
+          other.grantsJson == this.grantsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58358,6 +58397,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<String?> tier;
   final Value<int> curatedSeq;
   final Value<bool> drain;
+  final Value<String> grantsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58372,6 +58412,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.tier = const Value.absent(),
     this.curatedSeq = const Value.absent(),
     this.drain = const Value.absent(),
+    this.grantsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58387,6 +58428,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.tier = const Value.absent(),
     this.curatedSeq = const Value.absent(),
     this.drain = const Value.absent(),
+    this.grantsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58406,6 +58448,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<String>? tier,
     Expression<int>? curatedSeq,
     Expression<bool>? drain,
+    Expression<String>? grantsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58421,6 +58464,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (tier != null) 'tier': tier,
       if (curatedSeq != null) 'curated_seq': curatedSeq,
       if (drain != null) 'drain': drain,
+      if (grantsJson != null) 'grants_json': grantsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58438,6 +58482,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<String?>? tier,
     Value<int>? curatedSeq,
     Value<bool>? drain,
+    Value<String>? grantsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58453,6 +58498,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       tier: tier ?? this.tier,
       curatedSeq: curatedSeq ?? this.curatedSeq,
       drain: drain ?? this.drain,
+      grantsJson: grantsJson ?? this.grantsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -58488,6 +58534,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (drain.present) {
       map['drain'] = Variable<bool>(drain.value);
     }
+    if (grantsJson.present) {
+      map['grants_json'] = Variable<String>(grantsJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -58517,6 +58566,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('tier: $tier, ')
           ..write('curatedSeq: $curatedSeq, ')
           ..write('drain: $drain, ')
+          ..write('grantsJson: $grantsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -90316,6 +90366,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<String?> tier,
       Value<int> curatedSeq,
       Value<bool> drain,
+      Value<String> grantsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -90332,6 +90383,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<String?> tier,
       Value<int> curatedSeq,
       Value<bool> drain,
+      Value<String> grantsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -90385,6 +90437,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<bool> get drain => $composableBuilder(
     column: $table.drain,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get grantsJson => $composableBuilder(
+    column: $table.grantsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -90458,6 +90515,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get grantsJson => $composableBuilder(
+    column: $table.grantsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -90518,6 +90580,11 @@ class $$GaiaChatsTableTableAnnotationComposer
   GeneratedColumn<bool> get drain =>
       $composableBuilder(column: $table.drain, builder: (column) => column);
 
+  GeneratedColumn<String> get grantsJson => $composableBuilder(
+    column: $table.grantsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -90576,6 +90643,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<String?> tier = const Value.absent(),
                 Value<int> curatedSeq = const Value.absent(),
                 Value<bool> drain = const Value.absent(),
+                Value<String> grantsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -90590,6 +90658,7 @@ class $$GaiaChatsTableTableTableManager
                 tier: tier,
                 curatedSeq: curatedSeq,
                 drain: drain,
+                grantsJson: grantsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -90606,6 +90675,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<String?> tier = const Value.absent(),
                 Value<int> curatedSeq = const Value.absent(),
                 Value<bool> drain = const Value.absent(),
+                Value<String> grantsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -90620,6 +90690,7 @@ class $$GaiaChatsTableTableTableManager
                 tier: tier,
                 curatedSeq: curatedSeq,
                 drain: drain,
+                grantsJson: grantsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

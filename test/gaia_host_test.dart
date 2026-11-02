@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, pid;
 
 import 'package:fake_async/fake_async.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
@@ -12,10 +12,13 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
+import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
+import 'package:voyager/features/gaia/host/gaia_os_control.dart';
+import 'package:voyager/features/gaia/host/gaia_os_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
@@ -29,6 +32,61 @@ import 'fakes/gaia_fakes.dart';
 /// it serves. Each test runs in fake time against a scripted companion.
 
 /// A launched companion, as the main instance sees it over the pipe.
+/// Notepad in front, and nothing in the way: the host's checks are what's
+/// tested.
+class _ControlBackend implements GaiaInputBackend {
+  final sent = <GaiaInputEvent>[];
+
+  static const _window = (
+    hwnd: 7,
+    pid: 70,
+    exe: 'notepad',
+    app: 'Notepad',
+    title: 'notes.txt',
+    console: false,
+  );
+
+  @override
+  GaiaForegroundWindow? target(int gaiaPid) => _window;
+  @override
+  GaiaForegroundWindow? describe(int hwnd) => _window;
+  @override
+  int foreground() => 7;
+  @override
+  bool inFrontOfTarget(int hwnd, int gaiaPid) => false;
+  @override
+  bool activate(int hwnd) => true;
+  @override
+  int rootAt(int x, int y) => 7;
+  @override
+  ({int left, int top, int width, int height}) frame(int hwnd) =>
+      (left: 0, top: 0, width: 800, height: 600);
+  @override
+  Future<GaiaWindowScan?> find(
+    int hwnd, {
+    required bool browser,
+    required ({String name, String? type}) control,
+  }) async => null;
+  @override
+  Future<String?> address(int hwnd) async => null;
+  @override
+  Future<bool?> focusSensitive(int hwnd, {required bool browser}) async =>
+      false;
+  @override
+  bool modifiersDown() => false;
+  @override
+  bool escapeDown() => false;
+  @override
+  void moveCursor(int x, int y) {}
+  @override
+  bool get buttonsSwapped => false;
+  @override
+  int send(List<GaiaInputEvent> events) {
+    sent.addAll(events);
+    return events.length;
+  }
+}
+
 class _Companion {
   _Companion(this.pipe, this.pid) {
     pipe
@@ -101,7 +159,71 @@ void main() {
     copyGate = null;
   });
 
+  /// The window under the cursor, what's read of its control, and each
+  /// control a crop was taken of.
+  GaiaCursorTarget? underCursor;
+  GaiaPointedControl? pointedControl;
+  late List<GaiaScreenRect> controlCrops;
+  setUp(() {
+    underCursor = null;
+    pointedControl = null;
+    controlCrops = [];
+  });
+
+  /// Holds an `os_*` read until completed, when set.
+  Completer<void>? osGate;
+  setUp(() => osGate = null);
+
+  /// What the `os_*` actions send, and each label the border was given.
+  late _ControlBackend controlBackend;
+  late List<String?> borders;
+  setUp(() {
+    controlBackend = _ControlBackend();
+    borders = [];
+  });
+
   GaiaHost newHost() => GaiaHost(
+    osReads: GaiaOsReads(
+      companionPid: () => 1,
+      exclusions: () => const [],
+      vaultUnlocked: () => false,
+      target: (_) => (
+        hwnd: 7,
+        pid: 70,
+        exe: 'notepad',
+        app: 'Notepad',
+        title: 'notes.txt',
+        console: false,
+      ),
+      scan: (window, {required browser, region}) async {
+        await osGate?.future;
+        return (
+          url: null,
+          tree: 'Button "Save"',
+          cut: false,
+          sensitive: const <({int left, int top, int right, int bottom})>[],
+          matches: const <GaiaControlMatch>[],
+          controls: 1,
+          hasDocument: false,
+          sensitiveFocused: false,
+          anyFocused: false,
+        );
+      },
+    ),
+    osControl: GaiaOsControl(
+      companionPid: () => 1,
+      exclusions: () => const [],
+      vaultUnlocked: () => false,
+      backend: controlBackend,
+      settle: Duration.zero,
+    ),
+    showBorder: (label) async => borders.add(label),
+    cursorTarget: () => underCursor,
+    readControl: (target) async => pointedControl,
+    captureControl: (path, target, control) async {
+      controlCrops.add(control);
+      return path;
+    },
     pipe: pipe,
     abortFlag: () async => fs.file('gaia_aborted'),
     killCompanion: (pid) async => killed.add(pid),
@@ -560,6 +682,358 @@ void main() {
         expect(
           request(async, 'remember', {'chatId': null, 'text': 'I like tea'}),
           {'saved': true},
+        );
+      });
+    });
+  });
+
+  group('can see screen (§15.6)', () {
+    final now = DateTime.utc(2026, 11, 1);
+    Map<String, Object?> chat({Map<String, GaiaGrant> grants = const {}}) =>
+        GaiaChat(
+          id: 'c1',
+          title: 'A chat',
+          createdAt: now,
+          updatedAt: now,
+          lastMessageAt: now,
+          grants: grants,
+        ).toJson();
+    Map<String, Object?> osRead = const {};
+    setUp(() {
+      osRead = const {
+        'chatId': 'c1',
+        'tool': 'os_read_screen',
+        'arguments': <String, Object?>{},
+      };
+    });
+    Matcher refused(String words) => throwsA(
+      isA<GaiaPipeException>().having(
+        (error) => error.message,
+        'message',
+        contains(words),
+      ),
+    );
+
+    test('off by default, and the read refuses', () {
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat()});
+        expect(
+          () => request(async, 'osRead', osRead),
+          refused('can see screen'),
+        );
+      });
+    });
+
+    test('on, the chat reads; off again, it refuses', () {
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat()});
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+        final read = request(async, 'osRead', osRead)! as Map;
+        expect(read['text'], contains('Button "Save"'));
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': false});
+        expect(
+          () => request(async, 'osRead', osRead),
+          refused('can see screen'),
+        );
+      });
+    });
+
+    test("another device's grant does nothing here", () {
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'putChat', {
+          'chat': chat(grants: {'phone': GaiaGrant(seeScreen: true, at: now)}),
+        });
+        expect(
+          () => request(async, 'osRead', osRead),
+          refused('can see screen'),
+        );
+      });
+    });
+
+    test('Abort revokes it, and Re-arm leaves it off', () {
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat()});
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+        host.onHotkey(GaiaHotkey.abort);
+        async.flushMicrotasks();
+        expect(() => request(async, 'osRead', osRead), refused('aborted'));
+        expect(
+          () => request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true}),
+          refused('aborted'),
+        );
+        request(async, 'rearm');
+        expect(
+          () => request(async, 'osRead', osRead),
+          refused('can see screen'),
+        );
+        // It can be turned back on, per chat.
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+        expect(request(async, 'osRead', osRead), isA<Map>());
+      });
+    });
+
+    test('Abort during a read keeps what it got from the agent', () {
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat()});
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+        final gate = osGate = Completer<void>();
+        Object? answer;
+        Object? failure;
+        companions.single.pipe
+            .request('osRead', osRead)
+            .then((value) => answer = value, onError: (e) => failure = e);
+        async.flushMicrotasks();
+        host.onHotkey(GaiaHotkey.abort);
+        async.flushMicrotasks();
+        gate.complete();
+        async.flushMicrotasks();
+        expect(answer, isNull);
+        expect((failure! as GaiaPipeException).message, contains('aborted'));
+      });
+    });
+
+    test('turning it off during a read does too', () {
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'putChat', {'chat': chat()});
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+        final gate = osGate = Completer<void>();
+        Object? failure;
+        companions.single.pipe
+            .request('osRead', osRead)
+            .catchError((Object e) => failure = e);
+        async.flushMicrotasks();
+        request(async, 'setSeeScreen', {'chatId': 'c1', 'on': false});
+        gate.complete();
+        async.flushMicrotasks();
+        expect(
+          (failure! as GaiaPipeException).message,
+          contains('can see screen'),
+        );
+      });
+    });
+
+    group('can control (§15.6)', () {
+      const plan = {
+        'chatId': 'c1',
+        'cardId': 'card',
+        'tool': 'os_key',
+        'arguments': {'keys': 'A'},
+      };
+      const go = {'chatId': 'c1', 'cardId': 'card', 'once': true};
+
+      test('off by default, and a plan refuses', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          expect(() => request(async, 'osPlan', plan), refused('can control'));
+          expect(controlBackend.sent, isEmpty);
+        });
+      });
+
+      test('on, a plan runs; the border shows while it is on', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          expect(borders.last, isNull);
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          expect(borders.last, 'Gaia is in control: A chat');
+          final card = request(async, 'osPlan', plan)! as Map;
+          expect(card['app'], 'Notepad');
+          expect(controlBackend.sent, isEmpty);
+          final result = request(async, 'osRun', go)! as Map;
+          expect(result['ran'], 1);
+          expect(controlBackend.sent, hasLength(2));
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': false});
+          expect(borders.last, isNull);
+        });
+      });
+
+      test('the grants are separate', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          expect(() => request(async, 'osRead', osRead), refused('can see'));
+          request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+          expect(request(async, 'osRead', osRead), isA<Map>());
+          // Setting one kept the other.
+          expect(request(async, 'osPlan', plan), isA<Map>());
+        });
+      });
+
+      test("another device's grant does nothing here", () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {
+            'chat': chat(
+              grants: {
+                'phone': GaiaGrant(seeScreen: true, canControl: true, at: now),
+              },
+            ),
+          });
+          expect(() => request(async, 'osPlan', plan), refused('can control'));
+          expect(borders.last, isNull);
+        });
+      });
+
+      test('the border follows a change that came by sync, not the pipe', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          final repository = DriftGaiaRepository(db);
+          void write(GaiaChat written) {
+            repository.upsertChat(written);
+            async.flushMicrotasks();
+            async.elapse(const Duration(milliseconds: 300));
+            async.flushMicrotasks();
+          }
+
+          final on = GaiaChat.fromJson(
+            chat(
+              grants: {
+                'laptop': GaiaGrant(
+                  seeScreen: false,
+                  canControl: true,
+                  at: now,
+                ),
+              },
+            ),
+          );
+          write(on);
+          expect(borders.last, 'Gaia is in control: A chat');
+          final shown = borders.length;
+          // Nothing the border says changed: its windows are left alone.
+          write(on.copyWith(pinned: true));
+          expect(borders, hasLength(shown));
+          write(on.copyWith(title: 'Renamed'));
+          expect(borders.last, 'Gaia is in control: Renamed');
+          write(on.copyWith(deletedAt: now));
+          expect(borders.last, isNull);
+        });
+      });
+
+      test(
+        'Abort revokes it and takes the border, and Re-arm leaves it off',
+        () {
+          run(show: true, (async, host) {
+            connect(async);
+            request(async, 'putChat', {'chat': chat()});
+            request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+            host.onHotkey(GaiaHotkey.abort);
+            async.flushMicrotasks();
+            expect(borders.last, isNull);
+            expect(() => request(async, 'osPlan', plan), refused('aborted'));
+            expect(
+              () =>
+                  request(async, 'setCanControl', {'chatId': 'c1', 'on': true}),
+              refused('aborted'),
+            );
+            request(async, 'rearm');
+            expect(
+              () => request(async, 'osPlan', plan),
+              refused('can control'),
+            );
+          });
+        },
+      );
+
+      test('Abort stops a run mid-text, sending no more', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          request(async, 'osPlan', {
+            ...plan,
+            'tool': 'os_type',
+            'arguments': {'text': 'x' * 400},
+          });
+          Map? result;
+          companions.single.pipe
+              .request('osRun', go)
+              .then((value) => result = value! as Map);
+          async.elapse(const Duration(milliseconds: 5));
+          final soFar = controlBackend.sent.length;
+          expect(soFar, greaterThan(0));
+          host.onHotkey(GaiaHotkey.abort);
+          async.elapse(const Duration(seconds: 2));
+          expect(result!['stopped'], contains('aborted'));
+          expect(controlBackend.sent.length, soFar);
+        });
+      });
+
+      test('turning it off stops a run; so does osStop', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          final typed = {
+            ...plan,
+            'tool': 'os_type',
+            'arguments': {'text': 'x' * 400},
+          };
+          request(async, 'osPlan', typed);
+          Map? result;
+          companions.single.pipe
+              .request('osRun', go)
+              .then((value) => result = value! as Map);
+          async.elapse(const Duration(milliseconds: 5));
+          request(async, 'osStop', {'chatId': 'c1'});
+          async.elapse(const Duration(seconds: 2));
+          expect(result!['stopped'], contains('stopped'));
+
+          request(async, 'osPlan', typed);
+          result = null;
+          companions.single.pipe
+              .request('osRun', go)
+              .then((value) => result = value! as Map);
+          async.elapse(const Duration(milliseconds: 5));
+          companions.single.pipe.request('setCanControl', {
+            'chatId': 'c1',
+            'on': false,
+          });
+          async.elapse(const Duration(seconds: 2));
+          expect(result!['stopped'], contains('can control'));
+        });
+      });
+
+      test('a chat that comes with the grant shows the border', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {
+            'chat': chat(
+              grants: {
+                'laptop': GaiaGrant(
+                  seeScreen: false,
+                  canControl: true,
+                  at: now,
+                ),
+              },
+            ),
+          });
+          expect(borders.last, 'Gaia is in control: A chat');
+        });
+      });
+    });
+
+    test('started aborted, the store revokes what a crash left on', () async {
+      await DriftGaiaRepository(db).upsertChat(
+        GaiaChat.fromJson(
+          chat(grants: {'laptop': GaiaGrant(seeScreen: true, at: now)}),
+        ),
+      );
+      fs.file('gaia_aborted').writeAsStringSync('2026-11-01');
+      run(show: true, (async, host) {
+        connect(async);
+        request(async, 'rearm');
+        expect(
+          () => request(async, 'osRead', osRead),
+          refused('can see screen'),
         );
       });
     });
@@ -1069,6 +1543,212 @@ void main() {
             'url': 'github.com/pulls',
           },
           'selection': 'some code',
+        });
+      });
+    });
+
+    group('the control under the cursor (§15.5)', () {
+      Map<String, Object?>? lastPointed;
+      void listenPointed() {
+        lastPointed = null;
+        final pipeEnd = companions.single.pipe;
+        final onEvent = pipeEnd.onEvent!;
+        pipeEnd.onEvent = (event, params) {
+          if (event == 'pointed') lastPointed = params;
+          onEvent(event, params);
+        };
+      }
+
+      GaiaPointedControl control({
+        String name = 'Submit',
+        String? url,
+        bool sensitive = false,
+      }) => (
+        type: 'Button',
+        name: name,
+        value: null,
+        sensitive: sensitive,
+        left: 10,
+        top: 20,
+        width: 30,
+        height: 40,
+        url: url,
+      );
+
+      test('comes with its crop, by the window under the cursor', () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          foreground = chrome;
+          underCursor = (
+            x: 15,
+            y: 25,
+            window: (
+              hwnd: 2,
+              pid: 90,
+              exe: 'Code',
+              app: 'Visual Studio Code',
+              title: '',
+              console: false,
+            ),
+          );
+          pointedControl = control();
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          final part =
+              GaiaPart.fromJson((lastPointed!['control']! as Map).cast())
+                  as GaiaElementPart;
+          expect(part.label, 'Button · Submit · in Visual Studio Code');
+          expect(lastPointed!['crop'], isA<String>());
+          expect(controlCrops.single, (
+            left: 10,
+            top: 20,
+            width: 30,
+            height: 40,
+          ));
+        });
+      });
+
+      test('a sensitive field: refused, with nothing of it sent', () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          foreground = chrome;
+          underCursor = (x: 15, y: 25, window: chrome);
+          pointedControl = control(name: '', sensitive: true);
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(lastPointed, {'refused': 'sensitive'});
+          expect(controlCrops, isEmpty);
+        });
+      });
+
+      test('an excluded site under the cursor, though another app is in '
+          'front: refused', () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          DriftGaiaRepository(db).upsertSettings(
+            GaiaSettings.initial().copyWith(contextExclusions: ['rbc.com']),
+          );
+          async.flushMicrotasks();
+          foreground = (
+            hwnd: 2,
+            pid: 90,
+            exe: 'Code',
+            app: 'Visual Studio Code',
+            title: '',
+            console: false,
+          );
+          underCursor = (x: 15, y: 25, window: chrome);
+          pointedControl = control(url: 'https://www.rbc.com/login');
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(lastPointed, {'refused': 'excluded'});
+          expect(controlCrops, isEmpty);
+        });
+      });
+
+      test("a browser whose address can't be read, with a site on the list: "
+          'refused', () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          DriftGaiaRepository(db).upsertSettings(
+            GaiaSettings.initial().copyWith(contextExclusions: ['rbc.com']),
+          );
+          async.flushMicrotasks();
+          foreground = chrome;
+          underCursor = (x: 15, y: 25, window: chrome);
+          pointedControl = control();
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(lastPointed, {'refused': 'unknown'});
+          expect(controlCrops, isEmpty);
+        });
+      });
+
+      test("an app that can't be named: refused, nothing read", () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          foreground = chrome;
+          underCursor = (
+            x: 15,
+            y: 25,
+            window: (
+              hwnd: 2,
+              pid: 90,
+              exe: '',
+              app: '',
+              title: '',
+              console: false,
+            ),
+          );
+          pointedControl = control();
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(lastPointed, {'refused': 'unknown'});
+          expect(controlCrops, isEmpty);
+        });
+      });
+
+      test('Voyager with its vault unlocked: refused, nothing read', () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          foreground = chrome;
+          underCursor = (
+            x: 15,
+            y: 25,
+            window: (
+              hwnd: 2,
+              pid: pid,
+              exe: 'voyager',
+              app: 'Voyager',
+              title: '',
+              console: false,
+            ),
+          );
+          pointedControl = control();
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(lastPointed, {'refused': 'vault'});
+          expect(controlCrops, isEmpty);
+        });
+      });
+
+      test('aborted, nothing is read', () {
+        run(show: true, (async, host) {
+          connect(async);
+          host.onHotkey(GaiaHotkey.abort);
+          async.flushMicrotasks();
+          foreground = chrome;
+          underCursor = (x: 15, y: 25, window: chrome);
+          pointedControl = control();
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(controlCrops, isEmpty);
+        });
+      });
+
+      test('a summon from Gaia itself keeps what the companion has', () {
+        run(show: true, (async, host) {
+          connect(async);
+          listenPointed();
+          foreground = (
+            hwnd: 3,
+            pid: companions.single.pid,
+            exe: 'voyager',
+            app: 'Voyager',
+            title: 'Gaia',
+            console: false,
+          );
+          underCursor = (x: 15, y: 25, window: chrome);
+          pointedControl = control();
+          host.onHotkey(GaiaHotkey.small);
+          async.flushMicrotasks();
+          expect(lastPointed, isNull);
         });
       });
     });

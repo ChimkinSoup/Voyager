@@ -44,8 +44,9 @@ final gaiaSearchProvider = FutureProvider.autoDispose
 /// [message] of [chat].
 typedef GaiaAction = ({GaiaChat chat, GaiaMessage message, GaiaCardPart card});
 
-/// The action log (§10, §17): every accepted proposal that wrote something,
-/// in live chats, newest first. Read again on every write to the chats or
+/// The action log (§10, §15.6, §17): every accepted proposal that wrote
+/// something and every step list that sent something, in live chats, newest
+/// first. Read again on every write to the chats or
 /// messages, since an undo changes a card without touching its chat.
 final gaiaActionsProvider = StreamProvider.autoDispose<List<GaiaAction>>((
   ref,
@@ -59,9 +60,12 @@ final gaiaActionsProvider = StreamProvider.autoDispose<List<GaiaAction>>((
       for (final message in await repository.listMessagesWithCommits())
         if (chats[message.chatId] != null)
           for (final card in message.parts.whereType<GaiaCardPart>())
-            if (card.kind == GaiaCardKind.proposal &&
-                card.state == GaiaCardState.accepted &&
-                card.answer?['committed'] != null)
+            if ((card.kind == GaiaCardKind.proposal ||
+                    card.kind == GaiaCardKind.control) &&
+                card.answer?['committed'] != null &&
+                // A step list declined partway still sent what it sent.
+                (card.state == GaiaCardState.accepted ||
+                    card.kind == GaiaCardKind.control))
               (chat: chats[message.chatId]!, message: message, card: card),
     ];
     return actions

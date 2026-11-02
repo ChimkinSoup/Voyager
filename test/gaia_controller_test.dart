@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -1274,6 +1276,61 @@ void main() {
       expect(controller.draft.text, '[image 1]');
     });
 
+    test('/this takes its crop out of the swept captures folder; one nobody '
+        'used goes with the next summon', () async {
+      final captures = await Directory.systemTemp.createTemp('gaia_captures');
+      addTearDown(() => captures.delete(recursive: true));
+      const button = GaiaElementPart(
+        controlType: 'Button',
+        name: 'Submit',
+        app: 'Google Chrome',
+        left: 1,
+        top: 2,
+        width: 3,
+        height: 4,
+      );
+      final unused = File('${captures.path}/unused.bmp')..writeAsBytesSync([0]);
+      main.companion.onEvent!('pointed', {
+        'control': button.toJson(),
+        'crop': unused.path,
+      });
+      await settle();
+      final used = File('${captures.path}/used.bmp')..writeAsBytesSync([0]);
+      main.companion.onEvent!('pointed', {
+        'control': button.toJson(),
+        'crop': used.path,
+      });
+      for (var i = 0; i < 100 && unused.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(unused.existsSync(), isFalse);
+
+      expect(await controller.attachThis(), isTrue);
+      expect(controller.draftControl?.name, 'Submit');
+      expect(p.dirname(controller.draftImages.single.path), drafts.path);
+      expect(used.existsSync(), isFalse);
+      expect(controller.draft.text, '[image 1]');
+    });
+
+    test('/this with its crop swept away still attaches the control', () async {
+      main.companion.onEvent!('pointed', {
+        'control': const GaiaElementPart(
+          controlType: 'Button',
+          name: 'Submit',
+          app: 'Google Chrome',
+          left: 1,
+          top: 2,
+          width: 3,
+          height: 4,
+        ).toJson(),
+        'crop': '${drafts.path}/gone.bmp',
+      });
+      await settle();
+      expect(await controller.attachThis(), isTrue);
+      expect(controller.draftControl?.name, 'Submit');
+      expect(controller.draftImages, isEmpty);
+    });
+
     test('a second capture over the overlay still goes back to how Gaia '
         'was before it', () async {
       main.companion.onEvent!('capture', capture('region', 'one.bmp'));
@@ -1834,6 +1891,197 @@ void main() {
         question.parts.whereType<GaiaContextPart>().single.url,
         chrome.url,
       );
+    });
+
+    group('/this (§15.5)', () {
+      const button = GaiaElementPart(
+        controlType: 'Button',
+        name: 'Submit assignment',
+        app: 'Google Chrome',
+        left: 1,
+        top: 2,
+        width: 3,
+        height: 4,
+      );
+
+      void pointAt(Map<String, Object?> params) =>
+          main.companion.onEvent!('pointed', params);
+
+      Future<GaiaRunToast> refusal() async {
+        final toasts = <GaiaRunToast>[];
+        final listening = controller.toasts.listen(toasts.add);
+        await controller.runBuiltin(GaiaBuiltin.thisControl);
+        await settle();
+        await listening.cancel();
+        expect(controller.draftControl, isNull);
+        return toasts.single;
+      }
+
+      test('attaches as a chip; the message carries it, once', () async {
+        pointAt({'control': button.toJson()});
+        await settle();
+        // Thrown away unless it's used.
+        expect(controller.draftControl, isNull);
+        await controller.runBuiltin(GaiaBuiltin.thisControl);
+        expect(controller.draftControl?.label, button.label);
+
+        runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+        await controller.send('What does it do?');
+        await settle();
+        expect(controller.draftControl, isNull);
+        await controller.send('And again');
+        await settle();
+
+        expect(
+          runner.sent.first.prompt,
+          '${button.preamble}\n\nWhat does it do?',
+        );
+        expect(runner.sent.last.prompt, 'And again');
+        final question = (await main.messages()).first;
+        expect(question.text, 'What does it do?');
+        expect(
+          question.parts.whereType<GaiaElementPart>().single.name,
+          button.name,
+        );
+      });
+
+      test('its crop finishing its upload leaves it on the message '
+          '(BUG-339)', () async {
+        final dir = await Directory.systemTemp.createTemp('gaia_crop');
+        addTearDown(() => dir.delete(recursive: true));
+        final crop = File(p.join(dir.path, 'crop.bmp'))..writeAsBytesSync([0]);
+        pointAt({'control': button.toJson(), 'crop': crop.path});
+        await settle();
+        await controller.runBuiltin(GaiaBuiltin.thisControl);
+        expect(controller.draftImages, hasLength(1));
+
+        runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+        await controller.send(
+          '${controller.draft.text} What does it do?',
+          images: controller.takeDraftImages(),
+        );
+        await settle();
+
+        final question = (await main.messages()).first;
+        expect(question.parts.whereType<GaiaImagePart>(), hasLength(1));
+        expect(
+          question.parts.whereType<GaiaElementPart>().single.name,
+          button.name,
+        );
+      });
+
+      test('a BMP crop is kept with the draft, as a PNG (BUG-340)', () async {
+        const width = 2;
+        const height = 2;
+        final bmp = BytesBuilder()
+          ..add(
+            (ByteData(54)
+                  ..setUint8(0, 0x42)
+                  ..setUint8(1, 0x4D)
+                  ..setUint32(2, 54 + width * height * 4, Endian.little)
+                  ..setUint32(10, 54, Endian.little)
+                  ..setUint32(14, 40, Endian.little)
+                  ..setInt32(18, width, Endian.little)
+                  ..setInt32(22, -height, Endian.little)
+                  ..setUint16(26, 1, Endian.little)
+                  ..setUint16(28, 32, Endian.little))
+                .buffer
+                .asUint8List(),
+          )
+          ..add(List.filled(width * height * 4, 0x80));
+        final dir = await Directory.systemTemp.createTemp('gaia_crop');
+        addTearDown(() => dir.delete(recursive: true));
+        final crop = File(p.join(dir.path, 'crop.bmp'))
+          ..writeAsBytesSync(bmp.toBytes());
+        pointAt({'control': button.toJson(), 'crop': crop.path});
+        await settle();
+        await controller.runBuiltin(GaiaBuiltin.thisControl);
+
+        for (var i = 0; i < 200 && main.media.isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        expect(main.media.values.single.take(4), [0x89, 0x50, 0x4E, 0x47]);
+        await settle();
+        expect(controller.draftImages.single.mediaId, main.media.keys.single);
+        // Only the draft's own file is left beside it.
+        final path = controller.draftImages.single.path;
+        for (var i = 0; i < 100; i++) {
+          final left = File(
+            path,
+          ).parent.listSync().where((file) => file.path.contains('-upload-'));
+          if (left.isEmpty) break;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        expect(
+          File(
+            path,
+          ).parent.listSync().where((file) => file.path.contains('-upload-')),
+          isEmpty,
+        );
+      });
+
+      test('removed from the draft, it stays out', () async {
+        pointAt({'control': button.toJson()});
+        await settle();
+        await controller.runBuiltin(GaiaBuiltin.thisControl);
+        controller.dropDraftControl();
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        expect(runner.sent.single.prompt, 'Hi');
+      });
+
+      test('used once: pointing again takes another summon', () async {
+        pointAt({'control': button.toJson()});
+        await settle();
+        await controller.runBuiltin(GaiaBuiltin.thisControl);
+        controller.dropDraftControl();
+        expect((await refusal()).title, 'Nothing to attach');
+      });
+
+      test('waits for a crop still being made, not the last summon', () async {
+        pointAt({'refused': 'sensitive'});
+        await settle();
+        pointAt({'reading': true});
+        var attached = false;
+        final running = controller.attachThis().then((ok) => attached = ok);
+        await settle();
+        expect(attached, isFalse);
+        expect(controller.draftControl, isNull);
+        pointAt({'control': button.toJson()});
+        await running;
+        expect(attached, isTrue);
+        expect(controller.draftControl?.label, button.label);
+      });
+
+      test('a sensitive field or an excluded app says why', () async {
+        pointAt({'refused': 'sensitive'});
+        await settle();
+        expect((await refusal()).body, contains('password'));
+        pointAt({'refused': 'excluded'});
+        await settle();
+        expect((await refusal()).body, contains('exclusion list'));
+        pointAt({'refused': 'unknown'});
+        await settle();
+        expect((await refusal()).body, contains("can't tell"));
+        pointAt({'refused': 'vault'});
+        await settle();
+        expect((await refusal()).body, contains('vault'));
+      });
+
+      test('nothing under the cursor says so', () async {
+        pointAt({});
+        await settle();
+        expect((await refusal()).title, 'Nothing to attach');
+      });
+
+      test('aborted, it refuses, and what was pointed at is gone', () async {
+        pointAt({'control': button.toJson()});
+        await settle();
+        await main.pipe.request('abort');
+        await settle();
+        expect((await refusal()).title, 'Gaia is aborted');
+      });
     });
 
     test('removed from the draft, it stays out', () async {
@@ -3186,10 +3434,10 @@ void main() {
 
     test('reads go through the main instance', () async {
       final tools = await hanging();
-      expect(await tools.call('voyager_calendar', {'from': 'x'}), (
-        text: 'read voyager_calendar',
-        isError: false,
-      ));
+      expect(
+        await tools.call('voyager_calendar', {'from': 'x'}),
+        const GaiaToolResult(text: 'read voyager_calendar', isError: false),
+      );
       expect(main.reads, ['voyager_calendar']);
     });
   });

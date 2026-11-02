@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io' show sleep;
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
@@ -41,7 +43,30 @@ const kGaiaMinimumWidth = 560.0;
 /// The foreground window; null when there's none, as on a locked session.
 GaiaForegroundWindow? gaiaForegroundWindow() {
   final hwnd = GetForegroundWindow();
-  if (hwnd == 0) return null;
+  return hwnd == 0 ? null : _describeWindow(hwnd);
+}
+
+/// Where the cursor is, and the top-level window under it: not always the
+/// one in front.
+typedef GaiaCursorTarget = ({int x, int y, GaiaForegroundWindow window});
+
+GaiaCursorTarget? gaiaCursorTarget() {
+  final cursor = calloc<POINT>();
+  try {
+    if (GetCursorPos(cursor) == 0) return null;
+    final under = WindowFromPoint(cursor.ref);
+    if (under == 0) return null;
+    return (
+      x: cursor.ref.x,
+      y: cursor.ref.y,
+      window: _describeWindow(GetAncestor(under, GA_ROOT)),
+    );
+  } finally {
+    free(cursor);
+  }
+}
+
+GaiaForegroundWindow _describeWindow(int hwnd) {
   final pid = calloc<Uint32>();
   final className = wsalloc(256);
   try {
@@ -286,6 +311,814 @@ String? _host(String url) {
   final host = Uri.tryParse(withScheme)?.host.toLowerCase();
   return host == null || host.isEmpty ? null : host;
 }
+
+/// Whether a control may never be read or typed into, whatever an agent or
+/// a page says: a password, card or one-time code field (§15.6). Enforced
+/// here because a prompt isn't a boundary; it goes by the control's name and
+/// never its value. A port of nus-desktop's `guide/sensitive.js`.
+bool gaiaSensitiveControl({
+  required bool isPassword,
+  required String type,
+  required String name,
+  required String automationId,
+}) {
+  if (isPassword) return true;
+  final kind = type.toLowerCase();
+  if (kind != 'edit' && kind != 'combobox') return false;
+  final text = '$name $automationId'
+      .replaceAllMapped(
+        RegExp('([a-z])([A-Z])'),
+        (match) => '${match[1]} ${match[2]}',
+      )
+      // An acronym's end and a digit are word breaks too: OTPInput, cvv2.
+      .replaceAllMapped(
+        RegExp('([A-Z])([A-Z][a-z])'),
+        (match) => '${match[1]} ${match[2]}',
+      )
+      .replaceAll(RegExp('(?<=[a-zA-Z])(?=[0-9])|(?<=[0-9])(?=[a-zA-Z])'), ' ')
+      .replaceAll(RegExp('[_-]'), ' ')
+      .toLowerCase();
+  return _sensitiveWords.hasMatch(text);
+}
+
+final _sensitiveWords = RegExp(
+  r'\b(password|passcode|passwd|pwd|pin|cvv|cvc|ssn|passport|otp)\b'
+  r'|\b(?:card|credit|debit|account|routing|social security|national id'
+  r'|government id|tax id|driver.?s? licen[cs]e)\s*(?:number|no|num)?\b'
+  r'|\b(?:security|verification|one time)\s*code\b',
+);
+
+/// The control under the cursor (§15.5), and the browser's address when its
+/// window is one's. A sensitive one has no [value], which was never read.
+typedef GaiaPointedControl = ({
+  String type,
+  String name,
+  String? value,
+  bool sensitive,
+  int left,
+  int top,
+  int width,
+  int height,
+  String? url,
+});
+
+/// How much of a control's name and value goes on a message, which is synced:
+/// a document's value can be all its text.
+const _maxControlName = 200;
+const _maxControlValue = 500;
+
+String _capped(String text, int most) =>
+    text.length > most ? '${text.substring(0, most)}…' : text;
+
+/// A [gaiaReadControl] isolate still running, as [_uiaReading] is for its
+/// read.
+var _controlReading = false;
+
+/// Reads the control under [target]'s point on a worker isolate within
+/// [kGaiaUiaBudget]. Null from a call over budget, or while an earlier one is
+/// still stuck, or where there's no control.
+Future<GaiaPointedControl?> gaiaReadControl(GaiaCursorTarget target) async {
+  if (_controlReading) return null;
+  final (:x, :y, :window) = target;
+  final browser = gaiaIsBrowser(window.exe);
+  final hwnd = window.hwnd;
+  _controlReading = true;
+  final read = Isolate.run(() {
+    final first = _readControl(x, y, hwnd, browser: browser);
+    if (first == null ||
+        !gaiaLooksAsleep(first.type, first.name) ||
+        !(browser || gaiaHostsChromiumPage(hwnd))) {
+      return first;
+    }
+    // Asked for, the tree wakes. A page still not in it can't be read, and what's
+    // under the cursor could be a sensitive field: no control, and no crop.
+    final scan = gaiaScanWindow(hwnd, browser: browser, text: false);
+    if (scan == null) return null;
+    sleep(const Duration(milliseconds: 100));
+    final again = _readControl(x, y, hwnd, browser: browser);
+    return again != null &&
+            gaiaLooksAsleep(again.type, again.name) &&
+            !scan.hasDocument
+        ? null
+        : again;
+  });
+  read.whenComplete(() => _controlReading = false).ignore();
+  try {
+    return await read.timeout(kGaiaUiaBudget);
+  } on TimeoutException {
+    return null;
+  }
+}
+
+/// What a first read of a sleeping page gives for any control on it.
+bool gaiaLooksAsleep(String type, String name) =>
+    name.isEmpty && (type == 'Pane' || type == 'Document');
+
+GaiaPointedControl? _readControl(
+  int x,
+  int y,
+  int hwnd, {
+  required bool browser,
+}) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  final uia = CUIAutomation.createInstance();
+  final point = calloc<POINT>();
+  final found = calloc<COMObject>();
+  final value = calloc<VARIANT>();
+  try {
+    point.ref
+      ..x = x
+      ..y = y;
+    if (FAILED(uia.elementFromPoint(point.ref, found.cast())) ||
+        found.ref.isNull) {
+      return null;
+    }
+    final element = _detached(IUIAutomationElement(found));
+    final type = _controlTypeName(element.currentControlType);
+    String text(Pointer<Utf16> bstr) {
+      if (bstr == nullptr) return '';
+      final read = bstr.toDartString();
+      SysFreeString(bstr);
+      return read.trim();
+    }
+
+    final name = text(element.currentName);
+    final bounds = _boundsOf(element);
+    // Decided before the value is touched, which a sensitive field never is.
+    final sensitive = gaiaSensitiveControl(
+      isPassword: element.currentIsPassword != 0,
+      type: type,
+      name: name,
+      automationId: text(element.currentAutomationId),
+    );
+    String? read;
+    if (!sensitive &&
+        SUCCEEDED(
+          element.getCurrentPropertyValue(UIA_ValueValuePropertyId, value),
+        ) &&
+        value.ref.vt == VT_BSTR) {
+      final held = value.ref.bstrVal.toDartString().trim();
+      if (held.isNotEmpty) read = _capped(held, _maxControlValue);
+    }
+    return (
+      type: type,
+      name: sensitive ? '' : _capped(name, _maxControlName),
+      value: read,
+      sensitive: sensitive,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.right - bounds.left,
+      height: bounds.bottom - bounds.top,
+      // For the exclusion list, which may name the site.
+      url: browser ? _addressBar(uia, hwnd) : null,
+    );
+  } on WindowsException {
+    // The control went away while it was being read.
+    return null;
+  } finally {
+    _releaseFound(found);
+    VariantClear(value);
+    free(found);
+    free(point);
+    free(value);
+    _release(uia);
+    CoUninitialize();
+  }
+}
+
+/// The window an `os_*` tool works on (§15.6), worked out when it runs: the
+/// one in front, or with Gaia or the shell in front, the next app window under
+/// it that isn't Gaia's. [gaiaPid] is the companion's. Null with nothing in
+/// front, as on a locked session, or nothing under it.
+GaiaForegroundWindow? gaiaOsTarget(int gaiaPid) {
+  final front = GetForegroundWindow();
+  if (front == 0) return null;
+  if (!_ownedBy(front, gaiaPid) &&
+      !gaiaIsShellWindow(front) &&
+      IsWindowVisible(front) != 0 &&
+      IsIconic(front) == 0) {
+    return _describeWindow(front);
+  }
+  for (
+    var next = GetWindow(front, GW_HWNDNEXT);
+    next != 0;
+    next = GetWindow(next, GW_HWNDNEXT)
+  ) {
+    if (_isAppWindow(next) && !_ownedBy(next, gaiaPid)) {
+      return _describeWindow(next);
+    }
+  }
+  return null;
+}
+
+bool _ownedBy(int hwnd, int pid) {
+  final owner = calloc<Uint32>();
+  try {
+    GetWindowThreadProcessId(hwnd, owner);
+    return owner.value == pid;
+  } finally {
+    free(owner);
+  }
+}
+
+/// What the user sees of [hwnd], without its invisible resize borders.
+({int left, int top, int width, int height}) gaiaWindowFrame(int hwnd) {
+  final rect = calloc<RECT>();
+  try {
+    if (FAILED(
+      DwmGetWindowAttribute(
+        hwnd,
+        DWMWA_EXTENDED_FRAME_BOUNDS,
+        rect,
+        sizeOf<RECT>(),
+      ),
+    )) {
+      GetWindowRect(hwnd, rect);
+    }
+    return (
+      left: rect.ref.left,
+      top: rect.ref.top,
+      width: rect.ref.right - rect.ref.left,
+      height: rect.ref.bottom - rect.ref.top,
+    );
+  } finally {
+    free(rect);
+  }
+}
+
+/// Pixels `PrintWindow` draws [hwnd] with per physical pixel: 1 for a
+/// per-monitor aware app, under 1 for one Windows scales up to its monitor.
+double gaiaWindowPrintScale(int hwnd) {
+  final dpiX = calloc<Uint32>();
+  final dpiY = calloc<Uint32>();
+  try {
+    final own = GetDpiForWindow(hwnd);
+    if (own == 0 ||
+        FAILED(
+          GetDpiForMonitor(
+            MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+            MDT_EFFECTIVE_DPI,
+            dpiX,
+            dpiY,
+          ),
+        ) ||
+        dpiX.value == 0) {
+      return 1;
+    }
+    return own / dpiX.value;
+  } finally {
+    free(dpiX);
+    free(dpiY);
+  }
+}
+
+/// How long an agent's read of the screen gets (§15.6): a whole window's tree,
+/// from an app that may have to wake its accessibility tree first.
+const kGaiaScreenBudget = Duration(seconds: 8);
+
+/// A [gaiaScreenWork] isolate still running.
+var _screenWorking = false;
+
+/// [work] on a worker isolate within [kGaiaScreenBudget], since cross-process
+/// calls can block for as long as the app does. Null over budget, or while an
+/// earlier one is still stuck, so they don't pile up.
+Future<T?> gaiaScreenWork<T>(T Function() work) async {
+  if (_screenWorking) return null;
+  _screenWorking = true;
+  final run = Isolate.run(work);
+  run.whenComplete(() => _screenWorking = false).ignore();
+  try {
+    return await run.timeout(kGaiaScreenBudget);
+  } on TimeoutException {
+    return null;
+  }
+}
+
+/// A browser's address, for the exclusion list; call within [gaiaScreenWork].
+String? gaiaReadAddress(int hwnd) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  final uia = CUIAutomation.createInstance();
+  try {
+    return _addressBar(uia, hwnd);
+  } finally {
+    _release(uia);
+    CoUninitialize();
+  }
+}
+
+/// How much of a window's tree goes to the agent, and of one leaf's text: what
+/// a terminal or an editor holds.
+const _maxTreeText = 60000;
+const _maxLeafText = 20000;
+
+/// Containers with nothing to say of their own: their children stand in for
+/// them, a level up.
+const _silentControls = {'Pane', 'Group', 'Control', 'Image', 'Text'};
+
+/// Types whose value is worth asking for. Each is a call to the app, so not
+/// every control's.
+const _valueControls = {'Edit', 'ComboBox', 'Document', 'Spinner', 'Slider'};
+
+/// A window's controls (§15.6). [sensitive] are the bounds of the fields no
+/// tool may read, whose subtrees aren't looked into and whose values are never
+/// asked for.
+typedef GaiaWindowScan = ({
+  String? url,
+  String tree,
+  bool cut,
+  List<({int left, int top, int right, int bottom})> sensitive,
+  List<GaiaControlMatch> matches,
+  int controls,
+  bool hasDocument,
+  bool sensitiveFocused,
+  bool anyFocused,
+});
+
+/// A control [gaiaScanWindow] was asked to find. A sensitive one's [type] and
+/// name stay in the worker's scan: only that it matched comes out.
+typedef GaiaControlMatch = ({
+  String type,
+  bool sensitive,
+  int left,
+  int top,
+  int right,
+  int bottom,
+});
+
+/// Whether a control's [name] and [type] are what an agent asked for. Names are
+/// as `os_read_screen` shows them, where a long one ends in an ellipsis.
+bool gaiaControlMatches(
+  ({String name, String? type}) find, {
+  required String name,
+  required String type,
+}) {
+  if (find.type case final wanted?
+      when wanted.toLowerCase() != type.toLowerCase()) {
+    return false;
+  }
+  final shown = _capped(name, _maxControlName).trim().toLowerCase();
+  return shown.isNotEmpty && shown == find.name.trim().toLowerCase();
+}
+
+/// One look at what has focus. Not [held] when UI Automation answered with
+/// something that doesn't hold the keyboard focus, as its first answer about a
+/// sleeping page does.
+typedef GaiaFocusRead = ({bool held, bool sensitive});
+
+/// Whether what has focus can't be typed into (§15.6). Asking UI Automation what
+/// has focus proves little for a [web] page: its first answer is an unnamed Pane
+/// whatever has focus, and on Firefox the call can block for as long as the app
+/// runs. So a page is asked through its tree, once that shows the page. Elsewhere,
+/// and if the tree doesn't say, an answer that doesn't hold focus is asked again,
+/// and then the tree is. Not knowing counts as sensitive if the window has a
+/// sensitive field.
+bool gaiaSettleFocus(
+  GaiaFocusRead? Function() read,
+  GaiaWindowScan? Function() scan, {
+  required bool web,
+  required void Function() wait,
+  int tries = 8,
+}) {
+  if (web) {
+    final seen = gaiaSettleScan(scan, web: true, wait: wait);
+    if (seen == null || seen.sensitiveFocused) return true;
+    if (seen.anyFocused) return false;
+  }
+  for (var i = 0; i < tries; i++) {
+    final look = read();
+    if (look == null || look.sensitive) return true;
+    if (look.held) return false;
+    wait();
+  }
+  final seen = scan();
+  if (seen == null || seen.sensitiveFocused) return true;
+  if (seen.anyFocused) return false;
+  return seen.sensitive.isNotEmpty;
+}
+
+/// [gaiaSettleFocus] for what has focus in [hwnd], in front; call within
+/// [gaiaScreenWork].
+bool gaiaFocusSensitive(int hwnd, {required bool browser}) => gaiaSettleFocus(
+  _readFocus,
+  () => gaiaScanWindow(hwnd, browser: browser, text: false),
+  web: browser || gaiaHostsChromiumPage(hwnd),
+  wait: () => sleep(const Duration(milliseconds: 250)),
+);
+
+/// Null when it can't be asked.
+GaiaFocusRead? _readFocus() {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  final uia = CUIAutomation.createInstance();
+  final focused = calloc<COMObject>();
+  try {
+    if (FAILED(uia.getFocusedElement(focused.cast())) || focused.ref.isNull) {
+      return null;
+    }
+    final element = _detached(IUIAutomationElement(focused));
+    return (
+      held: element.currentHasKeyboardFocus != 0,
+      sensitive: gaiaSensitiveControl(
+        isPassword: element.currentIsPassword != 0,
+        type: _controlTypeName(element.currentControlType),
+        name: _taken(element.currentName),
+        automationId: _taken(element.currentAutomationId),
+      ),
+    );
+  } on WindowsException {
+    return null;
+  } finally {
+    _releaseFound(focused);
+    free(focused);
+    _release(uia);
+    CoUninitialize();
+  }
+}
+
+/// [hwnd], described as [gaiaOsTarget] describes a window.
+GaiaForegroundWindow gaiaDescribeWindow(int hwnd) => _describeWindow(hwnd);
+
+/// Whether [hwnd] is the shell or one of the process [pid]'s: what can be in
+/// front of a window an `os_*` action is about to activate (§15.6).
+bool gaiaInFrontOfTarget(int hwnd, int pid) =>
+    _ownedBy(hwnd, pid) || gaiaIsShellWindow(hwnd);
+
+/// Whether a Chromium page lives in [hwnd], as in Electron and WebView2 apps.
+bool gaiaHostsChromiumPage(int hwnd) {
+  final className = wsalloc(64);
+  try {
+    bool within(int parent) {
+      for (
+        var child = FindWindowEx(parent, 0, nullptr, nullptr);
+        child != 0;
+        child = FindWindowEx(parent, child, nullptr, nullptr)
+      ) {
+        GetClassName(child, className, 64);
+        if (className.toDartString() == 'Chrome_RenderWidgetHostHWND' ||
+            within(child)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    return within(hwnd);
+  } finally {
+    free(className);
+  }
+}
+
+/// The scan a screenshot's sensitive fields can be decided from (§15.6). An app
+/// may build its tree only once it's asked for one: a Chromium page isn't in
+/// its window's tree until about 300 ms after the first read, or at all while
+/// the page is covered. So one read says nothing: it takes two that agree, and
+/// with [web] content, one that shows the page. Null when it never does.
+GaiaWindowScan? gaiaSettleScan(
+  GaiaWindowScan? Function() read, {
+  required bool web,
+  required void Function() wait,
+  int tries = 16,
+}) {
+  var scan = read();
+  for (var i = 0; scan != null && i < tries; i++) {
+    wait();
+    final next = read();
+    final settled =
+        next != null &&
+        next.controls == scan.controls &&
+        (!web || next.hasDocument);
+    scan = next;
+    if (settled) return scan;
+  }
+  // An app whose tree never stops changing still has its latest read.
+  return scan == null || (web && !scan.hasDocument) ? null : scan;
+}
+
+/// Reads [hwnd]'s controls in one fetch of its tree; call within
+/// [gaiaScreenWork]. With [text] off, only what [GaiaWindowScan.sensitive]
+/// needs. [region] keeps the tree to controls touching it, in physical screen
+/// pixels. [find] fills [GaiaWindowScan.matches] with the on-screen controls
+/// of that name. Null when its tree couldn't be read at all.
+GaiaWindowScan? gaiaScanWindow(
+  int hwnd, {
+  required bool browser,
+  required bool text,
+  ({int left, int top, int width, int height})? region,
+  ({String name, String? type})? find,
+}) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  final uia = CUIAutomation.createInstance();
+  final root = calloc<COMObject>();
+  final request = calloc<COMObject>();
+  final cached = calloc<COMObject>();
+  try {
+    final url = browser ? _addressBar(uia, hwnd) : null;
+    if (FAILED(uia.elementFromHandle(hwnd, root.cast())) ||
+        root.ref.isNull ||
+        FAILED(uia.createCacheRequest(request.cast())) ||
+        request.ref.isNull) {
+      return null;
+    }
+    final cache = _detached(IUIAutomationCacheRequest(request));
+    for (final property in const [
+      UIA_ControlTypePropertyId,
+      UIA_NamePropertyId,
+      UIA_AutomationIdPropertyId,
+      UIA_IsPasswordPropertyId,
+      UIA_IsOffscreenPropertyId,
+      UIA_BoundingRectanglePropertyId,
+      UIA_IsTextPatternAvailablePropertyId,
+      UIA_HasKeyboardFocusPropertyId,
+    ]) {
+      cache.addProperty(property);
+    }
+    cache.treeScope = TreeScope_Subtree;
+    final hr = _detached(IUIAutomationElement(root)).buildUpdatedCache(
+      // The request itself, not the slot holding it.
+      request.ref.lpVtbl.cast(),
+      cached.cast(),
+    );
+    if (FAILED(hr) || cached.ref.isNull) return null;
+    final lines = StringBuffer();
+    final sensitive = <({int left, int top, int right, int bottom})>[];
+    final matches = <GaiaControlMatch>[];
+    var cut = false;
+    var controls = 0;
+    var hasDocument = false;
+    var sensitiveFocused = false;
+    var anyFocused = false;
+
+    void matchIf(
+      IUIAutomationElement element,
+      String type,
+      String name,
+      ({int left, int top, int right, int bottom}) bounds, {
+      required bool isSensitive,
+    }) {
+      if (find == null ||
+          element.cachedIsOffscreen != 0 ||
+          bounds.right <= bounds.left ||
+          bounds.bottom <= bounds.top ||
+          !gaiaControlMatches(find, name: name, type: type)) {
+        return;
+      }
+      matches.add((
+        type: type,
+        sensitive: isSensitive,
+        left: bounds.left,
+        top: bounds.top,
+        right: bounds.right,
+        bottom: bounds.bottom,
+      ));
+    }
+
+    bool inRegion(({int left, int top, int right, int bottom}) bounds) =>
+        region == null ||
+        (bounds.left < region.left + region.width &&
+            bounds.right > region.left &&
+            bounds.top < region.top + region.height &&
+            bounds.bottom > region.top);
+
+    void walk(IUIAutomationElement element, int depth) {
+      if (text && lines.length >= _maxTreeText) {
+        cut = true;
+        return;
+      }
+      final type = _controlTypeName(element.cachedControlType);
+      controls++;
+      if (type == 'Document') hasDocument = true;
+      final focused = element.cachedHasKeyboardFocus != 0;
+      if (focused) anyFocused = true;
+      final name = _taken(element.cachedName);
+      final bounds = _boundsOf(element, cached: true);
+      final place =
+          '[${bounds.left},${bounds.top} '
+          '${bounds.right - bounds.left}x${bounds.bottom - bounds.top}]';
+      // Decided before any value is touched, which a sensitive field's never
+      // is. Nor its children: a web field's text can be one.
+      if (gaiaSensitiveControl(
+        isPassword: element.cachedIsPassword != 0,
+        type: type,
+        name: name,
+        automationId: _taken(element.cachedAutomationId),
+      )) {
+        sensitive.add(bounds);
+        if (focused) sensitiveFocused = true;
+        matchIf(element, type, name, bounds, isSensitive: true);
+        if (text && inRegion(bounds)) {
+          lines.writeln('${'  ' * depth}$type (sensitive, not read) $place');
+        }
+        return;
+      }
+      matchIf(element, type, name, bounds, isSensitive: false);
+      final children = calloc<COMObject>();
+      try {
+        element.getCachedChildren(children.cast());
+        final leaf = children.ref.isNull;
+        var printed = false;
+        if (text && element.cachedIsOffscreen == 0 && inRegion(bounds)) {
+          final value = _valueControls.contains(type) || leaf
+              ? _valueOf(element, type, leaf: leaf)
+              : null;
+          if (value != null && value.length >= _maxLeafText) cut = true;
+          if (name.isNotEmpty ||
+              value != null ||
+              !_silentControls.contains(type)) {
+            // As JSON strings, so what a page says can't pass for another line.
+            lines.writeln(
+              '${'  ' * depth}$type'
+              '${name.isEmpty ? '' : ' ${jsonEncode(_capped(name, _maxControlName))}'}'
+              '${value == null ? '' : ' = ${jsonEncode(value)}'}'
+              ' $place',
+            );
+            printed = true;
+          }
+        }
+        if (leaf) return;
+        final array = _detached(IUIAutomationElementArray(children));
+        for (var i = 0; i < array.length; i++) {
+          final child = calloc<COMObject>();
+          try {
+            if (SUCCEEDED(array.getElement(i, child.cast())) &&
+                !child.ref.isNull) {
+              walk(
+                _detached(IUIAutomationElement(child)),
+                printed ? depth + 1 : depth,
+              );
+            }
+          } finally {
+            _releaseFound(child);
+            free(child);
+          }
+        }
+      } finally {
+        _releaseFound(children);
+        free(children);
+      }
+    }
+
+    walk(_detached(IUIAutomationElement(cached)), 0);
+    return (
+      url: url,
+      tree: lines.toString().trimRight(),
+      cut: cut,
+      sensitive: sensitive,
+      matches: matches,
+      controls: controls,
+      hasDocument: hasDocument,
+      sensitiveFocused: sensitiveFocused,
+      anyFocused: anyFocused,
+    );
+  } on WindowsException {
+    // The window went away while it was being read.
+    return null;
+  } finally {
+    [root, request, cached].forEach(_releaseFound);
+    free(root);
+    free(request);
+    free(cached);
+    _release(uia);
+    CoUninitialize();
+  }
+}
+
+/// What [element] holds: its value, or for a leaf with a TextPattern and no
+/// value, all its text, as a terminal's. Only a leaf's: a document with
+/// children has its fields among them, sensitive ones too.
+String? _valueOf(
+  IUIAutomationElement element,
+  String type, {
+  required bool leaf,
+}) {
+  final value = calloc<VARIANT>();
+  final available = calloc<VARIANT>();
+  final pattern = calloc<COMObject>();
+  Pointer<COMObject>? range;
+  final bstr = calloc<Pointer<Utf16>>();
+  try {
+    if (_valueControls.contains(type) &&
+        SUCCEEDED(
+          element.getCurrentPropertyValue(UIA_ValueValuePropertyId, value),
+        ) &&
+        value.ref.vt == VT_BSTR) {
+      final held = value.ref.bstrVal.toDartString().trim();
+      if (held.isNotEmpty) return _capped(held, _maxLeafText);
+    }
+    if (!leaf ||
+        FAILED(
+          element.getCachedPropertyValue(
+            UIA_IsTextPatternAvailablePropertyId,
+            available,
+          ),
+        ) ||
+        available.ref.vt != VT_BOOL ||
+        !available.ref.boolVal ||
+        FAILED(element.getCurrentPattern(UIA_TextPatternId, pattern.cast())) ||
+        pattern.ref.isNull) {
+      return null;
+    }
+    range = _detached(IUIAutomationTextPattern(pattern)).documentRange;
+    if (FAILED(
+          _detached(IUIAutomationTextRange(range)).getText(_maxLeafText, bstr),
+        ) ||
+        bstr.value == nullptr) {
+      return null;
+    }
+    final read = bstr.value.toDartString().trim();
+    SysFreeString(bstr.value);
+    return read.isEmpty ? null : read;
+  } on WindowsException {
+    return null;
+  } finally {
+    if (range != null) {
+      _releaseFound(range);
+      free(range);
+    }
+    _releaseFound(pattern);
+    VariantClear(value);
+    VariantClear(available);
+    free(value);
+    free(available);
+    free(pattern);
+    free(bstr);
+  }
+}
+
+/// A BSTR the caller owns as text, freed.
+String _taken(Pointer<Utf16> bstr) {
+  if (bstr == nullptr) return '';
+  final read = bstr.toDartString().trim();
+  SysFreeString(bstr);
+  return read;
+}
+
+/// [element]'s bounds, in physical screen pixels, or as [cached]. Not through
+/// the package's `currentBoundingRectangle` or `cachedBoundingRectangle`, which
+/// hand back a view of memory they've already freed (win32 5.15).
+({int left, int top, int right, int bottom}) _boundsOf(
+  IUIAutomationElement element, {
+  bool cached = false,
+}) {
+  final rect = calloc<RECT>();
+  try {
+    final hr = (element.ptr.ref.vtable + (cached ? 75 : 43))
+        .cast<Pointer<NativeFunction<Int32 Function(Pointer, Pointer<RECT>)>>>()
+        .value
+        .asFunction<
+          int Function(Pointer, Pointer<RECT>)
+        >()(element.ptr.ref.lpVtbl, rect);
+    if (FAILED(hr)) throw WindowsException(hr);
+    return (
+      left: rect.ref.left,
+      top: rect.ref.top,
+      right: rect.ref.right,
+      bottom: rect.ref.bottom,
+    );
+  } finally {
+    free(rect);
+  }
+}
+
+/// UI Automation's own name for a control type; "Control" for any other.
+String _controlTypeName(int id) => switch (id) {
+  UIA_ButtonControlTypeId => 'Button',
+  UIA_CalendarControlTypeId => 'Calendar',
+  UIA_CheckBoxControlTypeId => 'CheckBox',
+  UIA_ComboBoxControlTypeId => 'ComboBox',
+  UIA_DataGridControlTypeId => 'DataGrid',
+  UIA_DataItemControlTypeId => 'DataItem',
+  UIA_DocumentControlTypeId => 'Document',
+  UIA_EditControlTypeId => 'Edit',
+  UIA_GroupControlTypeId => 'Group',
+  UIA_HeaderControlTypeId => 'Header',
+  UIA_HeaderItemControlTypeId => 'HeaderItem',
+  UIA_HyperlinkControlTypeId => 'Link',
+  UIA_ImageControlTypeId => 'Image',
+  UIA_ListControlTypeId => 'List',
+  UIA_ListItemControlTypeId => 'ListItem',
+  UIA_MenuControlTypeId => 'Menu',
+  UIA_MenuBarControlTypeId => 'MenuBar',
+  UIA_MenuItemControlTypeId => 'MenuItem',
+  UIA_PaneControlTypeId => 'Pane',
+  UIA_ProgressBarControlTypeId => 'ProgressBar',
+  UIA_RadioButtonControlTypeId => 'RadioButton',
+  UIA_ScrollBarControlTypeId => 'ScrollBar',
+  UIA_SliderControlTypeId => 'Slider',
+  UIA_SpinnerControlTypeId => 'Spinner',
+  UIA_SplitButtonControlTypeId => 'SplitButton',
+  UIA_StatusBarControlTypeId => 'StatusBar',
+  UIA_TabControlTypeId => 'Tab',
+  UIA_TabItemControlTypeId => 'TabItem',
+  UIA_TableControlTypeId => 'Table',
+  UIA_TextControlTypeId => 'Text',
+  UIA_ThumbControlTypeId => 'Thumb',
+  UIA_TitleBarControlTypeId => 'TitleBar',
+  UIA_ToolBarControlTypeId => 'ToolBar',
+  UIA_ToolTipControlTypeId => 'ToolTip',
+  UIA_TreeControlTypeId => 'Tree',
+  UIA_TreeItemControlTypeId => 'TreeItem',
+  UIA_WindowControlTypeId => 'Window',
+  _ => 'Control',
+};
 
 /// A [gaiaReadUia] isolate still running, maybe long after its budget, on
 /// a hung app's UI Automation call.

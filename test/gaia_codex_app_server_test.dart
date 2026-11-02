@@ -29,7 +29,7 @@ class _Tools implements GaiaTurnTools {
   ) async {
     asked.add(arguments);
     final options = (arguments['options'] as List?) ?? const [];
-    return (
+    return GaiaToolResult(
       text: 'The user chose: "${(options.last as Map)['label']}".',
       isError: false,
     );

@@ -25,7 +25,13 @@ class GaiaCardView extends StatelessWidget {
     this.onReject,
     this.onEdit,
     this.onAcceptAll,
+    this.onRunAll,
+    this.onRunNext,
   });
+
+  /// A control card's approvals (§15.6), which only the desktop offers.
+  final VoidCallback? onRunAll;
+  final VoidCallback? onRunNext;
 
   final GaiaCardPart card;
 
@@ -65,6 +71,16 @@ class GaiaCardView extends StatelessWidget {
         onEdit: onEdit,
         onAccept: onAllow,
         onAcceptAll: onAcceptAll,
+        onReject: onReject,
+      );
+    }
+    if (card.kind == GaiaCardKind.control) {
+      return _ControlCard(
+        card: card,
+        waiting: waiting,
+        sendKey: sendKey,
+        onRunAll: onRunAll,
+        onRunNext: onRunNext,
         onReject: onReject,
       );
     }
@@ -222,6 +238,176 @@ class GaiaCardView extends StatelessWidget {
       GaiaCardState.voided => 'Cancelled',
       GaiaCardState.expired => 'No answer in time',
     };
+  }
+}
+
+/// Whether control [card]'s remaining steps can be approved in one go: every
+/// one shows its resolved target (§15.6).
+bool gaiaControlCanRunAll(GaiaCardPart card) {
+  final ran = (card.answer?['ran'] as num?)?.toInt() ?? 0;
+  return [
+    for (final step in (card.input['steps'] as List? ?? const []).skip(ran))
+      (step as Map)['resolved'] == true,
+  ].every((resolved) => resolved);
+}
+
+/// A step list (§15.6): the window, and every step with its target, ticked as
+/// it runs.
+class _ControlCard extends StatelessWidget {
+  const _ControlCard({
+    required this.card,
+    required this.waiting,
+    required this.sendKey,
+    required this.onRunAll,
+    required this.onRunNext,
+    required this.onReject,
+  });
+
+  final GaiaCardPart card;
+  final bool waiting;
+  final String? sendKey;
+  final VoidCallback? onRunAll;
+  final VoidCallback? onRunNext;
+  final VoidCallback? onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final steps = [
+      for (final step in card.input['steps'] as List? ?? const [])
+        (step as Map).cast<String, Object?>(),
+    ];
+    final ran = (card.answer?['ran'] as num?)?.toInt() ?? 0;
+    final stopped = card.answer?['stopped'] as String?;
+    final message = card.answer?['message'] as String?;
+    final answerable = card.isOpen && waiting;
+    final canRunAll = gaiaControlCanRunAll(card);
+    final outcome = switch (card.state) {
+      GaiaCardState.open when answerable && onRunAll == null =>
+        'Waiting for approval at the desktop',
+      GaiaCardState.open when answerable => [
+        if (sendKey != null)
+          '$sendKey runs ${canRunAll ? 'all' : 'the next step'}',
+        'or type why not',
+        'Esc stops a run',
+      ].join(' · '),
+      GaiaCardState.open => 'No longer waiting',
+      GaiaCardState.accepted when stopped != null =>
+        'Stopped after $ran of ${steps.length}: $stopped',
+      GaiaCardState.accepted => 'Ran all ${steps.length}',
+      GaiaCardState.rejected =>
+        'Declined after $ran of ${steps.length}'
+            '${message == null ? '' : ': "$message"'}',
+      GaiaCardState.voided => 'Cancelled after $ran of ${steps.length}',
+      GaiaCardState.expired => 'No answer in time',
+    };
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 520),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: (answerable ? accent : theme.colorScheme.outlineVariant)
+              .withValues(alpha: answerable ? 0.7 : 0.4),
+        ),
+        color: accent.withValues(alpha: answerable ? 0.08 : 0.03),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.pan_tool_alt, size: 16, color: kGaiaAstralGold),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Control ${card.input['window'] ?? 'a window'}?',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final (i, step) in steps.indexed)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: i < ran
+                        ? Icon(Icons.check, size: 14, color: accent)
+                        : Text(
+                            '${i + 1}',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                  ),
+                  Expanded(
+                    child: SelectableText(
+                      '${step['label'] ?? ''}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: AppFonts.monoFamily,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  outcome,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color:
+                        card.state == GaiaCardState.accepted && stopped == null
+                        ? theme.colorScheme.outline
+                        : answerable
+                        ? theme.colorScheme.outline
+                        : kGaiaStatusRose,
+                  ),
+                ),
+              ),
+              if (answerable && onReject != null)
+                GaiaButton(
+                  label: 'Deny',
+                  onPressed: onReject,
+                  size: 28,
+                  color: theme.colorScheme.error,
+                ),
+              if (answerable &&
+                  onRunNext != null &&
+                  steps.length - ran > 1) ...[
+                const SizedBox(width: 8),
+                GaiaButton(label: 'Next step', onPressed: onRunNext, size: 28),
+              ],
+              if (answerable && onRunAll != null && canRunAll) ...[
+                const SizedBox(width: 8),
+                GaiaButton(
+                  label: steps.length - ran > 1 ? 'Run all' : 'Run',
+                  onPressed: onRunAll,
+                  size: 28,
+                ),
+              ] else if (answerable &&
+                  onRunNext != null &&
+                  steps.length - ran == 1) ...[
+                const SizedBox(width: 8),
+                GaiaButton(label: 'Run', onPressed: onRunNext, size: 28),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

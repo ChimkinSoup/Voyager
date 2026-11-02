@@ -15,7 +15,7 @@ class _Tools implements GaiaTurnTools {
   @override
   Future<GaiaToolResult> call(String name, Map<String, Object?> arguments) {
     calls.add((name, arguments));
-    return Future.value((text: 'did $name', isError: false));
+    return Future.value(GaiaToolResult(text: 'did $name', isError: false));
   }
 
   @override
@@ -65,6 +65,14 @@ void main() {
         'propose_journal_entry',
         'memory_search',
         'memory_propose',
+        'os_focused_window',
+        'os_read_screen',
+        'os_screenshot',
+        'os_click',
+        'os_scroll',
+        'os_type',
+        'os_key',
+        'os_steps',
       ]);
       for (final tool in tools) {
         expect(tool['name'], matches(RegExp(r'^[a-zA-Z0-9_-]{1,64}$')));
@@ -93,41 +101,50 @@ void main() {
       });
     });
 
-    test('a call outside a turn, or to no such tool, fails as a result', () async {
-      Future<Map<String, Object?>> call(String name, GaiaTurnTools? tools) async =>
-          (await gaiaMcpAnswer({
-                    'jsonrpc': '2.0',
-                    'id': 3,
-                    'method': 'tools/call',
-                    'params': {'name': name},
-                  }, tools))!['result']!
-              as Map<String, Object?>;
-      expect(await call('ask_user', null), {
-        'content': [
-          {'type': 'text', 'text': 'No Gaia run is active.'},
-        ],
-        'isError': true,
-      });
-      final tools = _Tools();
-      expect((await call('rm_rf', tools))['isError'], isTrue);
-      expect(tools.calls, isEmpty);
-    });
+    test(
+      'a call outside a turn, or to no such tool, fails as a result',
+      () async {
+        Future<Map<String, Object?>> call(
+          String name,
+          GaiaTurnTools? tools,
+        ) async =>
+            (await gaiaMcpAnswer({
+                  'jsonrpc': '2.0',
+                  'id': 3,
+                  'method': 'tools/call',
+                  'params': {'name': name},
+                }, tools))!['result']!
+                as Map<String, Object?>;
+        expect(await call('ask_user', null), {
+          'content': [
+            {'type': 'text', 'text': 'No Gaia run is active.'},
+          ],
+          'isError': true,
+        });
+        final tools = _Tools();
+        expect((await call('rm_rf', tools))['isError'], isTrue);
+        expect(tools.calls, isEmpty);
+      },
+    );
 
-    test('a notification has no answer; an unknown method is an error', () async {
-      expect(
-        await gaiaMcpAnswer({
+    test(
+      'a notification has no answer; an unknown method is an error',
+      () async {
+        expect(
+          await gaiaMcpAnswer({
+            'jsonrpc': '2.0',
+            'method': 'notifications/initialized',
+          }, null),
+          isNull,
+        );
+        final answer = await gaiaMcpAnswer({
           'jsonrpc': '2.0',
-          'method': 'notifications/initialized',
-        }, null),
-        isNull,
-      );
-      final answer = await gaiaMcpAnswer({
-        'jsonrpc': '2.0',
-        'id': 4,
-        'method': 'resources/list',
-      }, null);
-      expect((answer!['error']! as Map)['code'], -32601);
-    });
+          'id': 4,
+          'method': 'resources/list',
+        }, null);
+        expect((answer!['error']! as Map)['code'], -32601);
+      },
+    );
   });
 
   group('a card part', () {
@@ -180,7 +197,10 @@ void main() {
         GaiaCardPart,
         GaiaTextPart,
       ]);
-      expect((builder.finished[1] as GaiaCardPart).state, GaiaCardState.accepted);
+      expect(
+        (builder.finished[1] as GaiaCardPart).state,
+        GaiaCardState.accepted,
+      );
     });
   });
 
@@ -224,6 +244,33 @@ void main() {
       drop: (cardId) => dropped.add(cardId),
     );
 
+    /// What the main instance answers for a step list, and what it was asked.
+    late List<Map<String, Object?>> planned;
+    late List<bool> runs;
+    late List<String> controlDropped;
+    Map<String, Object?> Function(int call)? runAnswer;
+    Object? planError;
+    const steps = [
+      {'label': 'Press A', 'resolved': true},
+      {'label': 'Press B', 'resolved': true},
+    ];
+    final control = (
+      plan: (String cardId, String tool, Map<String, Object?> arguments) async {
+        if (planError case final error?) throw error;
+        planned.add(arguments);
+        return <String, Object?>{
+          'window': 'Notepad: "notes.txt"',
+          'app': 'Notepad',
+          'steps': steps,
+        };
+      },
+      run: (String cardId, {required bool once}) async {
+        runs.add(once);
+        return runAnswer!(runs.length);
+      },
+      drop: (String cardId) => controlDropped.add(cardId),
+    );
+
     GaiaChatTools tools({Duration hold = const Duration(hours: 1)}) =>
         GaiaChatTools(
           chatId: 'chat',
@@ -234,12 +281,20 @@ void main() {
             if (arguments['fail'] == true) throw GaiaToolException('bad range');
             return 'data for $tool';
           },
+          screen: (tool, _) async =>
+              GaiaToolResult(text: 'screen $tool', isError: false),
           proposals: proposals,
+          control: control,
           aborted: () => aborted,
           hold: hold,
         );
 
     setUp(() {
+      planned = [];
+      runs = [];
+      controlDropped = [];
+      runAnswer = null;
+      planError = null;
       cards = GaiaCards();
       raised = [];
       aborted = false;
@@ -264,7 +319,10 @@ void main() {
         'fields': edited,
         'token': token,
       });
-      expect(await result, (text: 'Saved a new task (id t9)', isError: false));
+      expect(
+        await result,
+        GaiaToolResult(text: 'Saved a new task (id t9)', isError: false),
+      );
       final (cardId, sentToken, fields) = committed.single;
       expect((cardId, sentToken), (card.id, token));
       expect(fields, edited);
@@ -290,7 +348,7 @@ void main() {
     test('a proposal the main instance refuses raises no card', () async {
       expect(
         await tools().call('propose_todo', {'fail': true}),
-        (text: 'No todo list is called "Nope".', isError: true),
+        GaiaToolResult(text: 'No todo list is called "Nope".', isError: true),
       );
       expect(raised, isEmpty);
     });
@@ -299,7 +357,10 @@ void main() {
       final result = tools().call('propose_todo', {});
       await pumpEventQueue();
       cards.voidAll();
-      expect(await result, (text: 'aborted: Gaia is aborted.', isError: true));
+      expect(
+        await result,
+        GaiaToolResult(text: 'aborted: Gaia is aborted.', isError: true),
+      );
       expect(committed, isEmpty);
       expect(dropped, hasLength(1));
       expect(raised.last.state, GaiaCardState.voided);
@@ -323,9 +384,9 @@ void main() {
     test('a proposal left for the hour expires with nothing written', () {
       fakeAsync((async) {
         GaiaToolResult? answer;
-        tools(hold: const Duration(minutes: 1))
-            .call('propose_todo', {})
-            .then((value) => answer = value);
+        tools(
+          hold: const Duration(minutes: 1),
+        ).call('propose_todo', {}).then((value) => answer = value);
         async.elapse(const Duration(minutes: 2));
         expect(answer!.text, contains('nothing was written'));
         expect(raised.last.state, GaiaCardState.expired);
@@ -346,55 +407,62 @@ void main() {
       expect(raised, isEmpty);
     });
 
-    test('ask_user raises a card and returns what the user picked and wrote',
-        () async {
-      final result = tools().call('ask_user', {
-        'question': ' Which colour? ',
-        'options': [
-          {'label': 'Red', 'description': 'warm'},
-          {'label': 'Blue'},
-          {'label': '  '},
-        ],
-        'recommended': 'Blue',
-      });
-      await pumpEventQueue();
-      final card = raised.single;
-      expect(card.question, 'Which colour?');
-      expect(card.options.map((o) => o.label), ['Red', 'Blue']);
-      expect(card.recommended, 1);
-      expect(cards.isWaiting(card.id), isTrue);
-      expect(
-        cards.decide(card.id, GaiaCardState.accepted, {
-          'selected': ['Blue'],
-          'text': 'navy if you can',
-        }),
-        isTrue,
-      );
-      expect(
-        await result,
-        (
-          text: 'The user chose: "Blue".\nThe user wrote: navy if you can',
-          isError: false,
-        ),
-      );
-      expect(raised.last.id, card.id);
-      expect(raised.last.state, GaiaCardState.accepted);
-      expect(raised.last.question, 'Which colour?', reason: 'kept whole');
-      expect(cards.isWaiting(card.id), isFalse);
-    });
+    test(
+      'ask_user raises a card and returns what the user picked and wrote',
+      () async {
+        final result = tools().call('ask_user', {
+          'question': ' Which colour? ',
+          'options': [
+            {'label': 'Red', 'description': 'warm'},
+            {'label': 'Blue'},
+            {'label': '  '},
+          ],
+          'recommended': 'Blue',
+        });
+        await pumpEventQueue();
+        final card = raised.single;
+        expect(card.question, 'Which colour?');
+        expect(card.options.map((o) => o.label), ['Red', 'Blue']);
+        expect(card.recommended, 1);
+        expect(cards.isWaiting(card.id), isTrue);
+        expect(
+          cards.decide(card.id, GaiaCardState.accepted, {
+            'selected': ['Blue'],
+            'text': 'navy if you can',
+          }),
+          isTrue,
+        );
+        expect(
+          await result,
+          GaiaToolResult(
+            text: 'The user chose: "Blue".\nThe user wrote: navy if you can',
+            isError: false,
+          ),
+        );
+        expect(raised.last.id, card.id);
+        expect(raised.last.state, GaiaCardState.accepted);
+        expect(raised.last.question, 'Which colour?', reason: 'kept whole');
+        expect(cards.isWaiting(card.id), isFalse);
+      },
+    );
 
-    test('ask_user without a question, or with ten options, is refused', () async {
-      expect((await tools().call('ask_user', {})).isError, isTrue);
-      final ten = [
-        for (var i = 0; i < 10; i++) {'label': 'o$i'},
-      ];
-      expect(
-        (await tools().call('ask_user', {'question': 'Q', 'options': ten}))
-            .isError,
-        isTrue,
-      );
-      expect(raised, isEmpty);
-    });
+    test(
+      'ask_user without a question, or with ten options, is refused',
+      () async {
+        expect((await tools().call('ask_user', {})).isError, isTrue);
+        final ten = [
+          for (var i = 0; i < 10; i++) {'label': 'o$i'},
+        ];
+        expect(
+          (await tools().call('ask_user', {
+            'question': 'Q',
+            'options': ten,
+          })).isError,
+          isTrue,
+        );
+        expect(raised, isEmpty);
+      },
+    );
 
     test('a question left unanswered for the hold stays open, and the agent '
         'is told to end its turn', () {
@@ -412,14 +480,122 @@ void main() {
       });
     });
 
-    test('Abort voids a waiting question, and the agent hears "aborted"',
-        () async {
-      final result = tools().call('ask_user', {'question': 'Q?'});
-      await pumpEventQueue();
-      cards.voidAll();
-      expect(await result, (text: 'aborted: Gaia is aborted.', isError: true));
-      expect(raised.last.state, GaiaCardState.voided);
-      expect(raised.last.question, 'Q?');
+    test(
+      'Abort voids a waiting question, and the agent hears "aborted"',
+      () async {
+        final result = tools().call('ask_user', {'question': 'Q?'});
+        await pumpEventQueue();
+        cards.voidAll();
+        expect(
+          await result,
+          GaiaToolResult(text: 'aborted: Gaia is aborted.', isError: true),
+        );
+        expect(raised.last.state, GaiaCardState.voided);
+        expect(raised.last.question, 'Q?');
+      },
+    );
+
+    group('a step list (§15.6)', () {
+      test('sends nothing until approved, then all of it, once', () async {
+        runAnswer = (_) => {'ran': 2, 'steps': steps};
+        final result = tools().call('os_steps', {'steps': <Object?>[]});
+        await pumpEventQueue();
+        final card = raised.single;
+        expect(card.kind, GaiaCardKind.control);
+        expect(card.isOpen, isTrue);
+        expect(card.input['window'], 'Notepad: "notes.txt"');
+        expect(runs, isEmpty);
+        expect(cards.isWaiting(card.id), isTrue);
+        cards.decide(card.id, GaiaCardState.accepted, {'once': true});
+        final answer = await result;
+        expect(answer.isError, isFalse);
+        expect(answer.text, contains('Sent all 2'));
+        expect(runs, [true]);
+        expect(raised.last.state, GaiaCardState.accepted);
+        expect(raised.last.answer?['committed'], {'steps': 2});
+        // Back from its JSON, for a synced message and the action log.
+        final back = GaiaCardPart.fromJson(raised.last.toJson());
+        expect(back.kind, GaiaCardKind.control);
+        expect(back.input['steps'], steps);
+      });
+
+      test('step by step, it asks again before each', () async {
+        runAnswer = (call) => {'ran': call, 'steps': steps};
+        final result = tools().call('os_steps', const {});
+        await pumpEventQueue();
+        cards.decide(raised.last.id, GaiaCardState.accepted, {'once': false});
+        await pumpEventQueue();
+        expect(runs, [false]);
+        expect(raised.last.isOpen, isTrue);
+        expect(raised.last.answer?['ran'], 1);
+        expect(cards.isWaiting(raised.last.id), isTrue);
+        cards.decide(raised.last.id, GaiaCardState.accepted, {'once': false});
+        expect((await result).text, contains('Sent all 2'));
+        expect(runs, [false, false]);
+      });
+
+      test('declined, with the reason, sends nothing', () async {
+        final result = tools().call('os_key', {'keys': 'A'});
+        await pumpEventQueue();
+        cards.decide(raised.last.id, GaiaCardState.rejected, {
+          'message': 'wrong window',
+        });
+        final answer = await result;
+        expect(answer.text, contains('declined'));
+        expect(answer.text, contains('wrong window'));
+        expect(runs, isEmpty);
+        expect(controlDropped, hasLength(1));
+        expect(raised.last.answer?['committed'], isNull);
+      });
+
+      test('stopped partway, the agent and the log are told', () async {
+        runAnswer = (_) => {
+          'ran': 1,
+          'stopped': 'The user pressed Esc.',
+          'steps': steps,
+        };
+        final result = tools().call('os_steps', const {});
+        await pumpEventQueue();
+        cards.decide(raised.last.id, GaiaCardState.accepted, {'once': true});
+        final answer = await result;
+        expect(answer.text, contains('Stopped after 1 of 2'));
+        expect(answer.text, contains('Esc'));
+        expect(raised.last.answer?['stopped'], contains('Esc'));
+        expect(raised.last.answer?['committed'], {'steps': 1});
+      });
+
+      test('voided while waiting, as by Abort, it refuses', () async {
+        final result = tools().call('os_key', {'keys': 'A'});
+        await pumpEventQueue();
+        cards.voidAll();
+        final answer = await result;
+        expect(answer.text, contains('aborted'));
+        expect(runs, isEmpty);
+      });
+
+      test('a plan refused goes straight back, with no card', () async {
+        planError = GaiaToolException('The user has excluded that app');
+        final answer = await tools().call('os_key', {'keys': 'A'});
+        expect(answer.isError, isTrue);
+        expect(answer.text, contains('excluded'));
+        expect(raised, isEmpty);
+      });
+
+      test('aborted, it never plans', () async {
+        aborted = true;
+        final answer = await tools().call('os_key', {'keys': 'A'});
+        expect(answer.text, contains('aborted'));
+        expect(planned, isEmpty);
+      });
+
+      test('unanswered, it runs out and drops the plan', () async {
+        final answer = await tools(
+          hold: const Duration(milliseconds: 1),
+        ).call('os_key', {'keys': 'A'});
+        expect(answer.text, contains("didn't answer"));
+        expect(raised.last.state, GaiaCardState.expired);
+        expect(controlDropped, hasLength(1));
+      });
     });
 
     test('voiding one chat leaves another\'s cards waiting', () async {
@@ -429,7 +605,10 @@ void main() {
         cards: cards,
         onCard: raised.add,
         read: (_, _) async => '',
+        screen: (tool, _) async =>
+            GaiaToolResult(text: 'screen $tool', isError: false),
         proposals: proposals,
+        control: control,
         aborted: () => false,
       ).call('ask_user', {'question': 'Theirs?'});
       await pumpEventQueue();
@@ -441,34 +620,37 @@ void main() {
       expect((await theirs).text, contains('dismissed'));
     });
 
-    test('a permission allowed, and one denied with the user\'s reason', () async {
-      final allowed = tools().permit(
-        tool: 'Bash',
-        input: {'command': 'ls'},
-        description: 'List files',
-      );
-      await pumpEventQueue();
-      cards.decide(raised.single.id, GaiaCardState.accepted);
-      expect(await allowed, (allow: true, message: ''));
+    test(
+      'a permission allowed, and one denied with the user\'s reason',
+      () async {
+        final allowed = tools().permit(
+          tool: 'Bash',
+          input: {'command': 'ls'},
+          description: 'List files',
+        );
+        await pumpEventQueue();
+        cards.decide(raised.single.id, GaiaCardState.accepted);
+        expect(await allowed, (allow: true, message: ''));
 
-      final denied = tools().permit(
-        tool: 'Write',
-        input: {'file_path': 'C:\\x', 'content': 'x' * 5000},
-        description: '',
-      );
-      await pumpEventQueue();
-      final card = raised.lastWhere((c) => c.tool == 'Write');
-      expect(
-        (card.input['content']! as String).length,
-        lessThan(2100),
-        reason: 'a synced card keeps a shortened call',
-      );
-      cards.decide(card.id, GaiaCardState.rejected, {'message': 'not there'});
-      expect(
-        await denied,
-        (allow: false, message: 'The user declined: not there'),
-      );
-    });
+        final denied = tools().permit(
+          tool: 'Write',
+          input: {'file_path': 'C:\\x', 'content': 'x' * 5000},
+          description: '',
+        );
+        await pumpEventQueue();
+        final card = raised.lastWhere((c) => c.tool == 'Write');
+        expect(
+          (card.input['content']! as String).length,
+          lessThan(2100),
+          reason: 'a synced card keeps a shortened call',
+        );
+        cards.decide(card.id, GaiaCardState.rejected, {'message': 'not there'});
+        expect(await denied, (
+          allow: false,
+          message: 'The user declined: not there',
+        ));
+      },
+    );
 
     test('a permission unanswered for the hold expires, denied', () {
       fakeAsync((async) {
@@ -485,21 +667,27 @@ void main() {
     test('reads go to the main instance, its errors to the agent', () async {
       expect(
         await tools().call('voyager_calendar', {}),
-        (text: 'data for voyager_calendar', isError: false),
+        GaiaToolResult(text: 'data for voyager_calendar', isError: false),
       );
       expect(
         await tools().call('voyager_calendar', {'fail': true}),
-        (text: 'bad range', isError: true),
+        GaiaToolResult(text: 'bad range', isError: true),
       );
     });
 
     test('while aborted, every tool refuses and no card is raised', () async {
       aborted = true;
-      expect((await tools().call('ask_user', {'question': 'Q?'})).isError, isTrue);
+      expect(
+        (await tools().call('ask_user', {'question': 'Q?'})).isError,
+        isTrue,
+      );
       expect((await tools().call('voyager_todos', {})).isError, isTrue);
       expect(
-        (await tools().permit(tool: 'Bash', input: const {}, description: ''))
-            .allow,
+        (await tools().permit(
+          tool: 'Bash',
+          input: const {},
+          description: '',
+        )).allow,
         isFalse,
       );
       expect(raised, isEmpty);
@@ -508,9 +696,16 @@ void main() {
   });
 
   test('a question\'s answer, as the agent is told it', () {
-    expect(gaiaQuestionAnswerText({'selected': ['A', 'B'], 'text': ''}),
-        'The user chose: "A", "B".');
-    expect(gaiaQuestionAnswerText({'selected': <String>[], 'text': ' hi '}),
-        'The user wrote: hi');
+    expect(
+      gaiaQuestionAnswerText({
+        'selected': ['A', 'B'],
+        'text': '',
+      }),
+      'The user chose: "A", "B".',
+    );
+    expect(
+      gaiaQuestionAnswerText({'selected': <String>[], 'text': ' hi '}),
+      'The user wrote: hi',
+    );
   });
 }

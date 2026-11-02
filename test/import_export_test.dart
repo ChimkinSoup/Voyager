@@ -1469,6 +1469,44 @@ void main() {
   });
 
   group('Backup round trip', () {
+    test("a restored Gaia chat doesn't bring screen access back", () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final at = DateTime.utc(2026, 11, 1);
+      final settings = DriftSettingsRepository(db);
+      await settings.saveSettings(
+        (await settings.getSettings()).copyWith(deviceId: 'laptop'),
+      );
+      final chats = collectionsFor(
+        db,
+      ).firstWhere((c) => c.name == FirestoreCollections.gaiaChats);
+      final backedUp = gaiaChatToFirestore(
+        GaiaChat(
+          id: 'c1',
+          title: 'A chat',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          grants: {
+            'laptop': GaiaGrant(seeScreen: true, canControl: true, at: at),
+            'phone': GaiaGrant(seeScreen: true, at: at),
+          },
+        ),
+      );
+      await chats.restore('c1', backedUp);
+      final restored = await DriftGaiaRepository(db).getChat('c1');
+      expect(restored!.title, 'A chat');
+      expect(restored.grants.keys, ['laptop']);
+      expect(restored.grants['laptop']!.seeScreen, isFalse);
+      expect(restored.grants['laptop']!.canControl, isFalse);
+      // Another device's copy from before the restore doesn't turn it back on.
+      final pulled = gaiaMergeGrants(
+        restored.grants,
+        gaiaGrantsFromJson(backedUp['grants']),
+      );
+      expect(pulled['laptop']!.canControl, isFalse);
+    });
+
     test('restores every collection into an empty database', () async {
       final source = AppDatabase.inMemory();
       await seedOneOfEverything(source);

@@ -36,9 +36,11 @@ class _RecordingTools implements GaiaTurnTools {
     Map<String, Object?> arguments,
   ) async {
     calls.add((name: name, arguments: arguments));
-    if (name.startsWith('voyager_')) return (text: listed, isError: false);
+    if (name.startsWith('voyager_')) {
+      return GaiaToolResult(text: listed, isError: false);
+    }
     if (listed.isEmpty) await answer.future;
-    return (text: 'told $name', isError: false);
+    return GaiaToolResult(text: 'told $name', isError: false);
   }
 
   @override

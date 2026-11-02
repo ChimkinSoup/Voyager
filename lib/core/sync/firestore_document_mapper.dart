@@ -4382,6 +4382,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'tier': chat.tier?.name,
   'curatedSeq': chat.curatedSeq,
   'drain': chat.drain,
+  'grants': chat.toJson()['grants'],
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4430,6 +4431,14 @@ GaiaChat mergeGaiaChatFromRemote(
       null => local?.curatedSeq ?? -1,
     },
     drain: data['drain'] as bool? ?? local?.drain ?? false,
+    // Each device's entry on its own, so a stale copy can't turn a revoked
+    // grant back on (§15.6); an erase takes the remote's.
+    grants: isErasedPayload(data)
+        ? gaiaGrantsFromJson(data['grants'])
+        : gaiaMergeGrants(
+            local?.grants ?? const {},
+            gaiaGrantsFromJson(data['grants']),
+          ),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

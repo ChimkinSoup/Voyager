@@ -17,7 +17,8 @@ enum GaiaBuiltin {
   queue('queue', "Queue the draft for this chat, to send later"),
   queuePop('queue-pop', "Load this chat's next queued prompt to review"),
   queuePopSend('queue-pop!', "Send this chat's next queued prompt now"),
-  drain('drain', 'Send queued prompts one after another, on or off');
+  drain('drain', 'Send queued prompts one after another, on or off'),
+  thisControl('this', 'Attach the control the cursor was on when Gaia opened');
 
   const GaiaBuiltin(this.name, this.description);
 
@@ -186,6 +187,13 @@ String? gaiaRememberText(String draft) {
 /// when the draft doesn't start with `/queue` and some text.
 String? gaiaQueueText(String draft) {
   final match = RegExp(r'^/queue\s+(\S[\s\S]*)$').firstMatch(draft.trim());
+  return match?.group(1)!.trim();
+}
+
+/// What's left of [draft] after a leading `/this` (§15.5) and some text, to
+/// send with the control attached; null when it doesn't start that way.
+String? gaiaThisRest(String draft) {
+  final match = RegExp(r'^/this\s+(\S[\s\S]*)$').firstMatch(draft.trim());
   return match?.group(1)!.trim();
 }
 

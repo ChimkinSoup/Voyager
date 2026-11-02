@@ -493,6 +493,7 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
                                 'Why not? (sends Deny)',
                               GaiaCardKind.proposal =>
                                 'What to change? (turns it down)',
+                              GaiaCardKind.control => 'Why not? (sends Deny)',
                               null => 'Message Gaia on ${beacon.name}',
                             },
                             onTier: (tier) => setState(() => _tier = tier),
@@ -707,6 +708,11 @@ class GaiaTranscriptMessage extends ConsumerWidget {
                 Text(window.label, style: muted),
                 const SizedBox(height: 4),
               ],
+              if (message.parts.whereType<GaiaElementPart>().firstOrNull
+                  case final control?) ...[
+                Text(control.label, style: muted),
+                const SizedBox(height: 4),
+              ],
               for (final quote in message.parts.whereType<GaiaQuotePart>()) ...[
                 Text(
                   quote.label,
@@ -772,6 +778,7 @@ class GaiaTranscriptMessage extends ConsumerWidget {
               GaiaImagePart() ||
               GaiaFilePart() ||
               GaiaContextPart() ||
+              GaiaElementPart() ||
               GaiaQuotePart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },

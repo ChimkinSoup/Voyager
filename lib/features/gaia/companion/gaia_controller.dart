@@ -28,6 +28,7 @@ import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:win32/win32.dart' show AllowSetForegroundWindow;
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
@@ -198,12 +199,12 @@ class GaiaController extends ChangeNotifier {
   static const _imageExtensions = {'.png', '.jpg', '.jpeg', '.webp'};
 
   /// [attachImage] for an image already in a file the draft can own.
-  void _attachFile(String path) {
+  void _attachFile(String path, {bool capture = false}) {
     final label = _nextDraftLabel();
     draftImages.add(GaiaDraftImage(label: label, path: path));
     _insertInDraft(gaiaImageToken(label));
     notifyListeners();
-    unawaited(_ingest(path));
+    unawaited(_ingest(path, capture: capture));
   }
 
   /// The label the next image in the draft in view gets.
@@ -219,13 +220,18 @@ class GaiaController extends ChangeNotifier {
   /// The main instance takes the draft image at [path] in, so the kept
   /// draft can name it. Refused, it stays in this draft alone, and its
   /// send says why.
-  Future<void> _ingest(String path) async {
+  Future<void> _ingest(String path, {required bool capture}) async {
+    var upload = path;
     try {
+      // A capture is a BMP, which the media module doesn't take.
+      if (capture) upload = await gaiaUploadablePath(path);
       final mediaId =
-          (await _pipe.request('ingestImage', {'path': path}))! as String;
+          (await _pipe.request('ingestImage', {'path': upload}))! as String;
       _ingested(path, mediaId);
-    } on GaiaPipeException catch (error) {
+    } catch (error) {
       debugPrint('[gaia] draft image not kept: $error');
+    } finally {
+      if (upload != path) unawaited(_deleteQuietly(upload));
     }
   }
 
@@ -273,7 +279,7 @@ class GaiaController extends ChangeNotifier {
         : _window.shown;
     _enlargedForEditor = false;
     if (params['kind'] == 'screen') {
-      _attachFile(await _intoDrafts(path));
+      _attachFile(await _intoDrafts(path), capture: true);
       return _show(shown ?? GaiaMode.small);
     }
     _beforeCrop = shown;
@@ -485,6 +491,112 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The control attached with `/this` (§15.5): a chip on the draft, which
+  /// the next message takes with it.
+  GaiaElementPart? draftControl;
+
+  void dropDraftControl() {
+    draftControl = null;
+    notifyListeners();
+  }
+
+  /// What the last summon pointed at, kept for `/this`: the control and a
+  /// crop around it, or why there's nothing to attach.
+  GaiaElementPart? _pointed;
+  String? _pointedCrop;
+  String? _pointedRefused;
+
+  /// Set while the main instance is cropping the last summon's control.
+  Completer<void>? _pointedReading;
+
+  void _dropPointed() {
+    if (_pointedCrop case final crop?) unawaited(_deleteQuietly(crop));
+    _pointed = null;
+    _pointedCrop = null;
+    _pointedRefused = null;
+  }
+
+  void _onPointed(Map<String, Object?> params) {
+    _dropPointed();
+    if (params['reading'] == true) {
+      _pointedReading ??= Completer<void>();
+      return;
+    }
+    _pointedReading?.complete();
+    _pointedReading = null;
+    _pointed = switch (params['control']) {
+      final Map<Object?, Object?> json =>
+        GaiaPart.fromJson(json.cast()) as GaiaElementPart,
+      _ => null,
+    };
+    _pointedCrop = params['crop'] as String?;
+    _pointedRefused = params['refused'] as String?;
+  }
+
+  /// `/this` (§15.5): the summon's control joins the draft as a chip, with
+  /// its crop as an image. False, with a toast saying why, when it can't:
+  /// aborted (§15.7), a sensitive field, an excluded or unknown app, or Voyager
+  /// with its vault unlocked (§15.6), or nothing under the cursor. Used once:
+  /// pointing again takes another summon.
+  Future<bool> attachThis() async {
+    if (_pointedReading case final reading?) {
+      // A little past the main instance's own limit on the crop, in case it
+      // never says.
+      await reading.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {},
+      );
+      _pointedReading = null;
+    }
+    if (aborted) {
+      await _onRefused();
+      return false;
+    }
+    final control = _pointed;
+    if (control == null) {
+      final (title, body) = switch (_pointedRefused) {
+        'sensitive' => (
+          "Can't attach that control",
+          "It's a password, card or one-time code field.",
+        ),
+        'excluded' => (
+          "Can't attach that control",
+          "Its app or site is on Gaia's exclusion list.",
+        ),
+        'unknown' => (
+          "Can't attach that control",
+          "Gaia can't tell what app or site it's in, so can't check the "
+              'exclusion list.',
+        ),
+        'vault' => (
+          "Can't attach that control",
+          "Voyager's secure vault is unlocked.",
+        ),
+        _ => (
+          'Nothing to attach',
+          'Point at a control, then summon Gaia with its hotkey.',
+        ),
+      };
+      _note(title, body, error: true);
+      return false;
+    }
+    final crop = _pointedCrop;
+    _pointed = null;
+    _pointedCrop = null;
+    draftControl = control;
+    notifyListeners();
+    if (crop != null) {
+      try {
+        _attachFile(await _intoDrafts(crop), capture: true);
+      } on FileSystemException catch (error) {
+        // Swept with the other captures after an hour: the chip still says
+        // what it was.
+        debugPrint('[gaia] /this crop not attached: $error');
+      }
+    }
+    return true;
+  }
+
   /// Messages attached to the draft as context, chips on it like
   /// [windowContext]'s. They stay on it from one chat to another.
   final draftQuotes = <GaiaQuotePart>[];
@@ -525,6 +637,9 @@ class GaiaController extends ChangeNotifier {
   void _viewChat(String? chatId) {
     _chatViewed = true;
     if (chatId == currentChatId) return;
+    _newChatSeesScreen = false;
+    _newChatCanControl = false;
+    seeScreenWarning = false;
     _draftHistories[_keyOf(currentChatId)] = draftUndo.saveHistory();
     if (draft.text.isNotEmpty ||
         draftImages.isNotEmpty ||
@@ -905,6 +1020,7 @@ class GaiaController extends ChangeNotifier {
       ..clear()
       ..addAll(message.parts.whereType<GaiaQuotePart>());
     windowContext = message.parts.whereType<GaiaContextPart>().firstOrNull;
+    draftControl = message.parts.whereType<GaiaElementPart>().firstOrNull;
     draft.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
@@ -1202,6 +1318,18 @@ class GaiaController extends ChangeNotifier {
     cards.decide(card.id, GaiaCardState.accepted);
     notifyListeners();
   }
+
+  /// Approves control [card]'s steps (§15.6): all that are left with [once],
+  /// otherwise its next one. Gaia is in front to do it, and passes that on, so
+  /// the main instance can bring the target window up.
+  void approveControl(GaiaCardPart card, {required bool once}) {
+    AllowSetForegroundWindow(_anyProcess);
+    cards.decide(card.id, GaiaCardState.accepted, {'once': once});
+    notifyListeners();
+  }
+
+  /// `ASFW_ANY`, which the win32 package has no name for.
+  static const _anyProcess = 0xFFFFFFFF;
 
   /// The user's edits to each open proposal card's fields, by card id.
   final _proposalEdits = <String, Map<String, Object?>>{};
@@ -1774,6 +1902,7 @@ class GaiaController extends ChangeNotifier {
       resent: (
         quotes: question.parts.whereType<GaiaQuotePart>().toList(),
         context: question.parts.whereType<GaiaContextPart>().firstOrNull,
+        control: question.parts.whereType<GaiaElementPart>().firstOrNull,
       ),
     );
   }
@@ -1838,6 +1967,8 @@ class GaiaController extends ChangeNotifier {
         };
         _summonSelection = params['selection'] as String? ?? '';
         notifyListeners();
+      case 'pointed':
+        _onPointed(params);
       case 'refused':
         unawaited(_onRefused());
       case 'selection':
@@ -2326,6 +2457,8 @@ class GaiaController extends ChangeNotifier {
         await popQueue(send: true);
       case GaiaBuiltin.drain:
         await toggleDrain();
+      case GaiaBuiltin.thisControl:
+        await attachThis();
     }
   }
 
@@ -2422,6 +2555,83 @@ class GaiaController extends ChangeNotifier {
           : 'Queued prompts wait to be sent.',
     );
     if (drain && !_running.contains(chat.id)) _drainNext(chat.id);
+  }
+
+  /// A new chat's *can see screen*, until its first message makes it one.
+  var _newChatSeesScreen = false;
+
+  /// Turned on just now: the warning stays beside the toggle (§15.6) until
+  /// the next message, or the toggle or the chat changes.
+  var seeScreenWarning = false;
+
+  /// *Can see screen* (§15.6) for the chat in view, on this device.
+  bool get canSeeScreen => switch (currentChat) {
+    final chat? => chat.grants[_deviceId]?.seeScreen ?? false,
+    null => _newChatSeesScreen,
+  };
+
+  Future<void> toggleSeeScreen() async {
+    final chat = currentChat;
+    final on = !canSeeScreen;
+    seeScreenWarning = on;
+    if (chat == null) {
+      _newChatSeesScreen = on;
+      notifyListeners();
+      return;
+    }
+    chats = [
+      for (final c in chats)
+        c.id == chat.id
+            ? c.copyWith(
+                grants: {
+                  ...c.grants,
+                  _deviceId: GaiaGrant(
+                    seeScreen: on,
+                    canControl: c.grants[_deviceId]?.canControl ?? false,
+                    at: utcNow(),
+                  ),
+                },
+              )
+            : c,
+    ];
+    notifyListeners();
+    await _request('setSeeScreen', {'chatId': chat.id, 'on': on});
+  }
+
+  /// A new chat's *can control*, until its first message makes it one.
+  var _newChatCanControl = false;
+
+  /// *Can control* (§15.6) for the chat in view, on this device.
+  bool get canControl => switch (currentChat) {
+    final chat? => chat.grants[_deviceId]?.canControl ?? false,
+    null => _newChatCanControl,
+  };
+
+  Future<void> toggleCanControl() async {
+    final chat = currentChat;
+    final on = !canControl;
+    if (chat == null) {
+      _newChatCanControl = on;
+      notifyListeners();
+      return;
+    }
+    chats = [
+      for (final c in chats)
+        c.id == chat.id
+            ? c.copyWith(
+                grants: {
+                  ...c.grants,
+                  _deviceId: GaiaGrant(
+                    seeScreen: c.grants[_deviceId]?.seeScreen ?? false,
+                    canControl: on,
+                    at: utcNow(),
+                  ),
+                },
+              )
+            : c,
+    ];
+    notifyListeners();
+    await _request('setCanControl', {'chatId': chat.id, 'on': on});
   }
 
   /// In drain mode, [chatId]'s next prompt goes once its reply finished
@@ -2627,7 +2837,12 @@ class GaiaController extends ChangeNotifier {
     Completer<String?>? started,
     void Function()? onQueued,
     bool fromQueue = false,
-    ({List<GaiaQuotePart> quotes, GaiaContextPart? context})? resent,
+    ({
+      List<GaiaQuotePart> quotes,
+      GaiaContextPart? context,
+      GaiaElementPart? control,
+    })?
+    resent,
   }) async {
     void notStarted(String why) {
       if (started != null && !started.isCompleted) started.complete(why);
@@ -2714,14 +2929,21 @@ class GaiaController extends ChangeNotifier {
         : remote == null
         ? windowContext
         : null;
+    final control = resent != null
+        ? resent.control
+        : remote == null
+        ? draftControl
+        : null;
     final quotes =
         resent?.quotes ??
         (remote == null ? [...draftQuotes] : <GaiaQuotePart>[]);
     if (remote == null && resent == null) {
       windowContext = null;
+      draftControl = null;
       draftQuotes.clear();
     }
     final sentAt = utcNow();
+    if (remote == null) seeScreenWarning = false;
     if (chat == null) {
       // No utility model yet: the title is the first line (§5.1). Its
       // images' tokens are in it; its files aren't.
@@ -2741,7 +2963,20 @@ class GaiaController extends ChangeNotifier {
         tier:
             remote?.tier ??
             (remote == null ? nextTier : defaultTier ?? lastTier),
+        grants: remote == null && (_newChatSeesScreen || _newChatCanControl)
+            ? {
+                _deviceId: GaiaGrant(
+                  seeScreen: _newChatSeesScreen,
+                  canControl: _newChatCanControl,
+                  at: sentAt,
+                ),
+              }
+            : const {},
       );
+      if (remote == null) {
+        _newChatSeesScreen = false;
+        _newChatCanControl = false;
+      }
       chats = [chat, ...chats]..sort(_listed);
       // A remote chat is listed, but the one in view stays.
       if (remote == null) currentChatId = chatId;
@@ -2771,6 +3006,7 @@ class GaiaController extends ChangeNotifier {
         ...files,
         ...quotes,
         ?context,
+        ?control,
       ],
       status: GaiaMessageStatus.complete,
       createdAt: sentAt,
@@ -2818,6 +3054,7 @@ class GaiaController extends ChangeNotifier {
         return _settleDrain();
       }
       windowContext = context;
+      draftControl = control;
       // Less any attached again meanwhile.
       draftQuotes.insertAll(0, [
         for (final quote in quotes)
@@ -2912,6 +3149,7 @@ class GaiaController extends ChangeNotifier {
             ...files,
             ...quotes,
             ?context,
+            ?control,
           ],
           bumpVersion: false,
           touch: false,
@@ -3125,6 +3363,7 @@ class GaiaController extends ChangeNotifier {
     // Its files' paths after it (§9.3).
     final asked = [
       ?context?.preamble,
+      ?control?.preamble,
       for (final quote in quotes) quote.preamble,
       // Empty when only files were sent.
       if (prompt.isNotEmpty) prompt,
@@ -3212,6 +3451,26 @@ class GaiaController extends ChangeNotifier {
           throw GaiaToolException(error.message);
         }
       },
+      screen: (tool, arguments) async {
+        try {
+          final answer =
+              ((await _pipe.request('osRead', {
+                        'chatId': chatId,
+                        'tool': tool,
+                        'arguments': arguments,
+                      }))!
+                      as Map)
+                  .cast<String, Object?>();
+          return GaiaToolResult(
+            text: answer['text']! as String,
+            isError: false,
+            image: answer['image'] as String?,
+            mimeType: answer['mimeType'] as String?,
+          );
+        } on GaiaPipeException catch (error) {
+          throw GaiaToolException(error.message);
+        }
+      },
       proposals: (
         prepare: (cardId, tool, arguments) async {
           try {
@@ -3252,6 +3511,44 @@ class GaiaController extends ChangeNotifier {
             unawaited(
               _pipe
                   .request('dropProposal', {'cardId': cardId})
+                  .catchError((_) => null),
+            );
+          }
+        },
+      ),
+      control: (
+        plan: (cardId, tool, arguments) async {
+          try {
+            return ((await _pipe.request('osPlan', {
+                      'chatId': chatId,
+                      'cardId': cardId,
+                      'tool': tool,
+                      'arguments': arguments,
+                    }))!
+                    as Map)
+                .cast<String, Object?>();
+          } on GaiaPipeException catch (error) {
+            throw GaiaToolException(error.message);
+          }
+        },
+        run: (cardId, {required once}) async {
+          try {
+            return ((await _pipe.request('osRun', {
+                      'chatId': chatId,
+                      'cardId': cardId,
+                      'once': once,
+                    }))!
+                    as Map)
+                .cast<String, Object?>();
+          } on GaiaPipeException catch (error) {
+            throw GaiaToolException(error.message);
+          }
+        },
+        drop: (cardId) {
+          if (_pipe.connected) {
+            unawaited(
+              _pipe
+                  .request('osDrop', {'cardId': cardId})
                   .catchError((_) => null),
             );
           }
@@ -3763,6 +4060,12 @@ class GaiaController extends ChangeNotifier {
                 'That proposal is no longer waiting.',
           );
         }
+      case GaiaCardKind.control:
+        // The phone can say no. Yes takes someone at this screen, who can see
+        // the border and press Esc (§15.6).
+        throw GaiaPipeException(
+          'Real input on this desktop is approved at the desktop.',
+        );
     }
     return null;
   }
@@ -3772,6 +4075,11 @@ class GaiaController extends ChangeNotifier {
     if (!_running.contains(chatId)) return;
     _stopping.add(chatId);
     cards.voidAll(chatId: chatId);
+    if (_pipe.connected) {
+      unawaited(
+        _pipe.request('osStop', {'chatId': chatId}).catchError((_) => null),
+      );
+    }
     _scripted.stop(chatId);
     await Future.wait([
       for (final runner in _runners.values) runner.stop(chatId),
@@ -3834,6 +4142,9 @@ class GaiaController extends ChangeNotifier {
       case GaiaCardKind.proposal:
         title = 'Gaia has something to save';
         body = gaiaProposalTitle(card.proposal!, card.proposal!.fields);
+      case GaiaCardKind.control:
+        title = 'Gaia asks to control the screen';
+        body = '${card.input['window'] ?? ''}';
     }
     _toast(
       chatId,
@@ -3912,6 +4223,10 @@ class GaiaController extends ChangeNotifier {
   /// writing saved as aborted, before the main instance hears back (§15.7).
   Future<void> _abort() async {
     aborted = true;
+    _newChatSeesScreen = false;
+    _newChatCanControl = false;
+    seeScreenWarning = false;
+    _dropPointed();
     // Their tool calls refuse, and the cards show voided (§15.7).
     cards.voidAll();
     final saves = <Future<void>>[];

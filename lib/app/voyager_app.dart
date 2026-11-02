@@ -255,6 +255,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       fireImmediately: true,
     );
     GaiaHost.instance.attach(
+      vaultUnlocked: () => ref.read(secureVaultSessionProvider) != null,
       beacon: beacon,
       power: _gaiaPower,
       repository: ref.read(gaiaRepositoryProvider),
