@@ -33,6 +33,8 @@ enum GaiaHotkey {
   small,
   large,
   window,
+  fullScreen,
+  split,
   region,
   screen,
   selection,
@@ -65,7 +67,8 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
-/// {chatId}`, `accent {argb}`, `settings {..}` and `changed` events.
+/// {chatId}`, `split {left, top, width, height}`, `accent {argb}`, `settings
+/// {..}` and `changed` events.
 class GaiaHost {
   /// The app uses [instance]. Tests pass a fake [pipe], their own
   /// [abortFlag] file, and a [killCompanion] that kills nothing real.
@@ -83,7 +86,14 @@ class GaiaHost {
     })?
     readUia,
     Future<String?> Function(GaiaForegroundWindow window)? copySelection,
+    ({int left, int top, int width, int height}) Function(
+      int hwnd, {
+      required bool below,
+      required bool gaiaRight,
+    })?
+    splitWindows,
   }) : _pipe = pipe ?? GaiaPipe(),
+       _splitWindows = splitWindows ?? gaiaSplitWindows,
        _copySelection = copySelection ?? gaiaCopySelection,
        _abortFlag = abortFlag ?? _defaultAbortFlag,
        _killCompanion = killCompanion ?? _killTree,
@@ -106,6 +116,12 @@ class GaiaHost {
     required bool selection,
   })
   _readUia;
+  final ({int left, int top, int width, int height}) Function(
+    int hwnd, {
+    required bool below,
+    required bool gaiaRight,
+  })
+  _splitWindows;
 
   /// Chats in progress, for the tray and the Gaia page.
   final runs = ValueNotifier<List<GaiaRun>>(const []);
@@ -148,6 +164,9 @@ class GaiaHost {
   var _quitting = false;
   var _companionPid = 0;
   var _aborted = false;
+
+  /// The companion's crop overlay is up.
+  var _cropping = false;
   var _accent = 0xFF7C9EFF;
   var _text = GaiaTextSettings.off;
 
@@ -373,7 +392,38 @@ class GaiaHost {
         // Which reads the window itself.
         unawaited(_captureSelection(hotkey, window));
         return;
-      case GaiaHotkey.small || GaiaHotkey.large || GaiaHotkey.window:
+      case GaiaHotkey.split:
+        // Like the capture hotkeys (§15.7): it would move another app's window.
+        if (_aborted) {
+          _sendOrLaunch('refused', {'reason': 'aborted'});
+          break;
+        }
+        // Only cancels the crop, as any hotkey does, so nothing is to move.
+        if (_cropping) {
+          _sendOrLaunch('hotkey', {'key': hotkey.name});
+          break;
+        }
+        // Here, while the window to move is still the one in front. In Gaia,
+        // it's the one under Gaia.
+        final half = _splitWindows(
+          window == null
+              ? 0
+              : window.pid == _companionPid
+              ? window.hwnd
+              : _returnTo(window),
+          below: window != null && window.pid == _companionPid,
+          gaiaRight: _settings.splitGaiaRight,
+        );
+        _sendOrLaunch('split', {
+          'left': half.left,
+          'top': half.top,
+          'width': half.width,
+          'height': half.height,
+        });
+      case GaiaHotkey.small ||
+          GaiaHotkey.large ||
+          GaiaHotkey.window ||
+          GaiaHotkey.fullScreen:
         _sendOrLaunch('hotkey', {'key': hotkey.name, 'pressed': pressed});
       case GaiaHotkey.abort:
         break;
@@ -638,6 +688,7 @@ class GaiaHost {
 
   /// Also a companion that exited before it connected.
   void _onDisconnected() {
+    _cropping = false;
     runs.value = const [];
     usage.value = const {};
     // Its runs died with it: the phone stops showing them and their leases
@@ -717,6 +768,8 @@ class GaiaHost {
         _drained = null;
       case 'pickUpCancelled':
         unawaited(_armPickUp(false, tell: false));
+      case 'cropping':
+        _cropping = params['active'] == true;
     }
   }
 

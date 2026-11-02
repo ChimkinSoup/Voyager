@@ -168,13 +168,18 @@ class FakeGaiaWindow implements GaiaWindow {
     void Function() layout, {
     GaiaFrame? frame,
     bool behind = false,
+    bool? fullScreen,
   }) async {
     away = !foreground;
     shown = mode;
     this.frame = frame;
     this.behind = behind;
+    this.fullScreen = fullScreen ?? this.fullScreen;
     layout();
   }
+
+  @override
+  var fullScreen = false;
 
   @override
   void hide({bool between = false}) {

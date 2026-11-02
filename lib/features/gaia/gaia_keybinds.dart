@@ -10,6 +10,8 @@ enum GaiaKeybind {
   large('Large floater', 'Ctrl+Alt+Shift+Space'),
   // Unbound by default (§15.1).
   window('Gaia window', ''),
+  fullScreen('Gaia window, full screen', 'Ctrl+Alt+Enter'),
+  split('Split the screen with Gaia', 'Ctrl+Alt+Shift+Enter'),
   region('Screenshot a region', 'Ctrl+Alt+S'),
   screen('Screenshot the screen', 'Ctrl+Alt+Shift+S'),
   selection('Quote the selection', 'Ctrl+Alt+Q'),
@@ -32,6 +34,15 @@ enum GaiaKeybind {
 /// empty when unbound.
 String gaiaComboFor(GaiaKeybind keybind, Map<String, String> overrides) =>
     overrides[keybind.name] ?? keybind.defaultCombo;
+
+/// The label of the hotkey in [hotkeys], Voyager's own by what they do, that
+/// already holds [combo]; null for none. They're stored as typed, so each is
+/// read back into the form a Gaia combo is stored in.
+String? gaiaHotkeyClash(String combo, Map<String, String> hotkeys) => hotkeys
+    .entries
+    .where((hotkey) => '${parseGaiaCombo(hotkey.value)}' == combo)
+    .firstOrNull
+    ?.key;
 
 /// A parsed combo such as `Ctrl+Alt+Space`.
 class GaiaCombo {

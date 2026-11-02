@@ -9970,6 +9970,7 @@ class DriftGaiaRepository implements GaiaRepository {
               jsonEncode(settings.contextExclusions),
             ),
             autoAcceptCurator: Value(settings.autoAcceptCurator),
+            splitGaiaRight: Value(settings.splitGaiaRight),
             commandsJson: Value(
               jsonEncode([
                 for (final command in settings.commands) command.toJson(),
@@ -10273,6 +10274,7 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
       ? kGaiaDefaultContextExclusions
       : gaiaContextExclusionsFromJson(jsonDecode(row.contextExclusionsJson!)),
   autoAcceptCurator: row.autoAcceptCurator,
+  splitGaiaRight: row.splitGaiaRight,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

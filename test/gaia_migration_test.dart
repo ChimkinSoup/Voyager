@@ -442,6 +442,25 @@ void main() {
     );
   });
 
+  test('183→184 adds the split side setting', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN split_gaia_right',
+    );
+    await seed.customStatement('PRAGMA user_version = 183');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.splitGaiaRight, isFalse);
+
+    await repo.upsertSettings(settings.copyWith(splitGaiaRight: true));
+    expect((await repo.getSettings()).splitGaiaRight, isTrue);
+  });
+
   test('177→178 adds the drafts table', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());

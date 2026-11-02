@@ -6,6 +6,71 @@ import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 /// Focused-window context and selection capture (GAIA_HLD.md §15.2, §15.4):
 /// the exclusion list, the source a quote names, and the quote.
 void main() {
+  group('split halves', () {
+    test('Gaia on the left, from a work area off the origin', () {
+      final (:gaia, :other) = gaiaSplitHalves(
+        left: -1920,
+        top: 40,
+        right: 0,
+        bottom: 1080,
+        gaiaRight: false,
+        gaiaMinimumWidth: 560,
+      );
+      expect(gaia, (left: -1920, top: 40, width: 960, height: 1040));
+      expect(other, (left: -960, top: 40, width: 960, height: 1040));
+    });
+
+    test('swapped, and an odd width leaves no gap', () {
+      final (:gaia, :other) = gaiaSplitHalves(
+        left: 0,
+        top: 0,
+        right: 1001,
+        bottom: 500,
+        gaiaRight: true,
+        gaiaMinimumWidth: 400,
+      );
+      expect(other, (left: 0, top: 0, width: 500, height: 500));
+      expect(gaia, (left: 500, top: 0, width: 501, height: 500));
+    });
+
+    test('Gaia keeps its minimum, on either side, the other gets the rest', () {
+      // 1920x1080 at 200%: a half is under Gaia's 560 logical pixels.
+      final left = gaiaSplitHalves(
+        left: 0,
+        top: 0,
+        right: 1920,
+        bottom: 1040,
+        gaiaRight: false,
+        gaiaMinimumWidth: 1120,
+      );
+      expect(left.gaia, (left: 0, top: 0, width: 1120, height: 1040));
+      expect(left.other, (left: 1120, top: 0, width: 800, height: 1040));
+      final right = gaiaSplitHalves(
+        left: 0,
+        top: 0,
+        right: 1920,
+        bottom: 1040,
+        gaiaRight: true,
+        gaiaMinimumWidth: 1120,
+      );
+      expect(right.other, (left: 0, top: 0, width: 800, height: 1040));
+      expect(right.gaia, (left: 800, top: 0, width: 1120, height: 1040));
+    });
+
+    test('a monitor narrower than the minimum is all Gaia, on the screen', () {
+      final (:gaia, :other) = gaiaSplitHalves(
+        left: 0,
+        top: 0,
+        right: 1000,
+        bottom: 500,
+        gaiaRight: true,
+        gaiaMinimumWidth: 1120,
+      );
+      expect(gaia, (left: 0, top: 0, width: 1000, height: 500));
+      expect(other.width, 0);
+    });
+  });
+
   group('exclusions', () {
     bool excluded(String exe, String app, [String? url]) => gaiaContextExcluded(
       [...kGaiaDefaultContextExclusions, 'rbc.com', ' '],

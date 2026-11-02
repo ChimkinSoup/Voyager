@@ -500,6 +500,7 @@ class _Header extends StatelessWidget {
     final floater = controller.layout != GaiaMode.window;
     return _DragArea(
       floater: floater,
+      fullScreen: controller.fullScreen,
       child: SizedBox(
         // Room for the round buttons' shadows.
         height: 52,
@@ -558,7 +559,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 10),
             ],
-            if (!floater) const _WindowButtons(),
+            if (!floater) _WindowButtons(controller: controller),
             GaiaButton(
               icon: Icons.close,
               size: 32,
@@ -573,15 +574,23 @@ class _Header extends StatelessWidget {
 }
 
 /// Drags the window by its header. A double click maximises the Gaia
-/// window, as a title bar's does; a floater keeps its size.
+/// window, as a title bar's does; a floater keeps its size. A full-screen
+/// window stays put.
 class _DragArea extends StatelessWidget {
-  const _DragArea({required this.floater, required this.child});
+  const _DragArea({
+    required this.floater,
+    this.fullScreen = false,
+    required this.child,
+  });
 
   final bool floater;
+  final bool fullScreen;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => floater
+  Widget build(BuildContext context) => fullScreen && !floater
+      ? child
+      : floater
       ? GestureDetector(
           behavior: HitTestBehavior.translucent,
           onPanStart: (_) => windowManager.startDragging(),
@@ -593,7 +602,9 @@ class _DragArea extends StatelessWidget {
 /// The Gaia window's Minimize and Maximize or Restore, beside its close.
 /// The floaters have neither.
 class _WindowButtons extends StatefulWidget {
-  const _WindowButtons();
+  const _WindowButtons({required this.controller});
+
+  final GaiaController controller;
 
   @override
   State<_WindowButtons> createState() => _WindowButtonsState();
@@ -625,6 +636,7 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final fullScreen = widget.controller.fullScreen;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -635,9 +647,13 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
         ),
         const SizedBox(width: 10),
         GaiaButton(
-          icon: _maximized ? Icons.filter_none : Icons.crop_square,
+          icon: fullScreen || _maximized
+              ? Icons.filter_none
+              : Icons.crop_square,
           size: 32,
-          onPressed: _maximized
+          onPressed: fullScreen
+              ? widget.controller.leaveFullScreen
+              : _maximized
               ? windowManager.unmaximize
               : windowManager.maximize,
         ),

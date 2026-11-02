@@ -1196,14 +1196,17 @@ sandbox. It drains the battery. And it still can't reach the laptop's files.
 
 ### 15.1 Hotkeys
 
-All rebindable on the Gaia page, all registered by the main instance:
+All rebindable on the Gaia page, all registered by the main instance. A combo
+another Gaia key or one of Voyager's own global hotkeys already holds is refused:
 
 | | Gaia hidden | Gaia open |
 |---|---|---|
 | **A — small floater** | open small floater | small floater showing: hide. Otherwise: switch to small floater |
 | **B — large floater** | open large floater | switch to large floater (no-op if already large) |
 | **G — Gaia window** | open Gaia window | switch to Gaia window (unbound by default) |
-| **C — region** | open + crop overlay | crop overlay, attach to current draft |
+| **Full screen** (Ctrl+Alt+Enter) | open Gaia window covering the monitor under the cursor, taskbar included, on the chat last in view | same; full screen and in front: hide. The Restore button leaves it for where the window was; it holds until then, across hides and floaters |
+| **Split** (Ctrl+Alt+Shift+Enter) | move the focused window to one half of its monitor's work area, open Gaia window on the other | same, moving the app window under Gaia when Gaia has the focus. Gaia on the left by default; a setting on the Gaia page swaps the sides. Nothing to move, as over the desktop: Gaia still takes its half. A half narrower than the Gaia window's minimum: Gaia keeps its minimum, the other window gets the rest |
+| **C — region** | open + crop overlay | crop overlay, attach to current draft and copy to the clipboard |
 | **D — full screen** | capture screen, open, focus composer | capture screen, attach |
 | **E — selection** | copy selection, open with it quoted | append selection to draft |
 | **F — pick-up** | (§15.3) | hide, arm selection pick-up |
@@ -1274,10 +1277,17 @@ Reading the screen is an OS action, in two forms:
 - `os.screenshot`: pixels, for what UIA can't describe (canvases, images,
   games, some Electron apps).
 
-Agents are told to try `os.read_screen` first.
+Agents are told to try `os.read_screen` first. `os.focused_window` says which
+window that is.
 
-Acting: `os.focused_window`, `os.click` (by UIA control first, coordinates as a
-fallback), `os.scroll`, `os.type`, `os.key`.
+Acting: `os.click` (by UIA control first, coordinates as a fallback),
+`os.scroll`, `os.type`, `os.key`.
+
+**The target window is never Gaia (decided 2026-11-01).** Every `os.*` call
+works out its target when it runs. If the foreground window is one of Gaia's,
+the target is the next visible, non-minimized top-level window in Z-order that
+isn't Gaia's. Voyager's main window isn't Gaia's, so it can be a target. An
+action that needs its target in front activates it first.
 
 These are separate from what the user attaches. Hotkeys C/D and `/this` are
 the user's choice. These tools are the agent asking to look or act.
@@ -1309,7 +1319,8 @@ from any state:
 - **OS access:** every chat's *can see screen* and *can control* grants are
   revoked. Synthetic input stops mid-sequence, and Gaia sends key-ups for any
   key it was holding, so Ctrl or Shift is never left stuck down.
-- **Capture:** hotkeys C, D, E, F and `/this` refuse with "Gaia is aborted".
+- **Capture:** hotkeys C, D, E, F and `/this` refuse with "Gaia is aborted". So
+  does Split, which moves nothing.
 - **Cards:** open proposal, question and permission cards are voided. The main instance's action
   executor checks the abort flag itself before any commit; it doesn't trust
   the companion to have stopped.
@@ -1465,7 +1476,10 @@ Other additions:
 | 8A | Done | Usage reading on today's single accounts: `UsageSource` for Claude and Codex with fragile-endpoint fixtures and strict parsing (§6.3), health states (§6.4), a composer usage ring polled from launch rather than the first run (§6.2), and a Codex ring (checked live 2026-11-01, except the Codex passive update during a turn: its shape is tested from the recorded fixture) |
 | 8B | Done | Accounts: the ordered account list and per-spawn config (§6.1), native sessions tracked per account (§7.4), account-switch session copy and `--resume`, a manual switch with its divider (§6.5), a ring per account with inactive ones dulled (§6.2). Claude checked live 2026-11-01 across two logins; a Codex turn on a second account is not (below) |
 | 8C | Done | Low and exhausted (§6.5): floors, the low banner, the exhausted decision card and its three cases, the interrupted run's partial answer kept and marked, the resend checkbox, the card replacing the §7.5 confirmation. Checked live 2026-11-01 with forced numbers across two logins; the limit errors themselves come from the CLIs' binaries, not a real limit (below) |
-| 9 | | OS read/control + grants, `/this`, Abort extended to OS access; later: push-to-talk |
+| 9A | | `/this` (§15.5): the summon-time capture of the element under the cursor, the chip, the refusal while aborted, and the sensitive-field refusal in code (§15.6) |
+| 9B | | Agent reads (§15.6): per-chat, per-device grants, the target window rule, `os.read_screen`, `os.screenshot`, `os.focused_window`, and Abort revoking grants, with Re-arm leaving them off (§15.7) |
+| 9C | | Agent control (§15.6): `os.click`, `os.scroll`, `os.type`, `os.key`, step-list approval, the "Gaia is in control" border, Esc to stop, Abort stopping input mid-sequence with key-ups (§15.7), the action log |
+| Later | | Push-to-talk (§18) |
 
 Each phase ends with something usable. Phase 0–1 alone is already a Claude
 Desktop replacement.
@@ -1484,6 +1498,23 @@ card logic on top of both.
   home. The utility model and session catch-up are affected too. The terms
   re-check in §20 came first: checked by Juno, green light given (2026-11-01).
 - **8C** needs 8A's numbers and 8B's switch.
+
+**Phase 9 is split in three (decided 2026-11-01)**, built in order, because
+the risk rises with each part: a bug in 9A gives a bad chip, one in 9B sends
+screen contents to an agent, and one in 9C puts real input in the wrong app.
+Abort ships with the part it protects rather than as a step of its own.
+- **9A** is the user's choice of what to attach, so it adds no agent tools.
+  It builds on the UI Automation code from Phase 3. Its sensitive-field
+  refusal is what 9B's reads rely on.
+- **9B** sends no input. Its grants are new: stored on the chat, synced, and
+  applied only on the device that gave them (§8), so it needs a migration.
+  The open questions marked for 9B in §20 come first.
+- **9C** needs 9B's grants and its UI Automation tree for targeting. It's the
+  one part that has to be checked live with a real foreground window, not
+  with background input or while locked.
+
+Push-to-talk is out of Phase 9. It shares nothing with the OS work and needs
+whisper.cpp and audio capture of its own.
 
 Gemini's usage sources (§6.2) are out of scope while Gemini stays skipped
 (below), and come back with its adapter.
@@ -2265,7 +2296,22 @@ Decided in the second review (2026-10-24):
   (§7.4). A run lease serialises runs across devices (§8).
 - Images go through the media module (§8).
 
-No open questions remain.
+Decided for Phase 9 (2026-11-01):
+- The Phase 9 split (§19).
+- `os.*` tools never target Gaia. If Gaia is in the foreground, they use the
+  next window in Z-order (§15.6).
+
+Open, to settle before Phase 9B and 9C:
+- **Does the focused-window exclusion list (§15.4) apply to `os.*`?** §15.6
+  only refuses sensitive fields. Recommended: yes, so an agent can't read a
+  window the summon-time context refuses to touch. Settle before 9B.
+- **Screen text as prompt injection.** With *can control* on, text on a web
+  page can steer an agent that can click, and §5.3's framing is only a
+  mitigation, so the step list (§15.6) is the real boundary. Recommended: no
+  "approve once" for a batch unless it shows each step's target. Settle before
+  9C. Screen reads in workspace chats with Bash or web access have the same
+  exposure as `voyager.*` reads, which are off there by default (§5.3). Settle
+  whether *can see screen* needs a further warning there before 9B.
 
 To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's

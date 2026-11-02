@@ -3323,6 +3323,120 @@ void main() {
     });
   });
 
+  group('full screen and split (§15.1)', () {
+    GaiaChat chatAt(String id, int day) => GaiaChat(
+      id: id,
+      title: id,
+      createdAt: DateTime.utc(2026, 10, day),
+      updatedAt: DateTime.utc(2026, 10, day),
+      lastMessageAt: DateTime.utc(2026, 10, day),
+    );
+
+    Future<void> fullScreen({bool pressed = true}) async {
+      main.pipe.notify('hotkey', {'key': 'fullScreen', 'pressed': pressed});
+      await settle();
+    }
+
+    test('full screen opens the Gaia window on the chat in view', () async {
+      await main.store.createChat(chatAt('older', 1));
+      await main.store.createChat(chatAt('newer', 2));
+      await startCompanion();
+      await controller.selectChat('older');
+      await fullScreen();
+      expect(window.shown, GaiaMode.window);
+      expect(window.fullScreen, isTrue);
+      expect(controller.currentChatId, 'older');
+    });
+
+    test('with nothing viewed yet, it opens the last active chat', () async {
+      await main.store.createChat(chatAt('older', 1));
+      await main.store.createChat(chatAt('newer', 2));
+      await startCompanion();
+      await fullScreen();
+      expect(controller.currentChatId, 'newer');
+    });
+
+    test('a new chat the user started stays in view', () async {
+      await main.store.createChat(chatAt('older', 1));
+      await startCompanion();
+      controller.newChat();
+      await fullScreen();
+      expect(controller.currentChatId, isNull);
+    });
+
+    test(
+      'so does a new chat with a draft, before any chat was viewed',
+      () async {
+        await main.store.createChat(chatAt('older', 1));
+        await startCompanion();
+        controller.draft.text = 'typed in the floater';
+        await fullScreen();
+        expect(controller.currentChatId, isNull);
+        expect(controller.draft.text, 'typed in the floater');
+      },
+    );
+
+    test('the host hears when a crop starts and ends', () async {
+      await startCompanion();
+      main.companion.onEvent!('capture', {
+        'kind': 'region',
+        'path': 'shot.bmp',
+        'left': 0,
+        'top': 0,
+        'width': 100,
+        'height': 100,
+      });
+      await settle();
+      await controller.finishCrop(null);
+      await settle();
+      expect(main.events.where((e) => e.$1 == 'cropping').map((e) => e.$2), [
+        {'active': true},
+        {'active': false},
+      ]);
+    });
+
+    test('pressed again it hides; only in front, only full screen', () async {
+      await startCompanion();
+      main.pipe.notify('hotkey', {'key': 'window'});
+      await settle();
+      await fullScreen();
+      expect(window.shown, GaiaMode.window);
+      expect(window.fullScreen, isTrue);
+      window.behind = true;
+      await fullScreen();
+      expect(window.shown, GaiaMode.window);
+      window.behind = false;
+      await fullScreen();
+      expect(window.shown, isNull);
+    });
+
+    test('Restore leaves full screen', () async {
+      await startCompanion();
+      await fullScreen();
+      await controller.leaveFullScreen();
+      expect(window.shown, GaiaMode.window);
+      expect(window.fullScreen, isFalse);
+    });
+
+    test(
+      'split puts the Gaia window on its half, out of full screen',
+      () async {
+        await startCompanion();
+        await fullScreen();
+        main.pipe.notify('split', {
+          'left': 960,
+          'top': 0,
+          'width': 960,
+          'height': 1040,
+        });
+        await settle();
+        expect(window.shown, GaiaMode.window);
+        expect(window.fullScreen, isFalse);
+        expect(window.frame, (left: 960, top: 0, width: 960, height: 1040));
+      },
+    );
+  });
+
   group('hotkeys (§15.1)', () {
     setUp(() => startCompanion());
 

@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart'
     show TextEditingController, TextEditingValue, TextSelection;
 import 'package:path/path.dart' as p;
+import 'package:super_clipboard/super_clipboard.dart'
+    show DataWriterItem, Formats, SystemClipboard;
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/text/merge_aware_undo.dart';
@@ -87,6 +89,7 @@ class GaiaController extends ChangeNotifier {
     GaiaSidebar? sidebar,
     this._utility,
     Future<String> Function()? clipboard,
+    Future<void> Function(Uint8List png)? copyPng,
     String? draftDirectory,
     this._reach,
     this._usageSources = const {},
@@ -95,6 +98,7 @@ class GaiaController extends ChangeNotifier {
     @visibleForTesting this._cardHold = kGaiaCardHold,
     @visibleForTesting this._curateAfter = kGaiaCurateAfter,
   }) : _clipboard = clipboard ?? _readClipboard,
+       _copyPng = copyPng ?? _writeClipboardPng,
        _draftDirectory = draftDirectory ?? Directory.systemTemp.path,
        _cliVersions =
            cliVersions ??
@@ -126,6 +130,13 @@ class GaiaController extends ChangeNotifier {
 
   static Future<String> _readClipboard() async =>
       (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
+
+  /// Puts a finished crop on the clipboard.
+  final Future<void> Function(Uint8List png) _copyPng;
+
+  static Future<void> _writeClipboardPng(Uint8List png) async => SystemClipboard
+      .instance
+      ?.write([DataWriterItem()..add(Formats.png(png))]);
 
   /// Where the draft's images wait until they're sent.
   final String _draftDirectory;
@@ -268,6 +279,7 @@ class GaiaController extends ChangeNotifier {
     _beforeCrop = shown;
     if (!overCrop) _cropBehind = shown != null && !_window.foreground;
     cropping = (path: path, frame: frame);
+    _pipe.notify('cropping', {'active': true});
     onScreen.value = true;
     await _window.show(GaiaMode.overlay, () {
       layout = GaiaMode.overlay;
@@ -276,12 +288,14 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// The overlay's crop is done: [region], in the capture's pixels, joins
-  /// the draft; null cancels. The window goes back to how it was, and a
-  /// crop begun from hidden opens the small floater with it.
+  /// the draft and goes on the clipboard; null cancels. The window goes back
+  /// to how it was, and a crop begun from hidden opens the small floater
+  /// with it.
   Future<void> finishCrop(Rect? region) async {
     final capture = cropping;
     if (capture == null) return;
     cropping = null;
+    _pipe.notify('cropping', {'active': false});
     try {
       if (region != null) {
         // Off screen while it renders, not the chat stretched over the
@@ -289,6 +303,7 @@ class GaiaController extends ChangeNotifier {
         _window.hide(between: true);
         final png = await gaiaRenderPng(capture.path, crop: region);
         await attachImage(png);
+        await _copyCrop(png);
       }
     } finally {
       unawaited(_deleteQuietly(capture.path));
@@ -301,11 +316,29 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A clipboard that won't open (another process can hold it) costs the
+  /// copy, not the crop: it's in the draft already.
+  Future<void> _copyCrop(Uint8List png) async {
+    try {
+      await _copyPng(png);
+    } on Exception catch (error) {
+      debugPrint('[gaia] crop not copied: $error');
+      _toasts.add((
+        chatId: '',
+        title: 'Image not copied',
+        body: "It's in the draft, but not on the clipboard.",
+        error: true,
+        question: false,
+      ));
+    }
+  }
+
   /// A crop left behind by another hotkey: its capture isn't wanted.
   void _discardCrop() {
     final capture = cropping;
     if (capture == null) return;
     cropping = null;
+    _pipe.notify('cropping', {'active': false});
     unawaited(_deleteQuietly(capture.path));
   }
 
@@ -484,9 +517,13 @@ class GaiaController extends ChangeNotifier {
   /// [chatId]'s draft's key, here and in the main instance's store.
   static String _keyOf(String? chatId) => chatId ?? GaiaDraft.newChatId;
 
+  /// A chat, or a new one, has been brought into view this run.
+  var _chatViewed = false;
+
   /// Brings [chatId] into view with its own draft, the one in view put
   /// away for when its chat is back.
   void _viewChat(String? chatId) {
+    _chatViewed = true;
     if (chatId == currentChatId) return;
     _draftHistories[_keyOf(currentChatId)] = draftUndo.saveHistory();
     if (draft.text.isNotEmpty ||
@@ -1782,6 +1819,15 @@ class GaiaController extends ChangeNotifier {
             pressed: params['pressed'] == true,
           ),
         );
+      case 'split':
+        unawaited(
+          _onSplit((
+            left: params['left']! as int,
+            top: params['top']! as int,
+            width: params['width']! as int,
+            height: params['height']! as int,
+          )),
+        );
       case 'capture':
         unawaited(_onCapture(params));
       case 'context':
@@ -1989,7 +2035,7 @@ class GaiaController extends ChangeNotifier {
     _toasts.add((
       chatId: '',
       title: 'Gaia is aborted',
-      body: 'Re-arm it to capture again.',
+      body: 'Re-arm it to use this.',
       error: true,
       question: false,
     ));
@@ -2022,9 +2068,54 @@ class GaiaController extends ChangeNotifier {
           return dismiss();
         }
         await openWindow();
+      case 'fullScreen':
+        // Pressed again, it closes, as the Gaia window's own key does.
+        if (pressed &&
+            shown == GaiaMode.window &&
+            _window.fullScreen &&
+            _window.foreground) {
+          return dismiss();
+        }
+        await _openLastChat();
+        _returnTo = null;
+        await _show(GaiaMode.window, fullScreen: true);
     }
     _summoned.add(null);
   }
+
+  /// The split hotkey: the host has moved the other window, and [half] is
+  /// the Gaia window's.
+  Future<void> _onSplit(GaiaFrame half) async {
+    if (cropping != null) return finishCrop(null);
+    _dropPickUp();
+    _returnTo = null;
+    await _show(GaiaMode.window, frame: half, fullScreen: false);
+    _summoned.add(null);
+  }
+
+  /// The chat left in view stays there. Nothing has been in view yet this
+  /// run, as after a restart: the one last active, since what was in view
+  /// isn't kept across runs. A new chat's draft is something in view.
+  Future<void> _openLastChat() async {
+    if (currentChatId != null ||
+        _chatViewed ||
+        chats.isEmpty ||
+        draft.text.isNotEmpty ||
+        draftImages.isNotEmpty ||
+        draftFiles.isNotEmpty) {
+      return;
+    }
+    await selectChat(
+      chats
+          .reduce((a, b) => b.lastMessageAt.isAfter(a.lastMessageAt) ? b : a)
+          .id,
+    );
+  }
+
+  /// Leaves full screen, for where the Gaia window was before it.
+  Future<void> leaveFullScreen() => _show(GaiaMode.window, fullScreen: false);
+
+  bool get fullScreen => _window.fullScreen;
 
   Future<void> openWindow() async {
     _returnTo = null;
@@ -2053,13 +2144,24 @@ class GaiaController extends ChangeNotifier {
     onScreen.value = false;
   }
 
-  Future<void> _show(GaiaMode mode, {bool behind = false}) {
+  Future<void> _show(
+    GaiaMode mode, {
+    bool behind = false,
+    GaiaFrame? frame,
+    bool? fullScreen,
+  }) {
     if (currentChatId == null && !debug.dummyMode) _utility?.warm();
     onScreen.value = true;
-    return _window.show(mode, () {
-      layout = mode;
-      notifyListeners();
-    }, behind: behind);
+    return _window.show(
+      mode,
+      () {
+        layout = mode;
+        notifyListeners();
+      },
+      behind: behind,
+      frame: frame,
+      fullScreen: fullScreen,
+    );
   }
 
   void newChat() {

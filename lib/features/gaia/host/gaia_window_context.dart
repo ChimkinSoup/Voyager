@@ -34,6 +34,10 @@ const _consoleClasses = {'ConsoleWindowClass', 'CASCADIA_HOSTING_WINDOW_CLASS'};
 /// can block for seconds against a hung app.
 const kGaiaUiaBudget = Duration(milliseconds: 250);
 
+/// The narrowest the Gaia window goes, in logical pixels: its sidebar plus a
+/// usable chat.
+const kGaiaMinimumWidth = 560.0;
+
 /// The foreground window; null when there's none, as on a locked session.
 GaiaForegroundWindow? gaiaForegroundWindow() {
   final hwnd = GetForegroundWindow();
@@ -57,6 +61,192 @@ GaiaForegroundWindow? gaiaForegroundWindow() {
   } finally {
     free(pid);
     free(className);
+  }
+}
+
+/// The split hotkey (§15.1): moves the other window to its half of its
+/// monitor's work area, and returns Gaia's half. [hwnd] is the foreground
+/// window, which is the other window itself, or with [below] Gaia, whose next
+/// app window down is. With none, as over the desktop, only Gaia has a half,
+/// on the monitor under the cursor. Gaia's half is never narrower than the Gaia
+/// window can go.
+/// An elevated window refuses to be moved, and stays where it is.
+({int left, int top, int width, int height}) gaiaSplitWindows(
+  int hwnd, {
+  required bool below,
+  required bool gaiaRight,
+}) {
+  final other = below
+      ? _appWindowBelow(hwnd)
+      : (gaiaIsShellWindow(hwnd) ? 0 : _rootOwner(hwnd));
+  final cursor = calloc<POINT>();
+  final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
+  final dpiX = calloc<Uint32>();
+  final dpiY = calloc<Uint32>();
+  try {
+    GetCursorPos(cursor);
+    final monitor = other != 0
+        ? MonitorFromWindow(other, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint(cursor.ref, MONITOR_DEFAULTTONEAREST);
+    GetMonitorInfo(monitor, info);
+    GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, dpiX, dpiY);
+    final work = info.ref.rcWork;
+    final (:gaia, other: otherHalf) = gaiaSplitHalves(
+      left: work.left,
+      top: work.top,
+      right: work.right,
+      bottom: work.bottom,
+      gaiaRight: gaiaRight,
+      gaiaMinimumWidth: (kGaiaMinimumWidth * dpiX.value / 96).ceil(),
+    );
+    // Off this isolate: these calls wait on the window's thread, for as long
+    // as the app is busy.
+    if (other != 0) Isolate.run(() => _moveWindow(other, otherHalf)).ignore();
+    return gaia;
+  } finally {
+    free(cursor);
+    free(info);
+    free(dpiX);
+    free(dpiY);
+  }
+}
+
+/// The app window a dialog belongs to. An owner kept hidden isn't one, which
+/// leaves the dialog itself.
+int _rootOwner(int hwnd) {
+  var root = hwnd;
+  for (
+    var owner = GetWindow(root, GW_OWNER);
+    owner != 0;
+    owner = GetWindow(root, GW_OWNER)
+  ) {
+    root = owner;
+  }
+  return IsWindowVisible(root) != 0 ? root : hwnd;
+}
+
+/// A work area's two halves, 50:50, unless that leaves Gaia under
+/// [gaiaMinimumWidth]: then Gaia has that, and the other window the rest.
+({
+  ({int left, int top, int width, int height}) gaia,
+  ({int left, int top, int width, int height}) other,
+})
+gaiaSplitHalves({
+  required int left,
+  required int top,
+  required int right,
+  required int bottom,
+  required bool gaiaRight,
+  required int gaiaMinimumWidth,
+}) {
+  final height = bottom - top;
+  final width = right - left;
+  final minimum = gaiaMinimumWidth.clamp(0, width);
+  final leftWidth = gaiaRight
+      ? (width ~/ 2).clamp(0, width - minimum)
+      : (width ~/ 2).clamp(minimum, width);
+  final leftHalf = (left: left, top: top, width: leftWidth, height: height);
+  final rightHalf = (
+    left: left + leftWidth,
+    top: top,
+    width: width - leftWidth,
+    height: height,
+  );
+  return gaiaRight
+      ? (gaia: rightHalf, other: leftHalf)
+      : (gaia: leftHalf, other: rightHalf);
+}
+
+/// The taskbar, the desktop, or Start or Search, in front on the way to the
+/// user's app when they click through it: not an app. (A Store app's own
+/// CoreWindow is a child of its frame, never the top-level window here.)
+bool gaiaIsShellWindow(int hwnd) {
+  final className = wsalloc(64);
+  try {
+    GetClassName(hwnd, className, 64);
+    return const {
+      'Shell_TrayWnd',
+      'Shell_SecondaryTrayWnd',
+      'Progman',
+      'WorkerW',
+      'Windows.UI.Core.CoreWindow',
+    }.contains(className.toDartString());
+  } finally {
+    free(className);
+  }
+}
+
+/// The first app window under [hwnd] in the z-order, as Alt+Tab would list
+/// it, past any always-on-top ones a floater sits among; 0 for none.
+int _appWindowBelow(int hwnd) {
+  for (
+    var next = GetWindow(hwnd, GW_HWNDNEXT);
+    next != 0;
+    next = GetWindow(next, GW_HWNDNEXT)
+  ) {
+    if (_isAppWindow(next)) return next;
+  }
+  return 0;
+}
+
+bool _isAppWindow(int hwnd) {
+  if (IsWindowVisible(hwnd) == 0 ||
+      IsIconic(hwnd) != 0 ||
+      GetWindow(hwnd, GW_OWNER) != 0 ||
+      gaiaIsShellWindow(hwnd) ||
+      GetWindowTextLength(hwnd) == 0 ||
+      GetWindowLongPtr(hwnd, GWL_EXSTYLE) &
+              (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST) !=
+          0) {
+    return false;
+  }
+  // Windows on another virtual desktop, and suspended Store apps, are
+  // visible but cloaked.
+  final cloaked = calloc<Int32>();
+  try {
+    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloaked, sizeOf<Int32>());
+    return cloaked.value == 0;
+  } finally {
+    free(cloaked);
+  }
+}
+
+/// Fits what the user sees of [hwnd] to [frame]: its window rect also holds
+/// invisible resize borders, which would leave gaps at the edges of the half.
+void _moveWindow(int hwnd, ({int left, int top, int width, int height}) frame) {
+  // These wait on the window's thread, which a hung app never answers.
+  if (IsHungAppWindow(hwnd) != 0) return;
+  // SetWindowPos doesn't bring a window out of maximised or minimised. Not
+  // activating: a busy app gets here after Gaia has taken the foreground.
+  if (IsZoomed(hwnd) != 0 || IsIconic(hwnd) != 0) {
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+  }
+  final rect = calloc<RECT>();
+  final visible = calloc<RECT>();
+  try {
+    GetWindowRect(hwnd, rect);
+    final read = DwmGetWindowAttribute(
+      hwnd,
+      DWMWA_EXTENDED_FRAME_BOUNDS,
+      visible,
+      sizeOf<RECT>(),
+    );
+    final left = SUCCEEDED(read) ? visible.ref.left - rect.ref.left : 0;
+    final top = SUCCEEDED(read) ? visible.ref.top - rect.ref.top : 0;
+    final right = SUCCEEDED(read) ? rect.ref.right - visible.ref.right : 0;
+    final bottom = SUCCEEDED(read) ? rect.ref.bottom - visible.ref.bottom : 0;
+    SetWindowPos(
+      hwnd,
+      0,
+      frame.left - left,
+      frame.top - top,
+      frame.width + left + right,
+      frame.height + top + bottom,
+      SWP_NOZORDER | SWP_NOACTIVATE,
+    );
+  } finally {
+    free(rect);
+    free(visible);
   }
 }
 

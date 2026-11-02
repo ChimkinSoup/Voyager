@@ -2309,6 +2309,8 @@ class GaiaSettingsTable extends Table {
   TextColumn get contextExclusionsJson => text().nullable()();
   BoolColumn get autoAcceptCurator =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get splitGaiaRight =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2451,7 +2453,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 183;
+  int get schemaVersion => 184;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4535,6 +4537,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_messages_table',
           gaiaMessagesTable,
           gaiaMessagesTable.account,
+        );
+      }
+      if (from >= 169 && from < 184) {
+        // Which side the split hotkey puts Gaia on (GAIA_HLD.md §15.1).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.splitGaiaRight,
         );
       }
     },

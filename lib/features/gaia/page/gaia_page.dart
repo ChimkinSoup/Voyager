@@ -2267,6 +2267,21 @@ class _KeysSection extends ConsumerWidget {
       showVoyagerToast(context, message: '$stored is already ${clash.label}');
       return;
     }
+    // Send only works inside Gaia, so it can't take a system-wide hotkey.
+    final voyager = ref.read(settingsProvider).valueOrNull;
+    final voyagerClash = !keybind.global || voyager == null
+        ? null
+        : gaiaHotkeyClash(stored, {
+            'Quick journal entry': voyager.journalHotkey,
+            'Quick to-do': voyager.todoHotkey,
+            'Quick transaction': voyager.financeHotkey,
+            'Quick reminder': voyager.reminderHotkey,
+            'Quick event': voyager.calendarHotkey,
+          });
+    if (voyagerClash != null) {
+      showVoyagerToast(context, message: '$stored is already $voyagerClash');
+      return;
+    }
     await _save(ref, {...settings.keybinds, keybind.name: stored});
   }
 
@@ -2321,6 +2336,18 @@ class _KeysSection extends ConsumerWidget {
               ],
             ),
           ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Put Gaia on the right in a split'),
+          subtitle: const Text(
+            'Split the screen with Gaia puts the other window on the left. '
+            'Off, Gaia goes on the left and the other window on the right.',
+          ),
+          value: settings.splitGaiaRight,
+          onChanged: (value) => ref
+              .read(gaiaRepositoryProvider)
+              .upsertSettings(settings.copyWith(splitGaiaRight: value)),
+        ),
       ],
     );
   }

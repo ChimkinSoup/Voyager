@@ -3,6 +3,7 @@ import 'dart:ui' show Size;
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -23,7 +24,7 @@ const _pickUpSize = Size(460, 48);
 
 /// How far the user can shrink any mode: the Gaia window's sidebar plus a
 /// usable chat. No larger than [_smallSize], so it never clamps a mode.
-const _minimumSize = Size(560, 360);
+const _minimumSize = Size(kGaiaMinimumWidth, 360);
 
 /// The companion's one OS window, in whichever mode it's in. Floaters are
 /// topmost tool windows, out of the taskbar and Alt+Tab; the Gaia window is
@@ -58,11 +59,24 @@ class GaiaWindow {
   /// cursor has gone to.
   final _floaterFrames = <GaiaMode, GaiaFrame>{};
 
+  /// The Gaia window covers the monitor under the cursor, taskbar and all,
+  /// whenever it's shown, until it's left. A floater opened over it goes back
+  /// to it. [_windowPlacement] stays where it was before, to leave it for.
+  bool get fullScreen => _fullScreen;
+  var _fullScreen = false;
+
+  /// The full-screen window was minimised when last on screen.
+  var _fullScreenMinimized = false;
+
   /// Keeps where the mode on screen is, for the next time it's shown.
   void _rememberFrame() {
     switch (shown) {
       case GaiaMode.window:
-        _windowPlacement = _readPlacement(_hwnd);
+        if (_fullScreen) {
+          _fullScreenMinimized = IsIconic(_hwnd) != 0;
+        } else {
+          _windowPlacement = _readPlacement(_hwnd);
+        }
       case final mode? when mode == GaiaMode.small || mode == GaiaMode.large:
         if (IsIconic(_hwnd) == 0) _floaterFrames[mode] = _readFrame(_hwnd);
       case _:
@@ -103,8 +117,11 @@ class GaiaWindow {
   /// [mode]'s layout; it runs before the resize when the window shrinks, and
   /// after the frame at the new size when it grows, so a grow never shows
   /// the uncovered area black and a shrink never squeezes the old layout.
-  /// [GaiaMode.overlay] takes the monitor's [frame]. [GaiaMode.pickUp]
-  /// shows without taking the focus, which the user is selecting in.
+  /// [frame] is what the client area is to cover: the monitor for
+  /// [GaiaMode.overlay], which always takes one, or the split's half for the
+  /// Gaia window. [fullScreen] enters or leaves [GaiaWindow.fullScreen].
+  /// [GaiaMode.pickUp] shows without taking the focus, which the user is
+  /// selecting in.
   /// [behind] puts it back behind the app that was in front when Gaia last
   /// came up, which gets the foreground back: a crop cancelled over a Gaia
   /// window the user wasn't in.
@@ -113,12 +130,17 @@ class GaiaWindow {
     void Function() layout, {
     GaiaFrame? frame,
     bool behind = false,
+    bool? fullScreen,
   }) async {
     final hwnd = _hwnd;
     final pill = mode == GaiaMode.pickUp;
+    final moving = frame != null || (fullScreen ?? _fullScreen) != _fullScreen;
     // Already up in this mode, as a hotkey pressed again finds it: only
     // brought to the front. Going through the hide and re-show would flash.
-    if (mode == shown && mode != GaiaMode.overlay && IsIconic(hwnd) == 0) {
+    if (mode == shown &&
+        mode != GaiaMode.overlay &&
+        !moving &&
+        IsIconic(hwnd) == 0) {
       if (!pill) _takeForeground(hwnd);
       return;
     }
@@ -136,8 +158,14 @@ class GaiaWindow {
       );
     }
     _rememberFrame();
-    final placement = mode == GaiaMode.window ? _windowPlacement : null;
+    _fullScreen = fullScreen ?? _fullScreen;
+    final full = mode == GaiaMode.window && _fullScreen;
+    final coversClient = frame != null || full;
+    final placement = mode == GaiaMode.window && !coversClient
+        ? _windowPlacement
+        : null;
     frame ??=
+        (full ? _monitorUnderCursor() : null) ??
         placement?.frame ??
         _underCursor(_floaterFrames[mode]) ??
         _frameFor(mode);
@@ -183,17 +211,17 @@ class GaiaWindow {
       SetWindowLongPtr(hwnd, GWL_EXSTYLE, wantStyle);
     }
     // Without a maximise box, a floater dragged to the screen's edge isn't
-    // snapped to half of it or maximised.
+    // snapped to half of it or maximised; nor is Win+Up a full-screen window.
     final style = GetWindowLongPtr(hwnd, GWL_STYLE);
     SetWindowLongPtr(
       hwnd,
       GWL_STYLE,
-      floater ? style & ~WS_MAXIMIZEBOX : style | WS_MAXIMIZEBOX,
+      floater || full ? style & ~WS_MAXIMIZEBOX : style | WS_MAXIMIZEBOX,
     );
-    // Square to the monitor's edges as an overlay; rounded otherwise.
+    // Square to the monitor's edges over all of it; rounded otherwise.
     _setCorners(
       hwnd,
-      mode == GaiaMode.overlay ? DWMWCP_DONOTROUND : DWMWCP_DEFAULT,
+      mode == GaiaMode.overlay || full ? DWMWCP_DONOTROUND : DWMWCP_DEFAULT,
     );
     if (!grows) layout();
     if (placement != null) {
@@ -204,17 +232,8 @@ class GaiaWindow {
         minimized: minimized,
       );
     }
-    if (mode == GaiaMode.overlay) {
-      // The monitor is the client area's to cover, for its frame at 1:1:
-      // the hidden title bar still leaves resize borders around it.
-      final inset = _insets(hwnd);
-      frame = (
-        left: frame.left - inset.left,
-        top: frame.top - inset.top,
-        width: frame.width + inset.left + inset.right,
-        height: frame.height + inset.top + inset.bottom,
-      );
-    }
+    final client = coversClient ? frame : null;
+    if (client != null) frame = _aroundClient(hwnd, client);
     SetWindowPos(
       hwnd,
       floater ? HWND_TOPMOST : HWND_NOTOPMOST,
@@ -227,6 +246,22 @@ class GaiaWindow {
           (pill ? SWP_NOACTIVATE : 0) |
           (placement != null ? SWP_NOMOVE | SWP_NOSIZE : 0),
     );
+    if (client != null) {
+      // Onto a monitor of another scale, WM_DPICHANGED has resized it to
+      // Windows' suggested rect, and the borders have changed with the scale.
+      final fitted = _aroundClient(hwnd, client);
+      if (fitted != _readFrame(hwnd)) {
+        SetWindowPos(
+          hwnd,
+          0,
+          fitted.left,
+          fitted.top,
+          fitted.width,
+          fitted.height,
+          SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+      }
+    }
     if (!minimized) await _paintedAt();
     if (grows) {
       layout();
@@ -246,6 +281,8 @@ class GaiaWindow {
           SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
       }
+      // Sized first, so it restores from the taskbar still over the monitor.
+      if (full && _fullScreenMinimized) ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
     }
     _cloak(hwnd, false);
     if (!pill && !behind) _takeForeground(hwnd);
@@ -264,23 +301,9 @@ class GaiaWindow {
     returnTo = 0;
     away = true;
     final front = GetForegroundWindow();
-    if (front != 0 && front != _hwnd && !_isShell(front)) _cameFrom = front;
-  }
-
-  /// The taskbar or the desktop, in front on the way to the user's app when
-  /// they click through it: no app to put Gaia behind.
-  static bool _isShell(int hwnd) {
-    final className = wsalloc(64);
-    try {
-      GetClassName(hwnd, className, 64);
-      return const {
-        'Shell_TrayWnd',
-        'Shell_SecondaryTrayWnd',
-        'Progman',
-        'WorkerW',
-      }.contains(className.toDartString());
-    } finally {
-      free(className);
+    // Not the taskbar or the desktop: no app to put Gaia behind.
+    if (front != 0 && front != _hwnd && !gaiaIsShellWindow(front)) {
+      _cameFrom = front;
     }
   }
 
@@ -349,6 +372,29 @@ class GaiaWindow {
       return (left: left, top: top, width: width, height: height);
     } finally {
       free(cursor);
+    }
+  }
+
+  /// All of the monitor under the cursor.
+  static GaiaFrame _monitorUnderCursor() {
+    final cursor = calloc<POINT>();
+    final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
+    try {
+      GetCursorPos(cursor);
+      GetMonitorInfo(
+        MonitorFromPoint(cursor.ref, MONITOR_DEFAULTTONEAREST),
+        info,
+      );
+      final monitor = info.ref.rcMonitor;
+      return (
+        left: monitor.left,
+        top: monitor.top,
+        width: monitor.right - monitor.left,
+        height: monitor.bottom - monitor.top,
+      );
+    } finally {
+      free(cursor);
+      free(info);
     }
   }
 
@@ -428,6 +474,18 @@ class GaiaWindow {
     } finally {
       free(rect);
     }
+  }
+
+  /// The window frame that has [client] as its client area, for it at 1:1: the
+  /// hidden title bar still leaves resize borders around it.
+  static GaiaFrame _aroundClient(int hwnd, GaiaFrame client) {
+    final inset = _insets(hwnd);
+    return (
+      left: client.left - inset.left,
+      top: client.top - inset.top,
+      width: client.width + inset.left + inset.right,
+      height: client.height + inset.top + inset.bottom,
+    );
   }
 
   /// How far inside the window its client area sits, on each side.

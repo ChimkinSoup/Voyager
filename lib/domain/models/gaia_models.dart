@@ -1289,6 +1289,7 @@ class GaiaSettings extends SoftDeletable {
     this.windowContext = true,
     this.contextExclusions = kGaiaDefaultContextExclusions,
     this.autoAcceptCurator = false,
+    this.splitGaiaRight = false,
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -1361,6 +1362,10 @@ class GaiaSettings extends SoftDeletable {
   /// The curator's memories go straight in, skipping the inbox (§11).
   final bool autoAcceptCurator;
 
+  /// The split hotkey (§15.1) puts Gaia on the right and the other window on
+  /// the left, rather than the other way round.
+  final bool splitGaiaRight;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -1384,6 +1389,7 @@ class GaiaSettings extends SoftDeletable {
     bool? windowContext,
     List<String>? contextExclusions,
     bool? autoAcceptCurator,
+    bool? splitGaiaRight,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -1405,6 +1411,7 @@ class GaiaSettings extends SoftDeletable {
     windowContext: windowContext ?? this.windowContext,
     contextExclusions: contextExclusions ?? this.contextExclusions,
     autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
+    splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
   );
 
   /// What the companion needs of them.

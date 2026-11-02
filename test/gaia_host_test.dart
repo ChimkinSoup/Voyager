@@ -85,6 +85,10 @@ void main() {
     uia = (url: null, selection: null);
   });
 
+  /// Each time the split hotkey moved a window.
+  late List<({int hwnd, bool below, bool gaiaRight})> splits;
+  setUp(() => splits = []);
+
   /// Each Ctrl+C fallback, by the exe it was sent to, and what it got.
   late List<String> copies;
   String? copied;
@@ -108,6 +112,10 @@ void main() {
     },
     foregroundWindow: () => foreground,
     readUia: (window, {required selection}) async => uia,
+    splitWindows: (hwnd, {required below, required gaiaRight}) {
+      splits.add((hwnd: hwnd, below: below, gaiaRight: gaiaRight));
+      return (left: 0, top: 0, width: 960, height: 1040);
+    },
     copySelection: (window) async {
       copies.add(window.exe);
       await copyGate?.future;
@@ -200,6 +208,90 @@ void main() {
         });
       },
     );
+
+    test('full screen goes to the companion as a hotkey', () {
+      run(show: true, (async, host) {
+        connect(async);
+        host.onHotkey(GaiaHotkey.fullScreen, pressed: true);
+        async.flushMicrotasks();
+        expect(companions.single.events.last, 'hotkey fullScreen true');
+      });
+    });
+
+    GaiaForegroundWindow windowOf(int hwnd, int pid) => (
+      hwnd: hwnd,
+      pid: pid,
+      exe: 'app',
+      app: 'App',
+      title: '',
+      console: false,
+    );
+
+    test('split moves the window in front, then sends Gaia its half', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = windowOf(5, 77);
+        host.onHotkey(GaiaHotkey.split);
+        async.flushMicrotasks();
+        expect(splits, [(hwnd: 5, below: false, gaiaRight: false)]);
+        expect(companions.single.events, contains('split 0 0 960 1040'));
+      });
+    });
+
+    test('aborted, split moves nothing and the companion says why', () {
+      run(show: true, (async, host) {
+        connect(async);
+        host.onHotkey(GaiaHotkey.abort);
+        async.flushMicrotasks();
+        foreground = windowOf(5, 77);
+        host.onHotkey(GaiaHotkey.split);
+        async.flushMicrotasks();
+        expect(splits, isEmpty);
+        expect(companions.single.events, contains('refused aborted'));
+      });
+    });
+
+    test('mid-crop, split moves nothing and goes on to cancel the crop', () {
+      run(show: true, (async, host) {
+        connect(async);
+        companions.single.pipe.notify('cropping', {'active': true});
+        async.flushMicrotasks();
+        foreground = windowOf(9, companions.single.pid);
+        host.onHotkey(GaiaHotkey.split);
+        async.flushMicrotasks();
+        expect(splits, isEmpty);
+        expect(companions.single.events, contains('hotkey split'));
+        companions.single.pipe.notify('cropping', {'active': false});
+        async.flushMicrotasks();
+        host.onHotkey(GaiaHotkey.split);
+        async.flushMicrotasks();
+        expect(splits, [(hwnd: 9, below: true, gaiaRight: false)]);
+      });
+    });
+
+    test('split over Gaia moves the window under it', () {
+      run(show: true, (async, host) {
+        connect(async);
+        foreground = windowOf(9, companions.single.pid);
+        host.onHotkey(GaiaHotkey.split);
+        async.flushMicrotasks();
+        expect(splits, [(hwnd: 9, below: true, gaiaRight: false)]);
+      });
+    });
+
+    test('split follows the side setting', () {
+      run(show: true, (async, host) {
+        connect(async);
+        DriftGaiaRepository(
+          db,
+        ).upsertSettings(GaiaSettings.initial().copyWith(splitGaiaRight: true));
+        async.flushMicrotasks();
+        foreground = windowOf(5, 77);
+        host.onHotkey(GaiaHotkey.split);
+        async.flushMicrotasks();
+        expect(splits.single.gaiaRight, isTrue);
+      });
+    });
 
     test('a hotkey goes straight to a connected companion', () {
       run(show: true, (async, host) {
