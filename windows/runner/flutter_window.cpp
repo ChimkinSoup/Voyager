@@ -35,7 +35,11 @@ void CALLBACK OnWindowEvent(HWINEVENTHOOK, DWORD, HWND hwnd, LONG object,
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project,
                              bool start_hidden)
-    : project_(project), start_hidden_(start_hidden) {}
+    : project_(project),
+      start_hidden_(start_hidden),
+      gaia_border_([this] {
+        gaia_border_channel_->InvokeMethod("revoke", nullptr);
+      }) {}
 
 FlutterWindow::~FlutterWindow() {}
 
@@ -135,16 +139,22 @@ bool FlutterWindow::OnCreate() {
           result->NotImplemented();
           return;
         }
-        const auto* label = std::get_if<std::string>(call.arguments());
-        if (label) {
+        const auto* args =
+            std::get_if<flutter::EncodableMap>(call.arguments());
+        if (args) {
+          const auto& label = std::get<std::string>(
+              args->at(flutter::EncodableValue("label")));
           const int size = ::MultiByteToWideChar(
-              CP_UTF8, 0, label->data(), static_cast<int>(label->size()),
+              CP_UTF8, 0, label.data(), static_cast<int>(label.size()),
               nullptr, 0);
           std::wstring wide(size, L'\0');
-          ::MultiByteToWideChar(CP_UTF8, 0, label->data(),
-                                static_cast<int>(label->size()), wide.data(),
+          ::MultiByteToWideChar(CP_UTF8, 0, label.data(),
+                                static_cast<int>(label.size()), wide.data(),
                                 size);
-          gaia_border_.Show(wide);
+          gaia_border_.Show(wide,
+                            static_cast<unsigned int>(
+                                args->at(flutter::EncodableValue("accent"))
+                                    .LongValue()));
         } else {
           gaia_border_.Hide();
         }

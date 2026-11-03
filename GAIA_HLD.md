@@ -1823,12 +1823,24 @@ Phase 9C as built (2026-11-01):
   it got, and that the user stopped it. A result of "sent" says the input went, not
   that it worked: the tool's text tells the agent to read the screen.
 - **The border** is native (`gaia_control_border.cpp`), in the main instance: four
-  thin strips per monitor and a label on the primary, topmost, click-through, and
-  left out of captures. Strips rather than one window with a hole, since a topmost
-  window the size of a monitor reads as a full screen app. It shows while any chat
-  here has the grant, across hides and restarts, as §15.6 says. **The label names
-  the chat (decided 2026-11-01)**, or how many, or a forgotten grant would leave a
-  border nothing explains. It goes with Abort.
+  glowing strips per monitor, in Gaia's accent drifting into the Astral gold over a
+  dark falloff that keeps it readable on a white page, and a notch on the primary,
+  all topmost and left out of captures, and click-through but for the notch's button
+  (a window of its own, at alpha 1). Strips rather than
+  one window with a hole, since a topmost window the size of a monitor reads as a
+  full screen app. It shows while any chat here has the grant, across hides and
+  restarts, as §15.6 says. **The label names the chat (decided 2026-11-01)**, or how
+  many, or a forgotten grant would leave a border nothing explains. It goes with
+  Abort. The notch's text is Gaia's Iosevka Aile, loaded from the bundled asset and
+  drawn with GDI+, and its button is a still `GaiaButton`, with nothing animated, so
+  it costs nothing until the cursor is over it. **The notch's Revoke access
+  (2026-11-02)** turns off both grants on every
+  chat on this device, as Abort does, and stops a run, but agents keep running and
+  Gaia isn't aborted, so a grant can go straight back on. Pressing it doesn't
+  activate the window. A step aimed under the button is refused, as anything covering
+  the target is; one aimed under the rest of the notch goes through, as the user's
+  click does (decided 2026-11-03: a dead area for as long as the grant is on costs
+  more than a click reaching something the notch hides).
 - **The toggle** is the hand beside the eye, per chat. The grants are separate: with
   only *can control*, the agent can act but not read, and gets the eye's refusal if
   it tries to. Turning it on shows no warning: the step list and the border are the

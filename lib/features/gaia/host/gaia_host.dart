@@ -108,7 +108,7 @@ class GaiaHost {
     captureControl,
     GaiaOsReads? osReads,
     GaiaOsControl? osControl,
-    Future<void> Function(String? label)? showBorder,
+    Future<void> Function(String? label, int accent)? showBorder,
   }) : _pipe = pipe ?? GaiaPipe(),
        _osReadsOverride = osReads,
        _osControlOverride = osControl,
@@ -150,13 +150,17 @@ class GaiaHost {
         vaultUnlocked: () => _vaultUnlocked(),
       );
 
-  /// The "Gaia is in control" border (§15.6), with its label; off for null.
-  final Future<void> Function(String? label) _showBorder;
+  /// The "Gaia is in control" border (§15.6), with its label, in Gaia's accent;
+  /// off for null.
+  final Future<void> Function(String? label, int accent) _showBorder;
 
   static const _borderChannel = MethodChannel('voyager/gaia_border');
 
-  static Future<void> _showBorderWindows(String? label) =>
-      _borderChannel.invokeMethod<void>('show', label);
+  static Future<void> _showBorderWindows(String? label, int accent) =>
+      _borderChannel.invokeMethod<void>(
+        'show',
+        label == null ? null : {'label': label, 'accent': accent & 0xFFFFFF},
+      );
 
   /// Whether the Secure Notes vault is unlocked. The `os_*` reads wait for
   /// [attach], so this is always the app's by then.
@@ -318,6 +322,9 @@ class GaiaHost {
     _memories = memories;
     final store = GaiaChatStore(repository, deviceId: deviceId);
     _attached.complete(store);
+    _borderChannel.setMethodCallHandler((call) async {
+      if (call.method == 'revoke') await _revokeFromBorder();
+    });
     // A grant left on before a restart still counts.
     unawaited(_syncBorder(store));
     _changes = repository.watchChanges().listen((_) {
@@ -425,6 +432,7 @@ class GaiaHost {
     if (argb == _accent) return;
     _accent = argb;
     if (_pipe.connected) _pipe.notify('accent', {'argb': argb});
+    if (_attached.isCompleted) unawaited(_attached.future.then(_syncBorder));
   }
 
   /// The composer's share of Voyager's settings (§9.5). Set whenever they
@@ -913,8 +921,25 @@ class GaiaHost {
     await _syncBorder(store);
   }
 
+  /// The border's button (§15.6): both grants off on every chat here, as Abort
+  /// takes them, but agents keep running and Gaia isn't aborted.
+  Future<void> _revokeFromBorder() async {
+    _revoking = true;
+    _osControl.stop('The user revoked screen access.');
+    try {
+      await _revokeGrants();
+    } finally {
+      _revoking = false;
+    }
+  }
+
+  /// The border's button was pressed and the grants aren't all off yet: the
+  /// writes queue, and nothing gets through meanwhile.
+  var _revoking = false;
+
   var _borderSynced = false;
   String? _borderLabel;
+  int? _borderAccent;
 
   /// The border shows while any chat here has *can control* on (§15.6), and
   /// names it, for finding the toggle again.
@@ -927,12 +952,17 @@ class GaiaHost {
       _ => 'Gaia is in control: ${titles.length} chats',
     };
     // Showing rebuilds its windows, and most changes don't touch it.
-    if (_borderSynced && label == _borderLabel) return;
+    if (_borderSynced &&
+        label == _borderLabel &&
+        (label == null || _accent == _borderAccent)) {
+      return;
+    }
     _borderSynced = true;
     _borderLabel = label;
+    _borderAccent = _accent;
     // Not waited for: a chat's save doesn't hang on a window.
     unawaited(
-      Future.sync(() => _showBorder(label)).catchError((Object error) {
+      Future.sync(() => _showBorder(label, _accent)).catchError((Object error) {
         debugPrint('[gaia] border not shown: $error');
       }),
     );
@@ -1323,7 +1353,7 @@ class GaiaHost {
   ) async {
     Future<void> check() async {
       if (_aborted) throw GaiaPipeException('aborted: Gaia is aborted.');
-      if (!await store.canSeeScreen(chatId)) {
+      if (!await store.canSeeScreen(chatId) || _revoking) {
         throw GaiaPipeException(
           'The user hasn\'t turned on "can see screen" for this chat. They can, '
           'with the eye button under the composer.',
@@ -1350,7 +1380,7 @@ class GaiaHost {
   /// whatever the companion did.
   Future<void> _checkControl(GaiaChatStore store, String chatId) async {
     if (_aborted) throw GaiaPipeException('aborted: Gaia is aborted.');
-    if (!await store.canControl(chatId)) {
+    if (!await store.canControl(chatId) || _revoking) {
       throw GaiaPipeException(
         'The user hasn\'t turned on "can control" for this chat. They can, with '
         'the hand button under the composer.',

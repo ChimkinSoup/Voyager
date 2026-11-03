@@ -4,6 +4,7 @@ import 'dart:io' show Directory, File, pid;
 import 'package:fake_async/fake_async.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:file/memory.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/data/database/app_database.dart';
@@ -177,9 +178,11 @@ void main() {
   /// What the `os_*` actions send, and each label the border was given.
   late _ControlBackend controlBackend;
   late List<String?> borders;
+  late List<int> borderAccents;
   setUp(() {
     controlBackend = _ControlBackend();
     borders = [];
+    borderAccents = [];
   });
 
   GaiaHost newHost() => GaiaHost(
@@ -218,7 +221,10 @@ void main() {
       backend: controlBackend,
       settle: Duration.zero,
     ),
-    showBorder: (label) async => borders.add(label),
+    showBorder: (label, accent) async {
+      borders.add(label);
+      borderAccents.add(accent);
+    },
     cursorTarget: () => underCursor,
     readControl: (target) async => pointedControl,
     captureControl: (path, target, control) async {
@@ -945,6 +951,105 @@ void main() {
           });
         },
       );
+
+      void sendRevoke() {
+        unawaited(
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .handlePlatformMessage(
+                'voyager/gaia_border',
+                const StandardMethodCodec().encodeMethodCall(
+                  const MethodCall('revoke'),
+                ),
+                null,
+              ),
+        );
+      }
+
+      void pressRevoke(FakeAsync async) {
+        sendRevoke();
+        async.flushMicrotasks();
+      }
+
+      test("nothing gets through while the border's button's writes queue", () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          sendRevoke();
+          expect(() => request(async, 'osPlan', plan), refused('can control'));
+        });
+      });
+
+      test("the border's button stops a run mid-text", () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          request(async, 'osPlan', {
+            ...plan,
+            'tool': 'os_type',
+            'arguments': {'text': 'x' * 400},
+          });
+          Map? result;
+          companions.single.pipe
+              .request('osRun', go)
+              .then((value) => result = value! as Map);
+          async.elapse(const Duration(milliseconds: 5));
+          final soFar = controlBackend.sent.length;
+          expect(soFar, greaterThan(0));
+          pressRevoke(async);
+          async.elapse(const Duration(seconds: 2));
+          expect(result!['stopped'], contains('revoked'));
+          expect(controlBackend.sent.length, soFar);
+        });
+      });
+
+      test(
+        "the border's button takes both grants on every chat, not aborting",
+        () {
+          run(show: true, (async, host) {
+            connect(async);
+            request(async, 'putChat', {'chat': chat()});
+            request(async, 'putChat', {
+              'chat': {...chat(), 'id': 'c2'},
+            });
+            request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+            request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+            request(async, 'setCanControl', {'chatId': 'c2', 'on': true});
+            expect(borders.last, 'Gaia is in control: 2 chats');
+
+            pressRevoke(async);
+
+            expect(borders.last, isNull);
+            expect(
+              () => request(async, 'osPlan', plan),
+              refused('can control'),
+            );
+            expect(() => request(async, 'osRead', osRead), refused('can see'));
+            // Not an abort: the grant can go straight back on.
+            request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+            expect(borders.last, 'Gaia is in control: A chat');
+          });
+        },
+      );
+
+      test('the border takes up a new accent only while it shows', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          final hidden = borders.length;
+          host.accent = 0xFF112233;
+          async.flushMicrotasks();
+          expect(borders, hasLength(hidden));
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          expect(borderAccents.last, 0xFF112233);
+          host.accent = 0xFF445566;
+          async.flushMicrotasks();
+          expect(borderAccents.last, 0xFF445566);
+          expect(borders.last, 'Gaia is in control: A chat');
+        });
+      });
 
       test('Abort stops a run mid-text, sending no more', () {
         run(show: true, (async, host) {

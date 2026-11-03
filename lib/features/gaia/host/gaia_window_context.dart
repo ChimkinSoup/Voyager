@@ -48,7 +48,8 @@ GaiaForegroundWindow? gaiaForegroundWindow() {
 }
 
 /// Where the cursor is, and the top-level window under it: not always the
-/// one in front.
+/// one in front. Null over the control border's button, the only part of the
+/// border a point can land on, which hides what's below it.
 typedef GaiaCursorTarget = ({int x, int y, GaiaForegroundWindow window});
 
 GaiaCursorTarget? gaiaCursorTarget() {
@@ -56,7 +57,7 @@ GaiaCursorTarget? gaiaCursorTarget() {
   try {
     if (GetCursorPos(cursor) == 0) return null;
     final under = WindowFromPoint(cursor.ref);
-    if (under == 0) return null;
+    if (under == 0 || _isControlBorder(under)) return null;
     return (
       x: cursor.ref.x,
       y: cursor.ref.y,
@@ -64,6 +65,16 @@ GaiaCursorTarget? gaiaCursorTarget() {
     );
   } finally {
     free(cursor);
+  }
+}
+
+bool _isControlBorder(int hwnd) {
+  final className = wsalloc(256);
+  try {
+    GetClassName(hwnd, className, 256);
+    return className.toDartString() == 'VoyagerGaiaControlBorder';
+  } finally {
+    free(className);
   }
 }
 
