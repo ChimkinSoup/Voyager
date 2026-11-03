@@ -970,16 +970,20 @@ class _Win32InputBackend implements GaiaInputBackend {
     required bool browser,
     required ({String name, String? type}) control,
   }) => gaiaScreenWork<GaiaWindowScan?>(
+    hwnd,
     () => gaiaScanWindow(hwnd, browser: browser, text: false, find: control),
   );
 
   @override
   Future<String?> address(int hwnd) =>
-      gaiaScreenWork<String?>(() => gaiaReadAddress(hwnd));
+      gaiaScreenWork<String?>(hwnd, () => gaiaReadAddress(hwnd));
 
   @override
   Future<bool?> focusSensitive(int hwnd, {required bool browser}) =>
-      gaiaScreenWork<bool>(() => gaiaFocusSensitive(hwnd, browser: browser));
+      gaiaScreenWork<bool>(
+        hwnd,
+        () => gaiaFocusSensitive(hwnd, browser: browser),
+      );
 
   @override
   bool modifiersDown() => const [

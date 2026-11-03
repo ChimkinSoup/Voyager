@@ -13,7 +13,7 @@ import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// Contract tests for the Codex `app-server` adapter (GAIA_HLD.md §5.1):
 /// every fixture is real `codex app-server` output recorded from codex-cli
-/// 0.164.0 by test/gaia_codex_contract_test.dart, replayed through
+/// 0.166.0 by test/gaia_codex_contract_test.dart, replayed through
 /// [CodexAppServerClient] in the order it came.
 
 /// Answers every question with its last option, and denies every
@@ -90,7 +90,7 @@ class _Replay {
   );
 }
 
-const _thread = '01a18b3b-286d-72f0-86cf-f88f377cc0e4';
+const _thread = '01a19d70-293d-74a1-85eb-e4936b7fe8cd';
 
 List<Map<String, Object?>> _text(String text) => [
   {'type': 'text', 'text': text},
@@ -176,9 +176,7 @@ void main() {
     expect(_parts(events), [
       {
         'type': 'text',
-        'text':
-            'I’ll ask your favourite colour, then create the file and report '
-            'your choice.',
+        'text': 'I’ll ask your favourite colour, then create the file.',
       },
       {
         'type': 'activity',
@@ -298,7 +296,7 @@ void main() {
     await expectLater(turn, throwsA(isA<GaiaRunException>()));
     expect(replay.sentFor('turn/interrupt')['params'], {
       'threadId': _thread,
-      'turnId': '01a18b3b-2899-7430-a0a0-301d95e5ca85',
+      'turnId': '01a19d70-2982-7df1-91d8-fe45be84a740',
     });
   });
 

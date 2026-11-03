@@ -44,6 +44,15 @@ final gaiaSearchProvider = FutureProvider.autoDispose
 /// [message] of [chat].
 typedef GaiaAction = ({GaiaChat chat, GaiaMessage message, GaiaCardPart card});
 
+/// Whether a control card's step list ended with steps not sent, however it
+/// ended: a run that stopped, or the rest declined, cancelled or unanswered. One
+/// still open hasn't ended: its next step is waiting for its approval.
+bool gaiaControlStopped(GaiaCardPart card) =>
+    card.state != GaiaCardState.open &&
+    (card.answer?['stopped'] != null ||
+        ((card.answer?['ran'] as num?)?.toInt() ?? 0) <
+            (card.input['steps'] as List? ?? const []).length);
+
 /// The action log (§10, §15.6, §17): every accepted proposal that wrote
 /// something and every step list that sent something, in live chats, newest
 /// first. Read again on every write to the chats or
@@ -95,6 +104,11 @@ final gaiaUsageProvider = Provider.autoDispose<Map<String, GaiaAccountUsage>>((
   ref.onDispose(() => usage.removeListener(ref.invalidateSelf));
   return usage.value;
 });
+
+/// Asks for an account's usage to be read again, by its key.
+final gaiaRecheckUsageProvider = Provider<void Function(String key)>(
+  (ref) => GaiaHost.instance.recheckUsage,
+);
 
 /// The setup checklist's version check; invalidated to re-check. Each
 /// account's login is its own provider's, below.

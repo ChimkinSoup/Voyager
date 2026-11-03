@@ -9,7 +9,7 @@ import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 
 /// Contract tests for the Codex adapter (GAIA_HLD.md §5.1): every fixture is
-/// real `codex exec --json` output recorded from codex-cli 0.164.0.
+/// real `codex exec --json` output recorded from codex-cli 0.166.0.
 List<CodexEvent> _events(String fixture) => [
   for (final line in File(
     'test/fixtures/gaia/codex/$fixture',
@@ -39,16 +39,12 @@ void main() {
     final events = _events('single_turn.jsonl');
     expect(
       events.whereType<CodexThreadStarted>().single.threadId,
-      '01a1746d-ee2c-70a1-a6d6-3ad02d683ffe',
+      '01a19d6f-c7ba-7ac0-8205-83c571e7ed67',
     );
     expect(events.last, isA<CodexTurnEnded>());
     expect((events.last as CodexTurnEnded).error, isNull);
     expect(_build(events).map((part) => part.toJson()), [
-      {'type': 'text', 'text': 'Hello.'},
-      {
-        'type': 'text',
-        'text': 'Done. The shell command was blocked by policy.',
-      },
+      {'type': 'text', 'text': 'gaia contract ok'},
     ]);
   });
 
@@ -56,15 +52,15 @@ void main() {
     final events = _events('resume_command.jsonl');
     expect(
       events.whereType<CodexThreadStarted>().single.threadId,
-      '01a1746d-ee2c-70a1-a6d6-3ad02d683ffe',
+      '01a19d6f-c7ba-7ac0-8205-83c571e7ed67',
     );
     expect(_build(events).map((part) => part.toJson()), [
-      {'type': 'text', 'text': 'I’ll run it now.'},
+      {'type': 'text', 'text': 'I’ll run the command and report its output.'},
       {
         'type': 'activity',
         'tools': ['Shell'],
       },
-      {'type': 'text', 'text': 'Output: `hi`'},
+      {'type': 'text', 'text': 'gaia-contract'},
     ]);
   });
 
@@ -123,9 +119,9 @@ void main() {
   });
 
   test('versions', () {
-    expect(parseCliVersion('codex-cli 0.164.0'), (0, 164, 0));
-    expect(isVersionInRange((0, 164, 0), kCodexTestedVersions), isTrue);
-    expect(isVersionInRange((0, 165, 0), kCodexTestedVersions), isFalse);
+    expect(parseCliVersion('codex-cli 0.166.0'), (0, 166, 0));
+    expect(isVersionInRange((0, 166, 0), kCodexTestedVersions), isTrue);
+    expect(isVersionInRange((0, 167, 0), kCodexTestedVersions), isFalse);
   });
 
   test('the sandbox is ready when none is used, or once set up', () async {

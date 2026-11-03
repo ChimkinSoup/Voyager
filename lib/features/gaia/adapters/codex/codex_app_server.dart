@@ -1,5 +1,5 @@
 // FRAGILE(cli): Codex's `codex app-server` JSON-RPC protocol, still marked
-// experimental (observed on 0.164.0; `codex app-server generate-json-schema
+// experimental (observed on 0.166.0; `codex app-server generate-json-schema
 // --experimental` prints it). Every shape read here has a recorded fixture
 // under test/fixtures/gaia/codex_app_server/, which
 // gaia_codex_app_server_test.dart replays. Re-record them, and move

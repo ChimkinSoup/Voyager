@@ -1,12 +1,47 @@
+import 'dart:io' show sleep;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/host/gaia_capture.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
 /// Focused-window context and selection capture (GAIA_HLD.md §15.2, §15.4):
 /// the exclusion list, the source a quote names, and the quote.
 void main() {
+  group('the guard on stuck reads (§15.6)', () {
+    /// Holds a slot for [hwnd] on a real worker, for a little.
+    Future<int?> stuck(int hwnd) => gaiaScreenWork(hwnd, () {
+      sleep(const Duration(milliseconds: 500));
+      return hwnd;
+    });
+
+    test('a window with a read going refuses another, and others still read, '
+        'up to the cap', () async {
+      final held = [for (var i = 1; i < kGaiaScreenWorkCap; i++) stuck(i)];
+      expect(await gaiaScreenWork(1, () => -1), isNull);
+      expect(await gaiaScreenWork(100, () => 100), 100);
+      // The last slot gone, a window with none going can't have one.
+      final last = stuck(kGaiaScreenWorkCap);
+      await expectLater(
+        gaiaScreenWork(101, () => 101),
+        throwsA(
+          isA<GaiaReadException>().having(
+            (error) => error.message,
+            'message',
+            contains("Another window's read is stuck"),
+          ),
+        ),
+      );
+      // A window already stuck says that, rather than blaming another.
+      expect(await gaiaScreenWork(kGaiaScreenWorkCap, () => -1), isNull);
+      await Future.wait([...held, last]);
+      expect(await gaiaScreenWork(101, () => 101), 101);
+      expect(await gaiaScreenWork(1, () => 1), 1);
+    });
+  });
+
   group('settling a scan for a screenshot (§15.6)', () {
     GaiaWindowScan scan(
       int controls, {
@@ -22,6 +57,7 @@ void main() {
         for (var i = 0; i < sensitive; i++)
           (left: 0, top: 0, right: 1, bottom: 1),
       ],
+      unjudged: const [],
       matches: const [],
       controls: controls,
       hasDocument: document,
@@ -174,6 +210,72 @@ void main() {
       expect(gaiaLooksAsleep('Document', ''), isTrue);
       expect(gaiaLooksAsleep('Document', 'Checkout'), isFalse);
       expect(gaiaLooksAsleep('Edit', ''), isFalse);
+    });
+
+    test(
+      "what a page's tree gives before it wakes is no control (BUG-346)",
+      () {
+        bool notYet(
+          String type,
+          String name, [
+          int width = 300,
+          int height = 40,
+        ]) => gaiaNotYetAControl(type, name, width: width, height: height);
+        expect(notYet('Window', 'Checkout — Mozilla Firefox'), isTrue);
+        expect(notYet('Pane', 'Chrome Legacy Window'), isTrue);
+        expect(notYet('Control', '', 0, 0), isTrue);
+        expect(notYet('Edit', 'Notes'), isFalse);
+        expect(notYet('Button', 'Save'), isFalse);
+        expect(notYet('Pane', 'Sidebar'), isFalse);
+      },
+    );
+
+    test("a page's field with no name yet can't be judged (BUG-345)", () {
+      expect(gaiaFieldUnjudged('Edit', ''), isTrue);
+      expect(gaiaFieldUnjudged('ComboBox', ''), isTrue);
+      expect(gaiaFieldUnjudged('Edit', 'Notes'), isFalse);
+      expect(gaiaFieldUnjudged('Text', ''), isFalse);
+    });
+
+    group("Firefox's Document holding the focus (BUG-344)", () {
+      test('on a page, a container says nothing of which field has it', () {
+        for (final type in ['Document', 'Pane', 'Window', 'Group', 'Control']) {
+          expect(gaiaFocusNamesControl(type, 'Page', web: true), isFalse);
+        }
+        expect(gaiaFocusNamesControl('Edit', 'Notes', web: true), isTrue);
+        expect(gaiaFocusNamesControl('ComboBox', 'Notes', web: true), isTrue);
+      });
+
+      test('on a page, nor does a field with no name', () {
+        expect(gaiaFocusNamesControl('Edit', '', web: true), isFalse);
+        expect(gaiaFocusNamesControl('ComboBox', '', web: true), isFalse);
+      });
+
+      test("elsewhere, it's what is typed in, as a text editor's is", () {
+        expect(gaiaFocusNamesControl('Document', '', web: false), isTrue);
+        expect(gaiaFocusNamesControl('Pane', '', web: false), isTrue);
+        expect(gaiaFocusNamesControl('Edit', '', web: false), isTrue);
+      });
+
+      test('with a sensitive field on the page, typing is refused', () {
+        const document = (held: false, sensitive: false);
+        final page = (
+          url: null,
+          tree: '',
+          cut: false,
+          sensitive: const [(left: 0, top: 0, right: 9, bottom: 9)],
+          unjudged: const <({int left, int top, int right, int bottom})>[],
+          matches: const <GaiaControlMatch>[],
+          controls: 9,
+          hasDocument: true,
+          sensitiveFocused: false,
+          anyFocused: false,
+        );
+        expect(
+          gaiaSettleFocus(() => document, () => page, web: true, wait: () {}),
+          isTrue,
+        );
+      });
     });
   });
 

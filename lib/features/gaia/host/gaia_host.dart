@@ -590,6 +590,9 @@ class GaiaHost {
     if (excluded(null)) return tell({'refused': 'excluded'});
     if (window.exe.isEmpty) return tell({'refused': 'unknown'});
     if (vaultOpen()) return tell({'refused': 'vault'});
+    // Waking a page's tree and then the crop, which scans the whole window, can
+    // each take a while: `/this` waits.
+    tell({'reading': true});
     final control = await _readControl(target);
     if (control == null) return tell({});
     if (excluded(control.url)) return tell({'refused': 'excluded'});
@@ -601,8 +604,6 @@ class GaiaHost {
     if (control.sensitive) return tell({'refused': 'sensitive'});
     // Again: it may have been unlocked during the read.
     if (vaultOpen()) return tell({'refused': 'vault'});
-    // The crop scans the whole window, which can take a while: `/this` waits.
-    tell({'reading': true});
     final dir = await _captureDirectory();
     final crop = await _captureControl(
       p.join(dir.path, 'control-${DateTime.now().microsecondsSinceEpoch}.bmp'),
@@ -633,9 +634,10 @@ class GaiaHost {
   /// C and D (§15.1): the monitor under the cursor, captured here and now,
   /// while whatever the user wanted in the shot is still on screen; the
   /// companion crops (C) or attaches (D) it. Aborted, nothing is captured
-  /// (§15.7).
+  /// (§15.7), nor with the vault unlocked, whose windows it could show (§15.6).
   Future<void> _captureScreen(GaiaHotkey hotkey) async {
     if (_aborted) return _sendOrLaunch('refused', {'reason': 'aborted'});
+    if (_vaultUnlocked()) return _sendOrLaunch('refused', {'reason': 'vault'});
     final dir = await _captureDirectory();
     final capture = await _captureScreenTo(
       p.join(dir.path, 'capture-${DateTime.now().microsecondsSinceEpoch}.bmp'),
@@ -787,6 +789,12 @@ class GaiaHost {
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
   void openChat(String chatId) => _sendOrLaunch('openChat', {'chatId': chatId});
+
+  /// Has the companion read [key]'s usage again (§6.4), if it's up: with none,
+  /// there's no usage to correct.
+  void recheckUsage(String key) {
+    if (_pipe.connected) _pipe.notify('recheckUsage', {'key': key});
+  }
 
   /// Stops [chatId]'s run: the tray's or the Gaia page's Stop.
   Future<void> stop(String chatId) async {

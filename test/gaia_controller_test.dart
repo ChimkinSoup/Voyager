@@ -2084,6 +2084,23 @@ void main() {
       });
     });
 
+    test(
+      'a capture refused for the vault says so, not that Gaia is aborted',
+      () async {
+        final toasts = <String>[];
+        final listening = controller.toasts.listen(
+          (toast) => toasts.add('${toast.title}: ${toast.body}'),
+        );
+        addTearDown(listening.cancel);
+        main.pipe.notify('refused', {'reason': 'vault'});
+        main.pipe.notify('refused', {'reason': 'aborted'});
+        await settle();
+        expect(toasts, hasLength(2));
+        expect(toasts.first, contains('vault'));
+        expect(toasts.last, startsWith('Gaia is aborted'));
+      },
+    );
+
     test('removed from the draft, it stays out', () async {
       summonFrom(window: chrome.toJson());
       await settle();
@@ -2693,6 +2710,73 @@ void main() {
       await controller.send('Now say done');
       await settle();
       expect(calls.where((c) => c == 'title'), hasLength(1));
+    });
+
+    group('a first reply that fails (BUG-335)', () {
+      const failed = [
+        ClaudeResult(sessionId: 's', isError: true, text: 'Overloaded'),
+      ];
+
+      test('keeps the prompt as the title, with nothing else sent', () async {
+        await startCompanion(utility: utility('standard'));
+        runner.turns.add(failed);
+        await controller.send('Hi');
+        await settle();
+        expect((await main.chat()).title, 'Hi');
+        expect(calls.where((c) => c == 'title'), isEmpty);
+      });
+
+      test('leaves the title to the next reply that finishes, once', () async {
+        await startCompanion(utility: utility('standard'));
+        runner.turns
+          ..add(failed)
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        await controller.send('Hi again');
+        await settle();
+        expect((await main.chat()).title, 'Generated title');
+        expect(controller.currentChat!.title, 'Generated title');
+
+        await controller.send('And again');
+        await settle();
+        expect(calls.where((c) => c == 'title'), hasLength(1));
+      });
+
+      test('leaves a name the user gave it meanwhile', () async {
+        await startCompanion(utility: utility('standard'));
+        runner.turns
+          ..add(failed)
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        await controller.renameChat(controller.currentChatId!, 'Mine');
+        await settle();
+        await controller.send('Hi again');
+        await settle();
+        expect((await main.chat()).title, 'Mine');
+        expect(calls.where((c) => c == 'title'), isEmpty);
+      });
+    });
+
+    test('a first line cut to length still counts as untitled', () async {
+      await startCompanion(utility: utility('standard'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('${'long ' * 20}\nsecond line');
+      await settle();
+      expect((await main.chat()).title, 'Generated title');
+    });
+
+    test('a files-only first message still counts as untitled', () async {
+      await startCompanion(utility: utility('standard'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(
+        '',
+        files: const [GaiaFilePart(path: r'C:\docs\a.txt')],
+      );
+      await settle();
+      expect((await main.chat()).title, 'Generated title');
     });
 
     test('a chat renamed before its title arrives keeps its name', () async {
@@ -4622,6 +4706,31 @@ void main() {
       usageEvery: usageEvery,
       cliVersion: cliVersion,
     );
+
+    test('asked to, it reads the account again, and a login now clears signed '
+        'out', () async {
+      source.reply = const GaiaUsageRead(GaiaUsageHealth.signedOut);
+      await start();
+      expect(
+        controller.usageHealth[kGaiaClaudeCodeAdapter],
+        GaiaUsageHealth.signedOut,
+      );
+      source.reply = GaiaUsageRead(GaiaUsageHealth.ok, usage: numbers(0.2));
+      main.pipe.notify('recheckUsage', {'key': kGaiaClaudeCodeAdapter});
+      await settle();
+      expect(source.reads, hasLength(2));
+      expect(
+        controller.usageHealth[kGaiaClaudeCodeAdapter],
+        GaiaUsageHealth.ok,
+      );
+      final sent = main.events.lastWhere((event) => event.$1 == 'usage').$2;
+      expect(
+        GaiaAccountUsage.fromJson(
+          (sent[kGaiaClaudeCodeAdapter]! as Map).cast(),
+        ).health,
+        GaiaUsageHealth.ok,
+      );
+    });
 
     test('a read that throws counts as offline', () async {
       source.error = const FileSystemException('in use');

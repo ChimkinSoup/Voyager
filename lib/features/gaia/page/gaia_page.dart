@@ -363,7 +363,7 @@ class _ActionRowState extends State<_ActionRow> {
           [
             chat.title,
             DateFormat.yMMMd().add_Hm().format(message.createdAt.toLocal()),
-            if (card.answer?['stopped'] != null) 'stopped',
+            if (gaiaControlStopped(card)) 'stopped',
           ].join(' · '),
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodySmall,
@@ -1160,7 +1160,7 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
             _CodexAccountChecks(account: account)
           else
             _ClaudeAccountChecks(account: account),
-          _UsageRow(account: account),
+          GaiaUsageRow(account: account),
         ],
       ),
     );
@@ -1348,16 +1348,61 @@ class _AddAccountState extends State<_AddAccount> {
 }
 
 /// An account's usage (§6.4): its bars, or what's wrong with reading them.
-class _UsageRow extends ConsumerWidget {
-  const _UsageRow({required this.account});
+class GaiaUsageRow extends ConsumerWidget {
+  const GaiaUsageRow({super.key, required this.account});
 
   final GaiaAccount account;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // A login check that finds a login outdates the last usage read's signed
+    // out, which would otherwise stand until the next one (§6.4). Either can
+    // come first.
+    void recheck(AsyncValue<bool?> login) {
+      if (!login.isLoading &&
+          login.valueOrNull == true &&
+          ref.read(gaiaUsageProvider)[account.key]?.health ==
+              GaiaUsageHealth.signedOut) {
+        ref.read(gaiaRecheckUsageProvider)(account.key);
+      }
+    }
+
+    ref.listen(
+      gaiaUsageProvider.select((usage) => usage[account.key]?.health),
+      (_, _) => recheck(
+        account.adapter == kGaiaCodexAdapter
+            ? ref
+                  .read(gaiaCodexAccountProvider(account))
+                  .whenData((setup) => setup.loggedIn)
+            : ref
+                  .read(gaiaClaudeAccountProvider(account.dir))
+                  .whenData((setup) => setup.loggedIn),
+      ),
+    );
     final read = ref.watch(gaiaUsageProvider)[account.key];
     if (read == null) return const SizedBox.shrink();
     final health = read.health;
+    if (account.adapter == kGaiaCodexAdapter) {
+      ref.listen(
+        gaiaCodexAccountProvider(account),
+        (_, next) => recheck(next.whenData((setup) => setup.loggedIn)),
+      );
+    } else {
+      ref.listen(
+        gaiaClaudeAccountProvider(account.dir),
+        (_, next) => recheck(next.whenData((setup) => setup.loggedIn)),
+      );
+    }
+    // The login check above already says so, with the command to fix it.
+    final loggedIn = account.adapter == kGaiaCodexAdapter
+        ? ref.watch(gaiaCodexAccountProvider(account)).valueOrNull?.loggedIn
+        : ref
+              .watch(gaiaClaudeAccountProvider(account.dir))
+              .valueOrNull
+              ?.loggedIn;
+    if (health == GaiaUsageHealth.signedOut && loggedIn == false) {
+      return const SizedBox.shrink();
+    }
     if (health != null && health != GaiaUsageHealth.ok) {
       return _CheckRow(
         ok: false,

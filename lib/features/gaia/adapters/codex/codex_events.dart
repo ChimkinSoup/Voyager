@@ -1,11 +1,11 @@
 // FRAGILE(cli): Codex's `codex exec --json` event shapes are not a stable API
 // and change between CLI releases (GAIA_HLD.md §5.1). Every shape read here
 // has a recorded fixture under test/fixtures/gaia/codex/ (observed on
-// codex-cli 0.164.0), and gaia_codex_events_test.dart parses them all.
+// codex-cli 0.166.0), and gaia_codex_events_test.dart parses them all.
 // Re-record them, and move [kCodexTestedVersions], when a new CLI version is
 // tested.
 //
-// What 0.164.0 prints, one JSON object a line:
+// What 0.166.0 prints, one JSON object a line:
 //   {"type":"thread.started","thread_id":"<uuid>"}
 //   {"type":"turn.started"}
 //   {"type":"item.started"|"item.completed","item":{"id","type",...}}
@@ -13,8 +13,8 @@
 //     aggregated_output, exit_code, status}, "error" {message} (a warning,
 //     such as unknown model metadata), and others not yet recorded
 //   {"type":"turn.completed","usage":{...}}
-//   {"type":"error","message":"<json string>"}
-//   {"type":"turn.failed","error":{"message":"<json string>"}}
+//   {"type":"error","message":"<text, or a json string before 0.166.0>"}
+//   {"type":"turn.failed","error":{"message":"<the same>"}}
 // Text arrives whole, one agent message at a time: exec doesn't stream it.
 //
 // Strict: a known event missing a field read here is a parse failure, which
@@ -28,7 +28,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 /// The Codex versions the adapter is tested against: at least the first, and
 /// below the second. Outside it, chats still run, with an "untested CLI
 /// version" chip.
-const kCodexTestedVersions = ((0, 164, 0), (0, 165, 0));
+const kCodexTestedVersions = ((0, 166, 0), (0, 167, 0));
 
 sealed class CodexEvent {
   const CodexEvent();

@@ -318,6 +318,7 @@ class GaiaChatTools implements GaiaTurnTools {
       return GaiaToolResult(text: '$error', isError: true);
     }
     final total = (plan['steps']! as List).length;
+    final stepWord = total == 1 ? 'step' : 'steps';
     GaiaCardPart cardWith(
       GaiaCardState state, {
       required int ran,
@@ -349,7 +350,7 @@ class GaiaChatTools implements GaiaTurnTools {
           return GaiaToolResult(
             text:
                 "The user didn't answer within an hour. Ran $ran of $total "
-                'steps. End your turn; they can ask again.',
+                '$stepWord. End your turn; they can ask again.',
             isError: false,
           );
         }
@@ -366,7 +367,7 @@ class GaiaChatTools implements GaiaTurnTools {
           if (answer.state != GaiaCardState.rejected) return _aborted;
           return GaiaToolResult(
             text: [
-              'The user declined. Ran $ran of $total steps.',
+              'The user declined. Ran $ran of $total $stepWord.',
               if (message.isNotEmpty) 'They said: $message',
             ].join(' '),
             isError: false,
@@ -382,8 +383,8 @@ class GaiaChatTools implements GaiaTurnTools {
           onCard(cardWith(GaiaCardState.accepted, ran: ran, stopped: stopped));
           return GaiaToolResult(
             text:
-                'Stopped after $ran of $total steps: $stopped Nothing more was '
-                'sent. Read the screen before assuming anything, and if the '
+                'Stopped after $ran of $total $stepWord: $stopped Nothing more '
+                'was sent. Read the screen before assuming anything, and if the '
                 "user stopped it, don't start again unless they ask.",
             isError: false,
           );
@@ -397,8 +398,8 @@ class GaiaChatTools implements GaiaTurnTools {
     onCard(cardWith(GaiaCardState.accepted, ran: ran));
     return GaiaToolResult(
       text:
-          'Sent all $total steps. That says the input went, not that it '
-          'worked: read the screen to see.',
+          '${total == 1 ? 'Sent the step' : 'Sent all $total steps'}. That says '
+          'the input went, not that it worked: read the screen to see.',
       isError: false,
     );
   }

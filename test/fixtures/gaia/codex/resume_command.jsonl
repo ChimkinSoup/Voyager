@@ -1,7 +1,7 @@
-{"type":"thread.started","thread_id":"01a1746d-ee2c-70a1-a6d6-3ad02d683ffe"}
+{"type":"thread.started","thread_id":"01a19d6f-c7ba-7ac0-8205-83c571e7ed67"}
 {"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run it now.\n"}}
-{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'echo hi'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'echo hi'","aggregated_output":"hi\r\n","exit_code":0,"status":"completed"}}
-{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Output: `hi`"}}
-{"type":"turn.completed","usage":{"input_tokens":60146,"cached_input_tokens":56960,"cache_write_input_tokens":0,"output_tokens":99,"reasoning_output_tokens":0}}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the command and report its output.\n"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'echo gaia-contract'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'echo gaia-contract'","aggregated_output":"gaia-contract\r\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"gaia-contract"}}
+{"type":"turn.completed","usage":{"input_tokens":46136,"cached_input_tokens":42752,"cache_write_input_tokens":0,"output_tokens":67,"reasoning_output_tokens":0}}

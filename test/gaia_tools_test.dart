@@ -254,6 +254,7 @@ void main() {
       {'label': 'Press A', 'resolved': true},
       {'label': 'Press B', 'resolved': true},
     ];
+    var planSteps = steps;
     final control = (
       plan: (String cardId, String tool, Map<String, Object?> arguments) async {
         if (planError case final error?) throw error;
@@ -261,7 +262,7 @@ void main() {
         return <String, Object?>{
           'window': 'Notepad: "notes.txt"',
           'app': 'Notepad',
-          'steps': steps,
+          'steps': planSteps,
         };
       },
       run: (String cardId, {required bool once}) async {
@@ -295,6 +296,7 @@ void main() {
       controlDropped = [];
       runAnswer = null;
       planError = null;
+      planSteps = steps;
       cards = GaiaCards();
       raised = [];
       aborted = false;
@@ -517,6 +519,44 @@ void main() {
         final back = GaiaCardPart.fromJson(raised.last.toJson());
         expect(back.kind, GaiaCardKind.control);
         expect(back.input['steps'], steps);
+      });
+
+      group('of one step, the agent is told in the singular', () {
+        setUp(() => planSteps = [steps.first]);
+
+        test('sent', () async {
+          runAnswer = (_) => {'ran': 1, 'steps': planSteps};
+          final result = tools().call('os_key', {'keys': 'A'});
+          await pumpEventQueue();
+          cards.decide(raised.last.id, GaiaCardState.accepted, {'once': true});
+          expect((await result).text, startsWith('Sent the step. '));
+        });
+
+        test('stopped', () async {
+          runAnswer = (_) => {
+            'ran': 0,
+            'steps': planSteps,
+            'stopped': 'The window closed.',
+          };
+          final result = tools().call('os_key', {'keys': 'A'});
+          await pumpEventQueue();
+          cards.decide(raised.last.id, GaiaCardState.accepted, {'once': true});
+          expect((await result).text, contains('Stopped after 0 of 1 step:'));
+        });
+
+        test('declined', () async {
+          final result = tools().call('os_key', {'keys': 'A'});
+          await pumpEventQueue();
+          cards.decide(raised.last.id, GaiaCardState.rejected, {});
+          expect((await result).text, contains('Ran 0 of 1 step.'));
+        });
+
+        test('unanswered', () async {
+          final result = tools(
+            hold: const Duration(milliseconds: 1),
+          ).call('os_key', {'keys': 'A'});
+          expect((await result).text, contains('Ran 0 of 1 step. End'));
+        });
       });
 
       test('step by step, it asks again before each', () async {

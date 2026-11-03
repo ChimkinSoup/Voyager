@@ -3629,19 +3629,19 @@ Entry format:
 - Severity: Minor
 - Found: 2026-11-01, Phase 8A-8C in-app pass
 - Actual: Setup says "Untested version: Gaia is tested with 0.164.0 up to 0.165.0" and the chat header shows "Untested Codex 0.166.0", while GAIA_HLD.md §6.2 and §19 say the usage call and session copy were confirmed on 0.166.0. `kCodexTestedVersions` in `codex_events.dart` still ends at 0.165.0; its comment asks for the fixtures to be re-recorded when it moves.
-- Notes: open.
+- Notes (fixed 2026-11-02): the contract check passed on 0.166.0, its transcripts replaced the 0.164.0 fixtures, and the range is now 0.166.0 up to 0.167.0, so 0.164 and 0.165 get the chip. On 0.166.0 `codex exec` gives its error as plain text, not JSON; `codexErrorText` already took both. Live: Setup says "A tested version" on 0.166.0. The chat header's chip wasn't looked at live; it reads the same range. New in 0.166.0's transcripts, not acted on: a `deprecationNotice` on `thread/resume`, "Full-history hydration is deprecated for paginated threads".
 
 ### BUG-335 [GAIA-P8] A chat whose first reply hits a limit keeps its raw prompt as its title, even after the resend succeeds
 - Severity: Minor
 - Found: 2026-11-01, Phase 8A-8C in-app pass
 - Actual: titling runs only when the reply at seq 1 completes (`gaia_controller.dart`, after `_reportDone`). A limit stops that reply, and the resend's successful reply is at seq 3, so the title stays the prompt text for good.
-- Notes: open. Any failed first reply does this; the §6.5 resend makes it a normal path. Seen with the stand-in CLI's limit error, then a real reply on another account.
+- Notes (fixed 2026-11-02): any failed first reply did this; the §6.5 resend makes it a normal path. Seen with the stand-in CLI's limit error, then a real reply on another account. Titling now runs on the chat's first reply to finish, while the title is still the first message's first line, so a name given before the retry stays, and so does one given during the first run. Live: a first turn on a signed-out account failed and kept the prompt, a retry on a real login titled it "Pineapple Single-Word Reply", and a further turn left that alone. A real limit, a stopped first reply and the phone weren't run live.
 
 ### BUG-336 [GAIA-P8] A signed-out account says so twice on the Setup tab
 - Severity: Cosmetic
 - Found: 2026-11-01, Phase 8A-8C in-app pass
 - Actual: its row shows "Not logged in" with the login command, then "<account> is signed out. Log in with…" with the same folder, from the login check and the usage row.
-- Notes: open.
+- Notes (fixed 2026-11-02): the usage row says nothing when it's signed out and the login check already says "Not logged in". It still speaks if the check says logged in or has no answer. Live: a signed-out Claude account shows the one row with its command, and an expired token still reads as stale. Codex's usage isn't read on a profile with no Codex agent, so the signed-out Codex case is covered by `test/gaia_usage_row_test.dart` only. Not changed: after logging back in, "Check again" refreshes the login row only, so the amber "signed out" line can show beside "Logged in" until the next usage read (up to 10 minutes).
 
 ### BUG-337 [GAIA-P9C] Approving a step list from Gaia always fails: "Windows wouldn't bring it to the front"
 - Severity: Major
@@ -3691,4 +3691,56 @@ Entry format:
 - Expected: §15.6 "never types", and "Not knowing what has focus is a refusal".
 - Notes (fixed 2026-11-02): `gaiaSettleFocus`. A page (a browser, or a window with a Chromium page) is asked through its tree, once that shows the page, by the `HasKeyboardFocus` of each control. Elsewhere, and if the tree doesn't say, an answer that doesn't hold focus is asked again, for 2 s, and then the tree is. Still not knowing refuses if the window has a sensitive field. `/this` wakes the tree and reads again; a page still not in it gives no control and no crop. Live, in the app, a real turn and card against a fresh scratch browser: password refused and Notes typed on Chrome and Firefox; a real plan and run outside the app: password and card refused and Notes typed on Chrome. `/this` first read on a sleeping Chrome: Edit, sensitive, refused. Native windows: the live test passes. **Not checked:** an Electron app's sensitive field, as none was to hand, and `/this` on Firefox. **Under `flutter_tester` only**, a fresh Firefox's UI Automation calls could block for 30 s or more, which refuses, safely; the app didn't show it, and why isn't known. A stuck read also refuses the reads after it until it returns.
 
-<!-- Last ID: BUG-343. -->
+### BUG-344 [GAIA-P9C] `os_type` types into a Firefox password field
+- Severity: Major (security)
+- Found: 2026-11-02, `qa/GAIA_REMAINING_TESTS.md` C2
+- Steps: a scratch Firefox **already in front when the run starts**, on a test page whose password field holds the focus, here from `autofocus`, and also after a real click on the field; a plan and run of `os_type` with no target, through the host's `osPlan` and `osRun`.
+- Actual: the run returns `ran: 1`, and the page's own input counter goes from `pw=15` to `pw=21`, so "canary" is in the password field. Seen every time with Firefox in front: 4 of 4 fresh starts, after waiting 12 s, after an `os_read_screen` and an `os_screenshot`, and after a real click on the field. Chrome refuses the same plan with Chrome in front, and Electron refused its focused-field runs.
+- Expected: §15.6 "never types", and "Not knowing what has focus is a refusal".
+- Notes: **with Gaia in front and Firefox behind it, it refuses**, both for `os_type` alone and for a step list that clicks the field and then types. That's the normal way to approve a card, so BUG-343's Firefox result holds there. No normal path that reaches the failing state was found: a card is approved from Gaia, and the phone can't approve. The run was driven by host calls, so whether a user can reach it isn't settled. Naming the field is refused at plan or run. Run with made-up values.
+- Notes (fixed 2026-11-02): the cause: a field focused before Firefox's tree wakes isn't reported as focused, by UI Automation or by `IAccessible`. The page's Document holds `HasKeyboardFocus`, the same for the password field and Notes, and any control holding it counted as an answer. On a page, a container (`Document`, `Pane`, `Window`, `Group`, `Control`) holding the focus no longer does (`gaiaFocusNamesControl`), so with a sensitive field on the page it refuses. Outside a page it still counts, as a text editor's Document is what's typed in. Live, host calls, Firefox in front: refused on 3 of 3 fresh starts, after 12 s, after a read and a screenshot, and after a real click on the field, with the page's counter unchanged. Chrome and Electron still refuse. Notes named, on a fresh Firefox, approved one at a time, types; then Run all types, and typing into what has focus types, since a real click makes the field report focus. **The cost:** a field focused before the tree woke can't be told from the password field, so on a page with a sensitive field, typing into what has focus is refused even if that's Notes, until something clicks a field. Naming the field works.
+
+### BUG-345 [GAIA-P9B] `os_read_screen` returns card and one-time code values on Firefox's first read
+- Severity: Major (security)
+- Found: 2026-11-02, `qa/GAIA_REMAINING_TESTS.md` C2
+- Steps: a scratch Firefox on a page with labelled card and one-time code fields holding values; `os_read_screen` as the first read of that window.
+- Actual: the tree has `Edit = "4242 4242 4242 4242"` and `Edit = "424242"`, with no names and bounds of `[0,0 0x0]`. Seen on 3 of 3 fresh starts. The fields aren't recognised because their names aren't in the tree yet, so their values are asked for. The password field is still marked sensitive, as it reports itself as a password. A later read of the same page marks all three sensitive with no values. Chrome's first read shows no page fields at all.
+- Expected: §15.6: card and one-time code values never reach the agent. BUG-338's note that `os_read_screen` is safe on a sleeping tree doesn't hold on Firefox.
+- Notes: `os_screenshot` on the same first read has all three fields blacked out. Run with made-up values, read into local files, with no model involved.
+- Notes (fixed 2026-11-02): two layers. `os_read_screen` on a page first gives the tree up to about a second to settle (`gaiaReadWindow`). And on a page, a field with no name yet can't be judged, so its value and children aren't read: it's listed as `Edit (no name, not read)` (`gaiaFieldUnjudged`). The second holds whatever the timing, and also applies to a page's truly unlabelled field, whose value the agent no longer gets. Live: Firefox's first read on 3 of 3 fresh starts lists all three as sensitive with no made-up value anywhere in the result; Chrome and Electron the same. The unnamed form itself didn't come up in these runs, so that layer has only its unit test.
+
+### BUG-346 [GAIA-P9A] `/this` on a first read attaches the whole page or window instead of refusing a sensitive field
+- Severity: Minor (no value was exposed in these runs)
+- Found: 2026-11-02, `qa/GAIA_REMAINING_TESTS.md` C1 and C2
+- Steps: a fresh Electron app or Firefox, the cursor over a password, card or one-time code field, then the pointed read and `/this`.
+- Actual: Electron gives a Pane "Chrome Legacy Window" of 1374x1330 with a crop, 3 of 3 with the pointed read alone. Through a real summon, where the context read runs beside it, the result is instead an empty chip: type "Control", no name, 0x0, no crop. Firefox gives a Window named after the page, with value `chrome://browser/content/browser.xhtml`, and a crop, on all three sensitive fields and Notes. `gaiaLooksAsleep` only matches unnamed Panes and Documents, so these pass as ordinary controls. A second read refuses the password field correctly and gives Notes its real Edit.
+- Expected: C1 and C2: refused on a sensitive field; on an ordinary field, a chip and crop of that field, or no control at all.
+- Notes: the crops seen have the sensitive fields blacked out, so nothing leaked, but they depend on the window scan rather than on the refusal. The chip's name and value go on a synced message.
+- Notes (fixed 2026-11-02): those three answers now count as a page not yet in its tree (`gaiaNotYetAControl`): a `Window`, Chromium's "Chrome Legacy Window" Pane, anything of no size. As does an unnamed field. The tree is woken and the point read again, and if it's still one of those there's no control and no crop. A page's read now has the 8 s budget rather than 250 ms, as waking takes longer, and `/this` waits on the read as it did on the crop, so it can't say "Nothing to attach" while one is going. The summon still doesn't wait. Live, on a fresh window each: password, card and code on Firefox, password on Electron and Chrome, refused with "It's a password, card or one-time code field"; Notes on Firefox and Electron gets `Edit "Notes"`, with its crop. Through a real summon too, on Firefox and Electron: password refused, Notes chip. **Not checked:** that `/this <question>` stays unsent in the draft.
+
+### BUG-347 [GAIA-P9B] Firefox's address read returns the password field's masked value, so `os_screenshot` passes the exclusion list
+- Severity: Major (security)
+- Found: 2026-11-02, `qa/GAIA_REMAINING_TESTS.md` C2
+- Steps: a fresh scratch Firefox on `http://127.0.0.1:18765/page.html`, with `127.0.0.1` on the exclusion list and a password field on the page; `os_screenshot` as the first read.
+- Actual: the shot is returned, with "Address: ●●●●●●●●●●●●●●●" in its text. The dots match the 15-character test password, so the address read seems to have taken the page's password field for the address bar. The address isn't null, so the "couldn't read this browser's address" refusal doesn't fire, and it doesn't match the excluded site. The same first read also gives the agent the password's length. On the same site, Firefox's `os_read_screen` and `/this` refuse, and Chrome refuses all three as excluded.
+- Expected: §19 (9B): an excluded site, or one whose address can't be read, is refused and gets no picture.
+- Notes: the list was changed in memory only for the run and put back after. Seen on `file://` pages too, as the same dots in place of the address.
+- Notes (fixed 2026-11-02): the cause: Firefox's address bar is a `ComboBox` (`urlbar-input`), not an Edit, so "the first Edit" was always a field on the page. A card number first on a page would have gone out as the "address", in the agent's text, on `/this` and in the summon's context line. It now takes the first Edit or ComboBox, and gives no address if that's a password field or inside a Document (`_addressBar`). A browser whose whole UI is a page, as Vivaldi's may be, then reads as having no address, which refuses when a site is on the list; not tried. Live, first reads with `127.0.0.1` on the list: `os_screenshot`, `os_read_screen`, `os_focused_window` and `/this` all refuse on Firefox and Chrome, with no picture. Off the list, Firefox's address is the real `http://127.0.0.1:18765/page.html`. A page with a card field first and no password field gives its real address, and the field is listed as sensitive.
+
+### BUG-348 [GAIA-P9C] The action log doesn't say "stopped" for a step list denied after Next step
+- Severity: Cosmetic
+- Found: 2026-11-02, `qa/GAIA_REMAINING_TESTS.md` A (BUG-342)
+- Steps: a two-step card, Next step, then Deny with a reason.
+- Actual: the Actions tab says "Ran 1 of 2 steps in Google Chrome", and the line below has the chat title and time only. The card's answer is `{ran: 1, message: …, committed: {steps: 1}}`, with no `stopped`, which is what `gaia_page.dart` looks for.
+- Expected: "stopped" in the line below, as a run that stops early has.
+- Notes (fixed 2026-11-02): the log asks `gaiaControlStopped`: `stopped` in the answer, or fewer steps ran than the list has, so a card declined, cancelled or left unanswered partway says so, older ones included. Nothing about the card changed. Live, a real two-step card, Next step, then Deny: the Actions tab says "Ran 1 of 2 steps in Google Chrome" with "Declined Click Notes Edit Run · Nov 2, 2026 15:54 · stopped" below it.
+
+### BUG-349 [GAIA-P8] A turn on a signed-out Codex account shows the raw 401
+- Severity: Minor
+- Found: 2026-11-02, `qa/GAIA_REMAINING_TESTS.md` E5
+- Steps: a Codex account whose folder has no login, its sandbox set up, then a turn on it.
+- Actual: the reply fails after about 17 s with "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: …, request id: …". It doesn't hang.
+- Expected: E5 asks for a clear message: say the account is signed out, with its login command as Setup does.
+- Notes (fixed 2026-11-02): a failed Codex turn whose text says the login is the problem (`gaiaRunAuthFailed`) now shows what Setup says of a signed-out account (`gaiaRunErrorText`). Codex only, as Claude Code's own wording is already clear. The raw 401 is no longer on the message, so its request id isn't either. Live, a real turn on an account with no login: after 16 s, "CodexOut is signed out. Log in with `codex login`, with CODEX_HOME set to …". The backticks show as typed, since an error isn't rendered as Markdown.
+
+<!-- Last ID: BUG-349. -->

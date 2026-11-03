@@ -35,6 +35,7 @@ GaiaWindowScan _scanned({
   tree: tree,
   cut: false,
   sensitive: const [],
+  unjudged: const [],
   matches: const [],
   controls: 0,
   hasDocument: false,
@@ -269,7 +270,7 @@ void main() {
       expect(answer.mimeType, 'image/png');
       expect(answer.text, contains('100x50'));
       expect(answer.text, contains('10,20'));
-      expect(answer.text, contains('2 sensitive field(s)'));
+      expect(answer.text, contains('2 field(s) are blacked out'));
     });
 
     test('a capture refusal reaches the agent', () async {

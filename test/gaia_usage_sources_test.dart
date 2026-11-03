@@ -343,4 +343,61 @@ void main() {
     expect(gaiaRunAuthFailed('Failed to authenticate. API Error: 401'), isTrue);
     expect(gaiaRunAuthFailed('Unknown model: gpt-9'), isFalse);
   });
+
+  group('a failed turn as the user reads it (BUG-349)', () {
+    const raw =
+        'unexpected status 401 Unauthorized: Missing bearer or basic '
+        'authentication in header, url: https://api.openai.com/v1/responses';
+    const codex = GaiaAccount(
+      id: 'two',
+      label: 'Codex 2',
+      adapter: kGaiaCodexAdapter,
+      dir: r'C:\Users\me\.codex-2',
+    );
+
+    test(
+      "Codex's raw 401 says the account is signed out, and how to log in",
+      () {
+        final text = gaiaRunErrorText(raw, codex);
+        expect(text, contains('Codex 2 is signed out'));
+        expect(text, contains('codex login'));
+        expect(text, contains(r'CODEX_HOME set to C:\Users\me\.codex-2'));
+        expect(text, isNot(contains('401')));
+      },
+    );
+
+    test("Codex's server saying so says the same", () {
+      expect(
+        gaiaRunErrorText(
+          'Codex refused the thread: codex account authentication required',
+          codex,
+        ),
+        contains('Codex 2 is signed out'),
+      );
+    });
+
+    test('another service wanting a login keeps its own words', () {
+      for (final other in [
+        'MCP server tickets: authentication required',
+        'Proxy error, see https://proxy.example.com/login',
+      ]) {
+        expect(gaiaRunErrorText(other, codex), other);
+      }
+    });
+
+    test('any other failure, or any other adapter, keeps its own words', () {
+      expect(
+        gaiaRunErrorText('Unknown model: gpt-9', codex),
+        'Unknown model: gpt-9',
+      );
+      const claude = GaiaAccount(
+        id: 'one',
+        label: 'Claude',
+        adapter: kGaiaClaudeCodeAdapter,
+        dir: '',
+      );
+      expect(gaiaRunErrorText(raw, claude), raw);
+      expect(gaiaRunErrorText(raw, null), raw);
+    });
+  });
 }

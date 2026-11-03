@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Preserves scroll offset when this list is temporarily hidden by shell navigation.
@@ -41,8 +42,9 @@ class _KeepAliveScrollViewState extends State<KeepAliveScrollView>
       // to compensate — which reads as a sudden jump. This list is short
       // (a fixed handful of dev/settings/analytics sections), so keeping
       // every child laid out is cheap and avoids the dispose/recreate cycle
-      // entirely.
-      cacheExtent: double.infinity,
+      // entirely. Not infinity, which makes the viewport's semantics clip NaN
+      // once a screen reader or UI Automation turns semantics on.
+      scrollCacheExtent: const ScrollCacheExtent.pixels(1e6),
       children: widget.children,
     );
   }

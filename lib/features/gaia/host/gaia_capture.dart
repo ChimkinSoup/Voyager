@@ -209,7 +209,7 @@ GaiaWindowShot _shotRefused(String why) => (
 
 /// [_printWindow] for an agent. Null over budget.
 Future<GaiaWindowShot?> gaiaShootWindow(int hwnd, {required bool browser}) =>
-    gaiaScreenWork(() => _shootWindow(hwnd, browser: browser));
+    gaiaScreenWork(hwnd, () => _shootWindow(hwnd, browser: browser));
 
 GaiaWindowShot _shootWindow(int hwnd, {required bool browser}) {
   final printed = _printWindow(hwnd, browser: browser);
@@ -275,7 +275,8 @@ _WindowPrint _printRefused(String why) => (
 );
 
 /// One window's own pixels, whatever is over it, so nothing of an excluded app
-/// on top can get in. Sensitive fields (§15.6) are blacked out first. A window
+/// on top can get in. Sensitive fields (§15.6), and a page's fields with no name,
+/// which could be, are blacked out first. A window
 /// that keeps itself out of captures is refused: this way of asking wouldn't
 /// honour that.
 _WindowPrint _printWindow(int hwnd, {required bool browser}) {
@@ -324,7 +325,7 @@ _WindowPrint _printWindow(int hwnd, {required bool browser}) {
     // top left, while UI Automation's bounds and its window rect are physical.
     final factor = gaiaWindowPrintScale(hwnd);
     int inPrint(int physical) => (physical * factor).round();
-    for (final field in scan.sensitive) {
+    for (final field in [...scan.sensitive, ...scan.unjudged]) {
       fill.ref
         ..left = inPrint(field.left - left) - _shotFieldMargin
         ..top = inPrint(field.top - top) - _shotFieldMargin
@@ -358,7 +359,7 @@ _WindowPrint _printWindow(int hwnd, {required bool browser}) {
       top: top,
       factor: factor,
       url: scan.url,
-      hidden: scan.sensitive.length,
+      hidden: scan.sensitive.length + scan.unjudged.length,
     );
   } finally {
     if (pixels != null) free(pixels);

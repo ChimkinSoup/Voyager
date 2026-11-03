@@ -95,6 +95,7 @@ class _Backend implements GaiaInputBackend {
     tree: '',
     cut: false,
     sensitive: const <({int left, int top, int right, int bottom})>[],
+    unjudged: const <({int left, int top, int right, int bottom})>[],
     matches: matches,
     controls: 0,
     hasDocument: false,

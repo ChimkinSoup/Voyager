@@ -204,3 +204,23 @@ final _authFailure = RegExp(
 
 /// Whether a failed turn's [text] says the login is the problem.
 bool gaiaRunAuthFailed(String text) => _authFailure.hasMatch(text);
+
+// FRAGILE(usage): as above. Narrower than [_authFailure], as this replaces the
+// error: a login another service wants, as an MCP server's, must keep its words.
+// One no longer matched only shows Codex's own.
+final _codexSignedOut = RegExp(
+  r'unexpected status 401|codex account authentication required|codex login',
+  caseSensitive: false,
+);
+
+/// What the user is told of a failed turn. Codex's own words for a bad login are
+/// its API's raw 401, so they're replaced with what Setup says of it.
+String gaiaRunErrorText(String text, GaiaAccount? account) =>
+    account?.adapter == kGaiaCodexAdapter && _codexSignedOut.hasMatch(text)
+    ? gaiaUsageMessage(
+        kGaiaCodexAdapter,
+        GaiaUsageHealth.signedOut,
+        null,
+        account: account,
+      )
+    : text;

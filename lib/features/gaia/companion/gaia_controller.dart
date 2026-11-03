@@ -540,10 +540,10 @@ class GaiaController extends ChangeNotifier {
   /// pointing again takes another summon.
   Future<bool> attachThis() async {
     if (_pointedReading case final reading?) {
-      // A little past the main instance's own limit on the crop, in case it
-      // never says.
+      // A little past the main instance's own limits on the read and the crop,
+      // 8 s each, in case it never says.
       await reading.future.timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 18),
         onTimeout: () {},
       );
       _pointedReading = null;
@@ -1970,7 +1970,11 @@ class GaiaController extends ChangeNotifier {
       case 'pointed':
         _onPointed(params);
       case 'refused':
-        unawaited(_onRefused());
+        unawaited(_onRefused(vault: params['reason'] == 'vault'));
+      case 'recheckUsage':
+        for (final account in _usageSources.keys.expand(accountsFor)) {
+          if (account.key == params['key']) unawaited(_readUsage(account));
+        }
       case 'selection':
         unawaited(
           _onSelection(params['text'] as String?, params['source'] as String?),
@@ -2161,12 +2165,15 @@ class GaiaController extends ChangeNotifier {
     await _show(_window.shown ?? GaiaMode.small);
   }
 
-  /// A capture hotkey while aborted (§15.7): Gaia comes up saying so.
-  Future<void> _onRefused() async {
+  /// A capture hotkey while aborted (§15.7), or with [vault] unlocked (§15.6):
+  /// Gaia comes up saying so.
+  Future<void> _onRefused({bool vault = false}) async {
     _toasts.add((
       chatId: '',
-      title: 'Gaia is aborted',
-      body: 'Re-arm it to use this.',
+      title: vault ? "Can't capture the screen" : 'Gaia is aborted',
+      body: vault
+          ? "Voyager's secure vault is unlocked. Lock it to use this."
+          : 'Re-arm it to use this.',
       error: true,
       question: false,
     ));
@@ -2945,18 +2952,9 @@ class GaiaController extends ChangeNotifier {
     final sentAt = utcNow();
     if (remote == null) seeScreenWarning = false;
     if (chat == null) {
-      // No utility model yet: the title is the first line (§5.1). Its
-      // images' tokens are in it; its files aren't.
-      final firstLine = prompt.isNotEmpty
-          ? prompt.split('\n').first
-          : files.isNotEmpty
-          ? p.basename(files.first.path)
-          : quotes.first.text.trim().split('\n').first;
       chat = GaiaChat(
         id: chatId,
-        title: firstLine.length > 60
-            ? '${firstLine.substring(0, 60)}…'
-            : firstLine,
+        title: _firstLineTitle(prompt, files, quotes),
         createdAt: sentAt,
         updatedAt: sentAt,
         lastMessageAt: sentAt,
@@ -3397,10 +3395,14 @@ class GaiaController extends ChangeNotifier {
     }
 
     var retried = false;
-    String failed(Object error) => retried
-        ? "This chat's earlier session wasn't found, and starting a new one "
-              'failed too: $error'
-        : '$error';
+    String failed(Object error) {
+      final text = gaiaRunErrorText('$error', account);
+      return retried
+          ? "This chat's earlier session wasn't found, and starting a new one "
+                'failed too: $text'
+          : text;
+    }
+
     // Set once the reply is settled: a card voided as its run ends comes
     // too late to change it.
     var ended = false;
@@ -3746,9 +3748,9 @@ class GaiaController extends ChangeNotifier {
     }
     await _persist(reply);
     _reportDone(chatId, reply);
-    if (reply.seq == 1 &&
-        reply.status == GaiaMessageStatus.complete &&
-        !debug.dummyMode) {
+    if (reply.status == GaiaMessageStatus.complete &&
+        !debug.dummyMode &&
+        _awaitsTitle(chatId, reply)) {
       unawaited(_retitle(chatId, topic, reply.text));
     }
     if (reply.status == GaiaMessageStatus.complete &&
@@ -4429,7 +4431,44 @@ class GaiaController extends ChangeNotifier {
     await _persist(updated);
   }
 
-  /// The utility model's title for a chat's first exchange, over the
+  /// A new chat's title until the utility model gives it one (§5.1). Its
+  /// images' tokens are in it; its files aren't.
+  String _firstLineTitle(
+    String prompt,
+    List<GaiaFilePart> files,
+    List<GaiaQuotePart> quotes,
+  ) {
+    final firstLine = prompt.isNotEmpty
+        ? prompt.split('\n').first
+        : files.isNotEmpty
+        ? p.basename(files.first.path)
+        : quotes.first.text.trim().split('\n').first;
+    return firstLine.length > 60 ? '${firstLine.substring(0, 60)}…' : firstLine;
+  }
+
+  /// Whether [reply] is the chat's first to finish, a failed or stopped one
+  /// before it not counting, with the title still the first message's first
+  /// line: any other title is the user's own name for it.
+  bool _awaitsTitle(String chatId, GaiaMessage reply) {
+    final list = _messages[chatId];
+    if (list == null) return false;
+    final answered = list.any(
+      (message) =>
+          message.role == GaiaMessageRole.assistant &&
+          message.seq < reply.seq &&
+          message.status == GaiaMessageStatus.complete,
+    );
+    if (answered) return false;
+    final first = list.first;
+    return _chat(chatId)?.title ==
+        _firstLineTitle(
+          first.text,
+          first.parts.whereType<GaiaFilePart>().toList(),
+          first.parts.whereType<GaiaQuotePart>().toList(),
+        );
+  }
+
+  /// The utility model's title for a chat's first answered exchange, over the
   /// first-line one it started with, unless it was renamed meanwhile.
   Future<void> _retitle(String chatId, String prompt, String reply) async {
     final from = _chat(chatId)?.title;

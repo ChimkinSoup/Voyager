@@ -1,5 +1,4 @@
-{"type":"thread.started","thread_id":"01a1746d-ee2c-70a1-a6d6-3ad02d683ffe"}
+{"type":"thread.started","thread_id":"01a19d6f-c7ba-7ac0-8205-83c571e7ed67"}
 {"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Hello.\n"}}
-{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Done. The shell command was blocked by policy."}}
-{"type":"turn.completed","usage":{"input_tokens":29930,"cached_input_tokens":27136,"cache_write_input_tokens":0,"output_tokens":50,"reasoning_output_tokens":0}}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"gaia contract ok"}}
+{"type":"turn.completed","usage":{"input_tokens":15331,"cached_input_tokens":12416,"cache_write_input_tokens":0,"output_tokens":8,"reasoning_output_tokens":0}}

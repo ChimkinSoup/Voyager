@@ -65,12 +65,13 @@ class GaiaOsReads {
   }) {
     final hwnd = window.hwnd;
     return gaiaScreenWork<GaiaWindowScan?>(
-      () => gaiaScanWindow(hwnd, browser: browser, text: true, region: region),
+      hwnd,
+      () => gaiaReadWindow(hwnd, browser: browser, region: region),
     );
   }
 
   static Future<String?> _readAddress(int hwnd) =>
-      gaiaScreenWork<String?>(() => gaiaReadAddress(hwnd));
+      gaiaScreenWork<String?>(hwnd, () => gaiaReadAddress(hwnd));
 
   Future<GaiaOsAnswer> read(String tool, Map<String, Object?> arguments) async {
     final window =
@@ -197,7 +198,8 @@ class GaiaOsReads {
             '${shot.left},${shot.top} on screen, at '
             '${shot.scale.toStringAsFixed(3)} image pixels per screen pixel.',
         if (shot.hidden > 0)
-          '${shot.hidden} sensitive field(s) are blacked out.',
+          '${shot.hidden} field(s) are blacked out, as sensitive or with no '
+              'name to judge them by.',
       ]),
       image: base64Encode(shot.image!),
       mimeType: shot.mimeType,

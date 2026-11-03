@@ -202,6 +202,7 @@ void main() {
           tree: 'Button "Save"',
           cut: false,
           sensitive: const <({int left, int top, int right, int bottom})>[],
+          unjudged: const <({int left, int top, int right, int bottom})>[],
           matches: const <GaiaControlMatch>[],
           controls: 1,
           hasDocument: false,
@@ -254,11 +255,13 @@ void main() {
     GaiaMemories? memories,
     Future<void> Function(String word)? addWord,
     GaiaBeaconService? beacon,
+    bool vaultUnlocked = false,
   }) {
     fakeAsync((async) {
       final host = newHost();
       host.start(registerHotkeys: false, show: show);
       host.attach(
+        vaultUnlocked: () => vaultUnlocked,
         repository: DriftGaiaRepository(db),
         deviceId: 'laptop',
         toast: (chatId, title, body) => toasts.add('$chatId $title $body'),
@@ -1487,6 +1490,19 @@ void main() {
       });
     });
 
+    test('with the vault unlocked, C and D capture nothing and the companion '
+        'says why', () {
+      run(show: true, vaultUnlocked: true, (async, host) {
+        connect(async);
+        for (final hotkey in [GaiaHotkey.region, GaiaHotkey.screen]) {
+          host.onHotkey(hotkey);
+          async.flushMicrotasks();
+          expect(captured, isEmpty);
+          expect(companions.single.events.last, 'refused vault');
+        }
+      });
+    });
+
     test('captures older than an hour are swept', () {
       run(show: true, (async, host) {
         connect(async);
@@ -1694,7 +1710,7 @@ void main() {
       });
 
       test('Voyager with its vault unlocked: refused, nothing read', () {
-        run(show: true, (async, host) {
+        run(show: true, vaultUnlocked: true, (async, host) {
           connect(async);
           listenPointed();
           foreground = chrome;

@@ -231,7 +231,9 @@ The router waits at most 5 s before the last used tier takes the message;
 titles and summaries run after a reply, where a cold start doesn't matter.
 With no utility model (Claude Code missing or logged out), Gaia degrades:
 no auto-router (the last-used tier applies), titles come from the first line
-of the first message, and the curator (§11) is off.
+of the first message, and the curator (§11) is off. The title job runs once,
+on the chat's first reply to finish: a failed or stopped one doesn't count, and
+a title the user has changed from that first line stays.
 
 Lessons carried over from nus-desktop's `src/ai.js`:
 - Strip `ANTHROPIC_API_KEY` (and the equivalent for the others) from the
@@ -443,7 +445,9 @@ UsageWindow { kind: session | weekly | weeklyModel | daily,
 
 None of these costs tokens. Polling: Claude and Codex every 10 minutes per
 account and after each run, only for an adapter that has an agent and an
-installed CLI, and not while aborted. Gemini after each run. A Codex read uses
+installed CLI, and not while aborted. An account the last read called signed out
+is read again as soon as its login check on the Setup tab finds a login. Gemini
+after each run. A Codex read uses
 the process turns use, so the home's login has one owner; a process started
 just for a read goes straight after it, so idle polling leaves no server
 running.
@@ -1303,7 +1307,9 @@ isn't Gaia's. Voyager's main window isn't Gaia's, so it can be a target. An
 action that needs its target in front activates it first.
 
 These are separate from what the user attaches. Hotkeys C/D and `/this` are
-the user's choice. These tools are the agent asking to look or act.
+the user's choice. These tools are the agent asking to look or act. C and D
+still refuse while the vault is unlocked (decided 2026-11-02), wherever Voyager's
+windows are: they capture a whole monitor.
 
 Safety, partly borrowed from nus-desktop:
 - **Two grants per chat, both off by default:** *can see screen* (the read
@@ -1801,7 +1807,9 @@ Phase 9C as built (2026-11-01):
   page** (BUG-343): its first answer is an unnamed Pane that doesn't hold the focus. So
   a page is asked through its tree, by `HasKeyboardFocus`, once that shows the page
   (`gaiaSettleFocus`); elsewhere, an answer that doesn't hold focus is asked again, and
-  then the tree is. Still not knowing refuses if the window has a sensitive field. Keys that type, Ctrl+V among them, are refused in a sensitive field;
+  then the tree is. On a page, a container holding the focus isn't an answer: Firefox's
+  Document holds it for a field focused before its tree woke, whichever field that is
+  (BUG-344). Nor is a field with no name, which could be any field. Still not knowing refuses if the window has a sensitive field. Keys that type, Ctrl+V among them, are refused in a sensitive field;
   Tab, Enter and Esc there go. **The Windows key is refused**: it acts on Windows,
   not the window, and Win+R's dialog would be out of the list's sight.
 - **Key-ups.** A chord's presses and releases go in one `SendInput`, so Abort can't
@@ -1963,7 +1971,9 @@ Phase 9B as built (2026-11-01):
   an app, exe or site excluded, and Firefox refused with a site on the list; a display
   affinity refusing the picture (`os_read_screen` still reads that window, as built);
   the vault, by forcing its flag; a hung window refused at 8 s, a stuck read refusing
-  the next, and recovery; the grant off and Abort mid-read keeping the answer from
+  the next, and recovery (since 2026-11-02 the guard is per window, with up to 4
+  windows' reads at once: past that, a healthy window is told another window's read
+  is stuck); the grant off and Abort mid-read keeping the answer from
   the agent; Abort, chats in the trash too, Re-arm leaving them off, from the phone
   too, and a flag found at startup revoking. No screen text is in stored messages.
   **Fails: BUG-338**, a first `os_screenshot` of a browser whose tree is asleep has
@@ -1977,8 +1987,9 @@ Phase 9B as built (2026-11-01):
 Phase 9A as built (2026-11-01):
 - **The read.** Every hotkey but Abort, with Gaia not in front, starts it, and
   the summon doesn't wait on it (`_sendPointedControl` in `gaia_host.dart`). One
-  `ElementFromPoint` on its own worker isolate, under §15.2's 250 ms budget, gives
-  the control's type, name, value and bounds, and for a browser the URL. A later
+  `ElementFromPoint` on its own worker isolate, under §15.2's 250 ms budget, or 8 s
+  for a page, which may have to wake its tree (BUG-346), gives the control's type,
+  name, value and bounds, and for a browser the URL. A later
   summon replaces a read still going. Aborted, nothing is read.
 - **Which window.** The one under the cursor, not the one in front, since they
   can differ: the exclusion list is checked against it, by exe and app before any
@@ -1993,8 +2004,8 @@ Phase 9A as built (2026-11-01):
 - **The crop** is the control's bounds and 48 px around them, kept to its monitor,
   at most 1000 x 700 around the cursor for a control the size of a page. It goes to
   the captures folder, swept with the others, and is deleted when the next summon
-  replaces it unused. A crop can still show what's beside the control, including a
-  sensitive field: only the control itself is checked.
+  replaces it unused. It comes from `_printWindow`, as `os_screenshot` does, so a
+  sensitive field beside the control is blacked out (decided 2026-11-02).
 - **The chip.** `/this` alone, from the palette or sent, or `/this <question>`,
   which sends at once. It's a new `element` part on the message (no schema change;
   older builds keep it as an unknown part), with a `<pointed_control>` block ahead
@@ -2028,11 +2039,16 @@ Phase 9A as built (2026-11-01):
   reaching the CLI. **First reads, as feared:** Chrome gives an unnamed Pane and
   Electron an unnamed Document, the next read the real button, and a page-sized
   control's crop stays under 1000 x 700. So a first `/this` in a browser is a large
-  crop. **A neighbour's value does get out**, the limit above: a one-time code beside
-  the field went to the agent in the crop, and into the image's synced caption.
+  crop. **A neighbour's value did get out** in that build: a one-time code beside
+  the field went to the agent in the crop, and into the image's synced caption. Crops
+  now black it out, seen on Electron, Chrome and Firefox, first reads too.
   **BUG-339 and BUG-340 fixed 2026-11-02** and re-run in the app. A first read of a
   sleeping page now wakes the tree and reads again, and a page still not in it gives no
   control and no crop (BUG-343), so a sensitive field can't pass as a big unnamed Pane.
+  The same goes for the other answers a page gives before it's in the tree, which are
+  a `Window`, "Chrome Legacy Window" and anything of no size (BUG-346). On a page, a
+  field with no name can't be judged, so no tool reads its value (BUG-345), `/this`
+  gives no control or crop of it, and images black it out.
 
 Phase 8C as built (2026-11-01):
 - **Where it lives.** The rules and the CLIs' wording are in
@@ -2493,7 +2509,7 @@ Phase 3 as built:
   flattened on send.
 - **Window context.** Every summon reads the foreground window with Win32
   at once (app name from the exe's version resource, title), then the
-  browser address bar (first edit control) and the focused control's
+  browser address bar (first Edit or ComboBox, not on the page: BUG-347) and the focused control's
   selection through UI Automation within 250 ms, and sends them after the
   summon as a removable chip. The chip goes with the next message only, as
   a context part and a framed `<focused_window>` block ahead of the prompt.
