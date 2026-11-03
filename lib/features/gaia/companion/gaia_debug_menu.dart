@@ -9,6 +9,7 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
@@ -320,6 +321,8 @@ class _DebugMenu extends StatelessWidget {
             ),
           ),
         ],
+        heading('Taking control of the screen'),
+        GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
         heading('Display'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

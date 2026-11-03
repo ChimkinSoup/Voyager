@@ -124,8 +124,8 @@ Gdiplus::REAL TextSize(HMONITOR monitor) {
   return static_cast<Gdiplus::REAL>(Scaled(kFontSize, monitor));
 }
 
-int TextWidth(const std::wstring& text, HMONITOR monitor) {
-  const Gdiplus::Font font(TextFamily(), TextSize(monitor),
+int TextWidth(const std::wstring& text, Gdiplus::REAL size) {
+  const Gdiplus::Font font(TextFamily(), size,
                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
   Gdiplus::Bitmap bitmap(1, 1, PixelFormat32bppPARGB);
   Gdiplus::Graphics graphics(&bitmap);
@@ -180,13 +180,24 @@ class Canvas {
   }
 
   // Puts this on |window| at its position.
-  void Present(HWND window) {
+  void Present(HWND window, BYTE alpha = 255) {
     POINT source = {0, 0};
     SIZE size = {width_, height_};
-    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA};
     ::UpdateLayeredWindow(window, nullptr, nullptr, &size, dc_, &source, 0,
                           &blend, ULW_ALPHA);
   }
+
+  // Puts this on |window|, moving it to |at|, at |alpha| overall.
+  void PresentAt(HWND window, POINT at, BYTE alpha) {
+    POINT source = {0, 0};
+    SIZE size = {width_, height_};
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA};
+    ::UpdateLayeredWindow(window, nullptr, &at, &size, dc_, &source, 0, &blend,
+                          ULW_ALPHA);
+  }
+
+  void Clear() { std::fill_n(pixels_, width_ * height_, 0u); }
 
  private:
   int width_;
@@ -212,8 +223,7 @@ float RoundedBox(float x, float y, float left, float top, float right,
 // the pixels, and writes no alpha. Filled as outlines, since GDI+'s own text
 // drawing comes out thinner than Flutter's.
 void DrawLabel(Canvas& canvas, const std::wstring& text, RECT rect,
-               HMONITOR monitor, float lift) {
-  const Gdiplus::REAL size = TextSize(monitor);
+               Gdiplus::REAL size, float lift) {
   Gdiplus::Bitmap bitmap(canvas.width(), canvas.height(), canvas.width() * 4,
                          PixelFormat32bppPARGB,
                          reinterpret_cast<BYTE*>(canvas.pixels()));
@@ -248,7 +258,7 @@ Color AuroraAt(float x, float y, float width, float height, Color accent) {
 // goes by the distance to the monitor's nearest edge, so strips meet cleanly.
 void PaintStrip(HWND window, int left, int top, int width, int height,
                 int monitor_width, int monitor_height, HMONITOR monitor,
-                Color accent) {
+                Color accent, GaiaEffectStyle style = GaiaEffectStyle::kClassic) {
   Canvas canvas(width, height);
   if (!canvas.ok()) return;
   const float depth = static_cast<float>(Scaled(kGlowDepth, monitor));
@@ -268,9 +278,821 @@ void PaintStrip(HWND window, int left, int top, int width, int height,
       canvas.Blend(x, y, aurora, fade * fade * fade * 0.85f);
       canvas.Blend(x, y, Mix(aurora, kWhite, 0.18f),
                    Clamp01(line + 0.5f - edge));
+      const float s = depth / kGlowDepth;
+      if (style == GaiaEffectStyle::kEcho) {
+        canvas.Blend(x, y, kGold,
+                     Clamp01(1 - std::abs(edge - 6 * s) / s) * 0.65f);
+      } else if (style == GaiaEffectStyle::kGlide) {
+        const float corner = std::min(mx, monitor_width - mx) +
+                             std::min(my, monitor_height - my);
+        canvas.Blend(x, y, kGold, Clamp01(1 - std::abs(edge - 4 * s) / s) *
+                     Clamp01(1 - corner / (90 * s)));
+      }
     }
   }
   canvas.Present(window);
+}
+
+// Flashes (GAIA_AUTONOMY_HLD.md §6). Sizes at 100%.
+
+constexpr wchar_t kFlashClass[] = L"VoyagerGaiaFlash";
+constexpr UINT_PTR kFlashTimer = 1;
+constexpr size_t kFlashPool = 16;
+// Window updates a flash's faded pieces get a frame, and finished windows
+// hidden a frame, as each costs 0.2 ms or more.
+constexpr int kFadeUpdates = 4;
+constexpr size_t kHidesPerFrame = 3;
+// How long before the input a flash starts. gaia_os_control.dart waits as
+// long between asking for one and sending.
+constexpr float kLeadIn = 120;
+constexpr float kRipple = 460;
+constexpr float kSecondRipple = 130;
+constexpr float kScrollTime = 520;
+constexpr float kKeyTime = 900;
+constexpr float kWindowTime = 750;
+constexpr float kMarkTime = 1100;
+constexpr float kFadeOut = 250;
+// Once round a field's outline.
+constexpr float kSparkLap = 1400;
+constexpr float kClickReach = 48;
+// How far past its halo's radius an Astral click's light reaches: the orbits'
+// glow, the bloom and a right click's corner all end inside it.
+constexpr float kAstralClickMargin = 14;
+// The side of an Astral scroll's square: its furthest chevron and glow.
+constexpr float kAstralScrollSide = 136;
+constexpr float kHalo = 7;
+constexpr float kSpark = 16;
+constexpr float kPillGap = 26;
+constexpr float kMaxPillText = 360;
+
+// Under the light, so it reads on a white page.
+constexpr Color kShade = {0.03f, 0.04f, 0.09f};
+
+float ScaleAt(HMONITOR monitor) {
+  UINT dpi_x = 96;
+  UINT dpi_y = 96;
+  ::GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y);
+  return dpi_x / 96.0f;
+}
+
+float Ease(float x) {
+  x = Clamp01(x);
+  return 1 - (1 - x) * (1 - x) * (1 - x);
+}
+
+float Square(float x) { return x * x; }
+
+// In over |in| ms, out over the last |out| of |total|.
+float Envelope(float t, float in, float out, float total) {
+  return std::min(Clamp01(t / in), Clamp01((total - t) / out));
+}
+
+float SegmentDistance(float px, float py, float ax, float ay, float bx,
+                      float by) {
+  const float dx = bx - ax;
+  const float dy = by - ay;
+  const float length = dx * dx + dy * dy;
+  const float t =
+      length > 0 ? Clamp01(((px - ax) * dx + (py - ay) * dy) / length) : 0;
+  return std::hypot(px - ax - t * dx, py - ay - t * dy);
+}
+
+// A line of light |distance| from its middle: a dark falloff, the accent's
+// glow, then the line.
+void Light(Canvas& canvas, int x, int y, float distance, float width,
+           Color color, float alpha, float s) {
+  if (alpha <= 0) return;
+  const float halo = kHalo * s;
+  const float out = std::abs(distance) - width / 2;
+  if (out > halo) return;
+  const float nearness = Clamp01(1 - out / halo);
+  canvas.Blend(x, y, kShade, alpha * 0.38f * nearness * nearness);
+  canvas.Blend(x, y, color, alpha * 0.22f * nearness * nearness * nearness);
+  canvas.Blend(x, y, color, alpha * Clamp01(0.5f - out));
+}
+
+bool AroundRect(const GaiaFlash& flash) {
+  return !::IsRectEmpty(&flash.rect) &&
+         (flash.kind == GaiaFlash::Kind::kType ||
+          flash.kind == GaiaFlash::Kind::kMark);
+}
+
+// A shared material vocabulary for point effects, field contours and labels.
+// Coordinates are in logical pixels, so the strands retain their weight at DPI.
+using FlashStyle = GaiaFlash::Style;
+
+void FamilyContour(Canvas& canvas, int x, int y, float distance, float along,
+                   float s, Color accent, FlashStyle style, float alpha = 1) {
+  // A quiet version of each family's material, never a repeated miniature icon.
+  const Color color = style == FlashStyle::kAstral ? Mix(accent, kWhite, 0.72f)
+                      : style == FlashStyle::kEcho ? accent
+                      : Mix(accent, kWhite, 0.2f);
+  Light(canvas, x, y, distance, 1.8f * s, color, alpha, s);
+  if (style == FlashStyle::kAstral) {
+    Light(canvas, x, y, distance + 3 * s, s, kGold, alpha * 0.7f, s);
+  } else if (style == FlashStyle::kEcho) {
+    Light(canvas, x, y, distance + 3 * s, s, kGold, alpha * 0.45f, s);
+  } else if (style == FlashStyle::kGlide) {
+    // Long, restrained gold sections, rather than a chain of twinkling beads.
+    const float sweep = Square(Clamp01(1 - std::abs(along / s - 24) / 28));
+    Light(canvas, x, y, distance, 2 * s, kGold, alpha * sweep, s);
+  }
+}
+
+// Astral borrows the spinner's two planes: white light and Astral gold.
+// Echo is a circular wave.
+// Glide is a rounded square. Click motion stays on the existing gold halo.
+void PaintFamilyPoint(Canvas& canvas, float cx, float cy, float radius,
+                      float phase, float alpha, float s, Color accent,
+                      FlashStyle style, bool right = false,
+                      bool orbit_light = false, bool twin_lights = false) {
+  const float reach = radius + 10 * s;
+  const int left = std::max(0, static_cast<int>(cx - reach));
+  const int top = std::max(0, static_cast<int>(cy - reach));
+  const int end_x = std::min(canvas.width(), static_cast<int>(cx + reach + 1));
+  const int end_y = std::min(canvas.height(), static_cast<int>(cy + reach + 1));
+  for (int y = top; y < end_y; ++y) {
+    for (int x = left; x < end_x; ++x) {
+      const float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+      const float r = std::hypot(dx, dy);
+      if (style == FlashStyle::kAstral) {
+        for (int orbit = 0; orbit < 2; ++orbit) {
+          const float tilt = orbit == 0 ? -0.65f : 0.85f;
+          const float u = dx * std::cos(tilt) + dy * std::sin(tilt);
+          const float v = -dx * std::sin(tilt) + dy * std::cos(tilt);
+          const float halo = (std::hypot(u, v / 0.48f) - radius) * 0.6f;
+          const float head = (orbit_light ? (orbit == 1 ? phase : 0)
+                                         : (orbit == 0 ? phase : -phase)) - kPi / 2;
+          const float around = std::atan2(v / 0.48f, u);
+          const float glint = std::pow(std::max(0.0f, std::cos(around - head)), 6.0f);
+          Light(canvas, x, y, halo, 1.7f * s,
+                orbit == 0 ? Mix(accent, kWhite, 0.72f) : kGold,
+                alpha * (0.65f + 0.35f * glint), s);
+          if (orbit == 1 && orbit_light) {
+            const int count = twin_lights ? 2 : 1;
+            for (int light = 0; light < count; ++light) {
+              const float at = phase - kPi / 2 + light * kPi;
+              const float mx = radius * std::cos(at);
+              const float my = radius * 0.48f * std::sin(at);
+              Light(canvas, x, y, std::hypot(u - mx, v - my), 3.2f * s,
+                    Mix(kGold, kWhite, 0.65f), alpha, s);
+            }
+          }
+        }
+        Light(canvas, x, y, r, 4 * s, Mix(accent, kWhite, 0.72f), alpha, s);
+      } else if (style == FlashStyle::kEcho) {
+        Light(canvas, x, y, r - radius, 2.8f * s,
+              Mix(accent, kGold, Clamp01(phase * 0.25f)), alpha, s);
+        Light(canvas, x, y, r, 4 * s, kGold, alpha * 0.8f, s);
+      } else {
+        const float box = RoundedBox(dx, dy, -radius * 0.72f, -radius * 0.72f,
+                                     radius * 0.72f, radius * 0.72f, 5 * s);
+        Light(canvas, x, y, box, 2.4f * s, accent, alpha, s);
+        Light(canvas, x, y, r, 3 * s, kGold, alpha * 0.8f, s);
+      }
+      if (right) {
+        const float d = std::min(
+            SegmentDistance(dx, dy, 9 * s, 9 * s, 20 * s, 9 * s),
+            SegmentDistance(dx, dy, 9 * s, 9 * s, 9 * s, 20 * s));
+        Light(canvas, x, y, d, 2 * s, kGold, alpha, s);
+      }
+    }
+  }
+}
+
+// A pixel of an Astral click's square within its reach: where it sits from the
+// point, and from and round each orbit's ellipse.
+struct ClickPixel {
+  int x, y;
+  float dx, dy, r;
+  float around[2];
+  float angle[2];
+};
+
+// Those pixels, worked out once: the square holds still while a click plays,
+// and every click at a scale shares one.
+const std::vector<ClickPixel>& ClickGeometry(int width, int height, float cx,
+                                             float cy, float radius, float reach) {
+  struct Entry {
+    int width, height;
+    float cx, cy, radius, reach;
+    std::vector<ClickPixel> pixels;
+  };
+  static std::vector<Entry> cache;
+  for (const Entry& entry : cache) {
+    if (entry.width == width && entry.height == height && entry.cx == cx &&
+        entry.cy == cy && entry.radius == radius && entry.reach == reach) {
+      return entry.pixels;
+    }
+  }
+  if (cache.size() >= 4) cache.erase(cache.begin());
+  Entry entry = {width, height, cx, cy, radius, reach, {}};
+  const float tilt_cos[2] = {std::cos(-0.65f), std::cos(0.85f)};
+  const float tilt_sin[2] = {std::sin(-0.65f), std::sin(0.85f)};
+  for (int y = std::max(0, static_cast<int>(cy - reach));
+       y < std::min(height, static_cast<int>(cy + reach) + 1); ++y) {
+    for (int x = std::max(0, static_cast<int>(cx - reach));
+         x < std::min(width, static_cast<int>(cx + reach) + 1); ++x) {
+      ClickPixel pixel = {x, y, x + 0.5f - cx, y + 0.5f - cy, 0, {}, {}};
+      pixel.r = std::hypot(pixel.dx, pixel.dy);
+      if (pixel.r > reach) continue;
+      for (int orbit = 0; orbit < 2; ++orbit) {
+        const float u = pixel.dx * tilt_cos[orbit] + pixel.dy * tilt_sin[orbit];
+        const float v = (-pixel.dx * tilt_sin[orbit] + pixel.dy * tilt_cos[orbit]) / 0.48f;
+        pixel.around[orbit] = std::hypot(u, v) - radius;
+        pixel.angle[orbit] = std::fmod(std::atan2(v, u) + 2.5f * kPi, 2 * kPi);
+      }
+      entry.pixels.push_back(pixel);
+    }
+  }
+  cache.push_back(std::move(entry));
+  return cache.back().pixels;
+}
+
+// The selected click material also supplies the visual vocabulary for gestures
+// and markers. Double-click has two core beats within a single traced form.
+void PaintAstralClick(Canvas& canvas, const GaiaFlash& flash, float cx, float cy,
+                      float t, float s, Color accent) {
+  using Variant = GaiaFlash::ClickVariant;
+  const Variant variant = flash.kind == GaiaFlash::Kind::kClick
+                              ? flash.click_variant : Variant::kTraceBloom;
+  const bool twice = flash.kind == GaiaFlash::Kind::kDouble;
+  const bool marker = flash.kind == GaiaFlash::Kind::kMark;
+  const float total = twice ? 900 : marker ? kMarkTime : kLeadIn + kRipple;
+  const float p = Clamp01(t / total);
+  const float alpha = Envelope(t, 65, 220, total);
+  if (alpha <= 0) return;
+  const float radius = (marker ? 14 : 18) * s;
+  const bool trace = variant == Variant::kTrace || variant == Variant::kTraceBloom;
+  const bool bloom = variant == Variant::kBloom || variant == Variant::kTraceBloom;
+  if (!trace) {
+    PaintFamilyPoint(canvas, cx, cy, radius, 0, alpha, s, accent, FlashStyle::kAstral);
+  }
+  // Everything per frame rather than per pixel.
+  const Color white = Mix(accent, kWhite, 0.72f);
+  const float head = Ease(p / 0.7f) * 2 * kPi;
+  // Beyond this from its ellipse, an orbit's light (1.7 wide, scaled by 0.6)
+  // is nothing.
+  const float orbit_reach = (0.85f + kHalo) * s / 0.6f + 1;
+  const float breath = !bloom ? 0
+                       : twice ? 0.45f * std::sin(p * kPi) +
+                                     0.55f * Square(std::sin(p * 2 * kPi))
+                               : std::sin(p * kPi);
+  const float spread = (5 + 8 * breath) * s;
+  // Where the bloom's glow falls under half a level.
+  const float glow = alpha * 0.24f * breath * 255 / 0.5f;
+  const float glow_reach = glow > 1 ? spread * std::sqrt(std::log(glow)) : 0;
+  const float corner_alpha = flash.kind == GaiaFlash::Kind::kRight
+                                 ? alpha * Clamp01((p - 0.2f) * 5) : 0;
+  const float reach = radius + kAstralClickMargin * s;
+  for (const ClickPixel& pixel :
+       ClickGeometry(canvas.width(), canvas.height(), cx, cy, radius, reach)) {
+    const int x = pixel.x, y = pixel.y;
+    const float r = pixel.r;
+    if (trace) {
+      for (int orbit = 0; orbit < 2; ++orbit) {
+        const float around = pixel.around[orbit];
+        if (std::abs(around) > orbit_reach) continue;
+        const float reveal = Clamp01((head - pixel.angle[orbit]) / 0.18f);
+        Light(canvas, x, y, around * 0.6f, 1.7f * s,
+              orbit == 0 ? white : kGold, alpha * reveal, s);
+      }
+      Light(canvas, x, y, r, 4 * s, white, alpha, s);
+    }
+    if (breath > 0) {
+      if (r < glow_reach) {
+        canvas.Blend(x, y, accent, alpha * 0.24f * breath * std::exp(-r * r / (spread * spread)));
+      }
+      Light(canvas, x, y, r, (4 + 6 * breath) * s, white, alpha * breath * 0.45f, s);
+    }
+    // The corner's light ends 8 past its arms, which run from 9 to 20.
+    if (corner_alpha > 0 && pixel.dx > s && pixel.dy > s) {
+      const float corner = std::min(
+          SegmentDistance(pixel.dx, pixel.dy, 9 * s, 9 * s, 20 * s, 9 * s),
+          SegmentDistance(pixel.dx, pixel.dy, 9 * s, 9 * s, 9 * s, 20 * s));
+      Light(canvas, x, y, corner, 2 * s, kGold, corner_alpha, s);
+    }
+  }
+}
+
+constexpr float kFamilyScrollTime = 760;
+constexpr float kAstralDoubleTime = 900;
+
+void PaintScroll(Canvas& canvas, const GaiaFlash& flash, float cx, float cy,
+                 float t, float s, Color accent);
+
+// Echo and Glide retain their 100px journey and separated, full-strength beats.
+// Astral uses PaintScroll below to share Current's choreography exactly.
+void PaintFamilyScroll(Canvas& canvas, const GaiaFlash& flash, float cx,
+                       float cy, float t, float s, Color accent) {
+  static constexpr float dirs[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+  const auto& d = dirs[std::clamp(flash.direction, 0, 3)];
+  const int count = std::clamp(3 + (flash.amount - 3) / 4, 3, 6);
+  const float p = Clamp01(t / kFamilyScrollTime);
+  const float alpha = Envelope(t, 70, 170, kFamilyScrollTime);
+  if (alpha <= 0) return;
+  const float centre = (-50 + 100 * Ease(p)) * s;
+  for (int y = 0; y < canvas.height(); ++y) {
+    for (int x = 0; x < canvas.width(); ++x) {
+      const float px = x + 0.5f - cx, py = y + 0.5f - cy;
+      const float u = px * -d[1] + py * d[0];
+      const float v = px * d[0] + py * d[1];
+      for (int i = 0; i < count; ++i) {
+        const float head = centre - i * 16 * s;
+        if (std::abs(v - head) > 30 * s || std::abs(u) > 34 * s) continue;
+        const float strength = 1 - i * 0.06f;
+        const Color color = i == 0 ? Mix(kGold, kWhite, 0.2f) : accent;
+        if (flash.style == FlashStyle::kEcho) {
+          // Broad curved wavefronts, with a crisp centre and visible ends.
+          const float bow = head - u * u / (64 * s);
+          const float taper = Clamp01((25 * s - std::abs(u)) / (6 * s));
+          Light(canvas, x, y, (v - bow) * 0.85f, 3.5f * s, color,
+                alpha * strength * taper, s);
+        } else {
+          const float distance = std::min(
+              SegmentDistance(u, v, -17 * s, head - 12 * s, 0, head),
+              SegmentDistance(u, v, 17 * s, head - 12 * s, 0, head));
+          Light(canvas, x, y, distance, 3.5f * s, color, alpha * strength, s);
+        }
+      }
+    }
+  }
+}
+
+void PaintFamilyEffect(Canvas& canvas, const GaiaFlash& flash, float cx,
+                       float cy, float t, float s, Color accent) {
+  if (flash.kind == GaiaFlash::Kind::kScroll) {
+    if (flash.style == FlashStyle::kAstral) {
+      PaintScroll(canvas, flash, cx, cy, t, s, accent);
+    } else {
+      PaintFamilyScroll(canvas, flash, cx, cy, t, s, accent);
+    }
+    return;
+  }
+  const bool mark = flash.kind == GaiaFlash::Kind::kMark;
+  if (flash.style == FlashStyle::kAstral) {
+    PaintAstralClick(canvas, flash, cx, cy, t, s, accent);
+    return;
+  }
+  const int count = flash.kind == GaiaFlash::Kind::kDouble ? 2 : 1;
+  for (int i = 0; i < count; ++i) {
+    const float p = (t - i * kSecondRipple) / (mark ? kMarkTime : kLeadIn + kRipple);
+    if (p < 0 || p >= 1) continue;
+    const float alpha = Envelope(p, 0.08f, 0.42f, 1);
+    const float radius = (mark ? 14 + std::sin(p * 4 * kPi)
+                               : 8 + 18 * Ease(p)) * s;
+    PaintFamilyPoint(canvas, cx, cy, radius, p * 3 + i, alpha, s, accent,
+                     flash.style, flash.kind == GaiaFlash::Kind::kRight);
+  }
+}
+
+// The side of the square an effect redraws each frame, centred on its point.
+// Zero for one drawn only in strips, pills and a spark.
+int EffectSide(const GaiaFlash& flash, float s) {
+  // Astral's point effects fit a smaller square, which costs less to update.
+  const int point = flash.style == FlashStyle::kAstral
+                        ? static_cast<int>(2 * (18 + kAstralClickMargin) * s) + 2
+                        : static_cast<int>(2 * kClickReach * s);
+  switch (flash.kind) {
+    case GaiaFlash::Kind::kClick:
+    case GaiaFlash::Kind::kDouble:
+    case GaiaFlash::Kind::kRight:
+      return point;
+    case GaiaFlash::Kind::kScroll:
+      return flash.style == FlashStyle::kClassic
+                 ? static_cast<int>((std::clamp(flash.amount, 3, 6) * 10 + 64) * s)
+             : flash.style == FlashStyle::kAstral
+                 ? static_cast<int>(kAstralScrollSide * s)
+                 : static_cast<int>(320 * s);
+    case GaiaFlash::Kind::kMark:
+      return AroundRect(flash) ? 0 : point;
+    case GaiaFlash::Kind::kType:
+    case GaiaFlash::Kind::kKey:
+    case GaiaFlash::Kind::kWindow:
+      break;
+  }
+  return 0;
+}
+
+float TotalTime(const GaiaFlash& flash) {
+  switch (flash.kind) {
+    case GaiaFlash::Kind::kClick:
+    case GaiaFlash::Kind::kRight:
+      return kLeadIn + kRipple;
+    case GaiaFlash::Kind::kDouble:
+      return flash.style == FlashStyle::kAstral ? kAstralDoubleTime
+                                               : kLeadIn + kSecondRipple + kRipple;
+    case GaiaFlash::Kind::kScroll:
+      return flash.style == FlashStyle::kClassic || flash.style == FlashStyle::kAstral
+                 ? kScrollTime : kFamilyScrollTime;
+    case GaiaFlash::Kind::kType:
+      return std::max(static_cast<float>(flash.duration_ms), 500.0f) + 300;
+    case GaiaFlash::Kind::kKey:
+      return kKeyTime;
+    case GaiaFlash::Kind::kWindow:
+      return flash.style == FlashStyle::kAstral ? 1000 : kWindowTime;
+    case GaiaFlash::Kind::kMark:
+      return kMarkTime;
+  }
+  return 0;
+}
+
+// The target ring contracting onto the point, then a ripple from it, or two;
+// a right click adds the corner of the menu it opens.
+void PaintClick(Canvas& canvas, const GaiaFlash& flash, float cx, float cy,
+                float t, float s, Color accent) {
+  struct Ring {
+    float radius, width, alpha;
+    Color color;
+  };
+  Ring rings[3];
+  int count = 0;
+  float dot = 0;
+  if (t < kLeadIn) {
+    const float p = Ease(t / kLeadIn);
+    rings[count++] = {(30 - 22 * p) * s, 2.5f * s, Clamp01(t / kLeadIn * 1.5f),
+                      accent};
+    dot = p * 0.8f;
+  }
+  const int ripples = flash.kind == GaiaFlash::Kind::kDouble ? 2 : 1;
+  for (int i = 0; i < ripples; ++i) {
+    const float q = (t - kLeadIn - i * kSecondRipple) / kRipple;
+    if (q < 0 || q >= 1) continue;
+    rings[count++] = {(8 + 34 * Ease(q)) * s, (3 * (1 - q) + 1) * s,
+                      std::pow(1 - q, 1.5f), Mix(accent, kGold, q * 0.9f)};
+    if (i == 0) dot = 0.8f * Square(1 - q);
+  }
+  const float q = Clamp01((t - kLeadIn) / kRipple);
+  const float tick = flash.kind == GaiaFlash::Kind::kRight && t >= kLeadIn
+                         ? std::pow(1 - q, 1.2f)
+                         : 0;
+  const float corner_x = cx + 9 * s;
+  const float corner_y = cy + 9 * s;
+  const float dot_radius = 3.5f * s;
+  for (int y = 0; y < canvas.height(); ++y) {
+    for (int x = 0; x < canvas.width(); ++x) {
+      const float px = x + 0.5f;
+      const float py = y + 0.5f;
+      const float r = std::hypot(px - cx, py - cy);
+      for (int i = 0; i < count; ++i) {
+        Light(canvas, x, y, r - rings[i].radius, rings[i].width, rings[i].color,
+              rings[i].alpha, s);
+      }
+      if (dot > 0) {
+        Light(canvas, x, y, r, 2 * dot_radius, Mix(accent, kWhite, 0.4f), dot,
+              s);
+      }
+      if (tick > 0) {
+        const float d = std::min(
+            SegmentDistance(px, py, corner_x, corner_y, corner_x + 12 * s,
+                            corner_y),
+            SegmentDistance(px, py, corner_x, corner_y, corner_x,
+                            corner_y + 10 * s));
+        Light(canvas, x, y, d, 2 * s, kGold, tick, s);
+      }
+    }
+  }
+}
+
+// Chevrons sliding in the scroll's direction, one after another. Each paints
+// only the pixels it can reach.
+void PaintScroll(Canvas& canvas, const GaiaFlash& flash, float cx, float cy,
+                 float t, float s, Color accent) {
+  static constexpr float kDirections[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+  const float* d = kDirections[std::clamp(flash.direction, 0, 3)];
+  const int count = std::clamp(3 + (flash.amount - 3) / 4, 3, 6);
+  const float stagger = 50;
+  const float each = kScrollTime - stagger * (count - 1);
+  const float reach = (1.25f + kHalo + 1) * s;
+  for (int i = 0; i < count; ++i) {
+    const float q = Clamp01((t - i * stagger) / each);
+    if (q <= 0 || q >= 1) continue;
+    const float alpha = std::sin(q * kPi);
+    const Color color = Mix(accent, kGold, static_cast<float>(i) / count);
+    const float along = ((i - (count - 1) / 2.0f) * 10 - 9 + 18 * Ease(q)) * s;
+    if (flash.style == FlashStyle::kAstral) {
+      // Same stagger, lifespan, easing and accent-to-gold ordering as Current;
+      // only the arrow geometry and stroke weight differ. Only the pixels
+      // within 27 across and 30 along of this one's centre.
+      const float mid_x = cx + d[0] * along, mid_y = cy + d[1] * along;
+      const float half_x = (d[0] != 0 ? 30 : 27) * s;
+      const float half_y = (d[0] != 0 ? 27 : 30) * s;
+      const int from_x = std::max(0, static_cast<int>(mid_x - half_x) - 1);
+      const int from_y = std::max(0, static_cast<int>(mid_y - half_y) - 1);
+      const int to_x = std::min(canvas.width(), static_cast<int>(mid_x + half_x) + 2);
+      const int to_y = std::min(canvas.height(), static_cast<int>(mid_y + half_y) + 2);
+      for (int y = from_y; y < to_y; ++y) {
+        for (int x = from_x; x < to_x; ++x) {
+          const float px = x + 0.5f - cx, py = y + 0.5f - cy;
+          const float u = px * -d[1] + py * d[0];
+          const float v = px * d[0] + py * d[1];
+          if (std::abs(u) > 27 * s || std::abs(v - along) > 30 * s) continue;
+          const float side = std::abs(u) / s;
+          const float sweep = along - (side * 0.42f + side * side * 0.008f) * s;
+          const float taper = Clamp01((27 * s - std::abs(u)) / (4 * s));
+          Light(canvas, x, y, (v - sweep) * 0.85f, 3.8f * s,
+                color, alpha * taper, s);
+        }
+      }
+      continue;
+    }
+    // The tip, and the arms reaching back from it and out to each side.
+    const float ax = cx + d[0] * along;
+    const float ay = cy + d[1] * along;
+    const float bx = ax - d[0] * 7 * s;
+    const float by = ay - d[1] * 7 * s;
+    const float lx = bx - d[1] * 9 * s;
+    const float ly = by + d[0] * 9 * s;
+    const float rx = bx + d[1] * 9 * s;
+    const float ry = by - d[0] * 9 * s;
+    const int left = std::max(0, static_cast<int>(std::min({ax, lx, rx}) - reach));
+    const int top = std::max(0, static_cast<int>(std::min({ay, ly, ry}) - reach));
+    const int right = std::min(canvas.width(),
+                               static_cast<int>(std::max({ax, lx, rx}) + reach) + 1);
+    const int bottom = std::min(
+        canvas.height(), static_cast<int>(std::max({ay, ly, ry}) + reach) + 1);
+    for (int y = top; y < bottom; ++y) {
+      for (int x = left; x < right; ++x) {
+        const float px = x + 0.5f;
+        const float py = y + 0.5f;
+        const float distance =
+            std::min(SegmentDistance(px, py, ax, ay, lx, ly),
+                     SegmentDistance(px, py, ax, ay, rx, ry));
+        Light(canvas, x, y, distance, 2.5f * s, color, alpha, s);
+      }
+    }
+  }
+}
+
+// A ring pulsing at the point, round a white core.
+void PaintMarkPoint(Canvas& canvas, float cx, float cy, float t, float s,
+                    Color accent) {
+  const float alpha = Envelope(t, 120, 300, kMarkTime) *
+                      (0.65f + 0.35f * std::cos(t / 1000 * 4 * kPi));
+  const float radius = (14 + 3 * std::sin(t / 1000 * 4 * kPi)) * s;
+  for (int y = 0; y < canvas.height(); ++y) {
+    for (int x = 0; x < canvas.width(); ++x) {
+      const float r = std::hypot(x + 0.5f - cx, y + 0.5f - cy);
+      Light(canvas, x, y, r - radius, 2.5f * s, Mix(accent, kGold, 0.35f),
+            alpha, s);
+      Light(canvas, x, y, r, 5 * s, Mix(accent, kWhite, 0.4f), alpha * 0.8f, s);
+    }
+  }
+}
+
+// |flash|'s effect at |t| ms, on its square at |origin|.
+void PaintEffect(Canvas& canvas, const GaiaFlash& flash, POINT origin, float t,
+                 float s) {
+  canvas.Clear();
+  const Color accent = FromRgb(flash.accent);
+  const float cx = flash.point.x - origin.x + 0.5f;
+  const float cy = flash.point.y - origin.y + 0.5f;
+  if (flash.style != FlashStyle::kClassic) {
+    PaintFamilyEffect(canvas, flash, cx, cy, t, s, accent);
+    return;
+  }
+  switch (flash.kind) {
+    case GaiaFlash::Kind::kClick:
+    case GaiaFlash::Kind::kDouble:
+    case GaiaFlash::Kind::kRight:
+      PaintClick(canvas, flash, cx, cy, t, s, accent);
+      break;
+    case GaiaFlash::Kind::kScroll:
+      PaintScroll(canvas, flash, cx, cy, t, s, accent);
+      break;
+    case GaiaFlash::Kind::kMark:
+      PaintMarkPoint(canvas, cx, cy, t, s, accent);
+      break;
+    case GaiaFlash::Kind::kType:
+    case GaiaFlash::Kind::kKey:
+    case GaiaFlash::Kind::kWindow:
+      break;
+  }
+}
+
+int AstralWindowCornerSide(const RECT& frame, float s) {
+  const int width = frame.right - frame.left;
+  const int height = frame.bottom - frame.top;
+  const float extent = std::clamp(std::min(width, height) * 0.16f, 64 * s, 176 * s);
+  return std::max(0, std::min({static_cast<int>(std::round(extent)), width / 2, height / 2}));
+}
+
+// Detached, curved corner brackets for Astral's window adoption. The open
+// edges distinguish a window coming into focus from a field being typed into.
+void PaintAstralWindowCorner(Canvas& canvas, bool right, bool bottom,
+                             float s, Color accent) {
+  canvas.Clear();
+  const float side = static_cast<float>(canvas.width());
+  const float inset = side / 6;
+  const float radius = side * 0.28f;
+  const float weight = s * std::clamp(std::sqrt(side / (64 * s)), 1.0f, 1.7f);
+  for (int y = 0; y < canvas.height(); ++y) {
+    for (int x = 0; x < canvas.width(); ++x) {
+      const float px = right ? side - x - 0.5f : x + 0.5f;
+      const float py = bottom ? side - y - 0.5f : y + 0.5f;
+      const float distance = RoundedBox(px, py, inset, inset,
+                                        side * 4, side * 4, radius);
+      const float progress = Clamp01((std::max(px, py) - inset) / (side * 0.68f));
+      const float taper = Clamp01((side * 0.85f - std::max(px, py)) / (side * 0.24f)) *
+                          Clamp01((1 - progress) * 12);
+      Light(canvas, x, y, distance, 3 * weight, Mix(accent, kWhite, 0.72f),
+            taper, s);
+      Light(canvas, x, y, distance + 5 * weight, 2 * weight, kGold, taper, s);
+    }
+  }
+}
+
+// A faint, tapered pool at an edge midpoint. These small tiles preserve the
+// detached corners and leave most of each edge and all window content clear.
+void PaintAstralEdgeFade(Canvas& canvas, bool vertical, float s, Color accent) {
+  canvas.Clear();
+  const float length = static_cast<float>(vertical ? canvas.height() : canvas.width());
+  const float depth = static_cast<float>(vertical ? canvas.width() : canvas.height());
+  for (int y = 0; y < canvas.height(); ++y) {
+    for (int x = 0; x < canvas.width(); ++x) {
+      const float along = (vertical ? y + 0.5f : x + 0.5f) / length * 2 - 1;
+      const float normal = (vertical ? x + 0.5f : y + 0.5f) - depth / 2;
+      const float taper = Square(Clamp01(1 - along * along));
+      const float falloff = std::exp(-Square(normal / (5 * s)));
+      canvas.Blend(x, y, kShade, taper * falloff * 0.14f);
+      canvas.Blend(x, y, accent, taper * falloff * 0.2f);
+      canvas.Blend(x, y, Mix(kGold, kWhite, 0.35f),
+                   taper * std::exp(-Square(normal / (1.3f * s))) * 0.2f);
+    }
+  }
+}
+
+// The rounded box an outline round a control draws, in screen pixels.
+struct OutlineBox {
+  float left, top, right, bottom, radius;
+};
+
+OutlineBox OutlineAround(const RECT& rect, float s) {
+  const float inset = 3 * s;
+  OutlineBox box = {rect.left - inset, rect.top - inset, rect.right + inset,
+                    rect.bottom + inset, 0};
+  box.radius = std::min(
+      {6 * s, (box.right - box.left) / 2, (box.bottom - box.top) / 2});
+  return box;
+}
+
+// How far an outline's light reaches either side of its box.
+float OutlineReach(float s) { return (1 + kHalo) * s + 1; }
+
+// The part of |box|'s outline on |canvas|, which sits at |origin|.
+void PaintOutline(Canvas& canvas, const OutlineBox& box, POINT origin, float s,
+                  Color accent, FlashStyle style = FlashStyle::kClassic) {
+  const float width = box.right - box.left;
+  const float height = box.bottom - box.top;
+  for (int y = 0; y < canvas.height(); ++y) {
+    for (int x = 0; x < canvas.width(); ++x) {
+      const float px = origin.x + x + 0.5f;
+      const float py = origin.y + y + 0.5f;
+      const float distance = RoundedBox(px, py, box.left, box.top, box.right,
+                                        box.bottom, box.radius);
+      if (style != FlashStyle::kClassic) {
+        FamilyContour(canvas, x, y, distance, px - box.left + py - box.top,
+                      s, accent, style);
+      } else Light(canvas, x, y, distance, 2 * s,
+            AuroraAt(px - box.left, py - box.top, width, height, accent), 1, s);
+    }
+  }
+}
+
+// The pieces of screen an outline round |box| lights: four strips round an
+// inside it never touches, or one piece for a box too small to have one.
+std::vector<RECT> OutlinePieces(const OutlineBox& box, float s) {
+  const float reach = OutlineReach(s);
+  const RECT outer = {static_cast<LONG>(std::floor(box.left - reach)),
+                      static_cast<LONG>(std::floor(box.top - reach)),
+                      static_cast<LONG>(std::ceil(box.right + reach)),
+                      static_cast<LONG>(std::ceil(box.bottom + reach))};
+  const RECT inner = {static_cast<LONG>(std::ceil(box.left + reach)),
+                      static_cast<LONG>(std::ceil(box.top + reach)),
+                      static_cast<LONG>(std::floor(box.right - reach)),
+                      static_cast<LONG>(std::floor(box.bottom - reach))};
+  if (inner.right <= inner.left || inner.bottom <= inner.top) return {outer};
+  return {
+      {outer.left, outer.top, outer.right, inner.top},
+      {outer.left, inner.bottom, outer.right, outer.bottom},
+      {outer.left, inner.top, inner.left, inner.bottom},
+      {inner.right, inner.top, outer.right, inner.bottom},
+  };
+}
+
+// The spark that runs round a field while Gaia types into it.
+std::unique_ptr<Canvas> PaintSpark(float s, Color accent,
+                                 FlashStyle style = FlashStyle::kClassic) {
+  const int side = 2 * static_cast<int>(std::ceil((kSpark + kHalo) * s));
+  auto canvas = std::make_unique<Canvas>(side, side);
+  if (!canvas->ok()) return nullptr;
+  canvas->Clear();
+  const float centre = side / 2.0f;
+  for (int y = 0; y < side; ++y) {
+    for (int x = 0; x < side; ++x) {
+      const float r = style == FlashStyle::kGlide
+                          ? SegmentDistance(x + 0.5f, y + 0.5f, centre - 3 * s, centre,
+                                            centre + 3 * s, centre)
+                          : std::hypot(x + 0.5f - centre, y + 0.5f - centre);
+      Light(*canvas, x, y, r, 6 * s, Mix(kGold, kWhite, 0.6f), 1, s);
+      canvas->Blend(x, y, Mix(accent, kGold, 0.6f),
+                    0.75f * Square(Clamp01(1 - r / (kSpark * s))));
+    }
+  }
+  return canvas;
+}
+
+// Where the spark is, |along| of the way round |box| from its top left,
+// clockwise.
+POINT SparkAt(const OutlineBox& box, float along) {
+  const float width = box.right - box.left;
+  const float height = box.bottom - box.top;
+  float d = along * 2 * (width + height);
+  float x = box.left;
+  float y = box.top;
+  if (d < width) {
+    x += d;
+  } else if ((d -= width) < height) {
+    x = box.right;
+    y += d;
+  } else if ((d -= height) < width) {
+    x = box.right - d;
+    y = box.bottom;
+  } else {
+    y = box.bottom - (d - width);
+  }
+  return {static_cast<LONG>(x), static_cast<LONG>(y)};
+}
+
+// A pill with |text| in it, as Gaia's toasts are: its fill and a ring of
+// light. A keycap is larger and squarer. Null if it won't draw.
+std::unique_ptr<Canvas> PaintPill(const std::wstring& text, float s,
+                                  Color accent, bool keycap,
+                                  FlashStyle style = FlashStyle::kClassic) {
+  const float height = (keycap ? 34 : 26) * s;
+  const Gdiplus::REAL size = (keycap ? 15 : 13) * s;
+  const float padding = (keycap ? 14 : 11) * s;
+  const float radius = style == FlashStyle::kGlide ? 4 * s
+                      : keycap ? 8 * s : height / 2;
+  const int margin = static_cast<int>(std::ceil(kHalo * s));
+  const float width =
+      std::min(static_cast<float>(TextWidth(text, size) + 2), kMaxPillText * s) +
+      2 * padding;
+  auto canvas = std::make_unique<Canvas>(
+      static_cast<int>(std::ceil(width)) + 2 * margin,
+      static_cast<int>(std::ceil(height)) + 2 * margin);
+  if (!canvas->ok()) return nullptr;
+  canvas->Clear();
+  const float m = static_cast<float>(margin);
+  const Color fill = GaiaFill(accent);
+  for (int y = 0; y < canvas->height(); ++y) {
+    for (int x = 0; x < canvas->width(); ++x) {
+      const float px = x + 0.5f;
+      const float py = y + 0.5f;
+      const float box = RoundedBox(px, py, m, m, m + width, m + height, radius);
+      if (box > 0) {
+        canvas->Blend(x, y, kShade, 0.4f * Square(Clamp01(1 - box / m)));
+      }
+      const float inside = Clamp01(0.5f - box);
+      if (inside <= 0) continue;
+      canvas->Blend(x, y, fill, inside * 0.94f);
+      const float along = (px - m) / width;
+      const Color ring =
+          Mix(accent, kGold, 0.5f + 0.5f * std::sin(along * kPi * 2));
+      if (style == FlashStyle::kClassic) {
+        canvas->Blend(x, y, ring, inside * Clamp01(s + 0.5f + box) * 0.9f);
+      } else {
+        FamilyContour(*canvas, x, y, box, px + py, s, accent, style, 0.8f);
+      }
+    }
+  }
+  const RECT text_rect = {static_cast<LONG>(m + padding), margin,
+                          static_cast<LONG>(m + width - padding),
+                          static_cast<LONG>(m + height)};
+  DrawLabel(*canvas, text, text_rect, size, kTextLift);
+  return canvas;
+}
+
+// Where a box of |size| goes so it stays on |monitor|'s work area.
+POINT Clamped(POINT at, SIZE size, HMONITOR monitor) {
+  MONITORINFO info = {sizeof(info)};
+  if (!::GetMonitorInfo(monitor, &info)) return at;
+  const RECT& work = info.rcWork;
+  at.x = std::max(work.left, std::min(at.x, work.right - size.cx));
+  at.y = std::max(work.top, std::min(at.y, work.bottom - size.cy));
+  return at;
+}
+
+void SetAlpha(HWND window, float alpha) {
+  BLENDFUNCTION blend = {AC_SRC_OVER, 0,
+                         static_cast<BYTE>(255 * Clamp01(alpha)), AC_SRC_ALPHA};
+  ::UpdateLayeredWindow(window, nullptr, nullptr, nullptr, nullptr, nullptr, 0,
+                        &blend, ULW_ALPHA);
+}
+
+void ShowOnTop(HWND window) {
+  ::SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 }  // namespace
@@ -280,9 +1102,11 @@ GaiaControlBorder::GaiaControlBorder(std::function<void()> on_revoke)
 
 GaiaControlBorder::~GaiaControlBorder() { Hide(); }
 
-void GaiaControlBorder::Show(const std::wstring& label, unsigned int accent) {
+void GaiaControlBorder::Show(const std::wstring& label, unsigned int accent,
+                             GaiaEffectStyle style) {
   label_ = label;
   accent_ = accent;
+  style_ = style;
   Rebuild();
 }
 
@@ -334,7 +1158,7 @@ BOOL CALLBACK GaiaControlBorder::AddMonitor(HMONITOR monitor, HDC, LPRECT,
                                   strip_width, strip_height, false);
     if (window) {
       PaintStrip(window, strip.left, strip.top, strip_width, strip_height,
-                 width, height, monitor, accent);
+                 width, height, monitor, accent, self->style_);
     }
   }
   if (info.dwFlags & MONITORINFOF_PRIMARY) self->AddNotch(monitor, r);
@@ -346,7 +1170,7 @@ void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
   const int gap = Scaled(kGap, monitor);
   const int orb = Scaled(kOrbSize, monitor);
   const int button_width =
-      TextWidth(kButtonText, monitor) + 2 * Scaled(kButtonPadding, monitor);
+      TextWidth(kButtonText, TextSize(monitor)) + 2 * Scaled(kButtonPadding, monitor);
   const int height = Scaled(kNotchHeight, monitor);
   const int button_height = Scaled(kButtonHeight, monitor);
   // As far from the notch's right edge as from its top and bottom, inside the
@@ -355,7 +1179,7 @@ void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
   const int rest = padding + orb + gap + gap + button_width + inset + kNotchRim;
   // Never wider than the monitor, or the button goes off it.
   const int label_width =
-      std::min({TextWidth(label_, monitor) + 2, Scaled(kMaxLabelWidth, monitor),
+      std::min({TextWidth(label_, TextSize(monitor)) + 2, Scaled(kMaxLabelWidth, monitor),
                 static_cast<int>(bounds.right - bounds.left) - rest});
   const int width = rest + label_width;
   button_.right = width - inset - kNotchRim;
@@ -423,7 +1247,12 @@ void GaiaControlBorder::PaintNotch() {
       // The ring of light around it, as Gaia's buttons and toasts have.
       const float along = px / w;
       const Color ring = Mix(accent, kGold, 0.5f + 0.5f * std::sin(along * kPi * 2));
-      canvas.Blend(x, y, ring, inside * Clamp01(kNotchRim + 0.5f + box) * 0.9f);
+      if (style_ == GaiaEffectStyle::kClassic) {
+        canvas.Blend(x, y, ring, inside * Clamp01(kNotchRim + 0.5f + box) * 0.9f);
+      } else {
+        FamilyContour(canvas, x, y, box + 1, px + py, w / width,
+                      accent, style_, inside * 0.85f);
+      }
       // The orb: a white core in the accent's halo, ringed with gold.
       const float orb = std::hypot(px - orb_x, py - orb_y) / (orb_size / 2);
       canvas.Blend(x, y, accent, Clamp01(1.6f - orb) * 0.28f);
@@ -446,8 +1275,9 @@ void GaiaControlBorder::PaintNotch() {
     }
   }
 
-  DrawLabel(canvas, label_, label_rect_, monitor, kTextLift);
-  DrawLabel(canvas, kButtonText, button_, monitor, kButtonTextLift);
+  DrawLabel(canvas, label_, label_rect_, TextSize(monitor), kTextLift);
+  DrawLabel(canvas, kButtonText, button_, TextSize(monitor),
+            kButtonTextLift);
   canvas.Present(notch_);
 }
 
@@ -522,6 +1352,348 @@ LRESULT CALLBACK GaiaControlBorder::WindowProc(HWND hwnd, UINT message,
       return 0;
     case WM_APP:
       if (self) self->Rebuild();
+      return 0;
+  }
+  return ::DefWindowProc(hwnd, message, wparam, lparam);
+}
+
+// One flash playing.
+struct GaiaFlashes::Active {
+  GaiaFlash flash;
+  ULONGLONG start = 0;
+  float total = 0;
+  float scale = 1;
+  // A point effect, redrawn each frame.
+  HWND effect = nullptr;
+  POINT effect_at = {};
+  std::unique_ptr<Canvas> canvas;
+  // An outline round a control, faded as its kind fades.
+  std::vector<HWND> outline;
+  OutlineBox box = {};
+  // Typing's spark, moved round the outline.
+  HWND spark = nullptr;
+  int spark_side = 0;
+  // Pills and a window's strips, faded in and out.
+  std::vector<HWND> faded;
+  // What each group was last set to; they start hidden.
+  BYTE outline_alpha = 0;
+  // Per faded window, as only a few are updated a frame.
+  std::vector<BYTE> faded_alphas;
+  size_t next_faded = 0;
+};
+
+GaiaFlashes::GaiaFlashes() = default;
+
+GaiaFlashes::~GaiaFlashes() {
+  for (auto& active : active_) {
+    if (active->effect) ::DestroyWindow(active->effect);
+    if (active->spark) ::DestroyWindow(active->spark);
+    for (HWND window : active->outline) ::DestroyWindow(window);
+    for (HWND window : active->faded) ::DestroyWindow(window);
+  }
+  for (HWND window : hiding_) ::DestroyWindow(window);
+  for (HWND window : pool_) ::DestroyWindow(window);
+  if (timer_window_) ::DestroyWindow(timer_window_);
+}
+
+void GaiaFlashes::Play(const GaiaFlash& flash) {
+  static const bool registered = [] {
+    WNDCLASS window_class = {};
+    window_class.lpfnWndProc = WindowProc;
+    window_class.hInstance = ::GetModuleHandle(nullptr);
+    window_class.lpszClassName = kFlashClass;
+    return ::RegisterClass(&window_class) != 0;
+  }();
+  if (!registered) return;
+  if (!timer_window_) {
+    timer_window_ = ::CreateWindowEx(0, kFlashClass, L"", 0, 0, 0, 0, 0,
+                                     HWND_MESSAGE, nullptr,
+                                     ::GetModuleHandle(nullptr), this);
+    if (!timer_window_) return;
+  }
+  const bool around_rect = AroundRect(flash);
+  const bool window_wide = (flash.kind == GaiaFlash::Kind::kKey ||
+                            flash.kind == GaiaFlash::Kind::kWindow) &&
+                           !::IsRectEmpty(&flash.rect);
+  const POINT centre = around_rect || window_wide
+                           ? POINT{(flash.rect.left + flash.rect.right) / 2,
+                                   (flash.rect.top + flash.rect.bottom) / 2}
+                           : flash.point;
+  const HMONITOR monitor = ::MonitorFromPoint(centre, MONITOR_DEFAULTTONEAREST);
+  auto active = std::make_unique<Active>();
+  active->flash = flash;
+  active->start = ::GetTickCount64();
+  active->total = TotalTime(flash);
+  active->scale = ScaleAt(monitor);
+  const float s = active->scale;
+  const Color accent = FromRgb(flash.accent);
+
+  if (const int side = EffectSide(flash, s); side > 0) {
+    active->effect_at = {flash.point.x - side / 2, flash.point.y - side / 2};
+    active->canvas = std::make_unique<Canvas>(side, side);
+    if (active->canvas->ok()) active->effect = Acquire();
+    if (active->effect) {
+      PaintEffect(*active->canvas, flash, active->effect_at, 0, s);
+      active->canvas->PresentAt(active->effect, active->effect_at, 255);
+      ShowOnTop(active->effect);
+    }
+  }
+
+  if (around_rect) {
+    active->box = OutlineAround(flash.rect, s);
+    for (const RECT& piece : OutlinePieces(active->box, s)) {
+      auto canvas = std::make_unique<Canvas>(piece.right - piece.left, piece.bottom - piece.top);
+      HWND window = canvas->ok() ? Acquire() : nullptr;
+      if (!window) break;
+      const POINT at = {piece.left, piece.top};
+      PaintOutline(*canvas, active->box, at, s, accent, flash.style);
+      canvas->PresentAt(window, at, 0);
+      active->outline.push_back(window);
+    }
+    if (flash.kind == GaiaFlash::Kind::kType &&
+        flash.style != FlashStyle::kAstral) {
+      auto spark = PaintSpark(s, accent, flash.style);
+      active->spark = spark ? Acquire() : nullptr;
+      if (active->spark) {
+        active->spark_side = spark->width();
+        spark->PresentAt(active->spark, SparkAt(active->box, 0), 0);
+      }
+    }
+  }
+
+  // A window's outline, drawn as the border's frame is, in four strips.
+  const RECT& frame = flash.rect;
+  if (flash.kind == GaiaFlash::Kind::kWindow && window_wide &&
+      flash.style == FlashStyle::kAstral) {
+    const int side = AstralWindowCornerSide(frame, s);
+    const int inset = side / 6;
+    if (side > 0) {
+      for (int corner = 0; corner < 4; ++corner) {
+        auto canvas = std::make_unique<Canvas>(side, side);
+        HWND window = canvas->ok() ? Acquire() : nullptr;
+        if (!window) break;
+        const bool right = corner % 2 != 0;
+        const bool bottom = corner / 2 != 0;
+        const POINT at = {right ? frame.right - side + inset : frame.left - inset,
+                          bottom ? frame.bottom - side + inset : frame.top - inset};
+        PaintAstralWindowCorner(*canvas, right, bottom, s, accent);
+        canvas->PresentAt(window, at, 0);
+        active->faded.push_back(window);
+      }
+      const int depth = std::min(Scaled(24, monitor), std::max(2, side / 2));
+      for (int edge = 0; edge < 4; ++edge) {
+        const bool vertical = edge >= 2;
+        const int extent = vertical ? frame.bottom - frame.top : frame.right - frame.left;
+        const int length = std::min(extent - 2 * side,
+                                    std::clamp(static_cast<int>(extent * 0.28f),
+                                               Scaled(96, monitor), Scaled(360, monitor)));
+        if (length <= 0) continue;
+        auto canvas = std::make_unique<Canvas>(vertical ? depth : length, vertical ? length : depth);
+        HWND window = canvas->ok() ? Acquire() : nullptr;
+        if (!window) break;
+        const POINT at = vertical
+            ? POINT{(edge == 2 ? frame.left : frame.right) - depth / 2,
+                    (frame.top + frame.bottom - length) / 2}
+            : POINT{(frame.left + frame.right - length) / 2,
+                    (edge == 0 ? frame.top : frame.bottom) - depth / 2};
+        PaintAstralEdgeFade(*canvas, vertical, s, accent);
+        canvas->PresentAt(window, at, 0);
+        active->faded.push_back(window);
+      }
+    }
+  }
+  if (flash.kind == GaiaFlash::Kind::kWindow && window_wide &&
+      flash.style != FlashStyle::kAstral) {
+    const int width = frame.right - frame.left;
+    const int height = frame.bottom - frame.top;
+    const int edge =
+        std::min({Scaled(kGlowDepth, monitor), width / 2, height / 2});
+    const RECT strips[] = {
+        {0, 0, width, edge},
+        {0, height - edge, width, height},
+        {0, edge, edge, height - edge},
+        {width - edge, edge, width, height - edge},
+    };
+    for (const RECT& strip : strips) {
+      if (strip.right <= strip.left || strip.bottom <= strip.top) continue;
+      HWND window = Acquire();
+      if (!window) break;
+      ::SetWindowPos(window, HWND_TOPMOST, frame.left + strip.left,
+                     frame.top + strip.top, strip.right - strip.left,
+                     strip.bottom - strip.top, SWP_NOACTIVATE);
+      PaintStrip(window, strip.left, strip.top, strip.right - strip.left,
+                 strip.bottom - strip.top, width, height, monitor, accent, flash.style);
+      SetAlpha(window, 0);
+      active->faded.push_back(window);
+    }
+  }
+
+  // The pill: the control's name beside the effect, or the keys or the
+  // window's name near the top of the window.
+  if (!flash.label.empty()) {
+    const bool keycap = flash.kind == GaiaFlash::Kind::kKey;
+    auto pill = PaintPill(flash.label, s, accent, keycap, flash.style);
+    HWND window = pill ? Acquire() : nullptr;
+    if (window) {
+      const SIZE pill_size = {pill->width(), pill->height()};
+      POINT at;
+      if (window_wide) {
+        at = {(frame.left + frame.right - pill_size.cx) / 2,
+              frame.top + static_cast<LONG>((keycap ? 44 : 34) * s)};
+      } else {
+        // Right of the effect, or left of it at the monitor's edge.
+        const RECT target = around_rect ? flash.rect
+                                        : RECT{flash.point.x, flash.point.y,
+                                               flash.point.x, flash.point.y};
+        const LONG gap = static_cast<LONG>(kPillGap * s);
+        at = {target.right + gap,
+              (target.top + target.bottom) / 2 - pill_size.cy / 2};
+        MONITORINFO info = {sizeof(info)};
+        if (::GetMonitorInfo(monitor, &info) &&
+            at.x + pill_size.cx > info.rcWork.right) {
+          at.x = target.left - gap - pill_size.cx;
+        }
+      }
+      pill->PresentAt(window, Clamped(at, pill_size, monitor), 0);
+      active->faded.push_back(window);
+    }
+  }
+  for (HWND window : active->outline) ShowOnTop(window);
+  for (HWND window : active->faded) ShowOnTop(window);
+  if (active->spark) ShowOnTop(active->spark);
+  if (!active->effect && !active->spark && active->outline.empty() &&
+      active->faded.empty()) {
+    return;
+  }
+  active_.push_back(std::move(active));
+  if (!ticking_) {
+    ticking_ = ::SetTimer(timer_window_, kFlashTimer, 16, nullptr) != 0;
+  }
+}
+
+void GaiaFlashes::Tick() {
+  // Action feedback keeps its own clock, independent of Windows UI transitions.
+  const ULONGLONG now = ::GetTickCount64();
+  for (auto it = active_.begin(); it != active_.end();) {
+    Active& active = **it;
+    const float t = static_cast<float>(now - active.start);
+    if (t >= active.total) {
+      if (active.effect) hiding_.push_back(active.effect);
+      if (active.spark) hiding_.push_back(active.spark);
+      for (HWND window : active.outline) hiding_.push_back(window);
+      for (HWND window : active.faded) hiding_.push_back(window);
+      it = active_.erase(it);
+      continue;
+    }
+    if (active.effect) {
+      PaintEffect(*active.canvas, active.flash, active.effect_at, t,
+                  active.scale);
+      active.canvas->Present(active.effect);
+    }
+    // Each window update costs, so only when the alpha changes: mostly
+    // while fading in and out.
+    const BYTE outline_alpha =
+        static_cast<BYTE>(255 * Envelope(t, 150, 300, active.total));
+    if (!active.outline.empty() && outline_alpha != active.outline_alpha) {
+      active.outline_alpha = outline_alpha;
+      for (HWND window : active.outline) SetAlpha(window, outline_alpha / 255.0f);
+    }
+    if (active.spark) {
+      // While the typing goes on. Moved and faded in one update.
+      const float alpha =
+          Clamp01(t / 150) * Clamp01((active.total - 300 - t) / 200);
+      const POINT at = SparkAt(active.box, std::fmod(t / kSparkLap, 1.0f));
+      const int half = active.spark_side / 2;
+      POINT to = {at.x - half, at.y - half};
+      BLENDFUNCTION blend = {AC_SRC_OVER, 0, static_cast<BYTE>(255 * alpha),
+                             AC_SRC_ALPHA};
+      ::UpdateLayeredWindow(active.spark, nullptr, &to, nullptr, nullptr,
+                            nullptr, 0, &blend, ULW_ALPHA);
+    }
+    const BYTE faded_alpha =
+        static_cast<BYTE>(255 * Envelope(t, 100, kFadeOut, active.total));
+    // A window's eight pieces and its pill would take nine updates a frame,
+    // so a few at a time, round them: one that waits catches up a frame on.
+    active.faded_alphas.resize(active.faded.size());
+    int updates = kFadeUpdates;
+    for (size_t i = 0; i < active.faded.size() && updates > 0; ++i) {
+      const size_t k = (active.next_faded + i) % active.faded.size();
+      if (active.faded_alphas[k] == faded_alpha) continue;
+      active.faded_alphas[k] = faded_alpha;
+      SetAlpha(active.faded[k], faded_alpha / 255.0f);
+      active.next_faded = k + 1;
+      --updates;
+    }
+    ++it;
+  }
+  if (!hiding_.empty()) {
+    // A few at a time, in one batch, which costs about what hiding one alone
+    // does.
+    const size_t count = std::min(hiding_.size(), kHidesPerFrame);
+    HDWP batch = ::BeginDeferWindowPos(static_cast<int>(count));
+    for (size_t i = hiding_.size() - count; i < hiding_.size() && batch; ++i) {
+      batch = ::DeferWindowPos(batch, hiding_[i], nullptr, 0, 0, 0, 0,
+                               SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE |
+                                   SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (batch) ::EndDeferWindowPos(batch);
+    for (size_t i = hiding_.size() - count; i < hiding_.size(); ++i) {
+      Release(hiding_[i]);
+    }
+    hiding_.resize(hiding_.size() - count);
+  }
+  if (active_.empty() && hiding_.empty() && ticking_) {
+    ::KillTimer(timer_window_, kFlashTimer);
+    ticking_ = false;
+  }
+}
+
+HWND GaiaFlashes::Acquire() {
+  if (!pool_.empty()) {
+    HWND window = pool_.back();
+    pool_.pop_back();
+    return window;
+  }
+  // As the border's strips: never activated, never a target, clicks through.
+  HWND window = ::CreateWindowEx(
+      WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED |
+          WS_EX_TRANSPARENT,
+      kFlashClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+      ::GetModuleHandle(nullptr), this);
+  if (window) ::SetWindowDisplayAffinity(window, kExcludeFromCapture);
+  return window;
+}
+
+void GaiaFlashes::Release(HWND window) {
+  if (::IsWindowVisible(window)) ::ShowWindow(window, SW_HIDE);
+  if (pool_.size() < kFlashPool) {
+    pool_.push_back(window);
+  } else {
+    ::DestroyWindow(window);
+  }
+}
+
+LRESULT CALLBACK GaiaFlashes::WindowProc(HWND hwnd, UINT message,
+                                         WPARAM wparam,
+                                         LPARAM lparam) noexcept {
+  if (message == WM_NCCREATE) {
+    auto* create = reinterpret_cast<CREATESTRUCT*>(lparam);
+    ::SetWindowLongPtr(hwnd, GWLP_USERDATA,
+                       reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+  }
+  switch (message) {
+    case WM_MOUSEACTIVATE:
+      return MA_NOACTIVATE;
+    // WindowFromPoint asks windows of its own thread rather than going by
+    // WS_EX_TRANSPARENT, and a flash must never cover the click it shows.
+    case WM_NCHITTEST:
+      return HTTRANSPARENT;
+    case WM_TIMER:
+      if (wparam == kFlashTimer) {
+        auto* self = reinterpret_cast<GaiaFlashes*>(
+            ::GetWindowLongPtr(hwnd, GWLP_USERDATA));
+        if (self) self->Tick();
+      }
       return 0;
   }
   return ::DefWindowProc(hwnd, message, wparam, lparam);

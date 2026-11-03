@@ -37,6 +37,7 @@ import 'fakes/gaia_fakes.dart';
 /// tested.
 class _ControlBackend implements GaiaInputBackend {
   final sent = <GaiaInputEvent>[];
+  var escape = false;
 
   static const _window = (
     hwnd: 7,
@@ -76,7 +77,11 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   bool modifiersDown() => false;
   @override
-  bool escapeDown() => false;
+  bool escapeDown() => escape;
+  @override
+  int lastInput() => 0;
+  @override
+  void watchInput(bool on) {}
   @override
   void moveCursor(int x, int y) {}
   @override
@@ -1107,6 +1112,87 @@ void main() {
           });
           async.elapse(const Duration(seconds: 2));
           expect(result!['stopped'], contains('can control'));
+        });
+      });
+
+      group('forced Auto (GAIA_AUTONOMY_HLD.md §5)', () {
+        void running(List<String> chats) {
+          companions.single.pipe.notify('runs', {
+            'runs': [
+              for (final chatId in chats) {'chatId': chatId, 'title': ''},
+            ],
+          });
+        }
+
+        void start(FakeAsync async, GaiaHost host) {
+          host.forceAuto = true;
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+        }
+
+        test('off, it plans as in Ask', () {
+          run(show: true, (async, host) {
+            connect(async);
+            request(async, 'putChat', {'chat': chat()});
+            request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+            running(['c1']);
+            async.flushMicrotasks();
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isNull);
+          });
+        });
+
+        test('a running turn plans as Auto; one that ended has no session', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isNull);
+            running(['c1']);
+            async.flushMicrotasks();
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isTrue);
+            running([]);
+            async.flushMicrotasks();
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isNull);
+          });
+        });
+
+        test('Esc between calls stops the reply and drain, and refuses the '
+            "turn's later calls", () {
+          run(show: true, (async, host) {
+            start(async, host);
+            request(async, 'setDrain', {'chatId': 'c1', 'drain': true});
+            running(['c1']);
+            async.flushMicrotasks();
+            request(async, 'osPlan', plan);
+            controlBackend.escape = true;
+            async.elapse(const Duration(milliseconds: 40));
+            controlBackend.escape = false;
+            async.flushMicrotasks();
+            expect(companions.single.requests, contains('stop'));
+            final chats = request(async, 'chats')! as List;
+            expect((chats.single as Map)['drain'], isFalse);
+            expect(() => request(async, 'osPlan', plan), refused('Esc'));
+            // The next turn starts clean.
+            running([]);
+            async.flushMicrotasks();
+            running(['c1']);
+            async.flushMicrotasks();
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isTrue);
+          });
+        });
+
+        test('the companion going away ends the session', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            running(['c1']);
+            async.flushMicrotasks();
+            request(async, 'osPlan', plan);
+            companions.single.pipe.disconnect();
+            async.flushMicrotasks();
+            controlBackend.escape = true;
+            async.elapse(const Duration(milliseconds: 40));
+            controlBackend.escape = false;
+            expect(companions.single.requests, isNot(contains('stop')));
+          });
         });
       });
 

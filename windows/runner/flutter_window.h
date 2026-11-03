@@ -70,8 +70,9 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       gaia_tool_pipe_channel_;
 
-  // The "Gaia is in control" border, and its Dart side.
+  // The "Gaia is in control" border and Gaia's flashes, and their Dart side.
   GaiaControlBorder gaia_border_;
+  GaiaFlashes gaia_flashes_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       gaia_border_channel_;
 

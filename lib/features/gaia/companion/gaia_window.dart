@@ -39,6 +39,17 @@ class GaiaWindow {
   /// On screen and in front: not behind other apps or minimised.
   bool get foreground => shown != null && GetForegroundWindow() == _hwnd;
 
+  /// Where the client area starts on screen, in physical pixels.
+  ({int x, int y}) get clientOrigin {
+    final origin = calloc<POINT>();
+    try {
+      ClientToScreen(_hwnd, origin);
+      return (x: origin.ref.x, y: origin.ref.y);
+    } finally {
+      free(origin);
+    }
+  }
+
   /// The window [hide] gives the foreground back to: the app Gaia was
   /// summoned from. 0 for none, which leaves it to Windows.
   int returnTo = 0;

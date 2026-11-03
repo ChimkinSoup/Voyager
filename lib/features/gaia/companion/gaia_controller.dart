@@ -1764,6 +1764,9 @@ class GaiaController extends ChangeNotifier {
   /// it's closed. Never saved, and nothing it offers is acted on.
   GaiaLimitPreview? limitPreview;
 
+  /// Where Gaia's client area starts on screen, in physical pixels.
+  ({int x, int y}) get windowOrigin => _window.clientOrigin;
+
   void previewLimit(GaiaLimitPreview? preview) {
     limitPreview = preview;
     notifyListeners();

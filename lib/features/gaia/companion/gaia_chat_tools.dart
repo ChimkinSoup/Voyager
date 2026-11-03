@@ -317,6 +317,9 @@ class GaiaChatTools implements GaiaTurnTools {
     } catch (error) {
       return GaiaToolResult(text: '$error', isError: true);
     }
+    // In Auto the main instance runs it with no card (GAIA_AUTONOMY_HLD.md §5).
+    final auto = plan['auto'] == true;
+    plan = {...plan}..remove('auto');
     final total = (plan['steps']! as List).length;
     final stepWord = total == 1 ? 'step' : 'steps';
     GaiaCardPart cardWith(
@@ -338,7 +341,8 @@ class GaiaChatTools implements GaiaTurnTools {
       },
     );
     var ran = 0;
-    var once = false;
+    var once = auto;
+    String? adopted;
     while (ran < total) {
       if (!once) {
         final open = cardWith(GaiaCardState.open, ran: ran);
@@ -379,13 +383,18 @@ class GaiaChatTools implements GaiaTurnTools {
         final result = await control.run(id, once: once);
         ran = (result['ran']! as num).toInt();
         plan = {...plan, 'steps': result['steps']};
+        if (result['adopted'] case final String window) {
+          adopted =
+              ' A window opened in front, and later calls act on it: $window.';
+        }
         if (result['stopped'] case final String stopped) {
           onCard(cardWith(GaiaCardState.accepted, ran: ran, stopped: stopped));
           return GaiaToolResult(
             text:
                 'Stopped after $ran of $total $stepWord: $stopped Nothing more '
                 'was sent. Read the screen before assuming anything, and if the '
-                "user stopped it, don't start again unless they ask.",
+                "user stopped it, don't start again unless they ask."
+                '${adopted ?? ''}',
             isError: false,
           );
         }
@@ -399,7 +408,8 @@ class GaiaChatTools implements GaiaTurnTools {
     return GaiaToolResult(
       text:
           '${total == 1 ? 'Sent the step' : 'Sent all $total steps'}. That says '
-          'the input went, not that it worked: read the screen to see.',
+          'the input went, not that it worked: read the screen to see.'
+          '${adopted ?? ''}',
       isError: false,
     );
   }

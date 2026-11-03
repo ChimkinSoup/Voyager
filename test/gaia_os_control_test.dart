@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -42,6 +44,19 @@ class _Backend implements GaiaInputBackend {
   final cursor = <(int, int)>[];
   var activated = 0;
 
+  /// How many asks Windows refuses before it agrees: no right to the foreground.
+  var refusals = 0;
+
+  /// How many asks Windows agrees to and then does nothing about.
+  var ignoredAsks = 0;
+
+  /// [GaiaInputBackend.lastInput]: what's sent moves it, and tests move it as a
+  /// user would.
+  var inputTick = 0;
+
+  /// Other windows, by hwnd.
+  final windows = <int, GaiaForegroundWindow>{};
+
   /// How many looks at the foreground it takes Windows to switch; never when
   /// null. Windows agrees to a switch before it has made it.
   int? activateLag = 0;
@@ -56,7 +71,7 @@ class _Backend implements GaiaInputBackend {
   @override
   GaiaForegroundWindow? target(int gaiaPid) => window;
   @override
-  GaiaForegroundWindow? describe(int hwnd) => window;
+  GaiaForegroundWindow? describe(int hwnd) => windows[hwnd] ?? window;
   @override
   int foreground() {
     if (_switching) {
@@ -76,6 +91,14 @@ class _Backend implements GaiaInputBackend {
   @override
   bool activate(int hwnd) {
     activated++;
+    if (refusals > 0) {
+      refusals--;
+      return false;
+    }
+    if (ignoredAsks > 0) {
+      ignoredAsks--;
+      return true;
+    }
     _switching = activates;
     return activates;
   }
@@ -112,6 +135,10 @@ class _Backend implements GaiaInputBackend {
   @override
   bool escapeDown() => escape;
   @override
+  int lastInput() => inputTick;
+  @override
+  void watchInput(bool on) {}
+  @override
   void moveCursor(int x, int y) => cursor.add((x, y));
   @override
   bool get buttonsSwapped => swapped;
@@ -120,6 +147,7 @@ class _Backend implements GaiaInputBackend {
     final took = sendLimit ?? events.length;
     calls.add(events);
     sent.addAll(events.take(took));
+    inputTick++;
     sendLimit = null;
     onSend?.call();
     return took;
@@ -178,6 +206,17 @@ void main() {
         expect(stepsOf(card).single, {
           'label': 'Click Button "Save" [10,10 20x20]',
           'resolved': true,
+          // The marker hovering the step shows (GAIA_AUTONOMY_HLD.md §6.4).
+          'flash': {
+            'kind': 'mark',
+            'x': 20,
+            'y': 20,
+            'left': 10,
+            'top': 10,
+            'right': 30,
+            'bottom': 30,
+            'label': 'Save',
+          },
         });
         expect(backend.calls, isEmpty);
       },
@@ -660,6 +699,538 @@ void main() {
         control.run('other', once: true, check: () async {}),
         refused('no longer waiting'),
       );
+    });
+  });
+
+  group('Auto session (GAIA_AUTONOMY_HLD.md §5)', () {
+    const gaia = (
+      hwnd: 50,
+      pid: 1,
+      exe: 'voyager',
+      app: 'Gaia',
+      title: 'Gaia',
+      console: false,
+    );
+    const other = (
+      hwnd: 99,
+      pid: 90,
+      exe: 'calc',
+      app: 'Calculator',
+      title: 'Calculator',
+      console: false,
+    );
+    late GaiaOsControl auto;
+    late int stops;
+    const look = Duration(milliseconds: 60);
+
+    Future<Map<String, Object?>> act(
+      String tool,
+      Map<String, Object?> arguments, {
+      String chat = 'chat',
+    }) async {
+      auto.session(chat, auto: true, onUserStop: () => stops++);
+      await auto.plan(chat, 'card', tool, arguments);
+      return auto.run('card', once: true, check: () async {});
+    }
+
+    setUp(() {
+      stops = 0;
+      backend.windows
+        ..[gaia.hwnd] = gaia
+        ..[other.hwnd] = other;
+      auto = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        voyagerPid: 70,
+        backend: backend,
+        settle: Duration.zero,
+        activateWait: const Duration(milliseconds: 200),
+        adoptWithin: const Duration(milliseconds: 300),
+        pauseLimit: const Duration(milliseconds: 300),
+      );
+    });
+    tearDown(() => auto.endTurn());
+
+    test('a chat with no session goes by what is in front, as in Ask', () {
+      expect(
+        auto.session('chat', auto: false, onUserStop: () => stops++),
+        isNull,
+      );
+      expect(auto.sessionChat, isNull);
+    });
+
+    test('the plan says Auto, and needs no target shown yet', () async {
+      auto.session('chat', auto: true, onUserStop: () => stops++);
+      backend.matches = [];
+      final card = await auto.plan('chat', 'card', 'os_click', {
+        'name': 'Save',
+      });
+      expect(card['auto'], isTrue);
+      backend.matches = [_button()];
+      final result = await auto.run('card', once: true, check: () async {});
+      expect(result['stopped'], isNull);
+      expect(backend.cursor, hasLength(1));
+    });
+
+    test('later calls use the pin, not what is in front', () async {
+      expect(
+        auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+        _target.hwnd,
+      );
+      backend.windows[_target.hwnd] = _target;
+      backend.window = other;
+      expect(
+        auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+        _target.hwnd,
+      );
+    });
+
+    test('a pin that closed is refused', () {
+      auto.session('chat', auto: true, onUserStop: () {});
+      backend.window = null;
+      expect(
+        () => auto.session('chat', auto: true, onUserStop: () {}),
+        refused('closed'),
+      );
+    });
+
+    test('with no click behind it, an unbound key gets the right to the '
+        'foreground, and the action lands (§5.4)', () async {
+      backend.front = gaia.hwnd;
+      backend.gaiaInFront = true;
+      backend.refusals = 1;
+      final result = await act('os_key', {'keys': 'A'});
+      expect(result['stopped'], isNull);
+      expect(backend.activated, 2);
+      expect(backend.calls.first, const [
+        GaiaKeyEvent(VK_F24, up: false),
+        GaiaKeyEvent(VK_F24, up: true),
+      ]);
+      expect(backend.front, _target.hwnd);
+      expect(backend.calls.last, contains(const GaiaKeyEvent(0x41, up: false)));
+    });
+
+    test(
+      'an ask Windows agrees to and never carries out is made again',
+      () async {
+        backend.front = gaia.hwnd;
+        backend.gaiaInFront = true;
+        backend.ignoredAsks = 1;
+        auto = GaiaOsControl(
+          companionPid: () => 1,
+          exclusions: () => excluded,
+          vaultUnlocked: () => vault,
+          voyagerPid: 70,
+          backend: backend,
+          settle: Duration.zero,
+          activateWait: const Duration(seconds: 2),
+        );
+        final result = await act('os_key', {'keys': 'A'});
+        expect(result['stopped'], isNull);
+        expect(backend.activated, 2);
+        expect(backend.front, _target.hwnd);
+        expect(
+          backend.calls.first,
+          contains(const GaiaKeyEvent(VK_F24, up: false)),
+        );
+        expect(
+          backend.calls.last,
+          contains(const GaiaKeyEvent(0x41, up: false)),
+        );
+      },
+    );
+
+    test('Windows refusing even then sends nothing to the window', () async {
+      backend.front = gaia.hwnd;
+      backend.gaiaInFront = true;
+      backend.refusals = 2;
+      final result = await act('os_key', {'keys': 'A'});
+      expect(result['stopped'], contains("wouldn't bring"));
+      expect(backend.calls, hasLength(1), reason: 'only the unbound key');
+    });
+
+    test('no key is tapped when plain activation works', () async {
+      backend.front = gaia.hwnd;
+      backend.gaiaInFront = true;
+      await act('os_key', {'keys': 'A'});
+      expect(backend.calls, hasLength(1));
+    });
+
+    test('Esc between calls latches the turn and stops it (§5.3)', () async {
+      await act('os_key', {'keys': 'A'});
+      backend.escape = true;
+      await Future<void>.delayed(look);
+      backend.escape = false;
+      expect(stops, 1);
+      await Future<void>.delayed(look);
+      expect(stops, 1, reason: 'once');
+      final sent = backend.calls.length;
+      await expectLater(act('os_key', {'keys': 'B'}), refused('Esc'));
+      expect(backend.calls, hasLength(sent));
+    });
+
+    test('Esc mid-text stops it', () async {
+      auto.session('chat', auto: true, onUserStop: () => stops++);
+      await auto.plan('chat', 'card', 'os_type', {'text': 'x' * 2000});
+      final running = auto.run('card', once: true, check: () async {});
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      backend.escape = true;
+      final result = await running;
+      expect(result['stopped'], contains('Esc'));
+      expect(stops, 1);
+      expect(backend.sent.whereType<GaiaUnicodeEvent>().length, lessThan(4000));
+    });
+
+    test("the agent's own Esc isn't the user's", () async {
+      backend.onSend = () {
+        if (backend.calls.last.contains(
+          const GaiaKeyEvent(VK_ESCAPE, up: false),
+        )) {
+          backend.escape = true;
+        }
+      };
+      await act('os_key', {'keys': 'Esc'});
+      await Future<void>.delayed(look);
+      expect(stops, 0);
+      backend.escape = false;
+    });
+
+    test('the user switching window ends the turn, even right after a step, '
+        'with nothing sent to it (§5.2)', () async {
+      await act('os_key', {'keys': 'A'});
+      final sent = backend.calls.length;
+      backend.inputTick++;
+      backend.front = other.hwnd;
+      await Future<void>.delayed(look);
+      expect(stops, 1);
+      await expectLater(act('os_key', {'keys': 'B'}), refused('switched'));
+      expect(backend.calls, hasLength(sent));
+    });
+
+    test("Gaia's own later sends don't hide the user's input", () async {
+      auto.session('chat', auto: true, onUserStop: () => stops++);
+      await auto.plan('chat', 'card', 'os_type', {'text': 'x' * 40});
+      var sends = 0;
+      backend.onSend = () {
+        // The user's Alt+Tab goes in early, and the switch lands a few sends on.
+        if (++sends == 2) Future.microtask(() => backend.inputTick++);
+        if (sends == 6) backend.front = other.hwnd;
+      };
+      final result = await auto.run('card', once: true, check: () async {});
+      expect(result['stopped'], isNotNull);
+      await Future<void>.delayed(look);
+      expect(stops, 1);
+      expect(
+        () => auto.session('chat', auto: true, onUserStop: () {}),
+        refused('switched'),
+      );
+    });
+
+    test('input well before a step is not a reason to stop', () async {
+      auto.session('chat', auto: true, onUserStop: () => stops++);
+      backend.inputTick++;
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      backend.onSend = () => backend.front = other.hwnd;
+      await act('os_key', {'keys': 'A'});
+      backend.onSend = null;
+      await Future<void>.delayed(look);
+      expect(stops, 0);
+    });
+
+    test('a switch long after any step ends it, input or not', () async {
+      auto.session('chat', auto: true, onUserStop: () => stops++);
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      backend.front = other.hwnd;
+      await Future<void>.delayed(look);
+      expect(stops, 1);
+    });
+
+    test('a window its step opened is adopted, and the agent told', () async {
+      backend.onSend = () => backend.front = other.hwnd;
+      final first = await act('os_key', {'keys': 'A'});
+      backend.onSend = null;
+      await Future<void>.delayed(look);
+      expect(stops, 0);
+      expect(first['adopted'] ?? '', isA<String>());
+      final second = await act('os_key', {'keys': 'B'});
+      expect(second['stopped'], isNull);
+      expect(backend.activated, 0);
+      final pin = auto.session('chat', auto: true, onUserStop: () {});
+      expect(pin?.hwnd, other.hwnd);
+      expect('${first['adopted']}${second['adopted']}', contains('Calculator'));
+    });
+
+    test('an adopted window on the exclusion list gets nothing', () async {
+      excluded = ['calc'];
+      backend.onSend = () => backend.front = other.hwnd;
+      await act('os_key', {'keys': 'A'});
+      backend.onSend = null;
+      await Future<void>.delayed(look);
+      final sent = backend.calls.length;
+      await expectLater(act('os_key', {'keys': 'B'}), refused('excluded'));
+      expect(backend.calls, hasLength(sent));
+    });
+
+    test(
+      'Gaia in front pauses, then it resumes with the target back',
+      () async {
+        await act('os_key', {'keys': 'A'});
+        final sent = backend.calls.length;
+        backend.front = gaia.hwnd;
+        backend.gaiaInFront = true;
+        await Future<void>.delayed(look);
+        final going = act('os_key', {'keys': 'B'});
+        await Future<void>.delayed(look);
+        expect(backend.calls, hasLength(sent), reason: 'paused');
+        expect(backend.activated, 0);
+        backend.front = _target.hwnd;
+        expect((await going)['stopped'], isNull);
+        expect(backend.calls, hasLength(sent + 1));
+        expect(stops, 0);
+      },
+    );
+
+    test('paused too long, the turn stops', () async {
+      await act('os_key', {'keys': 'A'});
+      backend.front = gaia.hwnd;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(stops, 1);
+    });
+
+    test('another app coming in front while paused stops it', () async {
+      await act('os_key', {'keys': 'A'});
+      backend.front = gaia.hwnd;
+      await Future<void>.delayed(look);
+      backend.inputTick++;
+      backend.front = other.hwnd;
+      await Future<void>.delayed(look);
+      expect(stops, 1);
+    });
+
+    test('one session at a time: another chat is refused', () async {
+      auto.session('chat', auto: true, onUserStop: () {});
+      expect(
+        () => auto.session('theirs', auto: true, onUserStop: () {}),
+        refused('Another chat'),
+      );
+      expect(
+        () => auto.session('theirs', auto: false, onUserStop: () {}),
+        refused('Another chat'),
+      );
+      auto.endTurn('theirs');
+      expect(auto.sessionChat, 'chat');
+      auto.endTurn('chat');
+      expect(auto.sessionChat, isNull);
+      expect(auto.session('theirs', auto: true, onUserStop: () {}), isNotNull);
+    });
+
+    test("an Ask run and another chat's session never overlap", () async {
+      await auto.plan('chat', 'ask', 'os_key', {'keys': 'A'});
+      await auto.plan('chat', 'later', 'os_key', {'keys': 'A'});
+      final gate = Completer<void>();
+      final going = auto.run('ask', once: true, check: () => gate.future);
+      expect(
+        () => auto.session('theirs', auto: true, onUserStop: () {}),
+        refused('Another chat'),
+      );
+      gate.complete();
+      expect((await going)['stopped'], isNull);
+      auto.session('theirs', auto: true, onUserStop: () {});
+      await expectLater(
+        auto.run('later', once: true, check: () async {}),
+        refused('Another chat'),
+      );
+    });
+
+    test('Stop latches too; a new turn starts clean', () async {
+      auto.session('chat', auto: true, onUserStop: () {});
+      auto.stop('The user stopped the reply.', chatId: 'chat', latch: true);
+      await expectLater(act('os_key', {'keys': 'A'}), refused('stopped'));
+      auto.endTurn();
+      expect((await act('os_key', {'keys': 'A'}))['stopped'], isNull);
+    });
+
+    test('nothing is looked at once the turn has ended', () async {
+      auto.session('chat', auto: true, onUserStop: () => stops++);
+      auto.endTurn();
+      backend.escape = true;
+      await Future<void>.delayed(look);
+      expect(stops, 0);
+    });
+
+    test('an adopted window flashes its outline and name (§6.2)', () async {
+      final flashes = <Map<String, Object?>>[];
+      auto = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        flash: flashes.add,
+        voyagerPid: 70,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        activateWait: const Duration(milliseconds: 200),
+        adoptWithin: const Duration(milliseconds: 300),
+      );
+      backend.onSend = () => backend.front = other.hwnd;
+      await act('os_key', {'keys': 'A'});
+      backend.onSend = null;
+      await Future<void>.delayed(look);
+      expect(flashes.last, {
+        'kind': 'window',
+        'left': 0,
+        'top': 0,
+        'right': 800,
+        'bottom': 600,
+        'label': 'Calculator',
+      });
+    });
+
+    test('steps start at least the pace apart (§5.6)', () async {
+      final sentAt = <DateTime>[];
+      backend.onSend = () => sentAt.add(DateTime.now());
+      auto = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        voyagerPid: 70,
+        backend: backend,
+        settle: Duration.zero,
+        pace: const Duration(milliseconds: 150),
+        activateWait: const Duration(milliseconds: 200),
+      );
+      await act('os_key', {'keys': 'A'});
+      await act('os_key', {'keys': 'B'});
+      final keys = sentAt.length;
+      expect(keys, greaterThanOrEqualTo(2));
+      expect(
+        sentAt.last.difference(sentAt.first),
+        greaterThanOrEqualTo(const Duration(milliseconds: 140)),
+      );
+    });
+  });
+
+  group('flashes (GAIA_AUTONOMY_HLD.md §6)', () {
+    late List<Map<String, Object?>> flashes;
+    late List<int> sentWhenFlashed;
+
+    setUp(() {
+      flashes = [];
+      sentWhenFlashed = [];
+      control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        flash: (flash) {
+          flashes.add(flash);
+          sentWhenFlashed.add(backend.calls.length);
+        },
+        voyagerPid: 70,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: const Duration(milliseconds: 60),
+        modifierWait: const Duration(milliseconds: 40),
+        activateWait: const Duration(milliseconds: 200),
+      );
+    });
+
+    Future<Map<String, Object?>> step(
+      String tool,
+      Map<String, Object?> arguments,
+    ) async {
+      await plan(tool, arguments);
+      return run();
+    }
+
+    test('a click flashes at its control, named, before the input', () async {
+      DateTime? sentAt;
+      backend.onSend = () => sentAt ??= DateTime.now();
+      final started = DateTime.now();
+      final result = await step('os_click', {'name': 'Save'});
+      expect(result['stopped'], isNull);
+      expect(flashes.single, {
+        'kind': 'click',
+        'x': 20,
+        'y': 20,
+        'label': 'Save',
+      });
+      expect(sentWhenFlashed.single, 0);
+      // The input waits out the lead-in.
+      expect(
+        sentAt!.difference(started),
+        greaterThanOrEqualTo(const Duration(milliseconds: 55)),
+      );
+    });
+
+    test('each action has its own flash', () async {
+      await step('os_click', {'x': 40, 'y': 50, 'double': true});
+      await step('os_click', {'x': 40, 'y': 50, 'button': 'right'});
+      await step('os_scroll', {'direction': 'down', 'amount': 7});
+      await step('os_key', {'keys': 'Ctrl+S'});
+      expect(flashes, [
+        {'kind': 'double', 'x': 40, 'y': 50},
+        {'kind': 'right', 'x': 40, 'y': 50},
+        {
+          'kind': 'scroll',
+          'x': 400,
+          'y': 300,
+          'direction': 'down',
+          'amount': 7,
+        },
+        {
+          'kind': 'key',
+          'left': 0,
+          'top': 0,
+          'right': 800,
+          'bottom': 600,
+          'label': 'Ctrl+S',
+        },
+      ]);
+    });
+
+    test('typing outlines its field, and never shows the text', () async {
+      await step('os_type', {'name': 'Save', 'text': 'hunter2 secret'});
+      await step('os_type', {'text': 'hunter2 secret'});
+      expect(flashes[0], containsPair('kind', 'type'));
+      expect(flashes[0], containsPair('left', 10));
+      expect(flashes[0], containsPair('label', 'Save'));
+      expect(flashes[0]['ms'], isA<int>());
+      expect(flashes[1], containsPair('kind', 'key'));
+      expect(flashes[1], containsPair('label', 'Typing'));
+      expect(flashes.toString(), isNot(contains('hunter2')));
+    });
+
+    test('a stop during the lead-in sends nothing', () async {
+      control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        flash: (_) => control.stop('The user pressed Esc.'),
+        voyagerPid: 70,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: const Duration(milliseconds: 30),
+        activateWait: const Duration(milliseconds: 200),
+      );
+      final result = await step('os_click', {'name': 'Save'});
+      expect(result['stopped'], 'The user pressed Esc.');
+      expect(backend.calls, isEmpty);
+    });
+
+    test('a password field is refused before any flash', () async {
+      backend.matches = [_button(sensitive: true)];
+      await expectLater(
+        step('os_type', {'name': 'Save', 'text': 'x'}),
+        refused('password'),
+      );
+      expect(flashes, isEmpty);
+    });
+
+    test('a control not on screen has no marker on the card', () async {
+      backend.matches = [];
+      final card = await plan('os_click', {'name': 'Save'});
+      expect(stepsOf(card).single.containsKey('flash'), isFalse);
     });
   });
 

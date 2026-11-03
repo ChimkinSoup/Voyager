@@ -14,6 +14,7 @@ import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
+import 'package:voyager/features/gaia/host/gaia_flash.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
@@ -139,6 +140,10 @@ class GaiaHost {
         vaultUnlocked: () => _vaultUnlocked(),
       );
 
+  /// Runs every chat with *can control* in Auto, with no cards, until Auto's
+  /// own grant exists (GAIA_AUTONOMY_HLD.md §11, Phase 3).
+  bool forceAuto = const bool.fromEnvironment('GAIA_FORCE_AUTO');
+
   final GaiaOsControl? _osControlOverride;
 
   /// The `os_*` action tools (§15.6).
@@ -148,6 +153,7 @@ class GaiaHost {
         companionPid: () => _companionPid,
         exclusions: () => _settings.contextExclusions,
         vaultUnlocked: () => _vaultUnlocked(),
+        flash: (flash) => gaiaFlash(flash, _accent),
       );
 
   /// The "Gaia is in control" border (§15.6), with its label, in Gaia's accent;
@@ -860,6 +866,7 @@ class GaiaHost {
   /// Also a companion that exited before it connected.
   void _onDisconnected() {
     _osControl.stop('Gaia went away.');
+    _osControl.endTurn();
     _cropping = false;
     runs.value = const [];
     usage.value = const {};
@@ -888,6 +895,7 @@ class GaiaHost {
     _aborted = true;
     // Synthetic input first: mid-sequence, with key-ups for anything held.
     _osControl.stop('Gaia is aborted.');
+    _osControl.endTurn();
     _beacon?.setAborted(true);
     // And drain mode, everywhere (§13).
     if (_attached.isCompleted) {
@@ -926,6 +934,7 @@ class GaiaHost {
   Future<void> _revokeFromBorder() async {
     _revoking = true;
     _osControl.stop('The user revoked screen access.');
+    _osControl.endTurn();
     try {
       await _revokeGrants();
     } finally {
@@ -980,6 +989,10 @@ class GaiaHost {
               (chatId: chatId, title: title),
         ];
         _beacon?.setRuns(runs.value);
+        // A session lasts as long as its turn (GAIA_AUTONOMY_HLD.md §5.1).
+        if (_osControl.sessionChat case final chatId? when !_running(chatId)) {
+          _osControl.endTurn(chatId);
+        }
       case 'usage':
         usage.value = {
           for (final MapEntry(:key, :value) in params.entries)
@@ -1068,6 +1081,7 @@ class GaiaHost {
       case 'deleteChat':
         final chatId = params['chatId']! as String;
         _osControl.stop('The chat was deleted.', chatId: chatId);
+        _osControl.endTurn(chatId);
         await store.deleteChat(chatId);
         await _syncBorder(store);
         await store.deleteDraft(chatId);
@@ -1190,6 +1204,7 @@ class GaiaHost {
         if (on && _aborted) throw GaiaPipeException('Gaia is aborted.');
         if (!on) {
           _osControl.stop('The user turned off "can control".', chatId: chatId);
+          _osControl.endTurn(chatId);
         }
         await store.setCanControl(chatId, on);
         await _syncBorder(store);
@@ -1197,7 +1212,13 @@ class GaiaHost {
       case 'osPlan':
         final chatId = params['chatId']! as String;
         await _checkControl(store, chatId);
+        final auto = await _auto(store, chatId);
         try {
+          _osControl.session(
+            chatId,
+            auto: auto,
+            onUserStop: () => _userStopped(store, chatId),
+          );
           return await _osControl.plan(
             chatId,
             params['cardId']! as String,
@@ -1229,6 +1250,7 @@ class GaiaHost {
         _osControl.stop(
           'The user stopped the reply.',
           chatId: params['chatId']! as String,
+          latch: true,
         );
         return null;
       case 'memoryIndex':
@@ -1362,9 +1384,18 @@ class GaiaHost {
     }
 
     await check();
+    final auto = await _auto(store, chatId);
     final GaiaOsAnswer answer;
     try {
-      answer = await _osReads.read(tool, arguments);
+      answer = await _osReads.read(
+        tool,
+        arguments,
+        pinned: _osControl.session(
+          chatId,
+          auto: auto,
+          onUserStop: () => _userStopped(store, chatId),
+        ),
+      );
     } on GaiaReadException catch (error) {
       throw GaiaPipeException(error.message);
     }
@@ -1374,6 +1405,22 @@ class GaiaHost {
       'image': answer.image,
       'mimeType': answer.mimeType,
     };
+  }
+
+  bool _running(String chatId) => runs.value.any((r) => r.chatId == chatId);
+
+  /// Whether [chatId]'s `os_*` calls run in an Auto session. Only for a turn
+  /// that's running: a call that outlives its turn must not start a session
+  /// nothing would end. The caller goes straight on, with no await before it
+  /// starts one, or the turn could end in between.
+  Future<bool> _auto(GaiaChatStore store, String chatId) async =>
+      forceAuto && await store.canControl(chatId) && _running(chatId);
+
+  /// Esc or a switch of window stopped [chatId]'s session (§5.3): its reply
+  /// stops, and its queue doesn't carry on without the user.
+  void _userStopped(GaiaChatStore store, String chatId) {
+    unawaited(store.setDrain(chatId, false));
+    unawaited(stop(chatId));
   }
 
   /// Whether [chatId] may send input now (§15.6), asked here before every step,

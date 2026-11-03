@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_proposal_card.dart';
+import 'package:voyager/features/gaia/host/gaia_flash.dart';
 
 /// A card in a reply (GAIA_HLD.md §10): a question the agent asked through
 /// `ask_user`, a permission prompt from its CLI, or a proposal. Open and
@@ -302,113 +304,192 @@ class _ControlCard extends StatelessWidget {
       GaiaCardState.voided => 'Cancelled after $ran of ${steps.length}',
       GaiaCardState.expired => 'No answer in time',
     };
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 520),
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: (answerable ? accent : theme.colorScheme.outlineVariant)
-              .withValues(alpha: answerable ? 0.7 : 0.4),
-        ),
-        color: accent.withValues(alpha: answerable ? 0.08 : 0.03),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.pan_tool_alt, size: 16, color: kGaiaAstralGold),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Control ${card.input['window'] ?? 'a window'}?',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+    // Ask's step preview (GAIA_AUTONOMY_HLD.md §6.4): each step still to run
+    // shows its marker on the target when hovered, and once each, in order,
+    // when the card opens. An Auto card runs at once, so has none.
+    final previewing = answerable;
+    final argb = accent.toARGB32();
+    Map<String, Object?>? markerOf(int i) => previewing && i >= ran
+        ? (steps[i]['flash'] as Map?)?.cast<String, Object?>()
+        : null;
+    return _PulseOnOpen(
+      key: ValueKey(card.id),
+      cardId: card.id,
+      accent: argb,
+      flashes: [for (var i = 0; i < steps.length; i++) ?markerOf(i)],
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 520),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: (answerable ? accent : theme.colorScheme.outlineVariant)
+                .withValues(alpha: answerable ? 0.7 : 0.4),
           ),
-          const SizedBox(height: 6),
-          for (final (i, step) in steps.indexed)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 22,
-                    child: i < ran
-                        ? Icon(Icons.check, size: 14, color: accent)
-                        : Text(
-                            '${i + 1}',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                  ),
-                  Expanded(
-                    child: SelectableText(
-                      '${step['label'] ?? ''}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: AppFonts.monoFamily,
-                      ),
+          color: accent.withValues(alpha: answerable ? 0.08 : 0.03),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.pan_tool_alt,
+                  size: 16,
+                  color: kGaiaAstralGold,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Control ${card.input['window'] ?? 'a window'}?',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  outcome,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color:
-                        card.state == GaiaCardState.accepted && stopped == null
-                        ? theme.colorScheme.outline
-                        : answerable
-                        ? theme.colorScheme.outline
-                        : kGaiaStatusRose,
+            const SizedBox(height: 6),
+            for (final (i, step) in steps.indexed)
+              MouseRegion(
+                onEnter: markerOf(i) == null
+                    ? null
+                    : (_) => gaiaFlash(markerOf(i)!, argb),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        child: i < ran
+                            ? Icon(Icons.check, size: 14, color: accent)
+                            : Text(
+                                '${i + 1}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                      ),
+                      Expanded(
+                        child: SelectableText(
+                          '${step['label'] ?? ''}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: AppFonts.monoFamily,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              if (answerable && onReject != null)
-                GaiaButton(
-                  label: 'Deny',
-                  onPressed: onReject,
-                  size: 28,
-                  color: theme.colorScheme.error,
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    outcome,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color:
+                          card.state == GaiaCardState.accepted &&
+                              stopped == null
+                          ? theme.colorScheme.outline
+                          : answerable
+                          ? theme.colorScheme.outline
+                          : kGaiaStatusRose,
+                    ),
+                  ),
                 ),
-              if (answerable &&
-                  onRunNext != null &&
-                  steps.length - ran > 1) ...[
-                const SizedBox(width: 8),
-                GaiaButton(label: 'Next step', onPressed: onRunNext, size: 28),
+                if (answerable && onReject != null)
+                  GaiaButton(
+                    label: 'Deny',
+                    onPressed: onReject,
+                    size: 28,
+                    color: theme.colorScheme.error,
+                  ),
+                if (answerable &&
+                    onRunNext != null &&
+                    steps.length - ran > 1) ...[
+                  const SizedBox(width: 8),
+                  GaiaButton(
+                    label: 'Next step',
+                    onPressed: onRunNext,
+                    size: 28,
+                  ),
+                ],
+                if (answerable && onRunAll != null && canRunAll) ...[
+                  const SizedBox(width: 8),
+                  GaiaButton(
+                    label: steps.length - ran > 1 ? 'Run all' : 'Run',
+                    onPressed: onRunAll,
+                    size: 28,
+                  ),
+                ] else if (answerable &&
+                    onRunNext != null &&
+                    steps.length - ran == 1) ...[
+                  const SizedBox(width: 8),
+                  GaiaButton(label: 'Run', onPressed: onRunNext, size: 28),
+                ],
               ],
-              if (answerable && onRunAll != null && canRunAll) ...[
-                const SizedBox(width: 8),
-                GaiaButton(
-                  label: steps.length - ran > 1 ? 'Run all' : 'Run',
-                  onPressed: onRunAll,
-                  size: 28,
-                ),
-              ] else if (answerable &&
-                  onRunNext != null &&
-                  steps.length - ran == 1) ...[
-                const SizedBox(width: 8),
-                GaiaButton(label: 'Run', onPressed: onRunNext, size: 28),
-              ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Plays [flashes], one after another, the first time card [cardId] builds: an
+/// open control card pulsing its steps' markers (GAIA_AUTONOMY_HLD.md §6.4).
+/// Scrolled back into view, or its chat opened again, it doesn't replay.
+class _PulseOnOpen extends StatefulWidget {
+  const _PulseOnOpen({
+    super.key,
+    required this.cardId,
+    required this.flashes,
+    required this.accent,
+    required this.child,
+  });
+
+  final String cardId;
+  final List<Map<String, Object?>> flashes;
+  final int accent;
+  final Widget child;
+
+  @override
+  State<_PulseOnOpen> createState() => _PulseOnOpenState();
+}
+
+class _PulseOnOpenState extends State<_PulseOnOpen> {
+  static final _pulsed = <String>{};
+  final _timers = <Timer>[];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.flashes.isEmpty || !_pulsed.add(widget.cardId)) return;
+    for (final (i, flash) in widget.flashes.indexed) {
+      _timers.add(
+        Timer(
+          Duration(milliseconds: 300 * i),
+          () => gaiaFlash(flash, widget.accent),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final timer in _timers) {
+      timer.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// The part of a permission's call worth reading at a glance: a command,

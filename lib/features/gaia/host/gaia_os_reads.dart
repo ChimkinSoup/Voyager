@@ -73,8 +73,15 @@ class GaiaOsReads {
   static Future<String?> _readAddress(int hwnd) =>
       gaiaScreenWork<String?>(hwnd, () => gaiaReadAddress(hwnd));
 
-  Future<GaiaOsAnswer> read(String tool, Map<String, Object?> arguments) async {
+  /// Answers [tool] about [pinned], an Auto session's window, or else the target
+  /// as it stands now.
+  Future<GaiaOsAnswer> read(
+    String tool,
+    Map<String, Object?> arguments, {
+    GaiaForegroundWindow? pinned,
+  }) async {
     final window =
+        pinned ??
         _target(companionPid()) ??
         (throw GaiaReadException(
           'There is no window to read: nothing is open behind Gaia, or the '

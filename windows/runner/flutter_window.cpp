@@ -31,6 +31,61 @@ void CALLBACK OnWindowEvent(HWINEVENTHOOK, DWORD, HWND hwnd, LONG object,
   ::PostMessage(g_cover_window, kCoverEventMessage, 0, 0);
 }
 
+// A flash as gaia_flash.dart sends it.
+GaiaFlash ParseFlash(const flutter::EncodableMap& args) {
+  auto number = [&](const char* key) -> int {
+    const auto found = args.find(flutter::EncodableValue(key));
+    return found == args.end() || found->second.IsNull()
+               ? 0
+               : static_cast<int>(found->second.LongValue());
+  };
+  auto text = [&](const char* key) -> std::string {
+    const auto found = args.find(flutter::EncodableValue(key));
+    const auto* value =
+        found == args.end() ? nullptr : std::get_if<std::string>(&found->second);
+    return value ? *value : std::string();
+  };
+  static const std::pair<const char*, GaiaFlash::Kind> kKinds[] = {
+      {"click", GaiaFlash::Kind::kClick},   {"double", GaiaFlash::Kind::kDouble},
+      {"right", GaiaFlash::Kind::kRight},   {"scroll", GaiaFlash::Kind::kScroll},
+      {"type", GaiaFlash::Kind::kType},     {"key", GaiaFlash::Kind::kKey},
+      {"window", GaiaFlash::Kind::kWindow}, {"mark", GaiaFlash::Kind::kMark},
+  };
+  static const char* kDirections[] = {"up", "down", "left", "right"};
+  GaiaFlash flash;
+  const std::string style = text("style");
+  if (style == "classic") flash.style = GaiaFlash::Style::kClassic;
+  if (style == "astral") flash.style = GaiaFlash::Style::kAstral;
+  if (style == "echo") flash.style = GaiaFlash::Style::kEcho;
+  if (style == "glide") flash.style = GaiaFlash::Style::kGlide;
+  const std::string click_variant = text("click_variant");
+  if (click_variant == "trace") flash.click_variant = GaiaFlash::ClickVariant::kTrace;
+  if (click_variant == "bloom") flash.click_variant = GaiaFlash::ClickVariant::kBloom;
+  if (click_variant == "traceBloom") flash.click_variant = GaiaFlash::ClickVariant::kTraceBloom;
+  const std::string kind = text("kind");
+  for (const auto& [name, value] : kKinds) {
+    if (kind == name) flash.kind = value;
+  }
+  const std::string direction = text("direction");
+  for (int i = 0; i < 4; ++i) {
+    if (direction == kDirections[i]) flash.direction = i;
+  }
+  flash.point = {number("x"), number("y")};
+  flash.rect = {number("left"), number("top"), number("right"),
+                number("bottom")};
+  flash.amount = number("amount");
+  flash.duration_ms = number("ms");
+  flash.accent = static_cast<unsigned int>(number("accent"));
+  const std::string label = text("label");
+  const int size = ::MultiByteToWideChar(
+      CP_UTF8, 0, label.data(), static_cast<int>(label.size()), nullptr, 0);
+  flash.label.assign(size, L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, label.data(),
+                        static_cast<int>(label.size()), flash.label.data(),
+                        size);
+  return flash;
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project,
@@ -135,12 +190,17 @@ bool FlutterWindow::OnCreate() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
                  result) {
+        const auto* args =
+            std::get_if<flutter::EncodableMap>(call.arguments());
+        if (call.method_name() == "flash" && args) {
+          gaia_flashes_.Play(ParseFlash(*args));
+          result->Success();
+          return;
+        }
         if (call.method_name() != "show") {
           result->NotImplemented();
           return;
         }
-        const auto* args =
-            std::get_if<flutter::EncodableMap>(call.arguments());
         if (args) {
           const auto& label = std::get<std::string>(
               args->at(flutter::EncodableValue("label")));
@@ -154,7 +214,7 @@ bool FlutterWindow::OnCreate() {
           gaia_border_.Show(wide,
                             static_cast<unsigned int>(
                                 args->at(flutter::EncodableValue("accent"))
-                                    .LongValue()));
+                                    .LongValue()), ParseFlash(*args).style);
         } else {
           gaia_border_.Hide();
         }

@@ -160,6 +160,9 @@ class FakeGaiaWindow implements GaiaWindow {
   bool get foreground => shown != null && !behind;
 
   @override
+  ({int x, int y}) get clientOrigin => (x: 0, y: 0);
+
+  @override
   Future<void> init() async {}
 
   @override

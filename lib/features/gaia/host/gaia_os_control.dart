@@ -74,6 +74,16 @@ abstract interface class GaiaInputBackend {
   Future<bool?> focusSensitive(int hwnd, {required bool browser});
   bool modifiersDown();
   bool escapeDown();
+
+  /// Moves when the user presses a key or a mouse button. While [watchInput]
+  /// is on, that's the runner's count, which leaves out injected input, the
+  /// mouse moving and the wheel. Otherwise it's `GetLastInputInfo`'s tick,
+  /// which Gaia's own input and any mouse move also move, and which ticks about
+  /// every 16 ms, so input in the same tick as Gaia's can't be told from it.
+  int lastInput();
+
+  /// Turns on the runner's count for [lastInput], for an Auto session.
+  void watchInput(bool on);
   void moveCursor(int x, int y);
   bool get buttonsSwapped;
 
@@ -90,26 +100,44 @@ class GaiaOsControl {
     required this.companionPid,
     required this.exclusions,
     required this.vaultUnlocked,
+    this.flash,
     int? voyagerPid,
     GaiaInputBackend? backend,
     this._settle = const Duration(milliseconds: 150),
+    this._leadIn = const Duration(milliseconds: 120),
+    this._pace = const Duration(milliseconds: 250),
     this._modifierWait = const Duration(seconds: 3),
     this._activateWait = const Duration(seconds: 2),
+    this._adoptWithin = const Duration(milliseconds: 1500),
+    this._pauseLimit = const Duration(minutes: 5),
   }) : _voyagerPid = voyagerPid ?? pid,
        _backend = backend ?? _Win32InputBackend();
 
   final int Function() companionPid;
   final List<String> Function() exclusions;
   final bool Function() vaultUnlocked;
+
+  /// Plays a flash on screen (GAIA_AUTONOMY_HLD.md §6), as `gaia_flash.dart`
+  /// takes it. Null for none, and then no step waits for one.
+  final void Function(Map<String, Object?> flash)? flash;
   final int _voyagerPid;
   final GaiaInputBackend _backend;
   final Duration _settle;
+
+  /// How long a step's flash plays before its input (§6.2), and the least
+  /// time from one Auto step's start to the next (§5.6).
+  final Duration _leadIn;
+  final Duration _pace;
   final Duration _modifierWait;
   final Duration _activateWait;
+  final Duration _adoptWithin;
+  final Duration _pauseLimit;
 
   final _plans = <String, _Plan>{};
   _Active? _active;
+  _Session? _session;
 
+  static const _reask = Duration(milliseconds: 250);
   static const _maxSteps = 20;
   static const _maxText = 2000;
   static const _typeChunk = 4;
@@ -121,6 +149,140 @@ class GaiaOsControl {
       "That window didn't answer in time, or an earlier read of it is still "
       'going. Try again shortly.';
 
+  /// The chat whose Auto turn holds the screen (GAIA_AUTONOMY_HLD.md §5.1).
+  String? get sessionChat => _session?.chatId;
+
+  /// What [chatId]'s `os_*` call works on: the session's pinned window, starting
+  /// the session if [auto], or null for a chat with none, which goes by what's
+  /// in front as ever. Refused while another chat holds the screen, or once this
+  /// turn has been stopped. [onUserStop] runs if Esc or a switch of window stops
+  /// the session.
+  GaiaForegroundWindow? session(
+    String chatId, {
+    required bool auto,
+    required void Function() onUserStop,
+  }) {
+    var session = _session;
+    if (session != null && session.chatId != chatId) {
+      throw GaiaReadException('Another chat is controlling the screen.');
+    }
+    if (session == null) {
+      if (!auto) return null;
+      if (_active case final active? when active.chatId != chatId) {
+        throw GaiaReadException('Another chat is controlling the screen.');
+      }
+      final window =
+          _backend.target(companionPid()) ??
+          (throw GaiaReadException(
+            'There is no window to act on: nothing is open behind Gaia, or the '
+            'session is locked.',
+          ));
+      _backend.watchInput(true);
+      final front = _backend.foreground();
+      final started = session = _session = _Session(
+        chatId,
+        window,
+        onUserStop,
+        lastFront: front,
+        engaged: front == window.hwnd,
+        inputMark: _backend.lastInput(),
+      );
+      started.watch = Timer.periodic(
+        const Duration(milliseconds: 20),
+        (_) => _look(started),
+      );
+    }
+    if (session.latch case final why?) {
+      throw GaiaReadException(
+        '$why Nothing more can be sent this turn. End your turn; the user can '
+        'ask again.',
+      );
+    }
+    final now = _backend.describe(session.pin.hwnd);
+    if (now == null || now.pid != session.pin.pid) {
+      throw GaiaReadException('The window Gaia was working in closed.');
+    }
+    return session.pin = now;
+  }
+
+  /// Ends the session, or only [chatId]'s if it's that chat's: its turn is over.
+  void endTurn([String? chatId]) {
+    final session = _session;
+    if (session == null || (chatId != null && session.chatId != chatId)) return;
+    session.watch?.cancel();
+    _backend.watchInput(false);
+    session.latch ??= 'The turn ended.';
+    if (_active?.chatId == session.chatId) _active!.stop(session.latch!);
+    _session = null;
+  }
+
+  /// One look for the user stepping in (§5.2, §5.3), every 20 ms for the whole
+  /// session, whatever the agent is doing.
+  void _look(_Session session) {
+    if (session.latch != null) return;
+    final now = DateTime.now();
+    _noteUserInput(session, now);
+    if (_backend.escapeDown() && !now.isBefore(session.ownEscapeUntil)) {
+      return _userStop(session, 'The user pressed Esc.');
+    }
+    final pausedAt = session.pausedAt;
+    if (pausedAt != null && now.difference(pausedAt) > _pauseLimit) {
+      return _userStop(session, 'Gaia stayed in front for too long.');
+    }
+    final front = _backend.foreground();
+    // Mid-switch, nothing is in front.
+    if (front == 0 || front == session.lastFront) return;
+    session.lastFront = front;
+    if (front == session.pin.hwnd) {
+      session.engaged = true;
+      session.pausedAt = null;
+      return;
+    }
+    final window = _backend.describe(front);
+    if (window?.pid == companionPid()) {
+      // The turn's first action brings the target up from behind Gaia; after
+      // that, Gaia in front is the user looking at it.
+      if (session.engaged) session.pausedAt ??= now;
+      return;
+    }
+    session.pausedAt = null;
+    final lastStep = session.lastStep;
+    final lastUser = session.lastUserInput;
+    final caused =
+        lastStep != null &&
+        now.difference(lastStep) <= _adoptWithin &&
+        (lastUser == null || now.difference(lastUser) > _adoptWithin);
+    if (!caused) {
+      return _userStop(session, 'The user switched to another window.');
+    }
+    // The shell isn't a window to act in; the next step brings the pin back.
+    if (window == null || _backend.inFrontOfTarget(front, companionPid())) {
+      return;
+    }
+    session.pin = window;
+    session.adopted = '${window.app}: ${jsonEncode(window.title)}';
+    session.engaged = true;
+    flash?.call({
+      'kind': 'window',
+      ..._rectOf(_backend.frame(front)),
+      'label': window.app,
+    });
+  }
+
+  /// The input tick moved since Gaia last sent anything, so that wasn't Gaia.
+  void _noteUserInput(_Session session, DateTime now) {
+    final tick = _backend.lastInput();
+    if (tick == session.inputMark) return;
+    session.inputMark = tick;
+    session.lastUserInput = now;
+  }
+
+  void _userStop(_Session session, String why) {
+    session.latch = why;
+    if (_active?.chatId == session.chatId) _active!.stop(why);
+    session.onUserStop();
+  }
+
   /// Resolves tool call [tool] for the card [cardId] (§15.6), and returns the
   /// card's `{window, steps}`. Nothing is sent.
   Future<Map<String, Object?>> plan(
@@ -130,7 +292,9 @@ class GaiaOsControl {
     Map<String, Object?> arguments,
   ) async {
     final steps = _parse(tool, arguments);
+    final session = _session?.chatId == chatId ? _session : null;
     final window =
+        session?.pin ??
         _backend.target(companionPid()) ??
         (throw GaiaReadException(
           'There is no window to act on: nothing is open behind Gaia, or the '
@@ -141,10 +305,16 @@ class GaiaOsControl {
     }
     _checkWindow(window);
     await _checkSite(window);
-    final plan = _Plan(chatId, window, steps);
+    final plan = _Plan(
+      chatId,
+      window,
+      steps,
+      session,
+      _backend.frame(window.hwnd),
+    );
     await _resolveAll(plan, from: 0);
     _plans[cardId] = plan;
-    return plan.toCard();
+    return {...plan.toCard(), if (session != null) 'auto': true};
   }
 
   /// Sends card [cardId]'s next step, or with [once], all that are left. Each
@@ -161,17 +331,28 @@ class GaiaOsControl {
     if (_active != null) {
       throw GaiaReadException('Another step list is running. Try again after.');
     }
-    // Approving once needs every step's target shown (§15.6).
-    if (once && plan.steps.skip(plan.next).any((step) => !step.resolved)) {
+    if (_session case final other? when other.chatId != plan.chatId) {
+      throw GaiaReadException('Another chat is controlling the screen.');
+    }
+    final session = plan.session;
+    // Approving once needs every step's target shown (§15.6). In Auto nothing
+    // is shown, and each step looks for its control as it comes up.
+    if (session == null &&
+        once &&
+        plan.steps.skip(plan.next).any((step) => !step.resolved)) {
       throw GaiaReadException(
         "Some of these steps' controls aren't on screen yet, so they need "
         'approving one at a time.',
       );
     }
     final active = _active = _Active(plan.chatId);
-    final escape = Timer.periodic(const Duration(milliseconds: 20), (_) {
-      if (_backend.escapeDown()) active.stop('The user pressed Esc.');
-    });
+    if (session?.latch case final why?) active.stop(why);
+    // A session is already looking.
+    final escape = session != null
+        ? null
+        : Timer.periodic(const Duration(milliseconds: 20), (_) {
+            if (_backend.escapeDown()) active.stop('The user pressed Esc.');
+          });
     String? stopped;
     final activateFirst = plan.next;
     try {
@@ -194,7 +375,7 @@ class GaiaOsControl {
     } on GaiaReadException catch (error) {
       stopped = error.message;
     } finally {
-      escape.cancel();
+      escape?.cancel();
       _releaseHeld(active);
       _active = null;
     }
@@ -213,6 +394,7 @@ class GaiaOsControl {
     return {
       'ran': plan.next,
       'stopped': ?stopped,
+      'adopted': ?session?.takeAdopted(),
       'steps': plan.toCard()['steps'],
     };
   }
@@ -221,8 +403,13 @@ class GaiaOsControl {
   void drop(String cardId) => _plans.remove(cardId);
 
   /// Ends the run in progress, or [chatId]'s if it's that chat's: Abort, Stop,
-  /// the grant taken back, the companion gone.
-  void stop(String why, {String? chatId}) {
+  /// the grant taken back, the companion gone. With [latch], the session's turn
+  /// can send nothing more, however slowly its agent stops.
+  void stop(String why, {String? chatId, bool latch = false}) {
+    final session = _session;
+    if (latch && session != null && session.chatId == chatId) {
+      session.latch ??= why;
+    }
     final active = _active;
     if (active == null || (chatId != null && active.chatId != chatId)) return;
     active.stop(why);
@@ -354,14 +541,29 @@ class GaiaOsControl {
     required bool mayActivate,
   }) async {
     final step = plan.steps[plan.next];
-    final window = plan.window;
+    final session = plan.session;
+    if (session != null) {
+      // Time to see each flash, and to react (§5.6).
+      if (session.stepStarted case final last?) {
+        final wait = last.add(_pace).difference(DateTime.now());
+        if (wait > Duration.zero) await Future<void>.delayed(wait);
+        active.throwIfStopped();
+      }
+      session.stepStarted = DateTime.now();
+    }
     await check();
     active.throwIfStopped();
     await _waitForModifiers(active);
-    if (mayActivate) {
-      await _bringInFront(window, active);
+    final GaiaForegroundWindow window;
+    if (session != null) {
+      window = await _sessionTarget(session, active);
     } else {
-      _inFront(window);
+      window = plan.window;
+      if (mayActivate) {
+        await _bringInFront(window, active);
+      } else {
+        _inFront(window);
+      }
     }
     // A run stops if the window changes (§15.6), and an hwnd can be reused.
     final now = _backend.describe(window.hwnd);
@@ -382,20 +584,37 @@ class GaiaOsControl {
       }
     }
     active.throwIfStopped();
+    if (step.action == _Action.type && (match?.sensitive ?? false)) {
+      throw _Stopped(
+        'That is a password, card or one-time code field, which Gaia never '
+        'types into.',
+      );
+    }
+    final point = step.aimed || step.action == _Action.scroll
+        ? _pointOf(window, step, match)
+        : null;
+    if (flash case final play?) {
+      final shown = step.flash(
+        _backend.frame(window.hwnd),
+        match,
+        preview: false,
+        typing: _typingTime(step),
+      );
+      if (shown != null) {
+        play(shown);
+        // The flash leads, so the eye gets there first (§6.2).
+        await Future<void>.delayed(_leadIn);
+        active.throwIfStopped();
+      }
+    }
     switch (step.action) {
       case _Action.click:
-        _click(window, step, _pointOf(window, step, match));
+        _click(window, step, point!);
       case _Action.scroll:
-        _scroll(window, step, _pointOf(window, step, match));
+        _scroll(window, step, point!);
       case _Action.type:
-        if (match?.sensitive ?? false) {
-          throw _Stopped(
-            'That is a password, card or one-time code field, which Gaia never '
-            'types into.',
-          );
-        }
         if (step.aimed) {
-          _click(window, step, _pointOf(window, step, match), plain: true);
+          _click(window, step, point!, plain: true);
           await Future<void>.delayed(_settle);
         }
         await _checkFocus(window);
@@ -444,11 +663,14 @@ class GaiaOsControl {
 
   /// [_inFront], first bringing the target up from behind Gaia or the shell.
   /// Windows switches to another process's window a moment after agreeing to,
-  /// so the foreground is watched until it has.
+  /// so the foreground is watched until it has. With [unprompted], no click
+  /// handed Gaia the right to, and Windows refuses a process that hasn't had the
+  /// last input: tapping an unbound key makes this that process (§5.4).
   Future<void> _bringInFront(
     GaiaForegroundWindow window,
-    _Active active,
-  ) async {
+    _Active active, {
+    bool unprompted = false,
+  }) async {
     final front = _backend.foreground();
     if (front == window.hwnd) return;
     if (!_backend.inFrontOfTarget(front, companionPid())) {
@@ -457,8 +679,17 @@ class GaiaOsControl {
     final refused = _Stopped(
       "Windows wouldn't bring ${window.app} to the front.",
     );
-    if (!_backend.activate(window.hwnd)) throw refused;
+    void tap() => _send(const [
+      GaiaKeyEvent(VK_F24, up: false),
+      GaiaKeyEvent(VK_F24, up: true),
+    ], active);
+    if (!_backend.activate(window.hwnd)) {
+      if (!unprompted) throw refused;
+      tap();
+      if (!_backend.activate(window.hwnd)) throw refused;
+    }
     final until = DateTime.now().add(_activateWait);
+    var askAgain = DateTime.now().add(_reask);
     while (true) {
       active.throwIfStopped();
       final now = _backend.foreground();
@@ -468,8 +699,35 @@ class GaiaOsControl {
         throw _Stopped('The window in front changed.');
       }
       if (DateTime.now().isAfter(until)) throw refused;
+      // Windows can agree and then leave nothing in front. Tapping and asking
+      // again gets it there.
+      if (unprompted && DateTime.now().isAfter(askAgain)) {
+        tap();
+        _backend.activate(window.hwnd);
+        askAgain = DateTime.now().add(_reask);
+      }
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }
+  }
+
+  /// The pinned window, in front: waiting while Gaia is (§5.2), and bringing it
+  /// up with no click behind it (§5.4).
+  Future<GaiaForegroundWindow> _sessionTarget(
+    _Session session,
+    _Active active,
+  ) async {
+    _look(session);
+    active.throwIfStopped();
+    while (session.pausedAt != null) {
+      if (_backend.describe(session.pin.hwnd) == null) {
+        throw _Stopped('The window closed.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      active.throwIfStopped();
+    }
+    final window = session.pin;
+    await _bringInFront(window, active, unprompted: true);
+    return window;
   }
 
   ({int x, int y}) _pointOf(
@@ -477,21 +735,7 @@ class GaiaOsControl {
     _Step step,
     GaiaControlMatch? match,
   ) {
-    final ({int x, int y}) point;
-    if (match != null) {
-      point = (
-        x: (match.left + match.right) ~/ 2,
-        y: (match.top + match.bottom) ~/ 2,
-      );
-    } else if (step.x case final x?) {
-      point = (x: x, y: step.y!);
-    } else {
-      final frame = _backend.frame(window.hwnd);
-      point = (
-        x: frame.left + frame.width ~/ 2,
-        y: frame.top + frame.height ~/ 2,
-      );
-    }
+    final point = step.aim(_backend.frame(window.hwnd), match);
     try {
       _checkPoint(window, point.x, point.y);
     } on GaiaReadException catch (error) {
@@ -568,7 +812,11 @@ class GaiaOsControl {
         await Future<void>.delayed(_settle);
         await _checkFocus(window);
       } else {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
+        // In a session, far enough apart that the user's input between them
+        // shows in [GaiaInputBackend.lastInput].
+        await Future<void>.delayed(
+          Duration(milliseconds: _session == null ? 1 : 20),
+        );
       }
     }
   }
@@ -576,7 +824,19 @@ class GaiaOsControl {
   /// Whatever [SendInput] took of [events], remembering keys left down: a key's
   /// press and release go in one call, so only a short count leaves any.
   void _send(List<GaiaInputEvent> events, _Active active) {
+    final session = _session;
+    // Before this send's own tick covers up anything the user did.
+    if (session != null) _noteUserInput(session, DateTime.now());
     final sent = _backend.send(events);
+    if (session != null) {
+      final now = DateTime.now();
+      session.lastStep = now;
+      session.inputMark = _backend.lastInput();
+      // The agent's own press isn't the user's.
+      if (events.contains(const GaiaKeyEvent(VK_ESCAPE, up: false))) {
+        session.ownEscapeUntil = now.add(const Duration(milliseconds: 100));
+      }
+    }
     for (final event in events.take(sent)) {
       if (event case GaiaKeyEvent(:final vk, :final up)) {
         up ? active.held.remove(vk) : active.held.add(vk);
@@ -587,13 +847,28 @@ class GaiaOsControl {
     }
   }
 
+  /// About how long [step]'s typing takes, for its flash to last as long.
+  Duration _typingTime(_Step step) {
+    final text = step.text;
+    if (step.action != _Action.type || text == null) return Duration.zero;
+    // Enter and Tab each wait to settle.
+    final breaks = RegExp('[\n\t]').allMatches(text).length;
+    final chunks = (text.length / _typeChunk).ceil();
+    return Duration(milliseconds: chunks * (_session == null ? 2 : 20)) +
+        _settle * (breaks + (step.aimed ? 1 : 0));
+  }
+
   /// Nothing Gaia pressed stays down (§15.7).
   void _releaseHeld(_Active active) {
     if (active.held.isEmpty) return;
+    final session = _session;
+    if (session != null) _noteUserInput(session, DateTime.now());
     _backend.send([
       for (final vk in active.held.toList().reversed)
         GaiaKeyEvent(vk, up: true),
     ]);
+    // Gaia's own release isn't the user's input.
+    if (session != null) session.inputMark = _backend.lastInput();
     active.held.clear();
   }
 
@@ -686,6 +961,56 @@ class _Stopped implements Exception {
   final String why;
 }
 
+/// One Auto turn's hold on the screen (GAIA_AUTONOMY_HLD.md §5.1).
+class _Session {
+  _Session(
+    this.chatId,
+    this.pin,
+    this.onUserStop, {
+    required this.lastFront,
+    required this.engaged,
+    required this.inputMark,
+  });
+
+  final String chatId;
+  final void Function() onUserStop;
+  Timer? watch;
+
+  /// The window this turn acts on and reads (§5.2).
+  GaiaForegroundWindow pin;
+
+  /// Set once the turn is stopped: its calls are refused from then on.
+  String? latch;
+
+  /// The foreground at the last look.
+  int lastFront;
+
+  /// The pin has been in front this turn.
+  bool engaged;
+
+  /// When Gaia came in front; null unless paused (§5.2).
+  DateTime? pausedAt;
+
+  /// When Gaia last sent input, and [GaiaInputBackend.lastInput] as last seen.
+  /// A later tick means the user did something, noted in [lastUserInput].
+  DateTime? lastStep;
+  int inputMark;
+  DateTime? lastUserInput;
+  DateTime ownEscapeUntil = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// When the last step started, for pacing (§5.6).
+  DateTime? stepStarted;
+
+  /// The window adopted since the agent was last told.
+  String? adopted;
+
+  String? takeAdopted() {
+    final told = adopted;
+    adopted = null;
+    return told;
+  }
+}
+
 /// The run in progress.
 class _Active {
   _Active(this.chatId);
@@ -736,6 +1061,74 @@ class _Step {
 
   bool get aimed => name != null || x != null;
 
+  /// Where it acts: [match]'s middle, its point, or the middle of [frame].
+  ({int x, int y}) aim(
+    ({int left, int top, int width, int height}) frame,
+    GaiaControlMatch? match,
+  ) {
+    if (match != null) {
+      return (
+        x: (match.left + match.right) ~/ 2,
+        y: (match.top + match.bottom) ~/ 2,
+      );
+    }
+    if (x case final x?) return (x: x, y: y!);
+    return (x: frame.left + frame.width ~/ 2, y: frame.top + frame.height ~/ 2);
+  }
+
+  /// Its flash (GAIA_AUTONOMY_HLD.md §6.2) in [frame], its window, against
+  /// [match]; with [preview], the marker the card shows (§6.4). Null for a
+  /// control not on screen. The pill names the control, never typed text.
+  Map<String, Object?>? flash(
+    ({int left, int top, int width, int height}) frame,
+    GaiaControlMatch? match, {
+    required bool preview,
+    Duration typing = Duration.zero,
+  }) {
+    if (name != null && match == null) return null;
+    final point = aim(frame, match);
+    final at = {'x': point.x, 'y': point.y};
+    final rect = match == null
+        ? null
+        : {
+            'left': match.left,
+            'top': match.top,
+            'right': match.right,
+            'bottom': match.bottom,
+          };
+    final label = match == null ? null : name;
+    return switch (action) {
+      _Action.click => {
+        'kind': preview
+            ? 'mark'
+            : doubleClick
+            ? 'double'
+            : button == 'right'
+            ? 'right'
+            : 'click',
+        ...at,
+        if (preview) ...?rect,
+        'label': ?label,
+      },
+      _Action.scroll => {
+        'kind': 'scroll',
+        ...at,
+        'direction': direction,
+        'amount': amount,
+        'label': ?label,
+      },
+      _Action.type when rect != null => {
+        'kind': preview ? 'mark' : 'type',
+        ...rect,
+        'ms': typing.inMilliseconds,
+        'label': ?label,
+      },
+      _Action.type when aimed => {'kind': preview ? 'mark' : 'click', ...at},
+      _Action.type => {'kind': 'key', ..._rectOf(frame), 'label': 'Typing'},
+      _Action.key => {'kind': 'key', ..._rectOf(frame), 'label': keys!.label},
+    };
+  }
+
   String get _target {
     if (name case final name?) {
       final what = jsonEncode(name);
@@ -765,11 +1158,17 @@ class _Step {
 }
 
 class _Plan {
-  _Plan(this.chatId, this.window, this.steps);
+  _Plan(this.chatId, this.window, this.steps, this.session, this.frame);
 
   final String chatId;
   final GaiaForegroundWindow window;
   final List<_Step> steps;
+
+  /// Where [window] was when planned, for the card's markers (§6.4).
+  final ({int left, int top, int width, int height}) frame;
+
+  /// In Auto, which goes by its pin rather than [window].
+  final _Session? session;
   var next = 0;
 
   Map<String, Object?> toCard() => {
@@ -777,10 +1176,24 @@ class _Plan {
     'app': window.app,
     'steps': [
       for (final step in steps)
-        {'label': step.label, 'resolved': step.resolved},
+        {
+          'label': step.label,
+          'resolved': step.resolved,
+          'flash': ?step.flash(frame, step.match, preview: true),
+        },
     ],
   };
 }
+
+/// [frame] as the flash channel takes a rect.
+Map<String, Object?> _rectOf(
+  ({int left, int top, int width, int height}) frame,
+) => {
+  'left': frame.left,
+  'top': frame.top,
+  'right': frame.left + frame.width,
+  'bottom': frame.top + frame.height,
+};
 
 /// [text] as one press and release per character: Enter and Tab as their keys,
 /// which many apps want, the rest as UTF-16 units, which no keyboard layout or
@@ -996,6 +1409,47 @@ class _Win32InputBackend implements GaiaInputBackend {
 
   @override
   bool escapeDown() => GetAsyncKeyState(VK_ESCAPE) & 0x8000 != 0;
+
+  /// The runner's count of the user's presses (gaia_user_input.cpp): absent
+  /// under `flutter test`, and unused if its hooks didn't go in.
+  static final _watch = _runnerExport(
+    (runner) => runner.lookupFunction<Int32 Function(Int32), int Function(int)>(
+      'GaiaWatchUserInput',
+    ),
+  );
+  static final _count = _runnerExport(
+    (runner) => runner.lookupFunction<Uint32 Function(), int Function()>(
+      'GaiaUserInputCount',
+    ),
+  );
+  var _counting = false;
+
+  static F? _runnerExport<F>(F Function(DynamicLibrary runner) lookup) {
+    try {
+      return lookup(DynamicLibrary.executable());
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  @override
+  void watchInput(bool on) {
+    final watch = _watch;
+    if (watch == null || _count == null) return;
+    _counting = watch(on ? 1 : 0) != 0 && on;
+  }
+
+  @override
+  int lastInput() {
+    if (_counting) return _count!();
+    final info = calloc<LASTINPUTINFO>()..ref.cbSize = sizeOf<LASTINPUTINFO>();
+    try {
+      GetLastInputInfo(info);
+      return info.ref.dwTime;
+    } finally {
+      free(info);
+    }
+  }
 
   @override
   void moveCursor(int x, int y) => SetCursorPos(x, y);

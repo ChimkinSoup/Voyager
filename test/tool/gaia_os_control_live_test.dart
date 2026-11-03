@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
 
@@ -45,7 +46,22 @@ $secret.Left = 10; $secret.Top = 100; $secret.Width = 300
 $button = New-Object Windows.Forms.Button
 $button.Text = 'Save'; $button.Left = 10; $button.Top = 140
 $button.Add_Click({ [Console]::Out.WriteLine('CLICKED'); [Console]::Out.Flush() })
-$form.Controls.AddRange(@($edit, $secret, $button))
+$open = New-Object Windows.Forms.Button
+$open.Text = 'Open dialog'; $open.Left = 100; $open.Top = 140; $open.Width = 120
+$open.Add_Click({
+  $dialog = New-Object Windows.Forms.Form
+  $dialog.Text = 'Gaia control dialog'
+  $dialog.Width = 300; $dialog.Height = 200; $dialog.StartPosition = 'CenterParent'
+  $note = New-Object Windows.Forms.TextBox
+  $note.AccessibleName = 'Dialog note'; $note.Left = 10; $note.Top = 10; $note.Width = 200
+  $done = New-Object Windows.Forms.Button
+  $done.Text = 'Done'; $done.Left = 10; $done.Top = 60
+  $done.Add_Click({ [Console]::Out.WriteLine('DIALOG:' + $note.Text); [Console]::Out.Flush(); $dialog.Close() })
+  $dialog.Controls.AddRange(@($note, $done))
+  [void]$dialog.ShowDialog($form)
+  [Console]::Out.WriteLine('DIALOG CLOSED'); [Console]::Out.Flush()
+})
+$form.Controls.AddRange(@($edit, $secret, $button, $open))
 $timer = New-Object Windows.Forms.Timer
 $timer.Interval = 200
 $timer.Add_Tick({ [Console]::Out.WriteLine('TEXT:' + $edit.Text.Replace("`r`n", '|') + ':SECRET:' + $secret.Text); [Console]::Out.Flush() })
@@ -319,4 +335,245 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
     },
     timeout: const Timeout(Duration(minutes: 1)),
   );
+
+  group('an Auto session (GAIA_AUTONOMY_HLD.md §5)', () {
+    late List<String> lines;
+    late int hwnd;
+    late int other;
+    late int stops;
+    late GaiaOsControl control;
+
+    void key(int vk, {required bool up}) {
+      final input = calloc<INPUT>();
+      input.ref.type = INPUT_KEYBOARD;
+      input.ref.ki
+        ..wVk = vk
+        ..dwFlags = up ? KEYEVENTF_KEYUP : 0;
+      SendInput(1, input, sizeOf<INPUT>());
+      free(input);
+    }
+
+    Future<void> until(bool Function() done, String what) async {
+      for (var i = 0; i < 100 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect(done(), isTrue, reason: 'waiting for $what');
+    }
+
+    /// In front, as the user's click would put it: the tap gives this process
+    /// the right.
+    Future<void> toFront(int window) async {
+      key(VK_F24, up: false);
+      key(VK_F24, up: true);
+      SetForegroundWindow(window);
+      await until(() => GetForegroundWindow() == window, 'the foreground');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+
+    Future<Map<String, Object?>> act(
+      String tool,
+      Map<String, Object?> arguments,
+    ) async {
+      control.session('chat', auto: true, onUserStop: () => stops++);
+      await control.plan('chat', 'card', tool, arguments);
+      return control.run('card', once: true, check: () async {});
+    }
+
+    setUp(() async {
+      lines = [];
+      stops = 0;
+      final process = await Process.start('powershell', [
+        '-NoProfile',
+        '-STA',
+        '-Command',
+        probe,
+      ]);
+      process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(lines.add);
+      addTearDown(process.kill);
+      await until(() => lines.contains('SHOWN'), 'the window');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      hwnd = FindWindow(nullptr, 'Gaia control probe'.toNativeUtf16());
+      other = FindWindow(nullptr, 'Gaia control other'.toNativeUtf16());
+      expect(hwnd, isNot(0));
+      expect(other, isNot(0));
+      control = GaiaOsControl(
+        companionPid: () => -1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+      );
+      addTearDown(control.endTurn);
+      await toFront(hwnd);
+    });
+
+    test('Esc between calls stops the turn and refuses what follows', () async {
+      expect((await act('os_click', {'name': 'Save'}))['stopped'], isNull);
+      await until(() => lines.contains('CLICKED'), 'the click');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      key(VK_ESCAPE, up: false);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      key(VK_ESCAPE, up: true);
+      await until(() => stops == 1, 'the stop');
+      await expectLater(
+        act('os_type', {'name': 'Notes', 'text': 'late'}),
+        throwsA(isA<GaiaReadException>()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(lines.last, isNot(contains('late')));
+    }, timeout: const Timeout(Duration(minutes: 1)));
+
+    test('Alt+Tab mid-text stops the turn, with nothing sent to the new '
+        'window', () async {
+      await act('os_click', {'name': 'Notes'});
+      control.session('chat', auto: true, onUserStop: () => stops++);
+      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 1500});
+      final running = control.run('long', once: true, check: () async {});
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      // At the pace of a hand.
+      key(VK_MENU, up: false);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      key(VK_TAB, up: false);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      key(VK_TAB, up: true);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      key(VK_MENU, up: true);
+      final result = await running;
+      await until(() => stops == 1, 'the stop');
+      expect(result['stopped'], isNotNull);
+      expect(GetForegroundWindow(), isNot(hwnd));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final typed = RegExp('y').allMatches(
+        lines.lastWhere((l) => l.startsWith('TEXT:')),
+      ).length;
+      expect(typed, inExclusiveRange(0, 1500));
+      await expectLater(
+        act('os_key', {'keys': 'A'}),
+        throwsA(isA<GaiaReadException>()),
+      );
+      for (final vk in const [VK_CONTROL, VK_MENU, VK_SHIFT, VK_TAB]) {
+        expect(GetAsyncKeyState(vk) & 0x8000, 0);
+      }
+    }, timeout: const Timeout(Duration(minutes: 1)));
+
+    test('a click on another window mid-text stops the turn', () async {
+      await act('os_click', {'name': 'Notes'});
+      control.session('chat', auto: true, onUserStop: () => stops++);
+      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 1500});
+      final running = control.run('long', once: true, check: () async {});
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      final frame = gaiaWindowFrame(other);
+      SetCursorPos(frame.left + frame.width ~/ 2, frame.top + 60);
+      // Only ever on the probe's own window.
+      final at = calloc<POINT>()
+        ..ref.x = frame.left + frame.width ~/ 2
+        ..ref.y = frame.top + 60;
+      final under = GetAncestor(WindowFromPoint(at.ref), GA_ROOT);
+      free(at);
+      expect(under, other, reason: 'nothing to click safely');
+      void mouse(int flags) {
+        final input = calloc<INPUT>();
+        input.ref.type = INPUT_MOUSE;
+        input.ref.mi.dwFlags = flags;
+        SendInput(1, input, sizeOf<INPUT>());
+        free(input);
+      }
+
+      // A hand moves there first; SetCursorPos alone isn't input.
+      for (var i = 0; i < 5; i++) {
+        mouse(MOUSEEVENTF_MOVE);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      mouse(MOUSEEVENTF_LEFTDOWN);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      mouse(MOUSEEVENTF_LEFTUP);
+      final result = await running;
+      await until(() => stops == 1, 'the stop');
+      expect(result['stopped'], isNotNull);
+      expect(GetForegroundWindow(), other);
+      await expectLater(
+        act('os_key', {'keys': 'A'}),
+        throwsA(isA<GaiaReadException>()),
+      );
+    }, timeout: const Timeout(Duration(minutes: 1)));
+
+    test('a dialog its click opened is adopted, acted in, and handed back; its '
+        "own Esc doesn't stop it", () async {
+      final opened = await act('os_click', {'name': 'Open dialog'});
+      expect(opened['stopped'], isNull);
+      final dialog = FindWindow(nullptr, 'Gaia control dialog'.toNativeUtf16());
+      await until(
+        () =>
+            FindWindow(nullptr, 'Gaia control dialog'.toNativeUtf16()) != 0,
+        'the dialog',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(stops, 0, reason: 'dialog was $dialog');
+      final typed = await act('os_type', {
+        'name': 'Dialog note',
+        'text': 'in the dialog',
+      });
+      expect(typed['stopped'], isNull);
+      expect(typed['adopted'], contains('Gaia control dialog'));
+      expect((await act('os_click', {'name': 'Done'}))['stopped'], isNull);
+      await until(
+        () => lines.contains('DIALOG:in the dialog'),
+        'the text in the dialog',
+      );
+      await until(() => lines.contains('DIALOG CLOSED'), 'the dialog closing');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(stops, 0);
+      expect((await act('os_click', {'name': 'Save'}))['stopped'], isNull);
+      await until(() => lines.contains('CLICKED'), 'the click back in the main');
+      expect((await act('os_key', {'keys': 'Esc'}))['stopped'], isNull);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(stops, 0);
+    }, timeout: const Timeout(Duration(minutes: 1)));
+
+    test('from behind a Gaia in another process, with no click', () async {
+      // Gaia's stand-in: a process of its own, in front, that this one has never
+      // been handed the foreground by.
+      final gaia = await Process.start('powershell', [
+        '-NoProfile',
+        '-STA',
+        '-Command',
+        r'''
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object Windows.Forms.Form
+$f.Text = 'Gaia control standin'; $f.Width = 300; $f.Height = 200
+$f.Add_Shown({ [Console]::Out.WriteLine('SHOWN'); [Console]::Out.Flush() })
+[Windows.Forms.Application]::Run($f)
+''',
+      ]);
+      addTearDown(gaia.kill);
+      var shown = false;
+      gaia.stdout.transform(utf8.decoder).listen((c) => shown = true);
+      await until(() => shown, 'the stand-in');
+      final standin = FindWindow(
+        nullptr,
+        'Gaia control standin'.toNativeUtf16(),
+      );
+      await toFront(hwnd);
+      await toFront(standin);
+      SetWindowPos(hwnd, standin, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+      final auto = GaiaOsControl(
+        companionPid: () => gaia.pid,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+      );
+      addTearDown(auto.endTurn);
+      final pin = auto.session('chat', auto: true, onUserStop: () => stops++);
+      expect(pin?.title, 'Gaia control probe');
+      await auto.plan('chat', 'click', 'os_click', {'name': 'Save'});
+      final result = await auto.run('click', once: true, check: () async {});
+      expect(result['stopped'], isNull);
+      expect(GetForegroundWindow(), hwnd);
+      await until(() => lines.contains('CLICKED'), 'the click');
+      expect(stops, 0);
+      for (final vk in const [VK_CONTROL, VK_MENU, VK_SHIFT, VK_F24]) {
+        expect(GetAsyncKeyState(vk) & 0x8000, 0);
+      }
+    }, timeout: const Timeout(Duration(minutes: 1)));
+  });
 }

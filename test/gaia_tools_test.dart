@@ -255,6 +255,7 @@ void main() {
       {'label': 'Press B', 'resolved': true},
     ];
     var planSteps = steps;
+    var planAuto = false;
     final control = (
       plan: (String cardId, String tool, Map<String, Object?> arguments) async {
         if (planError case final error?) throw error;
@@ -263,6 +264,7 @@ void main() {
           'window': 'Notepad: "notes.txt"',
           'app': 'Notepad',
           'steps': planSteps,
+          if (planAuto) 'auto': true,
         };
       },
       run: (String cardId, {required bool once}) async {
@@ -297,6 +299,7 @@ void main() {
       runAnswer = null;
       planError = null;
       planSteps = steps;
+      planAuto = false;
       cards = GaiaCards();
       raised = [];
       aborted = false;
@@ -557,6 +560,22 @@ void main() {
           ).call('os_key', {'keys': 'A'});
           expect((await result).text, contains('Ran 0 of 1 step. End'));
         });
+      });
+
+      test('in Auto it runs with no open card, and says what it adopted', () async {
+        planAuto = true;
+        runAnswer = (_) => {
+          'ran': 2,
+          'steps': steps,
+          'adopted': 'Calculator: "Calculator"',
+        };
+        final result = await tools().call('os_key', {'keys': 'A'});
+        expect(runs, [true]);
+        expect(raised.where((card) => card.isOpen), isEmpty);
+        expect(raised.single.state, GaiaCardState.accepted);
+        expect(raised.single.input, isNot(contains('auto')));
+        expect(result.isError, isFalse);
+        expect(result.text, contains('Calculator'));
       });
 
       test('step by step, it asks again before each', () async {

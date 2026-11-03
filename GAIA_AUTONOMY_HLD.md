@@ -1,7 +1,7 @@
 # Gaia — Autonomous PC Control (HLD)
 
-Status: proposed, 2026-11-03. Nothing here is built. It changes GAIA_HLD.md §5.2,
-§10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
+Status: Phase 1 built and checked live, 2026-11-03 (§11.1). Phase 2 built, 2026-11-03 (§11.2). The
+rest is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
 
@@ -53,10 +53,11 @@ Findings the design relies on, each read from the code:
 | Both CLIs' permission prompts go through one function. | `GaiaChatTools.permit` | One change covers Claude Code and Codex, with no restart or new flags. |
 | Grants are JSON per device, on the chat. | `grants[deviceId]`, `gaia_models.dart:281` | A new mode needs no schema change. |
 
-**Not reproduced:** a window opened from the terminal staying behind. The report and
-Windows' foreground rules agree, since the launching process has no right to the
-foreground, but Phase 1 should confirm it. Nor could I find the transcript of the email
-test, so what Haiku did is taken from your description.
+**Not reproduced:** a window opened from the terminal staying behind. In Phase 1's spike,
+Character Map started through `cmd /c start` by a process with no foreground right came to
+the front 6 times of 6, under another app or under a stand-in for Gaia. A browser and a real
+CLI's shell weren't tried. Nor could I find the transcript of the email test, so what Haiku
+did is taken from your description.
 
 ## 4. The hand toggle
 
@@ -112,10 +113,24 @@ Replaces "a run stops if the window changes".
   "paused", and they resume when the target is back in front. After 5 minutes the run
   stops. Another app coming in front stops it.
 
-**Known gap:** switching windows yourself within 1.5 s of a Gaia step looks like Gaia
-caused it, so the agent could follow you. Exclusions and the vault still apply, and the
-flash shows where it went. Telling them apart reliably needs a low-level input hook,
-which I don't think is worth it in v1. Phase 1 should measure how often it happens.
+**Telling them apart.** Timing alone wasn't enough: with a model round trip of a few
+seconds, a good share of a run is within 1.5 s of a step. So a change is adopted only if it
+comes within 1.5 s of a Gaia step **and** the user pressed no key or mouse button in those
+1.5 s. For the session, low-level keyboard and mouse hooks in the runner
+(`gaia_user_input.cpp`) count the user's presses on a thread of their own. Injected input,
+Gaia's included, doesn't count, and nor do mouse moves or the wheel, so moving the mouse while
+a Gaia click opens a dialog doesn't stop the run. If the hooks can't go in, it falls back to
+`GetLastInputInfo` moving since Gaia's last send. That counts any mouse move as input, the safe
+way to be wrong, and its ~16 ms tick can't see input in the same tick as a Gaia send. In a
+session, `os_type` therefore sends at most every 20 ms, about 10 s for the 2000-character limit
+(Ask stays at 1 ms). Exclusions and the vault still apply.
+
+**A dialog that takes longer than 1.5 s to appear stops the run.** Also the safe way to be
+wrong, and the first thing to tune if it proves annoying.
+
+**Known gap for Phase 3:** answering `ask_user` mid-run leaves you in Gaia, so the run waits
+until you click the target, and stops after 5 minutes. §9 tells agents to ask before
+irreversible actions, so answering should resume the run.
 
 ### 5.3 Stopping
 
@@ -141,18 +156,27 @@ the press, as it does today.
 
 ### 5.4 Foreground without a click
 
-No approval click means no `AllowSetForegroundWindow` handed over. This is the riskiest
-unknown, and the first thing to test.
+No approval click means no `AllowSetForegroundWindow` handed over. What the spike and real
+turns found (2026-11-03):
 
-- **Desktop prompts:** pressing send is a real input in Gaia, so send hands over the
-  right, as `approveControl` does now. That should cover the first activation.
-- **Later switches** (`os_open`, `os_focus`, and phone prompts where nothing was
-  pressed): `SetForegroundWindow` first, then the `AttachThreadInput` route that
-  `_takeForeground` already uses, with its hung-window guard.
-- **Caution:** `AttachThreadInput` hung a test run before (qa/PROGRESS.md, 2026-11-02),
-  and a stuck modifier is a known hazard of it. The spike must cover both.
-- **If Windows refuses,** the tool returns the refusal and the agent can tell you. Failing
-  to switch mustn't send the input somewhere else.
+| Way | Result |
+|---|---|
+| `SetForegroundWindow` alone | Refused, whatever is in front |
+| `AllowSetForegroundWindow` from the window in front | Works, even 5 s later, but any key press cancels it |
+| `AttachThreadInput` | Works, but joins another thread's input queue, which hung a test run before |
+| Tap F24, then `SetForegroundWindow` | Works, 15 of 15, with nothing left held |
+
+**Built:** ask, and if refused, tap F24 (an unbound key) so this process had the last input,
+and ask again. Send hands nothing over, as this also covers phone prompts and later switches.
+
+**Windows can agree and do nothing.** In real turns, 5 of 8 asks returned true and left nothing
+in front, with every window answering, for as long as anyone waited. Tapping and asking again
+fixed it at once, so while the switch hasn't landed, it taps and asks again every 250 ms. With
+that, the same batch went 8 of 8. Why Windows does this wasn't established: 40 switches in a tight
+loop with no turn running never showed it.
+
+**If Windows still refuses,** the tool returns the refusal and the agent can tell you. Nothing is
+sent anywhere else.
 
 ### 5.5 Rules that change in Auto
 
@@ -408,11 +432,107 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 
 | Phase | Work | Done when |
 |---|---|---|
-| **1. Session** | Foreground spike (§5.4); confirm the terminal-launch behaviour; control session, pin, adoption, pause, latch; Esc for the session | With a forced Auto flag: an action after no click reaches a window behind Gaia on both CLIs; Esc between calls ends the turn; Alt+Tab mid-run stops it with nothing sent to the new window |
+| **1. Session** (done, §11.1) | Foreground spike (§5.4); confirm the terminal-launch behaviour; control session, pin, adoption, pause, latch; Esc for the session | With a forced Auto flag: an action after no click reaches a window behind Gaia on both CLIs; Esc between calls ends the turn; Alt+Tab mid-run stops it with nothing sent to the new window |
 | **2. Flashes** | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
 | **3. Auto** | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
 | **4. Opening** | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
 | **5. More tools** | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
+
+### 11.1 Phase 1 results (2026-11-03)
+
+Forced Auto is `GaiaHost.forceAuto`, or `--dart-define=GAIA_FORCE_AUTO=true`. It applies to every
+chat with *can control*, and Phase 3's grant replaces it. Only OS actions skip their card: CLI
+permission prompts and the activity row are still Phase 3. Pacing came with Phase 2's flashes.
+
+Real turns in `gaiaqa`, target behind the real Gaia window, nobody clicking:
+
+| Check | Claude Code (Haiku) | Codex (Sol) |
+|---|---|---|
+| An action reaches the window behind Gaia, no open card | Pass | Pass |
+| Esc between calls: turn cancelled, Save never clicked | Pass, 8 of 8, under 1 s; drain off | Pass; drain off |
+| Alt+Tab mid-run: turn cancelled, nothing sent to the new window | Pass | Pass |
+| Gaia in front for 25 s: nothing sent; target back: it carries on | Pass | Pass |
+
+`test/tool/gaia_os_control_live_test.dart` adds Esc, Alt+Tab and a click mid-text, a real dialog
+adopted and handed back, the agent's own Esc, and activation from behind another process. The
+existing Ask tests pass unchanged.
+
+**Not checked:**
+- How often the 1.5 s rule misfires in real use. The design asked for a measure of how often a
+  switch of yours gets adopted. The input check replaces most of that question, and what's left
+  needs real use.
+- The 5-minute pause limit at its real length; a unit test covers it at 300 ms.
+- A real app as the target. These runs used WinForms probes.
+- One real CLI's shell launching a window (§3).
+- Prompts from the phone.
+
+### 11.2 Phase 2 results (2026-11-03)
+
+Built: `GaiaFlashes` in `gaia_control_border.cpp`, played by `flash` on the border's channel
+(`gaia_flash.dart`). `GaiaOsControl` flashes each step, waits the 120 ms lead-in before its input,
+paces Auto steps 250 ms apart, and flashes an adopted window. Each step on a card carries its
+marker, which shows when hovered and pulses once in order when the card opens, in Ask only. The
+companion runs the same runner, so it plays the preview itself.
+
+Changes from §6:
+- **Outlines are drawn once.** Redrawing a field-sized window every frame took 20 ms at 200%. A
+  field's outline is four strips, drawn when it starts and then only faded; typing's shimmer is
+  a small spark window that runs round it.
+- A mark round a control (the preview) holds steady rather than pulsing, as pulsing meant four
+  window updates a frame. A mark at a point still pulses.
+- Typing with nothing aimed has no field to outline, so it shows a "Typing" pill near the window's
+  top, as a key does.
+
+Checked by a native harness built from the same source (not committed), and the unit tests:
+
+| Check | Result |
+|---|---|
+| A real click lands through a flash and through a name pill | Pass |
+| `WindowFromPoint` passes through the flash, the pill and both outlines, on its own thread and another | Pass |
+| A screen grab shows no flash; the same grab with capture allowed differs in ~21,000 pixels | Pass |
+| Painting a frame of any effect | Under 1 ms at 100% and 200% |
+| A whole frame, window updates included, one flash at a time at 200% | Mean 0.1 to 1.5 ms; worst 1.0 to 5.4 ms |
+| Six playing at once at 200% | Mean 3.8 ms, worst 5.3 ms |
+| Nothing when idle: timer stopped, windows hidden and pooled | Pass |
+| Legible on white and dark at 100% and 200% | Rendered and looked at; reads on both |
+
+**Under 2 ms isn't met at the worst frame.** Painting is well under. Each layered-window update
+costs about 0.3 ms with spikes to 1 ms, so the frames where several windows fade in or out at once
+go over. Updates are skipped while nothing changes, which is most of each flash. Starting one costs
+2 to 11 ms once at 200%, most for a window outline or a large field.
+
+**Not checked:**
+- A flash from the running app. The runner builds, but `ParseFlash` and the Dart channel weren't
+  driven end to end, nor the card's hover and pulse.
+- A second monitor at a different scale. Each flash takes the scale of the monitor it starts on.
+
+### 11.3 Astral Trace + Bloom against the frame budget (2026-11-03)
+
+Astral with the Trace + Bloom click is the live style. As first built it took 4.6 ms a frame on a
+click at 200%, and up to 11 ms on typing, keys and windows, which redrew every outline, pill and
+corner each 32 ms to trace them round. Changes:
+- Outlines, pills and window corners no longer trace round or bloom. They are drawn whole once
+  and only faded, as in §11.2.
+- A click's square is 64 rather than 96 logical pixels, and each pixel's distances and angles
+  are worked out once per scale and kept. Scroll paints only round each chevron, in a 136-pixel
+  square rather than 320. Both draw the same as before, within one level of rounding.
+- Faded pieces get at most four updates a frame, so a window's nine pieces take turns. Finished
+  windows are hidden three a frame, in one batch, rather than all in the frame they end.
+
+Whole frames, window updates included, one flash at a time (native benchmark, 4 runs each):
+
+| | 100% mean / p95 / worst | 200% mean / p95 / worst |
+|---|---|---|
+| Click (Trace + Bloom) | 0.6 / 1.4 / 2.1 ms | 1.0 / 1.8 / 2.3 ms |
+| Double, right, point mark | 0.5–0.6 / ≤1.0 / ≤2.1 ms | 0.9–1.0 / ≤1.8 / ≤2.6 ms |
+| Scroll | 0.6 / 1.1 / 2.4 ms | 1.0 / 1.6 / 1.9 ms |
+| Typing, mark round a field | 0.4 / ≤1.6 / ≤2.9 ms | 0.4–0.5 / ≤1.7 / ≤3.1 ms |
+| Key, window | 0.2–0.5 / ≤1.7 / ≤2.4 ms | 0.2–0.5 / ≤1.7 / ≤3.8 ms |
+
+Every case's 95th percentile is under 2 ms. A few frames per flash still go over, from window
+updates as in §11.2. Starting a flash is unchanged: 2 to 15 ms once, most for a window.
+
+**Not checked:** several flashes at once, since the budget for faded pieces is per flash.
 
 **End-to-end check after 4:** the job-board task, or a scratch version of it, runs 10+ pages with
 no cards, and a press of Esc at a random moment stops it within one step each time.
