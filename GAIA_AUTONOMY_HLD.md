@@ -1,7 +1,6 @@
 # Gaia — Autonomous PC Control (HLD)
 
-Status: Phase 1 built and checked live, 2026-11-03 (§11.1). Phase 2 built, 2026-11-03 (§11.2). The
-rest is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
+Status: Phases 1 and 2 built and checked live, 2026-11-03 (§11.1, §11.2). The rest is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
 
@@ -433,7 +432,7 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 | Phase | Work | Done when |
 |---|---|---|
 | **1. Session** (done, §11.1) | Foreground spike (§5.4); confirm the terminal-launch behaviour; control session, pin, adoption, pause, latch; Esc for the session | With a forced Auto flag: an action after no click reaches a window behind Gaia on both CLIs; Esc between calls ends the turn; Alt+Tab mid-run stops it with nothing sent to the new window |
-| **2. Flashes** | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
+| **2. Flashes** (done, §11.2) | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; 95th percentile under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
 | **3. Auto** | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
 | **4. Opening** | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
 | **5. More tools** | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
@@ -496,15 +495,32 @@ Checked by a native harness built from the same source (not committed), and the 
 | Nothing when idle: timer stopped, windows hidden and pooled | Pass |
 | Legible on white and dark at 100% and 200% | Rendered and looked at; reads on both |
 
-**Under 2 ms isn't met at the worst frame.** Painting is well under. Each layered-window update
-costs about 0.3 ms with spikes to 1 ms, so the frames where several windows fade in or out at once
-go over. Updates are skipped while nothing changes, which is most of each flash. Starting one costs
-2 to 11 ms once at 200%, most for a window outline or a large field.
+**The budget is the 95th percentile, not the worst frame.** Painting is well under 2 ms. Each
+layered-window update costs about 0.3 ms with spikes to 1 ms, so the frames where several windows
+fade in or out at once go over. Updates are skipped while nothing changes, which is most of each
+flash. Starting one costs 2 to 11 ms once at 200%, most for a window outline or a large field.
+§11.3 has the figures for the live style.
+
+Then in the running app, after §11.3: a debug build in `gaiaqa`, real Haiku turns, and a WinForms
+target. The display is at 200%.
+
+| Check | Result |
+|---|---|
+| All nine flash kinds through the channel, from the main instance; a mark from the companion | Pass |
+| Auto, one `os_steps` with two clicks: the flash comes first and both clicks land | Pass; flash about 144 ms ahead |
+| The second click's `rootAt` check, with the first flash still over that point | Pass |
+| Ask: opening the card pulses each step's marker in order | Pass; about 290 ms apart |
+| Ask: hovering a step shows its marker on its control, and hovering again replays it | Pass, with a real cursor |
+| Ask: Run all plays the click and typing flashes, and both actions land | Pass |
+| A screen grab during a click and a window flash, as shipped | 0 pixels differ |
+| The same grabs with capture allowed in-process, each kind on each page | Thousands of pixels differ; legible |
+| Astral at 100% on white and dark | Legible; the same source rendered in memory at 96 DPI |
+| Flash windows once finished | All hidden |
 
 **Not checked:**
-- A flash from the running app. The runner builds, but `ParseFlash` and the Dart channel weren't
-  driven end to end, nor the card's hover and pulse.
 - A second monitor at a different scale. Each flash takes the scale of the monitor it starts on.
+- Live frame times in the running app. The figures are from the native benchmarks.
+- 100% on a real display, as the render above bypasses the monitor's scale.
 
 ### 11.3 Astral Trace + Bloom against the frame budget (2026-11-03)
 
