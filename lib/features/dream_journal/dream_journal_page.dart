@@ -1665,53 +1665,60 @@ class _DreamEntryListTile extends StatelessWidget {
         horizontal: VoyagerSpacing.sm,
         vertical: VoyagerSpacing.xxs,
       ),
-      child: ListTile(
-        dense: true,
-        // Outlines the dream currently open in the reading pane, in the
-        // night accent rather than the neutral focus outline. The side
-        // stays one pixel wide when unselected, as in
-        // [VoyagerListItemSurface.focusShape], so rows don't shift.
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: isSelected
-                ? theme.colorScheme.primary.withValues(alpha: 0.6)
-                : Colors.transparent,
+      // The tile's fill and outline are ink, painted by the nearest Material.
+      // Without one per row that's a Material outside the list's repaint
+      // boundary, which keeps the old outline when the first line of text
+      // makes the row taller, cutting through the date row.
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          dense: true,
+          // Outlines the dream currently open in the reading pane, in the
+          // night accent rather than the neutral focus outline. The side
+          // stays one pixel wide when unselected, as in
+          // [VoyagerListItemSurface.focusShape], so rows don't shift.
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isSelected
+                  ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                  : Colors.transparent,
+            ),
           ),
-        ),
-        visualDensity: const VisualDensity(
-          vertical: VoyagerSpacing.compactListVerticalDensity,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: VoyagerSpacing.md,
-          vertical: VoyagerSpacing.xs,
-        ),
-        tileColor: VoyagerListItemSurface.restingColor(context),
-        selectedTileColor: VoyagerListItemSurface.selectedColor(context),
-        selected: isSelected,
-        title: isSelected
-            ? ValueListenableBuilder<String>(
-                valueListenable: titlePreview,
-                builder: (context, title, _) => Text(
-                  title.isEmpty ? 'Untitled' : title,
+          visualDensity: const VisualDensity(
+            vertical: VoyagerSpacing.compactListVerticalDensity,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: VoyagerSpacing.md,
+            vertical: VoyagerSpacing.xs,
+          ),
+          tileColor: VoyagerListItemSurface.restingColor(context),
+          selectedTileColor: VoyagerListItemSurface.selectedColor(context),
+          selected: isSelected,
+          title: isSelected
+              ? ValueListenableBuilder<String>(
+                  valueListenable: titlePreview,
+                  builder: (context, title, _) => Text(
+                    title.isEmpty ? 'Untitled' : title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  ),
+                )
+              : Text(
+                  entry.title.isEmpty ? 'Untitled' : entry.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: titleStyle,
                 ),
-              )
-            : Text(
-                entry.title.isEmpty ? 'Untitled' : entry.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: titleStyle,
-              ),
-        subtitle: isSelected
-            ? ValueListenableBuilder<String>(
-                valueListenable: bodyPreview,
-                builder: (context, body, _) => subtitle(body),
-              )
-            : subtitle(entry.body),
-        onTap: onTap,
+          subtitle: isSelected
+              ? ValueListenableBuilder<String>(
+                  valueListenable: bodyPreview,
+                  builder: (context, body, _) => subtitle(body),
+                )
+              : subtitle(entry.body),
+          onTap: onTap,
+        ),
       ),
     );
   }

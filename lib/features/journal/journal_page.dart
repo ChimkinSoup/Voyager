@@ -4228,85 +4228,95 @@ class _JournalEntryListTile extends StatelessWidget {
         horizontal: VoyagerSpacing.sm,
         vertical: VoyagerSpacing.xxs,
       ),
-      child: ListTile(
-        dense: true,
-        // Outlines the entry currently open in the editor.
-        shape: VoyagerListItemSurface.focusShape(context, focused: isSelected),
-        visualDensity: const VisualDensity(
-          vertical: VoyagerSpacing.compactListVerticalDensity,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: VoyagerSpacing.md,
-          vertical: VoyagerSpacing.xs,
-        ),
-        tileColor: VoyagerListItemSurface.restingColor(context),
-        selectedTileColor: VoyagerListItemSurface.selectedColor(context),
-        selected: isSelected,
-        title: isSelected
-            ? ValueListenableBuilder<String>(
-                valueListenable: titlePreview,
-                builder: (context, title, _) {
-                  return Text(
-                    title.isEmpty ? 'Untitled' : title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: titleStyle,
-                  );
-                },
-              )
-            : Text(
-                entry.title.isEmpty ? 'Untitled' : entry.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: titleStyle,
-              ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isSelected)
-              ValueListenableBuilder<String>(
-                valueListenable: bodyPreview,
-                builder: (context, body, _) {
-                  final preview = firstSentencePreview(body);
-                  if (preview.isEmpty) return const SizedBox.shrink();
-                  return VoyagerProseText(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: previewStyle,
-                  );
-                },
-              )
-            else ...[
-              Builder(
-                builder: (context) {
-                  final preview = firstSentencePreview(entry.body);
-                  if (preview.isEmpty) return const SizedBox.shrink();
-                  return VoyagerProseText(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: previewStyle,
-                  );
-                },
+      // The tile's fill and outline are ink, painted by the nearest Material.
+      // The one wrapping the list sits outside the rows' repaint boundaries,
+      // so it kept the old outline when the first line of text made a row
+      // taller, cutting through the date row.
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          dense: true,
+          // Outlines the entry currently open in the editor.
+          shape: VoyagerListItemSurface.focusShape(
+            context,
+            focused: isSelected,
+          ),
+          visualDensity: const VisualDensity(
+            vertical: VoyagerSpacing.compactListVerticalDensity,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: VoyagerSpacing.md,
+            vertical: VoyagerSpacing.xs,
+          ),
+          tileColor: VoyagerListItemSurface.restingColor(context),
+          selectedTileColor: VoyagerListItemSurface.selectedColor(context),
+          selected: isSelected,
+          title: isSelected
+              ? ValueListenableBuilder<String>(
+                  valueListenable: titlePreview,
+                  builder: (context, title, _) {
+                    return Text(
+                      title.isEmpty ? 'Untitled' : title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    );
+                  },
+                )
+              : Text(
+                  entry.title.isEmpty ? 'Untitled' : entry.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isSelected)
+                ValueListenableBuilder<String>(
+                  valueListenable: bodyPreview,
+                  builder: (context, body, _) {
+                    final preview = firstSentencePreview(body);
+                    if (preview.isEmpty) return const SizedBox.shrink();
+                    return VoyagerProseText(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: previewStyle,
+                    );
+                  },
+                )
+              else ...[
+                Builder(
+                  builder: (context) {
+                    final preview = firstSentencePreview(entry.body);
+                    if (preview.isEmpty) return const SizedBox.shrink();
+                    return VoyagerProseText(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: previewStyle,
+                    );
+                  },
+                ),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('$dateLabel · $timeLabel', style: dateStyle),
+                  ),
+                  if (hasImages)
+                    Icon(
+                      PhosphorIconsRegular.image,
+                      size: 10,
+                      color: dateStyle?.color,
+                    ),
+                ],
               ),
             ],
-            Row(
-              children: [
-                Expanded(
-                  child: Text('$dateLabel · $timeLabel', style: dateStyle),
-                ),
-                if (hasImages)
-                  Icon(
-                    PhosphorIconsRegular.image,
-                    size: 10,
-                    color: dateStyle?.color,
-                  ),
-              ],
-            ),
-          ],
+          ),
+          onTap: onTap,
         ),
-        onTap: onTap,
       ),
     );
   }

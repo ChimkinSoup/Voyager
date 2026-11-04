@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/photo_series_models.dart';
@@ -25,6 +27,11 @@ const _kMaxAlignRotation = math.pi / 4;
 
 /// How close to level the rotation slider snaps to 0.
 const _kRotationSnap = math.pi / 180;
+
+/// How long flicker shows each photo before switching to the other. Each
+/// switch and back is one flash, so this keeps flicker at 2.5 flashes a
+/// second, under WCAG 2.3.1's limit of three.
+const _kFlickerPhase = Duration(milliseconds: 120);
 
 /// The frame [angle]'s alignment editor draws underneath (PHOTO_SERIES_HLD.md
 /// §10): its chosen reference while that photo is among [frames], else its
@@ -109,6 +116,30 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
   late PhotoCheckInImage _draft = widget.image;
   double _opacity = 0.5;
   bool _saving = false;
+
+  /// While running, swaps between the photo and its reference, each at full
+  /// opacity, so a misalignment shows as movement.
+  Timer? _flicker;
+  bool _flickerShowsPhoto = true;
+
+  void _toggleFlicker() => setState(() {
+    if (_flicker != null) {
+      _flicker!.cancel();
+      _flicker = null;
+      return;
+    }
+    _flickerShowsPhoto = false;
+    _flicker = Timer.periodic(
+      _kFlickerPhase,
+      (_) => setState(() => _flickerShowsPhoto = !_flickerShowsPhoto),
+    );
+  });
+
+  @override
+  void dispose() {
+    _flicker?.cancel();
+    super.dispose();
+  }
 
   /// The frame as last laid out, which gestures move the photo across.
   Size _frame = Size.zero;
@@ -296,6 +327,11 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
             shift: true,
           ): () =>
               _nudge(0, 10),
+          if (reference != null)
+            const SingleActivator(
+              LogicalKeyboardKey.keyF,
+              includeRepeats: false,
+            ): _toggleFlicker,
         },
         child: Focus(
           autofocus: true,
@@ -369,6 +405,8 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                                       Opacity(
                                         opacity: reference == null
                                             ? 1
+                                            : _flicker != null
+                                            ? (_flickerShowsPhoto ? 1 : 0)
                                             : _opacity,
                                         child: _photo(
                                           _draft,
@@ -398,13 +436,37 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                   ),
                   const SizedBox(height: 12),
                   if (reference != null)
-                    _SliderRow(
-                      label: 'Opacity',
-                      value: _opacity,
-                      min: 0,
-                      max: 1,
-                      readout: '${(_opacity * 100).round()}%',
-                      onChanged: (value) => setState(() => _opacity = value),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SliderRow(
+                            label: 'Opacity',
+                            value: _opacity,
+                            min: 0,
+                            max: 1,
+                            readout: '${(_opacity * 100).round()}%',
+                            // Taking the slider back stops flicker.
+                            onChanged: (value) => setState(() {
+                              _flicker?.cancel();
+                              _flicker = null;
+                              _opacity = value;
+                            }),
+                          ),
+                        ),
+                        // Unfocusable, like the sliders, so the arrow keys
+                        // keep nudging after a click here.
+                        ExcludeFocus(
+                          child: IconButton(
+                            isSelected: _flicker != null,
+                            icon: const Icon(PhosphorIconsRegular.swap),
+                            selectedIcon: const Icon(PhosphorIconsFill.stop),
+                            tooltip: _flicker != null
+                                ? 'Stop flicker (F)'
+                                : 'Flicker between photos (F)',
+                            onPressed: _toggleFlicker,
+                          ),
+                        ),
+                      ],
                     ),
                   _SliderRow(
                     label: 'Rotation',
@@ -433,7 +495,8 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                   ),
                   Text(
                     'Drag to move, scroll or pinch to zoom, arrow keys to '
-                    'nudge (Shift for more).',
+                    'nudge (Shift for more)'
+                    '${reference != null ? ', F to flicker' : ''}.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
