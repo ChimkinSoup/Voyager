@@ -83,5 +83,10 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Lets firebase_auth see Custom Tabs for Google sign-in. Without it,
+             sign-in opens in full Chrome and leaves that tab behind. -->
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService"/>
+        </intent>
     </queries>
 </manifest>

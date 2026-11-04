@@ -128,6 +128,7 @@ class _Backend implements GaiaInputBackend {
   /// as SW_RESTORE activates.
   int restoreLag = 0;
   bool restoreActivates = false;
+  void Function()? onRestore;
 
   @override
   List<GaiaListedWindow> listWindows() => listed;
@@ -178,6 +179,7 @@ class _Backend implements GaiaInputBackend {
   @override
   void restore(int hwnd) {
     restored.add(hwnd);
+    onRestore?.call();
     if (restoreActivates) front = hwnd;
     if (restoreLag <= 0) minimizedWindows.remove(hwnd);
   }
@@ -1625,6 +1627,115 @@ void main() {
       expect(result['front'], 'Calculator: "Calculator"');
     });
 
+    test('a file opening as a tab in a window its app had is found as the '
+        'title names it, not at the end of the wait (BUG-353)', () async {
+      final dir = Directory.systemTemp.createTempSync('gaia_open');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File(p.join(dir.path, 'second.txt'))..writeAsStringSync('');
+      const before = (
+        hwnd: 81,
+        pid: 81,
+        exe: 'notepad',
+        app: 'Notepad',
+        title: 'first.txt - Notepad',
+        console: false,
+      );
+      final after = (
+        hwnd: 81,
+        pid: 81,
+        exe: 'notepad',
+        app: 'Notepad',
+        title: 'second.txt - Notepad',
+        console: false,
+      );
+      final control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        openWait: const Duration(seconds: 5),
+      );
+      addTearDown(control.endTurn);
+      backend.handlers['.txt'] = (exe: 'notepad', appId: null);
+      backend.listed = [listed(before)];
+      // The notepad.exe it launched stays running, with no window.
+      backend.launchAnswer = (pid: 82, exe: 'notepad');
+      backend.runningPids.add(82);
+      backend.onLaunch = () {
+        backend.windows[after.hwnd] = after;
+        backend.listed = [listed(after)];
+      };
+      control.session(
+        'chat',
+        auto: true,
+        onUserStop: () {},
+        needsWindow: false,
+      );
+      await control.plan('chat', 'card', 'os_open', {'target': file.path});
+      final watch = Stopwatch()..start();
+      final result = await control.run('card', once: true, check: () async {});
+      expect(result['front'], 'Notepad: "second.txt - Notepad"');
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test("a title only containing the file's name within a word doesn't end "
+        'the wait', () async {
+      final dir = Directory.systemTemp.createTempSync('gaia_open');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File(p.join(dir.path, 'a.txt'))..writeAsStringSync('');
+      const before = (
+        hwnd: 81,
+        pid: 81,
+        exe: 'notepad',
+        app: 'Notepad',
+        title: 'first.txt - Notepad',
+        console: false,
+      );
+      final after = (
+        hwnd: 81,
+        pid: 81,
+        exe: 'notepad',
+        app: 'Notepad',
+        title: 'data.txt - Notepad',
+        console: false,
+      );
+      final control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        openWait: const Duration(milliseconds: 400),
+      );
+      addTearDown(control.endTurn);
+      backend.handlers['.txt'] = (exe: 'notepad', appId: null);
+      backend.listed = [listed(before)];
+      backend.launchAnswer = (pid: 82, exe: 'notepad');
+      backend.runningPids.add(82);
+      backend.onLaunch = () {
+        backend.windows[after.hwnd] = after;
+        backend.listed = [listed(after)];
+      };
+      control.session(
+        'chat',
+        auto: true,
+        onUserStop: () {},
+        needsWindow: false,
+      );
+      await control.plan('chat', 'card', 'os_open', {'target': file.path});
+      final watch = Stopwatch()..start();
+      await control.run('card', once: true, check: () async {});
+      expect(
+        watch.elapsed,
+        greaterThanOrEqualTo(const Duration(milliseconds: 400)),
+      );
+    });
+
     test('a launch with no window it can tell says so', () async {
       backend.listed = [listed(_target)];
       final result = await act('os_open', {'target': 'Calculator'});
@@ -1746,6 +1857,43 @@ void main() {
         ..minimizedWindows.add(calc.hwnd)
         ..restoreActivates = true
         ..restoreLag = 5;
+      var userStopped = false;
+      control.session(
+        'chat',
+        auto: true,
+        onUserStop: () => userStopped = true,
+        needsWindow: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await control.plan('chat', 'card', 'os_focus', {'window': 'Calculator'});
+      final result = await control.run('card', once: true, check: () async {});
+      expect(result['stopped'], isNull);
+      expect(userStopped, isFalse);
+      expect(backend.front, calc.hwnd);
+    });
+
+    test('in Auto, os_focus on a window that comes in front only once '
+        'past adoptWithin, as a Store app can, is not the user switching '
+        '(BUG-351)', () async {
+      final control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        adoptWithin: const Duration(milliseconds: 50),
+      );
+      addTearDown(control.endTurn);
+      backend.listed = [listed(_target), listed(calc, minimized: true)];
+      backend
+        ..minimizedWindows.add(calc.hwnd)
+        ..restoreLag = 15;
+      backend.onRestore = () => Future<void>.delayed(
+        const Duration(milliseconds: 150),
+        () => backend.front = calc.hwnd,
+      );
       var userStopped = false;
       control.session(
         'chat',

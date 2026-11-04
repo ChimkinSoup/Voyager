@@ -55,6 +55,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
 import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
@@ -144,7 +145,15 @@ class CodexAppServerClient {
   /// item.
   final _changes = <String, List<Object?>>{};
 
+  /// Shell commands running, by thread: their item ids.
+  final _commands = <String, Set<String>>{};
+
   bool get busy => _turns.isNotEmpty;
+
+  /// Whether [threadId]'s turn has a shell command running. Codex's interrupt
+  /// leaves it going (BUG-350), so a stop ends it.
+  bool runningCommand(String threadId) =>
+      _commands[threadId]?.isNotEmpty ?? false;
 
   Future<void> initialize() async {
     await _request('initialize', {
@@ -229,6 +238,7 @@ class CodexAppServerClient {
 
   /// Interrupts [threadId]'s turn, which fails at once.
   void stop(String threadId) {
+    _commands.remove(threadId);
     final turn = _turns.remove(threadId);
     if (turn == null) return;
     _interrupt(threadId, turn);
@@ -326,6 +336,10 @@ class CodexAppServerClient {
               'changes',
               line,
             );
+          case 'commandExecution':
+            _commands
+                .putIfAbsent(threadId, () => {})
+                .add(_string(item, 'id', line));
         }
       case 'item/agentMessage/delta':
         if (turn == null) return;
@@ -337,6 +351,7 @@ class CodexAppServerClient {
         final item = _map(params, 'item', line);
         final type = _string(item, 'type', line);
         _changes.remove(item['id']);
+        _commands[threadId]?.remove(item['id']);
         if (turn == null) return;
         if (type == 'agentMessage') {
           turn.lastText = _string(item, 'text', line).trimRight();
@@ -362,6 +377,7 @@ class CodexAppServerClient {
       case 'turn/completed':
         final ended = _map(params, 'turn', line);
         final status = _string(ended, 'status', line);
+        _commands.remove(threadId);
         if (turn == null) return;
         _turns.remove(threadId);
         switch (status) {
@@ -574,6 +590,10 @@ class CodexAppServerRunner implements GaiaAgentRunner {
 
   /// Chats stopped before their thread was known.
   final _stopped = <String>{};
+
+  /// The server's processes as each running chat's turn began: any started
+  /// since may be its commands.
+  final _treeBefore = <String, Set<int>>{};
   Timer? _idle;
   String? _instructions;
 
@@ -646,6 +666,9 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         onEvent: onEvent,
         instructions: sessionInstructions,
         onThread: (threadId) {
+          // Once the thread is up, so what Codex starts with it, such as MCP
+          // servers, is never taken for a command.
+          _treeBefore[chatId] = _tree(process.pid, gaiaProcessParents());
           _threads[chatId] = threadId;
           if (_stopped.remove(chatId)) process.client.stop(threadId);
         },
@@ -655,6 +678,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
       _threads.remove(chatId);
       _sending.remove(chatId);
       _stopped.remove(chatId);
+      _treeBefore.remove(chatId);
       // Not the client's turns: a send still starting its thread has none.
       if (_sending.isEmpty && _process == process) {
         _idle?.cancel();
@@ -798,12 +822,67 @@ class CodexAppServerRunner implements GaiaAgentRunner {
 
   @override
   Future<void> stop(String chatId) async {
+    var commands = const <int>[];
     if (_threads.remove(chatId) case final threadId?) {
-      _process?.client.stop(threadId);
+      final process = _process;
+      if (process != null && process.client.runningCommand(threadId)) {
+        commands = _commandsOf(chatId, process);
+      }
+      process?.client.stop(threadId);
     } else if (_sending.contains(chatId)) {
       _stopped.add(chatId);
     }
-    await fallback.stop(chatId);
+    await Future.wait([
+      for (final pid in commands)
+        Process.run('taskkill', ['/t', '/f', '/pid', '$pid']).then((result) {
+          if (result.exitCode != 0) {
+            debugPrint(
+              '[gaia] Codex command $pid not ended: '
+              '${'${result.stderr}'.trim()}',
+            );
+          }
+        }),
+      fallback.stop(chatId),
+    ]);
+  }
+
+  /// The processes [chatId]'s commands started, each the root of its own
+  /// tree: under the server, started since its turn began. The server serves
+  /// every chat on this account, so one that may be another chat's running
+  /// command, started since that chat's turn began too, is left.
+  List<int> _commandsOf(String chatId, _AppServerProcess process) {
+    final before = _treeBefore[chatId];
+    if (before == null) return const [];
+    final others = [
+      for (final MapEntry(key: other, value: tree) in _treeBefore.entries)
+        if (other != chatId)
+          if (_threads[other] case final thread?)
+            if (process.client.runningCommand(thread)) tree,
+    ];
+    final parents = gaiaProcessParents();
+    return [
+      for (final pid in _tree(process.pid, parents))
+        if (!before.contains(pid) &&
+            before.contains(parents[pid]) &&
+            others.every((tree) => tree.contains(pid)))
+          pid,
+    ];
+  }
+
+  /// [root] and every process under it.
+  static Set<int> _tree(int root, Map<int, int> parents) {
+    final children = <int, List<int>>{};
+    for (final MapEntry(key: child, value: parent) in parents.entries) {
+      children.putIfAbsent(parent, () => []).add(child);
+    }
+    final tree = {root};
+    final queue = [root];
+    while (queue.isNotEmpty) {
+      for (final child in children[queue.removeLast()] ?? const <int>[]) {
+        if (tree.add(child)) queue.add(child);
+      }
+    }
+    return tree;
   }
 
   @override
@@ -1000,6 +1079,8 @@ class _AppServerProcess {
 
   final CodexAppServerClient client;
   late final CodexProcess _codex;
+
+  int get pid => _codex.pid;
 
   /// Also once it's being killed: no new turn should go to it.
   bool get exited => _codex.exited;

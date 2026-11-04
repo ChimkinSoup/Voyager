@@ -1,8 +1,8 @@
 # Gaia — Autonomous PC Control (HLD)
 
 Status: Phases 1 and 2 built and checked live, 2026-11-03 (§11.1, §11.2). Phases 3 and 4 built
-2026-11-04 and checked live the same day, with four bugs open (BUG-351 to BUG-354) and the phone
-still to do (§11.4, §11.5). Phase 5 is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
+2026-11-04 and checked live the same day, the phone included, with five bugs open (BUG-351 to
+BUG-354, BUG-356) (§11.4, §11.5). Phase 5 is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
 
@@ -626,8 +626,19 @@ real Haiku and Codex Sol turns, nobody at the PC):
   this machine's Claude Code user settings have `defaultMode: auto`, whose classifier allowed it.
   Such a command raises no card in Ask either.
 
-**Not checked:** a phone prompt running in Auto, and Stop and Abort from the phone. Not attempted:
-the emulator's sign-in failed in the 2026-11-02 pass (`qa/GAIA_REMAINING_TESTS.md`).
+**Checked from the phone** (2026-11-04, later the same day: a fresh debug build of the working
+tree on `gaiaqa`, qa-128, Haiku; the Android emulator on the 16:51 APK, signed in to qa-128 and
+paired with `gaiaqa`, codes matching), all in the Auto chat from the pass above:
+- A phone prompt runs in Auto: each reply had only the activity card, with no approval card.
+  "Open Calculator, then press 1 to 9 with `os_click`" opened Calculator and clicked in turn. The
+  first prompt's `os_open` of Character Map failed before launch: BUG-356.
+- Stop from the phone, mid-run: the reply was cancelled 2 s after the tap, with 7 of the 9
+  clicks done, and Calculator read 1,234,567, so nothing ran after it.
+- Abort from the phone's Status tab, mid-run: the reply ended `aborted`, the companion was killed
+  and relaunched, the desktop showed "Aborted", and the last click (1) never ran (98,765,432).
+  It took about 11 s from the tap, against Stop's 2 s, so some clicks may have landed in that
+  time; not looked into. Rearm from the phone cleared it.
+- On the way, due reminder stickies showed on the login page of a signed-out phone: BUG-355.
 
 ### 11.5 Phase 4 results (2026-11-04)
 

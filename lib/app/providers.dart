@@ -565,6 +565,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 /// the database through it, let alone wipes one.
 final accountAdmissionProvider = Provider<AccountAdmission?>((ref) => null);
 
+/// Whether anyone is signed in, for what holds back while nobody is, such as
+/// the reminder engine (BUG-355). True unless overridden: only the app
+/// overrides it from [authNotifierProvider], so a test reading the engine
+/// never reaches Firebase through it.
+final signedInProvider = Provider<bool>((ref) => true);
+
 final authNotifierProvider = ChangeNotifierProvider<AuthNotifier>((ref) {
   return AuthNotifier(
     ref.watch(authRepositoryProvider),

@@ -12,7 +12,20 @@
           "package_name": "com.example.voyager"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "74426781900-jf2bs63idjrfsh4cve1thiii4n9lese8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.voyager",
+            "certificate_hash": "7dbf41d415bcd6c79122913cfda1be6270d8133a"
+          }
+        },
+        {
+          "client_id": "74426781900-4vjcp49digr6bjitfjjnkqu35grauug2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDR_fRIvxgs2baeNqBOmJIWiZALM-rkuo8"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "74426781900-4vjcp49digr6bjitfjjnkqu35grauug2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

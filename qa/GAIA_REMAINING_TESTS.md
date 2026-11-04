@@ -24,7 +24,7 @@ Run on `gaiaqa` (qa-128) from a fresh debug build of the working tree. A ticked 
 **New bugs from that pass:** BUG-344 to BUG-349, all since fixed. Three were Major (security): BUG-344, BUG-345 and BUG-347.
 
 **Not run, and why:**
-- **Phone (D, F3, the phone items in A, B, E3, E5 and H):** the app won't sign in on the emulator. It says "There was an error while trying to get your package certificate hash", on a fresh install and after a relaunch. The APK was built on 2026-11-01 at 23:55. Sign-in last worked there on 2026-11-01. Whether this is the emulator or the app isn't known.
+- **Phone (D, F3, the phone items in A, B, E3, E5 and H):** not run, because sign-in on the emulator failed with "There was an error while trying to get your package certificate hash". No longer blocked. On 2026-11-04 that error reproduced only on Continue with Google (`INVALID_CERT_HASH`), because the Firebase Android app had no SHA certificates. Email sign-in worked on the same build, so use a qa account. This PC's debug SHA-1 is now registered, which clears that error. Google sign-in then failed on a deleted OAuth client (`deleted_client`, `74426781900-h9kkkd0l...`); Juno set a new web client (`74426781900-4vjcp49d...`) in Firebase, and a full Google sign-in on the emulator then succeeded. Whether the 2026-11-02 failure was on the Google path wasn't confirmed.
 - **E1 edge cases:** declining UAC, the three approval cards, and a missing `[windows] sandbox`.
 - **E2:** typing into Notes on a fresh browser, as opposed to an awake page.
 - **E3:** a multi-step Run all over 30 s.

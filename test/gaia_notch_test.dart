@@ -619,6 +619,27 @@ void main() {
       expect(find.byType(GaiaMenu), findsNothing);
     });
 
+    testWidgets('its labels are plain, not underlined (BUG-354)', (
+      tester,
+    ) async {
+      await pumpMenu(tester, child: area());
+      await tester.tap(
+        find.byKey(const Key('area')),
+        buttons: kSecondaryButton,
+      );
+      await settle(tester);
+      final labels = tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byType(GaiaMenu),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(labels, isNotEmpty);
+      for (final label in labels) {
+        expect(label.text.style?.decoration, isNot(TextDecoration.underline));
+      }
+    });
+
     testWidgets('Esc closes it; the arrows and Enter pick', (tester) async {
       await pumpMenu(tester, child: area());
       await tester.tap(

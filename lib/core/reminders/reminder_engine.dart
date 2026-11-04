@@ -599,18 +599,29 @@ final reminderOsNotifierProvider = Provider<ReminderOsNotifier>(
 /// already invalidates.
 ///
 /// Inert until the device id is known: an evaluation under the placeholder id
-/// would log history, and raise alerts, as a device that does not exist.
+/// would log history, and raise alerts, as a device that does not exist. And
+/// while nobody is signed in: the store keeps a signed-out account's
+/// reminders for its return, which aren't to be shown or answered meanwhile
+/// (BUG-355).
 final reminderEngineProvider = ChangeNotifierProvider<ReminderEngine>((ref) {
   final deviceId = ref.watch(deviceIdProvider);
+  final signedIn = ref.watch(signedInProvider);
+  final os = ref.watch(reminderOsNotifierProvider);
   final engine = ReminderEngine(
     repository: ref.watch(reminderRepositoryProvider),
-    os: ref.watch(reminderOsNotifierProvider),
+    os: os,
     deviceId: deviceId,
     onStatesWritten: () => ref.invalidate(reminderDeliveryStatesProvider),
     onRulesWritten: () => ref.invalidate(scheduledReminderRulesProvider),
     onLogWritten: (key) => ref.invalidate(reminderLogsProvider(key)),
   );
   if (deviceId == kUnresolvedDeviceId) return engine;
+  if (!signedIn) {
+    // Alarms already handed to the OS fire with the app killed; take the
+    // signed-out account's back. The next signed-in engine reschedules.
+    unawaited(os.schedule(const []));
+    return engine;
+  }
 
   ref.listen(scheduledReminderRulesProvider, (_, next) {
     engine.updateInputs(rules: next.valueOrNull);

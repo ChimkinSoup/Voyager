@@ -108,6 +108,11 @@ Future<void> main([List<String> args = const []]) async {
                     confirmDiscardUnsynced(ref, unsynced),
               ),
         ),
+        signedInProvider.overrideWith(
+          (ref) => ref.watch(
+            authNotifierProvider.select((auth) => auth.isAuthenticated),
+          ),
+        ),
       ],
       child: const VoyagerBootstrap(),
     ),

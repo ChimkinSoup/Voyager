@@ -180,16 +180,29 @@ class _GaiaMenuState extends State<GaiaMenu>
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top + _menuMargin;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(_menuMargin, top, _menuMargin, _menuMargin),
-      child: CustomSingleChildLayout(
-        delegate: DesktopTextSelectionToolbarLayoutDelegate(
-          anchor: widget.anchor - Offset(_menuMargin, top),
+    // In the overlay, with nothing giving its text a style: without this,
+    // Flutter's fallback underlines it in yellow (BUG-354).
+    return Material(
+      type: MaterialType.transparency,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          _menuMargin,
+          top,
+          _menuMargin,
+          _menuMargin,
         ),
-        child: TapRegion(
-          onTapOutside: (_) => _close(),
-          // Out of the corner at the cursor.
-          child: _MenuShell(growFrom: Alignment.topLeft, child: _rows(context)),
+        child: CustomSingleChildLayout(
+          delegate: DesktopTextSelectionToolbarLayoutDelegate(
+            anchor: widget.anchor - Offset(_menuMargin, top),
+          ),
+          child: TapRegion(
+            onTapOutside: (_) => _close(),
+            // Out of the corner at the cursor.
+            child: _MenuShell(
+              growFrom: Alignment.topLeft,
+              child: _rows(context),
+            ),
+          ),
         ),
       ),
     );

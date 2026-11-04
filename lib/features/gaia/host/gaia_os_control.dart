@@ -196,7 +196,7 @@ class GaiaOsControl {
   static const _reask = Duration(milliseconds: 250);
   static const _maxSteps = 20;
   static const _maxText = 2000;
-  static const _typeChunk = 4;
+  static const _charPause = Duration(milliseconds: 20);
 
   /// One notch of the wheel: `WHEEL_DELTA`, which the win32 package has no name
   /// for.
@@ -1033,21 +1033,27 @@ class GaiaOsControl {
     } on GaiaReadException catch (error) {
       throw _Stopped(error.message);
     }
+    // A window that came up on its own may already be adopted, and flashed.
+    final adopted = session?.adopted != null && session?.pin == window;
     if (_backend.minimized(window.hwnd)) {
-      // Restoring may bring it in front, which is Gaia's doing (§5.2).
+      // Restoring may bring it in front, which is Gaia's doing (§5.2): pinned
+      // first, as a Store app can take longer than [_adoptWithin] to come
+      // up (BUG-351).
       session?.lastStep = DateTime.now();
+      final pinned = session?.pin;
+      session?.pin = window;
       _backend.restore(window.hwnd);
       final until = DateTime.now().add(_activateWait);
       while (_backend.minimized(window.hwnd)) {
         if (DateTime.now().isAfter(until)) {
+          // Never came up: not the pin.
+          session?.pin = pinned;
           throw _Stopped("${window.app} wouldn't restore from minimized.");
         }
         await Future<void>.delayed(const Duration(milliseconds: 20));
         active.throwIfStopped();
       }
     }
-    // A window that came up on its own may already be adopted, and flashed.
-    final adopted = session?.adopted != null && session?.pin == window;
     if (session != null) {
       session
         ..pin = window
@@ -1068,7 +1074,8 @@ class GaiaOsControl {
   /// to be its own counts: from the process launched or one it started, from
   /// the exe that opens it, or carrying its app ID. Any other, opening by
   /// chance meanwhile, is passed over. A new one wins, the launched process's
-  /// first; else one that came in front; else, once the launched process
+  /// first; else, for a file, one whose title changed to name it; else one
+  /// that came in front; else, once the launched process
   /// exits (a single-instance app handing over) or the wait is up, one it
   /// already had.
   Future<GaiaForegroundWindow> _launch(
@@ -1086,7 +1093,21 @@ class GaiaOsControl {
       for (final listed in _backend.listWindows())
         if (listed.window.pid != companionPid()) listed,
     ];
-    final before = {for (final l in listed()) l.window.hwnd};
+    final before = {for (final l in listed()) l.window.hwnd: l.window.title};
+    // A file may open as a tab in a window its app already had, which then
+    // names it (BUG-353).
+    final file = step.file!;
+    // As a whole word: `a.txt` isn't named by "data.txt - Notepad".
+    final fileName =
+        p.windows.isAbsolute(file) && !file.toLowerCase().endsWith('.exe')
+        ? RegExp(
+            '(^|[^\\p{L}\\p{N}])'
+            '${RegExp.escape(p.windows.basenameWithoutExtension(file))}'
+            '(\$|[^\\p{L}\\p{N}])',
+            caseSensitive: false,
+            unicode: true,
+          )
+        : null;
     final front = _backend.foreground();
     // What it opens, coming up in front, is Gaia's doing (§5.2).
     session?.lastStep = DateTime.now();
@@ -1110,7 +1131,9 @@ class GaiaOsControl {
       final now = listed();
       final fresh = [
         for (final l in now)
-          if (!before.contains(l.window.hwnd) && !l.minimized && ours(l.window))
+          if (!before.containsKey(l.window.hwnd) &&
+              !l.minimized &&
+              ours(l.window))
             l.window,
       ];
       if (fresh.isNotEmpty) {
@@ -1118,6 +1141,17 @@ class GaiaOsControl {
           (window) => window.pid == launched.pid,
           orElse: () => fresh.first,
         );
+      }
+      if (fileName != null) {
+        for (final l in now) {
+          final was = before[l.window.hwnd];
+          if (was != null &&
+              l.window.title != was &&
+              fileName.hasMatch(l.window.title) &&
+              ours(l.window)) {
+            return l.window;
+          }
+        }
       }
       final inFront = _backend.foreground();
       if (inFront != front) {
@@ -1326,8 +1360,8 @@ class GaiaOsControl {
     ], _active!);
   }
 
-  /// A few characters at a time, looking up between them so that Abort, Esc or
-  /// a change of window lands mid-text. Tab and Enter can move the focus, so
+  /// A character at a time, looking up between them so that Abort, Esc or a
+  /// change of window lands mid-text. Tab and Enter can move the focus, so
   /// what has it is checked again before the text goes on (§15.6).
   Future<void> _type(
     GaiaForegroundWindow window,
@@ -1335,25 +1369,21 @@ class GaiaOsControl {
     _Active active,
   ) async {
     final taps = gaiaTextTaps(text);
-    var i = 0;
-    while (i < taps.length) {
+    for (final (i, tap) in taps.indexed) {
       await _waitForModifiers(active);
       active.throwIfStopped();
       _inFront(window);
-      final chunk = taps.skip(i).take(_typeChunk).toList();
-      final moves = chunk.indexWhere((tap) => tap.first is GaiaKeyEvent);
-      if (moves >= 0) chunk.length = moves + 1;
-      _send([...chunk.expand((tap) => tap)], active);
-      i += chunk.length;
-      if (moves >= 0 && i < taps.length) {
+      _send(tap, active);
+      if (tap.first is GaiaKeyEvent && i < taps.length - 1) {
         await Future<void>.delayed(_settle);
         await _checkFocus(window);
       } else {
-        // In a session, far enough apart that the user's input between them
-        // shows in [GaiaInputBackend.lastInput].
-        await Future<void>.delayed(
-          Duration(milliseconds: _session == null ? 1 : 20),
-        );
+        // Each its own send, this far apart: Windows 11 Notepad takes a
+        // packet's character as it reads it, so packets it hadn't yet read
+        // came out as a later one, and closer than about 16 ms a character
+        // was dropped (BUG-352). Also far enough apart that the user's input
+        // between them shows in [GaiaInputBackend.lastInput].
+        await Future<void>.delayed(_charPause);
       }
     }
   }
@@ -1390,9 +1420,7 @@ class GaiaOsControl {
     if (step.action != _Action.type || text == null) return Duration.zero;
     // Enter and Tab each wait to settle.
     final breaks = RegExp('[\n\t]').allMatches(text).length;
-    final chunks = (text.length / _typeChunk).ceil();
-    return Duration(milliseconds: chunks * (_session == null ? 2 : 20)) +
-        _settle * (breaks + (step.aimed ? 1 : 0));
+    return _charPause * text.length + _settle * (breaks + (step.aimed ? 1 : 0));
   }
 
   /// Nothing Gaia pressed stays down (§15.7).
@@ -2158,8 +2186,9 @@ class _Win32InputBackend implements GaiaInputBackend {
     // The shell asks to elevate an exe that needs administrator (UAC);
     // CreateProcess fails instead.
     final exe = file.toLowerCase().endsWith('.exe');
+    final path = exe ? _startAppExe(file) : file;
     final launched = await Isolate.run(
-      () => exe ? _createProcess(file) : _shellOpen(file),
+      () => exe ? _createProcess(path) : _shellOpen(path),
     );
     // The error code doesn't survive the FFI call, so needing administrator
     // can't be told from other failures.
@@ -2176,6 +2205,38 @@ class _Win32InputBackend implements GaiaInputBackend {
       );
     }
     return (pid: launched.pid, exe: launched.exe);
+  }
+
+  /// The exe's own path for a Start app whose ID is its path, as
+  /// `shell:AppsFolder\{known folder}\charmap.exe`, which [_createProcess]
+  /// can't open (BUG-356); [file] itself otherwise.
+  static String _startAppExe(String file) {
+    const prefix = r'shell:AppsFolder\';
+    if (!file.toLowerCase().startsWith(prefix.toLowerCase())) return file;
+    var path = file.substring(prefix.length);
+    if (RegExp(r'^\{[0-9a-fA-F-]{36}\}\\').hasMatch(path)) {
+      final folder = _knownFolder(path.substring(0, 38));
+      if (folder == null) return file;
+      path = p.windows.join(folder, path.substring(39));
+    }
+    return p.windows.isAbsolute(path) ? path : file;
+  }
+
+  /// The path of the known folder [id], such as `{1AC14E77-…}` for System32.
+  static String? _knownFolder(String id) {
+    final guid = GUIDFromString(id);
+    final path = calloc<Pointer<Utf16>>();
+    try {
+      if (FAILED(SHGetKnownFolderPath(guid, 0, 0, path))) return null;
+      try {
+        return path.value.toDartString();
+      } finally {
+        CoTaskMemFree(path.value);
+      }
+    } finally {
+      free(guid);
+      free(path);
+    }
   }
 
   /// Starts exe [file] in its own folder, as a double-click would, but never
