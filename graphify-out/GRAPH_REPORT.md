@@ -1,7 +1,7 @@
 # Graph Report - Voyager  (2026-11-03)
 
 ## Corpus Check
-- 1038 files · ~442,813,950 words
+- 1038 files · ~442,814,336 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `abc75be1`
+- Built from commit: `08a84589`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -3544,7 +3544,7 @@ Cohesion: 0.67
 Nodes (3): GaiaOrbMotion, _Orb, _StudyMotion
 
 ## Knowledge Gaps
-- **24856 isolated node(s):** `Direction contract`, `Implemented extension`, `Verification and disposition`, `1. Summary`, `2. Goals and non-goals` (+24851 more)
+- **24856 isolated node(s):** `1. Summary`, `2. Goals and non-goals`, `3. What the code does today`, `4. The hand toggle`, `5.1 Control session` (+24851 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **93 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -3553,7 +3553,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `_State` connect `data_export_service.dart` to `analytics_page.dart`, `journal_page.dart`, `notification_inbox_popover.dart`, `todo_edit_panel.dart`, `calendar_week_timeline.dart`, `ConsumerState`, `package:voyager/core/utils/ids.dart`, `life_tracker_page.dart`, `petal_field.dart`, `todoSortDebugLoggerProvider`, `vim_text_overlay.dart`, `vim_text_scope.dart`, `rankings_page.dart`, `finance_goal_modal.dart`, `queued,`, `leetcode_code_field.dart`, `rankings_score_input.dart`, `voyager_spinner_wheel.dart`, `int get`, `context_menu.dart`, `study_cram_page.dart`, `leetcode_scratch_pad.dart`, `workout_history.dart`, `settings_page.dart`, `caps_lock_caret_indicator.dart`, `geometric_texture.dart`, `study_page.dart`, `PhotoViewerEntry`, `contextual_popover.dart`, `bool get`, `tag_highlighted_text_field.dart`, `LiveSyncController`, `glass_button.dart`, `bucket_list_popup.dart`, `dictionary_dialog.dart`, `todo_sort_debug_logger.dart`, `leetcode_activity_calendar.dart`, `settings_color_palette_section.dart`, `rankings_tags_field.dart`, `time_selector_popovers.dart`, `media_lightbox.dart`, `Timer?`, `datetime_picker_dialog.dart`, `jobs_edit_panel.dart`, `confetti.dart`, `folder_backup_list_dialog.dart`, `package:voyager/core/soft_delete/soft_delete_toast.dart`, `TextEditingController?`, `_VoyagerAppState`, `text_field_context_menu.dart`, `package:flutter/material.dart`, `dart:io`, `lazyLoadProvider`, `study_import_text_modal.dart`, `journal_floater.dart`, `_openInAnalytics`, `Widget`, `voyager_time_picker_spinner.dart`, `RankingsTileLayerState`, `jobs_company_field.dart`, `caps_lock_indicator_scope.dart`, `shell_keyboard_shortcuts.dart`, `journal_debug_logger.dart`, `package:voyager/domain/models/calendar_models.dart`, `leetcode_comment_stripper.dart`, `VoidCallback`, `edit_side_panel_host.dart`, `_SliverRevealState`, `_DictionaryDialogState`, `transactionsProvider`, `shell_page_transition.dart`, `surface_grain.dart`, `reveal_request.dart`, `backup_list_dialog.dart`, `voyager_crossfade.dart`, `pull_progress_toast.dart`, `dream_models.dart`, `cloud_function_weather_client.dart`, `paper_texture.dart`, `stat_leader_label.dart`, `folder_backup_source_dialog.dart`, `workout_segment_fields.dart`, `error_logger.dart`, `study_linked_deck.dart`, `shell_page_storage_keys.dart`, `trash_labels.dart`, `study_debug_generator.dart`, `sync_conflict.dart`, `stat_number_format.dart`, `jobs_track_draft.dart`, `GaiaAction`, `_ViewingEntry`, `_CalendarMorphWarmupState`, `_MonthWeekMorphLayer`, `_MorphAnimationLayer`, `journal_constants.dart`, `calendar_days.dart`, `package:voyager/core/notifications/notification_history.dart`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **What connects `Direction contract`, `Implemented extension`, `Verification and disposition` to the rest of the system?**
+- **What connects `1. Summary`, `2. Goals and non-goals`, `3. What the code does today` to the rest of the system?**
   _24910 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `app_database.dart` be split into smaller, more focused modules?**
   _Cohesion score 0.003738317757009346 - nodes in this community are weakly interconnected._

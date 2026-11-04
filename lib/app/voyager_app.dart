@@ -504,7 +504,10 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       // assertion on Arrow Up/Down — see [SingleLineVerticalCaretAction].
       actions: {
         ...WidgetsApp.defaultActions,
-        DirectionalCaretMovementIntent: SingleLineVerticalCaretAction(),
+        ExtendSelectionVerticallyToAdjacentLineIntent:
+            SingleLineVerticalCaretAction(),
+        ExtendSelectionVerticallyToAdjacentPageIntent:
+            SingleLineVerticalCaretAction(),
       },
       builder: (context, child) {
         // Above the Navigator, so every route's snackbars go through it and

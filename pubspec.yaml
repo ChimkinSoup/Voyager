@@ -195,6 +195,14 @@ dependency_overrides:
     path: third_party/firebase_auth-6.5.3
   firebase_storage:
     path: third_party/firebase_storage-13.4.3
+  # Patched: the Windows build links Firebase C++ SDK 13.13.1, not 13.9.0.
+  # 13.13.1 drops the compromised eMudhra roots from the trust store
+  # Firestore embeds (see VOYAGER PATCH in
+  # third_party/firebase_core-4.12.0/windows/CMakeLists.txt). The upstream fix, firebase_core 4.15.2, needs firebase_core_platform_interface
+  # 8.x, which the forks above and firebase_messaging 16.4.1 can't take yet.
+  # Drop this override when they move to 4.15.2 or later.
+  firebase_core:
+    path: third_party/firebase_core-4.12.0
   flutter_map:
     path: third_party/flutter_map-8.3.2
   flutter_map_marker_cluster:

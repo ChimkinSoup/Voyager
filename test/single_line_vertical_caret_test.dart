@@ -24,7 +24,10 @@ void main() {
         actions: guarded
             ? {
                 ...WidgetsApp.defaultActions,
-                DirectionalCaretMovementIntent: SingleLineVerticalCaretAction(),
+                ExtendSelectionVerticallyToAdjacentLineIntent:
+                    SingleLineVerticalCaretAction(),
+                ExtendSelectionVerticallyToAdjacentPageIntent:
+                    SingleLineVerticalCaretAction(),
               }
             : null,
         home: Scaffold(

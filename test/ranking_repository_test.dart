@@ -279,15 +279,23 @@ void main() {
       final parent = await makeParent(category.id);
       await makeChild(parent.id);
       await repository.softDeleteCategory(category.id);
+      // Soft delete stamps the wall clock, so the window runs from that stamp.
+      final deletedAt = (await repository.getAllCategories(
+        includeDeleted: true,
+      )).single.deletedAt!;
 
       // Well inside the window: nothing goes yet.
-      await repository.purgeExpiredDeleted(now.add(const Duration(days: 5)));
+      await repository.purgeExpiredDeleted(
+        deletedAt.add(const Duration(days: 5)),
+      );
       expect(
         await repository.getAllCategories(includeDeleted: true),
         hasLength(1),
       );
 
-      await repository.purgeExpiredDeleted(now.add(const Duration(days: 120)));
+      await repository.purgeExpiredDeleted(
+        deletedAt.add(const Duration(days: 120)),
+      );
       expect(await repository.getAllCategories(includeDeleted: true), isEmpty);
       expect(await repository.getAllParents(includeDeleted: true), isEmpty);
       expect(await repository.getAllChildren(includeDeleted: true), isEmpty);

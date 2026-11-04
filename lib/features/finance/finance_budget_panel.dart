@@ -191,25 +191,34 @@ class _BudgetRow extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: tagColor.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(
-                        VoyagerTheme.fieldRadius,
-                      ),
-                    ),
-                    child: Text(
-                      '#${budget.tag}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: tagColor,
+                  // Shrinks and ellipsizes a long tag so the amounts stay
+                  // on a narrow sidebar.
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: tagColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(
+                            VoyagerTheme.fieldRadius,
+                          ),
+                        ),
+                        child: Text(
+                          '#${budget.tag}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: tagColor,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   Text(
                     '${formatCents(spentCents)} / ${formatCents(budget.limitCents)}',
                     style: theme.textTheme.labelMedium?.copyWith(
@@ -227,34 +236,38 @@ class _BudgetRow extends ConsumerWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Text.rich(
-                    TextSpan(
-                      text: switch (status) {
-                        BudgetStatus.onTrack => 'On track',
-                        BudgetStatus.aheadOfPace => 'Ahead of pace',
-                        BudgetStatus.overBudget => 'Over budget',
-                      },
-                      children: [
-                        if (paceDeltaCents != 0)
-                          TextSpan(
-                            text: paceDeltaCents > 0
-                                ? ' (${formatCents(paceDeltaCents)} over pace)'
-                                : ' (${formatCents(-paceDeltaCents)} under pace)',
-                            style: TextStyle(
-                              color: paceDeltaCents > 0
-                                  ? theme.colorScheme.error
-                                  : theme.colorScheme.primary,
-                              fontWeight: FontWeight.w500,
+                  // Takes what's left of the row and wraps, so the pace
+                  // delta never pushes the remainder off a narrow sidebar.
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        text: switch (status) {
+                          BudgetStatus.onTrack => 'On track',
+                          BudgetStatus.aheadOfPace => 'Ahead of pace',
+                          BudgetStatus.overBudget => 'Over budget',
+                        },
+                        children: [
+                          if (paceDeltaCents != 0)
+                            TextSpan(
+                              text: paceDeltaCents > 0
+                                  ? ' (${formatCents(paceDeltaCents)} over pace)'
+                                  : ' (${formatCents(-paceDeltaCents)} under pace)',
+                              style: TextStyle(
+                                color: paceDeltaCents > 0
+                                    ? theme.colorScheme.error
+                                    : theme.colorScheme.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
+                        ],
+                      ),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   Text(
                     remaining >= 0
                         ? '${formatCents(remaining)} left'

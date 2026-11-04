@@ -12,10 +12,12 @@ import 'package:flutter/widgets.dart';
 /// exactly that, extending the selection when Shift is held. Multi-line
 /// fields are handed back to Flutter's own action.
 ///
-/// Keyed on the base type: EditableText registers its line and page intents
-/// as one overridable `_UpdateTextSelectionVerticallyAction<
-/// DirectionalCaretMovementIntent>`, and an override is looked up by that
-/// type argument, not by the intent's own type.
+/// Register it under both intents, line and page: since Flutter 3.47
+/// `invoke`, `isEnabled` and `consumesKey` look an override up by the
+/// intent's own type, not by the type argument of EditableText's shared
+/// `_UpdateTextSelectionVerticallyAction<DirectionalCaretMovementIntent>`.
+/// (`isActionEnabled` still keys on that type argument, so it finds no
+/// override; harmless, as neither action overrides it.)
 class SingleLineVerticalCaretAction
     extends ContextAction<DirectionalCaretMovementIntent> {
   /// The focused single-line field the key came from, or null when the key
