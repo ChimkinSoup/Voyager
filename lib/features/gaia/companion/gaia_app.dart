@@ -3363,25 +3363,35 @@ class _ComposerStatus extends StatelessWidget {
             ),
           ),
         ),
+        // Off, Ask or Auto (GAIA_AUTONOMY_HLD.md §4): a menu rather than a
+        // cycle, so one stray click can't reach Auto.
         TextFieldTapRegion(
           child: Tooltip(
-            message: controller.canControl
-                ? 'Can control: on. Gaia asks before each step list, and the '
-                      'border shows while this is on. Esc stops a run.'
-                : 'Can control: off',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(4),
-              onTap: controller.toggleCanControl,
-              child: Padding(
-                padding: const EdgeInsets.all(_UsageRing.margin),
-                child: Icon(
-                  controller.canControl
-                      ? Icons.pan_tool_alt
-                      : Icons.pan_tool_alt_outlined,
-                  size: 14,
-                  color: controller.canControl
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
+            message: switch (controller.hand) {
+              GaiaHand.off => 'Can control: off',
+              GaiaHand.ask =>
+                'Can control: Ask. Gaia asks before each step list, and the '
+                    'border shows while this is on. Esc stops a run.',
+              GaiaHand.auto =>
+                'Can control: Auto. Gaia acts, runs commands and edits files '
+                    'with no cards. Esc stops a run.',
+            },
+            child: Builder(
+              builder: (button) => InkWell(
+                borderRadius: BorderRadius.circular(4),
+                // At the button, not the pointer, so Enter and Space open
+                // it too.
+                onTap: () {
+                  final box = button.findRenderObject()! as RenderBox;
+                  _showHandMenu(
+                    context,
+                    controller,
+                    box.localToGlobal(box.size.center(Offset.zero)),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(_UsageRing.margin),
+                  child: _HandIcon(hand: controller.hand),
                 ),
               ),
             ),
@@ -3740,6 +3750,126 @@ const _digits = [
   // Never an option (ask_user takes at most 9), but beside 9 to miss onto.
   LogicalKeyboardKey.digit0,
 ];
+
+/// The hand's menu (GAIA_AUTONOMY_HLD.md §4). Auto isn't offered to a new
+/// chat, and the first time on this device it shows its notice.
+void _showHandMenu(
+  BuildContext context,
+  GaiaController controller,
+  Offset position,
+) {
+  final hand = controller.hand;
+  String? current(GaiaHand item) => item == hand ? 'On' : null;
+  showGaiaMenu(context, position, [
+    GaiaMenuItem(
+      label: 'Off',
+      icon: Icons.pan_tool_alt_outlined,
+      detail: 'No input',
+      shortcut: current(GaiaHand.off),
+      onPressed: () => unawaited(controller.setHand(GaiaHand.off)),
+    ),
+    GaiaMenuItem(
+      label: 'Ask',
+      icon: Icons.pan_tool_alt,
+      detail: 'A card before each step list',
+      shortcut: current(GaiaHand.ask),
+      onPressed: () => unawaited(controller.setHand(GaiaHand.ask)),
+    ),
+    if (controller.currentChat != null)
+      GaiaMenuItem(
+        label: 'Auto',
+        icon: Icons.bolt,
+        detail: 'No cards, commands too',
+        shortcut: current(GaiaHand.auto),
+        onPressed: () => unawaited(_chooseAuto(context, controller)),
+      ),
+  ]);
+}
+
+/// Auto, once the user has read its notice on this device (§4).
+Future<void> _chooseAuto(
+  BuildContext context,
+  GaiaController controller,
+) async {
+  if (await controller.autoConsented()) {
+    return controller.setHand(GaiaHand.auto);
+  }
+  if (!context.mounted) return;
+  final send = _sendCombo(controller);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => CallbackShortcuts(
+      bindings: {send.activator: () => Navigator.of(context).pop(true)},
+      child: Focus(
+        autofocus: true,
+        child: AlertDialog(
+          title: const Text('Let Gaia act without asking?'),
+          content: const Text(
+            'In Auto, Gaia clicks, types, runs shell commands and edits files '
+            'in this chat with no cards to approve. You are responsible for '
+            'what it does.\n\n'
+            'Text it reads, on a page or in an email, can steer it. Use Auto '
+            'for tasks you chose, and Ask for anything strangers wrote.\n\n'
+            'Esc stops a run, and so does switching windows yourself.',
+          ),
+          actions: [
+            GaiaButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.of(context).pop(false),
+              color: Theme.of(context).colorScheme.error,
+            ),
+            GaiaButton(
+              label: 'Turn on Auto ($send)',
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (confirmed == true) {
+    await controller.setHand(GaiaHand.auto, consented: true);
+  }
+}
+
+/// The hand's icon: outlined for Off, filled for Ask, filled with an accent
+/// mark for Auto (§4).
+class _HandIcon extends StatelessWidget {
+  const _HandIcon({required this.hand});
+
+  final GaiaHand hand;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final icon = Icon(
+      hand == GaiaHand.off ? Icons.pan_tool_alt_outlined : Icons.pan_tool_alt,
+      size: 14,
+      color: hand == GaiaHand.off
+          ? theme.colorScheme.onSurfaceVariant
+          : theme.colorScheme.primary,
+    );
+    if (hand != GaiaHand.auto) return icon;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        icon,
+        Positioned(
+          right: -2,
+          top: -2,
+          child: Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: kGaiaAstralGold,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// The send keybind (§9.1), Ctrl+Enter by default, which is also its
 /// default when unbound: Enter and Shift+Enter are newlines.

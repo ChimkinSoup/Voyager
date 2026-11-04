@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -72,6 +73,28 @@ class _ContractTools implements GaiaTurnTools {
   }) async {
     permits.add(tool);
     return (allow: false, message: 'The user declined.');
+  }
+}
+
+/// Allows every permission, recording each, as a chat in Auto does
+/// (GAIA_AUTONOMY_HLD.md §5.7).
+class _AllowTools implements GaiaTurnTools {
+  final permits = <String>[];
+
+  @override
+  Future<GaiaToolResult> call(
+    String name,
+    Map<String, Object?> arguments,
+  ) async => const GaiaToolResult(text: 'unexpected tool', isError: true);
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) async {
+    permits.add('$tool ${input['command'] ?? ''}');
+    return (allow: true, message: '');
   }
 }
 
@@ -408,6 +431,96 @@ void main() {
       } finally {
         await cli.killAll();
         rules.parent.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'Auto (GAIA_AUTONOMY_HLD.md §5.7): a settings deny rule refuses without '
+    'reaching permit, and permit allows the rest',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final rules = File(
+        p.join(workingDirectory.path, '.claude', 'settings.json'),
+      )..createSync(recursive: true);
+      rules.writeAsStringSync(
+        '{"permissions":{"deny":["Bash(echo gaia-denied*)"],'
+        '"ask":["Bash(echo gaia-allowed*)"]}}',
+      );
+      final cli = runner('auto_deny_rule');
+      final tools = _AllowTools();
+      try {
+        final result = await cli.sendRaw(
+          chatId: 'contract',
+          sessionId: null,
+          newSessionId: _uuid.v4(),
+          model: _model,
+          prompt:
+              'Use the Bash tool to run `echo gaia-allowed`. Then use it to '
+              'run `echo gaia-denied`. Then say, for each, exactly what it '
+              'printed or why it did not run.',
+          tools: tools,
+          onEvent: (_) {},
+        );
+        debugPrint('GAIA-CLI auto deny: permits ${tools.permits}');
+        debugPrint('GAIA-CLI auto deny: ${result.text}');
+        expect(result.isError, isFalse, reason: result.text);
+        expect(tools.permits, [contains('gaia-allowed')]);
+        expect(result.text, contains('gaia-allowed'));
+      } finally {
+        await cli.killAll();
+        rules.parent.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'Auto (§5.7): a stopped turn ends the shell command it was running',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final marker = File(p.join(workingDirectory.path, 'gaia-stop-probe.txt'));
+      if (marker.existsSync()) marker.deleteSync();
+      final cli = runner('auto_stop_mid_command');
+      final started = Completer<void>();
+      final tools = _AllowTools();
+      final path = marker.path.replaceAll(r'\', '/');
+      final turn = cli
+          .sendRaw(
+            chatId: 'contract',
+            sessionId: null,
+            newSessionId: _uuid.v4(),
+            model: _model,
+            prompt:
+                'Use the Bash tool, in the foreground and not in the '
+                'background, to run exactly this command, and wait for it: '
+                'powershell -NoProfile -Command "Start-Sleep -Seconds 20; '
+                "Set-Content -Path '$path' -Value done\"",
+            tools: tools,
+            onEvent: (event) {
+              if (event case ClaudeToolUse(
+                name: 'Bash',
+              ) when !started.isCompleted) {
+                started.complete();
+              }
+            },
+          )
+          .then<Object?>((result) => result, onError: (Object e) => e);
+      try {
+        await started.future.timeout(const Duration(minutes: 2));
+        await Future<void>.delayed(const Duration(seconds: 6));
+        await cli.stop('contract');
+        debugPrint('GAIA-CLI auto stop: the turn ended with ${await turn}');
+        await Future<void>.delayed(const Duration(seconds: 25));
+        debugPrint(
+          'GAIA-CLI auto stop: permits ${tools.permits}; the command '
+          '${marker.existsSync() ? 'finished after the stop' : 'was ended'}',
+        );
+        expect(marker.existsSync(), isFalse);
+      } finally {
+        await cli.killAll();
+        if (marker.existsSync()) marker.deleteSync();
       }
     },
   );

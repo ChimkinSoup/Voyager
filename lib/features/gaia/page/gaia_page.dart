@@ -18,6 +18,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
@@ -355,8 +356,12 @@ class _ActionRowState extends State<_ActionRow> {
         contentPadding: EdgeInsets.zero,
         leading: const Icon(PhosphorIconsRegular.cursorClick, size: 20),
         title: Text(
-          'Ran $ran of ${steps.length} ${steps.length == 1 ? 'step' : 'steps'} '
-          "in ${card.input['app'] ?? 'a window'}",
+          gaiaIsActivity(card)
+              ? 'Auto: ${card.input['total'] ?? ran} actions'
+                    "${card.input['app'] == null ? '' : ' in ${card.input['app']}'}"
+              : 'Ran $ran of ${steps.length} '
+                    "${steps.length == 1 ? 'step' : 'steps'} "
+                    "in ${card.input['app'] ?? 'a window'}",
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(

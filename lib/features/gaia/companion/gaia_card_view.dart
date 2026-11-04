@@ -76,6 +76,9 @@ class GaiaCardView extends StatelessWidget {
         onReject: onReject,
       );
     }
+    if (card.kind == GaiaCardKind.control && gaiaIsActivity(card)) {
+      return _ActivityCard(key: ValueKey(card.id), card: card);
+    }
     if (card.kind == GaiaCardKind.control) {
       return _ControlCard(
         card: card,
@@ -436,6 +439,109 @@ class _ControlCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Whether control [card] is an Auto turn's activity row
+/// (GAIA_AUTONOMY_HLD.md §7) rather than a step list.
+bool gaiaIsActivity(GaiaCardPart card) => card.input['activity'] == true;
+
+/// What an Auto turn ran with no cards (§7): "12 actions in Gmail", opening to
+/// each one, newest last.
+class _ActivityCard extends StatefulWidget {
+  const _ActivityCard({super.key, required this.card});
+
+  final GaiaCardPart card;
+
+  @override
+  State<_ActivityCard> createState() => _ActivityCardState();
+}
+
+class _ActivityCardState extends State<_ActivityCard> {
+  var _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final card = widget.card;
+    final steps = [
+      for (final step in card.input['steps'] as List? ?? const [])
+        '${(step as Map)['label'] ?? ''}',
+    ];
+    final total = (card.input['total'] as num?)?.toInt() ?? steps.length;
+    final app = card.input['app'] as String?;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 520),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+        color: theme.colorScheme.primary.withValues(alpha: 0.03),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  const Icon(Icons.bolt, size: 16, color: kGaiaAstralGold),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$total ${total == 1 ? 'action' : 'actions'}'
+                      '${app == null ? '' : ' in $app'}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _open ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (total > steps.length)
+                    Text(
+                      'The first ${total - steps.length} are not kept.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  for (final label in steps)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: SelectableText(
+                        label,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: AppFonts.monoFamily,
+                          color: label.startsWith('Stopped: ')
+                              ? kGaiaStatusRose
+                              : null,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

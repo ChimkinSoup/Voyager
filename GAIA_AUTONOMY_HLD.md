@@ -1,6 +1,8 @@
 # Gaia — Autonomous PC Control (HLD)
 
-Status: Phases 1 and 2 built and checked live, 2026-11-03 (§11.1, §11.2). The rest is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
+Status: Phases 1 and 2 built and checked live, 2026-11-03 (§11.1, §11.2). Phases 3 and 4 built
+2026-11-04 and checked live the same day, with four bugs open (BUG-351 to BUG-354) and the phone
+still to do (§11.4, §11.5). Phase 5 is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
 
@@ -229,12 +231,21 @@ allow in Auto. Revoking mid-turn therefore applies to the next command.
 
 The command still shows in the activity row (§7). Abort's refusal stays first.
 
-**To verify against both CLIs, in Phase 3:**
-- Whether Claude Code's own classifier or settings can deny without reaching `permit`.
-  User-settings denials would still apply, and I think that's right.
-- Whether a command Codex is allowed still runs inside its Windows sandbox. If so, GUI
-  launches from it may not behave, which is one more reason `os_open` is the supported way.
-- What a stopped turn does to a shell command mid-flight.
+**Checked against both CLIs in Phase 3** (2026-11-04, Claude Code 2.1.318, Codex 0.166.0;
+the "Auto" scenarios in `test/gaia_cli_contract_test.dart` and `test/gaia_codex_contract_test.dart`):
+- **Claude Code's settings deny without reaching `permit`.** A `deny` rule refused
+  `echo gaia-denied` with `system/permission_denied` and no `permit` call, while an `ask` rule's
+  command reached `permit` and ran. That was a project rule, which safe mode reads; a user rule
+  goes through the same check. As intended.
+- **A command Codex is allowed runs as the signed-in user**, not as the elevated sandbox's own
+  account: `whoami` wrote `zephyrusg14\juno`. So GUI launches from it should behave. Not tried:
+  an actual GUI launch, which needs the screen on.
+- **A stopped turn:** Claude Code's command dies with it (the turn's process tree is killed; it
+  was a foreground command, `is_backgrounded: false`). **Codex's does not:** after
+  `turn/interrupt`, a 20-second command still finished and wrote its file. Esc and Stop end
+  the turn and latch the OS tools, but a Codex shell command already running carries on, as
+  §5.3 already says of Revoke. Ending it would mean killing children of the shared app-server,
+  which is a separate change: **BUG-350** in `qa/BUGS.md`.
 
 ## 6. Flashes
 
@@ -433,8 +444,8 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 |---|---|---|
 | **1. Session** (done, §11.1) | Foreground spike (§5.4); confirm the terminal-launch behaviour; control session, pin, adoption, pause, latch; Esc for the session | With a forced Auto flag: an action after no click reaches a window behind Gaia on both CLIs; Esc between calls ends the turn; Alt+Tab mid-run stops it with nothing sent to the new window |
 | **2. Flashes** (done, §11.2) | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; 95th percentile under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
-| **3. Auto** | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
-| **4. Opening** | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
+| **3. Auto** (built, §11.4) | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
+| **4. Opening** (built, §11.5) | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
 | **5. More tools** | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
 
 ### 11.1 Phase 1 results (2026-11-03)
@@ -549,6 +560,169 @@ Every case's 95th percentile is under 2 ms. A few frames per flash still go over
 updates as in §11.2. Starting a flash is unchanged: 2 to 15 ms once, most for a window.
 
 **Not checked:** several flashes at once, since the budget for faded pieces is per flash.
+
+### 11.4 Phase 3 results (2026-11-04)
+
+Built:
+- **The grant.** `GaiaGrant.auto`, written only when on, so older builds read Ask. Auto counts
+  only with *can control* and *can see screen* (`GaiaGrant.isAuto`). The store's `setAuto` turns
+  both on with it; *can see screen* off drops it, *can control* off drops it, and turning either
+  back on gives Ask, never Auto. Revoke and Abort clear it with the rest. `forceAuto` and
+  `GAIA_FORCE_AUTO` are gone.
+- **The hand** is a menu: Off, Ask, Auto (`GaiaHand`). A new chat isn't offered Auto. The first
+  Auto on a device shows the notice, confirmed with the send key (Ctrl+Enter unless rebound),
+  and the main instance refuses Auto until then (`gaia_auto_consent` beside the Abort flag).
+  Auto's icon is the filled hand with a gold dot.
+- **The notch** names a chat in Auto "Gaia · Auto · {chat}", and adds "Esc to stop" while a
+  session is open, or "Paused" while Gaia is in front. Ask's label is unchanged. Switching a
+  chat from Auto to Ask mid-turn ends its session, so its next action is a card.
+- **`permit`** asks the main instance (`isAuto`) at each prompt, after Abort's refusal. In Auto it
+  allows with no card and lists the command in the activity card.
+- **The activity card** (§7): one per turn, `GaiaCardKind.control` with `tool: 'activity'`,
+  `input.activity`, the latest 200 labels and the `total`, answered as a list that ran in full
+  for the action log and older builds. A stop is a "Stopped: …" row. Its updates are saved with
+  the reply's next save (at most a second apart) and at the turn's end, rather than each.
+- **§5.5:** the Windows key in Auto, alone or in a chord; Start and Search adopt as windows Gaia
+  caused, while the taskbar and desktop still don't (by window class). `os_click` takes
+  `anywhere` in Auto, for a point alone: what's there is checked against the exclusion list and
+  the vault, and Gaia's windows and the notch's button are refused.
+- **`read_after`** on every action tool: the result, then "The screen now:" and the read.
+- **Answering `ask_user`** resumes a paused session (`osResume`), closing §5.2's known gap: the
+  next step brings the target back. The 5-minute pause limit still runs while the question
+  waits.
+- **Phone prompts** need nothing of their own: a turn started from the phone runs in Auto like
+  any other, with no card for the phone to refuse. Stop and Abort are the existing paths.
+- Tool descriptions say "runs at once or after a card, depending on the chat's mode", and ask
+  for `ask_user` before anything irreversible.
+
+Checked by unit and widget tests (all 1100+ Gaia tests pass, Ask's unchanged), and against the
+real CLIs for §5.7 (above).
+
+**Checked live with the display on** (2026-11-04, a debug build of the working tree on `gaiaqa`,
+real Haiku and Codex Sol turns, nobody at the PC):
+- `test/tool/gaia_os_control_live_test.dart`: 8 of 8, three runs. Its Alt+Tab test pressed at a
+  fixed 60 ms, inside the 250 ms pace after the click that set it up, so nothing had been typed;
+  it now waits for the typing to start.
+- "Mark my top 3 emails as read", on a local mock inbox in a scratch Chrome profile rather than
+  real mail: no approval cards, 3 click flashes 250 ms apart, the first three marked read, and the
+  activity card lists the 3 clicks.
+- Win+R: Run adopted; the typing and Enter went into it and Character Map opened. Start: the
+  Windows key's Search window adopted, then typing and Enter opened Calculator. Its search box
+  sits under the floater, so the aimed typing was refused as covered and the agent typed into
+  what had focus.
+- An `anywhere` click on the taskbar's clock opened the Notification Center, adopted; Esc closed
+  it. The taskbar here auto-hides, so the agent needed a click on its bottom row first.
+- The hand menu by a real click (Off, Ask, Auto; Auto only once the chat has a message), the
+  notice, confirmed with a real Ctrl+Enter, and Auto's icon with the gold dot. The menu's labels
+  are underlined in yellow: BUG-354.
+- The notch: "Gaia · Auto · 88 chats" (this profile has 88 chats with *can control* on), then
+  "· Esc to stop" while a session is open, "· Paused" with Gaia clicked to the front mid-run,
+  nothing sent in the 16 s it stayed there, and the run carrying on once the inbox was clicked.
+- A GUI launch from a shell command, on both CLIs: `cmd /c start charmap` from Codex and from
+  Claude Code's Bash each opened Character Map **behind** the window in front, not in front, so
+  §3's "not reproduced" does reproduce with a real CLI's shell; the agent needs `os_focus` after.
+  A second Codex run reported success but left no Character Map running; not looked into.
+- Neither CLI's command reached `permit`, so no "Allowed …" row: Codex's sandbox allowed it, and
+  this machine's Claude Code user settings have `defaultMode: auto`, whose classifier allowed it.
+  Such a command raises no card in Ask either.
+
+**Not checked:** a phone prompt running in Auto, and Stop and Abort from the phone. Not attempted:
+the emulator's sign-in failed in the 2026-11-02 pass (`qa/GAIA_REMAINING_TESTS.md`).
+
+### 11.5 Phase 4 results (2026-11-04)
+
+Built:
+- **`os_open {target}`**, an action: a card in Ask, immediate in Auto. A target with a scheme of two
+  or more letters is a URL (`https:`, `mailto:`, `ms-settings:`); an absolute path must exist;
+  anything else is a Start menu name, matched exactly, else as the one name containing it, and
+  several or none are refused with the names. It launches with `ShellExecuteEx` and no verb, on an
+  isolate of its own.
+- **Exclusions before launch,** at plan and again at run: against the Start name, the exe in the
+  app's id (a desktop app's id is often its path), a path's `.exe` or `.lnk` name, a URL's host,
+  and the exes that would open it, so a URL whose browser is excluded never launches. Then against the window, and the vault, as for any target.
+- **Finding the window, strictly:** only a window shown to be what launched counts. One that opens
+  by chance during the wait is passed over, even in front. A window is the launch's if it is from:
+  - the launched process, or a process started under it (a launcher stub);
+  - an exe that opens the target: the path's exe, a Start shortcut's target exe, or the handler
+    of the file's extension or the URL's scheme (`AssocQueryString`); a folder is Explorer;
+  - or it carries the target's app ID: the Start ID, or the handler's, on the window itself, as
+    Store apps' frames and Chrome carry, or on its process's package, as Windows 11's Notepad has.
+
+  Top-level windows are listed before the launch and every 100 ms after, for up to 10 s. A new one
+  that's the launch's wins, the launched process's own first. Then one of its that came in front.
+  Then, once the launched process has exited (a single-instance app handing over) or the wait is
+  up, one of its that was already open. Otherwise it says it couldn't tell and points at
+  `os_windows`. `Microsoft.AutoGenerated.{…}` Start IDs are shortcuts whose windows carry no ID;
+  their target comes from the shell (`System.Link.TargetParsingPath`).
+- **Then,** for `os_open` and `os_focus` alike: restore if minimized, pin (in Auto), bring it up
+  with the F24 tap (§5.4) from behind any window, flash its outline, and tell the agent
+  "{app}: "{title}" is in front, and later calls act on it." In Ask nothing is pinned, and the next
+  card targets it because it's in front, or right under Gaia once you click the card.
+- **`os_windows`**, a read: the windows Alt+Tab would show, front first, minimized and topmost
+  included, Gaia's left out. Each is `id: app "title" [bounds]` or `minimized`, and the target is
+  marked "the os_ tools work on this" rather than "in front", since Gaia is usually what's in front.
+  Excluded windows are `id: excluded`; Voyager's has no title while the vault is unlocked. Ids are
+  window handles.
+- **`os_focus {window}`**: an id, else an exact title, else the one window whose title contains
+  the words or whose app is them. Excluded windows, and Voyager's with the vault unlocked, are
+  matched by id alone, then refused, so their titles never show in a "2 windows match" error.
+- **A session can start with no pin.** `os_open`, `os_focus` and `os_windows` don't need a window
+  behind Gaia, and work after the pinned window closed. Any other action then says to use
+  `os_open` or `os_focus`.
+- While `os_open` waits, each poll counts as a Gaia step, so the window it opens coming up by
+  itself is adopted (§5.2), and a click or key of yours in that time still stops the run.
+
+Decisions made here:
+- **Start names come from `Get-StartApps`** in a PowerShell child (about 0.6–0.8 s per `os_open`
+  by name), not from enumerating `shell:AppsFolder` over COM: the win32 package has no
+  `IEnumShellItems` or `StrRetToStr`. It covers Store and desktop apps alike.
+- **No verb isn't quite "never elevated".** An exe whose manifest requires admin still raises UAC
+  through `ShellExecuteEx`. Gaia never asks for `runas`, and the prompt is on the secure desktop,
+  so it can only be you who approves it.
+- After opening a URL, the site isn't checked against the window's address bar, which is often
+  still loading. The URL was checked before launch, and the next read or action checks the
+  address as always.
+
+Checked by unit tests (all 1135 Gaia tests pass, among them a window opening by chance being passed
+over, and nothing but such a window giving "couldn't tell"), and against real Win32 with the
+display off (throwaway probes, not committed):
+- The window list and `os_windows` text; "Character Map" and "Calculator" resolving through
+  `Get-StartApps` in 0.6 s.
+- The identity lookups on this machine: To Do's frame carries `Microsoft.Todos_8wekyb3d8bbwe!App`,
+  Chrome's windows `Chrome` and Firefox's its Start ID; `https` and `.pdf` open in Chrome, `.txt`
+  in Notepad, `ms-settings` in the Settings app ID; Git Bash's and Event Viewer's AutoGenerated
+  IDs resolve to `git-bash.exe` and `eventvwr.msc`.
+- Real launches, each window found by strict matching: Character Map (0.8 s), Notepad by its
+  package's app ID (1.2 s), Event Viewer through shortcut → `.msc` → `mmc` (1.6 s), a folder as
+  Explorer (0.3 s). A `.txt` with Notepad already open went into a tab of that window, so there
+  was no new window and it was found only at the 10 s limit.
+
+Each then stopped at bringing up with "Windows refused the input": with the display off, nothing
+is in front and `SendInput` is refused, as in §11.4.
+
+**Checked live with the display on** (2026-11-04, the same pass as §11.4's):
+- The Done-when, in one Auto turn on Haiku with Gaia in front: Character Map, then Select (`!` in
+  its box); Calculator, then Seven (7); a `.txt`, opened in Notepad, then Ctrl+End; and
+  `https://example.com`, opened in Chrome, then Learn more (it navigated). Each window was
+  brought up from behind Gaia and flashed. The typing after Ctrl+End came out garbled: BUG-352,
+  Windows 11 Notepad and four characters per `SendInput`.
+- `os_focus` on a real window: Character Map, minimized, restored, brought up and flashed, then
+  Alt+F4 closed it. A minimized Calculator stops the turn as the user's switch: BUG-351.
+- A `.txt` opening as a tab in Notepad already open, with Gaia in front: still the full 10 s, as
+  with the display off. Notepad doesn't come in front and its launched process never exits:
+  BUG-353.
+
+**Still not checked:**
+- An app with a splash screen. The splash would be pinned, and once it closes the next call says
+  the window closed, so the agent would need `os_windows` and `os_focus`. Worth seeing how often
+  it happens.
+- Strict matching's misses: an app whose window comes from a process that isn't the launched one's
+  descendant, isn't the exe that opens it and carries no app ID (some game launchers, apps started
+  through a service). They now give "couldn't tell", and the agent needs `os_windows` and
+  `os_focus`. How often that happens.
+- An unrelated window from the same app during the wait (another Chrome window while a URL
+  opens) can still be picked, as it's the right app.
+- A real Codex or Claude Code turn choosing `os_open` over `start` in the shell.
 
 **End-to-end check after 4:** the job-board task, or a scratch version of it, runs 10+ pages with
 no cards, and a press of Esc at a random moment stops it within one step each time.

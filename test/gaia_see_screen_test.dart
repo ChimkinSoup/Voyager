@@ -14,6 +14,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final at = DateTime.utc(2026, 11, 1);
 
+  /// The hand's requests to the main instance (GAIA_AUTONOMY_HLD.md §4).
+  var handCalls = <String>[];
+
   // The window buttons ask whether it's maximized.
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -34,6 +37,7 @@ void main() {
     await loadRealFonts(tester);
     final calls = <Map<String, Object?>>[];
     final created = <GaiaChat>[];
+    handCalls = [];
     late FakeGaiaPipe companion;
     final main = FakeGaiaPipe.main();
     main
@@ -42,6 +46,9 @@ void main() {
       }
       ..onRequest = (method, params) async {
         if (method == 'setSeeScreen') calls.add(params);
+        if (method case 'setAuto' || 'setCanControl') {
+          handCalls.add('$method ${params['on']} ${params['consented'] ?? ''}');
+        }
         if (method == 'putChat') {
           created.add(GaiaChat.fromJson((params['chat']! as Map).cast()));
         }
@@ -66,6 +73,7 @@ void main() {
           ],
           'messages' => <Object?>[],
           'drafts' => <Object?>[],
+          'autoConsented' => false,
           _ => null,
         };
       };
@@ -143,13 +151,78 @@ void main() {
     expect(controller.canSeeScreen, isTrue);
     expect(FocusManager.instance.primaryFocus, composer);
 
+    // The hand is a menu (GAIA_AUTONOMY_HLD.md §4).
     await tester.tap(
       find.byIcon(Icons.pan_tool_alt_outlined),
       kind: PointerDeviceKind.mouse,
     );
     await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(
+      find.textContaining('A card before each', findRichText: true),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
     expect(controller.canControl, isTrue);
     expect(FocusManager.instance.primaryFocus, composer);
+    await finish(tester);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('the hand is a menu: Auto shows its notice first, and turns on '
+      'seeing too (GAIA_AUTONOMY_HLD.md §4)', (tester) async {
+    final (controller, _, _) = await pump(tester);
+    Future<void> openMenu(IconData icon) async {
+      await tester.tap(find.byIcon(icon), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    Finder row(String detail) =>
+        find.textContaining(detail, findRichText: true);
+
+    await openMenu(Icons.pan_tool_alt_outlined);
+    await tester.tap(row('No cards'), kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Let Gaia act without asking?'), findsOneWidget);
+    expect(controller.hand, GaiaHand.off, reason: 'not before confirming');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(controller.hand, GaiaHand.auto);
+    expect(controller.canSeeScreen, isTrue);
+    expect(handCalls, ['setAuto true true']);
+
+    // Back to Ask, then Off.
+    await openMenu(Icons.pan_tool_alt);
+    await tester.tap(row('A card before'), kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    expect(controller.hand, GaiaHand.ask);
+    await openMenu(Icons.pan_tool_alt);
+    await tester.tap(row('No input'), kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    expect(controller.hand, GaiaHand.off);
+    expect(handCalls, [
+      'setAuto true true',
+      'setAuto false false',
+      'setCanControl false ',
+    ]);
+    await finish(tester);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('a new chat is never offered Auto (§4)', (tester) async {
+    await pump(tester, withChat: false);
+    await tester.tap(
+      find.byIcon(Icons.pan_tool_alt_outlined),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.textContaining('A card before', findRichText: true), findsOne);
+    expect(find.textContaining('No cards', findRichText: true), findsNothing);
     await finish(tester);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 

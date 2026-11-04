@@ -398,14 +398,27 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
   },
   {
+    'name': 'os_windows',
+    'description':
+        "List the windows open on the user's screen, front first: each one's "
+        'id, app, title and position, or that it is minimized, and which one '
+        "the os_ tools work on. Pass an id to os_focus. Apps the user has "
+        'excluded show only as excluded. Works only if "can see screen" is on '
+        'for this chat.',
+    'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
+  },
+  {
     'name': 'os_click',
     'description':
         'Click in the window the os_ tools work on. Name the control as '
         "os_read_screen shows it; use x and y alone only for what it can't "
-        'describe. The user sees and approves it first, and the result says '
-        'what ran. Works only if the user has turned on "can control" for this '
-        'chat, with the hand button under the composer. After any action, read '
-        'the screen again rather than assuming it worked.',
+        'describe. Runs at once or after the user approves a card, depending '
+        "on the chat's mode, and the result says what ran. Works only if the "
+        'user has turned on "can control" for this chat, with the hand button '
+        'under the composer. After any action, read the screen again rather '
+        "than assuming it worked. Before anything irreversible the user didn't "
+        'clearly ask for, such as sending, buying or deleting, ask them with '
+        'ask_user first.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -416,6 +429,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           'description': 'Left if left out.',
         },
         'double': {'type': 'boolean', 'description': 'A double click.'},
+        ..._anywhere,
+        ..._readAfter,
       },
     },
   },
@@ -423,7 +438,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'os_scroll',
     'description':
         'Scroll the mouse wheel over a control or point, or over the middle of '
-        'the window with neither. Approved by the user first, like os_click.',
+        'the window with neither. Approved or not like os_click.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -438,6 +453,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           'maximum': 50,
           'description': 'Wheel notches. 3 if left out.',
         },
+        ..._readAfter,
       },
       'required': ['direction'],
     },
@@ -447,13 +463,13 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'description':
         'Type text, at most 2000 characters, into a named control, which is '
         'clicked first, or with none, into whatever has focus. Password, card '
-        'and one-time code fields are refused. Approved by the user first, '
-        'like os_click.',
+        'and one-time code fields are refused. Approved or not like os_click.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         ..._controlTarget,
         'text': {'type': 'string'},
+        ..._readAfter,
       },
       'required': ['text'],
     },
@@ -462,12 +478,14 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'os_key',
     'description':
         'Press a key or a chord in that window: "Enter", "Ctrl+S", "Alt+F4", '
-        '"Shift+Tab". The Windows key is refused, as it acts on Windows rather '
-        'than the window. Approved by the user first, like os_click.',
+        '"Shift+Tab". The Windows key, as "Win" or "Win+R", works only in a '
+        'chat in Auto, where Start or the box it opens becomes the window the '
+        'os_ tools work on. Approved or not like os_click.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'keys': {'type': 'string'},
+        ..._readAfter,
       },
       'required': ['keys'],
     },
@@ -475,12 +493,14 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
   {
     'name': 'os_steps',
     'description':
-        'Several actions in one list, at most 20, that the user approves '
-        'together or one at a time. Prefer this to calling os_click and the '
-        "others in turn. A control that isn't on screen yet, as in a menu an "
-        'earlier step opens, can be named too, but then each step needs its '
-        'own approval. A run stops if the window in front changes, as when a '
-        'step opens a dialog: read the screen and send the rest as a new list.',
+        'Several actions in one list, at most 20, run at once or approved by '
+        "the user together or one at a time, depending on the chat's mode. "
+        'Prefer this to calling os_click and the others in turn. A control '
+        "that isn't on screen yet, as in a menu an earlier step opens, can be "
+        'named too, but when approving, each step then needs its own approval. '
+        'When a step opens a dialog, a run that needed approving stops: read '
+        'the screen and send the rest as a new list. One that ran at once acts '
+        'on the dialog from then on, and the result says so.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -506,12 +526,56 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
               'amount': {'type': 'integer'},
               'text': {'type': 'string'},
               'keys': {'type': 'string'},
+              ..._anywhere,
             },
             'required': ['action'],
           },
         },
+        ..._readAfter,
       },
       'required': ['steps'],
+    },
+  },
+  {
+    'name': 'os_open',
+    'description':
+        'Open an app, a file or folder, or a web page, bring its window to the '
+        'front, and make it the window the os_ tools work on. Use this rather '
+        "than starting a program from the shell, whose window Gaia can't tell "
+        'apart. The result names the window it opened. Refused for apps and '
+        'sites the user has excluded. Approved or not like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'target': {
+          'type': 'string',
+          'description':
+              "An installed app's name as the Start menu shows it "
+              '("Notepad", "Google Chrome"), a full path, or a URL with its '
+              'scheme ("https://…", "mailto:…", "ms-settings:").',
+        },
+        ..._readAfter,
+      },
+      'required': ['target'],
+    },
+  },
+  {
+    'name': 'os_focus',
+    'description':
+        'Bring an open window to the front, restoring it if minimized, and '
+        'make it the window the os_ tools work on. Approved or not like '
+        'os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'window': {
+          'type': 'string',
+          'description':
+              "An id from os_windows, or words from the window's title.",
+        },
+        ..._readAfter,
+      },
+      'required': ['window'],
     },
   },
 ];
@@ -531,6 +595,27 @@ const _controlTarget = <String, Object?>{
   'y': {'type': 'integer', 'description': 'Physical screen pixels.'},
 };
 
+/// A click outside the window (GAIA_AUTONOMY_HLD.md §5.5).
+const _anywhere = <String, Object?>{
+  'anywhere': {
+    'type': 'boolean',
+    'description':
+        'A click at x and y outside the window: the taskbar, the tray, '
+        'another window. Only in a chat in Auto. Whatever opens in front '
+        'becomes the window the os_ tools work on.',
+  },
+};
+
+/// The screen read with an action's result (§5.6).
+const _readAfter = <String, Object?>{
+  'read_after': {
+    'type': 'boolean',
+    'description':
+        'Also return the window as os_read_screen reads it once this has '
+        'run, which saves a call. Needs "can see screen".',
+  },
+};
+
 /// The `voyager_*` read tools: the main instance answers them.
 bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
 
@@ -542,6 +627,7 @@ bool isGaiaOsRead(String name) => const {
   'os_focused_window',
   'os_read_screen',
   'os_screenshot',
+  'os_windows',
 }.contains(name);
 
 /// The `os_*` action tools (§15.6): each is a step list the user approves.
@@ -551,6 +637,8 @@ bool isGaiaOsControl(String name) => const {
   'os_type',
   'os_key',
   'os_steps',
+  'os_open',
+  'os_focus',
 }.contains(name);
 
 /// The protocol version answered when the client names none.

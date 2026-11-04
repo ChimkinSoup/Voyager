@@ -61,6 +61,8 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   int rootAt(int x, int y) => 7;
   @override
+  String windowClass(int hwnd) => '';
+  @override
   ({int left, int top, int width, int height}) frame(int hwnd) =>
       (left: 0, top: 0, width: 800, height: 600);
   @override
@@ -91,6 +93,41 @@ class _ControlBackend implements GaiaInputBackend {
     sent.addAll(events);
     return events.length;
   }
+
+  @override
+  List<GaiaListedWindow> listWindows() => [
+    (
+      window: _window,
+      minimized: false,
+      frame: (left: 0, top: 0, width: 800, height: 600),
+    ),
+  ];
+  @override
+  Future<List<({String name, String id})>> startApps() async => [
+    (name: 'Notepad', id: r'C:\Windows\notepad.exe'),
+  ];
+  @override
+  Future<({int pid, String? exe})> launch(String file) async =>
+      (pid: 0, exe: null);
+  @override
+  bool running(int pid) => false;
+  @override
+  Map<int, int> processParents() => const {};
+  @override
+  Set<String> appIdsOf(GaiaForegroundWindow window) => const {};
+  @override
+  ({String? exe, String? appId}) handler(
+    String assoc, {
+    required bool protocol,
+  }) => (exe: null, appId: null);
+  @override
+  String? startAppTarget(String id) => null;
+  @override
+  String? shortcutTarget(String path) => null;
+  @override
+  bool minimized(int hwnd) => false;
+  @override
+  void restore(int hwnd) {}
 }
 
 class _Companion {
@@ -238,6 +275,7 @@ void main() {
     },
     pipe: pipe,
     abortFlag: () async => fs.file('gaia_aborted'),
+    autoConsent: () async => fs.file('gaia_auto_consent'),
     killCompanion: (pid) async => killed.add(pid),
     captureDirectory: () => fs.directory('captures').create(),
     captureScreen: (path) async {
@@ -1115,7 +1153,7 @@ void main() {
         });
       });
 
-      group('forced Auto (GAIA_AUTONOMY_HLD.md §5)', () {
+      group('Auto (GAIA_AUTONOMY_HLD.md §4, §5)', () {
         void running(List<String> chats) {
           companions.single.pipe.notify('runs', {
             'runs': [
@@ -1125,13 +1163,106 @@ void main() {
         }
 
         void start(FakeAsync async, GaiaHost host) {
-          host.forceAuto = true;
           connect(async);
           request(async, 'putChat', {'chat': chat()});
-          request(async, 'setCanControl', {'chatId': 'c1', 'on': true});
+          request(async, 'setAuto', {
+            'chatId': 'c1',
+            'on': true,
+            'consented': true,
+          });
         }
 
-        test('off, it plans as in Ask', () {
+        test('needs its notice once per device, and turns on both grants', () {
+          run(show: true, (async, host) {
+            connect(async);
+            request(async, 'putChat', {'chat': chat()});
+            expect(request(async, 'autoConsented'), isFalse);
+            expect(
+              () => request(async, 'setAuto', {'chatId': 'c1', 'on': true}),
+              refused('notice'),
+            );
+            request(async, 'setAuto', {
+              'chatId': 'c1',
+              'on': true,
+              'consented': true,
+            });
+            expect(request(async, 'autoConsented'), isTrue);
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isTrue);
+            final grant =
+                ((request(async, 'chats')! as List).single as Map)['grants']
+                    as Map;
+            expect(grant['laptop'], containsPair('seeScreen', true));
+            expect(grant['laptop'], containsPair('canControl', true));
+            expect(grant['laptop'], containsPair('auto', true));
+            expect(borders.last, 'Gaia · Auto · A chat');
+          });
+        });
+
+        test('see screen off drops it to Ask; can control off to Off', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            request(async, 'setSeeScreen', {'chatId': 'c1', 'on': false});
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isFalse);
+            expect(borders.last, 'Gaia is in control: A chat');
+            // Seeing again doesn't bring Auto back: it's chosen each time.
+            request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isFalse);
+            request(async, 'setAuto', {'chatId': 'c1', 'on': true});
+            request(async, 'setCanControl', {'chatId': 'c1', 'on': false});
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isFalse);
+            expect(borders.last, isNull);
+          });
+        });
+
+        test('Revoke and Abort turn it off, and Re-arm leaves it off', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            host.onHotkey(GaiaHotkey.abort);
+            async.flushMicrotasks();
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isFalse);
+            request(async, 'rearm');
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isFalse);
+          });
+        });
+
+        test('the notch says when a turn is acting', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            running(['c1']);
+            async.flushMicrotasks();
+            request(async, 'osPlan', plan);
+            async.flushMicrotasks();
+            expect(borders.last, 'Gaia · Auto · A chat · Esc to stop');
+            running([]);
+            async.flushMicrotasks();
+            expect(borders.last, 'Gaia · Auto · A chat');
+          });
+        });
+
+        test('back to Ask mid-turn, the next action plans a card', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            running(['c1']);
+            async.flushMicrotasks();
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isTrue);
+            request(async, 'setAuto', {'chatId': 'c1', 'on': false});
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isNull);
+            expect(request(async, 'isAuto', {'chatId': 'c1'}), isFalse);
+          });
+        });
+
+        test('see screen off mid-turn ends the session too', () {
+          run(show: true, (async, host) {
+            start(async, host);
+            running(['c1']);
+            async.flushMicrotasks();
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isTrue);
+            request(async, 'setSeeScreen', {'chatId': 'c1', 'on': false});
+            expect((request(async, 'osPlan', plan)! as Map)['auto'], isNull);
+          });
+        });
+
+        test('in Ask, it plans as ever', () {
           run(show: true, (async, host) {
             connect(async);
             request(async, 'putChat', {'chat': chat()});

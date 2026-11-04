@@ -3743,4 +3743,44 @@ Entry format:
 - Expected: E5 asks for a clear message: say the account is signed out, with its login command as Setup does.
 - Notes (fixed 2026-11-02): a failed Codex turn whose text says the login is the problem (`gaiaRunAuthFailed`) now shows what Setup says of a signed-out account (`gaiaRunErrorText`). Codex only, as Claude Code's own wording is already clear. The raw 401 is no longer on the message, so its request id isn't either. Live, a real turn on an account with no login: after 16 s, "CodexOut is signed out. Log in with `codex login`, with CODEX_HOME set to …". The backticks show as typed, since an error isn't rendered as Markdown.
 
-<!-- Last ID: BUG-349. -->
+### BUG-350 [GAIA-AUTO-P3] Stopping a Codex turn leaves its running shell command going
+- Severity: Major
+- Found: 2026-11-04, GAIA_AUTONOMY_HLD.md §5.7 check (Codex 0.166.0, app-server)
+- Steps: `GAIA_CLI_CHECK=1`, `flutter test test/gaia_codex_contract_test.dart --plain-name "Auto"`. A Codex turn on the app-server runs `powershell -NoProfile -Command "Start-Sleep -Seconds 20; Set-Content -Path 'gaia-stop-probe.txt' -Value done"`, its permission allowed; 6 s after the command is asked for, `CodexAppServerRunner.stop` ends the turn.
+- Actual: the turn ends at once ("Stopped"), but the command keeps running and writes `gaia-stop-probe.txt` about 14 s after the stop. `stop` sends `turn/interrupt` (`codex_app_server.dart`), which ends the turn but not the process it started. Claude Code doesn't have this: its stop kills the turn's process tree (`claude_code_runner.dart` `kill`), and the same check there leaves no file.
+- Expected: Esc, Stop and a window switch end everything the turn was doing (GAIA_AUTONOMY_HLD.md §5.3), the command it was running included. This matters most in Auto, where commands run with no card and Esc is the way to stop a run. It also affects Stop in Ask, after a command card was allowed.
+- Notes: Abort should be unaffected, as it kills each runner's process tree (`taskkill /t` on the app-server); not checked. A fix can't kill the app-server's tree, as it serves every Codex chat; it would have to find and kill the children of that turn's command. The check reports rather than asserts, so it passes either way: see its `GAIA-CLI codex auto stop` line.
+
+### BUG-351 [GAIA-AUTO-P4] `os_focus` on a minimized Store app stops the turn as "The user switched to another window"
+- Severity: Major
+- Found: 2026-11-04, GAIA_AUTONOMY_HLD.md §11.5 live pass (display on, `gaiaqa`, Haiku, Auto)
+- Steps: minimize Calculator; in an Auto chat, "Use os_focus to bring up the Calculator window (it is minimized), then click its Seven button."
+- Actual: the activity card's only row is "Stopped: The user switched to another window.", the reply is cancelled, and Calculator is left restored. Nobody touched the PC. Reproduced twice; the first time it was the second `os_focus` of a turn, after Alt+F4 closed Character Map. A minimized Character Map (Win32) restored and was acted in without a stop.
+- Expected: the window is restored, pinned, brought up and flashed, and the click lands (§8.2).
+- Notes: `_bringUp` (`gaia_os_control.dart`) calls `restore` (`ShowWindowAsync(SW_RESTORE)`) before it sets `session.pin` to the window, and a restore isn't `_send`, so `lastStep` doesn't move. Calculator activates as it restores; the 20 ms `_look` then sees a window other than the pin in front more than 1.5 s after Gaia's last input and calls it the user's switch. Setting the pin (or `lastStep`) before the restore would close it.
+
+### BUG-352 [GAIA-AUTO] Typing into Windows 11 Notepad comes out garbled
+- Severity: Major
+- Found: 2026-11-04, GAIA_AUTONOMY_HLD.md §11.5 live pass (display on, `gaiaqa`, Haiku, Auto)
+- Steps: `os_open` a `.txt` (Windows 11 Notepad), Ctrl+End, then `os_type` "gaia was here".
+- Actual: the buffer gets "gaia eeeeeeee"; a retry gave "gaia rrrrrrre". The agent noticed from its read and stopped. Reproduced without Gaia: KEYEVENTF_UNICODE down/up pairs, 4 characters per `SendInput` as `_type` sends them, turn " the quick brown fox" into " eee iiick nnnnn xxx", and 4 per call still garbles 150 ms apart. One character per `SendInput` came through clean at 5, 10, 20 and 60 ms apart; 2 per call dropped a character.
+- Expected: the text as given.
+- Notes: a VK_PACKET's character is looked up when the app translates the message, so packets queued in one batch before a busy app pumps them come out as a later one. `_typeChunk = 4` (`gaia_os_control.dart`) batches four. Sending each character's pair in its own `SendInput`, keeping the chunk's pauses for the checks between, should fix it at little cost in speed. WinForms and browsers, which the live tests use, weren't affected.
+
+### BUG-353 [GAIA-AUTO-P4] `os_open` of a file that opens as a tab in an app already open always waits the full 10 s
+- Severity: Minor
+- Found: 2026-11-04, GAIA_AUTONOMY_HLD.md §11.5 live pass (display on, `gaiaqa`, host `osPlan`/`osRun` with no model)
+- Steps: Notepad open with one `.txt`, Gaia in front; `os_open` another `.txt`.
+- Actual: 10.1 s every time (three runs), then "Notepad: "….txt - Notepad" is in front". The file opens as a tab in the existing window at once.
+- Expected: done as soon as the tab opens.
+- Notes: neither early exit in `_launch` fires. Notepad doesn't come in front by itself (the foreground stayed on Gaia until Gaia brought Notepad up at 10 s), and the `notepad.exe` it launched never exits: each open left a windowless ~18 MB `notepad.exe` running, as `Start-Process <file>` from PowerShell does too, so it's Notepad's behaviour. A window of the opener whose title changed to name the file could end the wait.
+
+### BUG-354 [GAIA] Gaia's menus underline every label in yellow
+- Severity: Cosmetic
+- Found: 2026-11-04, GAIA_AUTONOMY_HLD.md §11.4 live pass (the hand menu)
+- Steps: a chat with a message; click the hand under the composer.
+- Actual: "Off No input", "Ask A card before each step list", "Auto No cards, commands too" and "On" each have Flutter's yellow double underline (frame grab of the companion).
+- Expected: plain labels.
+- Notes: `showGaiaMenu` puts `GaiaMenu` in the overlay through `ContextMenuController`, with no `Material` or `DefaultTextStyle` above it, so its text inherits the fallback style's decoration. `gaia_menu.dart` is unchanged since 2026-10-31, so every `showGaiaMenu` menu is likely affected; only the hand menu was looked at.
+
+<!-- Last ID: BUG-354. -->

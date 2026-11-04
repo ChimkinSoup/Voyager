@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io' show pid;
+import 'dart:io' show FileSystemEntity, FileSystemEntityType, Process, pid;
+import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:path/path.dart' as p;
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
@@ -57,6 +59,10 @@ abstract interface class GaiaInputBackend {
 
   /// The top-level window at a point; clicks go only if it's the target.
   int rootAt(int x, int y);
+
+  /// [hwnd]'s window class, which tells the taskbar from Start, and finds the
+  /// border's own windows.
+  String windowClass(int hwnd);
   ({int left, int top, int width, int height}) frame(int hwnd);
 
   /// Null when the window didn't answer in time.
@@ -89,6 +95,48 @@ abstract interface class GaiaInputBackend {
 
   /// One atomic [SendInput]; how many of [events] went in.
   int send(List<GaiaInputEvent> events);
+
+  /// The windows Alt+Tab would show, front first ([gaiaListWindows]).
+  List<GaiaListedWindow> listWindows();
+
+  /// The Start menu's apps: each one's name, and the id `shell:AppsFolder`
+  /// opens it by.
+  Future<List<({String name, String id})>> startApps();
+
+  /// Opens [file] as Explorer would, except that an exe needing administrator
+  /// is refused rather than raising a UAC prompt. Returns the
+  /// process it started, with a pid of 0 when Windows didn't say, as when an
+  /// app already running takes it. Throws a [GaiaReadException] if Windows
+  /// couldn't open it.
+  Future<({int pid, String? exe})> launch(String file);
+
+  /// Whether process [pid] is still running.
+  bool running(int pid);
+
+  /// Every running process's parent, by pid.
+  Map<int, int> processParents();
+
+  /// [window]'s app IDs, lowercase: its own, as Store apps' frames carry, and
+  /// its process's package's.
+  Set<String> appIdsOf(GaiaForegroundWindow window);
+
+  /// What opens a file extension (".pdf"), or with [protocol] a URL scheme:
+  /// its exe's name and app ID, where Windows says ([gaiaHandlerOf]).
+  ({String? exe, String? appId}) handler(
+    String assoc, {
+    required bool protocol,
+  });
+
+  /// Where a Start menu app [id] points, if it's a shortcut
+  /// ([gaiaStartAppTarget]).
+  String? startAppTarget(String id);
+
+  /// Where the `.lnk` file at [path] points ([gaiaLinkTarget]).
+  String? shortcutTarget(String path);
+  bool minimized(int hwnd);
+
+  /// Brings minimized [hwnd] back, without waiting on its app.
+  void restore(int hwnd);
 }
 
 /// The `os_*` action tools (GAIA_HLD.md §15.6), answered by the main instance:
@@ -110,6 +158,7 @@ class GaiaOsControl {
     this._activateWait = const Duration(seconds: 2),
     this._adoptWithin = const Duration(milliseconds: 1500),
     this._pauseLimit = const Duration(minutes: 5),
+    this._openWait = const Duration(seconds: 10),
   }) : _voyagerPid = voyagerPid ?? pid,
        _backend = backend ?? _Win32InputBackend();
 
@@ -120,6 +169,10 @@ class GaiaOsControl {
   /// Plays a flash on screen (GAIA_AUTONOMY_HLD.md §6), as `gaia_flash.dart`
   /// takes it. Null for none, and then no step waits for one.
   final void Function(Map<String, Object?> flash)? flash;
+
+  /// A session started or ended, or paused or went on: what the notch says
+  /// changed (GAIA_AUTONOMY_HLD.md §4).
+  void Function()? onSession;
   final int _voyagerPid;
   final GaiaInputBackend _backend;
   final Duration _settle;
@@ -132,6 +185,9 @@ class GaiaOsControl {
   final Duration _activateWait;
   final Duration _adoptWithin;
   final Duration _pauseLimit;
+
+  /// How long `os_open` waits for a window (§8.1).
+  final Duration _openWait;
 
   final _plans = <String, _Plan>{};
   _Active? _active;
@@ -152,15 +208,29 @@ class GaiaOsControl {
   /// The chat whose Auto turn holds the screen (GAIA_AUTONOMY_HLD.md §5.1).
   String? get sessionChat => _session?.chatId;
 
+  /// The session waits while Gaia is in front (§5.2).
+  bool get sessionPaused => _session?.pausedAt != null;
+
+  /// The user answered Gaia mid-run (§5.2): a session waiting for its window
+  /// to come back in front goes on, and its next step brings it there.
+  void resume(String chatId) {
+    final session = _session;
+    if (session == null || session.chatId != chatId) return;
+    _paused(session, null);
+  }
+
   /// What [chatId]'s `os_*` call works on: the session's pinned window, starting
   /// the session if [auto], or null for a chat with none, which goes by what's
   /// in front as ever. Refused while another chat holds the screen, or once this
   /// turn has been stopped. [onUserStop] runs if Esc or a switch of window stops
-  /// the session.
+  /// the session. Without [needsWindow], as for `os_open`, `os_focus` and
+  /// `os_windows`, which find their own, a session can start with nothing to
+  /// pin, and a pin that closed is null rather than refused.
   GaiaForegroundWindow? session(
     String chatId, {
     required bool auto,
     required void Function() onUserStop,
+    bool needsWindow = true,
   }) {
     var session = _session;
     if (session != null && session.chatId != chatId) {
@@ -171,12 +241,13 @@ class GaiaOsControl {
       if (_active case final active? when active.chatId != chatId) {
         throw GaiaReadException('Another chat is controlling the screen.');
       }
-      final window =
-          _backend.target(companionPid()) ??
-          (throw GaiaReadException(
-            'There is no window to act on: nothing is open behind Gaia, or the '
-            'session is locked.',
-          ));
+      final window = _backend.target(companionPid());
+      if (window == null && needsWindow) {
+        throw GaiaReadException(
+          'There is no window to act on: nothing is open behind Gaia, or the '
+          'session is locked. os_open can open one.',
+        );
+      }
       _backend.watchInput(true);
       final front = _backend.foreground();
       final started = session = _session = _Session(
@@ -184,13 +255,14 @@ class GaiaOsControl {
         window,
         onUserStop,
         lastFront: front,
-        engaged: front == window.hwnd,
+        engaged: front == window?.hwnd,
         inputMark: _backend.lastInput(),
       );
       started.watch = Timer.periodic(
         const Duration(milliseconds: 20),
         (_) => _look(started),
       );
+      onSession?.call();
     }
     if (session.latch case final why?) {
       throw GaiaReadException(
@@ -198,9 +270,16 @@ class GaiaOsControl {
         'ask again.',
       );
     }
-    final now = _backend.describe(session.pin.hwnd);
-    if (now == null || now.pid != session.pin.pid) {
-      throw GaiaReadException('The window Gaia was working in closed.');
+    final pin = session.pin;
+    final now = pin == null ? null : _backend.describe(pin.hwnd);
+    if (now == null || now.pid != pin!.pid) {
+      if (!needsWindow) return null;
+      throw GaiaReadException(
+        pin == null
+            ? 'There is no window to act on yet. os_open or os_focus one.'
+            : 'The window Gaia was working in closed. os_open or os_focus '
+                  'another.',
+      );
     }
     return session.pin = now;
   }
@@ -214,6 +293,7 @@ class GaiaOsControl {
     session.latch ??= 'The turn ended.';
     if (_active?.chatId == session.chatId) _active!.stop(session.latch!);
     _session = null;
+    onSession?.call();
   }
 
   /// One look for the user stepping in (§5.2, §5.3), every 20 ms for the whole
@@ -233,19 +313,19 @@ class GaiaOsControl {
     // Mid-switch, nothing is in front.
     if (front == 0 || front == session.lastFront) return;
     session.lastFront = front;
-    if (front == session.pin.hwnd) {
+    if (front == session.pin?.hwnd) {
       session.engaged = true;
-      session.pausedAt = null;
+      _paused(session, null);
       return;
     }
     final window = _backend.describe(front);
     if (window?.pid == companionPid()) {
       // The turn's first action brings the target up from behind Gaia; after
       // that, Gaia in front is the user looking at it.
-      if (session.engaged) session.pausedAt ??= now;
+      if (session.engaged) _paused(session, session.pausedAt ?? now);
       return;
     }
-    session.pausedAt = null;
+    _paused(session, null);
     final lastStep = session.lastStep;
     final lastUser = session.lastUserInput;
     final caused =
@@ -255,8 +335,10 @@ class GaiaOsControl {
     if (!caused) {
       return _userStop(session, 'The user switched to another window.');
     }
-    // The shell isn't a window to act in; the next step brings the pin back.
-    if (window == null || _backend.inFrontOfTarget(front, companionPid())) {
+    // The taskbar and the desktop aren't windows to act in; the next step
+    // brings the pin back. Start and Search are, after the Windows key (§5.5).
+    if (window == null ||
+        _taskbarOrDesktop.contains(_backend.windowClass(front))) {
       return;
     }
     session.pin = window;
@@ -268,6 +350,23 @@ class GaiaOsControl {
       'label': window.app,
     });
   }
+
+  void _paused(_Session session, DateTime? at) {
+    final changed = (session.pausedAt == null) != (at == null);
+    session.pausedAt = at;
+    if (changed) onSession?.call();
+  }
+
+  static const _taskbarOrDesktop = {
+    'Shell_TrayWnd',
+    'Shell_SecondaryTrayWnd',
+    'Progman',
+    'WorkerW',
+  };
+
+  /// The border's windows (gaia_control_border.cpp). The notch's Revoke button
+  /// takes clicks, so it, not what's under it, is the window at its point.
+  static const _borderClass = 'VoyagerGaiaControlBorder';
 
   /// The input tick moved since Gaia last sent anything, so that wasn't Gaia.
   void _noteUserInput(_Session session, DateTime now) {
@@ -291,11 +390,18 @@ class GaiaOsControl {
     String tool,
     Map<String, Object?> arguments,
   ) async {
-    final steps = _parse(tool, arguments);
     final session = _session?.chatId == chatId ? _session : null;
+    if (tool == 'os_open' || tool == 'os_focus') {
+      final step = tool == 'os_open'
+          ? await _openStep(arguments)
+          : await _focusStep(arguments);
+      final plan = _Plan(chatId, step.window, [step], session, null);
+      _plans[cardId] = plan;
+      return {...plan.toCard(), if (session != null) 'auto': true};
+    }
+    final steps = _parse(tool, arguments, auto: session != null);
     final window =
-        session?.pin ??
-        _backend.target(companionPid()) ??
+        (session != null ? session.pin : _backend.target(companionPid())) ??
         (throw GaiaReadException(
           'There is no window to act on: nothing is open behind Gaia, or the '
           'session is locked.',
@@ -394,6 +500,7 @@ class GaiaOsControl {
     return {
       'ran': plan.next,
       'stopped': ?stopped,
+      'front': ?active.front,
       'adopted': ?session?.takeAdopted(),
       'steps': plan.toCard()['steps'],
     };
@@ -415,14 +522,236 @@ class GaiaOsControl {
     active.stop(why);
   }
 
+  /// An `os_open` call (§8.1): a URL, a full path, or an installed app by its
+  /// Start menu name. What it names is checked against the exclusions here,
+  /// before anything launches, and again when it runs.
+  Future<_Step> _openStep(Map<String, Object?> arguments) async {
+    final target = switch (arguments['target']) {
+      final String target when target.trim().isNotEmpty => target.trim(),
+      _ => throw GaiaReadException(
+        'os_open needs a target: an app, a full path or a URL.',
+      ),
+    };
+    final _Step step;
+    if (_isUrl(target)) {
+      step = _Step.window(
+        _Action.open,
+        target,
+        file: target,
+        url: target,
+        opener: _openerOf(target),
+      );
+    } else if (p.windows.isAbsolute(target)) {
+      if (FileSystemEntity.typeSync(target) == FileSystemEntityType.notFound) {
+        throw GaiaReadException('There is no file or folder at $target.');
+      }
+      // A shortcut is checked by what it opens, not by its own name.
+      final extension = p.windows.extension(target).toLowerCase();
+      final where = extension == '.lnk'
+          ? _backend.shortcutTarget(target) ?? target
+          : target;
+      step = _Step.window(
+        _Action.open,
+        p.windows.basename(target),
+        file: target,
+        url: _isUrl(where) ? where : null,
+        exe: extension == '.exe' || extension == '.lnk'
+            ? p.windows.basenameWithoutExtension(
+                where.toLowerCase().endsWith('.exe') ? where : target,
+              )
+            : null,
+        opener: _openerOf(where),
+      );
+    } else {
+      final apps = await _backend.startApps();
+      final lower = target.toLowerCase();
+      var found = [
+        for (final app in apps)
+          if (app.name.toLowerCase() == lower) app,
+      ];
+      if (found.isEmpty) {
+        found = [
+          for (final app in apps)
+            if (app.name.toLowerCase().contains(lower)) app,
+        ];
+      }
+      if (found.isEmpty) {
+        throw GaiaReadException(
+          'No installed app is named ${jsonEncode(target)}. os_open takes an '
+          "app's name as the Start menu shows it, a full path, or a URL with "
+          'its scheme.',
+        );
+      }
+      if (found.length > 1) {
+        throw GaiaReadException(
+          '${found.length} apps match ${jsonEncode(target)}: '
+          '${found.take(10).map((app) => jsonEncode(app.name)).join(', ')}'
+          '${found.length > 10 ? ', …' : ''}. Pass the one you mean.',
+        );
+      }
+      final app = found.single;
+      // A shortcut's target, as an AutoGenerated id has; else the id itself
+      // is often the exe's path.
+      final where = _backend.startAppTarget(app.id) ?? app.id;
+      final opener = _openerOf(where);
+      step = _Step.window(
+        _Action.open,
+        app.name,
+        file: 'shell:AppsFolder\\${app.id}',
+        url: _isUrl(where) ? where : null,
+        exe: app.id.toLowerCase().endsWith('.exe')
+            ? p.windows.basenameWithoutExtension(app.id)
+            : app.id,
+        // Its windows, or its package's, carry the id.
+        opener: (exes: opener.exes, appIds: {...opener.appIds, app.id}),
+      );
+    }
+    _checkOpen(step);
+    return step;
+  }
+
+  /// A scheme of one letter is a drive.
+  static bool _isUrl(String target) =>
+      RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]+:').hasMatch(target);
+
+  /// What opens [where], a URL, a path or a shell location, by the exes and
+  /// app IDs its windows can be told by (§8.1).
+  ({Set<String> exes, Set<String> appIds}) _openerOf(String where) {
+    final lower = where.toLowerCase();
+    if (lower.startsWith('::{') ||
+        lower.startsWith('shell:') ||
+        FileSystemEntity.isDirectorySync(where)) {
+      return (exes: {'explorer'}, appIds: const {});
+    }
+    if (lower.endsWith('.exe')) {
+      return (
+        exes: {p.windows.basenameWithoutExtension(lower)},
+        appIds: const <String>{},
+      );
+    }
+    final url = _isUrl(where);
+    final assoc = url
+        ? where.substring(0, where.indexOf(':'))
+        : p.windows.extension(where);
+    if (assoc.isEmpty) return (exes: const {}, appIds: const {});
+    final handler = _backend.handler(assoc, protocol: url);
+    return (exes: {?handler.exe?.toLowerCase()}, appIds: {?handler.appId});
+  }
+
+  void _checkOpen(_Step step) {
+    // What would open it, too: a URL whose browser is excluded opens there.
+    for (final exe in {step.exe ?? '', ...step.opener.exes}) {
+      if (gaiaContextExcluded(
+        exclusions(),
+        exe: exe,
+        app: step.target!,
+        url: step.url,
+      )) {
+        throw GaiaReadException(
+          "The user has excluded that app or site, so Gaia can't open it.",
+        );
+      }
+    }
+  }
+
+  /// An `os_focus` call (§8.2): the window with that id from `os_windows`, or
+  /// the one window whose title has those words. An excluded window, or
+  /// Voyager's while its vault is unlocked, is matched by its id alone, and
+  /// then refused. So is a browser on an excluded site, or one whose address
+  /// can't be read while a site is excluded.
+  Future<_Step> _focusStep(Map<String, Object?> arguments) async {
+    final asked = switch (arguments['window']) {
+      final num id => '${id.toInt()}',
+      final String text => text.trim(),
+      _ => '',
+    };
+    if (asked.isEmpty) {
+      throw GaiaReadException(
+        "os_focus needs a window: an id from os_windows, or words from its "
+        'title.',
+      );
+    }
+    final listed = [
+      for (final listed in _backend.listWindows())
+        if (listed.window.pid != companionPid()) listed.window,
+    ];
+    final id = int.tryParse(asked);
+    var found = [
+      for (final window in listed)
+        if (window.hwnd == id) window,
+    ];
+    if (found.isEmpty) {
+      final readable = [
+        for (final window in listed)
+          if (!_hidden(window) && !await _siteHidden(window)) window,
+      ];
+      final lower = asked.toLowerCase();
+      found = [
+        for (final window in readable)
+          if (window.title.toLowerCase() == lower) window,
+      ];
+      if (found.isEmpty) {
+        found = [
+          for (final window in readable)
+            if (window.title.toLowerCase().contains(lower) ||
+                window.app.toLowerCase() == lower)
+              window,
+        ];
+      }
+    }
+    if (found.isEmpty) {
+      throw GaiaReadException(
+        'No open window matches ${jsonEncode(asked)}. os_windows lists them.',
+      );
+    }
+    if (found.length > 1) {
+      throw GaiaReadException(
+        '${found.length} windows match ${jsonEncode(asked)}: '
+        '${found.map((w) => '${w.hwnd}: ${w.app} ${jsonEncode(w.title)}').join('; ')}. '
+        'Pass the id of the one you mean.',
+      );
+    }
+    final window = found.single;
+    if (window.exe.isEmpty) {
+      throw GaiaReadException("Gaia can't tell what app that window is.");
+    }
+    _checkWindow(window);
+    await _checkSite(window);
+    return _Step.window(
+      _Action.focus,
+      '${window.app}: ${jsonEncode(window.title)}',
+      window: window,
+    );
+  }
+
+  /// A window whose title `os_windows` doesn't show.
+  bool _hidden(GaiaForegroundWindow window) =>
+      window.exe.isEmpty ||
+      gaiaContextExcluded(exclusions(), exe: window.exe, app: window.app) ||
+      (window.pid == _voyagerPid && vaultUnlocked());
+
+  /// A browser window whose title `os_windows` doesn't show either.
+  Future<bool> _siteHidden(GaiaForegroundWindow window) async {
+    if (!gaiaIsBrowser(window.exe) ||
+        !exclusions().any((e) => e.contains('.'))) {
+      return false;
+    }
+    try {
+      await _checkSite(window);
+      return false;
+    } on GaiaReadException {
+      return true;
+    }
+  }
+
   Future<void> _resolveAll(_Plan plan, {required int from}) async {
     for (final step in plan.steps.skip(from)) {
       if (!step.aimed) continue;
       if (step.name == null) {
-        _checkPoint(plan.window, step.x!, step.y!);
+        if (!step.anywhere) _checkPoint(plan.window!, step.x!, step.y!);
         continue;
       }
-      final match = _matchOf(step, await _matches(plan.window, step));
+      final match = _matchOf(step, await _matches(plan.window!, step));
       step.resolved = match != null;
       step.match = match;
       if (step.action == _Action.type && (match?.sensitive ?? false)) {
@@ -554,11 +883,14 @@ class GaiaOsControl {
     await check();
     active.throwIfStopped();
     await _waitForModifiers(active);
+    if (step.action == _Action.open || step.action == _Action.focus) {
+      return _bringUp(step, session, active);
+    }
     final GaiaForegroundWindow window;
     if (session != null) {
       window = await _sessionTarget(session, active);
     } else {
-      window = plan.window;
+      window = plan.window!;
       if (mayActivate) {
         await _bringInFront(window, active);
       } else {
@@ -590,7 +922,9 @@ class GaiaOsControl {
         'types into.',
       );
     }
-    final point = step.aimed || step.action == _Action.scroll
+    final point = step.anywhere
+        ? await _anywhereAt(window, step)
+        : step.aimed || step.action == _Action.scroll
         ? _pointOf(window, step, match)
         : null;
     if (flash case final play?) {
@@ -625,6 +959,9 @@ class GaiaOsControl {
         active.throwIfStopped();
         _inFront(window);
         _send(step.keys!.events, active);
+      // Brought up by [_bringUp] above.
+      case _Action.open || _Action.focus:
+        break;
     }
     active.throwIfStopped();
   }
@@ -661,19 +998,182 @@ class GaiaOsControl {
     throw _Stopped('The window in front changed.');
   }
 
-  /// [_inFront], first bringing the target up from behind Gaia or the shell.
-  /// Windows switches to another process's window a moment after agreeing to,
-  /// so the foreground is watched until it has. With [unprompted], no click
-  /// handed Gaia the right to, and Windows refuses a process that hasn't had the
-  /// last input: tapping an unbound key makes this that process (§5.4).
+  /// An `os_open` or `os_focus` step (§8.1, §8.2): finds its window, brings it
+  /// up from wherever it is, and in a session pins it. The window it ends on
+  /// goes in [_Active.front] for the agent.
+  Future<void> _bringUp(_Step step, _Session? session, _Active active) async {
+    if (session != null) {
+      // Gaia in front is the user looking: wait, as any step does (§5.2).
+      _look(session);
+      active.throwIfStopped();
+      while (session.pausedAt != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        active.throwIfStopped();
+      }
+    }
+    final GaiaForegroundWindow window;
+    if (step.action == _Action.open) {
+      window = await _launch(step, session, active);
+    } else {
+      final asked = step.window!;
+      final now = _backend.describe(asked.hwnd);
+      if (now == null || now.pid != asked.pid) {
+        throw _Stopped('The window closed.');
+      }
+      window = now;
+    }
+    try {
+      if (window.exe.isEmpty) {
+        throw GaiaReadException("Gaia can't tell what app that window is.");
+      }
+      _checkWindow(window);
+      // Its title goes back as front: not for an excluded site. What os_open
+      // opened was checked by its URL, and a new tab may have no address yet.
+      if (step.action == _Action.focus) await _checkSite(window);
+    } on GaiaReadException catch (error) {
+      throw _Stopped(error.message);
+    }
+    if (_backend.minimized(window.hwnd)) {
+      // Restoring may bring it in front, which is Gaia's doing (§5.2).
+      session?.lastStep = DateTime.now();
+      _backend.restore(window.hwnd);
+      final until = DateTime.now().add(_activateWait);
+      while (_backend.minimized(window.hwnd)) {
+        if (DateTime.now().isAfter(until)) {
+          throw _Stopped("${window.app} wouldn't restore from minimized.");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        active.throwIfStopped();
+      }
+    }
+    // A window that came up on its own may already be adopted, and flashed.
+    final adopted = session?.adopted != null && session?.pin == window;
+    if (session != null) {
+      session
+        ..pin = window
+        ..adopted = null;
+    }
+    await _bringInFront(window, active, unprompted: true, fromAnywhere: true);
+    if (!adopted) {
+      flash?.call({
+        'kind': 'window',
+        ..._rectOf(_backend.frame(window.hwnd)),
+        'label': window.app,
+      });
+    }
+    active.front = '${window.app}: ${jsonEncode(window.title)}';
+  }
+
+  /// Opens [step]'s target and finds the window it opened. Only a window shown
+  /// to be its own counts: from the process launched or one it started, from
+  /// the exe that opens it, or carrying its app ID. Any other, opening by
+  /// chance meanwhile, is passed over. A new one wins, the launched process's
+  /// first; else one that came in front; else, once the launched process
+  /// exits (a single-instance app handing over) or the wait is up, one it
+  /// already had.
+  Future<GaiaForegroundWindow> _launch(
+    _Step step,
+    _Session? session,
+    _Active active,
+  ) async {
+    try {
+      // The exclusions may have changed since the card.
+      _checkOpen(step);
+    } on GaiaReadException catch (error) {
+      throw _Stopped(error.message);
+    }
+    List<GaiaListedWindow> listed() => [
+      for (final listed in _backend.listWindows())
+        if (listed.window.pid != companionPid()) listed,
+    ];
+    final before = {for (final l in listed()) l.window.hwnd};
+    final front = _backend.foreground();
+    // What it opens, coming up in front, is Gaia's doing (§5.2).
+    session?.lastStep = DateTime.now();
+    final ({int pid, String? exe}) launched;
+    try {
+      launched = await _backend.launch(step.file!);
+    } on GaiaReadException catch (error) {
+      throw _Stopped(error.message);
+    }
+    final exes = {...step.opener.exes, ?launched.exe?.toLowerCase()};
+    final appIds = {for (final id in step.opener.appIds) id.toLowerCase()};
+    final until = DateTime.now().add(_openWait);
+    while (true) {
+      active.throwIfStopped();
+      session?.lastStep = DateTime.now();
+      final family = _family(launched.pid);
+      bool ours(GaiaForegroundWindow window) =>
+          family.contains(window.pid) ||
+          exes.contains(window.exe.toLowerCase()) ||
+          _backend.appIdsOf(window).any(appIds.contains);
+      final now = listed();
+      final fresh = [
+        for (final l in now)
+          if (!before.contains(l.window.hwnd) && !l.minimized && ours(l.window))
+            l.window,
+      ];
+      if (fresh.isNotEmpty) {
+        return fresh.firstWhere(
+          (window) => window.pid == launched.pid,
+          orElse: () => fresh.first,
+        );
+      }
+      final inFront = _backend.foreground();
+      if (inFront != front) {
+        for (final l in now) {
+          if (l.window.hwnd == inFront && ours(l.window)) return l.window;
+        }
+      }
+      final timedOut = DateTime.now().isAfter(until);
+      if (timedOut || (launched.pid != 0 && !_backend.running(launched.pid))) {
+        for (final l in now) {
+          if (ours(l.window)) return l.window;
+        }
+      }
+      if (timedOut) {
+        throw _Stopped(
+          "Gaia couldn't tell which window ${step.target} opened, if any. "
+          'os_windows lists what is open, and os_focus brings one up.',
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  /// Process [pid] and every process started under it; none for 0.
+  Set<int> _family(int pid) {
+    if (pid == 0) return const {};
+    final children = <int, List<int>>{};
+    for (final MapEntry(key: child, value: parent)
+        in _backend.processParents().entries) {
+      if (child != parent) (children[parent] ??= []).add(child);
+    }
+    final family = {pid};
+    final queue = [pid];
+    while (queue.isNotEmpty) {
+      for (final child in children[queue.removeLast()] ?? const <int>[]) {
+        if (family.add(child)) queue.add(child);
+      }
+    }
+    return family;
+  }
+
+  /// [_inFront], first bringing the target up from behind Gaia or the shell,
+  /// or with [fromAnywhere], from behind any window. Windows switches to
+  /// another process's window a moment after agreeing to, so the foreground is
+  /// watched until it has. With [unprompted], no click handed Gaia the right
+  /// to, and Windows refuses a process that hasn't had the last input: tapping
+  /// an unbound key makes this that process (§5.4).
   Future<void> _bringInFront(
     GaiaForegroundWindow window,
     _Active active, {
     bool unprompted = false,
+    bool fromAnywhere = false,
   }) async {
     final front = _backend.foreground();
     if (front == window.hwnd) return;
-    if (!_backend.inFrontOfTarget(front, companionPid())) {
+    if (!fromAnywhere && !_backend.inFrontOfTarget(front, companionPid())) {
       throw _Stopped('The window in front changed.');
     }
     final refused = _Stopped(
@@ -695,7 +1195,9 @@ class GaiaOsControl {
       final now = _backend.foreground();
       if (now == window.hwnd) return;
       // Mid-switch, nothing is in front, or Gaia still is.
-      if (now != 0 && !_backend.inFrontOfTarget(now, companionPid())) {
+      if (!fromAnywhere &&
+          now != 0 &&
+          !_backend.inFrontOfTarget(now, companionPid())) {
         throw _Stopped('The window in front changed.');
       }
       if (DateTime.now().isAfter(until)) throw refused;
@@ -719,13 +1221,18 @@ class GaiaOsControl {
     _look(session);
     active.throwIfStopped();
     while (session.pausedAt != null) {
-      if (_backend.describe(session.pin.hwnd) == null) {
+      final pin = session.pin;
+      if (pin == null || _backend.describe(pin.hwnd) == null) {
         throw _Stopped('The window closed.');
       }
       await Future<void>.delayed(const Duration(milliseconds: 20));
       active.throwIfStopped();
     }
-    final window = session.pin;
+    final window =
+        session.pin ??
+        (throw _Stopped(
+          'There is no window to act on yet. os_open or os_focus one.',
+        ));
     await _bringInFront(window, active, unprompted: true);
     return window;
   }
@@ -748,6 +1255,36 @@ class GaiaOsControl {
       );
     }
     return point;
+  }
+
+  /// An `anywhere` click's point (§5.5): another window, the taskbar or the
+  /// tray, what's there checked as a target would be. Gaia's own windows and
+  /// the notch are never clicked.
+  Future<({int x, int y})> _anywhereAt(
+    GaiaForegroundWindow window,
+    _Step step,
+  ) async {
+    final (x, y) = (step.x!, step.y!);
+    final root = _backend.rootAt(x, y);
+    final under = root == 0 ? null : _backend.describe(root);
+    if (under == null) throw _Stopped('Nothing is at $x,$y.');
+    if (under.pid == companionPid() ||
+        _backend.windowClass(root) == _borderClass) {
+      throw _Stopped("$x,$y is on Gaia's own window, which Gaia never clicks.");
+    }
+    if (root != window.hwnd) {
+      if (under.exe.isEmpty) {
+        throw _Stopped("Gaia can't tell what app is at $x,$y.");
+      }
+      try {
+        _checkWindow(under);
+        // Another browser window may be on an excluded site.
+        await _checkSite(under);
+      } on GaiaReadException catch (error) {
+        throw _Stopped(error.message);
+      }
+    }
+    return (x: x, y: y);
   }
 
   void _click(
@@ -872,7 +1409,11 @@ class GaiaOsControl {
     active.held.clear();
   }
 
-  List<_Step> _parse(String tool, Map<String, Object?> arguments) {
+  List<_Step> _parse(
+    String tool,
+    Map<String, Object?> arguments, {
+    required bool auto,
+  }) {
     if (tool == 'os_steps') {
       final steps = arguments['steps'];
       if (steps is! List || steps.isEmpty) {
@@ -884,15 +1425,19 @@ class GaiaOsControl {
       return [
         for (final step in steps)
           if (step is Map)
-            _parseStep(step['action'], step.cast<String, Object?>())
+            _parseStep(step['action'], step.cast<String, Object?>(), auto: auto)
           else
             throw GaiaReadException('Each step needs an action.'),
       ];
     }
-    return [_parseStep(tool.replaceFirst('os_', ''), arguments)];
+    return [_parseStep(tool.replaceFirst('os_', ''), arguments, auto: auto)];
   }
 
-  _Step _parseStep(Object? action, Map<String, Object?> args) {
+  _Step _parseStep(
+    Object? action,
+    Map<String, Object?> args, {
+    required bool auto,
+  }) {
     final parsed = switch (action) {
       'click' => _Action.click,
       'scroll' => _Action.scroll,
@@ -921,10 +1466,21 @@ class GaiaOsControl {
       amount: (args['amount'] as num?)?.toInt() ?? 3,
       text: args['text'] as String?,
       keys: switch (parsed) {
-        _Action.key => GaiaKeyChord.parse(args['keys']),
+        _Action.key => GaiaKeyChord.parse(args['keys'], windows: auto),
         _ => null,
       },
+      anywhere: args['anywhere'] == true,
     );
+    if (step.anywhere) {
+      if (!auto) {
+        throw GaiaReadException(
+          'anywhere is only for a chat in Auto. Click inside the window.',
+        );
+      }
+      if (parsed != _Action.click || step.name != null || step.x == null) {
+        throw GaiaReadException('anywhere is for a click at x and y alone.');
+      }
+    }
     switch (parsed) {
       case _Action.click:
         if (!step.aimed) {
@@ -947,7 +1503,7 @@ class GaiaOsControl {
             'os_type takes at most $_maxText characters.',
           );
         }
-      case _Action.key:
+      case _Action.key || _Action.open || _Action.focus:
         break;
     }
     return step;
@@ -976,8 +1532,9 @@ class _Session {
   final void Function() onUserStop;
   Timer? watch;
 
-  /// The window this turn acts on and reads (§5.2).
-  GaiaForegroundWindow pin;
+  /// The window this turn acts on and reads (§5.2); none until `os_open` or
+  /// `os_focus` finds one, if nothing was open.
+  GaiaForegroundWindow? pin;
 
   /// Set once the turn is stopped: its calls are refused from then on.
   String? latch;
@@ -1019,6 +1576,9 @@ class _Active {
   final held = <int>{};
   String? _stopped;
 
+  /// The window `os_open` or `os_focus` brought up, for the agent.
+  String? front;
+
   void stop(String why) => _stopped ??= why;
 
   void throwIfStopped() {
@@ -1026,7 +1586,7 @@ class _Active {
   }
 }
 
-enum _Action { click, scroll, type, key }
+enum _Action { click, scroll, type, key, open, focus }
 
 class _Step {
   _Step({
@@ -1041,9 +1601,49 @@ class _Step {
     required this.amount,
     required this.text,
     required this.keys,
-  }) : resolved = name == null;
+    this.anywhere = false,
+  }) : resolved = name == null,
+       target = null,
+       file = null,
+       exe = null,
+       url = null,
+       window = null,
+       opener = (exes: const {}, appIds: const {});
+
+  /// An `os_open` of [target], shown by that name, or an `os_focus` of
+  /// [window], shown as [target].
+  _Step.window(
+    this.action,
+    String this.target, {
+    this.file,
+    this.exe,
+    this.url,
+    this.window,
+    this.opener = (exes: const {}, appIds: const {}),
+  }) : name = null,
+       type = null,
+       x = null,
+       y = null,
+       button = 'left',
+       doubleClick = false,
+       direction = null,
+       amount = 0,
+       text = null,
+       keys = null,
+       anywhere = false,
+       resolved = true;
 
   final _Action action;
+  final String? target;
+
+  /// What `os_open` hands Windows, and the exe and URL it's checked by.
+  final String? file;
+  final String? exe;
+  final String? url;
+  final GaiaForegroundWindow? window;
+
+  /// What `os_open`'s window can be told by: exes, lowercase, and app IDs.
+  final ({Set<String> exes, Set<String> appIds}) opener;
   final String? name;
   final String? type;
   final int? x;
@@ -1054,6 +1654,9 @@ class _Step {
   final int amount;
   final String? text;
   final GaiaKeyChord? keys;
+
+  /// A click at a point outside the target (§5.5).
+  final bool anywhere;
 
   /// Its control was found as it stands now; always for one that names none.
   bool resolved;
@@ -1126,6 +1729,8 @@ class _Step {
       _Action.type when aimed => {'kind': preview ? 'mark' : 'click', ...at},
       _Action.type => {'kind': 'key', ..._rectOf(frame), 'label': 'Typing'},
       _Action.key => {'kind': 'key', ..._rectOf(frame), 'label': keys!.label},
+      // Its window's outline plays once it's up.
+      _Action.open || _Action.focus => null,
     };
   }
 
@@ -1154,6 +1759,8 @@ class _Step {
     _Action.type =>
       'Type ${jsonEncode(text)} into ${aimed ? _target : 'what has focus'}',
     _Action.key => 'Press ${keys!.label}',
+    _Action.open => 'Open $target',
+    _Action.focus => 'Bring $target to the front',
   };
 }
 
@@ -1161,28 +1768,37 @@ class _Plan {
   _Plan(this.chatId, this.window, this.steps, this.session, this.frame);
 
   final String chatId;
-  final GaiaForegroundWindow window;
+
+  /// Null for `os_open`, which has none yet.
+  final GaiaForegroundWindow? window;
   final List<_Step> steps;
 
-  /// Where [window] was when planned, for the card's markers (§6.4).
-  final ({int left, int top, int width, int height}) frame;
+  /// Where [window] was when planned, for the card's markers (§6.4); null for
+  /// `os_open` and `os_focus`, which have none.
+  final ({int left, int top, int width, int height})? frame;
 
   /// In Auto, which goes by its pin rather than [window].
   final _Session? session;
   var next = 0;
 
-  Map<String, Object?> toCard() => {
-    'window': '${window.app}: ${jsonEncode(window.title)}',
-    'app': window.app,
-    'steps': [
-      for (final step in steps)
-        {
-          'label': step.label,
-          'resolved': step.resolved,
-          'flash': ?step.flash(frame, step.match, preview: true),
-        },
-    ],
-  };
+  Map<String, Object?> toCard() {
+    final (window, frame) = (this.window, this.frame);
+    return {
+      'window': window == null
+          ? steps.single.target
+          : '${window.app}: ${jsonEncode(window.title)}',
+      'app': window?.app ?? steps.single.target,
+      'steps': [
+        for (final step in steps)
+          {
+            'label': step.label,
+            'resolved': step.resolved,
+            if (frame != null)
+              'flash': ?step.flash(frame, step.match, preview: true),
+          },
+      ],
+    };
+  }
 }
 
 /// [frame] as the flash channel takes a rect.
@@ -1269,7 +1885,10 @@ class GaiaKeyChord {
     'right': VK_RIGHT,
   };
 
-  static GaiaKeyChord parse(Object? keys) {
+  /// With [windows], as in Auto (GAIA_AUTONOMY_HLD.md §5.5), the Windows key
+  /// is allowed, alone or with a key: Start or Win+R opens as a window Gaia
+  /// caused.
+  static GaiaKeyChord parse(Object? keys, {bool windows = false}) {
     if (keys is! String || keys.trim().isEmpty) {
       throw GaiaReadException('os_key needs keys, as "Ctrl+S".');
     }
@@ -1280,13 +1899,17 @@ class GaiaKeyChord {
         ..removeLast()
         ..last = '+';
     }
+    const winNames = {'win', 'windows', 'meta', 'cmd', 'super'};
+    const refused =
+        "The Windows key isn't allowed outside Auto: it acts on Windows, not "
+        'the window.';
     final modifiers = <int>[];
     for (final part in parts.take(parts.length - 1)) {
       final lower = part.toLowerCase();
-      if (const {'win', 'windows', 'meta', 'cmd', 'super'}.contains(lower)) {
-        throw GaiaReadException(
-          "The Windows key isn't allowed: it acts on Windows, not the window.",
-        );
+      if (winNames.contains(lower)) {
+        if (!windows) throw GaiaReadException(refused);
+        if (!modifiers.contains(VK_LWIN)) modifiers.add(VK_LWIN);
+        continue;
       }
       final modifier =
           _modifiers[lower] ?? (throw GaiaReadException('Unknown key: $part'));
@@ -1294,9 +1917,13 @@ class GaiaKeyChord {
     }
     final main = parts.last;
     final lower = main.toLowerCase();
-    if (const {'win', 'windows', 'meta', 'cmd', 'super'}.contains(lower)) {
-      throw GaiaReadException(
-        "The Windows key isn't allowed: it acts on Windows, not the window.",
+    if (winNames.contains(lower)) {
+      if (!windows) throw GaiaReadException(refused);
+      return GaiaKeyChord._(
+        parts.join('+'),
+        modifiers,
+        VK_LWIN,
+        typesText: false,
       );
     }
     final function = RegExp(r'^f(\d{1,2})$').firstMatch(lower);
@@ -1370,6 +1997,17 @@ class _Win32InputBackend implements GaiaInputBackend {
       return under == 0 ? 0 : GetAncestor(under, GA_ROOT);
     } finally {
       free(point);
+    }
+  }
+
+  @override
+  String windowClass(int hwnd) {
+    final name = wsalloc(64);
+    try {
+      GetClassName(hwnd, name, 64);
+      return name.toDartString();
+    } finally {
+      free(name);
     }
   }
 
@@ -1491,7 +2129,180 @@ class _Win32InputBackend implements GaiaInputBackend {
     }
   }
 
+  @override
+  List<GaiaListedWindow> listWindows() => gaiaListWindows();
+
+  @override
+  Future<List<({String name, String id})>> startApps() async {
+    final result = await Process.run('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '[Console]::OutputEncoding = [Text.Encoding]::UTF8; '
+          'Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress',
+    ], stdoutEncoding: utf8).timeout(const Duration(seconds: 15));
+    final out = (result.stdout as String).trim();
+    if (result.exitCode != 0 || out.isEmpty) {
+      throw GaiaReadException("Gaia couldn't list the installed apps.");
+    }
+    final decoded = jsonDecode(out);
+    return [
+      for (final app in decoded is List ? decoded : [decoded])
+        if (app case {'Name': final String name, 'AppID': final String id})
+          (name: name, id: id),
+    ];
+  }
+
+  @override
+  Future<({int pid, String? exe})> launch(String file) async {
+    // The shell asks to elevate an exe that needs administrator (UAC);
+    // CreateProcess fails instead.
+    final exe = file.toLowerCase().endsWith('.exe');
+    final launched = await Isolate.run(
+      () => exe ? _createProcess(file) : _shellOpen(file),
+    );
+    // The error code doesn't survive the FFI call, so needing administrator
+    // can't be told from other failures.
+    if (exe && launched.error != 0) {
+      throw GaiaReadException(
+        "Windows wouldn't start $file. If it needs administrator rights, "
+        'Gaia never opens anything as administrator; the user can open it '
+        'themselves.',
+      );
+    }
+    if (launched.error != 0) {
+      throw GaiaReadException(
+        "Windows couldn't open $file (error ${launched.error}).",
+      );
+    }
+    return (pid: launched.pid, exe: launched.exe);
+  }
+
+  /// Starts exe [file] in its own folder, as a double-click would, but never
+  /// elevated: one that needs administrator fails. A failure's error is
+  /// never 0, though GetLastError may read 0 after the FFI call.
+  static ({int pid, String? exe, int error}) _createProcess(String file) {
+    final startup = calloc<STARTUPINFO>();
+    final process = calloc<PROCESS_INFORMATION>();
+    final application = file.toNativeUtf16();
+    // Writable, as CreateProcess needs, and quoted as its own argv[0].
+    final command = '"$file"'.toNativeUtf16();
+    final folder = p.windows.dirname(file).toNativeUtf16();
+    try {
+      startup.ref.cb = sizeOf<STARTUPINFO>();
+      if (CreateProcess(
+            application,
+            command,
+            nullptr,
+            nullptr,
+            FALSE,
+            0,
+            nullptr,
+            folder,
+            startup,
+            process,
+          ) ==
+          0) {
+        final error = GetLastError();
+        return (pid: 0, exe: null, error: error == 0 ? -1 : error);
+      }
+      CloseHandle(process.ref.hThread);
+      CloseHandle(process.ref.hProcess);
+      return (
+        pid: process.ref.dwProcessId,
+        exe: p.windows.basenameWithoutExtension(file),
+        error: 0,
+      );
+    } finally {
+      free(startup);
+      free(process);
+      free(application);
+      free(command);
+      free(folder);
+    }
+  }
+
+  /// `ShellExecuteEx` with no verb, on a thread of its own: a slow file
+  /// association holds it. It asks to elevate what needs administrator, so an
+  /// exe goes by [_createProcess].
+  static ({int pid, String? exe, int error}) _shellOpen(String file) {
+    // SEE_MASK_NOCLOSEPROCESS, SEE_MASK_NOASYNC (this thread ends soon after)
+    // and SEE_MASK_FLAG_NO_UI, which the win32 package has no names for.
+    const mask = 0x40 | 0x100 | 0x400;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    final info = calloc<SHELLEXECUTEINFO>();
+    final path = file.toNativeUtf16();
+    try {
+      info.ref
+        ..cbSize = sizeOf<SHELLEXECUTEINFO>()
+        ..fMask = mask
+        ..lpFile = path
+        ..nShow = SW_SHOWNORMAL;
+      if (ShellExecuteEx(info) == 0) {
+        return (pid: 0, exe: null, error: GetLastError());
+      }
+      final process = info.ref.hProcess;
+      if (process == 0) return (pid: 0, exe: null, error: 0);
+      final size = calloc<Uint32>()..value = MAX_PATH;
+      final name = wsalloc(MAX_PATH);
+      try {
+        final exe = QueryFullProcessImageName(process, 0, name, size) == 0
+            ? null
+            : p.windows.basenameWithoutExtension(name.toDartString());
+        return (pid: GetProcessId(process), exe: exe, error: 0);
+      } finally {
+        CloseHandle(process);
+        free(size);
+        free(name);
+      }
+    } finally {
+      free(info);
+      free(path);
+      CoUninitialize();
+    }
+  }
+
+  @override
+  bool running(int pid) {
+    if (pid == 0) return false;
+    final process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (process == 0) return false;
+    try {
+      return WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+    } finally {
+      CloseHandle(process);
+    }
+  }
+
+  @override
+  Map<int, int> processParents() => gaiaProcessParents();
+
+  @override
+  Set<String> appIdsOf(GaiaForegroundWindow window) => {
+    ?gaiaWindowAppId(window.hwnd)?.toLowerCase(),
+    ?gaiaProcessAppId(window.pid)?.toLowerCase(),
+  };
+
+  @override
+  ({String? exe, String? appId}) handler(
+    String assoc, {
+    required bool protocol,
+  }) => gaiaHandlerOf(assoc, protocol: protocol);
+
+  @override
+  String? startAppTarget(String id) => gaiaStartAppTarget(id);
+
+  @override
+  String? shortcutTarget(String path) => gaiaLinkTarget(path);
+
+  @override
+  bool minimized(int hwnd) => IsIconic(hwnd) != 0;
+
+  @override
+  void restore(int hwnd) => ShowWindowAsync(hwnd, SW_RESTORE);
+
   static const _extended = {
+    VK_LWIN,
     VK_DELETE,
     VK_INSERT,
     VK_HOME,

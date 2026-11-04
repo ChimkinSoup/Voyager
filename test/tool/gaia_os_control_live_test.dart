@@ -430,7 +430,11 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
       control.session('chat', auto: true, onUserStop: () => stops++);
       await control.plan('chat', 'long', 'os_type', {'text': 'y' * 1500});
       final running = control.run('long', once: true, check: () async {});
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      // Past the pace after the click (§5.6), so the stop lands mid-text.
+      await until(
+        () => lines.any((l) => l.startsWith('TEXT:') && l.contains('y')),
+        'the typing',
+      );
       // At the pace of a hand.
       key(VK_MENU, up: false);
       await Future<void>.delayed(const Duration(milliseconds: 40));

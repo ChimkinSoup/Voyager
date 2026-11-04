@@ -271,6 +271,10 @@ class GaiaAgentSession {
       );
 }
 
+/// The hand under the composer (GAIA_AUTONOMY_HLD.md §4): no input, input
+/// after a card, or input with none.
+enum GaiaHand { off, ask, auto }
+
 /// What one device has let a chat do on it (§8, §15.6). Stamped [at], since
 /// a chat's document is last-write-wins as a whole, and a stale copy from
 /// another device must not turn a revoked grant back on: each device's entry
@@ -279,6 +283,7 @@ class GaiaGrant {
   const GaiaGrant({
     required this.seeScreen,
     this.canControl = false,
+    this.auto = false,
     required this.at,
   });
 
@@ -287,11 +292,20 @@ class GaiaGrant {
 
   /// *Can control*: the `os_*` action tools.
   final bool canControl;
+
+  /// The hand's Auto (GAIA_AUTONOMY_HLD.md §4): with [canControl] and
+  /// [seeScreen], actions and the CLI's prompts go with no card. A build that
+  /// doesn't know it reads the chat as Ask.
+  final bool auto;
   final DateTime at;
+
+  /// The hand as the user sees it: Off, Ask or Auto.
+  bool get isAuto => auto && canControl && seeScreen;
 
   Map<String, Object?> toJson() => {
     'seeScreen': seeScreen,
     'canControl': canControl,
+    if (auto) 'auto': true,
     'at': at.toIso8601String(),
   };
 }
@@ -304,6 +318,7 @@ Map<String, GaiaGrant> gaiaGrantsFromJson(Object? json) => {
           key as String: GaiaGrant(
             seeScreen: value['seeScreen'] == true,
             canControl: value['canControl'] == true,
+            auto: value['auto'] == true,
             at: parsed,
           ),
 };

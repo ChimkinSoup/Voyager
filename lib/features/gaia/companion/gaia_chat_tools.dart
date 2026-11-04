@@ -101,6 +101,10 @@ typedef GaiaControlHost = ({
 /// the `memory_*` tools (§11) go to the main instance through [read], the
 /// `os_*` reads through [screen], proposals through [proposals], and step lists
 /// through [control]. While [aborted], every tool refuses (§15.7).
+///
+/// In Auto (GAIA_AUTONOMY_HLD.md §4), which [isAuto] asks the main instance at
+/// each call, actions and the CLI's prompts raise no card: what ran goes in one
+/// activity card for the turn (§7), through [onActivity].
 class GaiaChatTools implements GaiaTurnTools {
   GaiaChatTools({
     required this.chatId,
@@ -111,12 +115,26 @@ class GaiaChatTools implements GaiaTurnTools {
     required this.proposals,
     required this.control,
     required this.aborted,
+    this.isAuto,
+    this.onActivity,
+    this.resume,
     this.hold = kGaiaCardHold,
   });
 
   final String chatId;
   final GaiaCards cards;
   final void Function(GaiaCardPart card) onCard;
+
+  /// Whether the chat is in Auto now; never, for null.
+  final Future<bool> Function()? isAuto;
+
+  /// The turn's activity card changed. It can change many times a second, so
+  /// it needn't be saved each time (§7); [onCard] takes it for null.
+  final void Function(GaiaCardPart card)? onActivity;
+
+  /// The user answered a question: an Auto run waiting while Gaia is in front
+  /// goes on (§5.2).
+  final void Function()? resume;
   final Future<String> Function(String tool, Map<String, Object?> arguments)
   read;
 
@@ -135,6 +153,51 @@ class GaiaChatTools implements GaiaTurnTools {
     text: 'aborted: Gaia is aborted.',
     isError: true,
   );
+
+  /// The turn's activity card (§7): its id once anything ran, what ran, newest
+  /// last and at most [_maxActivity], and how much in all.
+  String? _activityId;
+  final _activity = <String>[];
+  var _activityTotal = 0;
+  String? _activityWindow;
+  String? _activityApp;
+  static const _maxActivity = 200;
+
+  void _logActivity(Iterable<String> labels, {String? window, String? app}) {
+    for (final label in labels) {
+      _activity.add(label);
+      _activityTotal++;
+    }
+    if (_activity.length > _maxActivity) {
+      _activity.removeRange(0, _activity.length - _maxActivity);
+    }
+    _activityWindow = window ?? _activityWindow;
+    _activityApp = app ?? _activityApp;
+    final card = GaiaCardPart(
+      id: _activityId ??= _uuid.v4(),
+      kind: GaiaCardKind.control,
+      state: GaiaCardState.accepted,
+      tool: 'activity',
+      input: {
+        'activity': true,
+        'window': ?_activityWindow,
+        'app': ?_activityApp,
+        'total': _activityTotal,
+        'steps': [
+          for (final label in _activity) {'label': label, 'resolved': true},
+        ],
+      },
+      // As a step list that ran in full, for the action log and older builds.
+      answer: {
+        'ran': _activity.length,
+        'committed': {'steps': _activityTotal},
+      },
+    );
+    (onActivity ?? onCard)(card);
+  }
+
+  /// How long the screen gets to settle before `read_after` reads it.
+  static const _readSettle = Duration(milliseconds: 300);
 
   @override
   Future<GaiaToolResult> call(
@@ -215,6 +278,7 @@ class GaiaChatTools implements GaiaTurnTools {
     }
     final decided = card.decided(answer.state, answer.answer);
     onCard(decided);
+    if (decided.state != GaiaCardState.voided) resume?.call();
     return switch (decided.state) {
       GaiaCardState.accepted => GaiaToolResult(
         text: gaiaQuestionAnswerText(decided.answer),
@@ -320,6 +384,7 @@ class GaiaChatTools implements GaiaTurnTools {
     // In Auto the main instance runs it with no card (GAIA_AUTONOMY_HLD.md §5).
     final auto = plan['auto'] == true;
     plan = {...plan}..remove('auto');
+    if (auto) return _withRead(await _autoControl(id, plan), arguments);
     final total = (plan['steps']! as List).length;
     final stepWord = total == 1 ? 'step' : 'steps';
     GaiaCardPart cardWith(
@@ -341,8 +406,9 @@ class GaiaChatTools implements GaiaTurnTools {
       },
     );
     var ran = 0;
-    var once = auto;
+    var once = false;
     String? adopted;
+    String? stopped;
     while (ran < total) {
       if (!once) {
         final open = cardWith(GaiaCardState.open, ran: ran);
@@ -383,35 +449,115 @@ class GaiaChatTools implements GaiaTurnTools {
         final result = await control.run(id, once: once);
         ran = (result['ran']! as num).toInt();
         plan = {...plan, 'steps': result['steps']};
-        if (result['adopted'] case final String window) {
-          adopted =
-              ' A window opened in front, and later calls act on it: $window.';
-        }
-        if (result['stopped'] case final String stopped) {
-          onCard(cardWith(GaiaCardState.accepted, ran: ran, stopped: stopped));
-          return GaiaToolResult(
-            text:
-                'Stopped after $ran of $total $stepWord: $stopped Nothing more '
-                'was sent. Read the screen before assuming anything, and if the '
-                "user stopped it, don't start again unless they ask."
-                '${adopted ?? ''}',
-            isError: false,
-          );
-        }
+        adopted = _windowNote(result) ?? adopted;
+        stopped = result['stopped'] as String?;
       } catch (error) {
         control.drop(id);
         onCard(cardWith(GaiaCardState.voided, ran: ran, stopped: '$error'));
         return GaiaToolResult(text: '$error', isError: true);
       }
+      if (stopped != null) break;
     }
-    onCard(cardWith(GaiaCardState.accepted, ran: ran));
-    return GaiaToolResult(
-      text:
-          '${total == 1 ? 'Sent the step' : 'Sent all $total steps'}. That says '
-          'the input went, not that it worked: read the screen to see.'
-          '${adopted ?? ''}',
-      isError: false,
+    onCard(cardWith(GaiaCardState.accepted, ran: ran, stopped: stopped));
+    return _withRead(
+      stopped == null
+          ? _sentResult(total, adopted)
+          : _stoppedResult(ran, total, stopped, adopted),
+      arguments,
     );
+  }
+
+  /// An Auto action (§5): run at once, and logged on the turn's activity card.
+  Future<GaiaToolResult> _autoControl(
+    String id,
+    Map<String, Object?> plan,
+  ) async {
+    final total = (plan['steps']! as List).length;
+    List<String> labels(Object? steps, int ran) => [
+      for (final step in (steps as List? ?? const []).take(ran))
+        '${(step as Map)['label'] ?? ''}',
+    ];
+    final Map<String, Object?> result;
+    try {
+      result = await control.run(id, once: true);
+    } catch (error) {
+      control.drop(id);
+      _logActivity(['Stopped: $error']);
+      return GaiaToolResult(text: '$error', isError: true);
+    }
+    final ran = (result['ran']! as num).toInt();
+    final adopted = _windowNote(result);
+    final stopped = result['stopped'] as String?;
+    _logActivity(
+      [
+        ...labels(result['steps'], ran),
+        if (stopped != null) 'Stopped: $stopped',
+      ],
+      window:
+          result['front'] as String? ??
+          result['adopted'] as String? ??
+          plan['window'] as String?,
+      app: plan['app'] as String?,
+    );
+    return stopped == null
+        ? _sentResult(total, adopted)
+        : _stoppedResult(ran, total, stopped, adopted);
+  }
+
+  /// What the agent is told of the window a run left in front: the one
+  /// `os_open` or `os_focus` brought up, or one that opened by itself.
+  static String? _windowNote(Map<String, Object?> result) =>
+      switch ((result['front'], result['adopted'])) {
+        (final String window, _) =>
+          ' $window is in front, and later calls act on it.',
+        (_, final String window) =>
+          ' A window opened in front, and later calls act on it: $window.',
+        _ => null,
+      };
+
+  static GaiaToolResult _sentResult(int total, String? adopted) =>
+      GaiaToolResult(
+        text:
+            '${total == 1 ? 'Sent the step' : 'Sent all $total steps'}. That '
+            'says the input went, not that it worked: read the screen to see.'
+            '${adopted ?? ''}',
+        isError: false,
+      );
+
+  static GaiaToolResult _stoppedResult(
+    int ran,
+    int total,
+    String stopped,
+    String? adopted,
+  ) => GaiaToolResult(
+    text:
+        'Stopped after $ran of $total ${total == 1 ? 'step' : 'steps'}: '
+        '$stopped Nothing more was sent. Read the screen before assuming '
+        "anything, and if the user stopped it, don't start again unless they "
+        'ask.${adopted ?? ''}',
+    isError: false,
+  );
+
+  /// With `read_after` (§5.6), [result] and the screen as it is now, read
+  /// as `os_read_screen` reads it, so acting and looking take one call.
+  Future<GaiaToolResult> _withRead(
+    GaiaToolResult result,
+    Map<String, Object?> arguments,
+  ) async {
+    if (arguments['read_after'] != true) return result;
+    await Future<void>.delayed(_readSettle);
+    try {
+      final read = await screen('os_read_screen', const {});
+      return GaiaToolResult(
+        text: '${result.text}\n\nThe screen now:\n${read.text}',
+        isError: result.isError,
+      );
+    } catch (error) {
+      return GaiaToolResult(
+        text: '${result.text}\n\nThe screen could not be read: $error',
+        isError: result.isError,
+      );
+    }
   }
 
   @override
@@ -425,6 +571,13 @@ class GaiaChatTools implements GaiaTurnTools {
     // is its own card. A CLI asking about one, outside Auto mode, gets no
     // second card in front of it.
     if (tool.startsWith('mcp__${kGaiaMcpServer}__')) {
+      return (allow: true, message: '');
+    }
+    // Read now, so a chat taken out of Auto mid-turn asks again (§5.7). The
+    // activity card still shows what ran.
+    if (await isAuto?.call() ?? false) {
+      if (aborted()) return (allow: false, message: 'Gaia is aborted.');
+      _logActivity(['Allowed ${_permitted(tool, input)}']);
       return (allow: true, message: '');
     }
     final card = GaiaCardPart(
@@ -468,6 +621,18 @@ String gaiaQuestionAnswerText(Map<String, Object?>? answer) {
     if (text.isNotEmpty) 'The user wrote: $text',
     if (selected.isEmpty && text.isEmpty) 'The user answered without words.',
   ].join('\n');
+}
+
+/// A CLI prompt allowed in Auto, as its activity row says it: the command,
+/// path or URL where there is one.
+String _permitted(String tool, Map<String, Object?> input) {
+  for (final key in ['command', 'file_path', 'notebook_path', 'url', 'path']) {
+    if (input[key] case final String value when value.isNotEmpty) {
+      final line = value.replaceAll(RegExp(r'\s+'), ' ');
+      return '$tool: ${line.length > 200 ? '${line.substring(0, 200)}…' : line}';
+    }
+  }
+  return tool;
 }
 
 /// A permission card keeps the call it asks about, shortened: a file write's

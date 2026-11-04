@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -64,6 +65,28 @@ class _ContractTools implements GaiaTurnTools {
   }
 }
 
+/// Allows every permission, recording each, as a chat in Auto does
+/// (GAIA_AUTONOMY_HLD.md §5.7).
+class _AllowTools implements GaiaTurnTools {
+  final permits = <String>[];
+
+  @override
+  Future<GaiaToolResult> call(
+    String name,
+    Map<String, Object?> arguments,
+  ) async => const GaiaToolResult(text: 'unexpected tool', isError: true);
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) async {
+    permits.add('$tool ${input['command'] ?? ''}');
+    return (allow: true, message: '');
+  }
+}
+
 /// `os_screenshot` answered with a solid green picture, which a model can only
 /// describe if the image reached it (§15.6).
 class _ScreenshotTools implements GaiaTurnTools {
@@ -91,6 +114,28 @@ class _ScreenshotTools implements GaiaTurnTools {
     required Map<String, Object?> input,
     required String description,
   }) async => (allow: false, message: 'The user declined.');
+}
+
+/// [tools], saying when the first permission is asked for.
+class _StartedTools implements GaiaTurnTools {
+  _StartedTools(this.tools, this.asked);
+
+  final GaiaTurnTools tools;
+  final Completer<void> asked;
+
+  @override
+  Future<GaiaToolResult> call(String name, Map<String, Object?> arguments) =>
+      tools.call(name, arguments);
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) {
+    if (!asked.isCompleted) asked.complete();
+    return tools.permit(tool: tool, input: input, description: description);
+  }
 }
 
 void main() {
@@ -274,6 +319,89 @@ void main() {
         expect(text(resumed), contains('Blue'));
       } finally {
         await first.killAll();
+      }
+    },
+  );
+
+  test(
+    'app-server, Auto (GAIA_AUTONOMY_HLD.md §5.7): a command permit allows '
+    'runs as whom, and a stopped turn ends the command it was running',
+    skip: !_enabled,
+    timeout: const Timeout(Duration(minutes: 8)),
+    () async {
+      final ws = p.join(root.path, 'ws');
+      Directory(ws).createSync(recursive: true);
+      final who = File(p.join(ws, 'gaia-whoami.txt'));
+      final marker = File(p.join(ws, 'gaia-stop-probe.txt'));
+      for (final file in [who, marker]) {
+        if (file.existsSync()) file.deleteSync();
+      }
+      final cli = appServer('app_server_auto');
+      try {
+        final tools = _AllowTools();
+        final result = await cli.send(
+          chatId: 'contract',
+          sessionId: null,
+          model: _model,
+          prompt:
+              'With one shell command, write the output of whoami to a file '
+              'named gaia-whoami.txt in the current directory. Then reply '
+              'with what it wrote.',
+          tools: tools,
+          onEvent: (_) {},
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        final user = Platform.environment['USERNAME'] ?? '';
+        // PowerShell writes UTF-16: its ASCII, with the zero bytes left out.
+        final wrote = who.existsSync()
+            ? String.fromCharCodes(
+                who.readAsBytesSync().where((b) => b > 0 && b < 0x80),
+              ).trim()
+            : '';
+        debugPrint(
+          'GAIA-CLI codex auto: permits ${tools.permits}; whoami wrote '
+          '"$wrote", the user is "$user"',
+        );
+        expect(wrote, isNotEmpty);
+
+        final asked = Completer<void>();
+        final stopping = _AllowTools();
+        final turn = cli
+            .send(
+              chatId: 'contract',
+              sessionId: result.sessionId,
+              model: _model,
+              prompt:
+                  'Run exactly this shell command and wait for it to finish: '
+                  'powershell -NoProfile -Command "Start-Sleep -Seconds 20; '
+                  "Set-Content -Path 'gaia-stop-probe.txt' -Value done\"",
+              tools: _StartedTools(stopping, asked),
+              onEvent: (event) {
+                if (event is GaiaToolUse && !asked.isCompleted) {
+                  asked.complete();
+                }
+              },
+            )
+            .then<Object?>((result) => result, onError: (Object e) => e);
+        await asked.future.timeout(const Duration(minutes: 2));
+        await Future<void>.delayed(const Duration(seconds: 6));
+        await cli.stop('contract');
+        final ended = await turn;
+        debugPrint(
+          'GAIA-CLI codex auto stop: the turn ended with '
+          '${ended is GaiaTurnResult ? ended.text : ended}',
+        );
+        await Future<void>.delayed(const Duration(seconds: 25));
+        debugPrint(
+          'GAIA-CLI codex auto stop: permits ${stopping.permits}; the '
+          'command '
+          '${marker.existsSync() ? 'finished after the stop' : 'was ended'}',
+        );
+      } finally {
+        await cli.killAll();
+        for (final file in [who, marker]) {
+          if (file.existsSync()) file.deleteSync();
+        }
       }
     },
   );

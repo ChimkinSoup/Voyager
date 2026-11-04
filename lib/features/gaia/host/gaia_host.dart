@@ -70,7 +70,8 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
-/// `osStop {chatId}`, `rearm`,
+/// `osStop {chatId}`, `osResume {chatId}`, `autoConsented` (a bool),
+/// `setAuto {chatId, on, consented}`, `isAuto {chatId}` (a bool), `rearm`,
 /// and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
@@ -83,6 +84,7 @@ class GaiaHost {
   GaiaHost({
     GaiaPipe? pipe,
     Future<File> Function()? abortFlag,
+    Future<File> Function()? autoConsent,
     Future<void> Function(int pid)? killCompanion,
     Future<Directory> Function()? captureDirectory,
     Future<GaiaScreenCapture?> Function(String path)? captureScreen,
@@ -120,6 +122,7 @@ class GaiaHost {
        _splitWindows = splitWindows ?? gaiaSplitWindows,
        _copySelection = copySelection ?? gaiaCopySelection,
        _abortFlag = abortFlag ?? _defaultAbortFlag,
+       _autoConsent = autoConsent ?? _defaultAutoConsent,
        _killCompanion = killCompanion ?? _killTree,
        _captureDirectory = captureDirectory ?? _defaultCaptureDirectory,
        _captureScreenTo = captureScreen ?? gaiaCaptureScreen,
@@ -139,10 +142,6 @@ class GaiaHost {
         exclusions: () => _settings.contextExclusions,
         vaultUnlocked: () => _vaultUnlocked(),
       );
-
-  /// Runs every chat with *can control* in Auto, with no cards, until Auto's
-  /// own grant exists (GAIA_AUTONOMY_HLD.md §11, Phase 3).
-  bool forceAuto = const bool.fromEnvironment('GAIA_FORCE_AUTO');
 
   final GaiaOsControl? _osControlOverride;
 
@@ -172,6 +171,10 @@ class GaiaHost {
   /// [attach], so this is always the app's by then.
   bool Function() _vaultUnlocked = () => true;
   final Future<File> Function() _abortFlag;
+
+  /// There once the user has confirmed Auto's notice on this device
+  /// (GAIA_AUTONOMY_HLD.md §4).
+  final Future<File> Function() _autoConsent;
   final Future<void> Function(int pid) _killCompanion;
   final Future<Directory> Function() _captureDirectory;
   final Future<GaiaScreenCapture?> Function(String path) _captureScreenTo;
@@ -328,6 +331,9 @@ class GaiaHost {
     _memories = memories;
     final store = GaiaChatStore(repository, deviceId: deviceId);
     _attached.complete(store);
+    // The notch says when a turn is acting, and when it waits
+    // (GAIA_AUTONOMY_HLD.md §4).
+    _osControl.onSession = () => unawaited(_syncBorder(store));
     _borderChannel.setMethodCallHandler((call) async {
       if (call.method == 'revoke') await _revokeFromBorder();
     });
@@ -951,14 +957,28 @@ class GaiaHost {
   int? _borderAccent;
 
   /// The border shows while any chat here has *can control* on (§15.6), and
-  /// names it, for finding the toggle again.
+  /// names it, for finding the toggle again. A chat in Auto is named with its
+  /// mode, and while a turn acts, how to stop it (GAIA_AUTONOMY_HLD.md §4).
   Future<void> _syncBorder(GaiaChatStore store) async {
-    final titles = await store.controlledChatTitles();
-    final label = switch (titles) {
+    final chats = await store.controlledChats();
+    final auto = chats.any((chat) => chat.auto);
+    final named = switch (chats) {
       [] => null,
-      [final title] =>
-        title.isEmpty ? 'Gaia is in control' : 'Gaia is in control: $title',
-      _ => 'Gaia is in control: ${titles.length} chats',
+      [(:final title, auto: _)] when title.isNotEmpty => title,
+      [_] => '',
+      _ => '${chats.length} chats',
+    };
+    final acting = switch (_osControl.sessionChat) {
+      null => '',
+      _ when _osControl.sessionPaused => ' · Paused',
+      _ => ' · Esc to stop',
+    };
+    final label = switch (named) {
+      null => null,
+      _ when auto =>
+        ['Gaia · Auto', if (named.isNotEmpty) named].join(' · ') + acting,
+      '' => 'Gaia is in control',
+      _ => 'Gaia is in control: $named',
     };
     // Showing rebuilds its windows, and most changes don't touch it.
     if (_borderSynced &&
@@ -1189,7 +1209,18 @@ class GaiaHost {
       case 'setSeeScreen':
         final on = params['on']! as bool;
         if (on && _aborted) throw GaiaPipeException('Gaia is aborted.');
-        await store.setSeeScreen(params['chatId']! as String, on);
+        final chatId = params['chatId']! as String;
+        // Off drops Auto, so its running session ends as setAuto's does.
+        if (!on && _osControl.sessionChat == chatId) {
+          _osControl.stop(
+            'The user turned off "can see screen".',
+            chatId: chatId,
+          );
+          _osControl.endTurn(chatId);
+        }
+        await store.setSeeScreen(chatId, on);
+        // Off takes Auto with it, which the notch names.
+        await _syncBorder(store);
         return null;
       case 'osRead':
         return _osRead(
@@ -1209,20 +1240,53 @@ class GaiaHost {
         await store.setCanControl(chatId, on);
         await _syncBorder(store);
         return null;
+      case 'autoConsented':
+        return (await _autoConsent()).exists();
+      case 'setAuto':
+        final chatId = params['chatId']! as String;
+        final on = params['on']! as bool;
+        if (on) {
+          if (_aborted) throw GaiaPipeException('Gaia is aborted.');
+          final consent = await _autoConsent();
+          if (params['consented'] == true) {
+            await consent.writeAsString(DateTime.now().toIso8601String());
+          } else if (!await consent.exists()) {
+            throw GaiaPipeException('Auto needs its notice confirmed first.');
+          }
+        } else {
+          // Back to Ask, the turn's next action waits on a card.
+          _osControl.stop(
+            'The user switched this chat to Ask.',
+            chatId: chatId,
+          );
+          _osControl.endTurn(chatId);
+        }
+        await store.setAuto(chatId, on);
+        await _syncBorder(store);
+        return null;
+      case 'isAuto':
+        // Read at each CLI prompt (GAIA_AUTONOMY_HLD.md §5.7), so taking it
+        // back mid-turn applies to the next one.
+        return !_aborted &&
+            !_revoking &&
+            await store.isAuto(params['chatId']! as String);
       case 'osPlan':
         final chatId = params['chatId']! as String;
         await _checkControl(store, chatId);
         final auto = await _auto(store, chatId);
+        final tool = params['tool']! as String;
         try {
           _osControl.session(
             chatId,
             auto: auto,
             onUserStop: () => _userStopped(store, chatId),
+            // These find their own window (GAIA_AUTONOMY_HLD.md §8).
+            needsWindow: tool != 'os_open' && tool != 'os_focus',
           );
           return await _osControl.plan(
             chatId,
             params['cardId']! as String,
-            params['tool']! as String,
+            tool,
             _map(params['arguments']),
           );
         } on GaiaReadException catch (error) {
@@ -1245,6 +1309,9 @@ class GaiaHost {
         }
       case 'osDrop':
         _osControl.drop(params['cardId']! as String);
+        return null;
+      case 'osResume':
+        _osControl.resume(params['chatId']! as String);
         return null;
       case 'osStop':
         _osControl.stop(
@@ -1394,7 +1461,10 @@ class GaiaHost {
           chatId,
           auto: auto,
           onUserStop: () => _userStopped(store, chatId),
+          needsWindow: tool != 'os_windows',
         ),
+        // Read after session(), which may have started one.
+        session: _osControl.sessionChat == chatId,
       );
     } on GaiaReadException catch (error) {
       throw GaiaPipeException(error.message);
@@ -1414,7 +1484,7 @@ class GaiaHost {
   /// nothing would end. The caller goes straight on, with no await before it
   /// starts one, or the turn could end in between.
   Future<bool> _auto(GaiaChatStore store, String chatId) async =>
-      forceAuto && await store.canControl(chatId) && _running(chatId);
+      await store.isAuto(chatId) && _running(chatId);
 
   /// Esc or a switch of window stopped [chatId]'s session (§5.3): its reply
   /// stops, and its queue doesn't carry on without the user.
@@ -1577,6 +1647,9 @@ class GaiaHost {
 
   static Future<File> _defaultAbortFlag() async =>
       File(p.join((await appDataDirectory()).path, 'gaia_aborted'));
+
+  static Future<File> _defaultAutoConsent() async =>
+      File(p.join((await appDataDirectory()).path, 'gaia_auto_consent'));
 
   static Future<Directory> _defaultCaptureDirectory() async => Directory(
     p.join((await appSupportRoot()).path, 'gaia', 'captures'),

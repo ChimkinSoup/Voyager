@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
@@ -77,7 +79,7 @@ class _Backend implements GaiaInputBackend {
     if (_switching) {
       duringSwitch?.call();
       if (activateLag case final lag? when lag <= 0) {
-        front = _target.hwnd;
+        front = _switchTo;
         _switching = false;
       } else if (activateLag != null) {
         activateLag = activateLag! - 1;
@@ -100,11 +102,93 @@ class _Backend implements GaiaInputBackend {
       return true;
     }
     _switching = activates;
+    _switchTo = hwnd;
     return activates;
+  }
+
+  var _switchTo = _target.hwnd;
+
+  /// What [listWindows] gives, front first.
+  var listed = <GaiaListedWindow>[];
+
+  /// The Start menu's apps.
+  var apps = <({String name, String id})>[];
+  final launched = <String>[];
+
+  /// What [launch] answers; it throws for null.
+  ({int pid, String? exe})? launchAnswer = (pid: 0, exe: null);
+
+  /// Runs once per [launch], after it: an app opening its window.
+  void Function()? onLaunch;
+  final runningPids = <int>{};
+  final minimizedWindows = <int>{};
+  final restored = <int>[];
+
+  /// How many looks a restore takes to show, and whether it comes in front,
+  /// as SW_RESTORE activates.
+  int restoreLag = 0;
+  bool restoreActivates = false;
+
+  @override
+  List<GaiaListedWindow> listWindows() => listed;
+  @override
+  Future<List<({String name, String id})>> startApps() async => apps;
+  @override
+  Future<({int pid, String? exe})> launch(String file) async {
+    launched.add(file);
+    onLaunch?.call();
+    return launchAnswer ?? (throw GaiaReadException("Windows couldn't open."));
+  }
+
+  @override
+  bool running(int pid) => runningPids.contains(pid);
+
+  /// Each process's parent, and each window's app IDs, by hwnd.
+  final parents = <int, int>{};
+  final appIds = <int, Set<String>>{};
+
+  /// What opens each extension or scheme, and where each Start app points.
+  final handlers = <String, ({String? exe, String? appId})>{};
+  final startTargets = <String, String>{};
+  final shortcutTargets = <String, String>{};
+
+  @override
+  Map<int, int> processParents() => parents;
+  @override
+  Set<String> appIdsOf(GaiaForegroundWindow window) => {
+    for (final id in appIds[window.hwnd] ?? const <String>{}) id.toLowerCase(),
+  };
+  @override
+  ({String? exe, String? appId}) handler(
+    String assoc, {
+    required bool protocol,
+  }) => handlers[assoc] ?? (exe: null, appId: null);
+  @override
+  String? startAppTarget(String id) => startTargets[id];
+  @override
+  String? shortcutTarget(String path) => shortcutTargets[path];
+  @override
+  bool minimized(int hwnd) {
+    if (restored.contains(hwnd) && restoreLag-- <= 0) {
+      minimizedWindows.remove(hwnd);
+    }
+    return minimizedWindows.contains(hwnd);
+  }
+
+  @override
+  void restore(int hwnd) {
+    restored.add(hwnd);
+    if (restoreActivates) front = hwnd;
+    if (restoreLag <= 0) minimizedWindows.remove(hwnd);
   }
 
   @override
   int rootAt(int x, int y) => rootUnder;
+
+  /// Window classes, by hwnd; none for the rest.
+  final classes = <int, String>{};
+  @override
+  String windowClass(int hwnd) => classes[hwnd] ?? '';
   @override
   ({int left, int top, int width, int height}) frame(int hwnd) =>
       (left: 0, top: 0, width: 800, height: 600);
@@ -1087,6 +1171,150 @@ void main() {
       });
     });
 
+    group('rules that change in Auto (§5.5)', () {
+      test('the Windows key is refused in Ask, and sent in Auto', () async {
+        await expectLater(plan('os_key', {'keys': 'Win+R'}), refused('Auto'));
+        await expectLater(plan('os_key', {'keys': 'Win'}), refused('Auto'));
+        expect((await act('os_key', {'keys': 'Win+R'}))['stopped'], isNull);
+        expect(backend.calls.last, const [
+          GaiaKeyEvent(VK_LWIN, up: false),
+          GaiaKeyEvent(0x52, up: false),
+          GaiaKeyEvent(0x52, up: true),
+          GaiaKeyEvent(VK_LWIN, up: true),
+        ]);
+        await act('os_key', {'keys': 'Win'});
+        expect(backend.calls.last, const [
+          GaiaKeyEvent(VK_LWIN, up: false),
+          GaiaKeyEvent(VK_LWIN, up: true),
+        ]);
+      });
+
+      test('Start, opened by a step, is adopted; the taskbar is not', () async {
+        const start = (
+          hwnd: 60,
+          pid: 61,
+          exe: 'StartMenuExperienceHost',
+          app: 'Start',
+          title: 'Start',
+          console: false,
+        );
+        const taskbar = (
+          hwnd: 62,
+          pid: 63,
+          exe: 'explorer',
+          app: 'Windows Explorer',
+          title: '',
+          console: false,
+        );
+        backend.windows
+          ..[start.hwnd] = start
+          ..[taskbar.hwnd] = taskbar;
+        backend.classes
+          ..[start.hwnd] = 'Windows.UI.Core.CoreWindow'
+          ..[taskbar.hwnd] = 'Shell_TrayWnd';
+        // The taskbar is something the target can be brought up past.
+        backend.gaiaInFront = true;
+        backend.onSend = () => backend.front = taskbar.hwnd;
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(look);
+        expect(auto.session('chat', auto: true, onUserStop: () {})?.hwnd, 7);
+        backend.onSend = () => backend.front = start.hwnd;
+        await act('os_key', {'keys': 'Win'});
+        backend.onSend = null;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          start.hwnd,
+        );
+      });
+
+      test('anywhere is refused in Ask, and only for a point', () async {
+        await expectLater(
+          plan('os_click', {'x': 5, 'y': 5, 'anywhere': true}),
+          refused('Auto'),
+        );
+        auto.session('chat', auto: true, onUserStop: () {});
+        await expectLater(
+          auto.plan('chat', 'card', 'os_click', {
+            'name': 'Save',
+            'anywhere': true,
+          }),
+          refused('x and y alone'),
+        );
+      });
+
+      test(
+        'an anywhere click lands outside the window, on another app',
+        () async {
+          backend.rootUnder = other.hwnd;
+          final result = await act('os_click', {
+            'x': 900,
+            'y': 700,
+            'anywhere': true,
+          });
+          expect(result['stopped'], isNull);
+          expect(backend.cursor.last, (900, 700));
+        },
+      );
+
+      test(
+        'anywhere never clicks Gaia, the notch, or an excluded app',
+        () async {
+          const notch = (
+            hwnd: 55,
+            pid: 70,
+            exe: 'voyager',
+            app: 'Voyager',
+            title: '',
+            console: false,
+          );
+          backend.windows[notch.hwnd] = notch;
+          backend.classes[notch.hwnd] = 'VoyagerGaiaControlBorder';
+          Future<Object?> click() async => (await act('os_click', {
+            'x': 900,
+            'y': 700,
+            'anywhere': true,
+          }))['stopped'];
+          backend.rootUnder = gaia.hwnd;
+          expect(await click(), contains("Gaia's own"));
+          backend.rootUnder = notch.hwnd;
+          expect(await click(), contains("Gaia's own"));
+          excluded = ['calc'];
+          backend.rootUnder = other.hwnd;
+          expect(await click(), contains('excluded'));
+          expect(backend.cursor, isEmpty);
+        },
+      );
+    });
+
+    test('the notch hears a session start, pause, go on and end; answering '
+        'Gaia resumes it (§5.2)', () async {
+      var told = 0;
+      auto.onSession = () => told++;
+      await act('os_key', {'keys': 'A'});
+      expect(told, 1);
+      backend.front = gaia.hwnd;
+      backend.gaiaInFront = true;
+      await Future<void>.delayed(look);
+      expect(auto.sessionPaused, isTrue);
+      expect(told, 2);
+      auto.resume('other chat');
+      expect(auto.sessionPaused, isTrue);
+      auto.resume('chat');
+      expect(auto.sessionPaused, isFalse);
+      expect(told, 3);
+      // Gaia still in front isn't a new pause: the next step brings the
+      // target up.
+      await Future<void>.delayed(look);
+      expect(auto.sessionPaused, isFalse);
+      expect((await act('os_key', {'keys': 'B'}))['stopped'], isNull);
+      expect(backend.activated, greaterThan(0));
+      expect(stops, 0);
+      auto.endTurn();
+      expect(told, 4);
+    });
+
     test('steps start at least the pace apart (§5.6)', () async {
       final sentAt = <DateTime>[];
       backend.onSend = () => sentAt.add(DateTime.now());
@@ -1108,6 +1336,438 @@ void main() {
         sentAt.last.difference(sentAt.first),
         greaterThanOrEqualTo(const Duration(milliseconds: 140)),
       );
+    });
+  });
+
+  group('opening (GAIA_AUTONOMY_HLD.md §8.1, §8.2)', () {
+    const calc = (
+      hwnd: 99,
+      pid: 90,
+      exe: 'calc',
+      app: 'Calculator',
+      title: 'Calculator',
+      console: false,
+    );
+    const gaia = (
+      hwnd: 50,
+      pid: 1,
+      exe: 'voyager',
+      app: 'Gaia',
+      title: 'Gaia',
+      console: false,
+    );
+    GaiaListedWindow listed(
+      GaiaForegroundWindow window, {
+      bool minimized = false,
+    }) => (
+      window: window,
+      minimized: minimized,
+      frame: (left: 0, top: 0, width: 800, height: 600),
+    );
+    late GaiaOsControl auto;
+    late List<Map<String, Object?>> flashes;
+
+    setUp(() {
+      flashes = [];
+      backend.windows
+        ..[gaia.hwnd] = gaia
+        ..[calc.hwnd] = calc;
+      backend.apps = [
+        (
+          name: 'Calculator',
+          id: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe!App',
+        ),
+        (name: 'Notepad', id: r'C:\Windows\notepad.exe'),
+        (name: 'Notepad++', id: r'C:\Program Files\Notepad++\notepad++.exe'),
+      ];
+      auto = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        voyagerPid: 70,
+        backend: backend,
+        flash: flashes.add,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        activateWait: const Duration(milliseconds: 200),
+        openWait: const Duration(milliseconds: 200),
+      );
+    });
+    tearDown(() => auto.endTurn());
+
+    /// [tool] in an Auto turn, planned and run.
+    Future<Map<String, Object?>> act(
+      String tool,
+      Map<String, Object?> arguments,
+    ) async {
+      auto.session(
+        'chat',
+        auto: true,
+        onUserStop: () {},
+        needsWindow: tool != 'os_open' && tool != 'os_focus',
+      );
+      await auto.plan('chat', 'card', tool, arguments);
+      return auto.run('card', once: true, check: () async {});
+    }
+
+    test('an app resolves by its Start menu name: exactly, else the one '
+        'it is part of; nothing launches until it runs', () async {
+      var card = await auto.plan('chat', 'card', 'os_open', {
+        'target': 'notepad',
+      });
+      expect(card['window'], 'Notepad');
+      expect(stepsOf(card).single, {'label': 'Open Notepad', 'resolved': true});
+      card = await auto.plan('chat', 'card', 'os_open', {'target': 'calc'});
+      expect(stepsOf(card).single['label'], 'Open Calculator');
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {'target': 'note'}),
+        refused('2 apps match "note": "Notepad", "Notepad++"'),
+      );
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {'target': 'Paint'}),
+        refused('No installed app is named "Paint"'),
+      );
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {'target': r'C:\no\such.txt'}),
+        refused('no file or folder'),
+      );
+      expect(backend.launched, isEmpty);
+    });
+
+    test('an excluded app or site is refused before it launches', () async {
+      excluded = ['notepad', 'bank.com'];
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {'target': 'Notepad'}),
+        refused('excluded'),
+      );
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {
+          'target': 'https://www.bank.com/login',
+        }),
+        refused('excluded'),
+      );
+      // By the exe in its id, whatever the Start menu calls it.
+      excluded = ['notepad++'];
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {'target': 'Notepad++'}),
+        refused('excluded'),
+      );
+      // A shortcut by what it opens, whatever it's named.
+      final dir = Directory.systemTemp.createTempSync('gaia_lnk');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final link = File(p.join(dir.path, 'Chat.lnk'))..createSync();
+      backend.shortcutTargets[link.path] =
+          r'C:\Program Files\Notepad++\notepad++.exe';
+      await expectLater(
+        auto.plan('chat', 'card', 'os_open', {'target': link.path}),
+        refused('excluded'),
+      );
+      // And again when it runs, if excluded since the card.
+      excluded = [];
+      await auto.plan('chat', 'card', 'os_open', {'target': 'Calculator'});
+      excluded = ['calculator'];
+      final result = await auto.run('card', once: true, check: () async {});
+      expect(result['stopped'], contains('excluded'));
+      expect(backend.launched, isEmpty);
+    });
+
+    test('in Auto it launches, then brings up, pins and flashes the new '
+        'window, and the next action lands there', () async {
+      backend.listed = [listed(_target)];
+      backend.launchAnswer = (pid: 90, exe: 'calc');
+      backend.onLaunch = () => backend.listed = [listed(calc), listed(_target)];
+      final result = await act('os_open', {'target': 'Calculator'});
+      expect(backend.launched, [
+        r'shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App',
+      ]);
+      expect(result['stopped'], isNull);
+      expect(result['front'], 'Calculator: "Calculator"');
+      expect(backend.front, calc.hwnd);
+      expect(flashes.last, {
+        'kind': 'window',
+        'left': 0,
+        'top': 0,
+        'right': 800,
+        'bottom': 600,
+        'label': 'Calculator',
+      });
+      expect(
+        auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+        calc.hwnd,
+      );
+      final next = await act('os_key', {'keys': 'A'});
+      expect(next['stopped'], isNull);
+      expect(backend.calls.last, contains(const GaiaKeyEvent(0x41, up: false)));
+    });
+
+    test('with nothing open, a session starts for os_open alone', () async {
+      backend.window = null;
+      expect(
+        () => auto.session('chat', auto: true, onUserStop: () {}),
+        refused('os_open can open one'),
+      );
+      // A Store app: no process to go by, only the app ID its frame carries.
+      backend.appIds[calc.hwnd] = {
+        'Microsoft.WindowsCalculator_8wekyb3d8bbwe!App',
+      };
+      backend.onLaunch = () => backend.listed = [listed(calc)];
+      final result = await act('os_open', {'target': 'Calculator'});
+      expect(result['front'], 'Calculator: "Calculator"');
+    });
+
+    group('only a window shown to be what launched counts', () {
+      const stray = (
+        hwnd: 77,
+        pid: 77,
+        exe: 'mspaint',
+        app: 'Paint',
+        title: 'Untitled - Paint',
+        console: false,
+      );
+
+      test('one opening by chance meanwhile is passed over', () async {
+        backend.listed = [listed(_target)];
+        backend.appIds[calc.hwnd] = {
+          'microsoft.windowscalculator_8wekyb3d8bbwe!app',
+        };
+        backend.onLaunch = () {
+          backend.listed = [listed(stray), listed(_target)];
+          Future<void>.delayed(const Duration(milliseconds: 50), () {
+            backend.listed = [listed(calc), listed(stray), listed(_target)];
+          });
+        };
+        final result = await act('os_open', {'target': 'Calculator'});
+        expect(result['front'], 'Calculator: "Calculator"');
+        expect(backend.front, calc.hwnd);
+      });
+
+      test('and with nothing else, Gaia says it could not tell', () async {
+        backend.listed = [listed(_target)];
+        backend.onLaunch = () =>
+            backend.listed = [listed(stray), listed(_target)];
+        // Even in front.
+        backend.front = stray.hwnd;
+        final result = await act('os_open', {'target': 'Calculator'});
+        expect(result['stopped'], contains("couldn't tell"));
+        expect(result['front'], isNull);
+      });
+
+      test("a launcher's window comes from a process it started", () async {
+        const child = (
+          hwnd: 91,
+          pid: 91,
+          exe: 'realapp',
+          app: 'Real App',
+          title: 'Real App',
+          console: false,
+        );
+        backend.launchAnswer = (pid: 90, exe: 'notepad');
+        backend.parents[91] = 90;
+        backend.onLaunch = () =>
+            backend.listed = [listed(stray), listed(child), listed(_target)];
+        final result = await act('os_open', {
+          'target': r'C:\Windows\System32\notepad.exe',
+        });
+        expect(result['front'], 'Real App: "Real App"');
+      });
+
+      test("a URL's window is the browser's that opens its scheme", () async {
+        const chrome = (
+          hwnd: 60,
+          pid: 60,
+          exe: 'chrome',
+          app: 'Google Chrome',
+          title: 'Example - Google Chrome',
+          console: false,
+        );
+        backend.handlers['https'] = (exe: 'chrome', appId: 'Chrome');
+        backend.onLaunch = () =>
+            backend.listed = [listed(stray), listed(chrome), listed(_target)];
+        final result = await act('os_open', {'target': 'https://example.com'});
+        expect(result['front'], 'Google Chrome: "Example - Google Chrome"');
+        // And a browser the user excluded is refused before it launches.
+        backend.launched.clear();
+        excluded = ['chrome'];
+        await expectLater(
+          auto.plan('chat', 'card', 'os_open', {'target': 'https://a.org'}),
+          refused('excluded'),
+        );
+        expect(backend.launched, isEmpty);
+      });
+
+      test("a shortcut's window is its target exe's", () async {
+        const bash = (
+          hwnd: 61,
+          pid: 61,
+          exe: 'git-bash',
+          app: 'Git Bash',
+          title: 'MINGW64',
+          console: false,
+        );
+        const id = 'Microsoft.AutoGenerated.{0FDD9C6B}';
+        backend.apps = [(name: 'Git Bash', id: id)];
+        backend.startTargets[id] = r'C:\Program Files\Git\git-bash.exe';
+        backend.onLaunch = () =>
+            backend.listed = [listed(stray), listed(bash), listed(_target)];
+        final result = await act('os_open', {'target': 'Git Bash'});
+        expect(result['front'], 'Git Bash: "MINGW64"');
+      });
+    });
+
+    test('a single-instance app hands over to the window it has', () async {
+      backend.listed = [listed(calc)];
+      backend.launchAnswer = (pid: 5, exe: 'CALC');
+      final result = await act('os_open', {
+        'target': r'C:\Windows\System32\calc.exe',
+      });
+      expect(backend.launched, [r'C:\Windows\System32\calc.exe']);
+      expect(result['front'], 'Calculator: "Calculator"');
+    });
+
+    test('a launch with no window it can tell says so', () async {
+      backend.listed = [listed(_target)];
+      final result = await act('os_open', {'target': 'Calculator'});
+      expect(result['stopped'], contains('os_windows'));
+      expect(result['front'], isNull);
+    });
+
+    test('Windows refusing to open it is a stop', () async {
+      backend.launchAnswer = null;
+      final result = await act('os_open', {'target': 'https://example.com'});
+      expect(result['stopped'], contains("couldn't open"));
+    });
+
+    test(
+      'os_focus finds a window by id, title or app, never Gaia\'s',
+      () async {
+        backend.listed = [listed(gaia), listed(_target), listed(calc)];
+        for (final asked in <Object>[99, '99', 'calculator', 'CALC']) {
+          final card = await control.plan('chat', 'card', 'os_focus', {
+            'window': asked,
+          });
+          expect(
+            stepsOf(card).single['label'],
+            'Bring Calculator: "Calculator" to the front',
+          );
+        }
+        await expectLater(
+          control.plan('chat', 'card', 'os_focus', {'window': 'Gaia'}),
+          refused('No open window matches'),
+        );
+        backend.listed = [listed(_target), listed(calc), listed(calc)];
+        await expectLater(
+          control.plan('chat', 'card', 'os_focus', {'window': 'calc'}),
+          refused('2 windows match'),
+        );
+      },
+    );
+
+    test('an excluded window is matched by id alone, and refused', () async {
+      backend.listed = [listed(_target), listed(calc)];
+      excluded = ['calc'];
+      await expectLater(
+        control.plan('chat', 'card', 'os_focus', {'window': 'Calculator'}),
+        refused('No open window matches'),
+      );
+      await expectLater(
+        control.plan('chat', 'card', 'os_focus', {'window': 99}),
+        refused('excluded'),
+      );
+    });
+
+    test('a browser on an excluded site is matched by id alone, and '
+        'refused', () async {
+      const bank = (
+        hwnd: 61,
+        pid: 72,
+        exe: 'chrome',
+        app: 'Chrome',
+        title: 'Account 1234 - MyBank',
+        console: false,
+      );
+      backend.windows[bank.hwnd] = bank;
+      backend.listed = [listed(_target), listed(bank)];
+      excluded = ['mybank.com'];
+      backend.url = 'https://www.mybank.com/account';
+      await expectLater(
+        control.plan('chat', 'card', 'os_focus', {'window': 'MyBank'}),
+        refused('No open window matches'),
+      );
+      await expectLater(
+        control.plan('chat', 'card', 'os_focus', {'window': 61}),
+        refused('excluded'),
+      );
+      // An address that can't be read is no better while a site is excluded.
+      backend.url = null;
+      await expectLater(
+        control.plan('chat', 'card', 'os_focus', {'window': 'MyBank'}),
+        refused('No open window matches'),
+      );
+      backend.url = 'https://example.com/';
+      final card = await control.plan('chat', 'card', 'os_focus', {
+        'window': 'MyBank',
+      });
+      expect(stepsOf(card).single['label'], contains('MyBank'));
+    });
+
+    test('in Ask, os_focus is a card, and approved, restores and brings the '
+        'window up', () async {
+      backend.listed = [listed(_target), listed(calc, minimized: true)];
+      backend.minimizedWindows.add(calc.hwnd);
+      final card = await control.plan('chat', 'card', 'os_focus', {
+        'window': 'Calculator',
+      });
+      expect(card['auto'], isNull);
+      expect(card['window'], 'Calculator: "Calculator"');
+      expect(backend.activated, 0);
+      final result = await run();
+      expect(result['stopped'], isNull);
+      expect(backend.restored, [calc.hwnd]);
+      expect(backend.front, calc.hwnd);
+      expect(result['front'], 'Calculator: "Calculator"');
+    });
+
+    test('in Auto, os_focus restoring a window in front is not the user '
+        'switching', () async {
+      final control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        adoptWithin: const Duration(milliseconds: 50),
+      );
+      addTearDown(control.endTurn);
+      backend.listed = [listed(_target), listed(calc, minimized: true)];
+      backend
+        ..minimizedWindows.add(calc.hwnd)
+        ..restoreActivates = true
+        ..restoreLag = 5;
+      var userStopped = false;
+      control.session(
+        'chat',
+        auto: true,
+        onUserStop: () => userStopped = true,
+        needsWindow: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await control.plan('chat', 'card', 'os_focus', {'window': 'Calculator'});
+      final result = await control.run('card', once: true, check: () async {});
+      expect(result['stopped'], isNull);
+      expect(userStopped, isFalse);
+      expect(backend.front, calc.hwnd);
+    });
+
+    test('a window that closed before os_focus ran is a stop', () async {
+      backend.listed = [listed(calc)];
+      await control.plan('chat', 'card', 'os_focus', {'window': 99});
+      backend.windows.remove(calc.hwnd);
+      backend.window = null;
+      final result = await run();
+      expect(result['stopped'], contains('closed'));
     });
   });
 

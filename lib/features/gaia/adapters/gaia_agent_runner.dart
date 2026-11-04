@@ -29,9 +29,13 @@ class GaiaToolUse extends GaiaAgentEvent {
 /// A card was raised, or decided (§10): one with a new id goes after the
 /// reply so far, one already there is replaced where it is.
 class GaiaCardUpdate extends GaiaAgentEvent {
-  const GaiaCardUpdate(this.card);
+  const GaiaCardUpdate(this.card, {this.saveNow = true});
 
   final GaiaCardPart card;
+
+  /// Saved at once, rather than with the reply's next save: what another
+  /// device or the Gaia page waits on (GAIA_AUTONOMY_HLD.md §7).
+  final bool saveNow;
 }
 
 /// The account's usage, as the backend reported it mid-turn.

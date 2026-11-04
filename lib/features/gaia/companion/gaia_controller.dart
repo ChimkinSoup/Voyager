@@ -2598,6 +2598,8 @@ class GaiaController extends ChangeNotifier {
                   _deviceId: GaiaGrant(
                     seeScreen: on,
                     canControl: c.grants[_deviceId]?.canControl ?? false,
+                    // Auto needs reading (GAIA_AUTONOMY_HLD.md §4).
+                    auto: on && (c.grants[_deviceId]?.auto ?? false),
                     at: utcNow(),
                   ),
                 },
@@ -2608,7 +2610,8 @@ class GaiaController extends ChangeNotifier {
     await _request('setSeeScreen', {'chatId': chat.id, 'on': on});
   }
 
-  /// A new chat's *can control*, until its first message makes it one.
+  /// A new chat's *can control*, until its first message makes it one. Never
+  /// Auto (GAIA_AUTONOMY_HLD.md §4).
   var _newChatCanControl = false;
 
   /// *Can control* (§15.6) for the chat in view, on this device.
@@ -2617,14 +2620,34 @@ class GaiaController extends ChangeNotifier {
     null => _newChatCanControl,
   };
 
-  Future<void> toggleCanControl() async {
+  /// The hand (GAIA_AUTONOMY_HLD.md §4) for the chat in view, on this device.
+  GaiaHand get hand => switch (currentChat?.grants[_deviceId]) {
+    final grant? when grant.isAuto => GaiaHand.auto,
+    _ => canControl ? GaiaHand.ask : GaiaHand.off,
+  };
+
+  /// Whether Auto's notice has been confirmed on this device (§4).
+  Future<bool> autoConsented() async {
+    try {
+      return await _pipe.request('autoConsented') == true;
+    } on GaiaPipeException {
+      return false;
+    }
+  }
+
+  /// Sets the hand. A new chat never starts in Auto, and the main instance
+  /// refuses Auto until its notice is [consented] to, once per device (§4).
+  Future<void> setHand(GaiaHand to, {bool consented = false}) async {
     final chat = currentChat;
-    final on = !canControl;
+    if (to == hand) return;
     if (chat == null) {
-      _newChatCanControl = on;
+      if (to == GaiaHand.auto) return;
+      _newChatCanControl = to == GaiaHand.ask;
       notifyListeners();
       return;
     }
+    final grant = chat.grants[_deviceId];
+    final auto = to == GaiaHand.auto;
     chats = [
       for (final c in chats)
         c.id == chat.id
@@ -2632,8 +2655,9 @@ class GaiaController extends ChangeNotifier {
                 grants: {
                   ...c.grants,
                   _deviceId: GaiaGrant(
-                    seeScreen: c.grants[_deviceId]?.seeScreen ?? false,
-                    canControl: on,
+                    seeScreen: auto || (grant?.seeScreen ?? false),
+                    canControl: to != GaiaHand.off,
+                    auto: auto,
                     at: utcNow(),
                   ),
                 },
@@ -2641,7 +2665,20 @@ class GaiaController extends ChangeNotifier {
             : c,
     ];
     notifyListeners();
-    await _request('setCanControl', {'chatId': chat.id, 'on': on});
+    if (to == GaiaHand.off) {
+      await _request('setCanControl', {'chatId': chat.id, 'on': false});
+    } else if (auto || (grant?.auto ?? false)) {
+      await _request('setAuto', {
+        'chatId': chat.id,
+        'on': auto,
+        'consented': consented,
+      });
+      if (!auto && !(grant?.canControl ?? false)) {
+        await _request('setCanControl', {'chatId': chat.id, 'on': true});
+      }
+    } else {
+      await _request('setCanControl', {'chatId': chat.id, 'on': true});
+    }
   }
 
   /// In drain mode, [chatId]'s next prompt goes once its reply finished
@@ -3429,7 +3466,7 @@ class GaiaController extends ChangeNotifier {
       );
       final last = _lastPersist[reply.id];
       // A card at once: it's what the Gaia page and other devices wait on.
-      if (event is GaiaCardUpdate ||
+      if ((event is GaiaCardUpdate && event.saveNow) ||
           last == null ||
           DateTime.now().difference(last) > _persistEvery) {
         unawaited(_persist(reply));
@@ -3560,6 +3597,26 @@ class GaiaController extends ChangeNotifier {
         },
       ),
       aborted: () => aborted,
+      // Asked at each CLI prompt (GAIA_AUTONOMY_HLD.md §5.7), where it counts.
+      isAuto: () async {
+        try {
+          return await _pipe.request('isAuto', {'chatId': chatId}) == true;
+        } on GaiaPipeException {
+          return false;
+        }
+      },
+      // An Auto turn's activity row changes with each step, and is saved as
+      // the reply streams (§7).
+      onActivity: (card) => onEvent(GaiaCardUpdate(card, saveNow: false)),
+      resume: () {
+        if (_pipe.connected) {
+          unawaited(
+            _pipe
+                .request('osResume', {'chatId': chatId})
+                .catchError((_) => null),
+          );
+        }
+      },
       hold: _cardHold,
     );
 

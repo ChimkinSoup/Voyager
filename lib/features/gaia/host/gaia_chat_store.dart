@@ -138,6 +138,8 @@ class GaiaChatStore {
           deviceId: GaiaGrant(
             seeScreen: on,
             canControl: chat.grants[deviceId]?.canControl ?? false,
+            // Auto needs reading (GAIA_AUTONOMY_HLD.md §4): off drops to Ask.
+            auto: on && (chat.grants[deviceId]?.auto ?? false),
             at: utcNow(),
           ),
         },
@@ -167,6 +169,7 @@ class GaiaChatStore {
           deviceId: GaiaGrant(
             seeScreen: chat.grants[deviceId]?.seeScreen ?? false,
             canControl: on,
+            // On again, it's Ask: Auto is chosen each time.
             at: utcNow(),
           ),
         },
@@ -174,12 +177,42 @@ class GaiaChatStore {
     );
   });
 
-  /// The titles of live chats with *can control* on, on this device: what the
-  /// border names (§15.6).
-  Future<List<String>> controlledChatTitles() async => [
+  /// Whether [chatId] is in Auto on this device (GAIA_AUTONOMY_HLD.md §4).
+  Future<bool> isAuto(String chatId) async {
+    final chat = await _repository.getChat(chatId);
+    return chat != null &&
+        !chat.isDeleted &&
+        (chat.grants[deviceId]?.isAuto ?? false);
+  }
+
+  /// The hand to Auto, or back to Ask, for [chatId] on this device. Auto turns
+  /// on *can control* and *can see screen* with it (§4).
+  Future<void> setAuto(String chatId, bool on) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.isDeleted) return;
+    final grant = chat.grants[deviceId];
+    if (on ? grant?.isAuto ?? false : !(grant?.auto ?? false)) return;
+    await _repository.upsertChat(
+      chat.copyWith(
+        grants: {
+          ...chat.grants,
+          deviceId: GaiaGrant(
+            seeScreen: on || (grant?.seeScreen ?? false),
+            canControl: on || (grant?.canControl ?? false),
+            auto: on,
+            at: utcNow(),
+          ),
+        },
+      ),
+    );
+  });
+
+  /// Live chats with *can control* on, on this device, and whether each is in
+  /// Auto: what the border names (§15.6).
+  Future<List<({String title, bool auto})>> controlledChats() async => [
     for (final chat in await _repository.listChats())
       if (!chat.isDeleted && (chat.grants[deviceId]?.canControl ?? false))
-        chat.title,
+        (title: chat.title, auto: chat.grants[deviceId]!.isAuto),
   ];
 
   /// Every chat's grants on this device off: Abort (§15.7), and Re-arm leaves
@@ -188,7 +221,10 @@ class GaiaChatStore {
     // Those in the trash too, or a restore would bring theirs back.
     for (final chat in await _repository.listChats(includeDeleted: true)) {
       final grant = chat.grants[deviceId];
-      if (grant == null || !(grant.seeScreen || grant.canControl)) continue;
+      if (grant == null ||
+          !(grant.seeScreen || grant.canControl || grant.auto)) {
+        continue;
+      }
       await _repository.upsertChat(
         chat.copyWith(
           grants: {

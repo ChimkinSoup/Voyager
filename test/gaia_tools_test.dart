@@ -2,6 +2,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_chat_tools.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
@@ -68,11 +69,14 @@ void main() {
         'os_focused_window',
         'os_read_screen',
         'os_screenshot',
+        'os_windows',
         'os_click',
         'os_scroll',
         'os_type',
         'os_key',
         'os_steps',
+        'os_open',
+        'os_focus',
       ]);
       for (final tool in tools) {
         expect(tool['name'], matches(RegExp(r'^[a-zA-Z0-9_-]{1,64}$')));
@@ -274,18 +278,30 @@ void main() {
       drop: (String cardId) => controlDropped.add(cardId),
     );
 
+    /// The chat's mode as the main instance answers it, the activity card's
+    /// updates, and how often an answer resumed a paused run.
+    var autoNow = false;
+    late List<GaiaCardPart> activity;
+    var resumed = 0;
+    var screenReads = <Map<String, Object?>>[];
+
     GaiaChatTools tools({Duration hold = const Duration(hours: 1)}) =>
         GaiaChatTools(
           chatId: 'chat',
           cards: cards,
           onCard: raised.add,
+          isAuto: () async => autoNow,
+          onActivity: activity.add,
+          resume: () => resumed++,
           read: (tool, arguments) async {
             reads.add(tool);
             if (arguments['fail'] == true) throw GaiaToolException('bad range');
             return 'data for $tool';
           },
-          screen: (tool, _) async =>
-              GaiaToolResult(text: 'screen $tool', isError: false),
+          screen: (tool, arguments) async {
+            screenReads.add(arguments);
+            return GaiaToolResult(text: 'screen $tool', isError: false);
+          },
           proposals: proposals,
           control: control,
           aborted: () => aborted,
@@ -302,6 +318,10 @@ void main() {
       planAuto = false;
       cards = GaiaCards();
       raised = [];
+      autoNow = false;
+      activity = [];
+      resumed = 0;
+      screenReads = [];
       aborted = false;
       reads = [];
       committed = [];
@@ -562,7 +582,7 @@ void main() {
         });
       });
 
-      test('in Auto it runs with no open card, and says what it adopted', () async {
+      test('in Auto it runs with no card, and says what it adopted', () async {
         planAuto = true;
         runAnswer = (_) => {
           'ran': 2,
@@ -571,11 +591,112 @@ void main() {
         };
         final result = await tools().call('os_key', {'keys': 'A'});
         expect(runs, [true]);
-        expect(raised.where((card) => card.isOpen), isEmpty);
-        expect(raised.single.state, GaiaCardState.accepted);
-        expect(raised.single.input, isNot(contains('auto')));
+        expect(raised, isEmpty);
+        expect(activity.single.state, GaiaCardState.accepted);
+        expect(activity.single.input, isNot(contains('auto')));
         expect(result.isError, isFalse);
         expect(result.text, contains('Calculator'));
+      });
+
+      group('the activity card (GAIA_AUTONOMY_HLD.md §7)', () {
+        test('is one card for the turn, with every step that ran', () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 2, 'steps': steps};
+          final turn = tools();
+          await turn.call('os_steps', const {});
+          runAnswer = (_) => {'ran': 1, 'steps': steps, 'stopped': 'Esc.'};
+          final stopped = await turn.call('os_steps', const {});
+          expect(stopped.text, contains('Stopped after 1 of 2 steps: Esc.'));
+          expect(activity.map((card) => card.id).toSet(), hasLength(1));
+          final card = activity.last;
+          expect(card.kind, GaiaCardKind.control);
+          expect(card.state, GaiaCardState.accepted);
+          expect(gaiaIsActivity(card), isTrue);
+          expect(
+            [for (final step in card.input['steps']! as List) step['label']],
+            ['Press A', 'Press B', 'Press A', 'Stopped: Esc.'],
+          );
+          expect(card.input['total'], 4);
+          expect(card.input['app'], 'Notepad');
+          // As a list that ran in full, for the action log and older builds.
+          expect(card.answer, {
+            'ran': 4,
+            'committed': {'steps': 4},
+          });
+          // Another turn has a card of its own.
+          await tools().call('os_key', {'keys': 'A'});
+          expect(activity.map((card) => card.id).toSet(), hasLength(2));
+        });
+
+        test('keeps the latest 200, with the count', () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 2, 'steps': steps};
+          final turn = tools();
+          for (var i = 0; i < 101; i++) {
+            await turn.call('os_steps', const {});
+          }
+          final card = activity.last;
+          expect(card.input['steps'], hasLength(200));
+          expect(card.input['total'], 202);
+        });
+
+        test('a CLI prompt is allowed with no card, and listed', () async {
+          autoNow = true;
+          final allowed = await tools().permit(
+            tool: 'Bash',
+            input: {'command': 'git status\n  --short'},
+            description: 'Show status',
+          );
+          expect(allowed, (allow: true, message: ''));
+          expect(raised, isEmpty);
+          expect(
+            (activity.single.input['steps']! as List).single['label'],
+            'Allowed Bash: git status --short',
+          );
+        });
+
+        test(
+          'out of Auto, the prompt asks again; aborted, it refuses first',
+          () async {
+            final asking = tools().permit(
+              tool: 'Bash',
+              input: {'command': 'ls'},
+              description: '',
+            );
+            await pumpEventQueue();
+            expect(raised.single.kind, GaiaCardKind.permission);
+            cards.decide(raised.single.id, GaiaCardState.rejected);
+            await asking;
+            autoNow = true;
+            aborted = true;
+            expect(
+              await tools().permit(
+                tool: 'Bash',
+                input: const {},
+                description: '',
+              ),
+              (allow: false, message: 'Gaia is aborted.'),
+            );
+            expect(activity, isEmpty);
+          },
+        );
+      });
+
+      test('read_after returns the screen with the result (§5.6)', () async {
+        planAuto = true;
+        runAnswer = (_) => {'ran': 2, 'steps': steps};
+        final result = await tools().call('os_steps', {'read_after': true});
+        expect(result.text, startsWith('Sent all 2 steps.'));
+        expect(result.text, endsWith('The screen now:\nscreen os_read_screen'));
+        expect(screenReads, hasLength(1));
+        runAnswer = (_) => {'ran': 0, 'steps': steps, 'stopped': 'Esc.'};
+        final stopped = await tools().call('os_key', {
+          'keys': 'A',
+          'read_after': true,
+        });
+        expect(stopped.text, contains('screen os_read_screen'));
+        final plain = await tools().call('os_key', {'keys': 'A'});
+        expect(plain.text, isNot(contains('os_read_screen')));
       });
 
       test('step by step, it asks again before each', () async {
@@ -655,6 +776,16 @@ void main() {
         expect(raised.last.state, GaiaCardState.expired);
         expect(controlDropped, hasLength(1));
       });
+    });
+
+    test('answering a question resumes an Auto run waiting on Gaia '
+        '(GAIA_AUTONOMY_HLD.md §5.2)', () async {
+      final asked = tools().call('ask_user', {'question': 'Which?'});
+      await pumpEventQueue();
+      expect(resumed, 0);
+      cards.decide(raised.last.id, GaiaCardState.accepted, {'text': 'That'});
+      await asked;
+      expect(resumed, 1);
     });
 
     test('voiding one chat leaves another\'s cards waiting', () async {

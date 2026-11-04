@@ -296,6 +296,105 @@ void main() {
         {'type': 'image', 'data': 'AQID', 'mimeType': 'image/png'},
       ]);
     });
+
+    group('os_windows (GAIA_AUTONOMY_HLD.md §8.2)', () {
+      const gaia = (
+        hwnd: 5,
+        pid: 1,
+        exe: 'voyager',
+        app: 'Gaia',
+        title: 'Gaia',
+        console: false,
+      );
+      const voyager = (
+        hwnd: 4,
+        pid: 40,
+        exe: 'voyager',
+        app: 'Voyager',
+        title: 'Secret note',
+        console: false,
+      );
+      GaiaListedWindow listed(
+        GaiaForegroundWindow window, {
+        bool minimized = false,
+      }) => (
+        window: window,
+        minimized: minimized,
+        frame: (left: 10, top: 20, width: 300, height: 200),
+      );
+
+      Future<String> list({
+        List<String> exclusions = const [],
+        bool vault = false,
+        GaiaForegroundWindow? pinned,
+        bool session = false,
+        String? url,
+      }) async => (await GaiaOsReads(
+        companionPid: () => 1,
+        exclusions: () => exclusions,
+        address: (_) async => url,
+        vaultUnlocked: () => vault,
+        voyagerPid: 40,
+        target: (_) => _notepad,
+        windows: () => [
+          listed(gaia),
+          listed(_notepad),
+          listed(_chrome, minimized: true),
+          listed(voyager),
+        ],
+      ).read('os_windows', const {}, pinned: pinned, session: session)).text;
+
+      test('lists each window front first with its id, leaving out '
+          "Gaia's", () async {
+        final text = await list();
+        expect(text, startsWith('<screen_data>'));
+        expect(
+          text,
+          contains(
+            '7: Notepad "notes.txt" [10,20 300x200] (the os_ tools work on '
+            'this)\n8: Google Chrome "Bank" minimized\n4: Voyager '
+            '"Secret note" [10,20 300x200]',
+          ),
+        );
+        expect(text, isNot(contains('Gaia"')));
+        expect(text, isNot(contains('5:')));
+      });
+
+      test('marks the pinned window, not what is in front', () async {
+        final text = await list(pinned: _chrome);
+        expect(text, contains('8: Google Chrome "Bank" minimized (the os_'));
+        expect(text, isNot(contains('[10,20 300x200] (the')));
+      });
+
+      test('a browser on an excluded site, or whose address can\'t be read, '
+          'is only "excluded"', () async {
+        for (final url in ['https://www.bank.com/account', null]) {
+          final text = await list(exclusions: ['bank.com'], url: url);
+          expect(text, contains('\n8: excluded\n'));
+          expect(text, isNot(contains('Bank')));
+        }
+        final text = await list(
+          exclusions: ['bank.com'],
+          url: 'https://example.com/',
+        );
+        expect(text, contains('8: Google Chrome "Bank" minimized'));
+      });
+
+      test('marks none in a session with nothing pinned yet', () async {
+        final text = await list(session: true);
+        expect(text, contains('7: Notepad "notes.txt" [10,20 300x200]\n'));
+        expect(text, isNot(contains('(the os_')));
+      });
+
+      test('an excluded app is only "excluded", and Voyager has no title '
+          'while the vault is unlocked', () async {
+        final text = await list(exclusions: ['chrome'], vault: true);
+        expect(text, contains('\n8: excluded\n'));
+        expect(text, isNot(contains('Bank')));
+        expect(text, contains('4: Voyager [10,20 300x200]'));
+        expect(text, isNot(contains('Secret')));
+      });
+    });
   });
 
   group('grants', () {

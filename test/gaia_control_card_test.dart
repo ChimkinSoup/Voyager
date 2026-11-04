@@ -47,6 +47,41 @@ void main() {
     ),
   );
 
+  testWidgets('an Auto turn shows one row, opening to what ran '
+      '(GAIA_AUTONOMY_HLD.md §7)', (tester) async {
+    await pump(
+      tester,
+      GaiaCardPart(
+        id: 'a',
+        kind: GaiaCardKind.control,
+        state: GaiaCardState.accepted,
+        tool: 'activity',
+        input: {
+          'activity': true,
+          'app': 'Gmail',
+          'total': 203,
+          'steps': [
+            {'label': 'Click Button "Mark as read"', 'resolved': true},
+            {'label': 'Stopped: The user pressed Esc.', 'resolved': true},
+          ],
+        },
+        answer: const {
+          'ran': 2,
+          'committed': {'steps': 203},
+        },
+      ),
+      waiting: false,
+    );
+    expect(find.text('203 actions in Gmail'), findsOneWidget);
+    expect(find.textContaining('Mark as read'), findsNothing);
+    expect(find.text('Run'), findsNothing);
+    await tester.tap(find.text('203 actions in Gmail'));
+    await tester.pump();
+    expect(find.textContaining('Mark as read'), findsOneWidget);
+    expect(find.textContaining('pressed Esc'), findsOneWidget);
+    expect(find.textContaining('first 201 are not kept'), findsOneWidget);
+  });
+
   testWidgets('shows the window and every step with its target', (
     tester,
   ) async {

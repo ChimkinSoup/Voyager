@@ -12,7 +12,7 @@ if (git status --porcelain) { $sha = "$sha-dirty" }
 $date = Get-Date -Format "yyyy-MM-dd"
 
 Write-Host "Building $version · $sha · $date"
-flutter build windows --release `
+flutter build windows --release -v `
     --dart-define-from-file=dart_defines.json `
     --dart-define=BUILD_VERSION=$version `
     --dart-define=BUILD_SHA=$sha `
