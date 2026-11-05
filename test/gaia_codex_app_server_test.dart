@@ -172,6 +172,7 @@ void main() {
     expect(result.isError, isFalse);
     expect(result.sessionId, _thread);
     expect(result.contextTokens, isNotNull);
+    expect(result.contextWindow, isNotNull);
     expect(events.whereType<GaiaTextDelta>().length, greaterThan(2));
     expect(_parts(events), [
       {

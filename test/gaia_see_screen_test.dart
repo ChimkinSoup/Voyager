@@ -30,6 +30,7 @@ void main() {
     WidgetTester tester, {
     Map<String, GaiaGrant> grants = const {},
     bool withChat = true,
+    List<GaiaMessage> messages = const [],
   }) async {
     tester.view.physicalSize = const Size(560, 460);
     tester.view.devicePixelRatio = 1;
@@ -71,7 +72,7 @@ void main() {
                 grants: grants,
               ).toJson(),
           ],
-          'messages' => <Object?>[],
+          'messages' => [for (final message in messages) message.toJson()],
           'drafts' => <Object?>[],
           'autoConsented' => false,
           _ => null,
@@ -238,6 +239,34 @@ void main() {
     expect(warning(), findsNothing);
     await finish(tester);
   });
+
+  testWidgets("hovering the context shows how much of the model's window it "
+      'fills', (tester) async {
+    await pump(
+      tester,
+      messages: [
+        GaiaMessage(
+          id: 'm1',
+          chatId: 'c1',
+          seq: 1,
+          role: GaiaMessageRole.assistant,
+          parts: const [GaiaTextPart('Hi')],
+          status: GaiaMessageStatus.complete,
+          createdAt: at,
+          updatedAt: at,
+          contextTokens: 84000,
+          contextWindow: 200000,
+        ),
+      ],
+    );
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(gesture.removePointer);
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(find.text('84k context')));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('84k of 200k tokens (42%)'), findsOneWidget);
+    await finish(tester);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets("another device's grant shows off here", (tester) async {
     final (controller, _, _) = await pump(

@@ -149,7 +149,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    final (result, started) = await _send(
+    final (result, started, sessionModel) = await _send(
       chatId: chatId,
       sessionId: sessionId,
       newSessionId: sessionId ?? _uuid.v4(),
@@ -169,6 +169,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
       isError: result.isError,
       text: result.text,
       contextTokens: result.contextTokens,
+      contextWindow: result.contextWindowOf(sessionModel),
       sessionFound: started,
     );
   }
@@ -200,9 +201,10 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     onEvent: onEvent,
   )).$1;
 
-  /// [sendRaw], and whether the process got as far as a session: a resume
-  /// that finds none ends in an error result without an `init`.
-  Future<(ClaudeResult, bool)> _send({
+  /// [sendRaw], whether the process got as far as a session (a resume that
+  /// finds none ends in an error result without an `init`), and the model
+  /// its `init` named.
+  Future<(ClaudeResult, bool, String?)> _send({
     required String chatId,
     required String? sessionId,
     required String newSessionId,
@@ -265,7 +267,11 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     }
     _live[chatId] = process;
     try {
-      return (await process.turn(content, tools, onEvent), process.started);
+      return (
+        await process.turn(content, tools, onEvent),
+        process.started,
+        process.sessionModel,
+      );
     } finally {
       // Read once, as the process started, and the session keeps it (§11):
       // not left on disk with a copy of the user's memories.
@@ -494,6 +500,9 @@ class _ClaudeProcess {
 
   /// An `init` came: the CLI started or resumed a session. Once a process.
   var started = false;
+
+  /// The model `init` named: [model] resolved, as `modelUsage` keys it.
+  String? sessionModel;
   Timer? _idle;
 
   void Function(ClaudeEvent event)? _onEvent;
@@ -603,7 +612,10 @@ class _ClaudeProcess {
       unawaited(kill());
       return;
     }
-    if (event is ClaudeInit) started = true;
+    if (event is ClaudeInit) {
+      started = true;
+      sessionModel = event.model;
+    }
     if (event case final ClaudeControlRequest request) {
       // Always answered: the CLI blocks on the request until it is.
       unawaited(

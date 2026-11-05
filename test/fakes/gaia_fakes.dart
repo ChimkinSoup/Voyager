@@ -306,10 +306,12 @@ class FakeClaudeRunner
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);
     final turn = _active[chatId] = Completer<GaiaTurnResult>();
+    String? sessionModel;
     for (final event in events) {
       await Future<void>.microtask(() {});
       if (turn.isCompleted) break;
       if (gaiaEventOf(event) case final event?) onEvent(event);
+      if (event is ClaudeInit) sessionModel = event.model;
       if (event is ClaudeResult) {
         turn.complete(
           GaiaTurnResult(
@@ -317,6 +319,7 @@ class FakeClaudeRunner
             isError: event.isError,
             text: event.text,
             contextTokens: event.contextTokens,
+            contextWindow: event.contextWindowOf(sessionModel),
             sessionFound: !missingSessions.contains(sessionId),
           ),
         );

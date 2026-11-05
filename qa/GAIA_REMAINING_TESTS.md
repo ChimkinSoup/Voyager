@@ -19,7 +19,8 @@ Run on `gaiaqa` (qa-128) from a fresh debug build of the working tree. A ticked 
 - **"1 steps" (A):** the agent's tool text now uses the singular. Unit-tested.
 - **Ctrl+Enter after coming back:** works by hand, tried by Juno. The harness failure was the harness.
 - **BUG-344 to BUG-349:** fixed and run in the app; see each entry in `qa/BUGS.md`.
-- Still open: another profile's vault limit (C3). `/this` keeps its own global guards at summon (`_controlReading`, `_elementCropping`), which F5's change didn't touch.
+- Still open: another profile's vault limit (C3). Confirmed live 2026-11-05; accepting or filing it is still to decide.
+- **D (2026-11-05):** the phone's missing history was BUG-363, Gaia messages written while the desktop is signed out never uploading. Not fixed. `/this` keeps its own global guards at summon (`_controlReading`, `_elementCropping`), which F5's change didn't touch.
 
 **New bugs from that pass:** BUG-344 to BUG-349, all since fixed. Three were Major (security): BUG-344, BUG-345 and BUG-347.
 
@@ -196,7 +197,7 @@ Edge cases:
 - [x] Vault locked by its auto-lock, if it has one: the state updates without a restart. **Result (2026-11-02):** Locks after 5 idle minutes, and reads work with no restart.
 - [x] Decrypted note or photo on screen: other apps' windows still read, with Voyager not in the picture. **Result (2026-11-02):** Another app's window reads with the vault unlocked. No note was on screen.
 - [x] `/this` and hotkeys C and D over a Voyager window with the vault unlocked. **Observe:** the rule is written for `os_*` tools only, so decide whether these should refuse too. **Result (2026-11-02):** From the code, not run: `/this` refuses (`vault`). C and D had no vault check, so a capture could show decrypted content. **Fixed 2026-11-02:** C and D now refuse while the vault is unlocked. Run with a real vault: no capture file, and the toast says why.
-- [x] Another profile's instance with its own vault unlocked: known limit, this instance can't see it. Confirm and accept, or file it. **Result (2026-11-02):** From the code, not run: the check only covers this instance's own PID. Confirm and accept, or file it.
+- [x] Another profile's instance with its own vault unlocked: known limit, this instance can't see it. Confirm and accept, or file it. **Result (2026-11-02):** From the code, not run: the check only covers this instance's own PID. Confirm and accept, or file it. **Result (2026-11-05):** Confirmed live. Profile `qb` was signed in to qa-128 with its vault unlocked, and `gaiaqa`'s vault was locked. `gaiaqa`'s `os_focused_window`, `os_read_screen` and `os_screenshot`, pinned to `qb`'s window, all read it (the screenshot came back with an image). The action tools use the same PID check (`gaia_os_control.dart`), so they'd act on it too; from the code, not run. Only dev profiles can run a second instance: they're debug-only, and a normal install is a single instance. Waiting on Juno's decision: accept it, or file it.
 
 ### C4. Decision: a neighbouring field's value in a `/this` crop
 
@@ -208,19 +209,21 @@ The crop is the control plus 48 px around it. In the Phase 9 pass, a one-time co
 
 Seen once in the Phase 9 pass, in one chat: the phone showed only the new messages. Nobody looked into it, and which chat it was wasn't recorded.
 
-- [ ] Long chat started on the desktop before the phone was paired: open it on the phone. Older messages appear.
-- [ ] Same chat, send from the phone: the older ones are still there alongside the new ones.
-- [ ] Send from the desktop while the chat is open on the phone.
+**Result (2026-11-05):** a sync gap, not a display bug: **BUG-363** (Major, not fixed). Gaia messages written while the desktop is signed out never upload, so the phone shows only what came after signing back in. Reproduced on purpose. Run on `gaiaqa` (qa-128, debug build of `3d9ba0a2`) with a fresh install on the emulator, email sign-in, paired with "They match". The desktop's Gaia debug dummy mode was on, so no model was called.
+
+- [x] Long chat started on the desktop before the phone was paired: open it on the phone. Older messages appear. **Result:** a 32-message chat ("D-HIST"), made before the install: all of it, from "D-HIST 1" down.
+- [x] Same chat, send from the phone: the older ones are still there alongside the new ones. **Result:** yes.
+- [x] Send from the desktop while the chat is open on the phone. **Result:** arrives live, with the older ones still there.
 
 Edge cases:
-- [ ] Chat opened while the desktop is offline or the companion isn't running.
-- [ ] Chat with images, cards or `/this` chips in its history.
-- [ ] Scrolling up in a chat longer than one page: does it page in older messages?
-- [ ] Force-close the phone app and reopen the chat.
-- [ ] A fresh install and pairing, as in the Phase 9 pass, compared with an existing one.
-- [ ] A chat with messages from two accounts.
-- [ ] A chat restored from the trash.
-- [ ] If it reproduces: compare the message count in the desktop's database with what the phone has, to tell a sync gap from a display bug.
+- [x] Chat opened while the desktop is offline or the companion isn't running. **Result:** with `gaiaqa` and its companion stopped, and after a force-close, the whole chat shows. It's read from the phone's own database.
+- [x] Chat with images, cards or `/this` chips in its history. **Result:** not by eye. Covered by the counts below, which matched in every chat except BUG-363's, qa-128's cards and screenshots included.
+- [x] Scrolling up in a chat longer than one page: does it page in older messages? **Result:** nothing pages in: the whole chat is there from the start, and scrolling reaches the first message.
+- [x] Force-close the phone app and reopen the chat. **Result:** unchanged.
+- [x] A fresh install and pairing, as in the Phase 9 pass, compared with an existing one. **Result:** the fresh install restored all 1,578 items, the Gaia chats among them. The same phone after pairing behaved the same.
+- [x] A chat with messages from two accounts. **Result:** not by eye. qa-128's 8B chats (two Claude logins) matched in the counts.
+- [ ] A chat restored from the trash. Not run: unrelated to the cause found.
+- [x] If it reproduces: compare the message count in the desktop's database with what the phone has, to tell a sync gap from a display bug. **Result:** the phone had 1,140 of the desktop's 1,162 messages. The 22 missing were 11 chats from the 2026-11-02 pass (06:53 to 07:02 UTC), all 404 in Firestore. Then reproduced: signed out, one exchange in a new chat, signed back in, a second exchange. The first two messages are 404 and the phone shows only the second exchange.
 
 ## E. Codex
 

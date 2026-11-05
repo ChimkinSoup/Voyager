@@ -3300,8 +3300,14 @@ class _ContextChip extends StatelessWidget {
   }
 }
 
+/// 84000 as "84k", a whole million as "1M".
+String _tokensK(int tokens) => tokens >= 1000000 && tokens % 1000000 == 0
+    ? '${tokens ~/ 1000000}M'
+    : '${(tokens / 1000).round()}k';
+
 /// Under the composer: the current chat's context, the next message's
-/// account usage, and the tier picker.
+/// account usage, and the tier picker. Hovering the context shows how much
+/// of the model's window it fills.
 class _ComposerStatus extends StatelessWidget {
   const _ComposerStatus({required this.controller});
 
@@ -3323,16 +3329,29 @@ class _ComposerStatus extends StatelessWidget {
       children: [
         const SizedBox(width: 4),
         Expanded(
-          child: Text(
-            controller.seeScreenWarning
-                ? 'Agent tools could leak or obey screen text.'
-                : tokens == null
-                ? ''
-                : '${(tokens / 1000).round()}k context',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: controller.seeScreenWarning
-                  ? kGaiaStatusRose
-                  : theme.colorScheme.onSurfaceVariant,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Tooltip(
+              message: controller.seeScreenWarning || tokens == null
+                  ? ''
+                  : switch (controller.contextWindow) {
+                      final window? when window > 0 =>
+                        '${_tokensK(tokens)} of ${_tokensK(window)} tokens '
+                            '(${(tokens * 100 / window).round()}%)',
+                      _ => '',
+                    },
+              child: Text(
+                controller.seeScreenWarning
+                    ? 'Agent tools could leak or obey screen text.'
+                    : tokens == null
+                    ? ''
+                    : '${_tokensK(tokens)} context',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: controller.seeScreenWarning
+                      ? kGaiaStatusRose
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ),
         ),

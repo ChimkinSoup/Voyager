@@ -262,4 +262,22 @@ void main() {
     expect(claudeContextTokens('nope'), isNull);
     expect(claudeContextTokens({'output_tokens': 5}), isNull);
   });
+
+  test("Claude's context window: the session's model, else the one that read "
+      'the most', () {
+    final usage = {
+      // A busy subagent: it read more than the session itself.
+      'claude-haiku-5-5': {'inputTokens': 90000, 'contextWindow': 200000},
+      'claude-opus-5-5': {
+        'inputTokens': 2,
+        'cacheReadInputTokens': 9000,
+        'contextWindow': 1000000,
+      },
+    };
+    expect(claudeContextWindow(usage, model: 'claude-opus-5-5'), 1000000);
+    expect(claudeContextWindow(usage, model: 'opus'), 200000);
+    expect(claudeContextWindow(usage), 200000);
+    expect(claudeContextWindow({'m': {'inputTokens': 1}}), isNull);
+    expect(claudeContextWindow('nope'), isNull);
+  });
 }

@@ -1251,6 +1251,7 @@ class GaiaMessage extends SoftDeletable {
     this.error,
     this.needsInput = false,
     this.contextTokens,
+    this.contextWindow,
   });
 
   final String chatId;
@@ -1279,6 +1280,10 @@ class GaiaMessage extends SoftDeletable {
   /// warning (§7.5); null when the backend doesn't say.
   final int? contextTokens;
 
+  /// The reply's model's context window, for the composer's tooltip; null
+  /// when the backend doesn't say.
+  final int? contextWindow;
+
   String get text =>
       parts.whereType<GaiaTextPart>().map((part) => part.text).join('\n\n');
 
@@ -1289,6 +1294,7 @@ class GaiaMessage extends SoftDeletable {
     String? error,
     bool? needsInput,
     int? contextTokens,
+    int? contextWindow,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -1310,6 +1316,7 @@ class GaiaMessage extends SoftDeletable {
     error: error ?? this.error,
     needsInput: needsInput ?? this.needsInput,
     contextTokens: contextTokens ?? this.contextTokens,
+    contextWindow: contextWindow ?? this.contextWindow,
   );
 
   Map<String, Object?> toJson() => {
@@ -1329,6 +1336,7 @@ class GaiaMessage extends SoftDeletable {
     'error': error,
     'needsInput': needsInput,
     'contextTokens': contextTokens,
+    'contextWindow': contextWindow,
   };
 
   factory GaiaMessage.fromJson(Map<String, Object?> json) {
@@ -1350,6 +1358,7 @@ class GaiaMessage extends SoftDeletable {
       error: json['error'] as String?,
       needsInput: json['needsInput'] == true,
       contextTokens: (json['contextTokens'] as num?)?.toInt(),
+      contextWindow: (json['contextWindow'] as num?)?.toInt(),
     );
   }
 }

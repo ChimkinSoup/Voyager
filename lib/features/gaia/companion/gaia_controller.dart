@@ -1913,11 +1913,16 @@ class GaiaController extends ChangeNotifier {
     );
   }
 
-  /// The current chat's context at its last reply that said (§7.5).
-  int? get contextTokens => messages.reversed
-      .map((message) => message.contextTokens)
-      .nonNulls
+  /// The current chat's last reply that said its context (§7.5).
+  GaiaMessage? get _contextReply => messages.reversed
+      .where((message) => message.contextTokens != null)
       .firstOrNull;
+
+  /// The current chat's context at [_contextReply].
+  int? get contextTokens => _contextReply?.contextTokens;
+
+  /// The window [contextTokens] fills: its reply's model's.
+  int? get contextWindow => _contextReply?.contextWindow;
 
   /// Whether switching the current chat to [tier] needs the user's yes
   /// (§7.5): a change after the chat's first reply.
@@ -3757,6 +3762,7 @@ class GaiaController extends ChangeNotifier {
                 parts: parts,
                 status: GaiaMessageStatus.complete,
                 contextTokens: result.contextTokens,
+                contextWindow: result.contextWindow,
                 // Or a question card left open, its wait run out.
                 needsInput:
                     gaiaEndsWithQuestion(

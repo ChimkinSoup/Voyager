@@ -1286,7 +1286,9 @@ class _AddAccountState extends State<_AddAccount> {
     final theme = Theme.of(context);
     final codex = widget.adapter == kGaiaCodexAdapter;
     final label = _label.text.trim();
-    final dir = _dir.text.trim();
+    // Explorer's "Copy as path" wraps the path in quotes, which can't be part
+    // of a Windows path.
+    final dir = _dir.text.replaceAll('"', '').trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

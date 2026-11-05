@@ -1,0 +1,1 @@
+await signOutPausingSync(c.read(firestoreProvider), c.read(authRepositoryProvider));

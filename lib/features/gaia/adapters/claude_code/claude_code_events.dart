@@ -57,6 +57,7 @@ class ClaudeResult extends ClaudeEvent {
     required this.isError,
     required this.text,
     this.contextTokens,
+    this.modelUsage,
   });
 
   final String sessionId;
@@ -67,6 +68,13 @@ class ClaudeResult extends ClaudeEvent {
   /// cache write tokens. Read leniently, since it's only shown: null when
   /// `usage` isn't the shape below.
   final int? contextTokens;
+
+  /// `modelUsage` as the CLI sent it, for [contextWindowOf].
+  final Object? modelUsage;
+
+  /// The context window of [model], the session's (its `init`'s), in tokens.
+  int? contextWindowOf(String? model) =>
+      claudeContextWindow(modelUsage, model: model);
 }
 
 /// `rate_limit_event`: the account's usage windows, mid-turn. Not every turn
@@ -173,6 +181,7 @@ ClaudeEvent parseClaudeLine(String line) {
         // Absent on some error subtypes; the error is then in `subtype`.
         text: decoded['result'] as String? ?? field<String>(decoded, 'subtype'),
         contextTokens: claudeContextTokens(decoded['usage']),
+        modelUsage: decoded['modelUsage'],
       );
     case 'rate_limit_event':
       final usage = claudeUsage(decoded['rate_limit_info']);
@@ -242,6 +251,27 @@ int? claudeContextTokens(Object? usage) {
   return count('input_tokens') +
       count('cache_read_input_tokens') +
       count('cache_creation_input_tokens');
+}
+
+/// `modelUsage.<model>.contextWindow` (observed on 2.1.310) of [model], the
+/// session's own rather than a side call's such as a subagent's. When it
+/// isn't listed under that name, the model that read the most input.
+int? claudeContextWindow(Object? modelUsage, {String? model}) {
+  if (modelUsage is! Map) return null;
+  int input(Map usage) => [
+    'inputTokens',
+    'cacheReadInputTokens',
+    'cacheCreationInputTokens',
+  ].fold(0, (sum, key) => sum + ((usage[key] as num?)?.toInt() ?? 0));
+  final main = switch (modelUsage[model]) {
+    final Map own => own,
+    _ => modelUsage.values.whereType<Map>().fold<Map?>(
+      null,
+      (best, usage) =>
+          best == null || input(usage) > input(best) ? usage : best,
+    ),
+  };
+  return (main?['contextWindow'] as num?)?.toInt();
 }
 
 const _gaiaToolPrefix = 'mcp__${kGaiaMcpServer}__';

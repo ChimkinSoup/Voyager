@@ -2372,6 +2372,8 @@ void main() {
       await settle();
       expect((await main.messages()).last.contextTokens, 26642);
       expect(controller.contextTokens, 26642);
+      expect((await main.messages()).last.contextWindow, 1000000);
+      expect(controller.contextWindow, 1000000);
     });
 
     test(

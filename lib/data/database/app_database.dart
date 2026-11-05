@@ -2262,6 +2262,9 @@ class GaiaMessagesTable extends Table {
 
   /// The session's context when a reply finished, in tokens.
   IntColumn get contextTokens => integer().nullable()();
+
+  /// The reply's model's context window, in tokens.
+  IntColumn get contextWindow => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2456,7 +2459,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 185;
+  int get schemaVersion => 186;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4558,6 +4561,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_chats_table',
           gaiaChatsTable,
           gaiaChatsTable.grantsJson,
+        );
+      }
+      if (from >= 169 && from < 186) {
+        // The context tooltip's window size.
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_messages_table',
+          gaiaMessagesTable,
+          gaiaMessagesTable.contextWindow,
         );
       }
     },

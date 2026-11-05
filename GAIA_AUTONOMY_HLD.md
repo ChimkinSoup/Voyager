@@ -5,7 +5,8 @@ open. Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). P
 done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). Phase 5 done,
 built 2026-11-04 and checked live 2026-11-05 (§11.7). BUG-359 and BUG-360 from it are fixed
 (2026-11-05). The follow-ups were run 2026-11-05 (§11.5, §11.6, §11.7); BUG-361 and BUG-362 from
-them are fixed and checked in the app (2026-11-05), including the code review's follow-ups. Not
+them are fixed and checked in the app (2026-11-05), including the code review's follow-ups.
+BUG-364 and BUG-365, two misleading results from §11.5 and §11.7, are open (Minor). Not
 run, by decision: a second monitor. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
 §15.7 and §20; §12 below lists how.
 

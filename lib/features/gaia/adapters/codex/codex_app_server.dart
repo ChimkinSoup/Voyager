@@ -24,7 +24,9 @@
 //     agentMessage {text}, commandExecution, fileChange {changes: [{path,
 //     diff}]}, dynamicToolCall {tool}, reasoning, userMessage and others
 //   item/agentMessage/delta {threadId, delta}: the reply streams
-//   thread/tokenUsage/updated {threadId, tokenUsage: {last: {totalTokens}}}
+//   thread/tokenUsage/updated {threadId, tokenUsage: {last: {totalTokens},
+//     modelContextWindow?}}: the window not strict, since only a tooltip
+//     shows it
 //   error {threadId, error: {message}, willRetry}
 //   turn/completed {threadId, turn: {status: completed | failed |
 //     interrupted, error: {message}?}}
@@ -116,6 +118,7 @@ class _Turn {
   final done = Completer<GaiaTurnResult>();
   String? turnId;
   int? contextTokens;
+  int? contextWindow;
   String? error;
   var lastText = '';
 
@@ -365,8 +368,16 @@ class CodexAppServerClient {
           );
         }
       case 'thread/tokenUsage/updated':
-        final last = _map(_map(params, 'tokenUsage', line), 'last', line);
+        final usage = _map(params, 'tokenUsage', line);
+        final last = _map(usage, 'last', line);
         turn?.contextTokens = _field<int>(last, 'totalTokens', line);
+        // Only shown, so read leniently: a later update without it keeps
+        // the one seen.
+        if (turn != null) {
+          turn.contextWindow =
+              (usage['modelContextWindow'] as num?)?.toInt() ??
+              turn.contextWindow;
+        }
       case 'error':
         if (params['willRetry'] == true || turn == null) return;
         turn.error = codexErrorText(
@@ -388,6 +399,7 @@ class CodexAppServerClient {
                 isError: false,
                 text: turn.lastText,
                 contextTokens: turn.contextTokens,
+                contextWindow: turn.contextWindow,
               ),
             );
           case 'interrupted':
@@ -404,6 +416,7 @@ class CodexAppServerClient {
                     ? codexErrorText(_string(error, 'message', line))
                     : turn.error ?? 'Codex failed the turn ($status)',
                 contextTokens: turn.contextTokens,
+                contextWindow: turn.contextWindow,
               ),
             );
         }

@@ -1,0 +1,7 @@
+final vs = c.read(secureVaultServiceProvider);
+var hdr = await vs.localHeader();
+for (var i = 0; i < 60 && hdr == null; i++) { await Future<void>.delayed(const Duration(seconds: 1)); hdr = await vs.localHeader(); }
+final key = await vs.unlock('gaiaqa-vault-madeup');
+if (key == null) { throw StateError('wrong password'); }
+c.read(secureVaultSessionProvider.notifier).unlock(key, hdr!.vaultId);
+debugPrint('C3UNLOCK ' + hdr.vaultId);

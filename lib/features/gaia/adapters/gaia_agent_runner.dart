@@ -53,6 +53,7 @@ class GaiaTurnResult {
     required this.isError,
     required this.text,
     this.contextTokens,
+    this.contextWindow,
     this.sessionFound = true,
   });
 
@@ -68,6 +69,9 @@ class GaiaTurnResult {
   /// How many tokens the session's context held at the turn's last model
   /// call; null when the backend doesn't say.
   final int? contextTokens;
+
+  /// The model's context window in tokens; null when the backend doesn't say.
+  final int? contextWindow;
 }
 
 /// A turn that ended without a result: the process died, or its output

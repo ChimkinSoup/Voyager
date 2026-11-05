@@ -1986,7 +1986,8 @@ Phase 9B as built (2026-11-01):
   instance's vault is unlocked, every `os_*` tool refuses a window of Voyager's
   process, checked before the read and after it, since they can show decrypted notes
   and photos (§5.3). It refuses rather than moving on to the next window. Another
-  profile's instance has its own vault, which this one can't see.
+  profile's instance has its own vault, which this one can't see (confirmed live
+  2026-11-05: its window reads while its vault is unlocked; dev profiles only).
 - **Checked live (2026-11-01)**, with the session locked: the real scan against
   probe-owned WinForms windows, one DPI-unaware and one per-monitor aware (no
   secret value in the tree, both fields found and blacked out, in the picture by

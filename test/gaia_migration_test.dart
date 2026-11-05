@@ -570,6 +570,45 @@ void main() {
     expect((await repo.getMessage('m1'))!.contextTokens, 1234);
   });
 
+  test("185→186 adds a reply's context window", () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    final seedRepo = DriftGaiaRepository(seed);
+    await seedRepo.upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Hi',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    final message = GaiaMessage(
+      id: 'm1',
+      chatId: 'c1',
+      seq: 1,
+      role: GaiaMessageRole.assistant,
+      parts: const [GaiaTextPart('hello')],
+      status: GaiaMessageStatus.complete,
+      createdAt: now,
+      updatedAt: now,
+      contextTokens: 1234,
+    );
+    await seedRepo.upsertMessage(message);
+    await seed.customStatement(
+      'ALTER TABLE gaia_messages_table DROP COLUMN context_window',
+    );
+    await seed.customStatement('PRAGMA user_version = 185');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect((await repo.getMessage('m1'))!.contextTokens, 1234);
+    expect((await repo.getMessage('m1'))!.contextWindow, isNull);
+    await repo.upsertMessage(message.copyWith(contextWindow: 200000));
+    expect((await repo.getMessage('m1'))!.contextWindow, 200000);
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(
