@@ -453,6 +453,7 @@ class _AlignEditorState extends ConsumerState<_AlignEditor> {
                             }),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         // Unfocusable, like the sliders, so the arrow keys
                         // keep nudging after a click here.
                         ExcludeFocus(
