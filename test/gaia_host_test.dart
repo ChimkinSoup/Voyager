@@ -136,8 +136,9 @@ class _Companion {
       ..onEvent = (event, params) {
         events.add('$event ${params.values.join(' ')}');
       }
-      ..onRequest = (method, _) async {
+      ..onRequest = (method, params) async {
         requests.add(method);
+        if (method == 'stop') stopWhy = params['why'] as String?;
         return replies[method];
       };
   }
@@ -149,6 +150,7 @@ class _Companion {
   final replies = <String, Object?>{};
   final events = <String>[];
   final requests = <String>[];
+  String? stopWhy;
 }
 
 void main() {
@@ -1299,6 +1301,7 @@ void main() {
             controlBackend.escape = false;
             async.flushMicrotasks();
             expect(companions.single.requests, contains('stop'));
+            expect(companions.single.stopWhy, 'The user pressed Esc.');
             final chats = request(async, 'chats')! as List;
             expect((chats.single as Map)['drain'], isFalse);
             expect(() => request(async, 'osPlan', plan), refused('Esc'));

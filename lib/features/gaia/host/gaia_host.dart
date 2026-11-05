@@ -816,14 +816,15 @@ class GaiaHost {
     if (_pipe.connected) _pipe.notify('recheckUsage', {'key': key});
   }
 
-  /// Stops [chatId]'s run: the tray's or the Gaia page's Stop.
-  Future<void> stop(String chatId) async {
+  /// Stops [chatId]'s run: the tray's or the Gaia page's Stop, or a session's
+  /// own stop, which says [why] on the activity card (BUG-357).
+  Future<void> stop(String chatId, {String? why}) async {
     if (!_pipe.connected) return;
     // Its callers (the tray, Gaia's run list) don't wait on it: a companion
     // that exits mid-request, or never answers, ends here.
     try {
       await _pipe
-          .request('stop', {'chatId': chatId})
+          .request('stop', {'chatId': chatId, 'why': ?why})
           .timeout(const Duration(seconds: 2));
     } catch (error) {
       debugPrint('[gaia] companion did not confirm stop ($error)');
@@ -1490,7 +1491,7 @@ class GaiaHost {
   /// stops, and its queue doesn't carry on without the user.
   void _userStopped(GaiaChatStore store, String chatId) {
     unawaited(store.setDrain(chatId, false));
-    unawaited(stop(chatId));
+    unawaited(stop(chatId, why: _osControl.sessionStopped));
   }
 
   /// Whether [chatId] may send input now (§15.6), asked here before every step,

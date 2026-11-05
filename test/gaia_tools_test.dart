@@ -599,6 +599,24 @@ void main() {
       });
 
       group('the activity card (GAIA_AUTONOMY_HLD.md §7)', () {
+        test('a stop between calls gets a row, and the step it ended '
+            "doesn't add a second (BUG-357)", () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 1, 'steps': steps};
+          final turn = tools();
+          await turn.call('os_steps', const {});
+          turn.logStopped('Esc.');
+          List<Object?> labels() => [
+            for (final step in activity.last.input['steps']! as List)
+              step['label'],
+          ];
+          expect(labels(), ['Press A', 'Stopped: Esc.']);
+          runAnswer = (_) => {'ran': 1, 'steps': steps, 'stopped': 'Esc.'};
+          await turn.call('os_steps', const {});
+          expect(labels(), ['Press A', 'Press A', 'Stopped: Esc.']);
+          expect(activity.last.input['total'], 3);
+        });
+
         test('is one card for the turn, with every step that ran', () async {
           planAuto = true;
           runAnswer = (_) => {'ran': 2, 'steps': steps};

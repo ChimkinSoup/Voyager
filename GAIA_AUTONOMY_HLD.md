@@ -1,8 +1,8 @@
 # Gaia — Autonomous PC Control (HLD)
 
-Status: Phases 1 and 2 built and checked live, 2026-11-03 (§11.1, §11.2). Phases 3 and 4 built
-2026-11-04 and checked live the same day, the phone included, with five bugs open (BUG-351 to
-BUG-354, BUG-356) (§11.4, §11.5). Phase 5 is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
+Status: Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). Phases 3 and 4
+done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). No bugs from
+them are open. Phase 5 is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
 
@@ -123,8 +123,9 @@ Gaia's included, doesn't count, and nor do mouse moves or the wheel, so moving t
 a Gaia click opens a dialog doesn't stop the run. If the hooks can't go in, it falls back to
 `GetLastInputInfo` moving since Gaia's last send. That counts any mouse move as input, the safe
 way to be wrong, and its ~16 ms tick can't see input in the same tick as a Gaia send. In a
-session, `os_type` therefore sends at most every 20 ms, about 10 s for the 2000-character limit
-(Ask stays at 1 ms). Exclusions and the vault still apply.
+session, `os_type` therefore sends at most every 20 ms. Since BUG-352 it sends one character each
+time, in Ask too: about a minute for the 2000-character limit (§11.6). Exclusions and the vault
+still apply.
 
 **A dialog that takes longer than 1.5 s to appear stops the run.** Also the safe way to be
 wrong, and the first thing to tune if it proves annoying.
@@ -241,11 +242,10 @@ the "Auto" scenarios in `test/gaia_cli_contract_test.dart` and `test/gaia_codex_
   account: `whoami` wrote `zephyrusg14\juno`. So GUI launches from it should behave. Not tried:
   an actual GUI launch, which needs the screen on.
 - **A stopped turn:** Claude Code's command dies with it (the turn's process tree is killed; it
-  was a foreground command, `is_backgrounded: false`). **Codex's does not:** after
-  `turn/interrupt`, a 20-second command still finished and wrote its file. Esc and Stop end
-  the turn and latch the OS tools, but a Codex shell command already running carries on, as
-  §5.3 already says of Revoke. Ending it would mean killing children of the shared app-server,
-  which is a separate change: **BUG-350** in `qa/BUGS.md`.
+  was a foreground command, `is_backgrounded: false`). Codex leaves its command going after
+  `turn/interrupt`, so on a stop Gaia kills the processes started under the shared app-server
+  since that turn began, leaving any that may be another chat's running command (BUG-350).
+  Checked in the app (§11.6). Revoke still leaves a running command alone (§5.3).
 
 ## 6. Flashes
 
@@ -333,8 +333,9 @@ Gaia: `start` hands off to the shell, and a browser's new window belongs to a pr
 already existed. Auto-focusing anything new would also steal focus for unrelated windows.
 
 - `target` is an installed app's name, a file or folder path, or a URL.
-- Names resolve through `shell:AppsFolder`, so Store apps work. Launching is `ShellExecuteEx`,
-  never `runas`.
+- Names resolve through the Start menu, so Store apps work. An exe, by path or by a Start ID
+  that's its path, starts with `CreateProcess`, never elevated, so one that needs administrator
+  fails and says so. Anything else opens with `ShellExecuteEx`, never `runas`.
 - Exclusions are checked **before** launching, against the name or URL, and again against the
   window.
 - It takes a snapshot of top-level windows, launches, then waits up to 10 s for a new window.
@@ -444,8 +445,8 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 |---|---|---|
 | **1. Session** (done, §11.1) | Foreground spike (§5.4); confirm the terminal-launch behaviour; control session, pin, adoption, pause, latch; Esc for the session | With a forced Auto flag: an action after no click reaches a window behind Gaia on both CLIs; Esc between calls ends the turn; Alt+Tab mid-run stops it with nothing sent to the new window |
 | **2. Flashes** (done, §11.2) | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; 95th percentile under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
-| **3. Auto** (built, §11.4) | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
-| **4. Opening** (built, §11.5) | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
+| **3. Auto** (done, §11.4, §11.6) | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
+| **4. Opening** (done, §11.5, §11.6) | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
 | **5. More tools** | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
 
 ### 11.1 Phase 1 results (2026-11-03)
@@ -599,7 +600,8 @@ Checked by unit and widget tests (all 1100+ Gaia tests pass, Ask's unchanged), a
 real CLIs for §5.7 (above).
 
 **Checked live with the display on** (2026-11-04, a debug build of the working tree on `gaiaqa`,
-real Haiku and Codex Sol turns, nobody at the PC):
+real Haiku and Codex Sol turns, nobody at the PC). The bugs named in this pass and the next are
+as found then; all are since fixed (§11.6):
 - `test/tool/gaia_os_control_live_test.dart`: 8 of 8, three runs. Its Alt+Tab test pressed at a
   fixed 60 ms, inside the 250 ms pace after the click that set it up, so nothing had been typed;
   it now waits for the typing to start.
@@ -637,7 +639,8 @@ paired with `gaiaqa`, codes matching), all in the Auto chat from the pass above:
 - Abort from the phone's Status tab, mid-run: the reply ended `aborted`, the companion was killed
   and relaunched, the desktop showed "Aborted", and the last click (1) never ran (98,765,432).
   It took about 11 s from the tap, against Stop's 2 s, so some clicks may have landed in that
-  time; not looked into. Rearm from the phone cleared it.
+  time. That didn't reproduce: 1.0 to 1.6 s in 10 later trials (§11.6). Rearm from the phone
+  cleared it.
 - On the way, due reminder stickies showed on the login page of a signed-out phone: BUG-355.
 
 ### 11.5 Phase 4 results (2026-11-04)
@@ -646,8 +649,7 @@ Built:
 - **`os_open {target}`**, an action: a card in Ask, immediate in Auto. A target with a scheme of two
   or more letters is a URL (`https:`, `mailto:`, `ms-settings:`); an absolute path must exist;
   anything else is a Start menu name, matched exactly, else as the one name containing it, and
-  several or none are refused with the names. It launches with `ShellExecuteEx` and no verb, on an
-  isolate of its own.
+  several or none are refused with the names. It launches on an isolate of its own, as §8.1 says.
 - **Exclusions before launch,** at plan and again at run: against the Start name, the exe in the
   app's id (a desktop app's id is often its path), a path's `.exe` or `.lnk` name, a URL's host,
   and the exes that would open it, so a URL whose browser is excluded never launches. Then against the window, and the vault, as for any target.
@@ -687,9 +689,10 @@ Decisions made here:
 - **Start names come from `Get-StartApps`** in a PowerShell child (about 0.6–0.8 s per `os_open`
   by name), not from enumerating `shell:AppsFolder` over COM: the win32 package has no
   `IEnumShellItems` or `StrRetToStr`. It covers Store and desktop apps alike.
-- **No verb isn't quite "never elevated".** An exe whose manifest requires admin still raises UAC
-  through `ShellExecuteEx`. Gaia never asks for `runas`, and the prompt is on the secure desktop,
-  so it can only be you who approves it.
+- **Never elevated.** An exe starts with `CreateProcess`, which fails for one that needs admin,
+  and the agent is told the user can open it. `ShellExecuteEx`, used for everything else, could
+  still raise UAC for what it opens. Gaia never asks for `runas`, and the prompt is on the secure
+  desktop, so it can only be you who approves it.
 - After opening a URL, the site isn't checked against the window's address bar, which is often
   still loading. The URL was checked before launch, and the next read or action checks the
   address as always.
@@ -732,7 +735,9 @@ is in front and `SendInput` is refused, as in §11.4.
   through a service). They now give "couldn't tell", and the agent needs `os_windows` and
   `os_focus`. How often that happens.
 - An unrelated window from the same app during the wait (another Chrome window while a URL
-  opens) can still be picked, as it's the right app.
+  opens) can still be picked, as it's the right app. Seen in §11.6 with two Chrome profiles: the
+  URL opened as a tab in the default profile, and the other profile's window was pinned. The
+  agent saw the page hadn't changed and said so.
 - A real Codex or Claude Code turn choosing `os_open` over `start` in the shell.
 
 **End-to-end check after 4:** the job-board task, or a scratch version of it, runs 10+ pages with
@@ -743,7 +748,87 @@ Esc between calls. Existing Ask tests should pass unchanged, which is what shows
 Long-lived probes should follow the existing memory notes on background input and focus, with
 Phase 1 specifically testing a real foreground switch.
 
+### 11.6 Second live pass (2026-11-04)
+
+Run after BUG-350 to BUG-356 were fixed: a debug build of commit `39893543` on `gaiaqa`, with real
+Haiku and Codex Sol turns, and a scratch job board (15 local pages). A later round on the same
+evening, with BUG-357 fixed, is at the end of this section.
+
+**A mistake in how this was run:** the board was opened in a scratch Chrome profile, but `os_open`
+of a URL goes to the default browser, so those runs opened board tabs in Juno's own Chrome, and
+some runs clicked there rather than in the scratch window. Only board pages were touched, and
+the stop results hold in either window. Use `os_focus` on a scratch window for this check, or
+make a scratch browser the default.
+
+**Typing is slower, in Ask too.** The fix for BUG-352 sends each character on its own, 20 ms apart,
+which is about 31 ms on the default timer. The 2000-character limit now takes about a minute,
+against about 15 s in a session before, and Ask was faster still (1 ms between chunks of four).
+This is the one way Ask has moved from "behaves exactly as before". It stays under the CLIs' tool
+timeout (`kGaiaMcpToolTimeout`, 1 h 5 min), and the flash lasts as long as the typing
+(`_typingTime`), though that estimate counts 20 ms a character, not the 31.
+
+**Re-run after the fixes:** `test/tool/gaia_os_control_live_test.dart` 8 of 8, Alt+Tab mid-text
+included, and the 60 `test/gaia*_test.dart` files, 1161 passed, with `GAIA_CLI_CHECK=1`, so the
+real-CLI contract scenarios ran too.
+
+**The end-to-end check, on Haiku:**
+- Four runs left alone each reached all 15 pages in 82 to 91 s, in the right order, and listed
+  them correctly. Each had one activity card and no approval card.
+- A real Esc at a random moment, sent only with the board in front: 10 of 10 ended `cancelled`
+  with no page load after the press. The status read as ended within 298 to 333 ms, about the
+  polling interval. Two more runs don't count: one had finished before the press, and one
+  stopped with no press (BUG-358).
+- Most of those stops fell between calls and left no "Stopped:" row (BUG-357, since fixed).
+
+**An excluded app is refused before launch,** in real Auto turns, each with "The user has excluded
+that app or site, so Gaia can't open it.":
+- Character Map by name: no `charmap.exe` started.
+- A site (`127.0.0.1`) and a browser (`chrome`) for a URL: the server saw no request either time.
+- `notepad` for a `.txt`: no `notepad.exe` started.
+- The control, with the list back to its defaults, opened Character Map. A refused `os_open` adds
+  no row to the activity card.
+
+**A shell command raises no card, this time through `permit`:**
+- Claude Code, with a temporary project `ask` rule in Gaia's working folder: in Auto, no card and
+  "Allowed Bash: echo gaia-permit-auto". In Ask, a permission card, and the command ran once it
+  was allowed.
+- Codex in Auto: its commands reached `permit` with no rule, each with an "Allowed Shell" row, one
+  of them writing outside the working folder. Not tried in Ask.
+
+**BUG-350 in the app,** with a Codex Sol turn in Auto running a 25 s command that writes a file at
+its end. Left alone, it wrote the file (three times, two of those window-switch trials whose click
+the script's own guard refused). The real Stop button (2 of 2), Esc (1 of 1) and a real click on
+another window (1 of 1) each ended the turn, with the command gone 3 s later and no file.
+
+**The later round, with BUG-357 fixed:**
+- A stop between calls now has its row: a real Esc after a run of clicks gave "Stopped: The user
+  pressed Esc.", and a scripted Alt+Tab gave "Stopped: The user switched to another window."
+- **BUG-358 is put down to Juno's two Alt+Tabs,** nobody touching the PC after: 40 unattended
+  turns and no stop with no cause. Of those, 28 were Haiku, the last 8 of them five clicks each
+  through `os_focus`. The earlier Haiku turns often stopped by themselves on the problem above.
+  The 12 Codex turns are weak evidence: in 11, `os_focus` left no row, and the one session read
+  shows it refused as "2 windows match", as the board was open in both Chromes. They went on to
+  read and run `echo`.
+- A scripted Alt+Tab within 1.5 s of a Gaia step doesn't stop the run, and is adopted: 1 of 2 did
+  this. Injected keys don't reach the input hook (§5.2), so it looks like Gaia's own doing. A
+  real key does count, by design. That couldn't be run with nobody at the PC, so it rests on the
+  hook and Juno's two presses.
+- **Abort from the phone, timed from the tap to `_aborted` set on the desktop:** 1.0 to 1.6 s in
+  10 of 10, with 5 on the phone already running, 3 straight after a cold start (with its sync
+  going), and 2 on a run the phone itself started, as §11.4 did. Of those, 9 had no page load
+  after the tap, and 1 had one at +736 ms, before the flag was set. The companion confirmed each
+  time, unlike the 11 s case, where it was killed and relaunched. So the 11 s didn't reproduce,
+  and its cause isn't known; no code changed. This is on the current build and the 16:51 APK.
+- `test/tool/gaia_os_control_live_test.dart` needs foreground rights: with another app in front
+  and none given, its first two window tests fail on `GetForegroundWindow`, as they did here. Run
+  from a window brought up with an F24 tap that calls `AllowSetForegroundWindow(-1)`: 8 of 8,
+  twice. All 60 `test/gaia*_test.dart` files: 1163 passed.
+
+**Still not run:** the job board on Codex, and Esc on Codex more than once.
+
 ## 12. Changes to GAIA_HLD.md when built
+
+Applied for Phases 3 and 4, 2026-11-04.
 
 - **§5.2, §10.1:** in Auto, CLI prompts are answered without a card.
 - **§12.2:** phone prompts act in Auto.

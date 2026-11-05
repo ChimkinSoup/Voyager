@@ -165,6 +165,11 @@ class GaiaChatTools implements GaiaTurnTools {
 
   void _logActivity(Iterable<String> labels, {String? window, String? app}) {
     for (final label in labels) {
+      // The stop can come from the session and from the step it ended:
+      // one row, after whatever ran.
+      if (label.startsWith('Stopped: ') && _activity.remove(label)) {
+        _activityTotal--;
+      }
       _activity.add(label);
       _activityTotal++;
     }
@@ -195,6 +200,10 @@ class GaiaChatTools implements GaiaTurnTools {
     );
     (onActivity ?? onCard)(card);
   }
+
+  /// A stop that came from the session, which may land between calls, with
+  /// no step to report it (BUG-357).
+  void logStopped(String why) => _logActivity(['Stopped: $why']);
 
   /// How long the screen gets to settle before `read_after` reads it.
   static const _readSettle = Duration(milliseconds: 300);

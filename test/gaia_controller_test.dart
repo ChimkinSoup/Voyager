@@ -3288,6 +3288,27 @@ void main() {
     GaiaCardPart card(GaiaMessage message) =>
         message.parts.whereType<GaiaCardPart>().single;
 
+    test('a stop that says why shows on the activity card, and a plain '
+        'one adds no card (BUG-357)', () async {
+      await hanging();
+      final chatId = controller.currentChatId!;
+      await controller.stop(chatId, why: 'The user pressed Esc.');
+      await settle();
+      final stopped = (await main.messages()).last;
+      expect(stopped.status, GaiaMessageStatus.cancelled);
+      expect(
+        (card(stopped).input['steps']! as List).single['label'],
+        'Stopped: The user pressed Esc.',
+      );
+
+      await hanging();
+      await controller.stop(chatId);
+      await settle();
+      final plain = (await main.messages()).last;
+      expect(plain.status, GaiaMessageStatus.cancelled);
+      expect(plain.parts.whereType<GaiaCardPart>(), isEmpty);
+    });
+
     test('ask_user shows a card the composer answers; the agent gets the '
         'answer and the card is kept, answered', () async {
       final tools = await hanging();

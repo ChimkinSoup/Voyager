@@ -1187,6 +1187,9 @@ class GaiaController extends ChangeNotifier {
 
   final _stopping = <String>{};
 
+  /// Each running chat's tools for its turn.
+  final _turnTools = <String, GaiaChatTools>{};
+
   /// A send still attaching its images, picking its tier or taking its
   /// lease, by chat: no run to stop yet, so a stop takes the send back.
   final _cancelSend = <String, void Function()>{};
@@ -2011,7 +2014,7 @@ class GaiaController extends ChangeNotifier {
         await _abort();
         return null;
       case 'stop':
-        await stop(params['chatId']! as String);
+        await stop(params['chatId']! as String, why: params['why'] as String?);
         return null;
       case 'drain':
         return _drain();
@@ -3619,6 +3622,7 @@ class GaiaController extends ChangeNotifier {
       },
       hold: _cardHold,
     );
+    _turnTools[chatId] = tools;
 
     try {
       // Moved here from another account (§6.5): a copy of its newest session
@@ -3802,6 +3806,7 @@ class GaiaController extends ChangeNotifier {
     } finally {
       _stopping.remove(chatId);
       _running.remove(chatId);
+      _turnTools.remove(chatId);
       _lastPersist.remove(reply.id);
       _reportRuns();
       notifyListeners();
@@ -4132,10 +4137,11 @@ class GaiaController extends ChangeNotifier {
     return null;
   }
 
-  Future<void> stop(String chatId) async {
+  Future<void> stop(String chatId, {String? why}) async {
     if (_cancelSend.remove(chatId) case final cancel?) return cancel();
     if (!_running.contains(chatId)) return;
     _stopping.add(chatId);
+    if (why != null) _turnTools[chatId]?.logStopped(why);
     cards.voidAll(chatId: chatId);
     if (_pipe.connected) {
       unawaited(

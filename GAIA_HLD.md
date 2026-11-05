@@ -329,6 +329,8 @@ settings and mode (Claude Code's Auto mode included) apply unchanged. File
 edits, commands and launching the app run as they would in the CLI, from the
 desktop or a remote prompt (§12.2). Only what the CLI itself would ask about
 reaches Gaia, as a permission card through the permission-prompt tool (§5.3).
+In a chat in Auto, Gaia allows it with no card and lists it on the turn's activity
+card (GAIA_AUTONOMY_HLD.md §5.7).
 Approve-before-write covers Voyager data (§10), not coding work.
 
 A workspace binding stores a folder path **per device**, since paths differ
@@ -1075,6 +1077,9 @@ Question and permission cards show on the phone with a push, and answering
 there sends an `answer` command to the beacon. Drain mode pauses on any open
 card, and Abort voids them all.
 
+In a chat in Auto, permission prompts raise no card (GAIA_AUTONOMY_HLD.md §5.7).
+Questions and Voyager data proposals still do.
+
 ---
 
 ## 11. Memory ("global graphify")
@@ -1152,6 +1157,9 @@ sandbox. It drains the battery. And it still can't reach the laptop's files.
   included, §5.2). Only what the CLI would ask about becomes a permission
   card on the phone. Pairing is what protects remote use, not extra
   approvals.
+- **A phone prompt acts in Auto (amended 2026-11-04).** In a chat in Auto, a
+  prompt from the phone runs OS actions and commands with no card, and Stop and
+  Abort work from the phone (GAIA_AUTONOMY_HLD.md §11.4).
 - **No beacon online:** the phone can still chat directly with **API-key
   agents** (Gemini API). It's the same history, so the chat carries on, and
   the tier picker greys out CLI-only agents.
@@ -1298,10 +1306,18 @@ Agents are told to try `os.read_screen` first. `os.focused_window` says which
 window that is.
 
 Acting: `os.click` (by UIA control first, coordinates as a fallback),
-`os.scroll`, `os.type`, `os.key`.
+`os.scroll`, `os.type`, `os.key`, and `os_open` and `os_focus`, with `os_windows`
+to list what's open (GAIA_AUTONOMY_HLD.md §8).
 
-**The target window is never Gaia (decided 2026-11-01).** Every `os.*` call
-works out its target when it runs. If the foreground window is one of Gaia's,
+**Three modes (amended 2026-11-04):** the hand is Off, Ask or Auto, per chat
+(GAIA_AUTONOMY_HLD.md §4). In Ask, what follows holds as written. In Auto there are
+no step-list cards, the turn's target stays pinned, and the stop model below it is
+Esc, switching windows yourself, and the rest of §5.3 there. The refusals don't
+change.
+
+**The target window is never Gaia (decided 2026-11-01).** In Ask, every `os.*` call
+works out its target when it runs; in Auto, it's the session's pinned window
+(GAIA_AUTONOMY_HLD.md §5.2). If the foreground window is one of Gaia's,
 the target is the next visible, non-minimized top-level window in Z-order that
 isn't Gaia's. Voyager's main window isn't Gaia's, so it can be a target. An
 action that needs its target in front activates it first.
@@ -1328,7 +1344,7 @@ Safety, partly borrowed from nus-desktop:
   each time and in every chat, beside the toggle: an agent with its CLI's shell
   or web tools could send screen text elsewhere, or be steered by it. The grant
   stays one click.
-- Each action batch shows as a step list, approved once or step-by-step, the
+- In Ask, each action batch shows as a step list, approved once or step-by-step, the
   OS-level equivalent of §10. **Approving once needs every step's target shown
   (decided 2026-11-01):** its window and resolved control, or its coordinates.
   A run stops if the window changes.
@@ -1369,6 +1385,12 @@ with Ctrl+Enter. It restores chats and runs. It does **not** restore OS grants
 or drain modes; those are turned back on per chat. The phone can trigger Abort
 ("Abort laptop" on the Gaia page) and can re-arm, which is safe because grants
 stay off after any re-arm.
+
+**In Auto (amended 2026-11-04).** Esc is polled for the whole session rather than
+one step list, and ends the turn. Esc or switching windows also sets a latch, so
+that turn's `os_*` calls are refused however slowly its agent stops, and turns the
+chat's drain mode off, so the next queued prompt doesn't carry on
+(GAIA_AUTONOMY_HLD.md §5.3).
 
 ---
 
@@ -1799,8 +1821,9 @@ Phase 9C as built (2026-11-01):
   (`AllowSetForegroundWindow`), and the switch is watched for up to 2 s, as Windows
   makes it a moment after agreeing to. Later in a run, Gaia in front is the window
   changing.
-- **Typing** goes as Unicode, so no layout or Caps Lock changes it, four characters
-  at a time with a look between them, at most 2000. Enter and Tab are real keys.
+- **Typing** goes as Unicode, so no layout or Caps Lock changes it, one character
+  at a time, 20 ms apart, with a look between them, at most 2000, which takes about a
+  minute (BUG-352). Enter and Tab are real keys.
   Focus is checked for a sensitive field before a step types, not between its
   characters; the window in front is checked throughout. Not knowing what has focus
   is a refusal. **UI Automation's focused element proves nothing about a sleeping
@@ -1847,7 +1870,8 @@ Phase 9C as built (2026-11-01):
   boundary.
 - **The phone can deny, not approve (decided 2026-11-01).** Approving takes someone
   at the screen, who can see the border and press Esc. A prompt from the phone that
-  reaches a step list waits for the desktop.
+  reaches a step list waits for the desktop. This holds in Ask; Auto has no step
+  list to approve (§12.2).
 - **The action log** lists a step list that sent anything, however it ended, as "Ran
   2 of 3 steps in Notepad", with no Undo. The card in the chat has the steps. A
   card's labels sync with its message, window title, control names and typed text
@@ -2637,6 +2661,12 @@ Decided for Phase 9 (2026-11-01):
   don't exist yet, so §5.3's default-off doesn't apply here (§15.6).
 - A phone can deny a step list but not approve one, and the border's label names
   the chat (§19).
+
+Amended 2026-11-04 (GAIA_AUTONOMY_HLD.md §9): the two decisions above on screen
+text and the phone hold for Ask, which exists for the reason they give. A chat in
+Auto gives up the step list as a boundary, by the user's choice per chat and after
+a notice: text on a page can steer its agent, and a prompt from the phone acts with
+no one at the screen.
 
 To verify against current CLI versions at the start of the phase that needs
 them: Claude Code's

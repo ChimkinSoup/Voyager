@@ -208,6 +208,9 @@ class GaiaOsControl {
   /// The chat whose Auto turn holds the screen (GAIA_AUTONOMY_HLD.md §5.1).
   String? get sessionChat => _session?.chatId;
 
+  /// Why the session was stopped, once it has been (§5.3).
+  String? get sessionStopped => _session?.latch;
+
   /// The session waits while Gaia is in front (§5.2).
   bool get sessionPaused => _session?.pausedAt != null;
 
