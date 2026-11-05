@@ -2,8 +2,8 @@
 
 Status: Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). Phases 3 and 4
 done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). No bugs from
-them are open. Phase 5 is built, 2026-11-04, and run live 2026-11-05: its first Done-when holds, BUG-359 and
-BUG-360 from it are fixed (2026-11-05), and the password manager check isn't run (§11.7). It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
+them are open. Phase 5 done, built 2026-11-04 and checked live 2026-11-05 (§11.7). BUG-359 and
+BUG-360 from it are fixed (2026-11-05). It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
 §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
@@ -449,7 +449,7 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 | **2. Flashes** (done, §11.2) | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; 95th percentile under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
 | **3. Auto** (done, §11.4, §11.6) | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
 | **4. Opening** (done, §11.5, §11.6) | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
-| **5. More tools** (built, live pass §11.7; BUG-359 and BUG-360 fixed) | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
+| **5. More tools** (done, §11.7) | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
 
 ### 11.1 Phase 1 results (2026-11-03)
 
@@ -934,9 +934,10 @@ Win32 (`test/tool/gaia_more_tools_live_test.dart`, run by path):
 - The two drag tests, on a real TrackBar, stopped at `os_focus` with "Windows refused the
   input", as §11.5's did with the display off. They need running with it on.
 
-**Not checked:** everything in the app, the Done-when included. The drag's 10 moves are a guess
-at what apps need to see a drag, Explorer's OLE drag included. Real password managers'
-markings weren't seen; the probe set them from PowerShell.
+**Not checked with the display off:** everything in the app, the Done-when included. The drag's
+10 moves were a guess at what apps need to see a drag, Explorer's OLE drag included. Real
+password managers' markings weren't seen; the probe set them from PowerShell. The live pass below
+covers these.
 
 **Live pass (2026-11-05),** display on, `gaiaqa`, debug build of `27b6d2df`, real Haiku and Codex
 turns; item by item in `qa/GAIA_REMAINING_TESTS.md` §I.
@@ -944,8 +945,9 @@ turns; item by item in `qa/GAIA_REMAINING_TESTS.md` §I.
   (3 of 3) and a covered end all let go. But the drag isn't undone: a trackbar stays where the
   drag reached, and the result says nothing was sent (BUG-359). Moving back to `from` and letting
   go at once doesn't give the app the move; a 40 ms wait between them does.
-- **A password manager's copy is refused on read: not run.** The session wasn't allowed to run a
-  downloaded KeePass.
+- **A password manager's copy is refused on read: met** (run later by Juno). A password copied
+  from KeePass portable was refused as from an excluded app. That's the owner check: KeePass is
+  on the default exclusion list, so whether it sets the private markings wasn't seen.
 - `os_window` in Ask and Auto, `os_drag` in Ask, Auto and `os_steps`, an Explorer file drag (the
   10 moves are enough), and `os_clipboard`'s write, read-back, history, browser, and vault
   refusals all passed. Neither CLI picked write plus Ctrl+V over typing 1,488 characters.
