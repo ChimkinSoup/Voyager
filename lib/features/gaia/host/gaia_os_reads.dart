@@ -297,7 +297,9 @@ class GaiaOsReads {
   /// The clipboard's text (GAIA_AUTONOMY_HLD.md §8.5), framed as the screen's
   /// is. Refused while the vault is unlocked, when it was marked private as
   /// password managers mark what they copy, and when the app that put it
-  /// there is excluded, or is a browser while a site is.
+  /// there is excluded, or is a browser whose page is or can't be told: the
+  /// page the copy names and the one the browser shows now, or, for a copy
+  /// naming none, the address it is.
   Future<GaiaOsAnswer> _readClipboard() async {
     void checkVault() {
       if (vaultUnlocked()) {
@@ -343,12 +345,37 @@ class GaiaOsReads {
           "so Gaia can't read it.",
         );
       }
+      // A page's copy names the frame it came from, which may be another
+      // site's, so the page the browser shows now must be allowed too. A copy
+      // naming none is read only if it's an address, as the address bar's
+      // is, and goes by that address.
+      final text = read.text?.trim() ?? '';
       if (gaiaIsBrowser(owner.exe) &&
-          exclusions().any((e) => e.contains('.'))) {
-        throw GaiaReadException(
-          'What is on the clipboard came from a browser, and Gaia can\'t tell '
-          'whether from a site the user has excluded, so it can\'t read it.',
-        );
+          exclusions().any((e) => e.contains('.')) &&
+          (read.source != null || text.isNotEmpty)) {
+        final urls = read.source != null
+            ? [read.source, await _shownBy(owner.pid)]
+            : [_asAddress(text)];
+        if (urls.contains(null)) {
+          throw GaiaReadException(
+            'What is on the clipboard came from a browser, and Gaia can\'t '
+            'tell whether from a site the user has excluded, so it can\'t '
+            'read it.',
+          );
+        }
+        if (urls.any(
+          (url) => gaiaContextExcluded(
+            exclusions(),
+            exe: owner.exe,
+            app: owner.app,
+            url: url,
+          ),
+        )) {
+          throw GaiaReadException(
+            'What is on the clipboard came from a site the user has excluded, '
+            "so Gaia can't read it.",
+          );
+        }
       }
     }
     // Again: it may have been unlocked during the read.
@@ -371,6 +398,22 @@ class GaiaOsReads {
       image: null,
       mimeType: null,
     );
+  }
+
+  /// The address in browser process [pid]'s front window, if it can be read.
+  Future<String?> _shownBy(int pid) async {
+    for (final (:window, minimized: _, frame: _) in _windows()) {
+      if (window.pid == pid) return _address(window.hwnd);
+    }
+    return null;
+  }
+
+  /// [text] if it's one whole address with a scheme and a host, as a copy of
+  /// the address bar is; else null.
+  static String? _asAddress(String text) {
+    if (text.contains(RegExp(r'\s')) || !text.contains('://')) return null;
+    final host = Uri.tryParse(text)?.host;
+    return host == null || host.isEmpty ? null : text;
   }
 
   /// [arguments]' `region`; a malformed one is the agent's to fix.

@@ -259,19 +259,28 @@ typedef GaiaListedWindow = ({
 /// ones included: visible, titled, owned by no other window, and not a tool
 /// window, the shell or the control border. Gaia's own are the caller's to
 /// leave out.
-List<GaiaListedWindow> gaiaListWindows() => [
-  for (
-    var hwnd = GetWindow(GetDesktopWindow(), GW_CHILD);
-    hwnd != 0;
-    hwnd = GetWindow(hwnd, GW_HWNDNEXT)
-  )
-    if (_isListedWindow(hwnd))
-      (
-        window: _describeWindow(hwnd),
-        minimized: IsIconic(hwnd) != 0,
-        frame: gaiaWindowFrame(hwnd),
-      ),
-];
+List<GaiaListedWindow> gaiaListWindows() {
+  // The handles all at once, then each described: a z-order walk describing
+  // each as it went missed a window raised meanwhile (BUG-360).
+  final handles = _enumerated = [];
+  EnumWindows(Pointer.fromFunction<WNDENUMPROC>(_collectWindow, 0), 0);
+  return [
+    for (final hwnd in handles)
+      if (_isListedWindow(hwnd))
+        (
+          window: _describeWindow(hwnd),
+          minimized: IsIconic(hwnd) != 0,
+          frame: gaiaWindowFrame(hwnd),
+        ),
+  ];
+}
+
+var _enumerated = <int>[];
+
+int _collectWindow(int hwnd, int _) {
+  _enumerated.add(hwnd);
+  return 1;
+}
 
 /// The app ID [hwnd] was given explicitly, as Store apps' frames and some
 /// desktop apps (Chrome) are: what the taskbar groups by. Null for none.

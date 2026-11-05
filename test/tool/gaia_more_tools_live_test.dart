@@ -326,7 +326,7 @@ $form.Add_FormClosed({ [Console]::Out.WriteLine('CLOSED'); [Console]::Out.Flush(
       });
       watch.cancel();
       expect(held, isTrue);
-      expect(result['stopped'], 'The user pressed Esc.');
+      expect(result['stopped'], startsWith('The user pressed Esc. The drag'));
       await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(buttons(), 'None');
       expect(GetAsyncKeyState(VK_LBUTTON) & 0x8000, 0);

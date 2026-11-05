@@ -2492,13 +2492,36 @@ void main() {
           'from': {'x': 10, 'y': 10},
           'to': {'x': 500, 'y': 500},
         });
+        final sentAt = <DateTime>[];
+        final sentFrom = <(int, int)>[];
         backend.onSend = () {
+          sentAt.add(DateTime.now());
+          sentFrom.add(backend.cursor.last);
           if (backend.calls.length == 4) control.stop('The user pressed Esc.');
         };
         final result = await run();
-        expect(result['stopped'], 'The user pressed Esc.');
+        expect(
+          result['stopped'],
+          'The user pressed Esc. The drag had begun, so Gaia moved back and '
+          'let go where it started, which most apps take as no drag.',
+        );
         expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
         expect(backend.cursor.last, (10, 10));
+        // A move back, then time for the app to see it, then the release
+        // (BUG-359): let go at once, an app takes it where the drag reached.
+        final [..., moveBack, release] = [
+          for (final call in backend.calls)
+            [for (final event in call) (event as GaiaMouseEvent).flags],
+        ];
+        expect(moveBack, [MOUSEEVENTF_MOVE]);
+        expect(release, [MOUSEEVENTF_LEFTUP]);
+        final [..., movedFrom, _] = sentFrom;
+        expect(movedFrom, (10, 10));
+        final [..., movedAt, releasedAt] = sentAt;
+        expect(
+          releasedAt.difference(movedAt),
+          greaterThanOrEqualTo(const Duration(milliseconds: 40)),
+        );
       });
 
       test('stopped once the user has taken the mouse, it lets go where they '
@@ -2515,11 +2538,40 @@ void main() {
           }
         };
         final result = await runShown();
-        expect(result['stopped'], 'The user pressed Esc.');
+        expect(
+          result['stopped'],
+          'The user pressed Esc. The drag had begun, and Gaia let go where '
+          'the user has the mouse, so part of it may have taken effect.',
+        );
         expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
         // Not moved back to 10,10 to let go.
         expect(backend.cursor.last, isNot((10, 10)));
         expect(flashes.map((f) => f['kind'] ?? 'stop'), ['drag', 'stop']);
+      });
+
+      test('if the user takes the mouse while it waits to let go, it says '
+          'so', () async {
+        shown.session('chat', auto: true, onUserStop: () {});
+        await shown.plan('chat', 'card', 'os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        var stopped = false;
+        backend.onSend = () {
+          // The first send after the stop is the move back.
+          if (stopped && backend.userMoved == null) {
+            backend.userMoved = (x: 700, y: 80);
+            backend.inputTick++;
+          }
+          if (backend.calls.length == 3) stopped = backend.escape = true;
+        };
+        final result = await runShown();
+        expect(
+          result['stopped'],
+          'The user pressed Esc. The drag had begun, and Gaia let go where '
+          'the user has the mouse, so part of it may have taken effect.',
+        );
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
       });
 
       test('in a session, Esc mid-drag lets go too', () async {
@@ -2532,7 +2584,7 @@ void main() {
           if (backend.calls.length == 3) backend.escape = true;
         };
         final result = await runShown();
-        expect(result['stopped'], 'The user pressed Esc.');
+        expect(result['stopped'], startsWith('The user pressed Esc. The drag'));
         expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
         expect(backend.cursor.last, (10, 10));
         // Its trail ends there too, rather than going on to the end.

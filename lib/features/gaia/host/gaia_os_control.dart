@@ -236,6 +236,11 @@ class GaiaOsControl {
   static const _dragMoves = 10;
   static const _dragPause = Duration(milliseconds: 30);
 
+  /// How long a drag cut short waits, moved back to its start, before letting
+  /// go: an app that hasn't yet seen the move takes the release where the drag
+  /// had reached (BUG-359; 40 ms was enough for a WinForms trackbar).
+  static const _releaseSettle = Duration(milliseconds: 50);
+
   /// One notch of the wheel: `WHEEL_DELTA`, which the win32 package has no name
   /// for.
   static const _wheelDelta = 120;
@@ -504,6 +509,7 @@ class GaiaOsControl {
             if (_backend.escapeDown()) active.stop('The user pressed Esc.');
           });
     String? stopped;
+    String? dragNote;
     final activateFirst = plan.next;
     try {
       do {
@@ -526,9 +532,10 @@ class GaiaOsControl {
       stopped = error.message;
     } finally {
       escape?.cancel();
-      _releaseHeld(active);
+      dragNote = await _releaseHeld(active);
       _active = null;
     }
+    if (stopped != null && dragNote != null) stopped = '$stopped $dragNote';
     if (stopped == null && plan.next < plan.steps.length) {
       // The next step's control may be on screen now, for its approval.
       await Future<void>.delayed(_settle);
@@ -1352,10 +1359,7 @@ class GaiaOsControl {
     final until = DateTime.now().add(_holdLimit);
     void next() {
       if (DateTime.now().isAfter(until)) {
-        throw _Stopped(
-          'The drag held the button too long, so Gaia let go where it '
-          'started.',
-        );
+        throw _Stopped('The drag held the button too long.');
       }
       active.throwIfStopped();
       _inFront(window);
@@ -1376,10 +1380,7 @@ class GaiaOsControl {
     await Future<void>.delayed(_dragPause);
     next();
     if (_backend.rootAt(to.x, to.y) != window.hwnd) {
-      throw _Stopped(
-        'Another window is covering ${to.x},${to.y}, so Gaia let go where the '
-        'drag started.',
-      );
+      throw _Stopped('Another window is covering ${to.x},${to.y}.');
     }
     _send([GaiaMouseEvent(up)], active);
     active.drag = null;
@@ -1742,15 +1743,26 @@ class GaiaOsControl {
   /// it started, which most apps take as no drag (§8.4), unless the user has
   /// moved the mouse: then it lets go where they have it, and leaves the
   /// cursor in their hand.
-  void _releaseHeld(_Active active) {
+  /// Returns what the agent should know of a drag cut short, if there was one.
+  Future<String?> _releaseHeld(_Active active) async {
     final drag = active.drag;
-    if (active.held.isEmpty && drag == null) return;
+    if (active.held.isEmpty && drag == null) return null;
     final session = _session;
     if (session != null) _noteUserInput(session, DateTime.now());
+    var movedBack = false;
     if (drag != null) {
       stopFlashes?.call();
       if (_backend.cursorAt() == drag.at) {
         _backend.moveCursor(drag.from.x, drag.from.y);
+        // The app sees the move back as input, then has time to handle it
+        // before the button comes up there (BUG-359).
+        _backend.send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)]);
+        if (session != null) session.inputMark = _backend.lastInput();
+        await Future<void>.delayed(_releaseSettle);
+        // The user may have taken the mouse meanwhile: that's theirs, and the
+        // button comes up where they have it.
+        if (session != null) _noteUserInput(session, DateTime.now());
+        movedBack = _backend.cursorAt() == drag.from;
       }
     }
     _backend.send([
@@ -1762,6 +1774,12 @@ class GaiaOsControl {
     if (session != null) session.inputMark = _backend.lastInput();
     active.held.clear();
     active.drag = null;
+    if (drag == null) return null;
+    return movedBack
+        ? 'The drag had begun, so Gaia moved back and let go where it '
+              'started, which most apps take as no drag.'
+        : 'The drag had begun, and Gaia let go where the user has the '
+              'mouse, so part of it may have taken effect.';
   }
 
   List<_Step> _parse(

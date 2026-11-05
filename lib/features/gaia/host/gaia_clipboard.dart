@@ -1,19 +1,22 @@
+import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
 
 /// What `os_clipboard` read (GAIA_AUTONOMY_HLD.md §8.5): the text, if there is
 /// any; whether it was marked private, as password managers mark what they
-/// copy; the window that put it there, 0 when none did; and whether it's
-/// [ours], Gaia's own last write. Null text with [busy] means another app had
-/// the clipboard open.
+/// copy; the window that put it there, 0 when none did; whether it's [ours],
+/// Gaia's own last write; and the page a browser says it was copied from, its
+/// [source]. Null text with [busy] means another app had the clipboard open.
 typedef GaiaClipboard = ({
   String? text,
   bool private,
   int owner,
   bool ours,
   bool busy,
+  String? source,
 });
 
 /// The clipboard's sequence number just after Gaia's last write: its own
@@ -23,7 +26,14 @@ int? _gaiaWrote;
 /// The clipboard's text, unless it was marked private.
 Future<GaiaClipboard> gaiaReadClipboard() async {
   if (!await _open()) {
-    return (text: null, private: false, owner: 0, ours: false, busy: true);
+    return (
+      text: null,
+      private: false,
+      owner: 0,
+      ours: false,
+      busy: true,
+      source: null,
+    );
   }
   try {
     final owner = GetClipboardOwner();
@@ -34,8 +44,23 @@ Future<GaiaClipboard> gaiaReadClipboard() async {
             _has('Clipboard Viewer Ignore') ||
             _dword('CanIncludeInClipboardHistory') == 0);
     if (private) {
-      return (text: null, private: true, owner: owner, ours: ours, busy: false);
+      return (
+        text: null,
+        private: true,
+        owner: owner,
+        ours: ours,
+        busy: false,
+        source: null,
+      );
     }
+    // Only a browser's: another app (Excel, Word) may render its HTML only
+    // when asked, which can take seconds with the clipboard held open.
+    final source =
+        owner != 0 &&
+            IsWindow(owner) != 0 &&
+            gaiaIsBrowser(gaiaDescribeWindow(owner).exe)
+        ? _source()
+        : null;
     final handle = GetClipboardData(CF_UNICODETEXT);
     if (handle == 0) {
       return (
@@ -44,6 +69,7 @@ Future<GaiaClipboard> gaiaReadClipboard() async {
         owner: owner,
         ours: ours,
         busy: false,
+        source: source,
       );
     }
     final memory = Pointer.fromAddress(handle);
@@ -55,6 +81,7 @@ Future<GaiaClipboard> gaiaReadClipboard() async {
         owner: owner,
         ours: ours,
         busy: false,
+        source: source,
       );
     }
     try {
@@ -64,6 +91,7 @@ Future<GaiaClipboard> gaiaReadClipboard() async {
         owner: owner,
         ours: ours,
         busy: false,
+        source: source,
       );
     } finally {
       GlobalUnlock(memory);
@@ -119,6 +147,38 @@ String gaiaCut(String text, int length) {
     0,
     last >= 0xD800 && last <= 0xDBFF ? length - 1 : length,
   );
+}
+
+/// The `SourceURL` a browser writes in the "HTML Format" header it puts beside
+/// what it copies from a page; call with the clipboard open. Only the header,
+/// before the first `<`, is read.
+String? _source() {
+  final handle = GetClipboardData(_format('HTML Format'));
+  if (handle == 0) return null;
+  final memory = Pointer.fromAddress(handle);
+  final bytes = GlobalLock(memory).cast<Uint8>();
+  if (bytes == nullptr) return null;
+  try {
+    final size = GlobalSize(memory);
+    var end = 0;
+    while (end < size && bytes[end] != 0 && bytes[end] != 0x3C) {
+      end++;
+    }
+    return gaiaHtmlSource(
+      utf8.decode(bytes.asTypedList(end), allowMalformed: true),
+    );
+  } finally {
+    GlobalUnlock(memory);
+  }
+}
+
+/// The `SourceURL` in an "HTML Format" [header], if it names one.
+String? gaiaHtmlSource(String header) {
+  final url = RegExp(
+    r'^SourceURL:(.*)$',
+    multiLine: true,
+  ).firstMatch(header)?.group(1)?.trim();
+  return url == null || url.isEmpty ? null : url;
 }
 
 /// Another app may hold the clipboard for a moment.

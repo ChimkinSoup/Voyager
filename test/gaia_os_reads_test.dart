@@ -108,6 +108,7 @@ void main() {
       List<String> exclusions = const [],
       bool vault = false,
       void Function()? onRead,
+      String? shown,
     }) async => (await GaiaOsReads(
       companionPid: () => 1,
       exclusions: () => exclusions,
@@ -119,10 +120,31 @@ void main() {
         return clipboard;
       },
       describe: (hwnd) => owners[hwnd],
+      // Chrome's front window, behind Notepad, shows [shown].
+      windows: () => [
+        for (final window in [_notepad, _chrome])
+          (
+            window: window,
+            minimized: false,
+            frame: (left: 0, top: 0, width: 1, height: 1),
+          ),
+      ],
+      address: (hwnd) async => hwnd == _chrome.hwnd ? shown : null,
     ).read('os_clipboard', const {'action': 'read'})).text;
 
-    GaiaClipboard text(String text, {int owner = 7, bool ours = false}) =>
-        (text: text, private: false, owner: owner, ours: ours, busy: false);
+    GaiaClipboard text(
+      String text, {
+      int owner = 7,
+      bool ours = false,
+      String? source,
+    }) => (
+      text: text,
+      private: false,
+      owner: owner,
+      ours: ours,
+      busy: false,
+      source: source,
+    );
 
     test('the text comes framed as reference data', () async {
       final answer = await read(text('hello'));
@@ -136,6 +158,7 @@ void main() {
           owner: 0,
           ours: false,
           busy: false,
+          source: null,
         )),
         contains('The clipboard has no text.'),
       );
@@ -152,25 +175,108 @@ void main() {
 
     test("a password manager's copy is refused, unread", () async {
       await expectLater(
-        read((text: null, private: true, owner: 30, ours: false, busy: false)),
+        read((
+          text: null,
+          private: true,
+          owner: 30,
+          ours: false,
+          busy: false,
+          source: null,
+        )),
         _refusal('marked private'),
       );
     });
 
-    test('text from an excluded app is refused, and from a browser while '
-        'a site is', () async {
+    test('text from an excluded app is refused', () async {
       await expectLater(
         read(text('pw', owner: 30), exclusions: kGaiaDefaultContextExclusions),
         _refusal('excluded'),
-      );
-      await expectLater(
-        read(text('acct', owner: 8), exclusions: const ['mybank.com']),
-        _refusal('from a browser'),
       );
       expect(
         await read(text('acct', owner: 8), exclusions: const ['keepass']),
         contains('acct'),
       );
+    });
+
+    test("a browser's copy needs both the page it names and the one shown "
+        'now allowed', () async {
+      const sites = ['mybank.com'];
+      await expectLater(
+        read(
+          text('acct', owner: 8, source: 'https://www.mybank.com/a'),
+          exclusions: sites,
+          shown: 'example.com',
+        ),
+        _refusal('from a site the user has excluded'),
+      );
+      // A frame from another site, on an excluded page.
+      await expectLater(
+        read(
+          text('acct', owner: 8, source: 'https://widget.example.com/a'),
+          exclusions: sites,
+          shown: 'mybank.com',
+        ),
+        _refusal('from a site the user has excluded'),
+      );
+      await expectLater(
+        read(
+          text('news', owner: 8, source: 'https://example.com/a'),
+          exclusions: sites,
+        ),
+        _refusal("can't tell whether from a site"),
+      );
+      expect(
+        await read(
+          text('news', owner: 8, source: 'https://example.com/a'),
+          exclusions: sites,
+          shown: 'example.com/b',
+        ),
+        contains('news'),
+      );
+    });
+
+    test('a copy naming no page is read only if it is an address, and goes '
+        'by that address, whatever the browser shows now', () async {
+      const sites = ['mybank.com'];
+      await expectLater(
+        read(
+          text('https://www.mybank.com/a', owner: 8),
+          exclusions: sites,
+          shown: 'example.com',
+        ),
+        _refusal('from a site the user has excluded'),
+      );
+      expect(
+        await read(
+          text('https://example.com/a', owner: 8),
+          exclusions: sites,
+          shown: 'mybank.com',
+        ),
+        contains('https://example.com/a'),
+      );
+      // Typed in a page's field, or written by its script.
+      for (final copied in ['12345678', 'example.com', 'see https://a.com']) {
+        await expectLater(
+          read(text(copied, owner: 8), exclusions: sites, shown: 'example.com'),
+          _refusal("can't tell whether from a site"),
+        );
+      }
+      expect(
+        await read(text('', owner: 8), exclusions: sites),
+        contains('The clipboard has no text.'),
+      );
+    });
+
+    test("an HTML Format header's SourceURL is the copy's page", () {
+      expect(
+        gaiaHtmlSource(
+          'Version:0.9\r\nStartHTML:0000000105\r\nEndHTML:0000000199\r\n'
+          'SourceURL:https://www.mybank.com/a?b=1\r\n',
+        ),
+        'https://www.mybank.com/a?b=1',
+      );
+      expect(gaiaHtmlSource('Version:0.9\r\nStartHTML:0000000105\r\n'), isNull);
+      expect(gaiaHtmlSource('Version:0.9\r\nSourceURL:\r\n'), isNull);
     });
 
     test('an owner Gaia can\'t name is refused; none at all is not', () async {
@@ -235,7 +341,14 @@ void main() {
 
     test('a clipboard another app holds says so', () async {
       await expectLater(
-        read((text: null, private: false, owner: 0, ours: false, busy: true)),
+        read((
+          text: null,
+          private: false,
+          owner: 0,
+          ours: false,
+          busy: true,
+          source: null,
+        )),
         _refusal('Another app is using the clipboard'),
       );
     });

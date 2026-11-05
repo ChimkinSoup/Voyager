@@ -2,8 +2,8 @@
 
 Status: Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). Phases 3 and 4
 done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). No bugs from
-them are open. Phase 5 is built and unit-tested, 2026-11-04, with the display off, so its
-Done-when isn't checked live yet (§11.7). It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
+them are open. Phase 5 is built, 2026-11-04, and run live 2026-11-05: its first Done-when holds, BUG-359 and
+BUG-360 from it are fixed (2026-11-05), and the password manager check isn't run (§11.7). It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
 §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
@@ -449,7 +449,7 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 | **2. Flashes** (done, §11.2) | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; 95th percentile under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
 | **3. Auto** (done, §11.4, §11.6) | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
 | **4. Opening** (done, §11.5, §11.6) | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
-| **5. More tools** (built, §11.7; not checked live) | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
+| **5. More tools** (built, live pass §11.7; BUG-359 and BUG-360 fixed) | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
 
 ### 11.1 Phase 1 results (2026-11-03)
 
@@ -858,7 +858,9 @@ Built:
   path (Esc, Stop, Abort, Revoke, a switch of window, the window covered, Windows refusing input,
   the 5 s hold limit) ends in `run`'s `finally`, whose `_releaseHeld` moves the cursor back to
   `from` and lets go there, which most apps take as no drag. That's a choice over letting go in
-  place, which could drop onto whatever is now under the cursor.
+  place, which could drop onto whatever is now under the cursor. The move back is sent as input,
+  and the button comes up 50 ms later: let go at once, an app takes it where the drag had reached
+  (BUG-359). The stop's result then says the drag had begun and where Gaia let go.
 
   The exception is when the user has moved the mouse. Then the cursor isn't where the drag last
   put it, and Gaia lets go where it is, rather than pulling the pointer out of the user's hand.
@@ -935,6 +937,31 @@ Win32 (`test/tool/gaia_more_tools_live_test.dart`, run by path):
 **Not checked:** everything in the app, the Done-when included. The drag's 10 moves are a guess
 at what apps need to see a drag, Explorer's OLE drag included. Real password managers'
 markings weren't seen; the probe set them from PowerShell.
+
+**Live pass (2026-11-05),** display on, `gaiaqa`, debug build of `27b6d2df`, real Haiku and Codex
+turns; item by item in `qa/GAIA_REMAINING_TESTS.md` §I.
+- **A stopped drag leaves no button down: met.** Esc (3 of 3), Alt+Tab (3 of 3), phone Stop
+  (3 of 3) and a covered end all let go. But the drag isn't undone: a trackbar stays where the
+  drag reached, and the result says nothing was sent (BUG-359). Moving back to `from` and letting
+  go at once doesn't give the app the move; a 40 ms wait between them does.
+- **A password manager's copy is refused on read: not run.** The session wasn't allowed to run a
+  downloaded KeePass.
+- `os_window` in Ask and Auto, `os_drag` in Ask, Auto and `os_steps`, an Explorer file drag (the
+  10 moves are enough), and `os_clipboard`'s write, read-back, history, browser, and vault
+  refusals all passed. Neither CLI picked write plus Ctrl+V over typing 1,488 characters.
+- The live test: the drag stop test fails as BUG-359; the `os_window` test failed 2 of 5
+  (BUG-360).
+- Not run: an elevated window, a second monitor, `minimize` with the floater next behind.
+
+**Fixes (2026-11-05):**
+- **BUG-359:** `_releaseHeld` sends the move back, waits 50 ms, then lets go, and the result says
+  the drag had begun. The live test's "stopped mid-drag" passed 6 of 6, the trackbar back at its
+  start. Esc, Alt+Tab, phone Stop and a covered end weren't re-run in the app.
+- **BUG-360:** `gaiaListWindows` walked the z-order with `GetWindow(GW_HWNDNEXT)`, describing each
+  window as it went, so a window raised meanwhile (by a maximize) was skipped. It now takes the
+  handles with `EnumWindows` first. The live `os_window` test passed 20 of 20 (the old code failed
+  3 of 20). In the app, on Haiku in Auto, 3 of 3 turns ran `os_window` by id through maximize,
+  move, maximize, minimize, move and close.
 
 ## 12. Changes to GAIA_HLD.md when built
 
