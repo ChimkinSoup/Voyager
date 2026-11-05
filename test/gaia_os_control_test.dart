@@ -70,12 +70,16 @@ class _Backend implements GaiaInputBackend {
   /// Runs once per [send], after it, to change things mid-run.
   void Function()? onSend;
 
+  /// Runs at each look at the foreground, before it's read.
+  void Function()? onForeground;
+
   @override
   GaiaForegroundWindow? target(int gaiaPid) => window;
   @override
   GaiaForegroundWindow? describe(int hwnd) => windows[hwnd] ?? window;
   @override
   int foreground() {
+    onForeground?.call();
     if (_switching) {
       duringSwitch?.call();
       if (activateLag case final lag? when lag <= 0) {
@@ -882,6 +886,7 @@ void main() {
         settle: Duration.zero,
         activateWait: const Duration(milliseconds: 200),
         adoptWithin: const Duration(milliseconds: 300),
+        handoverWait: const Duration(milliseconds: 200),
         pauseLimit: const Duration(milliseconds: 300),
       );
     });
@@ -1079,6 +1084,140 @@ void main() {
       backend.front = other.hwnd;
       await Future<void>.delayed(look);
       expect(stops, 1);
+    });
+
+    group("the pinned app's own window, later than adoptWithin (BUG-362)", () {
+      const main = (
+        hwnd: 71,
+        pid: 70,
+        exe: 'notepad',
+        app: 'Notepad',
+        title: 'main',
+        console: false,
+      );
+      setUp(() => backend.windows[main.hwnd] = main);
+
+      // The splash closing.
+      void closePin() {
+        backend.windows.remove(_target.hwnd);
+        backend.window = null;
+      }
+
+      test('is adopted once the pin has closed, with no user input since '
+          'the step, as a splash hands over', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        closePin();
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        final next = await act('os_key', {'keys': 'B'});
+        expect(next['stopped'], isNull);
+        expect(next['adopted'], contains('main'));
+      });
+
+      test('is adopted when the pin closes just after, as a splash that '
+          'shows its main window first does', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        closePin();
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        final next = await act('os_key', {'keys': 'B'});
+        expect(next['stopped'], isNull);
+        expect(next['adopted'], contains('main'));
+      });
+
+      test('ends the turn if the pin stays open past the wait, as a reminder '
+          'beside the main window would', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        expect(stops, 1);
+      });
+
+      test('ends the turn on user input while it waits for the pin to '
+          'close', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        backend.inputTick++;
+        await Future<void>.delayed(look);
+        expect(stops, 1);
+      });
+
+      test('ends the turn after the user has touched the PC', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        backend.inputTick++;
+        await Future<void>.delayed(look);
+        closePin();
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 1);
+      });
+
+      test('ends the turn after input during a step, though Gaia sent '
+          'more after it', () async {
+        auto.session('chat', auto: true, onUserStop: () => stops++);
+        await auto.plan('chat', 'card', 'os_type', {'text': 'abcdef'});
+        var sends = 0;
+        backend.onSend = () {
+          if (++sends == 2) Future.microtask(() => backend.inputTick++);
+        };
+        await auto.run('card', once: true, check: () async {});
+        backend.onSend = null;
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        closePin();
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 1);
+      });
+
+      test('is adopted when the pin closes first and another window is in '
+          'front until it shows, as Windows does for a splash that closes '
+          'first', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        closePin();
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        backend.front = main.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        final next = await act('os_key', {'keys': 'B'});
+        expect(next['stopped'], isNull);
+        expect(next['adopted'], contains('main'));
+      });
+
+      test("another app's window, with none of the pinned app's after, ends "
+          'the turn once the wait is over', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        closePin();
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        expect(stops, 1);
+      });
+
+      test("another app's window while the pin is open ends the turn at "
+          'once', () async {
+        await act('os_key', {'keys': 'A'});
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 1);
+      });
     });
 
     test('a window its step opened is adopted, and the agent told', () async {
@@ -2522,6 +2661,58 @@ void main() {
           releasedAt.difference(movedAt),
           greaterThanOrEqualTo(const Duration(milliseconds: 40)),
         );
+      });
+
+      test('stopped as its window loses the front, it says part of the drag '
+          'may have taken effect (BUG-361)', () async {
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.onSend = () {
+          if (backend.calls.length == 4) backend.front = 99;
+        };
+        final result = await run();
+        expect(
+          result['stopped'],
+          'The window in front changed. The drag had begun, and its window '
+          'lost the front, which ends a drag where it had reached in most '
+          'apps, so part of it may have taken effect.',
+        );
+        // Still let go, so no button stays down.
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        // Not moved back, button down, over whatever is in front now.
+        expect(backend.cursor.last, isNot((10, 10)));
+      });
+
+      test('a window that lost the front mid-drag and got it back still '
+          'says part of the drag may have taken effect', () async {
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        var seen = false;
+        backend.onForeground = () {
+          if (backend.front != 99) return;
+          // Out of the front for one look, then back.
+          if (seen) backend.front = _target.hwnd;
+          seen = true;
+        };
+        backend.onSend = () {
+          if (backend.calls.length == 4) {
+            backend.front = 99;
+            control.stop('The user pressed Esc.');
+          }
+        };
+        final result = await run();
+        backend.onForeground = null;
+        expect(
+          result['stopped'],
+          'The user pressed Esc. The drag had begun, and its window lost the '
+          'front, which ends a drag where it had reached in most apps, so '
+          'part of it may have taken effect.',
+        );
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
       });
 
       test('stopped once the user has taken the mouse, it lets go where they '

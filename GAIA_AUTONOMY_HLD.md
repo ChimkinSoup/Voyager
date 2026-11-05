@@ -1,9 +1,12 @@
 # Gaia — Autonomous PC Control (HLD)
 
-Status: Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). Phases 3 and 4
-done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). No bugs from
-them are open. Phase 5 done, built 2026-11-04 and checked live 2026-11-05 (§11.7). BUG-359 and
-BUG-360 from it are fixed (2026-11-05). It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
+Status: **Done, 2026-11-05.** Every phase is built and checked live, and no bugs from it are
+open. Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). Phases 3 and 4
+done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). Phase 5 done,
+built 2026-11-04 and checked live 2026-11-05 (§11.7). BUG-359 and BUG-360 from it are fixed
+(2026-11-05). The follow-ups were run 2026-11-05 (§11.5, §11.6, §11.7); BUG-361 and BUG-362 from
+them are fixed and checked in the app (2026-11-05), including the code review's follow-ups. Not
+run, by decision: a second monitor. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
 §15.7 and §20; §12 below lists how.
 
 ## 1. Summary
@@ -129,8 +132,15 @@ session, `os_type` therefore sends at most every 20 ms. Since BUG-352 it sends o
 time, in Ask too: about a minute for the 2000-character limit (§11.6). Exclusions and the vault
 still apply.
 
-**A dialog that takes longer than 1.5 s to appear stops the run.** Also the safe way to be
-wrong, and the first thing to tune if it proves annoying.
+**A dialog that takes longer than 1.5 s to appear stops the run,** unless the pinned window has
+closed, the new one is from its process, and the user has pressed nothing since Gaia's last step
+began: then it's adopted too, as a splash screen handing over to its main window is (BUG-362,
+2026-11-05). Kept to the same process and a closed pin, so neither a window that takes the front
+by itself nor another window of the pinned app (an Outlook reminder) is adopted. The hand-over
+gets up to 1 s either way round: a main window shown before the splash closes waits for it to
+close, and a splash that closes first, leaving another app in front until the main window
+shows, waits for that window. Input from the user meanwhile ends the turn at once. Otherwise the
+safe way to be wrong, and the first thing to tune if it proves annoying.
 
 **Known gap for Phase 3:** answering `ask_user` mid-run leaves you in Gaia, so the run waits
 until you click the target, and stops after 5 minutes. §9 tells agents to ask before
@@ -742,6 +752,22 @@ is in front and `SendInput` is refused, as in §11.4.
   agent saw the page hadn't changed and said so.
 - A real Codex or Claude Code turn choosing `os_open` over `start` in the shell.
 
+**Checked 2026-11-05** (debug build of `4433a197`, Auto, scratch WinForms apps):
+- A splash screen (3 s, then the main window): the turn ended `cancelled` as "The user switched to
+  another window", 3 of 3, not as described above (BUG-362). Fixed: past `_adoptWithin`, a window
+  from the pinned window's process, with no user input since Gaia's last step, adopts (§5.2); any
+  other window still stops. Then 3 of 3 `complete`, typing into the main window. A splash from a
+  separate exe would still stop. After code review the pin must also have closed, with up to 1 s
+  for the hand-over either way round (§5.2): both splash orders 6 of 6 `complete`, and a second
+  window of the same app beside its open main window still ends the turn.
+- A launcher that starts its window's exe through `explorer.exe` and exits: "couldn't tell", as
+  expected, but the same result also adopts the window that came in front, so the agent typed into
+  it with no `os_focus`. Haiku called the result contradictory ("Stopped after 0 of 1 step… Nothing
+  more was sent" beside "later calls act on it").
+- A URL opened with the scratch Chrome profile also on the board: the window that got the tab
+  (the default profile's) was pinned, 1 of 1.
+- "Open Character Map for me": Haiku and Codex each used `os_open`, not the shell.
+
 **End-to-end check after 4:** the job-board task, or a scratch version of it, runs 10+ pages with
 no cards, and a press of Esc at a random moment stops it within one step each time.
 
@@ -826,7 +852,10 @@ another window (1 of 1) each ended the turn, with the command gone 3 s later and
   from a window brought up with an F24 tap that calls `AllowSetForegroundWindow(-1)`: 8 of 8,
   twice. All 60 `test/gaia*_test.dart` files: 1163 passed.
 
-**Still not run:** the job board on Codex, and Esc on Codex more than once.
+**Still not run:** the job board on Codex, and Esc on Codex more than once. **Run 2026-11-05
+(debug build of `4433a197`):** the job board on Codex in Auto read and clicked "Next page" 15
+times in 21 s with no card. Esc on Codex at random points: 4 of 4 `cancelled`, 297 to 336 ms after
+the press, no page load after it, each with "Stopped: The user pressed Esc.".
 
 ### 11.7 Phase 5 results (2026-11-04)
 
@@ -921,6 +950,9 @@ Decisions made here:
   would otherwise go round.
 - A clipboard write overwrites what the user copied with no backup. The tool's description
   tells the agent to say so.
+- A copy whose app has since exited (`clip.exe`, `Set-Clipboard`) stays refused while anything
+  is excluded, and the default list never is (2026-11-05). Reading it would let an excluded app's
+  copy through once that app closes.
 
 Checked by unit tests (all 1176 Gaia tests pass; 30 new in `gaia_os_control_test.dart`,
 `gaia_os_reads_test.dart` and `gaia_tools_test.dart`), and with the display off against real
@@ -964,6 +996,28 @@ turns; item by item in `qa/GAIA_REMAINING_TESTS.md` §I.
   handles with `EnumWindows` first. The live `os_window` test passed 20 of 20 (the old code failed
   3 of 20). In the app, on Haiku in Auto, 3 of 3 turns ran `os_window` by id through maximize,
   move, maximize, minimize, move and close.
+
+**Follow-ups (2026-11-05, later),** `gaiaqa`, debug build of `4433a197`, real Haiku and Codex turns:
+- **BUG-359 in the app:** Esc (3 of 3), phone Stop (3 of 3, two of them in a later drag of a
+  10-drag `os_steps`) and a covered end (1 of 1) each put the trackbar back where its drag started
+  before the button came up. After Alt+Tab (3 of 3) it stays where the drag reached: losing the
+  foreground ends the app's drag there, which a script with no Gaia shows too, so nothing can
+  undo it. The result still said it was probably undone (BUG-361). Fixed: a drag whose window
+  has lost the front at the release says part of it may have taken effect. Alt+Tab 3 of 3 with
+  that text in the app; Esc unchanged.
+- **`minimize` of the pinned window:** with Gaia's window next behind, it comes in front, nothing
+  pauses, and the next `os_key` is refused with "There is no window to act on yet. os_open or
+  os_focus one." in a turn of about 5 s. The floater, a topmost tool window, is never what Windows
+  brings forward: the next app window is, and it adopts as Gaia's doing (here the emulator, which
+  got the key).
+- **An elevated window:** `os_focus` brings it in front, but `move` and `close` do nothing (UIPI)
+  while each returns "Sent the step". The agent only learns by reading the screen.
+- **The clipboard's browser rule** (as changed after review), 127.0.0.1 excluded: page text from
+  127.0.0.1 with localhost showing, page text from localhost with 127.0.0.1 showing, and an
+  address-bar copy of 127.0.0.1 with localhost showing were refused; page text and an address-bar
+  copy from localhost were read. A copy from a text field carries no page, so it's refused while
+  any site is excluded, even on an allowed site.
+- Not run: a second monitor (skipped by decision).
 
 ## 12. Changes to GAIA_HLD.md when built
 

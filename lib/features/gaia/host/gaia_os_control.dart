@@ -182,6 +182,7 @@ class GaiaOsControl {
     this._modifierWait = const Duration(seconds: 3),
     this._activateWait = const Duration(seconds: 2),
     this._adoptWithin = const Duration(milliseconds: 1500),
+    this._handoverWait = const Duration(seconds: 1),
     this._pauseLimit = const Duration(minutes: 5),
     this._openWait = const Duration(seconds: 10),
     this._holdLimit = const Duration(seconds: 5),
@@ -214,6 +215,11 @@ class GaiaOsControl {
   final Duration _modifierWait;
   final Duration _activateWait;
   final Duration _adoptWithin;
+
+  /// How long a pinned window is given to hand over to another of its
+  /// process's windows: a splash may show its main window before it closes,
+  /// or close first and leave another app in front a moment (BUG-362).
+  final Duration _handoverWait;
   final Duration _pauseLimit;
 
   /// How long `os_open` waits for a window (§8.1).
@@ -360,7 +366,9 @@ class GaiaOsControl {
     if (front == 0 || front == session.lastFront) return;
     session.lastFront = front;
     if (front == session.pin?.hwnd) {
-      session.engaged = true;
+      session
+        ..engaged = true
+        ..handover = null;
       _paused(session, null);
       return;
     }
@@ -374,13 +382,43 @@ class GaiaOsControl {
     _paused(session, null);
     final lastStep = session.lastStep;
     final lastUser = session.lastUserInput;
+    // Later, the pinned window's own process taking over from it once it
+    // closed, with no input from the user since Gaia's last step began, is
+    // still Gaia's doing: a splash handing over to its main window (BUG-362).
+    // Not a further window while the pin stays open, as Outlook's reminder
+    // beside its main window would be.
+    final pin = session.pin;
+    final stepStarted = session.stepStarted;
+    final untouched =
+        stepStarted != null &&
+        (lastUser == null || lastUser.isBefore(stepStarted));
+    final pinsApp = window != null && pin != null && window.pid == pin.pid;
+    final pinClosed = pin != null && _backend.describe(pin.hwnd) == null;
     final caused =
         lastStep != null &&
-        now.difference(lastStep) <= _adoptWithin &&
+        (now.difference(lastStep) <= _adoptWithin ||
+            (untouched && pinsApp && pinClosed)) &&
         (lastUser == null || now.difference(lastUser) > _adoptWithin);
     if (!caused) {
+      // A splash may show its main window a moment before it closes, or close
+      // first, and Windows puts another window in front until the main one
+      // shows: look again, for a while, for the hand-over to finish before
+      // calling it the user's.
+      final handingOver = pinsApp ? !pinClosed : pinClosed;
+      if (untouched && lastStep != null && pin != null && handingOver) {
+        final handover = session.handover;
+        final since = handover?.hwnd == pin.hwnd ? handover!.since : now;
+        if (now.difference(since) <= _handoverWait) {
+          session
+            ..handover = (hwnd: pin.hwnd, since: since)
+            ..lastFront = 0;
+          return;
+        }
+      }
+      session.handover = null;
       return _userStop(session, 'The user switched to another window.');
     }
+    session.handover = null;
     // The taskbar and the desktop aren't windows to act in; the next step
     // brings the pin back. Start and Search are, after the Windows key (§5.5).
     if (window == null ||
@@ -1354,10 +1392,12 @@ class GaiaOsControl {
         : (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
     _backend.moveCursor(from.x, from.y);
     // Set first, so that a stop even mid-send lets go.
-    active.drag = (from: from, up: up, at: from);
+    active.drag = (window: window.hwnd, from: from, up: up, at: from);
+    active.dragLostFront = false;
     _send([GaiaMouseEvent(down)], active);
     final until = DateTime.now().add(_holdLimit);
     void next() {
+      if (_backend.foreground() != window.hwnd) active.dragLostFront = true;
       if (DateTime.now().isAfter(until)) {
         throw _Stopped('The drag held the button too long.');
       }
@@ -1373,7 +1413,7 @@ class GaiaOsControl {
         y: from.y + (to.y - from.y) * i ~/ _dragMoves,
       );
       _backend.moveCursor(at.x, at.y);
-      active.drag = (from: from, up: up, at: at);
+      active.drag = (window: window.hwnd, from: from, up: up, at: at);
       // An app sees the move as input, as a real mouse's.
       _send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)], active);
     }
@@ -1750,9 +1790,18 @@ class GaiaOsControl {
     final session = _session;
     if (session != null) _noteUserInput(session, DateTime.now());
     var movedBack = false;
+    var userHasMouse = false;
+    // A window that loses the front ends its own drag where it had reached,
+    // before anything Gaia sends after (BUG-361).
+    final lostFront =
+        drag != null &&
+        (active.dragLostFront || _backend.foreground() != drag.window);
     if (drag != null) {
       stopFlashes?.call();
-      if (_backend.cursorAt() == drag.at) {
+      userHasMouse = _backend.cursorAt() != drag.at;
+      // Not once the window lost the front: the move back, button down, and
+      // the release would go to whatever is in front now.
+      if (!userHasMouse && !lostFront) {
         _backend.moveCursor(drag.from.x, drag.from.y);
         // The app sees the move back as input, then has time to handle it
         // before the button comes up there (BUG-359).
@@ -1763,6 +1812,7 @@ class GaiaOsControl {
         // button comes up where they have it.
         if (session != null) _noteUserInput(session, DateTime.now());
         movedBack = _backend.cursorAt() == drag.from;
+        userHasMouse = !movedBack;
       }
     }
     _backend.send([
@@ -1775,11 +1825,18 @@ class GaiaOsControl {
     active.held.clear();
     active.drag = null;
     if (drag == null) return null;
-    return movedBack
-        ? 'The drag had begun, so Gaia moved back and let go where it '
-              'started, which most apps take as no drag.'
-        : 'The drag had begun, and Gaia let go where the user has the '
-              'mouse, so part of it may have taken effect.';
+    // The cursor being the user's matters most to the agent.
+    if (userHasMouse) {
+      return 'The drag had begun, and Gaia let go where the user has the '
+          'mouse, so part of it may have taken effect.';
+    }
+    if (lostFront) {
+      return 'The drag had begun, and its window lost the front, which ends '
+          'a drag where it had reached in most apps, so part of it may have '
+          'taken effect.';
+    }
+    return 'The drag had begun, so Gaia moved back and let go where it '
+        'started, which most apps take as no drag.';
   }
 
   List<_Step> _parse(
@@ -1980,6 +2037,10 @@ class _Session {
   /// When the last step started, for pacing (§5.6).
   DateTime? stepStarted;
 
+  /// The pin whose hand-over to another window of its process Gaia is waiting
+  /// on, and since when (BUG-362).
+  ({int hwnd, DateTime since})? handover;
+
   /// The window adopted since the agent was last told.
   String? adopted;
 
@@ -2001,9 +2062,13 @@ class _Active {
   /// The window `os_open` or `os_focus` brought up, for the agent.
   String? front;
 
-  /// A drag holding the button: where it started, the button's release, and
-  /// where Gaia last put the cursor.
-  ({({int x, int y}) from, int up, ({int x, int y}) at})? drag;
+  /// A drag holding the button: its window, where it started, the button's
+  /// release, and where Gaia last put the cursor.
+  ({int window, ({int x, int y}) from, int up, ({int x, int y}) at})? drag;
+
+  /// The drag's window was seen out of the front mid-drag, which ends the
+  /// app's drag where it had reached, even if the window came back (BUG-361).
+  bool dragLostFront = false;
 
   void stop(String why) => _stopped ??= why;
 
