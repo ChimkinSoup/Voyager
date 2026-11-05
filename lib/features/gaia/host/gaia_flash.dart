@@ -23,3 +23,15 @@ void gaiaFlash(Map<String, Object?> flash, int accent) {
         }),
   );
 }
+
+/// Ends every flash playing, at once. All of them: there's no ending one.
+void gaiaStopFlashes() {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+  unawaited(
+    const MethodChannel(
+      'voyager/gaia_border',
+    ).invokeMethod<void>('stopFlashes').catchError((Object error) {
+      debugPrint('[gaia] flashes not stopped: $error');
+    }),
+  );
+}

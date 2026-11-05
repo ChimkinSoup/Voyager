@@ -62,16 +62,20 @@ struct GaiaFlash {
   Style style = Style::kAstral;
   enum class ClickVariant { kTrace, kBloom, kTraceBloom };
   ClickVariant click_variant = ClickVariant::kTraceBloom;
-  enum class Kind { kClick, kDouble, kRight, kScroll, kType, kKey, kWindow, kMark };
+  enum class Kind {
+    kClick, kDouble, kRight, kScroll, kType, kKey, kWindow, kMark, kDrag
+  };
   Kind kind = Kind::kClick;
   POINT point = {};
+  // Where a drag lets go; |point| is where it takes hold.
+  POINT to = {};
   // The field typed into, the window for a key or a window flash, or the
   // control a mark outlines. Empty for none.
   RECT rect = {};
   // A scroll's: 0 up, 1 down, 2 left, 3 right.
   int direction = 0;
   int amount = 3;
-  // How long typing goes on.
+  // How long typing goes on, or a drag takes to travel.
   int duration_ms = 0;
   // The control's name, the keys, or the window's app. Never typed text.
   std::wstring label;
@@ -89,6 +93,8 @@ class GaiaFlashes {
   GaiaFlashes& operator=(const GaiaFlashes&) = delete;
 
   void Play(const GaiaFlash& flash);
+  // Ends every flash playing, hiding its windows at once.
+  void StopAll();
 
  private:
   struct Active;

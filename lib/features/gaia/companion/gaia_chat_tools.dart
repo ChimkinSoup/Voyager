@@ -216,8 +216,8 @@ class GaiaChatTools implements GaiaTurnTools {
     if (aborted()) return _aborted;
     if (name == 'ask_user') return _ask(arguments);
     if (kGaiaProposalTools.containsKey(name)) return _propose(name, arguments);
-    if (isGaiaOsControl(name)) return _control(name, arguments);
-    if (isGaiaOsRead(name)) {
+    if (isGaiaOsControl(name, arguments)) return _control(name, arguments);
+    if (isGaiaOsRead(name, arguments)) {
       try {
         return await screen(name, arguments);
       } catch (error) {
@@ -393,7 +393,12 @@ class GaiaChatTools implements GaiaTurnTools {
     // In Auto the main instance runs it with no card (GAIA_AUTONOMY_HLD.md §5).
     final auto = plan['auto'] == true;
     plan = {...plan}..remove('auto');
-    if (auto) return _withRead(await _autoControl(id, plan), arguments);
+    if (auto) {
+      return _withRead(
+        await _autoControl(id, plan, inWindow: tool != 'os_clipboard'),
+        arguments,
+      );
+    }
     final total = (plan['steps']! as List).length;
     final stepWord = total == 1 ? 'step' : 'steps';
     GaiaCardPart cardWith(
@@ -476,11 +481,13 @@ class GaiaChatTools implements GaiaTurnTools {
     );
   }
 
-  /// An Auto action (§5): run at once, and logged on the turn's activity card.
+  /// An Auto action (§5): run at once, and logged on the turn's activity card,
+  /// which names the window it was in, unless it was in none ([inWindow]).
   Future<GaiaToolResult> _autoControl(
     String id,
-    Map<String, Object?> plan,
-  ) async {
+    Map<String, Object?> plan, {
+    required bool inWindow,
+  }) async {
     final total = (plan['steps']! as List).length;
     List<String> labels(Object? steps, int ran) => [
       for (final step in (steps as List? ?? const []).take(ran))
@@ -505,8 +512,8 @@ class GaiaChatTools implements GaiaTurnTools {
       window:
           result['front'] as String? ??
           result['adopted'] as String? ??
-          plan['window'] as String?,
-      app: plan['app'] as String?,
+          (inWindow ? plan['window'] as String? : null),
+      app: inWindow ? plan['app'] as String? : null,
     );
     return stopped == null
         ? _sentResult(total, adopted)

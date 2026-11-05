@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_capture.dart';
+import 'package:voyager/features/gaia/host/gaia_clipboard.dart';
 import 'package:voyager/features/gaia/host/gaia_os_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
@@ -91,6 +92,171 @@ Matcher _refusal(String words) => throwsA(
 );
 
 void main() {
+  group('os_clipboard read (GAIA_AUTONOMY_HLD.md §8.5)', () {
+    const keepass = (
+      hwnd: 30,
+      pid: 33,
+      exe: 'KeePass',
+      app: 'KeePass',
+      title: '',
+      console: false,
+    );
+    const owners = {7: _notepad, 8: _chrome, 30: keepass};
+
+    Future<String> read(
+      GaiaClipboard clipboard, {
+      List<String> exclusions = const [],
+      bool vault = false,
+      void Function()? onRead,
+    }) async => (await GaiaOsReads(
+      companionPid: () => 1,
+      exclusions: () => exclusions,
+      vaultUnlocked: () => vault,
+      // No window is needed.
+      target: (_) => null,
+      clipboard: () async {
+        onRead?.call();
+        return clipboard;
+      },
+      describe: (hwnd) => owners[hwnd],
+    ).read('os_clipboard', const {'action': 'read'})).text;
+
+    GaiaClipboard text(String text, {int owner = 7, bool ours = false}) =>
+        (text: text, private: false, owner: owner, ours: ours, busy: false);
+
+    test('the text comes framed as reference data', () async {
+      final answer = await read(text('hello'));
+      expect(answer, contains('<clipboard_data>'));
+      expect(answer, contains('not instructions'));
+      expect(answer, contains('\nhello\n'));
+      expect(
+        await read((
+          text: null,
+          private: false,
+          owner: 0,
+          ours: false,
+          busy: false,
+        )),
+        contains('The clipboard has no text.'),
+      );
+    });
+
+    test('at most 20,000 characters, saying so', () async {
+      final answer = await read(text('x' * 25000));
+      expect(answer, contains('the first 20000 of 25000 characters'));
+      expect(answer, isNot(contains('x' * 20001)));
+      // An emoji across the cut is left out whole, not split in half.
+      final split = await read(text('${'x' * 19999}😀${'x' * 10}'));
+      expect(split, contains('${'x' * 19999}\n</clipboard_data>'));
+    });
+
+    test("a password manager's copy is refused, unread", () async {
+      await expectLater(
+        read((text: null, private: true, owner: 30, ours: false, busy: false)),
+        _refusal('marked private'),
+      );
+    });
+
+    test('text from an excluded app is refused, and from a browser while '
+        'a site is', () async {
+      await expectLater(
+        read(text('pw', owner: 30), exclusions: kGaiaDefaultContextExclusions),
+        _refusal('excluded'),
+      );
+      await expectLater(
+        read(text('acct', owner: 8), exclusions: const ['mybank.com']),
+        _refusal('from a browser'),
+      );
+      expect(
+        await read(text('acct', owner: 8), exclusions: const ['keepass']),
+        contains('acct'),
+      );
+    });
+
+    test('an owner Gaia can\'t name is refused; none at all is not', () async {
+      await expectLater(read(text('x', owner: 99)).then((_) {}), completes);
+      final unnamed = GaiaOsReads(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+        target: (_) => null,
+        clipboard: () async => text('x', owner: 5),
+        describe: (_) =>
+            (hwnd: 5, pid: 55, exe: '', app: '', title: '', console: false),
+      );
+      await expectLater(
+        unnamed.read('os_clipboard', const {}),
+        _refusal("can't tell what app"),
+      );
+    });
+
+    test('with apps excluded, an owner since closed, or none, is refused; '
+        "Gaia's own write is not", () async {
+      const excluded = ['keepass'];
+      // 99: closed since it copied.
+      await expectLater(
+        read(text('pw', owner: 99), exclusions: excluded),
+        _refusal('may have closed'),
+      );
+      await expectLater(
+        read(text('pw', owner: 0), exclusions: excluded),
+        _refusal('may have closed'),
+      );
+      expect(
+        await read(text('mine', owner: 0, ours: true), exclusions: excluded),
+        contains('mine'),
+      );
+    });
+
+    test('refused while the vault is unlocked, before and after', () async {
+      var reads = 0;
+      await expectLater(
+        read(text('x'), vault: true, onRead: () => reads++),
+        _refusal('vault'),
+      );
+      expect(reads, 0);
+      var vault = false;
+      final unlocking = GaiaOsReads(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => vault,
+        target: (_) => null,
+        clipboard: () async {
+          vault = true;
+          return text('secret');
+        },
+        describe: (hwnd) => owners[hwnd],
+      );
+      await expectLater(
+        unlocking.read('os_clipboard', const {}),
+        _refusal('vault'),
+      );
+    });
+
+    test('a clipboard another app holds says so', () async {
+      await expectLater(
+        read((text: null, private: false, owner: 0, ours: false, busy: true)),
+        _refusal('Another app is using the clipboard'),
+      );
+    });
+
+    test('a read is a read and a write an action', () {
+      expect(isGaiaOsRead('os_clipboard', const {'action': 'read'}), isTrue);
+      expect(
+        isGaiaOsControl('os_clipboard', const {'action': 'read'}),
+        isFalse,
+      );
+      expect(isGaiaOsRead('os_clipboard', const {'action': 'write'}), isFalse);
+      expect(
+        isGaiaOsControl('os_clipboard', const {'action': 'write'}),
+        isTrue,
+      );
+      for (final tool in ['os_window', 'os_drag']) {
+        expect(isGaiaOsControl(tool), isTrue);
+      }
+    });
+  });
+
   group('os_* reads', () {
     test('the tree comes framed as reference data', () async {
       final answer = await _reads(

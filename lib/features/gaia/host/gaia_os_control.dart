@@ -6,8 +6,10 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/features/gaia/host/gaia_clipboard.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:win32/win32.dart';
 
 /// One synthetic input: a key, a typed UTF-16 unit, or a mouse event.
@@ -91,6 +93,9 @@ abstract interface class GaiaInputBackend {
   /// Turns on the runner's count for [lastInput], for an Auto session.
   void watchInput(bool on);
   void moveCursor(int x, int y);
+
+  /// Where the cursor is.
+  ({int x, int y}) cursorAt();
   bool get buttonsSwapped;
 
   /// One atomic [SendInput]; how many of [events] went in.
@@ -137,6 +142,25 @@ abstract interface class GaiaInputBackend {
 
   /// Brings minimized [hwnd] back, without waiting on its app.
   void restore(int hwnd);
+
+  /// Minimizes [hwnd]; Windows brings up the next window.
+  void minimize(int hwnd);
+
+  /// Maximizes [hwnd], which brings it in front.
+  void maximize(int hwnd);
+
+  /// Moves or resizes [hwnd]'s frame, as [frame] gives it, first restoring it
+  /// if it's maximized or minimized, without bringing it in front. What's
+  /// left out stays as it is. False, and left alone, when it didn't come out of
+  /// maximized or minimized, as a window that doesn't respond won't.
+  Future<bool> place(int hwnd, {int? left, int? top, int? width, int? height});
+
+  /// Asks [hwnd] to close, as its close button does (`WM_CLOSE`).
+  void close(int hwnd);
+
+  /// Replaces the clipboard with [text] ([gaiaWriteClipboard]); false when
+  /// another app held the clipboard.
+  Future<bool> writeClipboard(String text);
 }
 
 /// The `os_*` action tools (GAIA_HLD.md §15.6), answered by the main instance:
@@ -149,6 +173,7 @@ class GaiaOsControl {
     required this.exclusions,
     required this.vaultUnlocked,
     this.flash,
+    this.stopFlashes,
     int? voyagerPid,
     GaiaInputBackend? backend,
     this._settle = const Duration(milliseconds: 150),
@@ -159,6 +184,7 @@ class GaiaOsControl {
     this._adoptWithin = const Duration(milliseconds: 1500),
     this._pauseLimit = const Duration(minutes: 5),
     this._openWait = const Duration(seconds: 10),
+    this._holdLimit = const Duration(seconds: 5),
   }) : _voyagerPid = voyagerPid ?? pid,
        _backend = backend ?? _Win32InputBackend();
 
@@ -169,6 +195,10 @@ class GaiaOsControl {
   /// Plays a flash on screen (GAIA_AUTONOMY_HLD.md §6), as `gaia_flash.dart`
   /// takes it. Null for none, and then no step waits for one.
   final void Function(Map<String, Object?> flash)? flash;
+
+  /// Ends every flash playing: a drag stopped partway, whose trail would
+  /// otherwise go on to an end it never reached.
+  final void Function()? stopFlashes;
 
   /// A session started or ended, or paused or went on: what the notch says
   /// changed (GAIA_AUTONOMY_HLD.md §4).
@@ -189,6 +219,9 @@ class GaiaOsControl {
   /// How long `os_open` waits for a window (§8.1).
   final Duration _openWait;
 
+  /// The longest a drag holds the button (§8.4).
+  final Duration _holdLimit;
+
   final _plans = <String, _Plan>{};
   _Active? _active;
   _Session? _session;
@@ -197,6 +230,11 @@ class GaiaOsControl {
   static const _maxSteps = 20;
   static const _maxText = 2000;
   static const _charPause = Duration(milliseconds: 20);
+
+  /// A drag's moves from start to end, and the pause before each and before
+  /// letting go, so the app sees a drag rather than a click (§8.4).
+  static const _dragMoves = 10;
+  static const _dragPause = Duration(milliseconds: 30);
 
   /// One notch of the wheel: `WHEEL_DELTA`, which the win32 package has no name
   /// for.
@@ -394,10 +432,13 @@ class GaiaOsControl {
     Map<String, Object?> arguments,
   ) async {
     final session = _session?.chatId == chatId ? _session : null;
-    if (tool == 'os_open' || tool == 'os_focus') {
-      final step = tool == 'os_open'
-          ? await _openStep(arguments)
-          : await _focusStep(arguments);
+    if (gaiaWindowlessControls.contains(tool)) {
+      final step = switch (tool) {
+        'os_open' => await _openStep(arguments),
+        'os_focus' => await _focusStep(arguments),
+        'os_window' => await _windowStep(arguments),
+        _ => _clipboardStep(arguments),
+      };
       final plan = _Plan(chatId, step.window, [step], session, null);
       _plans[cardId] = plan;
       return {...plan.toCard(), if (session != null) 'auto': true};
@@ -657,20 +698,106 @@ class GaiaOsControl {
     }
   }
 
-  /// An `os_focus` call (§8.2): the window with that id from `os_windows`, or
-  /// the one window whose title has those words. An excluded window, or
-  /// Voyager's while its vault is unlocked, is matched by its id alone, and
-  /// then refused. So is a browser on an excluded site, or one whose address
-  /// can't be read while a site is excluded.
+  /// An `os_focus` call (§8.2): the window [_windowOf] finds.
   Future<_Step> _focusStep(Map<String, Object?> arguments) async {
-    final asked = switch (arguments['window']) {
+    final window = await _windowOf('os_focus', arguments['window']);
+    return _Step.window(
+      _Action.focus,
+      '${window.app}: ${jsonEncode(window.title)}',
+      window: window,
+    );
+  }
+
+  /// An `os_window` call (§8.3): minimize, maximize, restore, move or close a
+  /// window found as `os_focus` finds it. Voyager's own can't be closed, as
+  /// it runs the tools themselves.
+  Future<_Step> _windowStep(Map<String, Object?> arguments) async {
+    final how = arguments['action'];
+    if (how is! String ||
+        !const {
+          'minimize',
+          'maximize',
+          'restore',
+          'move',
+          'close',
+        }.contains(how)) {
+      throw GaiaReadException(
+        'os_window needs an action: minimize, maximize, restore, move or '
+        'close.',
+      );
+    }
+    int? number(String key) => (arguments[key] as num?)?.toInt();
+    final place = (
+      left: number('left'),
+      top: number('top'),
+      width: number('width'),
+      height: number('height'),
+    );
+    if (how == 'move') {
+      if ((place.left == null) != (place.top == null) ||
+          (place.width == null) != (place.height == null)) {
+        throw GaiaReadException(
+          'Pass left and top together, and width and '
+          'height together.',
+        );
+      }
+      if (place.left == null && place.width == null) {
+        throw GaiaReadException(
+          'move needs left and top, width and height, or all four.',
+        );
+      }
+      if ((place.width ?? 1) < 1 || (place.height ?? 1) < 1) {
+        throw GaiaReadException('width and height must be above 0.');
+      }
+    }
+    final window = await _windowOf('os_window', arguments['window']);
+    if (how == 'close' && window.pid == _voyagerPid) {
+      throw GaiaReadException(
+        "Voyager's window can't be closed this way: Gaia's tools run in it.",
+      );
+    }
+    return _Step.window(
+      _Action.window,
+      '${window.app}: ${jsonEncode(window.title)}',
+      window: window,
+      how: how,
+      place: how == 'move' ? place : null,
+    );
+  }
+
+  /// An `os_clipboard` write (§8.5). A read is answered as the screen's reads
+  /// are, by `GaiaOsReads`.
+  _Step _clipboardStep(Map<String, Object?> arguments) {
+    if (arguments['action'] != 'write') {
+      throw GaiaReadException('os_clipboard writes here; action is "write".');
+    }
+    final text = arguments['text'];
+    if (text is! String) {
+      throw GaiaReadException('os_clipboard write needs text.');
+    }
+    if (text.length > gaiaClipboardLimit) {
+      throw GaiaReadException(
+        'os_clipboard writes at most $gaiaClipboardLimit characters.',
+      );
+    }
+    return _Step.window(_Action.clipboard, 'the clipboard', text: text);
+  }
+
+  /// The window [argument] names for [tool]: an id from `os_windows`, else an
+  /// exact title, else the one whose title has those words or whose app is
+  /// them. An excluded window, or Voyager's while its vault is unlocked, is
+  /// matched by its id alone, and then refused. So is a browser on an
+  /// excluded site, or one whose address can't be read while a site is
+  /// excluded.
+  Future<GaiaForegroundWindow> _windowOf(String tool, Object? argument) async {
+    final asked = switch (argument) {
       final num id => '${id.toInt()}',
       final String text => text.trim(),
       _ => '',
     };
     if (asked.isEmpty) {
       throw GaiaReadException(
-        "os_focus needs a window: an id from os_windows, or words from its "
+        "$tool needs a window: an id from os_windows, or words from its "
         'title.',
       );
     }
@@ -720,11 +847,7 @@ class GaiaOsControl {
     }
     _checkWindow(window);
     await _checkSite(window);
-    return _Step.window(
-      _Action.focus,
-      '${window.app}: ${jsonEncode(window.title)}',
-      window: window,
-    );
+    return window;
   }
 
   /// A window whose title `os_windows` doesn't show.
@@ -749,20 +872,26 @@ class GaiaOsControl {
 
   Future<void> _resolveAll(_Plan plan, {required int from}) async {
     for (final step in plan.steps.skip(from)) {
-      if (!step.aimed) continue;
-      if (step.name == null) {
-        if (!step.anywhere) _checkPoint(plan.window!, step.x!, step.y!);
-        continue;
+      // A drag has two ends to find.
+      for (final end in [step, ?step.to]) {
+        if (!end.aimed) continue;
+        if (end.name == null) {
+          if (!end.anywhere) _checkPoint(plan.window!, end.x!, end.y!);
+          // Afresh each pass: a drag's own may have been cleared by its end.
+          end.resolved = true;
+          continue;
+        }
+        final match = _matchOf(end, await _matches(plan.window!, end));
+        end.resolved = match != null;
+        end.match = match;
+        if (end.action == _Action.type && (match?.sensitive ?? false)) {
+          throw GaiaReadException(
+            'That is a password, card or one-time code field, which Gaia '
+            'never types into.',
+          );
+        }
       }
-      final match = _matchOf(step, await _matches(plan.window!, step));
-      step.resolved = match != null;
-      step.match = match;
-      if (step.action == _Action.type && (match?.sensitive ?? false)) {
-        throw GaiaReadException(
-          'That is a password, card or one-time code field, which Gaia never '
-          'types into.',
-        );
-      }
+      if (step.to case final to?) step.resolved &= to.resolved;
     }
   }
 
@@ -889,6 +1018,17 @@ class GaiaOsControl {
     if (step.action == _Action.open || step.action == _Action.focus) {
       return _bringUp(step, session, active);
     }
+    if (step.action == _Action.window) return _arrange(step, session, active);
+    if (step.action == _Action.clipboard) {
+      await _waitWhilePaused(session, active);
+      if (!await _backend.writeClipboard(step.text!)) {
+        throw _Stopped(
+          "Gaia couldn't set the clipboard, and left it as it was: another "
+          'app may be using it. Try again shortly.',
+        );
+      }
+      return;
+    }
     final GaiaForegroundWindow window;
     if (session != null) {
       window = await _sessionTarget(session, active);
@@ -962,8 +1102,30 @@ class GaiaOsControl {
         active.throwIfStopped();
         _inFront(window);
         _send(step.keys!.events, active);
-      // Brought up by [_bringUp] above.
-      case _Action.open || _Action.focus:
+      case _Action.drag:
+        final to = step.to!;
+        final GaiaControlMatch? toMatch;
+        if (to.name == null) {
+          toMatch = null;
+        } else {
+          toMatch = _matchOf(to, await _matches(window, to));
+          if (toMatch == null) {
+            throw _Stopped(
+              'The control ${jsonEncode(to.name)} is not on screen.',
+            );
+          }
+        }
+        active.throwIfStopped();
+        await _drag(
+          window,
+          point!,
+          _pointOf(window, to, toMatch),
+          match == null ? null : step.name,
+          active,
+        );
+      // Done above.
+      case _Action.open || _Action.focus || _Action.window:
+      case _Action.clipboard:
         break;
     }
     active.throwIfStopped();
@@ -1005,15 +1167,7 @@ class GaiaOsControl {
   /// up from wherever it is, and in a session pins it. The window it ends on
   /// goes in [_Active.front] for the agent.
   Future<void> _bringUp(_Step step, _Session? session, _Active active) async {
-    if (session != null) {
-      // Gaia in front is the user looking: wait, as any step does (§5.2).
-      _look(session);
-      active.throwIfStopped();
-      while (session.pausedAt != null) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        active.throwIfStopped();
-      }
-    }
+    await _waitWhilePaused(session, active);
     final GaiaForegroundWindow window;
     if (step.action == _Action.open) {
       window = await _launch(step, session, active);
@@ -1071,6 +1225,164 @@ class GaiaOsControl {
       });
     }
     active.front = '${window.app}: ${jsonEncode(window.title)}';
+  }
+
+  /// Gaia in front is the user looking: wait, as any step does (§5.2).
+  Future<void> _waitWhilePaused(_Session? session, _Active active) async {
+    if (session == null) return;
+    _look(session);
+    active.throwIfStopped();
+    while (session.pausedAt != null) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      active.throwIfStopped();
+    }
+  }
+
+  /// An `os_window` step (§8.3), flashed at where the window was. Nothing is
+  /// typed or clicked, so it needn't be in front. In a session, what comes in
+  /// front after is Gaia's doing (§5.2): a "save changes?" prompt after a
+  /// close, or the next window after a minimize. Restoring or maximizing
+  /// brings the window up, so it's pinned first, as [_bringUp] does; the pin
+  /// minimized or closed leaves none, so Gaia in front isn't a pause.
+  Future<void> _arrange(_Step step, _Session? session, _Active active) async {
+    await _waitWhilePaused(session, active);
+    final asked = step.window!;
+    final window = _backend.describe(asked.hwnd);
+    if (window == null || window.pid != asked.pid) {
+      throw _Stopped('The window closed.');
+    }
+    try {
+      _checkWindow(window);
+      await _checkSite(window);
+    } on GaiaReadException catch (error) {
+      throw _Stopped(error.message);
+    }
+    final before = _backend.frame(window.hwnd);
+    if (!_backend.minimized(window.hwnd)) {
+      flash?.call({'kind': 'window', ..._rectOf(before), 'label': window.app});
+      await Future<void>.delayed(_leadIn);
+      active.throwIfStopped();
+    }
+    final how = step.how!;
+    if (session != null) {
+      if (how == 'restore' || how == 'maximize') {
+        session
+          ..pin = window
+          ..adopted = null
+          ..engaged = true;
+        active.front = '${window.app}: ${jsonEncode(window.title)}';
+      } else if ((how == 'minimize' || how == 'close') &&
+          session.pin?.hwnd == window.hwnd) {
+        session
+          ..pin = null
+          ..engaged = false;
+      }
+      session.lastStep = DateTime.now();
+    }
+    switch (how) {
+      case 'minimize':
+        _backend.minimize(window.hwnd);
+      case 'maximize':
+        _backend.maximize(window.hwnd);
+      case 'restore':
+        _backend.restore(window.hwnd);
+      case 'close':
+        _backend.close(window.hwnd);
+      case 'move':
+        final place = step.place!;
+        final placed = await _backend.place(
+          window.hwnd,
+          left: place.left,
+          top: place.top,
+          width: place.width,
+          height: place.height,
+        );
+        if (!placed) {
+          throw _Stopped(
+            "${window.app} didn't come out of maximized or minimized, so Gaia "
+            "couldn't move it. It may not be responding.",
+          );
+        }
+    }
+    session?.lastStep = DateTime.now();
+  }
+
+  /// A drag (§8.4): the button down at [from], moved to [to] in steps, and let
+  /// go there if the target is still what's under it. The button is never
+  /// held more than [_holdLimit], and a stop lets go where the drag started
+  /// ([_releaseHeld]). Its flash, ahead of the press as a click's is, travels
+  /// as long as the moves do; [fromName] labels it.
+  Future<void> _drag(
+    GaiaForegroundWindow window,
+    ({int x, int y}) from,
+    ({int x, int y}) to,
+    String? fromName,
+    _Active active,
+  ) async {
+    if (flash case final play?) {
+      play({
+        'kind': 'drag',
+        'x': from.x,
+        'y': from.y,
+        'to_x': to.x,
+        'to_y': to.y,
+        'ms': (_dragPause * (_dragMoves + 1)).inMilliseconds,
+        'label': ?fromName,
+      });
+    }
+    try {
+      if (flash != null) {
+        await Future<void>.delayed(_leadIn);
+        active.throwIfStopped();
+      }
+      _inFront(window);
+    } catch (_) {
+      // Stopped before the press: no drag to show.
+      stopFlashes?.call();
+      rethrow;
+    }
+    // A swapped mouse's left button is sent as its right.
+    final (down, up) = _backend.buttonsSwapped
+        ? (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP)
+        : (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
+    _backend.moveCursor(from.x, from.y);
+    // Set first, so that a stop even mid-send lets go.
+    active.drag = (from: from, up: up, at: from);
+    _send([GaiaMouseEvent(down)], active);
+    final until = DateTime.now().add(_holdLimit);
+    void next() {
+      if (DateTime.now().isAfter(until)) {
+        throw _Stopped(
+          'The drag held the button too long, so Gaia let go where it '
+          'started.',
+        );
+      }
+      active.throwIfStopped();
+      _inFront(window);
+    }
+
+    for (var i = 1; i <= _dragMoves; i++) {
+      await Future<void>.delayed(_dragPause);
+      next();
+      final at = (
+        x: from.x + (to.x - from.x) * i ~/ _dragMoves,
+        y: from.y + (to.y - from.y) * i ~/ _dragMoves,
+      );
+      _backend.moveCursor(at.x, at.y);
+      active.drag = (from: from, up: up, at: at);
+      // An app sees the move as input, as a real mouse's.
+      _send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)], active);
+    }
+    await Future<void>.delayed(_dragPause);
+    next();
+    if (_backend.rootAt(to.x, to.y) != window.hwnd) {
+      throw _Stopped(
+        'Another window is covering ${to.x},${to.y}, so Gaia let go where the '
+        'drag started.',
+      );
+    }
+    _send([GaiaMouseEvent(up)], active);
+    active.drag = null;
   }
 
   /// Opens [step]'s target and finds the window it opened. Only a window shown
@@ -1426,18 +1738,30 @@ class GaiaOsControl {
     return _charPause * text.length + _settle * (breaks + (step.aimed ? 1 : 0));
   }
 
-  /// Nothing Gaia pressed stays down (§15.7).
+  /// Nothing Gaia pressed stays down (§15.7). A drag cut short lets go where
+  /// it started, which most apps take as no drag (§8.4), unless the user has
+  /// moved the mouse: then it lets go where they have it, and leaves the
+  /// cursor in their hand.
   void _releaseHeld(_Active active) {
-    if (active.held.isEmpty) return;
+    final drag = active.drag;
+    if (active.held.isEmpty && drag == null) return;
     final session = _session;
     if (session != null) _noteUserInput(session, DateTime.now());
+    if (drag != null) {
+      stopFlashes?.call();
+      if (_backend.cursorAt() == drag.at) {
+        _backend.moveCursor(drag.from.x, drag.from.y);
+      }
+    }
     _backend.send([
+      if (drag != null) GaiaMouseEvent(drag.up),
       for (final vk in active.held.toList().reversed)
         GaiaKeyEvent(vk, up: true),
     ]);
     // Gaia's own release isn't the user's input.
     if (session != null) session.inputMark = _backend.lastInput();
     active.held.clear();
+    active.drag = null;
   }
 
   List<_Step> _parse(
@@ -1474,8 +1798,16 @@ class GaiaOsControl {
       'scroll' => _Action.scroll,
       'type' => _Action.type,
       'key' => _Action.key,
+      'drag' => _Action.drag,
       _ => throw GaiaReadException('Unknown action: $action'),
     };
+    if (parsed == _Action.drag) {
+      if (args['anywhere'] == true) {
+        throw GaiaReadException('anywhere is for a click at x and y alone.');
+      }
+      final from = _dragEnd(args['from'], 'from');
+      return from..to = _dragEnd(args['to'], 'to');
+    }
     final name = switch (args['name']) {
       final String name when name.trim().isNotEmpty => name.trim(),
       _ => null,
@@ -1534,10 +1866,51 @@ class GaiaOsControl {
             'os_type takes at most $_maxText characters.',
           );
         }
-      case _Action.key || _Action.open || _Action.focus:
+      case _Action.key ||
+          _Action.open ||
+          _Action.focus ||
+          _Action.window ||
+          _Action.drag ||
+          _Action.clipboard:
         break;
     }
     return step;
+  }
+
+  /// One end of a drag (§8.4): a control's name, or x and y.
+  _Step _dragEnd(Object? end, String which) {
+    if (end is! Map) {
+      throw GaiaReadException(
+        'A drag needs $which: a control\'s name, or x and y.',
+      );
+    }
+    final name = switch (end['name']) {
+      final String name when name.trim().isNotEmpty => name.trim(),
+      _ => null,
+    };
+    final x = (end['x'] as num?)?.toInt();
+    final y = (end['y'] as num?)?.toInt();
+    if ((x == null) != (y == null)) {
+      throw GaiaReadException('Pass x and y together.');
+    }
+    if (name == null && x == null) {
+      throw GaiaReadException(
+        'A drag needs $which: a control\'s name, or x and y.',
+      );
+    }
+    return _Step(
+      action: _Action.drag,
+      name: name,
+      type: end['type'] as String?,
+      x: x,
+      y: y,
+      button: 'left',
+      doubleClick: false,
+      direction: null,
+      amount: 0,
+      text: null,
+      keys: null,
+    );
   }
 }
 
@@ -1610,6 +1983,10 @@ class _Active {
   /// The window `os_open` or `os_focus` brought up, for the agent.
   String? front;
 
+  /// A drag holding the button: where it started, the button's release, and
+  /// where Gaia last put the cursor.
+  ({({int x, int y}) from, int up, ({int x, int y}) at})? drag;
+
   void stop(String why) => _stopped ??= why;
 
   void throwIfStopped() {
@@ -1617,7 +1994,7 @@ class _Active {
   }
 }
 
-enum _Action { click, scroll, type, key, open, focus }
+enum _Action { click, scroll, type, key, open, focus, window, drag, clipboard }
 
 class _Step {
   _Step({
@@ -1639,10 +2016,13 @@ class _Step {
        exe = null,
        url = null,
        window = null,
+       how = null,
+       place = null,
        opener = (exes: const {}, appIds: const {});
 
-  /// An `os_open` of [target], shown by that name, or an `os_focus` of
-  /// [window], shown as [target].
+  /// An `os_open` of [target], shown by that name; an `os_focus` or
+  /// `os_window` of [window], shown as [target]; or an `os_clipboard` write of
+  /// [text].
   _Step.window(
     this.action,
     String this.target, {
@@ -1650,6 +2030,9 @@ class _Step {
     this.exe,
     this.url,
     this.window,
+    this.how,
+    this.place,
+    this.text,
     this.opener = (exes: const {}, appIds: const {}),
   }) : name = null,
        type = null,
@@ -1659,13 +2042,19 @@ class _Step {
        doubleClick = false,
        direction = null,
        amount = 0,
-       text = null,
        keys = null,
        anywhere = false,
        resolved = true;
 
   final _Action action;
   final String? target;
+
+  /// What `os_window` does, and for a move, where to.
+  final String? how;
+  final ({int? left, int? top, int? width, int? height})? place;
+
+  /// A drag's other end (§8.4); this step is where it starts.
+  _Step? to;
 
   /// What `os_open` hands Windows, and the exe and URL it's checked by.
   final String? file;
@@ -1760,10 +2149,23 @@ class _Step {
       _Action.type when aimed => {'kind': preview ? 'mark' : 'click', ...at},
       _Action.type => {'kind': 'key', ..._rectOf(frame), 'label': 'Typing'},
       _Action.key => {'kind': 'key', ..._rectOf(frame), 'label': keys!.label},
-      // Its window's outline plays once it's up.
-      _Action.open || _Action.focus => null,
+      // A card marks where it starts. Run, its trail plays from `_drag`, once
+      // its end is found (§6.2).
+      _Action.drag when preview => {
+        'kind': 'mark',
+        ...at,
+        ...?rect,
+        'label': ?label,
+      },
+      _Action.drag => null,
+      // Its window's outline plays once it's up, or where it was.
+      _Action.open || _Action.focus || _Action.window => null,
+      _Action.clipboard => null,
     };
   }
+
+  /// A drag's end as its label says it.
+  String get _end => name == null ? '$x, $y' : _target;
 
   String get _target {
     if (name case final name?) {
@@ -1792,6 +2194,24 @@ class _Step {
     _Action.key => 'Press ${keys!.label}',
     _Action.open => 'Open $target',
     _Action.focus => 'Bring $target to the front',
+    _Action.drag => 'Drag from $_end to ${to!._end}',
+    _Action.window => switch (how) {
+      'minimize' => 'Minimize $target',
+      'maximize' => 'Maximize $target',
+      'restore' => 'Restore $target',
+      'close' => 'Close $target',
+      _ => [
+        place!.left == null ? 'Resize $target to' : 'Move $target to',
+        [
+          if (place!.left != null) '${place!.left},${place!.top}',
+          if (place!.width != null) '${place!.width}x${place!.height}',
+        ].join(', '),
+      ].join(' '),
+    },
+    // The card is synced: a long text is shown cut short.
+    _Action.clipboard =>
+      'Put ${jsonEncode(text!.length > 200 ? '${gaiaCut(text!, 200)}…' : text)} '
+          'on the clipboard',
   };
 }
 
@@ -2124,6 +2544,17 @@ class _Win32InputBackend implements GaiaInputBackend {
   void moveCursor(int x, int y) => SetCursorPos(x, y);
 
   @override
+  ({int x, int y}) cursorAt() {
+    final point = calloc<POINT>();
+    try {
+      GetCursorPos(point);
+      return (x: point.ref.x, y: point.ref.y);
+    } finally {
+      free(point);
+    }
+  }
+
+  @override
   bool get buttonsSwapped => GetSystemMetrics(SM_SWAPBUTTON) != 0;
 
   @override
@@ -2364,6 +2795,69 @@ class _Win32InputBackend implements GaiaInputBackend {
 
   @override
   void restore(int hwnd) => ShowWindowAsync(hwnd, SW_RESTORE);
+
+  @override
+  void minimize(int hwnd) => ShowWindowAsync(hwnd, SW_MINIMIZE);
+
+  @override
+  void maximize(int hwnd) => ShowWindowAsync(hwnd, SW_MAXIMIZE);
+
+  @override
+  Future<bool> place(
+    int hwnd, {
+    int? left,
+    int? top,
+    int? width,
+    int? height,
+  }) async {
+    bool placed() => IsZoomed(hwnd) == 0 && IsIconic(hwnd) == 0;
+    if (!placed()) {
+      ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
+      final until = DateTime.now().add(const Duration(seconds: 2));
+      var again = true;
+      while (!placed() && DateTime.now().isBefore(until)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        // One minimized from maximized comes back maximized: once more
+        // restores it.
+        if (again && IsIconic(hwnd) == 0 && IsZoomed(hwnd) != 0) {
+          again = false;
+          ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
+        }
+      }
+      // Its frame now is its maximized one, which a move would go by.
+      if (!placed()) return false;
+    }
+    final frame = gaiaWindowFrame(hwnd);
+    final rect = calloc<RECT>();
+    try {
+      GetWindowRect(hwnd, rect);
+      // SetWindowPos counts the invisible resize borders the frame leaves out.
+      final dl = frame.left - rect.ref.left;
+      final dt = frame.top - rect.ref.top;
+      final dr = rect.ref.right - (frame.left + frame.width);
+      final db = rect.ref.bottom - (frame.top + frame.height);
+      SetWindowPos(
+        hwnd,
+        NULL,
+        (left ?? frame.left) - dl,
+        (top ?? frame.top) - dt,
+        (width ?? frame.width) + dl + dr,
+        (height ?? frame.height) + dt + db,
+        // SWP_ASYNCWINDOWPOS, which the win32 package has no name for: a
+        // window that doesn't answer can't hold Gaia up.
+        SWP_NOZORDER | SWP_NOACTIVATE | 0x4000,
+      );
+    } finally {
+      free(rect);
+    }
+    return true;
+  }
+
+  @override
+  void close(int hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
+
+  @override
+  Future<bool> writeClipboard(String text) => gaiaWriteClipboard(text);
 
   static const _extended = {
     VK_LWIN,

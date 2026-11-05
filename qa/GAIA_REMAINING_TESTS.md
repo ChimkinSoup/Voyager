@@ -57,6 +57,7 @@ Run on `gaiaqa` (qa-128) from a fresh debug build of the working tree. A ticked 
 | 6 | [F. Phase 9 edge cases](#f-phase-9-edge-cases) | Lower risk | Second monitor, an elevated app |
 | 7 | [G. Real limit errors](#g-real-limit-errors-phase-8) | Can't be forced; do it whenever an account runs out | An exhausted account |
 | 8 | [H. Older phases](#h-older-gaia-phases) | Rare paths | Varies |
+| 9 | [I. Autonomy Phase 5](#i-autonomy-phase-5-os_window-os_drag-os_clipboard) | Built with the display off; the Done-when is unchecked live | Display on, a password manager |
 
 ## Before you start
 
@@ -398,6 +399,56 @@ Rare paths, listed as "not checked live" in `GAIA_HLD.md` §19.
 **Phase 6:**
 - [ ] Typing in Vim's Normal mode, by real keyboard (background input also types the characters).
 - [ ] Clicking a link in a chat.
+
+## I. Autonomy Phase 5: `os_window`, `os_drag`, `os_clipboard`
+
+Built 2026-11-04 with the display off (`GAIA_AUTONOMY_HLD.md` §11.7). Unit tests and the real-Win32 clipboard and window probes pass. Everything below needs the display on, and the app rebuilt.
+
+**First, the probe that couldn't run:**
+- [ ] `flutter test --run-skipped test/tool/gaia_more_tools_live_test.dart` with the display on and nobody touching the PC. Expected: all 6 pass. Its two `os_drag` tests failed with the display off at `os_focus`'s "Windows refused the input", before any drag. They drag a real TrackBar's thumb to its end, then stop a drag mid-way and check `GetAsyncKeyState(VK_LBUTTON)` and WinForms' `MouseButtons` show no button held.
+
+**The Done-when, in the app (Auto chat, Haiku):**
+- [ ] **A stopped drag leaves no button down.** Ask Gaia to drag something slow to drag (a long file list's item onto a folder in a scratch Explorer window, or a slider on a local page), and press Esc while it's moving. Expected: the turn ends `cancelled`; the item is back where it was or never dropped (Gaia lets go where the drag started); and clicking and selecting text afterwards works normally, with no button stuck. Repeat with Alt+Tab mid-drag instead of Esc, and with Stop on the phone.
+- [ ] **A password manager's copy is refused on read.** With a real password manager (KeePass, Bitwarden or 1Password's desktop app), copy a made-up entry's password, then ask Gaia to read the clipboard. Expected: "What is on the clipboard was marked private…", and the password never in the reply. The probe covers the formats (`ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory = 0`) set from PowerShell, not a real manager. **Observe** which managers set them: one that sets neither is read unless it's on the exclusion list (where it's refused as the clipboard's owner, if it owns it).
+
+**`os_window`:**
+- [ ] Ask mode: a card for each action; approving runs it, with the window outline flash at the window's old place. Minimize, maximize, restore, move, resize, close on a scratch Notepad.
+- [ ] Auto: `close` on Notepad with unsaved text. Expected: its "Do you want to save?" prompt adopts as a window Gaia caused, and the agent can answer it. Then on a window with no prompt: the next window in front adopts and the agent is told.
+- [ ] Auto: `minimize` of the pinned window with Gaia's floater next behind it. Expected: no "Paused" in the notch, and the agent's next action says to `os_open` or `os_focus` a window, rather than waiting 5 minutes.
+- [ ] Auto: `restore` of a minimized Store app (Calculator). Expected: not stopped as "The user switched to another window" (BUG-351's case, through this tool).
+- [ ] `move` of a maximized window, and of one on a second monitor at another scale: lands at the asked frame, as `os_windows` reports frames (invisible borders accounted for).
+- [ ] An elevated window (F1's setup): **Observe** what `move` and `close` do. UIPI should block both silently; the result says "Sent", which isn't a check that it worked.
+- [ ] `close` on Voyager's own window is refused before a card.
+
+**`os_drag`:**
+- [ ] A real drag lands, in Ask (the card shows the start's marker) and in Auto. While it runs, the drag trail below plays in about 330 ms. Check it keeps pace with the cursor and is gone soon after the button comes up.
+- [ ] Debug menu → control showcase → **Drag**, in each of Current, Astral, Echo and Glide. Check that:
+  - the style's click plays on "Mark as read" to take hold;
+  - the style's marker travels to the empty spot, with a trail behind it brightest at its head. The marker is Astral's orbits, Echo's ring and wavefront, Glide's square and chevron, or Current's dot and chevron;
+  - the marker grows as it travels and arrives at the size of the start click's halo, no larger. The chevron or wave ahead keeps clear of it as it grows;
+  - at the end it holds there fully lit for a moment (~300 ms; Astral's orbits keep spinning), then fades (~250 ms). There's no second click. In Current, its ring opens out on the way;
+  - in Astral, each click study changes the starting click;
+  - the effect stays smooth over a long, diagonal drag.
+
+  Ending all flashes at once (`stopFlashes`) was tested in-app on 2026-11-05 with `flutter test integration_test/gaia_flash_stop_test.dart -d windows`, passing 11 of 11, three runs in a row. That run covered:
+  - every kind in every style, ended by one call, with nothing coming back;
+  - play after a stop;
+  - windows still waiting to hide;
+  - 30 stop/play rounds, with the pool kept at no more than 16 windows;
+  - a real `os_drag` on a WinForms trackbar, stopped partway: its trail was gone within 300 ms, the button came up, and the value didn't move;
+  - a real `os_drag` run to the end: it landed, and its trail played out on its own in about 1.2 s.
+
+  That test counts windows; nobody has looked at how the effect looks.
+- [ ] A drag whose end gets covered mid-drag (a window opening over it): stopped, let go at the start.
+- [ ] An OLE drag (file from Explorer to another Explorer folder): **Observe** whether the 10 moves over ~0.3 s are enough for Explorer to start a drag, and whether letting go at the start after a stop is a no-op.
+- [ ] A drag in `os_steps` alongside clicks.
+
+**`os_clipboard`:**
+- [ ] Write in Ask (a card naming the text, cut at 200 characters) and in Auto (a row on the activity card, which keeps the app it named before). Then Ctrl+V in Notepad pastes it.
+- [ ] Gaia's own write reads back, though it's marked out of clipboard history; Win+V doesn't list it.
+- [ ] A read from Chrome with a site on the exclusion list: refused as "from a browser". **Decide** whether that's too strict.
+- [ ] A read with the vault unlocked: refused.
+- [ ] A real Codex and Claude Code turn choosing `os_clipboard` write plus Ctrl+V over a long `os_type`.
 
 ## Cleanup when you're done
 

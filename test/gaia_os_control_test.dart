@@ -184,6 +184,48 @@ class _Backend implements GaiaInputBackend {
     if (restoreLag <= 0) minimizedWindows.remove(hwnd);
   }
 
+  /// What `os_window` did, as "minimize 99".
+  final arranged = <String>[];
+
+  /// Runs once per minimize: Windows bringing up the next window.
+  void Function()? onMinimize;
+  @override
+  void minimize(int hwnd) {
+    arranged.add('minimize $hwnd');
+    onMinimize?.call();
+  }
+
+  @override
+  void maximize(int hwnd) => arranged.add('maximize $hwnd');
+  @override
+  Future<bool> place(
+    int hwnd, {
+    int? left,
+    int? top,
+    int? width,
+    int? height,
+  }) async {
+    if (stuck) return false;
+    arranged.add('move $hwnd $left,$top ${width}x$height');
+    return true;
+  }
+
+  /// A window that won't come out of maximized, so can't be placed.
+  var stuck = false;
+  @override
+  void close(int hwnd) => arranged.add('close $hwnd');
+
+  /// What's been written to the clipboard; another app holds it while
+  /// [clipboardBusy].
+  final clipboard = <String>[];
+  var clipboardBusy = false;
+  @override
+  Future<bool> writeClipboard(String text) async {
+    if (clipboardBusy) return false;
+    clipboard.add(text);
+    return true;
+  }
+
   @override
   int rootAt(int x, int y) => rootUnder;
 
@@ -226,6 +268,13 @@ class _Backend implements GaiaInputBackend {
   void watchInput(bool on) {}
   @override
   void moveCursor(int x, int y) => cursor.add((x, y));
+
+  /// Where the user moved the mouse to, if they did; else where Gaia put it.
+  ({int x, int y})? userMoved;
+  @override
+  ({int x, int y}) cursorAt() =>
+      userMoved ??
+      (cursor.isEmpty ? (x: 0, y: 0) : (x: cursor.last.$1, y: cursor.last.$2));
   @override
   bool get buttonsSwapped => swapped;
   @override
@@ -1076,6 +1125,21 @@ void main() {
         expect(stops, 0);
       },
     );
+
+    test('a clipboard write waits while paused too', () async {
+      await act('os_key', {'keys': 'A'});
+      // Past the pace between steps, so only the pause holds it.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      backend.front = gaia.hwnd;
+      backend.gaiaInFront = true;
+      await Future<void>.delayed(look);
+      final going = act('os_clipboard', {'action': 'write', 'text': 'hello'});
+      await Future<void>.delayed(look);
+      expect(backend.clipboard, isEmpty, reason: 'paused');
+      backend.front = _target.hwnd;
+      expect((await going)['stopped'], isNull);
+      expect(backend.clipboard, ['hello']);
+    });
 
     test('paused too long, the turn stops', () async {
       await act('os_key', {'keys': 'A'});
@@ -2039,6 +2103,604 @@ void main() {
       backend.matches = [];
       final card = await plan('os_click', {'name': 'Save'});
       expect(stepsOf(card).single.containsKey('flash'), isFalse);
+    });
+  });
+
+  group('more tools (GAIA_AUTONOMY_HLD.md §8.3–§8.5)', () {
+    const calc = (
+      hwnd: 99,
+      pid: 90,
+      exe: 'calc',
+      app: 'Calculator',
+      title: 'Calculator',
+      console: false,
+    );
+    const gaia = (
+      hwnd: 50,
+      pid: 1,
+      exe: 'voyager',
+      app: 'Gaia',
+      title: 'Gaia',
+      console: false,
+    );
+    GaiaListedWindow listed(GaiaForegroundWindow window) => (
+      window: window,
+      minimized: false,
+      frame: (left: 0, top: 0, width: 800, height: 600),
+    );
+    late List<Map<String, Object?>> flashes;
+    late GaiaOsControl shown;
+
+    setUp(() {
+      flashes = [];
+      backend.windows
+        ..[gaia.hwnd] = gaia
+        ..[calc.hwnd] = calc;
+      backend.listed = [listed(gaia), listed(_target), listed(calc)];
+      shown = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        voyagerPid: 70,
+        backend: backend,
+        flash: flashes.add,
+        stopFlashes: () => flashes.add(const {'stopped': true}),
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        adoptWithin: const Duration(milliseconds: 200),
+        holdLimit: const Duration(seconds: 2),
+      );
+    });
+    tearDown(() => shown.endTurn());
+
+    Future<Map<String, Object?>> runShown() =>
+        shown.run('card', once: true, check: () async {});
+
+    List<int> buttons() => [
+      for (final event in backend.sent.whereType<GaiaMouseEvent>())
+        if (event.flags != MOUSEEVENTF_MOVE) event.flags,
+    ];
+
+    group('os_window', () {
+      test('names the window and what it does; nothing runs until '
+          'approved', () async {
+        Future<String> label(Map<String, Object?> arguments) async =>
+            stepsOf(
+                  await plan('os_window', {'window': 99, ...arguments}),
+                ).single['label']!
+                as String;
+        expect(
+          await label({'action': 'minimize'}),
+          'Minimize Calculator: "Calculator"',
+        );
+        expect(await label({'action': 'maximize'}), startsWith('Maximize'));
+        expect(await label({'action': 'restore'}), startsWith('Restore'));
+        expect(await label({'action': 'close'}), startsWith('Close'));
+        expect(
+          await label({'action': 'move', 'left': 10, 'top': 20}),
+          'Move Calculator: "Calculator" to 10,20',
+        );
+        expect(
+          await label({'action': 'move', 'width': 300, 'height': 200}),
+          'Resize Calculator: "Calculator" to 300x200',
+        );
+        expect(
+          await label({
+            'action': 'move',
+            'left': 10,
+            'top': 20,
+            'width': 300,
+            'height': 200,
+          }),
+          'Move Calculator: "Calculator" to 10,20, 300x200',
+        );
+        final card = await plan('os_window', {
+          'window': 'Calculator',
+          'action': 'close',
+        });
+        expect(card['window'], 'Calculator: "Calculator"');
+        expect(backend.arranged, isEmpty);
+      });
+
+      test('refuses a bad action, a move with nowhere to go, and halves of '
+          'a point or a size', () async {
+        await expectLater(
+          plan('os_window', {'window': 99}),
+          refused('needs an action'),
+        );
+        await expectLater(
+          plan('os_window', {'window': 99, 'action': 'shake'}),
+          refused('needs an action'),
+        );
+        await expectLater(
+          plan('os_window', {'window': 99, 'action': 'move'}),
+          refused('move needs'),
+        );
+        await expectLater(
+          plan('os_window', {'window': 99, 'action': 'move', 'left': 1}),
+          refused('together'),
+        );
+        await expectLater(
+          plan('os_window', {
+            'window': 99,
+            'action': 'move',
+            'width': 0,
+            'height': 5,
+          }),
+          refused('above 0'),
+        );
+        await expectLater(
+          plan('os_window', {'action': 'close'}),
+          refused('os_window needs a window'),
+        );
+      });
+
+      test("Voyager's window can't be closed, though it can be minimized; "
+          "Gaia's isn't found; an excluded one is refused", () async {
+        await expectLater(
+          plan('os_window', {'window': 7, 'action': 'close'}),
+          refused("can't be closed"),
+        );
+        await plan('os_window', {'window': 7, 'action': 'minimize'});
+        await expectLater(
+          plan('os_window', {'window': 'Gaia', 'action': 'minimize'}),
+          refused('No open window matches'),
+        );
+        excluded = ['calc'];
+        await expectLater(
+          plan('os_window', {'window': 99, 'action': 'minimize'}),
+          refused('excluded'),
+        );
+      });
+
+      test('approved, it runs, flashed where the window was', () async {
+        for (final (arguments, did) in [
+          ({'action': 'minimize'}, 'minimize 99'),
+          ({'action': 'maximize'}, 'maximize 99'),
+          ({'action': 'close'}, 'close 99'),
+          ({'action': 'move', 'left': 5, 'top': 6}, 'move 99 5,6 nullxnull'),
+        ]) {
+          backend.arranged.clear();
+          flashes.clear();
+          await shown.plan('chat', 'card', 'os_window', {
+            'window': 99,
+            ...arguments,
+          });
+          final result = await runShown();
+          expect(result['stopped'], isNull);
+          expect(backend.arranged, [did]);
+          expect(flashes.single, {
+            'kind': 'window',
+            'left': 0,
+            'top': 0,
+            'right': 800,
+            'bottom': 600,
+            'label': 'Calculator',
+          });
+        }
+        await shown.plan('chat', 'card', 'os_window', {
+          'window': 99,
+          'action': 'restore',
+        });
+        await runShown();
+        expect(backend.restored, [99]);
+        // Nothing was sent.
+        expect(backend.calls, isEmpty);
+      });
+
+      test("a window that won't come out of maximized isn't moved, and "
+          'says so', () async {
+        backend.stuck = true;
+        await shown.plan('chat', 'card', 'os_window', {
+          'window': 99,
+          'action': 'move',
+          'left': 5,
+          'top': 6,
+        });
+        final result = await runShown();
+        expect(result['stopped'], contains('not be responding'));
+        expect(backend.arranged, isEmpty);
+      });
+
+      test('a minimized window gets no flash, and one that closed is a '
+          'stop', () async {
+        backend.minimizedWindows.add(99);
+        await shown.plan('chat', 'card', 'os_window', {
+          'window': 99,
+          'action': 'restore',
+        });
+        await runShown();
+        expect(flashes, isEmpty);
+        await shown.plan('chat', 'card', 'os_window', {
+          'window': 99,
+          'action': 'close',
+        });
+        backend.windows.remove(99);
+        backend.window = null;
+        expect((await runShown())['stopped'], contains('closed'));
+        expect(backend.arranged, isEmpty);
+      });
+
+      test('in Auto, minimizing the pin leaves none, and Gaia coming in '
+          'front after is no pause', () async {
+        shown.session('chat', auto: true, onUserStop: () {});
+        backend.onMinimize = () => backend.front = gaia.hwnd;
+        await shown.plan('chat', 'card', 'os_window', {
+          'window': 7,
+          'action': 'minimize',
+        });
+        expect((await runShown())['stopped'], isNull);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(shown.sessionPaused, isFalse);
+        expect(shown.sessionStopped, isNull);
+        expect(
+          () => shown.session('chat', auto: true, onUserStop: () {}),
+          refused('os_open or os_focus one'),
+        );
+      });
+
+      test('in Auto, restoring a window pins it, and it coming in front '
+          'is not the user switching', () async {
+        var userStopped = false;
+        shown.session('chat', auto: true, onUserStop: () => userStopped = true);
+        backend
+          ..minimizedWindows.add(99)
+          ..restoreActivates = true;
+        await shown.plan('chat', 'card', 'os_window', {
+          'window': 99,
+          'action': 'restore',
+        });
+        final result = await runShown();
+        expect(result['stopped'], isNull);
+        // Later calls act on it, so the agent is told.
+        expect(result['front'], 'Calculator: "Calculator"');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        expect(userStopped, isFalse);
+        expect(shown.session('chat', auto: true, onUserStop: () {})?.hwnd, 99);
+      });
+    });
+
+    group('os_drag', () {
+      test('takes names or points, and shows its start on the card', () async {
+        final card = await plan('os_drag', {
+          'from': {'name': 'Save'},
+          'to': {'x': 400, 'y': 300},
+        });
+        expect(stepsOf(card).single, {
+          'label': 'Drag from Button "Save" [10,10 20x20] to 400, 300',
+          'resolved': true,
+          'flash': {
+            'kind': 'mark',
+            'x': 20,
+            'y': 20,
+            'left': 10,
+            'top': 10,
+            'right': 30,
+            'bottom': 30,
+            'label': 'Save',
+          },
+        });
+        final steps = await plan('os_steps', {
+          'steps': [
+            {
+              'action': 'drag',
+              'from': {'x': 10, 'y': 10},
+              'to': {'x': 50, 'y': 60},
+            },
+          ],
+        });
+        expect(stepsOf(steps).single['label'], 'Drag from 10, 10 to 50, 60');
+        expect(backend.calls, isEmpty);
+      });
+
+      test('an end not on screen yet leaves the step unresolved', () async {
+        backend.matches = [];
+        final card = await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'name': 'Bin'},
+        });
+        expect(stepsOf(card).single['resolved'], false);
+      });
+
+      test('from a point, it resolves once its end comes on screen', () async {
+        backend.matches = [];
+        await plan('os_steps', {
+          'steps': [
+            {'action': 'key', 'keys': 'A'},
+            {
+              'action': 'drag',
+              'from': {'x': 10, 'y': 10},
+              'to': {'name': 'Save'},
+            },
+          ],
+        });
+        backend.gaiaInFront = true;
+        backend.onSend = () => backend.matches = [_button()];
+        final first = await run(once: false);
+        expect(first['ran'], 1);
+        expect(stepsOf(first)[1]['resolved'], true);
+      });
+
+      test('refuses a missing end, half a point, and anywhere', () async {
+        await expectLater(
+          plan('os_drag', {
+            'from': {'x': 1, 'y': 1},
+          }),
+          refused('A drag needs to'),
+        );
+        await expectLater(
+          plan('os_drag', {
+            'from': {'x': 1},
+            'to': {'x': 2, 'y': 2},
+          }),
+          refused('together'),
+        );
+        await expectLater(
+          plan('os_drag', {
+            'from': {'x': 1, 'y': 1},
+            'to': {'x': 900, 'y': 2},
+          }),
+          refused('outside'),
+        );
+        await expectLater(
+          plan('os_drag', {
+            'from': {'x': 1, 'y': 1},
+            'to': {'x': 2, 'y': 2},
+            'anywhere': true,
+          }),
+          refused('anywhere'),
+        );
+      });
+
+      test('presses at the start, moves in steps, and lets go at the end, '
+          'with one trail ahead of the press', () async {
+        await shown.plan('chat', 'card', 'os_drag', {
+          'from': {'name': 'Save'},
+          'to': {'x': 400, 'y': 300},
+        });
+        final result = await runShown();
+        expect(result['stopped'], isNull);
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        expect(backend.cursor.first, (20, 20));
+        expect(backend.cursor.last, (400, 300));
+        expect(backend.cursor.length, 11);
+        expect(flashes.single, {
+          'kind': 'drag',
+          'x': 20,
+          'y': 20,
+          'to_x': 400,
+          'to_y': 300,
+          'ms': 330,
+          'label': 'Save',
+        });
+      });
+
+      test('a swapped mouse drags with its right button', () async {
+        backend.swapped = true;
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 50, 'y': 60},
+        });
+        await run();
+        expect(buttons(), [MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP]);
+      });
+
+      test('stopped mid-drag, it lets go where it started, so no button '
+          'stays down', () async {
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.onSend = () {
+          if (backend.calls.length == 4) control.stop('The user pressed Esc.');
+        };
+        final result = await run();
+        expect(result['stopped'], 'The user pressed Esc.');
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        expect(backend.cursor.last, (10, 10));
+      });
+
+      test('stopped once the user has taken the mouse, it lets go where they '
+          'have it, and leaves the cursor alone', () async {
+        shown.session('chat', auto: true, onUserStop: () {});
+        await shown.plan('chat', 'card', 'os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.onSend = () {
+          if (backend.calls.length == 3) {
+            backend.userMoved = (x: 700, y: 80);
+            backend.escape = true;
+          }
+        };
+        final result = await runShown();
+        expect(result['stopped'], 'The user pressed Esc.');
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        // Not moved back to 10,10 to let go.
+        expect(backend.cursor.last, isNot((10, 10)));
+        expect(flashes.map((f) => f['kind'] ?? 'stop'), ['drag', 'stop']);
+      });
+
+      test('in a session, Esc mid-drag lets go too', () async {
+        shown.session('chat', auto: true, onUserStop: () {});
+        await shown.plan('chat', 'card', 'os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.onSend = () {
+          if (backend.calls.length == 3) backend.escape = true;
+        };
+        final result = await runShown();
+        expect(result['stopped'], 'The user pressed Esc.');
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        expect(backend.cursor.last, (10, 10));
+        // Its trail ends there too, rather than going on to the end.
+        expect(flashes.map((f) => f['kind'] ?? 'stop'), ['drag', 'stop']);
+      });
+
+      test("a finished drag leaves its trail to play out", () async {
+        await shown.plan('chat', 'card', 'os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        expect((await runShown())['stopped'], isNull);
+        expect(flashes.map((f) => f['kind']), ['drag']);
+      });
+
+      test('stopped before the press, its trail ends there', () async {
+        late final GaiaOsControl stopping;
+        stopping = GaiaOsControl(
+          companionPid: () => 1,
+          exclusions: () => excluded,
+          vaultUnlocked: () => vault,
+          voyagerPid: 70,
+          backend: backend,
+          flash: (flash) {
+            flashes.add(flash);
+            stopping.stop('The user pressed Esc.');
+          },
+          stopFlashes: () => flashes.add(const {'stopped': true}),
+          settle: Duration.zero,
+          leadIn: const Duration(milliseconds: 30),
+          pace: Duration.zero,
+          holdLimit: const Duration(seconds: 2),
+        );
+        await stopping.plan('chat', 'card', 'os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        final result = await stopping.run(
+          'card',
+          once: true,
+          check: () async {},
+        );
+        expect(result['stopped'], 'The user pressed Esc.');
+        expect(buttons(), isEmpty);
+        expect(flashes.map((f) => f['kind'] ?? 'stop'), ['drag', 'stop']);
+      });
+
+      test('the window changing mid-drag is a stop, and lets go', () async {
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.onSend = () {
+          if (backend.calls.length == 2) backend.front = 99;
+        };
+        final result = await run();
+        expect(result['stopped'], contains('changed'));
+        expect(buttons().last, MOUSEEVENTF_LEFTUP);
+      });
+
+      test('a window covering the end lets go where it started', () async {
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.onSend = () {
+          if (backend.calls.length == 11) backend.rootUnder = 99;
+        };
+        final result = await run();
+        expect(result['stopped'], contains('covering 500,500'));
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        expect(backend.cursor.last, (10, 10));
+      });
+
+      test('the button is never held past the limit', () async {
+        final slow = GaiaOsControl(
+          companionPid: () => 1,
+          exclusions: () => excluded,
+          vaultUnlocked: () => vault,
+          voyagerPid: 70,
+          backend: backend,
+          settle: Duration.zero,
+          holdLimit: const Duration(milliseconds: 50),
+        );
+        await slow.plan('chat', 'card', 'os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        final result = await slow.run('card', once: true, check: () async {});
+        expect(result['stopped'], contains('too long'));
+        expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
+        expect(backend.cursor.last, (10, 10));
+      });
+
+      test('Windows refusing the press still sends the release', () async {
+        await plan('os_drag', {
+          'from': {'x': 10, 'y': 10},
+          'to': {'x': 500, 'y': 500},
+        });
+        backend.sendLimit = 0;
+        final result = await run();
+        expect(result['stopped'], contains('refused'));
+        expect(buttons(), [MOUSEEVENTF_LEFTUP]);
+      });
+    });
+
+    group('os_clipboard', () {
+      test('a write is a step that names the text, cut short on the '
+          'card', () async {
+        final card = await plan('os_clipboard', {
+          'action': 'write',
+          'text': 'hello',
+        });
+        expect(card['window'], 'the clipboard');
+        expect(stepsOf(card).single['label'], 'Put "hello" on the clipboard');
+        expect(backend.clipboard, isEmpty);
+        final long = await plan('os_clipboard', {
+          'action': 'write',
+          'text': 'x' * 300,
+        });
+        expect(
+          stepsOf(long).single['label'],
+          'Put "${'x' * 200}…" on the clipboard',
+        );
+      });
+
+      test('refuses a read here, no text, and too much', () async {
+        await expectLater(
+          plan('os_clipboard', {'action': 'read'}),
+          refused('"write"'),
+        );
+        await expectLater(
+          plan('os_clipboard', {'action': 'write'}),
+          refused('needs text'),
+        );
+        await expectLater(
+          plan('os_clipboard', {'action': 'write', 'text': 'x' * 20001}),
+          refused('at most 20000'),
+        );
+      });
+
+      test('approved, it writes, with no window needed; a busy clipboard '
+          'is a stop', () async {
+        backend.window = null;
+        shown.session(
+          'chat',
+          auto: true,
+          onUserStop: () {},
+          needsWindow: false,
+        );
+        await shown.plan('chat', 'card', 'os_clipboard', {
+          'action': 'write',
+          'text': 'hello',
+        });
+        expect((await runShown())['stopped'], isNull);
+        expect(backend.clipboard, ['hello']);
+        expect(backend.calls, isEmpty);
+        expect(flashes, isEmpty);
+        backend.clipboardBusy = true;
+        await shown.plan('chat', 'card', 'os_clipboard', {
+          'action': 'write',
+          'text': 'again',
+        });
+        expect(
+          (await runShown())['stopped'],
+          contains('left it as it was: another app may be using it'),
+        );
+      });
     });
   });
 

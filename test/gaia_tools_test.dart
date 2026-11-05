@@ -77,6 +77,9 @@ void main() {
         'os_steps',
         'os_open',
         'os_focus',
+        'os_window',
+        'os_drag',
+        'os_clipboard',
       ]);
       for (final tool in tools) {
         expect(tool['name'], matches(RegExp(r'^[a-zA-Z0-9_-]{1,64}$')));
@@ -615,6 +618,24 @@ void main() {
           await turn.call('os_steps', const {});
           expect(labels(), ['Press A', 'Press A', 'Stopped: Esc.']);
           expect(activity.last.input['total'], 3);
+        });
+
+        test('os_clipboard: a read is a screen read, a write an action that '
+            "leaves the card's window as it was (GAIA_AUTONOMY_HLD.md "
+            '§8.5)', () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 2, 'steps': steps};
+          final turn = tools();
+          final read = await turn.call('os_clipboard', {'action': 'read'});
+          expect(read.text, 'screen os_clipboard');
+          expect(planned, isEmpty);
+          await turn.call('os_steps', const {});
+          expect(activity.last.input['app'], 'Notepad');
+          await turn.call('os_clipboard', {'action': 'write', 'text': 'hi'});
+          expect(planned.last, {'action': 'write', 'text': 'hi'});
+          expect(activity.last.input['app'], 'Notepad');
+          expect(activity.last.input['window'], 'Notepad: "notes.txt"');
+          expect(activity.last.input['total'], 4);
         });
 
         test('is one card for the turn, with every step that ran', () async {

@@ -50,6 +50,7 @@ GaiaFlash ParseFlash(const flutter::EncodableMap& args) {
       {"right", GaiaFlash::Kind::kRight},   {"scroll", GaiaFlash::Kind::kScroll},
       {"type", GaiaFlash::Kind::kType},     {"key", GaiaFlash::Kind::kKey},
       {"window", GaiaFlash::Kind::kWindow}, {"mark", GaiaFlash::Kind::kMark},
+      {"drag", GaiaFlash::Kind::kDrag},
   };
   static const char* kDirections[] = {"up", "down", "left", "right"};
   GaiaFlash flash;
@@ -71,6 +72,7 @@ GaiaFlash ParseFlash(const flutter::EncodableMap& args) {
     if (direction == kDirections[i]) flash.direction = i;
   }
   flash.point = {number("x"), number("y")};
+  flash.to = {number("to_x"), number("to_y")};
   flash.rect = {number("left"), number("top"), number("right"),
                 number("bottom")};
   flash.amount = number("amount");
@@ -194,6 +196,11 @@ bool FlutterWindow::OnCreate() {
             std::get_if<flutter::EncodableMap>(call.arguments());
         if (call.method_name() == "flash" && args) {
           gaia_flashes_.Play(ParseFlash(*args));
+          result->Success();
+          return;
+        }
+        if (call.method_name() == "stopFlashes") {
+          gaia_flashes_.StopAll();
           result->Success();
           return;
         }

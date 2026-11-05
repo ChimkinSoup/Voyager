@@ -87,6 +87,8 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   void moveCursor(int x, int y) {}
   @override
+  ({int x, int y}) cursorAt() => (x: 0, y: 0);
+  @override
   bool get buttonsSwapped => false;
   @override
   int send(List<GaiaInputEvent> events) {
@@ -128,6 +130,22 @@ class _ControlBackend implements GaiaInputBackend {
   bool minimized(int hwnd) => false;
   @override
   void restore(int hwnd) {}
+  @override
+  void minimize(int hwnd) {}
+  @override
+  void maximize(int hwnd) {}
+  @override
+  Future<bool> place(
+    int hwnd, {
+    int? left,
+    int? top,
+    int? width,
+    int? height,
+  }) async => true;
+  @override
+  void close(int hwnd) {}
+  @override
+  Future<bool> writeClipboard(String text) async => true;
 }
 
 class _Companion {

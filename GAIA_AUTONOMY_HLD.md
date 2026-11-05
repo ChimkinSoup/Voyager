@@ -2,7 +2,9 @@
 
 Status: Phases 1 and 2 done, built and checked live 2026-11-03 (§11.1, §11.2). Phases 3 and 4
 done, built and checked live 2026-11-04, the phone included (§11.4, §11.5, §11.6). No bugs from
-them are open. Phase 5 is proposed. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6, §15.7 and §20; §12 below lists how.
+them are open. Phase 5 is built and unit-tested, 2026-11-04, with the display off, so its
+Done-when isn't checked live yet (§11.7). It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
+§15.7 and §20; §12 below lists how.
 
 ## 1. Summary
 
@@ -270,7 +272,7 @@ dark falloff so they read on a white page.
 | Scroll | Three chevrons sliding in the direction, more for a bigger amount |
 | Type | Soft outline on the field, then a shimmer along it while typing |
 | Key or chord | Keycap pill near the target window's top ("Ctrl+S") |
-| Drag | Dot at the start, a trail, a ripple at the end |
+| Drag | A click at the start, the marker trailing to the end and growing on the way, then holding a moment before it fades |
 | Open, focus, adopt | Brief outline around the whole window, with its name |
 | Move, resize, close, minimize | The same outline, at the window's old position |
 
@@ -447,7 +449,7 @@ The native border work uncommitted in the working tree (notch, Revoke) comes fir
 | **2. Flashes** (done, §11.2) | Native effects; `Flash` channel; Ask's preview | A real click lands through a flash and `rootAt` agrees; capture shows no flash; 95th percentile under 2 ms per frame, nothing when idle; legible on a white and a dark page at 100% and 200% DPI |
 | **3. Auto** (done, §11.4, §11.6) | Grant field, menu, notice, notch text; card skip; `permit`; activity card and debounce; the §5.5 rules; `read_after`; phone; the §5.7 checks | "Mark my top 3 emails as read" on Haiku raises 0 cards and shows 3 flashes; a shell command raises none; a phone prompt runs and Stop and Abort work; Ask behaves exactly as before |
 | **4. Opening** (done, §11.5, §11.6) | `os_open`, `os_windows`, `os_focus` | Gaia opens an installed app, a Store app, a file and a URL, and the next action lands there each time; an excluded app is refused before launch |
-| **5. More tools** | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
+| **5. More tools** (built, §11.7; not checked live) | `os_window`, `os_drag`, `os_clipboard` | A stopped drag leaves no button down; a password manager's copy is refused on read |
 
 ### 11.1 Phase 1 results (2026-11-03)
 
@@ -826,9 +828,117 @@ another window (1 of 1) each ended the turn, with the command gone 3 s later and
 
 **Still not run:** the job board on Codex, and Esc on Codex more than once.
 
+### 11.7 Phase 5 results (2026-11-04)
+
+Built with the display off, so nothing here has run in the app. What's left is
+`qa/GAIA_REMAINING_TESTS.md` §I.
+
+Built:
+- **`os_window {window, action, left?, top?, width?, height?}`**, an action: a card in Ask,
+  immediate in Auto. It finds its window as `os_focus` does (`_windowOf`, shared now), so
+  excluded windows, excluded sites and Voyager's with the vault unlocked are matched by id
+  alone and refused. `minimize`, `maximize` and `restore` are `ShowWindowAsync`; `close` posts
+  `WM_CLOSE`, refused for Voyager's own window; `move` takes left and top, width and height, or
+  all four, in the frame `os_windows` reports. It restores a maximized or minimized window first
+  without activating it, adds back the invisible borders the frame leaves out, and is
+  `SWP_ASYNCWINDOWPOS`, so a hung window can't hold Gaia up. The outline flash plays at the
+  window's old place, unless it was minimized.
+- **In a session:** what comes in front after counts as Gaia's doing, so a "save changes?"
+  prompt after `close`, or the next window after `minimize`, adopts (§5.2). `restore` and
+  `maximize` pin the window first, as `os_focus` does since BUG-351. `minimize` or `close` of the
+  pinned window leaves no pin and clears "engaged", so Gaia in front after isn't a pause that
+  would wait 5 minutes for a window that's gone, and the next action says to `os_open` or
+  `os_focus` one.
+- **`os_drag {from, to}`**, and a `drag` action in `os_steps`. Each end is a name (with its
+  type) or x and y, found and checked like a click's target, inside the window. The button goes
+  down at `from`, the cursor moves to `to` in 10 steps 30 ms apart, each also sent as a zero mouse
+  move so the app sees input, and the button comes up at `to` only if the target is still the
+  window there. A swapped mouse uses its right button, as clicks do.
+- **No button stays down.** The drag is noted on the run before the press is sent. Every stop
+  path (Esc, Stop, Abort, Revoke, a switch of window, the window covered, Windows refusing input,
+  the 5 s hold limit) ends in `run`'s `finally`, whose `_releaseHeld` moves the cursor back to
+  `from` and lets go there, which most apps take as no drag. That's a choice over letting go in
+  place, which could drop onto whatever is now under the cursor.
+
+  The exception is when the user has moved the mouse. Then the cursor isn't where the drag last
+  put it, and Gaia lets go where it is, rather than pulling the pointer out of the user's hand.
+  The in-app test for this is `integration_test/gaia_flash_stop_test.dart`.
+- **Its cost** was measured in-app by `integration_test/gaia_drag_cost_test.dart` on a
+  2880×1800 screen:
+  - At first, a full-screen diagonal drag held Flutter's thread up by 45–90 ms at a time for the
+    second it plays, because each frame cleared, swept and repainted the whole window spanning
+    both ends.
+  - Now a frame touches only what it draws:
+    - it clears what the last frame drew;
+    - the trail sweeps only its band of each row;
+    - Windows is sent only the changed rectangle (`UpdateLayeredWindowIndirect`).
+
+    A temporary check found no lit pixel outside that area in any style or direction, so nothing
+    goes stale.
+  - Painting a frame is now the remaining cost. Presenting it costs at most about 2 ms, even full
+    screen.
+  - In a profile build (optimised, like release), a frame takes:
+    - a short drag: 2–4 ms;
+    - a full-width or full-screen diagonal drag: 7–15 ms, plus about 2 ms to present, so about a
+      frame at worst.
+
+    Debug builds are about twice as slow, with worst hold-ups of 32–54 ms.
+- **Its flash** is one native `drag` effect, played the lead-in ahead of the press, once both ends
+  are found. It runs as long as the moves (330 ms) and has three parts:
+  - **Taking hold:** the style's click at `from`.
+  - **Travel:** the style's marker moves to `to` with a trail behind it, growing as it goes until
+    it reaches the click's halo size.
+  - **Letting go:** the marker holds there lit (300 ms), then fades (250 ms).
+
+  If a drag is stopped partway, `_releaseHeld` ends its trail along with the button. It calls
+  `stopFlashes` on `voyager/gaia_border`, which hides every flash playing in one batch. That's
+  every flash, not just the drag's: Gaia runs one step at a time, so nothing else of its own is
+  playing then, and ending a single flash isn't supported.
+
+  The in-app test is `integration_test/gaia_flash_stop_test.dart`.
+- **`os_clipboard {action, text?}`**. `read` is a read, like `os_windows`: no card, *can see
+  screen*, answered by `GaiaOsReads`, framed as `<clipboard_data>` reference data, at most 20,000
+  characters with a note when cut. `write` is an action, as §8 says of every tool there: a card
+  in Ask naming the text (cut at 200 characters, since the card syncs), immediate in Auto, and
+  *can control*. It sets `CanIncludeInClipboardHistory` and `CanUploadToCloudClipboard` to 0.
+  It needs no window, and in Auto its row doesn't change the window the activity card names.
+- **Read is refused** while the vault is unlocked (before and after), when the clipboard carries
+  `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` (KeePass's older
+  marking) or `CanIncludeInClipboardHistory = 0`, unless that's Gaia's own write (by the
+  clipboard's sequence number), and by the app that put it there (`GetClipboardOwner`): an
+  excluded app, an app Gaia can't name, or a browser while a site is excluded, as `os_windows`
+  treats a browser it can't check. With no owner, as some apps leave it, or one that has since
+  closed, only the markings apply, but only while nothing is excluded. With any exclusion set,
+  such a read is refused, since it may have come from an excluded app. Gaia's own write is never
+  refused this way.
+
+Decisions made here:
+- `os_clipboard` read follows `os_windows` rather than §8's "each is a card in Ask": reading
+  is what *can see screen* grants, and a card per read would make no sense beside
+  `os_read_screen`. The owner check covers the exclusion list, which a read of the clipboard
+  would otherwise go round.
+- A clipboard write overwrites what the user copied with no backup. The tool's description
+  tells the agent to say so.
+
+Checked by unit tests (all 1176 Gaia tests pass; 30 new in `gaia_os_control_test.dart`,
+`gaia_os_reads_test.dart` and `gaia_tools_test.dart`), and with the display off against real
+Win32 (`test/tool/gaia_more_tools_live_test.dart`, run by path):
+- Gaia's write reads back as written, with both DWORDs at 0. Another process's plain copy reads.
+  A copy from another process marked either way, as a password manager does, is refused, and
+  one with `CanIncludeInClipboardHistory = 1` isn't. The clipboard's text was put back after.
+- `os_window` on a WinForms probe: moved and resized to exactly 300,220 900x400 by its DWM
+  frame, minimized, maximized, moved out of maximized (restored first), and closed, its
+  `FormClosed` firing.
+- The two drag tests, on a real TrackBar, stopped at `os_focus` with "Windows refused the
+  input", as §11.5's did with the display off. They need running with it on.
+
+**Not checked:** everything in the app, the Done-when included. The drag's 10 moves are a guess
+at what apps need to see a drag, Explorer's OLE drag included. Real password managers'
+markings weren't seen; the probe set them from PowerShell.
+
 ## 12. Changes to GAIA_HLD.md when built
 
-Applied for Phases 3 and 4, 2026-11-04.
+Applied for Phases 3 and 4, 2026-11-04, and §15.6's list of tools for Phase 5.
 
 - **§5.2, §10.1:** in Auto, CLI prompts are answered without a card.
 - **§12.2:** phone prompts act in Auto.

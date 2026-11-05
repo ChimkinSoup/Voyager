@@ -511,7 +511,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
             'properties': {
               'action': {
                 'type': 'string',
-                'enum': ['click', 'scroll', 'type', 'key'],
+                'enum': ['click', 'scroll', 'type', 'key', 'drag'],
               },
               ..._controlTarget,
               'button': {
@@ -527,6 +527,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
               'text': {'type': 'string'},
               'keys': {'type': 'string'},
               ..._anywhere,
+              ..._dragEnds,
             },
             'required': ['action'],
           },
@@ -578,7 +579,96 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       'required': ['window'],
     },
   },
+  {
+    'name': 'os_window',
+    'description':
+        'Minimize, maximize, restore, move or resize, or close an open window. '
+        'close asks the window to close, as its close button does, so it may '
+        'ask to save first; whatever comes in front after becomes the window '
+        "the os_ tools work on. Voyager's own window can't be closed. Approved "
+        'or not like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'window': {
+          'type': 'string',
+          'description':
+              "An id from os_windows, or words from the window's title.",
+        },
+        'action': {
+          'type': 'string',
+          'enum': ['minimize', 'maximize', 'restore', 'move', 'close'],
+        },
+        'left': {
+          'type': 'integer',
+          'description': 'For move: physical screen pixels, with top.',
+        },
+        'top': {'type': 'integer'},
+        'width': {
+          'type': 'integer',
+          'description':
+              'For move: physical pixels, with height. Leave out left and '
+              'top to only resize, or width and height to only move.',
+        },
+        'height': {'type': 'integer'},
+        ..._readAfter,
+      },
+      'required': ['window', 'action'],
+    },
+  },
+  {
+    'name': 'os_drag',
+    'description':
+        'Drag with the mouse in the window the os_ tools work on: press at '
+        'from, move to to, and let go. Each end is a control as '
+        "os_read_screen shows it, or x and y. If the drag is stopped, or "
+        'something covers to, Gaia lets go where it started. Also a drag '
+        'action in os_steps. Approved or not like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {..._dragEnds, ..._readAfter},
+      'required': ['from', 'to'],
+    },
+  },
+  {
+    'name': 'os_clipboard',
+    'description':
+        "Read or write the user's clipboard, as text. write replaces what the "
+        'user copied, so say you did; it runs at once or after a card, like '
+        'os_click, and needs "can control". read returns at most '
+        '$gaiaClipboardLimit characters and needs "can see screen". Refused while what is on it '
+        'was marked private, as password managers mark what they copy, or came '
+        'from an app the user has excluded.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'action': {
+          'type': 'string',
+          'enum': ['read', 'write'],
+        },
+        'text': {
+          'type': 'string',
+          'description': 'For write: at most $gaiaClipboardLimit characters.',
+        },
+      },
+      'required': ['action'],
+    },
+  },
 ];
+
+/// A drag's two ends (GAIA_AUTONOMY_HLD.md §8.4).
+const _dragEnds = <String, Object?>{
+  'from': {
+    'type': 'object',
+    'description': 'For a drag: where it starts.',
+    'properties': _controlTarget,
+  },
+  'to': {
+    'type': 'object',
+    'description': 'For a drag: where it lets go.',
+    'properties': _controlTarget,
+  },
+};
 
 /// What an action tool can aim at. With a name and a point, the point picks
 /// among controls of that name.
@@ -622,24 +712,47 @@ bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
 /// The `memory_*` tools (§11): the main instance answers them too.
 bool isGaiaMemoryTool(String name) => name.startsWith('memory_');
 
-/// The `os_*` read tools (§15.6): the main instance answers them too.
-bool isGaiaOsRead(String name) => const {
-  'os_focused_window',
-  'os_read_screen',
-  'os_screenshot',
-  'os_windows',
-}.contains(name);
+/// The `os_*` read tools (§15.6): the main instance answers them too. An
+/// `os_clipboard` read is one.
+bool isGaiaOsRead(String name, [Map<String, Object?> arguments = const {}]) =>
+    const {
+      'os_focused_window',
+      'os_read_screen',
+      'os_screenshot',
+      'os_windows',
+    }.contains(name) ||
+    (name == 'os_clipboard' && arguments['action'] == 'read');
 
-/// The `os_*` action tools (§15.6): each is a step list the user approves.
-bool isGaiaOsControl(String name) => const {
-  'os_click',
-  'os_scroll',
-  'os_type',
-  'os_key',
-  'os_steps',
+/// The action tools that find their own window, or need none
+/// (GAIA_AUTONOMY_HLD.md §8): their plan isn't tied to the one in front.
+const gaiaWindowlessControls = {
   'os_open',
   'os_focus',
-}.contains(name);
+  'os_window',
+  'os_clipboard',
+};
+
+/// The most of the clipboard `os_clipboard` reads or writes, in characters.
+const gaiaClipboardLimit = 20000;
+
+/// The `os_*` action tools (§15.6): each is a step list the user approves.
+bool isGaiaOsControl(
+  String name, [
+  Map<String, Object?> arguments = const {},
+]) =>
+    const {
+      'os_click',
+      'os_scroll',
+      'os_type',
+      'os_key',
+      'os_steps',
+      'os_open',
+      'os_focus',
+      'os_window',
+      'os_drag',
+      'os_clipboard',
+    }.contains(name) &&
+    !isGaiaOsRead(name, arguments);
 
 /// The protocol version answered when the client names none.
 const _protocolVersion = '2025-06-18';

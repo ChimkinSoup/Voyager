@@ -80,7 +80,9 @@ class _GaiaControlShowcaseState extends State<GaiaControlShowcase> {
   Map<String, Object?> _styled(Map<String, Object?> flash) => {
     ...flash,
     'style': _set.name,
-    if (_set == _EffectSet.astral && flash['kind'] == 'click')
+    // A drag takes hold and lets go with a click.
+    if (_set == _EffectSet.astral &&
+        (flash['kind'] == 'click' || flash['kind'] == 'drag'))
       'click_variant': _clickStudy.name,
   };
 
@@ -219,6 +221,17 @@ class _GaiaControlShowcaseState extends State<GaiaControlShowcase> {
       'label': 'Mark as read',
     },
     'Marker at a point': () => {'kind': 'mark', ..._spot()},
+    'Drag': () {
+      final to = _spot();
+      return {
+        'kind': 'drag',
+        ..._centre(_rect(_button)),
+        'to_x': to['x'],
+        'to_y': to['y'],
+        'ms': 700,
+        'label': 'Mark as read',
+      };
+    },
   };
 
   void _play(String effect) => gaiaFlash(_styled(_effects[effect]!()), _accent);

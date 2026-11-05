@@ -25,6 +25,7 @@ import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_power.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
@@ -153,6 +154,7 @@ class GaiaHost {
         exclusions: () => _settings.contextExclusions,
         vaultUnlocked: () => _vaultUnlocked(),
         flash: (flash) => gaiaFlash(flash, _accent),
+        stopFlashes: gaiaStopFlashes,
       );
 
   /// The "Gaia is in control" border (§15.6), with its label, in Gaia's accent;
@@ -1281,8 +1283,9 @@ class GaiaHost {
             chatId,
             auto: auto,
             onUserStop: () => _userStopped(store, chatId),
-            // These find their own window (GAIA_AUTONOMY_HLD.md §8).
-            needsWindow: tool != 'os_open' && tool != 'os_focus',
+            // These find their own window, or need none (GAIA_AUTONOMY_HLD.md
+            // §8).
+            needsWindow: !gaiaWindowlessControls.contains(tool),
           );
           return await _osControl.plan(
             chatId,
@@ -1462,7 +1465,7 @@ class GaiaHost {
           chatId,
           auto: auto,
           onUserStop: () => _userStopped(store, chatId),
-          needsWindow: tool != 'os_windows',
+          needsWindow: tool != 'os_windows' && tool != 'os_clipboard',
         ),
         // Read after session(), which may have started one.
         session: _osControl.sessionChat == chatId,

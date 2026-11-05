@@ -1307,7 +1307,8 @@ window that is.
 
 Acting: `os.click` (by UIA control first, coordinates as a fallback),
 `os.scroll`, `os.type`, `os.key`, and `os_open` and `os_focus`, with `os_windows`
-to list what's open (GAIA_AUTONOMY_HLD.md §8).
+to list what's open, and `os_window`, `os_drag` and `os_clipboard` (GAIA_AUTONOMY_HLD.md
+§8). An `os_clipboard` read is a read, needing *can see screen*; its write is an action.
 
 **Three modes (amended 2026-11-04):** the hand is Off, Ask or Auto, per chat
 (GAIA_AUTONOMY_HLD.md §4). In Ask, what follows holds as written. In Auto there are

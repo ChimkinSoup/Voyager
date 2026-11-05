@@ -199,6 +199,32 @@ class Canvas {
 
   void Clear() { std::fill_n(pixels_, width_ * height_, 0u); }
 
+  // Clears only |rect|, clipped to this.
+  void Clear(const RECT& rect) {
+    const int left = std::max(0, static_cast<int>(rect.left));
+    const int right = std::min(width_, static_cast<int>(rect.right));
+    if (right <= left) return;
+    for (int y = std::max(0, static_cast<int>(rect.top));
+         y < std::min(height_, static_cast<int>(rect.bottom)); ++y) {
+      std::fill_n(pixels_ + y * width_ + left, right - left, 0u);
+    }
+  }
+
+  // Puts this on |window| where it is, telling Windows only |dirty| changed.
+  void PresentDirty(HWND window, const RECT& dirty) {
+    POINT source = {0, 0};
+    SIZE size = {width_, height_};
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UPDATELAYEREDWINDOWINFO info = {sizeof(info)};
+    info.psize = &size;
+    info.hdcSrc = dc_;
+    info.pptSrc = &source;
+    info.pblend = &blend;
+    info.dwFlags = ULW_ALPHA;
+    info.prcDirty = &dirty;
+    ::UpdateLayeredWindowIndirect(window, &info);
+  }
+
  private:
   int width_;
   int height_;
@@ -669,10 +695,25 @@ int EffectSide(const GaiaFlash& flash, float s) {
     case GaiaFlash::Kind::kType:
     case GaiaFlash::Kind::kKey:
     case GaiaFlash::Kind::kWindow:
+    case GaiaFlash::Kind::kDrag:
       break;
   }
   return 0;
 }
+
+// A drag's travel, at least long enough to see.
+float DragTravel(const GaiaFlash& flash) {
+  return std::max(static_cast<float>(flash.duration_ms), 200.0f);
+}
+
+// Once let go, a drag's marker, grown to full size on the way, stays there lit,
+// then fades.
+constexpr float kDragHold = 300;
+constexpr float kDragFade = 250;
+
+// How far a drag's light reaches past its two ends: Current's click ripple at
+// the start, the widest of the styles' clicks.
+constexpr float kDragReach = 54;
 
 float TotalTime(const GaiaFlash& flash) {
   switch (flash.kind) {
@@ -693,6 +734,8 @@ float TotalTime(const GaiaFlash& flash) {
       return flash.style == FlashStyle::kAstral ? 1000 : kWindowTime;
     case GaiaFlash::Kind::kMark:
       return kMarkTime;
+    case GaiaFlash::Kind::kDrag:
+      return kLeadIn + DragTravel(flash) + kDragHold + kDragFade;
   }
   return 0;
 }
@@ -729,8 +772,14 @@ void PaintClick(Canvas& canvas, const GaiaFlash& flash, float cx, float cy,
   const float corner_x = cx + 9 * s;
   const float corner_y = cy + 9 * s;
   const float dot_radius = 3.5f * s;
-  for (int y = 0; y < canvas.height(); ++y) {
-    for (int x = 0; x < canvas.width(); ++x) {
+  // Only what the widest ring can light, as a drag's canvas is much larger.
+  const float reach = (42 + 4 + kHalo) * s + 1;
+  const int from_x = std::max(0, static_cast<int>(cx - reach));
+  const int from_y = std::max(0, static_cast<int>(cy - reach));
+  const int to_x = std::min(canvas.width(), static_cast<int>(cx + reach) + 1);
+  const int to_y = std::min(canvas.height(), static_cast<int>(cy + reach) + 1);
+  for (int y = from_y; y < to_y; ++y) {
+    for (int x = from_x; x < to_x; ++x) {
       const float px = x + 0.5f;
       const float py = y + 0.5f;
       const float r = std::hypot(px - cx, py - cy);
@@ -840,7 +889,169 @@ void PaintMarkPoint(Canvas& canvas, float cx, float cy, float t, float s,
   }
 }
 
-// |flash|'s effect at |t| ms, on its square at |origin|.
+// A drag in the style's own vocabulary: taking hold is its click at the start;
+// the held point travels as its marker, leaving a comet's trail in its contour
+// light; letting go, the marker swells and fades where it lands.
+//
+// Its canvas spans both ends, which across a large screen is millions of
+// pixels, so a frame touches only what it draws: it clears |previous|, what
+// the last frame drew, and returns what this one drew. Everything else stays
+// clear.
+RECT PaintDrag(Canvas& canvas, const GaiaFlash& flash, float fx, float fy,
+               float tx, float ty, float t, float s, Color accent,
+               const RECT& previous) {
+  canvas.Clear(previous);
+  RECT drawn = {};
+  auto drawing = [&](float left, float top, float right, float bottom) {
+    const RECT part = {
+        std::max(0L, static_cast<LONG>(std::floor(left))),
+        std::max(0L, static_cast<LONG>(std::floor(top))),
+        std::min(static_cast<LONG>(canvas.width()),
+                 static_cast<LONG>(std::ceil(right)) + 1),
+        std::min(static_cast<LONG>(canvas.height()),
+                 static_cast<LONG>(std::ceil(bottom)) + 1)};
+    ::UnionRect(&drawn, &drawn, &part);
+  };
+  const float travel = DragTravel(flash);
+  const float release = kLeadIn + travel;
+  GaiaFlash click = flash;
+  click.kind = GaiaFlash::Kind::kClick;
+  if (t < kLeadIn + kRipple) {
+    // Each style's click paints within this of its point.
+    const float reach = kDragReach * s;
+    drawing(fx - reach, fy - reach, fx + reach, fy + reach);
+    if (flash.style == FlashStyle::kClassic) {
+      PaintClick(canvas, click, fx, fy, t, s, accent);
+    } else {
+      PaintFamilyEffect(canvas, click, fx, fy, t, s, accent);
+    }
+  }
+
+  const float length = std::hypot(tx - fx, ty - fy);
+  const float ux = length > 0 ? (tx - fx) / length : 1;
+  const float uy = length > 0 ? (ty - fy) / length : 0;
+  // How far along it is, 0 to 1.
+  const float moved = Ease((t - kLeadIn) / travel);
+  const float head = length * moved;
+  const float hx = fx + ux * head, hy = fy + uy * head;
+  // The trail fades once let go.
+  const float q = Clamp01((t - release) / kRipple);
+  const float trail_alpha = Clamp01((t - kLeadIn) / 80) * (1 - q * q);
+  const float reach = (2 + kHalo) * s + 1;
+  if (head > 0 && trail_alpha > 0) {
+    // Only the box from the start to the head, and in each row only the
+    // pixels within |reach| of the line.
+    drawing(std::min(fx, hx) - reach, std::min(fy, hy) - reach,
+            std::max(fx, hx) + reach, std::max(fy, hy) + reach);
+    const int from_x = std::max(0, static_cast<int>(std::min(fx, hx) - reach));
+    const int from_y = std::max(0, static_cast<int>(std::min(fy, hy) - reach));
+    const int to_x = std::min(canvas.width(),
+                              static_cast<int>(std::max(fx, hx) + reach) + 1);
+    const int to_y = std::min(canvas.height(),
+                              static_cast<int>(std::max(fy, hy) + reach) + 1);
+    for (int y = from_y; y < to_y; ++y) {
+      // across = c - px * uy, within reach, for px = x + 0.5 - fx.
+      const float c = (y + 0.5f - fy) * ux;
+      int row_from = from_x, row_to = to_x;
+      if (std::abs(uy) > 1e-4f) {
+        const float a = (c - reach) / uy, b = (c + reach) / uy;
+        row_from = std::max(from_x,
+                            static_cast<int>(std::floor(std::min(a, b) + fx)) - 1);
+        row_to = std::min(to_x,
+                          static_cast<int>(std::ceil(std::max(a, b) + fx)) + 1);
+      } else if (std::abs(c) > reach) {
+        continue;
+      }
+      for (int x = row_from; x < row_to; ++x) {
+        const float px = x + 0.5f - fx, py = y + 0.5f - fy;
+        const float across = -px * uy + py * ux;
+        if (std::abs(across) > reach) continue;
+        const float along = px * ux + py * uy;
+        const float nearest = std::clamp(along, 0.0f, head);
+        const float d = std::hypot(along - nearest, across);
+        if (d > reach) continue;
+        // Dimmer toward the tail.
+        const float alpha =
+            trail_alpha * (0.2f + 0.8f * std::pow(nearest / head, 1.5f));
+        if (flash.style == FlashStyle::kClassic) {
+          Light(canvas, x, y, d, 2.5f * s,
+                Mix(accent, kGold, nearest / head * 0.8f), alpha, s);
+        } else {
+          FamilyContour(canvas, x, y, d, head - nearest, s, accent,
+                        flash.style, alpha);
+        }
+      }
+    }
+  }
+
+  // The held point: Astral's orbiting planes, Echo's ring, Glide's rounded
+  // square, or Current's ring round a dot. It grows as it travels, arriving
+  // the size of the click's halo where it took hold; let go, it stays a
+  // moment, then fades.
+  const float grow = moved;
+  const float fade = Clamp01((t - release - kDragHold) / kDragFade);
+  const float head_alpha =
+      Clamp01((t - kLeadIn) / 80) * std::pow(1 - fade, 1.5f);
+  if (head_alpha <= 0) return drawn;
+  const float radius = (10 + 8 * grow) * s;
+  const float side = radius + (20 + kHalo) * s;
+  drawing(hx - side, hy - side, hx + side, hy + side);
+  if (flash.style != FlashStyle::kClassic) {
+    PaintFamilyPoint(canvas, hx, hy, radius, t / 1000 * 3 * kPi, head_alpha,
+                     s, accent, flash.style, false,
+                     flash.style == FlashStyle::kAstral);
+  }
+  // Ahead of it, which way it's going, until let go: Echo's wavefront, or a
+  // scroll's chevron. Each keeps its distance from the marker as it grows.
+  const float ahead_alpha = head_alpha * Clamp01((release - t) / 60);
+  if (flash.style == FlashStyle::kAstral) return drawn;
+  const int from_x = std::max(0, static_cast<int>(hx - side));
+  const int from_y = std::max(0, static_cast<int>(hy - side));
+  const int to_x = std::min(canvas.width(), static_cast<int>(hx + side) + 1);
+  const int to_y = std::min(canvas.height(), static_cast<int>(hy + side) + 1);
+  const Color tip = Mix(kGold, kWhite, 0.2f);
+  for (int y = from_y; y < to_y; ++y) {
+    for (int x = from_x; x < to_x; ++x) {
+      const float px = x + 0.5f - hx, py = y + 0.5f - hy;
+      const float ahead = px * ux + py * uy;
+      const float across = -px * uy + py * ux;
+      if (flash.style == FlashStyle::kClassic) {
+        const float r = std::hypot(px, py);
+        Light(canvas, x, y, r - radius, (3 * (1 - grow) + 1) * s,
+              Mix(accent, kGold, grow * 0.9f), head_alpha * Clamp01(grow * 6),
+              s);
+        Light(canvas, x, y, r, 7 * s, Mix(accent, kWhite, 0.4f), head_alpha,
+              s);
+      }
+      if (ahead_alpha <= 0) continue;
+      if (flash.style == FlashStyle::kEcho) {
+        const float bow = radius + 5 * s - across * across / (40 * s);
+        const float taper = Clamp01((16 * s - std::abs(across)) / (5 * s));
+        Light(canvas, x, y, (ahead - bow) * 0.85f, 3 * s, tip,
+              ahead_alpha * taper, s);
+        continue;
+      }
+      const float lead =
+          radius + (flash.style == FlashStyle::kGlide ? 9 : 4) * s;
+      const float d = std::min(
+          SegmentDistance(ahead, across, lead, 0, lead - 7 * s, -9 * s),
+          SegmentDistance(ahead, across, lead, 0, lead - 7 * s, 9 * s));
+      Light(canvas, x, y, d, 2.5f * s, tip, ahead_alpha, s);
+    }
+  }
+  return drawn;
+}
+
+// A drag's frame at |t| ms, on its canvas at |origin|: see PaintDrag.
+RECT PaintDragFrame(Canvas& canvas, const GaiaFlash& flash, POINT origin,
+                    float t, float s, const RECT& previous) {
+  return PaintDrag(canvas, flash, flash.point.x - origin.x + 0.5f,
+                   flash.point.y - origin.y + 0.5f,
+                   flash.to.x - origin.x + 0.5f, flash.to.y - origin.y + 0.5f,
+                   t, s, FromRgb(flash.accent), previous);
+}
+
+// |flash|'s effect at |t| ms, on its square at |origin|. Not a drag's.
 void PaintEffect(Canvas& canvas, const GaiaFlash& flash, POINT origin, float t,
                  float s) {
   canvas.Clear();
@@ -866,6 +1077,7 @@ void PaintEffect(Canvas& canvas, const GaiaFlash& flash, POINT origin, float t,
     case GaiaFlash::Kind::kType:
     case GaiaFlash::Kind::kKey:
     case GaiaFlash::Kind::kWindow:
+    case GaiaFlash::Kind::kDrag:
       break;
   }
 }
@@ -1367,6 +1579,8 @@ struct GaiaFlashes::Active {
   HWND effect = nullptr;
   POINT effect_at = {};
   std::unique_ptr<Canvas> canvas;
+  // A drag's: what its last frame drew on |canvas|, all else being clear.
+  RECT drawn = {};
   // An outline round a control, faded as its kind fades.
   std::vector<HWND> outline;
   OutlineBox box = {};
@@ -1428,12 +1642,30 @@ void GaiaFlashes::Play(const GaiaFlash& flash) {
   const float s = active->scale;
   const Color accent = FromRgb(flash.accent);
 
-  if (const int side = EffectSide(flash, s); side > 0) {
+  // A point effect's square, or the box round both ends of a drag.
+  SIZE effect_size = {};
+  if (flash.kind == GaiaFlash::Kind::kDrag) {
+    const LONG margin = static_cast<LONG>(std::ceil(kDragReach * s));
+    active->effect_at = {std::min(flash.point.x, flash.to.x) - margin,
+                         std::min(flash.point.y, flash.to.y) - margin};
+    effect_size = {std::abs(flash.to.x - flash.point.x) + 2 * margin,
+                   std::abs(flash.to.y - flash.point.y) + 2 * margin};
+  } else if (const int side = EffectSide(flash, s); side > 0) {
     active->effect_at = {flash.point.x - side / 2, flash.point.y - side / 2};
-    active->canvas = std::make_unique<Canvas>(side, side);
+    effect_size = {side, side};
+  }
+  if (effect_size.cx > 0) {
+    active->canvas = std::make_unique<Canvas>(effect_size.cx, effect_size.cy);
     if (active->canvas->ok()) active->effect = Acquire();
     if (active->effect) {
-      PaintEffect(*active->canvas, flash, active->effect_at, 0, s);
+      if (flash.kind == GaiaFlash::Kind::kDrag) {
+        // Cleared whole once; after that, each frame only what it drew.
+        active->canvas->Clear();
+        active->drawn =
+            PaintDragFrame(*active->canvas, flash, active->effect_at, 0, s, {});
+      } else {
+        PaintEffect(*active->canvas, flash, active->effect_at, 0, s);
+      }
       active->canvas->PresentAt(active->effect, active->effect_at, 255);
       ShowOnTop(active->effect);
     }
@@ -1585,7 +1817,18 @@ void GaiaFlashes::Tick() {
       it = active_.erase(it);
       continue;
     }
-    if (active.effect) {
+    if (active.effect && active.flash.kind == GaiaFlash::Kind::kDrag) {
+      // Only what changed: what the last frame drew, and what this one does.
+      const RECT drawn = PaintDragFrame(*active.canvas, active.flash,
+                                        active.effect_at, t, active.scale,
+                                        active.drawn);
+      RECT dirty;
+      ::UnionRect(&dirty, &active.drawn, &drawn);
+      active.drawn = drawn;
+      if (!::IsRectEmpty(&dirty)) {
+        active.canvas->PresentDirty(active.effect, dirty);
+      }
+    } else if (active.effect) {
       PaintEffect(*active.canvas, active.flash, active.effect_at, t,
                   active.scale);
       active.canvas->Present(active.effect);
@@ -1643,6 +1886,34 @@ void GaiaFlashes::Tick() {
     hiding_.resize(hiding_.size() - count);
   }
   if (active_.empty() && hiding_.empty() && ticking_) {
+    ::KillTimer(timer_window_, kFlashTimer);
+    ticking_ = false;
+  }
+}
+
+void GaiaFlashes::StopAll() {
+  for (auto& active : active_) {
+    if (active->effect) hiding_.push_back(active->effect);
+    if (active->spark) hiding_.push_back(active->spark);
+    for (HWND window : active->outline) hiding_.push_back(window);
+    for (HWND window : active->faded) hiding_.push_back(window);
+  }
+  active_.clear();
+  // All in one batch, rather than a few a frame as Tick does: a stop should
+  // leave nothing showing.
+  if (!hiding_.empty()) {
+    HDWP batch = ::BeginDeferWindowPos(static_cast<int>(hiding_.size()));
+    for (size_t i = 0; i < hiding_.size() && batch; ++i) {
+      batch = ::DeferWindowPos(batch, hiding_[i], nullptr, 0, 0, 0, 0,
+                               SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE |
+                                   SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (batch) ::EndDeferWindowPos(batch);
+    // Release hides any the batch didn't.
+    for (HWND window : hiding_) Release(window);
+    hiding_.clear();
+  }
+  if (ticking_) {
     ::KillTimer(timer_window_, kFlashTimer);
     ticking_ = false;
   }

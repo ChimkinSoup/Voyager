@@ -71,71 +71,68 @@ void main() {
     expect(flashes().single['style'], 'classic');
   }, variant: windows);
 
-  testWidgets(
-    'click studies affect only single click and compare all three',
-    (tester) async {
-      await pump(tester);
-      await tapLabel(tester, 'Astral');
-      for (final entry in {
-        'Trace': 'trace',
-        'Bloom': 'bloom',
-        'Trace + Bloom': 'traceBloom',
-      }.entries) {
-        await tapLabel(tester, entry.key);
-        calls.clear();
-        await tapLabel(tester, 'Click');
-        expect(flashes().single['click_variant'], entry.value);
-        calls.clear();
-        await tapLabel(tester, 'Double click');
-        expect(flashes().single.containsKey('click_variant'), isFalse);
-      }
+  testWidgets('click studies affect single click and drag, and compare all '
+      'three', (tester) async {
+    await pump(tester);
+    await tapLabel(tester, 'Astral');
+    for (final entry in {
+      'Trace': 'trace',
+      'Bloom': 'bloom',
+      'Trace + Bloom': 'traceBloom',
+    }.entries) {
+      await tapLabel(tester, entry.key);
       calls.clear();
-      await tapLabel(tester, 'Play click studies');
-      await tester.pump(const Duration(seconds: 7));
-      expect(flashes().map((f) => f['click_variant']), [
-        'trace',
-        'bloom',
-        'traceBloom',
-      ]);
-      expect(flashes().every((f) => f['kind'] == 'click'), isTrue);
-    },
-    variant: windows,
-  );
+      await tapLabel(tester, 'Click');
+      expect(flashes().single['click_variant'], entry.value);
+      calls.clear();
+      await tapLabel(tester, 'Drag');
+      expect(flashes().single['click_variant'], entry.value);
+      calls.clear();
+      await tapLabel(tester, 'Double click');
+      expect(flashes().single.containsKey('click_variant'), isFalse);
+    }
+    calls.clear();
+    await tapLabel(tester, 'Play click studies');
+    await tester.pump(const Duration(seconds: 7));
+    expect(flashes().map((f) => f['click_variant']), [
+      'trace',
+      'bloom',
+      'traceBloom',
+    ]);
+    expect(flashes().every((f) => f['kind'] == 'click'), isTrue);
+  }, variant: windows);
 
-  testWidgets(
-    'every set styles effects, card markers and the control border',
-    (tester) async {
-      await pump(tester);
-      for (final name in ['Astral', 'Echo', 'Glide', 'Current']) {
-        await tapLabel(tester, name);
-        calls.clear();
-        await tapLabel(tester, 'Play all');
-        await tester.pump(const Duration(seconds: 30));
-        final style = name == 'Current' ? 'classic' : name.toLowerCase();
-        expect(flashes(), hasLength(15));
-        expect(flashes().every((f) => f['style'] == style), isTrue);
+  testWidgets('every set styles effects, card markers and the control border', (
+    tester,
+  ) async {
+    await pump(tester);
+    for (final name in ['Astral', 'Echo', 'Glide', 'Current']) {
+      await tapLabel(tester, name);
+      calls.clear();
+      await tapLabel(tester, 'Play all');
+      await tester.pump(const Duration(seconds: 30));
+      final style = name == 'Current' ? 'classic' : name.toLowerCase();
+      expect(flashes(), hasLength(16));
+      expect(flashes().every((f) => f['style'] == style), isTrue);
 
-        calls.clear();
-        await tapLabel(tester, 'Open the card');
-        await tester.pump(const Duration(seconds: 2));
-        expect(flashes(), hasLength(5));
-        expect(flashes().every((f) => f['style'] == style), isTrue);
-        await tapLabel(tester, 'Next step');
-        expect(flashes().last['style'], style);
+      calls.clear();
+      await tapLabel(tester, 'Open the card');
+      await tester.pump(const Duration(seconds: 2));
+      expect(flashes(), hasLength(5));
+      expect(flashes().every((f) => f['style'] == style), isTrue);
+      await tapLabel(tester, 'Next step');
+      expect(flashes().last['style'], style);
 
-        await tester.tap(find.byType(Switch));
-        await tester.pump();
-        expect(
-          (calls.lastWhere((c) => c.method == 'show').arguments
-              as Map)['style'],
-          style,
-        );
-        await tester.tap(find.byType(Switch));
-        await tester.pump();
-      }
-    },
-    variant: windows,
-  );
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(
+        (calls.lastWhere((c) => c.method == 'show').arguments as Map)['style'],
+        style,
+      );
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+    }
+  }, variant: windows);
 
   testWidgets(
     'switching sets cancels playback and refreshes an active border',
@@ -168,6 +165,21 @@ void main() {
     expect((flash['y'] as int).toDouble(), closeTo(centre.dy, 2));
   }, variant: windows);
 
+  testWidgets('a drag runs from the control to an empty spot', (tester) async {
+    await pump(tester);
+    await tapLabel(tester, 'Drag');
+    final flash = flashes().single;
+    expect(flash['kind'], 'drag');
+    final from =
+        tester.getCenter(find.text('Mark as read')) * 2 +
+        const Offset(1000, 500);
+    expect((flash['x'] as int).toDouble(), closeTo(from.dx, 2));
+    expect((flash['y'] as int).toDouble(), closeTo(from.dy, 2));
+    expect(flash['to_x'] as int, greaterThan(flash['x'] as int));
+    expect(flash['to_y'] as int, greaterThan(flash['y'] as int));
+    expect(flash['ms'], 700);
+  }, variant: windows);
+
   testWidgets('Play all plays every kind of flash', (tester) async {
     await pump(tester);
     await tapLabel(tester, 'Play all');
@@ -181,6 +193,7 @@ void main() {
       'key',
       'window',
       'mark',
+      'drag',
     });
     expect(
       flashes().where((f) => f['kind'] == 'scroll').map((f) => f['direction']),
