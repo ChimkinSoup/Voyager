@@ -1016,6 +1016,21 @@ const _scripts = {
     }, 'Commit and push'),
     GaiaDebugText('Pushed.'),
   ]),
+  '/away': GaiaDebugScript(
+    'Five seconds, then a question: go to another app to see Gaia come up',
+    [
+      GaiaDebugText('Give me five seconds.'),
+      GaiaDebugPause(Duration(seconds: 5)),
+      GaiaDebugQuestion({
+        'question': 'Did I come up in front without taking your keys?',
+        'options': [
+          {'label': 'Yes', 'description': 'In front, and my typing stayed put'},
+          {'label': 'No', 'description': 'Something went wrong'},
+        ],
+      }),
+      GaiaDebugText('Thanks.'),
+    ],
+  ),
   '/slow': GaiaDebugScript('Ten seconds of thinking, then a short reply', [
     GaiaDebugPause(Duration(seconds: 10)),
     GaiaDebugText('Sorry for the wait. Here is the answer: 42.'),

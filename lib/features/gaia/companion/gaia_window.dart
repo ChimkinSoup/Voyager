@@ -135,16 +135,18 @@ class GaiaWindow {
   /// selecting in.
   /// [behind] puts it back behind the app that was in front when Gaia last
   /// came up, which gets the foreground back: a crop cancelled over a Gaia
-  /// window the user wasn't in.
+  /// window the user wasn't in. Without [activate], it comes up without the
+  /// focus too, as [attend] does it.
   Future<void> show(
     GaiaMode mode,
     void Function() layout, {
     GaiaFrame? frame,
     bool behind = false,
     bool? fullScreen,
+    bool activate = true,
   }) async {
     final hwnd = _hwnd;
-    final pill = mode == GaiaMode.pickUp;
+    final focusless = mode == GaiaMode.pickUp || !activate;
     final moving = frame != null || (fullScreen ?? _fullScreen) != _fullScreen;
     // Already up in this mode, as a hotkey pressed again finds it: only
     // brought to the front. Going through the hide and re-show would flash.
@@ -152,7 +154,7 @@ class GaiaWindow {
         mode != GaiaMode.overlay &&
         !moving &&
         IsIconic(hwnd) == 0) {
-      if (!pill) _takeForeground(hwnd);
+      if (!focusless) _takeForeground(hwnd);
       return;
     }
     _showing = true;
@@ -162,10 +164,11 @@ class GaiaWindow {
     final back = _cameFrom;
     behind = behind && IsWindowVisible(back) != 0 && IsIconic(back) == 0;
     // The chat's minimum size would hold the pill at the size of one.
-    if (pill != _minimumOff) {
-      _minimumOff = pill;
+    final unsized = mode == GaiaMode.pickUp;
+    if (unsized != _minimumOff) {
+      _minimumOff = unsized;
       await windowManager.setMinimumSize(
-        pill ? const Size(1, 1) : _minimumSize,
+        unsized ? const Size(1, 1) : _minimumSize,
       );
     }
     _rememberFrame();
@@ -254,7 +257,7 @@ class GaiaWindow {
       frame.height,
       SWP_SHOWWINDOW |
           SWP_FRAMECHANGED |
-          (pill ? SWP_NOACTIVATE : 0) |
+          (focusless ? SWP_NOACTIVATE : 0) |
           (placement != null ? SWP_NOMOVE | SWP_NOSIZE : 0),
     );
     if (client != null) {
@@ -296,13 +299,51 @@ class GaiaWindow {
       if (full && _fullScreenMinimized) ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
     }
     _cloak(hwnd, false);
-    if (!pill && !behind) _takeForeground(hwnd);
+    if (!focusless && !behind) _takeForeground(hwnd);
     shown = mode;
     _showing = false;
   }
 
   /// Mid-[show], which can hide the window on the way.
   var _showing = false;
+
+  /// A card waits on the user, who is in another app: the window on screen
+  /// comes in front of it, out of the taskbar if minimised, without the
+  /// focus, so the keys they're typing stay in their app. The Gaia window's
+  /// taskbar button flashes until they go to it; floaters have none.
+  void attend() {
+    final hwnd = _hwnd;
+    final mode = shown;
+    if (mode == null || foreground || _showing) return;
+    if (IsIconic(hwnd) != 0) ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    // Windows leaves a background app's HWND_TOP under the foreground window,
+    // restored ones too, but not a window made topmost: the Gaia window goes
+    // topmost and straight back, which leaves it over the user's app.
+    final order = mode == GaiaMode.window
+        ? [HWND_TOPMOST, HWND_NOTOPMOST]
+        : [HWND_TOPMOST];
+    for (final after in order) {
+      SetWindowPos(
+        hwnd,
+        after,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+      );
+    }
+    if (mode != GaiaMode.window) return;
+    final info = calloc<_FlashInfo>()
+      ..ref.cbSize = sizeOf<_FlashInfo>()
+      ..ref.hwnd = hwnd
+      ..ref.dwFlags = _flashTray | _flashUntilForeground;
+    try {
+      _flashWindowEx(info);
+    } finally {
+      free(info);
+    }
+  }
 
   /// The window lost the foreground. To another app the user went to, the
   /// app [returnTo] names is no longer the one they were last in: Windows
@@ -685,3 +726,33 @@ class GaiaWindow {
     }
   }
 }
+
+/// `FLASHWINFO`, which the win32 package has no binding for, nor for
+/// [_flashWindowEx].
+final class _FlashInfo extends Struct {
+  @Uint32()
+  external int cbSize;
+
+  @IntPtr()
+  external int hwnd;
+
+  @Uint32()
+  external int dwFlags;
+
+  @Uint32()
+  external int uCount;
+
+  @Uint32()
+  external int dwTimeout;
+}
+
+/// `FLASHW_TRAY` and `FLASHW_TIMERNOFG`: the taskbar button, until the
+/// window comes to the foreground.
+const _flashTray = 0x2;
+const _flashUntilForeground = 0xC;
+
+final _flashWindowEx = DynamicLibrary.open('user32.dll')
+    .lookupFunction<
+      Int32 Function(Pointer<_FlashInfo>),
+      int Function(Pointer<_FlashInfo>)
+    >('FlashWindowEx');

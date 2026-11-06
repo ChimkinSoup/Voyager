@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
@@ -271,6 +273,221 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
     await tester.pump(const Duration(seconds: 1));
     expect(controller.currentAccount(kGaiaClaudeCodeAdapter), _b);
+    await finish(tester);
+  });
+
+  testWidgets('a question card answers with the keys after coming up without '
+      'the focus', (tester) async {
+    final (controller, _) = await pump(
+      tester,
+      used: {kGaiaDefaultAccountId: 0},
+      messages: [asked('Which colour?'), _question(at)],
+    );
+    expect(controller.openCard?.id, 'q1');
+    // Shown for the card without the focus, so nothing gave the composer
+    // any; the click into the window then focuses it.
+    FocusManager.instance.primaryFocus?.unfocus();
+    controller.focused.value = false;
+    await tester.pump();
+    controller.focused.value = true;
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.pump();
+    expect(controller.cardPicks('q1'), {1});
+    await finish(tester);
+  });
+
+  testWidgets('with the focus elsewhere in Gaia, the keys still answer a '
+      'question card', (tester) async {
+    final (controller, runner) = await pump(
+      tester,
+      used: {kGaiaDefaultAccountId: 0},
+      messages: [asked('Which colour?'), _question(at)],
+    );
+    // Off the composer, as a click on a button or the chat leaves it.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorStateOfType<EditableTextState>(),
+      isNull,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.pump();
+    expect(controller.cardPicks('q1'), {1});
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    expect(controller.openCard, isNull, reason: 'answered');
+    expect(runner.sent, isNotEmpty, reason: 'the answer went as a message');
+    await finish(tester);
+  });
+
+  group('a click in Gaia', () {
+    /// The composer's field: the one on the draft, whatever its hint.
+    bool composerFocused(WidgetTester tester, GaiaController controller) =>
+        tester
+            .widgetList<EditableText>(find.byType(EditableText))
+            .singleWhere((field) => field.controller == controller.draft)
+            .focusNode
+            .hasFocus;
+
+    testWidgets('on the chat, gives the composer the focus', (tester) async {
+      final (controller, _) = await pump(
+        tester,
+        used: {kGaiaDefaultAccountId: 0},
+        messages: [asked('Which colour?'), _question(at)],
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      expect(composerFocused(tester, controller), isFalse);
+
+      await tester.tap(find.text('Which colour?', findRichText: true).first);
+      await tester.pump();
+      expect(composerFocused(tester, controller), isTrue);
+      await finish(tester);
+    });
+
+    testWidgets('dragging over the chat text leaves its selection', (
+      tester,
+    ) async {
+      final (controller, _) = await pump(
+        tester,
+        used: {kGaiaDefaultAccountId: 0},
+        messages: [asked('Which colour?'), _question(at)],
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+
+      final text = find.text('Which colour?', findRichText: true).first;
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(text) + const Offset(2, 6),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await gesture.moveTo(tester.getTopRight(text) + const Offset(-2, 6));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      expect(composerFocused(tester, controller), isFalse);
+      await finish(tester);
+    });
+  });
+
+  group('type to focus', () {
+    testWidgets('a letter typed off the composer goes in it, at its caret, '
+        'and it takes the focus', (tester) async {
+      final (controller, _) = await pump(
+        tester,
+        used: {kGaiaDefaultAccountId: 0},
+      );
+      controller.draft.value = const TextEditingValue(
+        text: 'ac',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await tester.pump();
+      expect(controller.draft.text, 'abc');
+      expect(controller.draft.selection.baseOffset, 2);
+      final field = tester
+          .widgetList<EditableText>(find.byType(EditableText))
+          .singleWhere((field) => field.controller == controller.draft);
+      expect(field.focusNode.hasFocus, isTrue);
+      await finish(tester);
+    });
+
+    testWidgets('Ctrl+V off the composer pastes in it, and it takes the '
+        'focus', (tester) async {
+      final (controller, _) = await pump(
+        tester,
+        used: {kGaiaDefaultAccountId: 0},
+      );
+      gaiaClipboard = _TextClipboard();
+      addTearDown(() => gaiaClipboard = const MediaClipboard());
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => switch (call.method) {
+          'Clipboard.getData' => {'text': 'pasted'},
+          'Clipboard.hasStrings' => {'value': true},
+          _ => null,
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pump();
+      await tester.pump();
+      expect(controller.draft.text, 'pasted');
+      final field = tester
+          .widgetList<EditableText>(find.byType(EditableText))
+          .singleWhere((field) => field.controller == controller.draft);
+      expect(field.focusNode.hasFocus, isTrue);
+      await finish(tester);
+    });
+
+    testWidgets('a Ctrl chord types nothing', (tester) async {
+      final (controller, _) = await pump(
+        tester,
+        used: {kGaiaDefaultAccountId: 0},
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pump();
+      expect(controller.draft.text, isEmpty);
+      await finish(tester);
+    });
+  });
+
+  testWidgets('coming back to the window leaves a focused field its focus', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(
+      tester,
+      used: {kGaiaDefaultAccountId: 0},
+    );
+    final other = FocusNode();
+    addTearDown(other.dispose);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Column(
+          children: [
+            Focus(focusNode: other, child: const SizedBox()),
+            Expanded(child: GaiaApp(controller: controller)),
+          ],
+        ),
+      ),
+    );
+    other.requestFocus();
+    await tester.pump();
+    controller.focused.value = false;
+    await tester.pump();
+    controller.focused.value = true;
+    await tester.pump();
+
+    expect(other.hasPrimaryFocus, isTrue);
     await finish(tester);
   });
 
@@ -689,4 +906,34 @@ void main() {
     expect(find.textContaining('Beta resets at'), findsOneWidget);
     await finish(tester);
   });
+}
+
+/// An open question card with two options, as Gaia left it.
+GaiaMessage _question(DateTime at) => GaiaMessage(
+  id: 'm1',
+  chatId: 'c1',
+  seq: 1,
+  role: GaiaMessageRole.assistant,
+  parts: const [
+    GaiaCardPart(
+      id: 'q1',
+      kind: GaiaCardKind.question,
+      question: 'Which colour?',
+      options: [
+        (label: 'Red', description: ''),
+        (label: 'Blue', description: ''),
+      ],
+    ),
+  ],
+  status: GaiaMessageStatus.complete,
+  createdAt: at,
+  updatedAt: at,
+  adapter: kGaiaClaudeCodeAdapter,
+);
+
+/// A clipboard with text on it and no image: the composer pastes the text.
+class _TextClipboard extends MediaClipboard {
+  @override
+  Future<({bool hasText, bool hasImage})> peek() async =>
+      (hasText: true, hasImage: false);
 }

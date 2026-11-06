@@ -448,6 +448,74 @@ class _BlockState extends State<_Block> {
         : shown;
   }
 
+  /// Inline [math] cut after each comma outside any brackets that a space
+  /// follows, each piece with the space after it: where a line too narrow
+  /// for it wraps, as a list like `\{P\}, \{Q\}` would in prose. Whole if
+  /// there's none, or a piece doesn't typeset alone. The pieces' sources
+  /// and spaces are the whole source, so a selection copies it as written.
+  static final _texWord = RegExp('[a-zA-Z]+');
+  static final _space = RegExp(r'\s+');
+
+  /// TeX's infix fractions and its switches, which reach to the end of the
+  /// group they're in.
+  static const _groupWide = {
+    'over', 'atop', 'choose', 'above', 'brace', 'brack', //
+    'displaystyle', 'textstyle', 'scriptstyle', 'scriptscriptstyle', //
+    'color', 'bf', 'it', 'rm', 'sf', 'tt', 'cal', 'frak', 'Bbb', //
+    'tiny', 'scriptsize', 'footnotesize', 'small', 'normalsize', //
+    'large', 'Large', 'LARGE', 'huge', 'Huge',
+  };
+
+  static List<(md.Element, String)> _mathPieces(md.Element math) {
+    final whole = [(math, '')];
+    final source = math.attributes['source']!;
+    final tex = math.textContent;
+    final texStart = source.indexOf(tex);
+    final cuts = <(int, int)>[];
+    var depth = 0;
+    for (var i = 0; i < tex.length; i++) {
+      switch (tex[i]) {
+        case r'\':
+          final word = _texWord.matchAsPrefix(tex, i + 1)?[0];
+          // It acts on the rest of the group, so on pieces after a cut too.
+          if (depth == 0 && _groupWide.contains(word)) return whole;
+          if (word == 'left' || word == 'begin') depth++;
+          if (word == 'right' || word == 'end') depth--;
+          if (word == null && i + 1 < tex.length) {
+            if (tex[i + 1] == '{') depth++;
+            if (tex[i + 1] == '}') depth--;
+          }
+          i += word?.length ?? 1;
+        case '{' || '(' || '[':
+          depth++;
+        case '}' || ')' || ']':
+          depth--;
+        case ',' when depth == 0:
+          final gap = _space.matchAsPrefix(tex, i + 1);
+          if (gap != null) cuts.add((texStart + i + 1, texStart + gap.end));
+      }
+      if (depth < 0) return whole;
+    }
+    if (depth != 0 || cuts.isEmpty) return whole;
+    final pieces = <(md.Element, String)>[];
+    var at = 0;
+    for (final (end, next) in [...cuts, (source.length, source.length)]) {
+      final pieceSource = source.substring(at, end);
+      final pieceTex = source
+          .substring(max(at, texStart), min(end, texStart + tex.length))
+          .trim();
+      if (Math.tex(pieceTex).parseError != null) return whole;
+      pieces.add((
+        md.Element('math', [md.Text(pieceTex)])
+          ..attributes['display'] = math.attributes['display']!
+          ..attributes['source'] = pieceSource,
+        source.substring(end, next),
+      ));
+      at = next;
+    }
+    return pieces;
+  }
+
   Widget _paragraph(
     BuildContext context,
     List<md.Node> nodes,
@@ -678,12 +746,16 @@ class _BlockState extends State<_Block> {
             }
           }
         case 'math':
-          spans.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: _math(node, style),
-            ),
-          );
+          for (final (piece, gap) in _mathPieces(node)) {
+            spans.add(
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                // A piece still wider than the line scrolls, not cut off.
+                child: _math(piece, style, scrolls: true),
+              ),
+            );
+            if (gap.isNotEmpty) spans.add(TextSpan(text: gap, style: style));
+          }
         case 'br':
           spans.add(const TextSpan(text: '\n'));
         case 'img':

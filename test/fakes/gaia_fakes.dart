@@ -172,11 +172,12 @@ class FakeGaiaWindow implements GaiaWindow {
     GaiaFrame? frame,
     bool behind = false,
     bool? fullScreen,
+    bool activate = true,
   }) async {
     away = !foreground;
     shown = mode;
     this.frame = frame;
-    this.behind = behind;
+    this.behind = behind || !activate;
     this.fullScreen = fullScreen ?? this.fullScreen;
     layout();
   }
@@ -208,6 +209,15 @@ class FakeGaiaWindow implements GaiaWindow {
 
   @override
   var away = false;
+
+  /// How many times [attend] brought the window up for a card.
+  var attended = 0;
+
+  @override
+  void attend() {
+    if (shown == null || foreground) return;
+    attended++;
+  }
 }
 
 /// One [FakeClaudeRunner.send] call.

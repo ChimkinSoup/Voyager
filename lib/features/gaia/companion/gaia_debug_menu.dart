@@ -250,6 +250,43 @@ class _DebugMenu extends StatelessWidget {
             ),
           ],
         ),
+        heading('A card while you are away'),
+        Text(
+          'Plays /away in the open chat: a question card after five seconds. '
+          'With Gaia behind another app, or minimised, it comes in front '
+          "without the focus and the Gaia window's taskbar button flashes. "
+          'Hidden, it comes up as the small floater, also without the focus. '
+          'Either way, the keys you type stay in your app. Then the Gaia '
+          'hotkey goes to the chat of the waiting card. Needs scripted replies '
+          'and "Notify when a run finishes" on the Gaia page.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            GaiaButton(
+              label: 'Then switch apps',
+              onPressed: debug.scriptedReplies && !controller.currentRunning
+                  ? () {
+                      Navigator.of(context).pop();
+                      controller.send('/away');
+                    }
+                  : null,
+            ),
+            GaiaButton(
+              label: 'Hide Gaia',
+              onPressed: debug.scriptedReplies && !controller.currentRunning
+                  ? () {
+                      Navigator.of(context).pop();
+                      controller.send('/away');
+                      controller.dismiss();
+                    }
+                  : null,
+            ),
+          ],
+        ),
         heading('Remember toasts'),
         Text(
           'Each toast /remember can show, as its text says it. Saved and '

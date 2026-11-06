@@ -606,6 +606,40 @@ void main() {
       expect(copied, written);
     });
 
+    testWidgets('a long inline list wraps at its commas, copied whole', (
+      tester,
+    ) async {
+      const long =
+          r'$S_1 = \{P, \neg Q, \neg R, S, \neg T\}, \{\neg Q\}, '
+          r'\{P, \neg R, \neg S\}, \{Q, R, \neg S\}, \{P, \neg Q, R, S, \neg T\}, '
+          r'\{\neg P, \neg Q, \neg S, \neg T\}, \{P, \neg Q, R, \neg T\}, '
+          r'\{Q, \neg R, S, T\}, \{P, \neg Q, R, S\}, \{\neg P, S\}, '
+          r'\{P, \neg Q, T\}$';
+      await pump(tester, long);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Math), findsNWidgets(11));
+      await tester.tapAt(
+        tester.getCenter(find.byType(Math).first),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.pump();
+      await copy(tester);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(copied, long);
+    });
+
+    testWidgets('inline math with a group-wide command stays whole', (
+      tester,
+    ) async {
+      for (final tex in [r'$a, b \over c$', r'$\color{red} x, y$']) {
+        await pump(tester, tex);
+        expect(find.byType(Math), findsOneWidget, reason: tex);
+      }
+    });
+
     testWidgets('all selected', (tester) async {
       await pump(tester, text);
       await tester.tapAt(

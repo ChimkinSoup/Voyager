@@ -23,6 +23,11 @@ class GaiaCards {
   /// message instead.
   bool isWaiting(String id) => _waiting.containsKey(id);
 
+  /// The chats with a card waiting, oldest card first.
+  List<String> get waitingChats => [
+    for (final waiting in _waiting.values) waiting.chatId,
+  ];
+
   /// Holds until [card] is decided, voided or [hold] runs out: null then.
   Future<GaiaCardAnswer?> wait(
     String chatId,

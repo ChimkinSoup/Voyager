@@ -843,23 +843,19 @@ void main() {
       expect(_text(reply), endsWith('A closing paragraph after a rule.'));
     });
 
-    test(
-      'tool steps come out as activity between text blocks',
-      () async {
-        await controller.send('/msg4');
-        await settle();
+    test('tool steps come out as activity between text blocks', () async {
+      await controller.send('/msg4');
+      await settle();
 
-        final reply = (await main.messages()).last;
-        expect(reply.parts.map((p) => p.runtimeType), [
-          GaiaTextPart,
-          GaiaActivityPart,
-          GaiaTextPart,
-          GaiaActivityPart,
-          GaiaTextPart,
-        ]);
-      },
-      timeout: const Timeout(Duration(seconds: 30)),
-    );
+      final reply = (await main.messages()).last;
+      expect(reply.parts.map((p) => p.runtimeType), [
+        GaiaTextPart,
+        GaiaActivityPart,
+        GaiaTextPart,
+        GaiaActivityPart,
+        GaiaTextPart,
+      ]);
+    }, timeout: const Timeout(Duration(seconds: 30)));
 
     test('a task ticked while the reply streams, here or on the Gaia page, '
         'stays ticked through the rest of it, and is saved', () async {
@@ -3353,6 +3349,94 @@ void main() {
       expect(reply.needsInput, isFalse);
     });
 
+    group('a card while the user is in another app', () {
+      Future<void> ask(GaiaTurnTools tools) async {
+        unawaited(tools.call('ask_user', {'question': 'Which one?'}));
+        await settle();
+      }
+
+      test("behind, the Gaia window comes up on the card's chat without "
+          'the focus', () async {
+        await controller.openWindow();
+        final tools = await hanging();
+        final chatId = controller.currentChatId;
+        controller.newChat();
+        window.behind = true;
+        await ask(tools);
+
+        expect(window.attended, 1);
+        expect(window.foreground, isFalse);
+        expect(controller.currentChatId, chatId);
+        runner.finish(chatId!);
+      });
+
+      test(
+        'hidden, it comes up as the small floater without the focus',
+        () async {
+          final tools = await hanging();
+          await ask(tools);
+
+          expect(window.shown, GaiaMode.small);
+          expect(window.foreground, isFalse);
+          runner.finish(controller.currentChatId!);
+        },
+      );
+
+      test('the small hotkey takes that floater to the front, and pressed '
+          'again closes it', () async {
+        final tools = await hanging();
+        await ask(tools);
+
+        await controller.onHotkey('small', pressed: true);
+        expect(window.shown, GaiaMode.small);
+        expect(window.foreground, isTrue);
+
+        await controller.onHotkey('small', pressed: true);
+        expect(window.shown, isNull);
+        runner.finish(controller.currentChatId!);
+      });
+
+      test('in front, it stays as it is', () async {
+        await controller.openWindow();
+        final tools = await hanging();
+        await ask(tools);
+
+        expect(window.attended, 0);
+        expect(window.foreground, isTrue);
+        runner.finish(controller.currentChatId!);
+      });
+
+      test('the hotkey goes to the chat of the waiting card', () async {
+        await controller.openWindow();
+        final tools = await hanging();
+        final chatId = controller.currentChatId;
+        controller.newChat();
+        await ask(tools);
+        expect(window.attended, 0, reason: 'Gaia was in front');
+        expect(controller.currentChatId, isNull);
+
+        await controller.dismiss();
+        await controller.onHotkey('small', pressed: true);
+
+        expect(controller.currentChatId, chatId);
+        runner.finish(chatId!);
+      });
+
+      test('the hotkey closing Gaia leaves the chat as it was', () async {
+        await controller.openWindow();
+        final tools = await hanging();
+        final chatId = controller.currentChatId;
+        controller.newChat();
+        await ask(tools);
+
+        await controller.onHotkey('window', pressed: true);
+
+        expect(window.shown, isNull);
+        expect(controller.currentChatId, isNull);
+        runner.finish(chatId!);
+      });
+    });
+
     test('a permission prompt is allowed or denied from its card', () async {
       final tools = await hanging();
       final allowed = tools.permit(
@@ -4112,6 +4196,7 @@ void main() {
 
       await main.store.enqueue('c1', 'queued');
       await main.store.setDrain('c1', true);
+      main.pipe.notify('queue');
       // Only the question has synced: the reply is running elsewhere.
       await main.store.putMessage(
         message(0, GaiaMessageRole.user, GaiaMessageStatus.complete),
@@ -4125,6 +4210,9 @@ void main() {
       await kick();
       expect(runner.sent, isEmpty);
       expect((await main.store.queue('c1')).single.text, 'queued');
+      // Nothing can go, so no lease is taken only to be let go again.
+      expect(main.leases, isEmpty);
+      expect(main.released, isEmpty);
     });
 
     test('a phone prompt to a chat another device runs says it was queued, '

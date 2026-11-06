@@ -5,6 +5,8 @@ import 'dart:math';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/gestures.dart'
+    show computeHitSlop, kDoubleTapSlop, kDoubleTapTimeout, kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart'
@@ -380,44 +382,118 @@ class _GaiaShell extends StatelessWidget {
       // Focus leaving a text box lands here, under the bindings, so Esc
       // still reaches them with nothing focused.
       child: FocusScope(
-        child: Scaffold(
-          body: Stack(
-            children: [
-              // Behind the whole window, so the sidebar coming, going or
-              // resizing covers stars rather than moving them.
-              Positioned.fill(
-                child: GaiaStarfield(
-                  active: controller.focused,
-                  child: floater
-                      ? chat()
-                      : GaiaSidebarLayout(
-                          sidebar: controller.sidebar,
-                          // A Material, which the sidebar's buttons paint
-                          // their ink on.
-                          side: Material(
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            child: _Sidebar(controller: controller),
+        onKeyEvent: (_, event) {
+          final card = _cardKey(controller, event);
+          if (card == KeyEventResult.handled) return card;
+          return _typeToComposer(controller, event);
+        },
+        child: _ClickToComposer(
+          controller: controller,
+          child: Scaffold(
+            body: Stack(
+              children: [
+                // Behind the whole window, so the sidebar coming, going or
+                // resizing covers stars rather than moving them.
+                Positioned.fill(
+                  child: GaiaStarfield(
+                    active: controller.focused,
+                    child: floater
+                        ? chat()
+                        : GaiaSidebarLayout(
+                            sidebar: controller.sidebar,
+                            // A Material, which the sidebar's buttons paint
+                            // their ink on.
+                            side: Material(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              child: _Sidebar(controller: controller),
+                            ),
+                            chat: (shown, toggle) => chat(
+                              sidebarShown: shown,
+                              toggleSidebar: toggle,
+                            ),
                           ),
-                          chat: (shown, toggle) =>
-                              chat(sidebarShown: shown, toggleSidebar: toggle),
-                        ),
-                ),
-              ),
-              if (controller.debug.showFps)
-                Positioned(
-                  // Above the composer, clear of the toasts below the header.
-                  bottom: 102,
-                  right: 12,
-                  child: IgnorePointer(
-                    child: FpsCounterCard(monitor: controller.debug.fps),
                   ),
                 ),
-            ],
+                if (controller.debug.showFps)
+                  Positioned(
+                    // Above the composer, clear of the toasts below the header.
+                    bottom: 102,
+                    right: 12,
+                    child: IgnorePointer(
+                      child: FpsCounterCard(monitor: controller.debug.fps),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// A plain click anywhere in Gaia, on the chat or a card, a button or the
+/// sidebar, gives the composer the focus, so its keys work from there. Not
+/// a click into another text box, which keeps it, nor one that opened a
+/// menu or a dialog; and not a drag, a double or triple click or a
+/// Shift+click, which select the chat's text, and would lose it with the
+/// focus.
+class _ClickToComposer extends StatefulWidget {
+  const _ClickToComposer({required this.controller, required this.child});
+
+  final GaiaController controller;
+  final Widget child;
+
+  @override
+  State<_ClickToComposer> createState() => _ClickToComposerState();
+}
+
+class _ClickToComposerState extends State<_ClickToComposer> {
+  /// Where the click in progress went down; null for one that doesn't count.
+  Offset? _down;
+
+  /// The last click's release, for telling a double click.
+  ({Duration at, Offset where})? _lastUp;
+
+  void _onDown(PointerDownEvent event) {
+    final last = _lastUp;
+    final repeat =
+        last != null &&
+        event.timeStamp - last.at < kDoubleTapTimeout &&
+        (event.position - last.where).distance < kDoubleTapSlop;
+    _down =
+        event.buttons == kPrimaryButton &&
+            !repeat &&
+            !HardwareKeyboard.instance.isShiftPressed
+        ? event.position
+        : null;
+  }
+
+  void _onUp(PointerUpEvent event) {
+    final down = _down;
+    _down = null;
+    _lastUp = (at: event.timeStamp, where: event.position);
+    if (down == null ||
+        (event.position - down).distance > computeHitSlop(event.kind, null)) {
+      return;
+    }
+    // After the click's own tap, which may open a menu or focus a field: the
+    // next frame, so the focus a tap on a field asks for has been applied.
+    WidgetsBinding.instance.ensureVisualUpdate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      if (_inTextField()) return;
+      widget.controller.focusComposer();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: _onDown,
+    onPointerUp: _onUp,
+    child: widget.child,
+  );
 }
 
 /// Pick-up mode's indicator (§15.3), at the top of the screen while the
@@ -2275,6 +2351,48 @@ class _ComposerState extends State<_Composer> {
     super.initState();
     _text.addListener(_onDraft);
     _summoned = widget.controller.summoned.listen((_) => _focus.requestFocus());
+    widget.controller.focused.addListener(_onWindowFocus);
+    _composers[widget.controller] = this;
+  }
+
+  /// A key typed with the focus elsewhere in Gaia (see [_typeToComposer]):
+  /// [character] goes in the draft where its caret was, or at the end, and
+  /// the composer takes the focus for the rest. Vim is in Insert, as a field
+  /// it left is reset to.
+  void typeIn(String character) {
+    final value = _text.value;
+    final at = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    _text.value = TextEditingValue(
+      text: value.text.replaceRange(at.start, at.end, character),
+      selection: TextSelection.collapsed(offset: at.start + character.length),
+    );
+    _focus.requestFocus();
+  }
+
+  /// Ctrl+V with the focus elsewhere in Gaia: [_paste], into the composer,
+  /// which takes the focus. Text goes at its caret, or at the end when it
+  /// has none yet.
+  void pasteIn() {
+    if (!_text.selection.isValid) {
+      _text.selection = TextSelection.collapsed(offset: _text.text.length);
+    }
+    _focus.requestFocus();
+    unawaited(_paste());
+  }
+
+  /// Gaia can come up for a card without the focus, and with no summon to
+  /// give the composer it: clicked into, the window has nothing focused,
+  /// and the send keybind and an option's digit go nowhere. Not over a
+  /// field the click put the focus in.
+  void _onWindowFocus() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (widget.controller.focused.value &&
+        (ModalRoute.of(context)?.isCurrent ?? true) &&
+        (primary == null || primary is FocusScopeNode)) {
+      _focus.requestFocus();
+    }
   }
 
   void _onDraft() {
@@ -2468,6 +2586,10 @@ class _ComposerState extends State<_Composer> {
   void dispose() {
     _text.removeListener(_onDraft);
     unawaited(_summoned.cancel());
+    widget.controller.focused.removeListener(_onWindowFocus);
+    if (_composers[widget.controller] == this) {
+      _composers[widget.controller] = null;
+    }
     _focus.dispose();
     super.dispose();
   }
@@ -2579,39 +2701,7 @@ class _ComposerState extends State<_Composer> {
       _text.clear();
       return widget.controller.enqueue(queued);
     }
-    // An open card takes the draft (§10, §10.1): a question's answer, a
-    // permission's "why not", or a proposal's correction. Sent empty, a
-    // permission is allowed and a proposal saved as its editor has it.
-    if (widget.controller.openCard case final card?) {
-      final controller = widget.controller;
-      final text = _text.text;
-      switch (card.kind) {
-        case GaiaCardKind.question:
-          if (await controller.answerCard(card, text: text)) _text.clear();
-        case GaiaCardKind.permission:
-          if (text.trim().isEmpty) {
-            controller.allowCard(card);
-          } else {
-            controller.rejectCard(card, message: text);
-            _text.clear();
-          }
-        case GaiaCardKind.proposal:
-          if (text.trim().isEmpty) {
-            controller.acceptProposal(card);
-          } else {
-            controller.rejectCard(card, message: text);
-            _text.clear();
-          }
-        case GaiaCardKind.control:
-          if (text.trim().isEmpty) {
-            controller.approveControl(card, once: gaiaControlCanRunAll(card));
-          } else {
-            controller.rejectCard(card, message: text);
-            _text.clear();
-          }
-      }
-      return;
-    }
+    if (await _submitCard(widget.controller)) return;
     final controller = widget.controller;
     // Mid-reply, send is the stop button's, as the button is; the draft
     // waits, commands and all.
@@ -3755,6 +3845,133 @@ Future<bool?> _confirmSwitch(
   );
 }
 
+/// An open card takes the draft (§10, §10.1): a question's answer, a
+/// permission's "why not", or a proposal's correction. Sent empty, a
+/// permission is allowed and a proposal saved as its editor has it. False
+/// with no card open.
+Future<bool> _submitCard(GaiaController controller) async {
+  final card = controller.openCard;
+  if (card == null) return false;
+  final draft = controller.draft;
+  final text = draft.text;
+  switch (card.kind) {
+    case GaiaCardKind.question:
+      if (await controller.answerCard(card, text: text)) draft.clear();
+    case GaiaCardKind.permission:
+      if (text.trim().isEmpty) {
+        controller.allowCard(card);
+      } else {
+        controller.rejectCard(card, message: text);
+        draft.clear();
+      }
+    case GaiaCardKind.proposal:
+      if (text.trim().isEmpty) {
+        controller.acceptProposal(card);
+      } else {
+        controller.rejectCard(card, message: text);
+        draft.clear();
+      }
+    case GaiaCardKind.control:
+      if (text.trim().isEmpty) {
+        controller.approveControl(card, once: gaiaControlCanRunAll(card));
+      } else {
+        controller.rejectCard(card, message: text);
+        draft.clear();
+      }
+  }
+  return true;
+}
+
+/// The composer's keys for an open card, wherever in the window the focus
+/// is (a button, a card's own field, or nothing): the send keybind answers
+/// it, and a question's digits pick its options while the draft is empty.
+/// Not the digits in a text box, which types them; the composer has its
+/// own, which come first.
+KeyEventResult _cardKey(GaiaController controller, KeyEvent event) {
+  final card = controller.openCard;
+  if (card == null || event is KeyUpEvent) return KeyEventResult.ignored;
+  final keyboard = HardwareKeyboard.instance;
+  final inText = _inTextField();
+  // A card's own field, not the sidebar's search or a rename.
+  final inCard =
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<GaiaCardView>() !=
+      null;
+  final modified =
+      keyboard.isControlPressed ||
+      keyboard.isAltPressed ||
+      keyboard.isMetaPressed;
+  // A send keybind of plain Enter is a card field's newline.
+  if (((modified && inCard) || !inText) &&
+      _sendCombo(controller).activator.accepts(event, keyboard)) {
+    // Held down, once: not on a card that opens meanwhile.
+    if (event is KeyDownEvent) unawaited(_submitCard(controller));
+    return KeyEventResult.handled;
+  }
+  final digit = _digits.indexOf(event.logicalKey);
+  if (digit < 0 ||
+      card.options.isEmpty ||
+      controller.draft.text.isNotEmpty ||
+      modified ||
+      keyboard.isShiftPressed ||
+      inText) {
+    return KeyEventResult.ignored;
+  }
+  // A miss does nothing, as in the composer.
+  if (event is KeyDownEvent) controller.pickCardOption(card, digit);
+  return KeyEventResult.handled;
+}
+
+/// The composer on screen for each controller, for [_typeToComposer]; none
+/// while a usage limit or Voyager quitting stands in for it.
+final _composers = Expando<_ComposerState>();
+
+/// Type to focus, as in other chat apps: a character typed with the focus
+/// elsewhere in Gaia, on the chat, a button or nothing, goes in the
+/// composer, which takes the focus. Not with Ctrl, Alt or the Windows key
+/// (AltGr, which is Ctrl+Alt, types), nor Space on a button, which presses
+/// it; keys a focused control takes never come here.
+KeyEventResult _typeToComposer(GaiaController controller, KeyEvent event) {
+  final character = event.character;
+  final composer = _composers[controller];
+  if (event is! KeyDownEvent || composer == null || _inTextField()) {
+    return KeyEventResult.ignored;
+  }
+  final keyboard = HardwareKeyboard.instance;
+  final control = keyboard.isControlPressed;
+  final alt = keyboard.isAltPressed;
+  // Ctrl+V pastes there too: text at its caret, or an image attached.
+  if (event.logicalKey == LogicalKeyboardKey.keyV &&
+      control &&
+      !alt &&
+      !keyboard.isShiftPressed &&
+      !keyboard.isMetaPressed) {
+    composer.pasteIn();
+    return KeyEventResult.handled;
+  }
+  if (character == null ||
+      character.isEmpty ||
+      character.codeUnits.any((unit) => unit < 0x20 || unit == 0x7f)) {
+    return KeyEventResult.ignored;
+  }
+  if (keyboard.isMetaPressed ||
+      (control != alt) ||
+      (character == ' ' &&
+          FocusManager.instance.primaryFocus is! FocusScopeNode)) {
+    return KeyEventResult.ignored;
+  }
+  composer.typeIn(character);
+  return KeyEventResult.handled;
+}
+
+/// The focus is in a box the user types in: not read-only text, such as a
+/// card's, selected in the chat.
+bool _inTextField() {
+  final editable = FocusManager.instance.primaryFocus?.context
+      ?.findAncestorStateOfType<EditableTextState>();
+  return editable != null && !editable.widget.readOnly;
+}
+
 /// 1 to 9, which pick a question card's options.
 const _digits = [
   LogicalKeyboardKey.digit1,
@@ -3851,8 +4068,8 @@ Future<void> _chooseAuto(
   }
 }
 
-/// The hand's icon: outlined for Off, filled for Ask, filled with an accent
-/// mark for Auto (§4).
+/// The hand's icon: outlined for Off, filled for Ask, filled with a small
+/// four-point star by it for Auto (§4).
 class _HandIcon extends StatelessWidget {
   const _HandIcon({required this.hand});
 
@@ -3861,12 +4078,19 @@ class _HandIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final icon = Icon(
-      hand == GaiaHand.off ? Icons.pan_tool_alt_outlined : Icons.pan_tool_alt,
-      size: 14,
-      color: hand == GaiaHand.off
-          ? theme.colorScheme.onSurfaceVariant
-          : theme.colorScheme.primary,
+    final color = hand == GaiaHand.off
+        ? theme.colorScheme.onSurfaceVariant
+        : theme.colorScheme.primary;
+    const outlined = Icon(Icons.pan_tool_alt_outlined, size: 14);
+    // The filled glyph's edge sits inside the outlined one's, so filled is
+    // the outline with its inside filled in, keeping the hand's size.
+    final icon = IconTheme.merge(
+      data: IconThemeData(color: color),
+      child: hand == GaiaHand.off
+          ? outlined
+          : const Stack(
+              children: [outlined, Icon(Icons.pan_tool_alt, size: 14)],
+            ),
     );
     if (hand != GaiaHand.auto) return icon;
     return Stack(
@@ -3874,20 +4098,46 @@ class _HandIcon extends StatelessWidget {
       children: [
         icon,
         Positioned(
-          right: -2,
-          top: -2,
-          child: Container(
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              color: kGaiaAstralGold,
-              shape: BoxShape.circle,
-            ),
+          right: -3,
+          top: -3,
+          child: CustomPaint(
+            size: const Size.square(7),
+            painter: _StarPainter(color),
           ),
         ),
       ],
     );
   }
+}
+
+/// A four-point star with concave sides, like a glint.
+class _StarPainter extends CustomPainter {
+  const _StarPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    final path = Path()..moveTo(c.dx, c.dy - r);
+    var from = (0, -1);
+    for (final (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1)]) {
+      // Pulled in towards the middle, not all the way, so the arms keep
+      // some width at this size.
+      path.quadraticBezierTo(
+        c.dx + (from.$1 + dx) * r * 0.12,
+        c.dy + (from.$2 + dy) * r * 0.12,
+        c.dx + dx * r,
+        c.dy + dy * r,
+      );
+      from = (dx, dy);
+    }
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_StarPainter old) => old.color != color;
 }
 
 /// The send keybind (§9.1), Ctrl+Enter by default, which is also its

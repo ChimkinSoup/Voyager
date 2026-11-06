@@ -1071,10 +1071,13 @@ class GaiaController extends ChangeNotifier {
   Stream<GaiaRunToast> get toasts => _toasts.stream;
   final _toasts = StreamController<GaiaRunToast>.broadcast();
 
-  /// Gaia opened by [onHotkey]: the composer takes the focus, to type
-  /// straight away.
+  /// Gaia opened by [onHotkey], or [focusComposer]: the composer takes the
+  /// focus, to type straight away.
   Stream<void> get summoned => _summoned.stream;
   final _summoned = StreamController<void>.broadcast();
+
+  /// A click somewhere in Gaia: the composer takes the focus back.
+  void focusComposer() => _summoned.add(null);
 
   /// Each CLI's `--version` by adapter, and how the companion ends:
   /// parameters for tests.
@@ -2198,38 +2201,48 @@ class GaiaController extends ChangeNotifier {
     if (cropping != null) return finishCrop(null);
     _dropPickUp();
     final shown = _window.shown;
-    // Pressed again, a floater closes rather than going back to the Gaia
-    // window it was opened over, which the next press would turn back into
-    // the floater.
-    if (key == shown?.name) _returnTo = null;
+    // Pressed again, each closes, but only when in front: up without the
+    // focus, as a floater raised for a card is, or behind another app, it's
+    // brought to the front instead. Before going to a waiting chat, so
+    // closing leaves the chat as it was.
+    final closes =
+        _window.foreground &&
+        ((key == 'small' && shown == GaiaMode.small) ||
+            (key == 'large' && shown == GaiaMode.large) ||
+            (pressed &&
+                shown == GaiaMode.window &&
+                (key == 'window' ||
+                    (key == 'fullScreen' && _window.fullScreen))));
+    if (closes) {
+      // A floater closes rather than going back to the Gaia window it was
+      // opened over, which the next press would turn back into the floater.
+      if (key == shown?.name) _returnTo = null;
+      return dismiss();
+    }
+    await _openWaitingChat();
     switch (key) {
       case 'small':
-        if (shown == GaiaMode.small) return dismiss();
         _returnTo = shown == GaiaMode.window ? GaiaMode.window : _returnTo;
         await _show(GaiaMode.small);
       case 'large':
-        if (shown == GaiaMode.large) return dismiss();
         _returnTo = shown == GaiaMode.window ? GaiaMode.window : _returnTo;
         await _show(GaiaMode.large);
       case 'window':
-        // Up but behind another app, it's brought to the front instead.
-        if (pressed && shown == GaiaMode.window && _window.foreground) {
-          return dismiss();
-        }
         await openWindow();
       case 'fullScreen':
-        // Pressed again, it closes, as the Gaia window's own key does.
-        if (pressed &&
-            shown == GaiaMode.window &&
-            _window.fullScreen &&
-            _window.foreground) {
-          return dismiss();
-        }
         await _openLastChat();
         _returnTo = null;
         await _show(GaiaMode.window, fullScreen: true);
     }
     _summoned.add(null);
+  }
+
+  /// Summoned with a card waiting on the user in another chat, Gaia goes to
+  /// the chat of the one raised last, to answer it at once.
+  Future<void> _openWaitingChat() async {
+    final waiting = cards.waitingChats;
+    if (waiting.isEmpty || waiting.contains(currentChatId)) return;
+    await selectChat(waiting.last);
   }
 
   /// The split hotkey: the host has moved the other window, and [half] is
@@ -2298,6 +2311,7 @@ class GaiaController extends ChangeNotifier {
     bool behind = false,
     GaiaFrame? frame,
     bool? fullScreen,
+    bool activate = true,
   }) {
     if (currentChatId == null && !debug.dummyMode) _utility?.warm();
     onScreen.value = true;
@@ -2310,6 +2324,7 @@ class GaiaController extends ChangeNotifier {
       behind: behind,
       frame: frame,
       fullScreen: fullScreen,
+      activate: activate,
     );
   }
 
@@ -2700,15 +2715,17 @@ class GaiaController extends ChangeNotifier {
     if (!_drainPopping.add(chatId)) return;
     unawaited(() async {
       try {
-        // The lease first: a prompt popped for a chat another desktop runs
-        // would only go back in the queue, which starts this over. That
-        // desktop drains the chat itself; if it lets go first, its reply
-        // syncing here brings this back.
-        if (await _takeLease(chatId) != null) return;
         // Idle, it goes by the chat's last message as saved: what's in
-        // memory here may not have the reply another device stopped.
-        final clean = reply != null || await _lastEndedCleanly(chatId);
-        final popped = !clean || aborted || _running.contains(chatId)
+        // memory here may not have the reply another device stopped. Before
+        // the lease: one taken for a chat that can't go is only let go again,
+        // on every change.
+        if (reply == null && !await _lastEndedCleanly(chatId)) return;
+        // The lease before the pop: a prompt popped for a chat another
+        // desktop runs would only go back in the queue, which starts this
+        // over. That desktop drains the chat itself; if it lets go first, its
+        // reply syncing here brings this back.
+        if (await _takeLease(chatId) != null) return;
+        final popped = aborted || _running.contains(chatId)
             ? null
             : await _pipe
                   .request('queuePop', {'chatId': chatId})
@@ -4226,6 +4243,28 @@ class GaiaController extends ChangeNotifier {
       body.length > 120 ? '${body.substring(0, 120)}…' : body,
       question: true,
     );
+    unawaited(_attend(chatId));
+  }
+
+  /// A card opened in [chatId] while the user is in another app: Gaia comes
+  /// up on that chat, in front of the app, but without the focus, so the
+  /// keys they're typing never land on the card. Hidden, it comes up as the
+  /// small floater. Not over a crop or the pick-up pill.
+  Future<void> _attend(String chatId) async {
+    // Checked again once the chat has loaded: the user may have moved.
+    bool away() =>
+        !_window.foreground &&
+        cropping == null &&
+        !_pickingUp &&
+        _window.shown != GaiaMode.overlay &&
+        _window.shown != GaiaMode.pickUp;
+    if (!away()) return;
+    if (chatId != currentChatId) {
+      await selectChat(chatId);
+      if (!away()) return;
+    }
+    if (_window.shown == null) return _show(GaiaMode.small, activate: false);
+    _window.attend();
   }
 
   /// In front, or floating, Gaia's own toast; otherwise a Windows one.
