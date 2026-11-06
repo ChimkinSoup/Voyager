@@ -118,7 +118,7 @@ class GaiaCardView extends StatelessWidget {
               Icon(
                 question ? Icons.help_outline : Icons.shield_outlined,
                 size: 16,
-                color: kGaiaAstralGold,
+                color: gaiaAstralGoldFor(Theme.of(context).brightness),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -338,10 +338,10 @@ class _ControlCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
+                Icon(
                   Icons.pan_tool_alt,
                   size: 16,
-                  color: kGaiaAstralGold,
+                  color: gaiaAstralGoldFor(Theme.of(context).brightness),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -501,7 +501,11 @@ class _ActivityCardState extends State<_ActivityCard> {
               padding: const EdgeInsets.all(10),
               child: Row(
                 children: [
-                  const Icon(Icons.bolt, size: 16, color: kGaiaAstralGold),
+                  Icon(
+                    Icons.bolt,
+                    size: 16,
+                    color: gaiaAstralGoldFor(Theme.of(context).brightness),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -680,7 +684,9 @@ class _Option extends StatelessWidget {
                           TextSpan(
                             text: '  Recommended',
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: kGaiaAstralGold,
+                              color: gaiaAstralGoldFor(
+                                Theme.of(context).brightness,
+                              ),
                             ),
                           ),
                       ],

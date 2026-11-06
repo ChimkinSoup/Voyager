@@ -42,11 +42,29 @@ class ClaudeTextDelta extends ClaudeEvent {
   final String text;
 }
 
-/// The agent called a tool.
+/// The agent called a tool. Its input streams in after this, and comes whole
+/// in a [ClaudeToolInputs] naming [id].
 class ClaudeToolUse extends ClaudeEvent {
-  const ClaudeToolUse(this.name);
+  const ClaudeToolUse(this.name, {this.id});
 
   final String name;
+  final String? id;
+}
+
+/// An `assistant` message's tool calls, by their ids: the whole-message echo
+/// of a streamed block, input and all.
+class ClaudeToolInputs extends ClaudeEvent {
+  const ClaudeToolInputs(this.inputs);
+
+  final Map<String, ({String name, Object? input})> inputs;
+}
+
+/// A `user` message's tool results that were errors, by their calls' ids,
+/// with why in brief: a failing command's is "Exit code 1".
+class ClaudeToolErrors extends ClaudeEvent {
+  const ClaudeToolErrors(this.errors);
+
+  final Map<String, String> errors;
 }
 
 /// The end of a turn. [isError] covers failures the CLI reports as a reply,
@@ -162,7 +180,10 @@ ClaudeEvent parseClaudeLine(String line) {
           final block = field<Map<String, Object?>>(event, 'content_block');
           return switch (field<String>(block, 'type')) {
             'text' => const ClaudeTextStart(),
-            'tool_use' => ClaudeToolUse(field<String>(block, 'name')),
+            'tool_use' => ClaudeToolUse(
+              field<String>(block, 'name'),
+              id: block['id'] as String?,
+            ),
             _ => const ClaudeIgnored(),
           };
         case 'content_block_delta':
@@ -174,6 +195,46 @@ ClaudeEvent parseClaudeLine(String line) {
         default:
           return const ClaudeIgnored();
       }
+    case 'assistant':
+      // Read leniently, since its tool inputs are only shown. A subagent's
+      // calls aren't the reply's.
+      if (decoded['parent_tool_use_id'] != null) return const ClaudeIgnored();
+      final inputs = <String, ({String name, Object? input})>{
+        if (decoded['message'] case {'content': final List content})
+          for (final block in content)
+            if (block case {
+              'type': 'tool_use',
+              'id': final String id,
+              'name': final String name,
+            })
+              id: (name: name, input: block['input']),
+      };
+      return inputs.isEmpty ? const ClaudeIgnored() : ClaudeToolInputs(inputs);
+    case 'user':
+      // Read leniently, since it's only shown. A subagent's results aren't
+      // the reply's.
+      if (decoded['parent_tool_use_id'] != null) return const ClaudeIgnored();
+      final errors = <String, String>{
+        if (decoded['message'] case {'content': final List content})
+          for (final block in content)
+            if (block case {
+              'type': 'tool_result',
+              'tool_use_id': final String id,
+              'is_error': true,
+            })
+              id: gaiaToolFailure(
+                switch (block['content']) {
+                  // Text blocks, as some results come.
+                  final List parts => [
+                    for (final part in parts)
+                      if (part case {'text': final String text}) text,
+                  ].join('\n'),
+                  final String text => text,
+                  _ => '',
+                }.replaceAll(_toolUseErrorTag, ''),
+              ),
+      };
+      return errors.isEmpty ? const ClaudeIgnored() : ClaudeToolErrors(errors);
     case 'result':
       return ClaudeResult(
         sessionId: field<String>(decoded, 'session_id'),
@@ -276,17 +337,45 @@ int? claudeContextWindow(Object? modelUsage, {String? model}) {
 
 const _gaiaToolPrefix = 'mcp__${kGaiaMcpServer}__';
 
+/// The tags the CLI wraps its own tool errors in, left out of a failure.
+final _toolUseErrorTag = RegExp('</?tool_use_error>');
+
+/// The input field that says what a call of each of Claude Code's own tools
+/// did; any other tool shows its whole input.
+const _detailKeys = {
+  'Bash': ['command'],
+  'PowerShell': ['command'],
+  'WebSearch': ['query'],
+  'WebFetch': ['url'],
+  'Read': ['file_path'],
+  'Write': ['file_path'],
+  'Edit': ['file_path'],
+  'MultiEdit': ['file_path'],
+  'NotebookEdit': ['notebook_path'],
+  'Grep': ['pattern'],
+  'Glob': ['pattern'],
+  'Task': ['description'],
+  'Agent': ['description'],
+  'Skill': ['skill'],
+};
+
 /// What Gaia reads of [event]; null for the session's own bookkeeping.
 GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
   ClaudeTextStart() => const GaiaTextStart(),
   ClaudeTextDelta(:final text) => GaiaTextDelta(text),
   // Gaia's own tools by their own names: `ask_user`, not
   // `mcp__gaia__ask_user`.
-  ClaudeToolUse(:final name) => GaiaToolUse(
+  ClaudeToolUse(:final name, :final id) => GaiaToolUse(
     name.startsWith(_gaiaToolPrefix)
         ? name.substring(_gaiaToolPrefix.length)
         : name,
+    id: id,
   ),
+  ClaudeToolInputs(:final inputs) => GaiaToolDetails({
+    for (final MapEntry(key: id, value: (:name, :input)) in inputs.entries)
+      id: ?gaiaToolDetail(input, _detailKeys[name] ?? const []),
+  }),
+  ClaudeToolErrors(:final errors) => GaiaToolFailures(errors),
   ClaudeRateLimit(:final usage) => GaiaUsageUpdate(usage),
   ClaudeInit() ||
   ClaudeResult() ||

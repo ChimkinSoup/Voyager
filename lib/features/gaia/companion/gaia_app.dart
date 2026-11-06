@@ -455,7 +455,19 @@ class _ClickToComposerState extends State<_ClickToComposer> {
   /// The last click's release, for telling a double click.
   ({Duration at, Offset where})? _lastUp;
 
+  /// The composer taking the focus, once the click turns out not to be a
+  /// double click's first: the second and third clicks select without taking
+  /// the focus back, so Ctrl+C would go to the composer.
+  Timer? _pending;
+
+  @override
+  void dispose() {
+    _pending?.cancel();
+    super.dispose();
+  }
+
   void _onDown(PointerDownEvent event) {
+    _pending?.cancel();
     final last = _lastUp;
     final repeat =
         last != null &&
@@ -477,10 +489,9 @@ class _ClickToComposerState extends State<_ClickToComposer> {
         (event.position - down).distance > computeHitSlop(event.kind, null)) {
       return;
     }
-    // After the click's own tap, which may open a menu or focus a field: the
-    // next frame, so the focus a tap on a field asks for has been applied.
-    WidgetsBinding.instance.ensureVisualUpdate();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // After the click's own tap, which may open a menu or focus a field, and
+    // after the time a second click would have come in.
+    _pending = Timer(kDoubleTapTimeout, () {
       if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
       if (_inTextField()) return;
       widget.controller.focusComposer();
@@ -2084,7 +2095,7 @@ class _MessageView extends StatelessWidget {
               ),
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: GaiaActivityChip(label: _activity(tools)),
+                child: GaiaActivityChip(label: _activity(tools), part: part),
               ),
               // Rebuilt with the controller, not the message: whether it's
               // waiting and what's picked aren't on the message.

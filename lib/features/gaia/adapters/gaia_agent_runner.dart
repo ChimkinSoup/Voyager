@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
@@ -19,11 +21,86 @@ class GaiaTextDelta extends GaiaAgentEvent {
   final String text;
 }
 
-/// The agent called a tool.
+/// The agent called a tool. [detail] is what it was called with, and
+/// [failure] why it failed, when those are known already; otherwise a
+/// [GaiaToolDetails] or [GaiaToolFailures] naming [id] brings them later.
 class GaiaToolUse extends GaiaAgentEvent {
-  const GaiaToolUse(this.name);
+  const GaiaToolUse(this.name, {this.id, this.detail, this.failure});
 
   final String name;
+  final String? id;
+  final String? detail;
+  final String? failure;
+}
+
+/// Tools already reported by a [GaiaToolUse] that failed, by their ids, with
+/// why in brief.
+class GaiaToolFailures extends GaiaAgentEvent {
+  const GaiaToolFailures(this.failures);
+
+  final Map<String, String> failures;
+}
+
+/// At most this many characters of why a tool call failed are kept.
+const kGaiaToolFailureMax = 120;
+
+/// [text]'s first non-empty line, clipped to [kGaiaToolFailureMax]; [orElse]
+/// when it has none.
+String gaiaToolFailure(Object? text, [String orElse = 'Failed']) {
+  final line = text is String
+      ? text
+            .split('\n')
+            .map((line) => line.trim())
+            .firstWhere((line) => line.isNotEmpty, orElse: () => '')
+      : '';
+  if (line.isEmpty) return orElse;
+  return line.length <= kGaiaToolFailureMax
+      ? line
+      : '${line.substring(0, kGaiaToolFailureMax)}…';
+}
+
+/// What tools already reported by a [GaiaToolUse] were called with, by their
+/// ids, once their input has come in whole.
+class GaiaToolDetails extends GaiaAgentEvent {
+  const GaiaToolDetails(this.details);
+
+  final Map<String, String> details;
+}
+
+/// At most this many characters of a tool call's detail are kept: it's
+/// saved and synced with the reply.
+const kGaiaToolDetailMax = 500;
+
+/// [input]'s gist for an activity part: the first of [keys] it has as a
+/// non-empty string, or with none of them, all of it as compact JSON.
+/// Clipped to [kGaiaToolDetailMax]; null when there's nothing to show.
+String? gaiaToolDetail(Object? input, [List<String> keys = const []]) {
+  if (input is! Map) return null;
+  String? detail;
+  for (final key in keys) {
+    if (input[key] case final String value when value.trim().isNotEmpty) {
+      detail = value.trim();
+      break;
+    }
+  }
+  if (detail == null && input.isNotEmpty) {
+    try {
+      detail = jsonEncode(input);
+    } on JsonUnsupportedObjectError {
+      return null;
+    }
+  }
+  return gaiaClipDetail(detail);
+}
+
+/// [detail] trimmed and clipped to [kGaiaToolDetailMax]; null when there's
+/// nothing to show.
+String? gaiaClipDetail(String? detail) {
+  final trimmed = detail?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  return trimmed.length <= kGaiaToolDetailMax
+      ? trimmed
+      : '${trimmed.substring(0, kGaiaToolDetailMax)}…';
 }
 
 /// A card was raised, or decided (§10): one with a new id goes after the
@@ -217,6 +294,10 @@ bool isVersionInRange(
 class GaiaTurnBuilder {
   final _parts = <GaiaPart>[];
 
+  /// Where each tool call with an id is: its activity part's place in
+  /// [_parts], and its own in that part.
+  final _calls = <String, (int, int)>{};
+
   List<GaiaPart> get parts => List.unmodifiable(_parts);
 
   /// Applies [event]; true when [parts] changed.
@@ -230,12 +311,25 @@ class GaiaTurnBuilder {
         } else {
           _parts.add(GaiaTextPart(text));
         }
-      case GaiaToolUse(:final name):
-        if (_parts.lastOrNull case GaiaActivityPart(:final tools)) {
-          _parts.last = GaiaActivityPart([...tools, name]);
-        } else {
-          _parts.add(GaiaActivityPart([name]));
+      case GaiaToolUse(:final name, :final id, :final detail, :final failure):
+        if (_parts.lastOrNull is! GaiaActivityPart) {
+          _parts.add(const GaiaActivityPart([]));
         }
+        final part = _parts.last as GaiaActivityPart;
+        if (id != null) _calls[id] = (_parts.length - 1, part.tools.length);
+        _parts.last = part.adding(name, detail: detail, failure: failure);
+      case GaiaToolDetails(:final details):
+        return _update(
+          details,
+          (part, call) => part.detailAt(call),
+          (part, call, detail) => part.withCall(call, detail: detail),
+        );
+      case GaiaToolFailures(:final failures):
+        return _update(
+          failures,
+          (part, call) => part.failureAt(call),
+          (part, call, failure) => part.withCall(call, failure: failure),
+        );
       case GaiaCardUpdate(:final card):
         final index = _parts.indexWhere(
           (part) => part is GaiaCardPart && part.id == card.id,
@@ -249,6 +343,26 @@ class GaiaTurnBuilder {
         return false;
     }
     return true;
+  }
+
+  /// Sets each call in [values] by its id with [set], where [get] has it
+  /// otherwise; true when any changed. Ids not seen are skipped.
+  bool _update(
+    Map<String, String> values,
+    String? Function(GaiaActivityPart part, int call) get,
+    GaiaActivityPart Function(GaiaActivityPart part, int call, String value)
+    set,
+  ) {
+    var changed = false;
+    for (final MapEntry(key: id, :value) in values.entries) {
+      final (index, call) = _calls[id] ?? (-1, -1);
+      if (index < 0) continue;
+      final part = _parts[index] as GaiaActivityPart;
+      if (get(part, call) == value) continue;
+      _parts[index] = set(part, call, value);
+      changed = true;
+    }
+    return changed;
   }
 
   /// [parts] without text blocks that ended up empty.

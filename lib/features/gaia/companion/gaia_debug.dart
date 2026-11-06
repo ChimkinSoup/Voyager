@@ -439,12 +439,26 @@ class GaiaDebugText extends GaiaDebugStep {
   final String text;
 }
 
-/// A tool call, which takes [duration].
+/// A tool call, which takes [duration]. [detail] is what it was called with,
+/// clipped as a real one is; with [detailAfter], it comes that long after
+/// the call shows, as Claude Code's streamed input does.
 class GaiaDebugTool extends GaiaDebugStep {
-  const GaiaDebugTool(this.name, [this.duration = const Duration(seconds: 1)]);
+  const GaiaDebugTool(
+    this.name, [
+    this.duration = const Duration(seconds: 1),
+    this.detail,
+    this.detailAfter,
+    this.failure,
+  ]);
 
   final String name;
   final Duration duration;
+  final String? detail;
+  final Duration? detailAfter;
+
+  /// Why it failed: told with the call, or with [detailAfter], once it has
+  /// run, as Claude Code's tool result is.
+  final String? failure;
 }
 
 /// A permission card, raised as the CLI raises one; the tool runs once
@@ -533,6 +547,9 @@ class GaiaScriptedRunner {
 
   static const _tick = Duration(milliseconds: 30);
 
+  /// Ids for calls whose detail comes later.
+  var _calls = 0;
+
   Future<void> _play(
     Completer<GaiaTurnResult> turn,
     GaiaDebugScript script,
@@ -568,9 +585,25 @@ class GaiaScriptedRunner {
             reply.write(chunk);
             onEvent(GaiaTextDelta(chunk));
           }
-        case GaiaDebugTool(:final name, :final duration):
-          onEvent(GaiaToolUse(name));
-          if (!await wait(duration)) return;
+        case GaiaDebugTool(
+          :final name,
+          :final duration,
+          :final detail,
+          :final detailAfter,
+          :final failure,
+        ):
+          final clipped = gaiaClipDetail(detail);
+          if (detailAfter == null) {
+            onEvent(GaiaToolUse(name, detail: clipped, failure: failure));
+            if (!await wait(duration)) return;
+          } else {
+            final id = 'debug-${_calls++}';
+            onEvent(GaiaToolUse(name, id: id));
+            if (!await wait(detailAfter)) return;
+            if (clipped != null) onEvent(GaiaToolDetails({id: clipped}));
+            if (!await wait(duration)) return;
+            if (failure != null) onEvent(GaiaToolFailures({id: failure}));
+          }
         case GaiaDebugPermission(:final tool, :final input, :final description):
           final permission = await tools.permit(
             tool: tool,
@@ -579,7 +612,12 @@ class GaiaScriptedRunner {
           );
           if (turn.isCompleted) return;
           if (permission.allow) {
-            onEvent(GaiaToolUse(tool));
+            onEvent(
+              GaiaToolUse(
+                tool,
+                detail: gaiaToolDetail(input, const ['command', 'file_path']),
+              ),
+            );
             if (!await wait(const Duration(seconds: 1))) return;
           }
         case GaiaDebugQuestion(:final arguments):
@@ -686,12 +724,165 @@ final Map<String, GaiaDebugScript> gaiaDebugScripts = {
     GaiaDebugText(
       'Scripted replies, for testing Gaia without a Claude Code run:\n\n'
       '${[
-        for (final MapEntry(:key, :value) in {..._scripts, ..._proposalScripts}.entries) '- `$key`: ${value.description}',
+        for (final MapEntry(:key, :value) in {..._scripts, ..._toolScripts, ..._proposalScripts}.entries) '- `$key`: ${value.description}',
       ].join('\n')}',
     ),
   ]),
   ..._scripts,
+  ..._toolScripts,
   ..._proposalScripts,
+};
+
+const _toolStep = Duration(milliseconds: 400);
+
+/// Every way a tool call's detail shows in the "Used …" chip, one chip per
+/// case, each named by the text above it.
+final _toolScripts = {
+  '/tools': GaiaDebugScript('Tool call details: every case, one chip each', [
+    const GaiaDebugText('**Short command** (Bash):'),
+    const GaiaDebugTool('Bash', _toolStep, 'git status'),
+    const GaiaDebugText('**Multi-line command** (a heredoc):'),
+    const GaiaDebugTool(
+      'Bash',
+      _toolStep,
+      "cat > notes.md <<'EOF'\n# Notes\n- first\n- second\nEOF\nwc -l notes.md",
+    ),
+    const GaiaDebugText('**Long single line**, wrapping but under the cap:'),
+    GaiaDebugTool(
+      'Bash',
+      _toolStep,
+      'flutter test ${[for (var i = 1; i <= 15; i++) 'test/feature_${i}_test.dart'].join(' ')}',
+    ),
+    GaiaDebugText(
+      '**Clipped command**, over $kGaiaToolDetailMax characters, ending in …:',
+    ),
+    GaiaDebugTool(
+      'Bash',
+      _toolStep,
+      'python -c "print(${List.filled(400, "'gaia'").join(' + ')})"',
+    ),
+    const GaiaDebugText('**Search query** (WebSearch):'),
+    const GaiaDebugTool(
+      'WebSearch',
+      _toolStep,
+      'flutter SelectableText inside SelectionArea',
+    ),
+    const GaiaDebugText('**URL** (WebFetch):'),
+    const GaiaDebugTool(
+      'WebFetch',
+      _toolStep,
+      'https://api.flutter.dev/flutter/material/SelectableText-class.html',
+    ),
+    const GaiaDebugText('**File paths** (Read, then Edit):'),
+    const GaiaDebugTool(
+      'Read',
+      _toolStep,
+      r'C:\Users\Juno\Code\Voyager\lib\features\gaia\companion\gaia_app.dart',
+    ),
+    const GaiaDebugTool(
+      'Edit',
+      _toolStep,
+      r'C:\Users\Juno\Code\Voyager\lib\features\gaia\companion\gaia_activity_chip.dart',
+    ),
+    const GaiaDebugText('**Search pattern** (Grep):'),
+    const GaiaDebugTool('Grep', _toolStep, r'class \w+Chip'),
+    const GaiaDebugText(
+      '**JSON fallback**: a tool with no known field shows its whole input:',
+    ),
+    const GaiaDebugTool(
+      'voyager_calendar',
+      _toolStep,
+      '{"from":"2026-11-06","to":"2026-11-13","include":["events","tasks"]}',
+    ),
+    const GaiaDebugText(
+      '**Codex**: a shell command without its wrapper, and an edit to '
+      'several files:',
+    ),
+    const GaiaDebugTool(
+      'Shell',
+      _toolStep,
+      'Get-ChildItem -Recurse -Filter *.dart',
+    ),
+    const GaiaDebugTool(
+      'Edit',
+      _toolStep,
+      'lib/main.dart\nlib/app.dart\ntest/app_test.dart',
+    ),
+    const GaiaDebugText(
+      '**Repeated calls in one chip**: three Bash calls, labelled ×3:',
+    ),
+    const GaiaDebugTool('Bash', _toolStep, 'flutter pub get'),
+    const GaiaDebugTool('Bash', _toolStep, 'flutter analyze'),
+    const GaiaDebugTool('Bash', _toolStep, 'flutter test'),
+    const GaiaDebugText(
+      '**Mixed**: one call with a detail, one without (as a message saved '
+      'before details existed, mid-chip):',
+    ),
+    const GaiaDebugTool('Glob', _toolStep),
+    const GaiaDebugTool('Read', _toolStep, 'pubspec.yaml'),
+    const GaiaDebugText(
+      '**No details at all**: nothing to open, no ▾ (an older message):',
+    ),
+    const GaiaDebugTool('TodoWrite', _toolStep),
+    const GaiaDebugText(
+      '**Failed command**: "1 failed" beside the label, and its reason:',
+    ),
+    const GaiaDebugTool(
+      'Bash',
+      _toolStep,
+      'flutter test test/missing_test.dart',
+      null,
+      'Exit code 1',
+    ),
+    const GaiaDebugText(
+      '**Some failed, some not**: two of four, one declined (Codex), one an '
+      'MCP error long enough to clip:',
+    ),
+    const GaiaDebugTool('Shell', _toolStep, 'git fetch origin'),
+    const GaiaDebugTool(
+      'Shell',
+      _toolStep,
+      'Remove-Item -Recurse build',
+      null,
+      'Declined',
+    ),
+    const GaiaDebugTool('Read', _toolStep, 'README.md'),
+    GaiaDebugTool(
+      'MCP',
+      _toolStep,
+      'docs/search {"q":"SelectionArea"}',
+      null,
+      gaiaToolFailure(
+        'Connection to the docs server was refused after three attempts, '
+        'each timing out at 30 seconds; check that it is running and that '
+        'its port is not blocked by a firewall',
+      ),
+    ),
+    const GaiaDebugText('**Failed, nothing else known**: no detail, only why:'),
+    const GaiaDebugTool('ask_user', _toolStep, null, null, 'Failed'),
+    const GaiaDebugText(
+      '**Mid-stream failure (Claude Code)**: the call shows at once, its '
+      'command after 1 s, and it fails 2 s after that:',
+    ),
+    const GaiaDebugTool(
+      'Bash',
+      Duration(seconds: 2),
+      'flutter build windows',
+      Duration(seconds: 1),
+      'Exit code 1',
+    ),
+    const GaiaDebugText(
+      '**Mid-stream (Claude Code)**: open the next chip now. The call shows '
+      'at once, its command comes 3 s later, and the call runs 3 s more:',
+    ),
+    const GaiaDebugTool(
+      'Bash',
+      Duration(seconds: 3),
+      'dart run build_runner build --delete-conflicting-outputs',
+      Duration(seconds: 3),
+    ),
+    const GaiaDebugText('Done: every case above.'),
+  ]),
 };
 
 /// [today], [days] on, as a proposal takes it: a day, or a time on it.

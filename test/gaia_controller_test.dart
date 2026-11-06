@@ -3107,6 +3107,30 @@ void main() {
       },
     );
 
+    test("a tool's command coming just after its call is saved while the "
+        'tool still runs', () async {
+      // Nothing follows the command: the run is long, so only a save of
+      // its own gets it to the Gaia page and other devices.
+      runner.turns.add([
+        const ClaudeToolUse('Bash', id: 't'),
+        const ClaudeToolInputs({
+          't': (name: 'Bash', input: {'command': 'sleep 600'}),
+        }),
+      ]);
+      final sending = controller.send('Hi');
+      await settle();
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+
+      final reply = (await main.messages()).last;
+      expect(reply.status, GaiaMessageStatus.streaming);
+      expect(reply.parts.whereType<GaiaActivityPart>().single.details, [
+        'sleep 600',
+      ]);
+      runner.crash(controller.currentChatId!);
+      await sending;
+      await settle();
+    });
+
     test('Stop keeps what streamed and saves the reply as cancelled', () async {
       runner.turns.add([
         const ClaudeTextStart(),

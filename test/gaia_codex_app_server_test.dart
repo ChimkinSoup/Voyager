@@ -182,6 +182,14 @@ void main() {
       {
         'type': 'activity',
         'tools': ['ask_user', 'Shell'],
+        // The command without the shell wrapping it.
+        'details': [
+          '{"question":"What is your favourite colour?","options":'
+              '[{"label":"Red"},{"label":"Blue"}]}',
+          'Set-Content -LiteralPath gaia-probe.txt -Value hi -NoNewline',
+        ],
+        // The recorded command was declined.
+        'failures': [null, 'Declined'],
       },
       {
         'type': 'text',
@@ -190,6 +198,20 @@ void main() {
             'wasn’t created.',
       },
     ]);
+
+    // The command showed as it started, before its approval, with what it
+    // runs; its decline came when it completed.
+    final shell = events.indexWhere(
+      (e) => e is GaiaToolUse && e.name == 'Shell',
+    );
+    final use = events[shell] as GaiaToolUse;
+    expect(use.id, isNotNull);
+    expect(use.detail, contains('gaia-probe.txt'));
+    expect(use.failure, isNull);
+    final declined = events.indexWhere(
+      (e) => e is GaiaToolFailures && e.failures[use.id] == 'Declined',
+    );
+    expect(declined, greaterThan(shell));
 
     // Loaded already: no resume.
     expect(replay.sent.where((m) => m['method'] == 'thread/resume'), isEmpty);

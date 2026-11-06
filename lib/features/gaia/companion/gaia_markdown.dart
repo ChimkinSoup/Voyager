@@ -251,9 +251,17 @@ class _LineSelection extends StaticSelectionContainerDelegate {
         if (selectable.getSelectedContent() case final content?)
           content.plainText,
     ];
-    return parts.isEmpty ? null : SelectedContent(plainText: parts.join('\n'));
+    // Without the line break a triple click takes with its line, which a
+    // terminal would run the command on as it's pasted.
+    return parts.isEmpty
+        ? null
+        : SelectedContent(
+            plainText: parts.join('\n').replaceFirst(_trailingBreaks, ''),
+          );
   }
 }
+
+final _trailingBreaks = RegExp(r'[\r\n]+$');
 
 /// One top-level block, parsed once for its [source].
 class _Block extends StatefulWidget {

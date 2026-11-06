@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
@@ -138,6 +139,52 @@ void main() {
     // each 30ms tick up to a character gave.
     expect(clock.elapsedMilliseconds, greaterThanOrEqualTo(390));
   });
+
+  test('/tools plays every detail case, the late one filled in', () async {
+    final builder = GaiaTurnBuilder();
+    // The mid-stream call, while its detail hasn't come.
+    List<String?>? early;
+    await GaiaScriptedRunner().send(
+      chatId: 'c',
+      script: gaiaDebugScripts['/tools']!,
+      replyDelay: Duration.zero,
+      streamSpeed: 6400,
+      onEvent: (event) {
+        builder.apply(event);
+        if (event case GaiaToolUse(id: _?)) {
+          early = (builder.parts.last as GaiaActivityPart).details;
+        }
+      },
+      tools: _NoTools(),
+    );
+    final chips = builder.finished.whereType<GaiaActivityPart>().toList();
+    expect(chips, hasLength(18));
+    // Failures: with the call, late after it ran, and only some of a chip's.
+    expect(chips.firstWhere((c) => c.tools.length == 4).failures, [
+      null,
+      'Declined',
+      null,
+      endsWith('…'),
+    ]);
+    expect(chips[chips.length - 2].failures, ['Exit code 1']);
+    expect(chips[chips.length - 2].details, ['flutter build windows']);
+    expect(early, [null]);
+    expect(chips.last.details, [
+      'dart run build_runner build --delete-conflicting-outputs',
+    ]);
+    // Clipped as a real call is.
+    expect(chips[3].details.single, hasLength(kGaiaToolDetailMax + 1));
+    // Three calls in one chip; one with no detail beside one with.
+    expect(chips.firstWhere((c) => c.tools.length == 3).tools, [
+      'Bash',
+      'Bash',
+      'Bash',
+    ]);
+    expect(chips.firstWhere((c) => c.tools.first == 'Glob').details, [
+      null,
+      'pubspec.yaml',
+    ]);
+  }, timeout: const Timeout(Duration(minutes: 1)));
 
   test('a change proposal finds the first row that does not repeat', () async {
     final tools = _RecordingTools(

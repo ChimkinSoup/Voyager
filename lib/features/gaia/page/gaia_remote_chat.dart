@@ -415,6 +415,7 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
                     const SizedBox.shrink()
                   else
                     GaiaTranscriptMessage(
+                      key: ValueKey(message.id),
                       message: message,
                       openCard: message == last ? openCard : null,
                       picks: _picks,
@@ -763,6 +764,7 @@ class GaiaTranscriptMessage extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: GaiaActivityChip(
                   label: 'Used ${tools.toSet().join(', ')}',
+                  part: part,
                 ),
               ),
               GaiaCardPart() when part.id == openCard?.id => GaiaCardView(

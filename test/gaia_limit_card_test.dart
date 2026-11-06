@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
@@ -11,6 +11,7 @@ import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
+import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
@@ -350,7 +351,8 @@ void main() {
       expect(composerFocused(tester, controller), isFalse);
 
       await tester.tap(find.text('Which colour?', findRichText: true).first);
-      await tester.pump();
+      // Once it's clear the click isn't a double click's first.
+      await tester.pump(kDoubleTapTimeout);
       expect(composerFocused(tester, controller), isTrue);
       await finish(tester);
     });
@@ -443,6 +445,75 @@ void main() {
       expect(field.focusNode.hasFocus, isTrue);
       await finish(tester);
     });
+
+    testWidgets('a triple click on a line of code keeps the focus, so Ctrl+C '
+        'copies it without its line break', (tester) async {
+      await pump(
+        tester,
+        used: {kGaiaDefaultAccountId: 0},
+        messages: [
+          asked('how?'),
+          GaiaMessage(
+            id: 'm1',
+            chatId: 'c1',
+            seq: 1,
+            role: GaiaMessageRole.assistant,
+            parts: [GaiaTextPart('Run:\n\n```bash\ncd /tmp\nls -la\n```')],
+            status: GaiaMessageStatus.complete,
+            createdAt: at,
+            updatedAt: at,
+            adapter: kGaiaClaudeCodeAdapter,
+          ),
+        ],
+      );
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final code = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(GaiaCodeBlock),
+              matching: find.byType(RichText),
+            )
+            .last,
+      );
+      // The second line.
+      final line = Offset(code.left + 20, code.top + code.height * 3 / 4);
+      Future<void> click() async {
+        final gesture = await tester.startGesture(
+          line,
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(milliseconds: 40));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 60));
+      }
+
+      for (var i = 0; i < 3; i++) {
+        await click();
+      }
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pump();
+      // Not the line break after it, which a terminal would run it on.
+      expect(copied, 'ls -la');
+      await finish(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
     testWidgets('a Ctrl chord types nothing', (tester) async {
       final (controller, _) = await pump(

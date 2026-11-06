@@ -96,6 +96,39 @@ const _toolNames = {
   'imageView': 'ViewImage',
 };
 
+/// What a tool [item] of [type] shows as: a client-hosted tool its own name.
+String _toolName(String type, Map<String, Object?> item, String line) =>
+    type == 'dynamicToolCall'
+    ? CodexAppServerClient._string(item, 'tool', line)
+    : _toolNames[type] ?? type;
+
+/// What a tool [item] of [type] did: its command, query, paths or
+/// arguments. Read leniently, since it's only shown.
+String? _toolDetail(String type, Map<String, Object?> item) {
+  String? lines(Object? list, String key) => list is List
+      ? gaiaClipDetail(
+          [
+            for (final entry in list)
+              if (entry is Map && entry[key] is String) entry[key] as String,
+          ].join('\n'),
+        )
+      : null;
+  return switch (type) {
+    // The commands themselves, without the shell wrapping them.
+    'commandExecution' =>
+      lines(item['commandActions'], 'command') ??
+          gaiaToolDetail(item, const ['command']),
+    'webSearch' => gaiaToolDetail(item, const ['query']),
+    'imageView' => gaiaToolDetail(item, const ['path']),
+    'fileChange' => lines(item['changes'], 'path'),
+    'mcpToolCall' => gaiaClipDetail(
+      '${item['server']}/${item['tool']} ${jsonEncode(item['arguments'])}',
+    ),
+    'dynamicToolCall' => gaiaToolDetail(item['arguments']),
+    _ => null,
+  };
+}
+
 /// Item types that aren't the agent acting.
 const _notTools = {
   'userMessage',
@@ -136,6 +169,10 @@ class _Turn {
   /// A message's trailing whitespace, held back until more text follows: a
   /// block shouldn't end in a blank line.
   var held = '';
+
+  /// The tool items shown as they started, by id: their detail and failure
+  /// follow when they complete.
+  final started = <String>{};
 }
 
 /// One `codex app-server` process's side of the protocol: turns on its
@@ -391,6 +428,21 @@ class CodexAppServerClient {
                 .putIfAbsent(threadId, () => {})
                 .add(_string(item, 'id', line));
         }
+        // A tool shows as it starts, with what it was called with, so a
+        // long command or one waiting on approval shows while it does.
+        final type = _string(item, 'type', line);
+        if (turn != null && !_notTools.contains(type)) {
+          if (item['id'] case final String id) {
+            turn.started.add(id);
+            turn.onEvent(
+              GaiaToolUse(
+                _toolName(type, item, line),
+                id: id,
+                detail: _toolDetail(type, item),
+              ),
+            );
+          }
+        }
       case 'item/agentMessage/delta':
         if (turn == null) return;
         final text = turn.held + _string(params, 'delta', line);
@@ -406,13 +458,21 @@ class CodexAppServerClient {
         if (type == 'agentMessage') {
           turn.lastText = _string(item, 'text', line).trimRight();
         } else if (!_notTools.contains(type)) {
-          turn.onEvent(
-            GaiaToolUse(
-              type == 'dynamicToolCall'
-                  ? _string(item, 'tool', line)
-                  : _toolNames[type] ?? type,
-            ),
-          );
+          final detail = _toolDetail(type, item);
+          final failure = codexToolFailure(item);
+          if (item['id'] case final String id when turn.started.remove(id)) {
+            // Shown as it started: what it ended up with.
+            if (detail != null) turn.onEvent(GaiaToolDetails({id: detail}));
+            if (failure != null) turn.onEvent(GaiaToolFailures({id: failure}));
+          } else {
+            turn.onEvent(
+              GaiaToolUse(
+                _toolName(type, item, line),
+                detail: detail,
+                failure: failure,
+              ),
+            );
+          }
         }
       case 'thread/tokenUsage/updated':
         final usage = _map(params, 'tokenUsage', line);

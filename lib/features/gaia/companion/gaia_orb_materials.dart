@@ -215,8 +215,23 @@ const kGaiaAstralUnfurlTime = 1.0;
 /// and toast marks share it with the orb.
 Color gaiaAstralLight(Color accent) => Color.lerp(accent, Colors.white, 0.72)!;
 
+/// [gaiaAstralLight] for a mark on [brightness]'s background: on a light one,
+/// where the near-white doesn't show, [accent] darkened instead.
+Color gaiaAstralLightFor(Color accent, Brightness brightness) =>
+    brightness == Brightness.light
+    ? Color.lerp(accent, Colors.black, 0.25)!
+    : gaiaAstralLight(accent);
+
 /// The Astral orbits' warm gold.
 const kGaiaAstralGold = Color(0xFFFFDF91);
+
+/// [kGaiaAstralGold] for text on a light background, where the pale gold
+/// doesn't show: a deep amber, about 5:1 on the light theme's background.
+const kGaiaAstralGoldOnLight = Color(0xFF8A5F00);
+
+/// The gold for text and icons on [brightness]'s background.
+Color gaiaAstralGoldFor(Brightness brightness) =>
+    brightness == Brightness.light ? kGaiaAstralGoldOnLight : kGaiaAstralGold;
 
 /// A soft rose for the chat's own notices: a reply that didn't finish
 /// normally (Stopped, Interrupted...) and the switch to another CLI, apart

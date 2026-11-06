@@ -49,10 +49,13 @@ class CodexMessage extends CodexEvent {
 }
 
 /// A finished item that isn't a message: a command, an edit, a search.
+/// [detail] is what it did, where that's known, and [failure] why it failed.
 class CodexTool extends CodexEvent {
-  const CodexTool(this.name);
+  const CodexTool(this.name, {this.detail, this.failure});
 
   final String name;
+  final String? detail;
+  final String? failure;
 }
 
 /// `turn.completed`, or `turn.failed` with [error] saying why.
@@ -115,7 +118,26 @@ CodexEvent parseCodexLine(String line) {
         return CodexMessage(field<String>(item, 'text'));
       }
       if (_notTools.contains(type)) return const CodexIgnored();
-      return CodexTool(_toolNames[type] ?? type);
+      // Read leniently, since it's only shown.
+      return CodexTool(
+        _toolNames[type] ?? type,
+        detail: switch (type) {
+          'command_execution' => gaiaToolDetail(item, const ['command']),
+          'web_search' => gaiaToolDetail(item, const ['query']),
+          'file_change' => gaiaClipDetail(
+            [
+              if (item['changes'] case final List changes)
+                for (final change in changes)
+                  if (change case {'path': final String path}) path,
+            ].join('\n'),
+          ),
+          'mcp_tool_call' => gaiaClipDetail(
+            '${item['server']}/${item['tool']} ${jsonEncode(item['arguments'])}',
+          ),
+          _ => null,
+        },
+        failure: codexToolFailure(item),
+      );
     case 'turn.completed':
       return const CodexTurnEnded();
     case 'turn.failed':
@@ -128,6 +150,26 @@ CodexEvent parseCodexLine(String line) {
       // and `error`, which `turn.failed` repeats.
       return const CodexIgnored();
   }
+}
+
+/// Why a finished tool [item] failed, in brief; null when it didn't. Reads
+/// both `codex exec`'s snake_case items and the app server's camelCase
+/// ones, leniently, since it's only shown: a non-zero exit code, a declined
+/// or failed status, an MCP error, a client tool's `success: false`.
+String? codexToolFailure(Map<String, Object?> item) {
+  final exitCode = item['exitCode'] ?? item['exit_code'];
+  if (exitCode is num && exitCode != 0) return 'Exit code $exitCode';
+  final error = switch (item['error']) {
+    {'message': final String message} => message,
+    final String message => message,
+    _ => null,
+  };
+  return switch (item['status']) {
+    'declined' => 'Declined',
+    'failed' => gaiaToolFailure(error),
+    _ when error != null || item['success'] == false => gaiaToolFailure(error),
+    _ => null,
+  };
 }
 
 /// A turn's error message is often the API's JSON error as a string; its own
@@ -149,6 +191,8 @@ List<GaiaAgentEvent> gaiaEventsOf(CodexEvent event) => switch (event) {
     const GaiaTextStart(),
     GaiaTextDelta(text.trimRight()),
   ],
-  CodexTool(:final name) => [GaiaToolUse(name)],
+  CodexTool(:final name, :final detail, :final failure) => [
+    GaiaToolUse(name, detail: detail, failure: failure),
+  ],
   CodexThreadStarted() || CodexTurnEnded() || CodexIgnored() => const [],
 };

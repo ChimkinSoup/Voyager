@@ -726,7 +726,11 @@ sealed class GaiaPart {
           json['text']! as String,
           checks: {...?(json['checks'] as List?)?.cast<int>()},
         ),
-        'activity' => GaiaActivityPart((json['tools']! as List).cast<String>()),
+        'activity' => GaiaActivityPart(
+          (json['tools']! as List).cast<String>(),
+          details: (json['details'] as List?)?.cast<String?>() ?? const [],
+          failures: (json['failures'] as List?)?.cast<String?>() ?? const [],
+        ),
         'image' => GaiaImagePart(
           mediaId: json['mediaId']! as String,
           label: (json['label']! as num).toInt(),
@@ -836,14 +840,72 @@ List<GaiaPart> gaiaWithCheck(
     i == part ? (p as GaiaTextPart).withCheck(task, flipped) : p,
 ];
 
+/// At most this many characters of tool call details are kept in one
+/// [GaiaActivityPart], so a long turn's reply stays well under a synced
+/// document's size limit.
+const kGaiaActivityDetailBudget = 64 * 1024;
+
 class GaiaActivityPart extends GaiaPart {
-  const GaiaActivityPart(this.tools);
+  const GaiaActivityPart(
+    this.tools, {
+    this.details = const [],
+    this.failures = const [],
+  });
 
   /// Tool names, in the order they were called.
   final List<String> tools;
 
+  /// What each of [tools] was called with, by its place: a command, a query,
+  /// a path. Null where it isn't known (yet), and shorter than [tools] when
+  /// the last ones have none.
+  final List<String?> details;
+
+  /// Why each of [tools] failed, by its place, as its backend said it
+  /// briefly ("Exit code 1", "Declined"). Null for one that didn't fail, or
+  /// hasn't finished; shorter than [tools] as [details] can be.
+  final List<String?> failures;
+
+  String? detailAt(int index) => details.elementAtOrNull(index);
+
+  String? failureAt(int index) => failures.elementAtOrNull(index);
+
+  /// With call [index]'s detail and failure as given; null keeps its own.
+  /// A detail that would take the part's details over
+  /// [kGaiaActivityDetailBudget] is left out.
+  GaiaActivityPart withCall(int index, {String? detail, String? failure}) {
+    final used = details.fold(0, (sum, d) => sum + (d?.length ?? 0));
+    final fits =
+        detail != null &&
+        used - (detailAt(index)?.length ?? 0) + detail.length <=
+            kGaiaActivityDetailBudget;
+    return GaiaActivityPart(
+      tools,
+      details: [
+        for (var i = 0; i < tools.length; i++)
+          i == index && fits ? detail : detailAt(i),
+      ],
+      failures: [
+        for (var i = 0; i < tools.length; i++)
+          i == index ? failure ?? failureAt(i) : failureAt(i),
+      ],
+    );
+  }
+
+  /// With [tool] called after the others.
+  GaiaActivityPart adding(String tool, {String? detail, String? failure}) =>
+      GaiaActivityPart(
+        [...tools, tool],
+        details: [...details],
+        failures: [...failures],
+      ).withCall(tools.length, detail: detail, failure: failure);
+
   @override
-  Map<String, Object?> toJson() => {'type': 'activity', 'tools': tools};
+  Map<String, Object?> toJson() => {
+    'type': 'activity',
+    'tools': tools,
+    if (details.any((detail) => detail != null)) 'details': details,
+    if (failures.any((failure) => failure != null)) 'failures': failures,
+  };
 }
 
 /// An image on a user's message: a media asset (§8), never the bytes. Where

@@ -119,6 +119,104 @@ void main() {
     expect(_build(turns.last).single, isA<GaiaTextPart>());
   });
 
+  test("a tool call's command comes in once its input has streamed", () {
+    final turn = _turns(_events('tool_call_two_turns.jsonl')).first;
+    final builder = GaiaTurnBuilder();
+    final seen = <List<String?>>[];
+    for (final event in turn) {
+      final gaia = gaiaEventOf(event);
+      if (gaia != null && builder.apply(gaia)) {
+        if (builder.parts.firstOrNull case GaiaActivityPart part) {
+          seen.add([
+            for (var i = 0; i < part.tools.length; i++) part.detailAt(i),
+          ]);
+        }
+      }
+    }
+    // Shown as called at once, then with its command.
+    expect(seen.first, [null]);
+    expect(seen.last, ['echo gaia-fixture']);
+    expect(_build(turn).first.toJson(), {
+      'type': 'activity',
+      'tools': ['Bash'],
+      'details': ['echo gaia-fixture'],
+    });
+  });
+
+  test("a failed tool result marks its call; a succeeded one doesn't", () {
+    // The recorded Bash call succeeded.
+    final turn = _turns(_events('tool_call_two_turns.jsonl')).first;
+    expect(turn.whereType<ClaudeToolErrors>(), isEmpty);
+    expect((_build(turn).first as GaiaActivityPart).failureAt(0), isNull);
+
+    final builder = GaiaTurnBuilder()
+      ..apply(const GaiaToolUse('Bash', id: 'a'))
+      ..apply(const GaiaToolUse('Read', id: 'b'));
+    final failed = parseClaudeLine(
+      '{"type":"user","parent_tool_use_id":null,"message":{"content":['
+      '{"type":"tool_result","tool_use_id":"a","is_error":true,'
+      r'"content":"Exit code 1\nerror: no such file"},'
+      '{"type":"tool_result","tool_use_id":"b","is_error":true,'
+      '"content":[{"type":"text","text":"File does not exist."}]},'
+      '{"type":"tool_result","tool_use_id":"c","is_error":true,'
+      '"content":"<tool_use_error>File has not been read yet.'
+      '</tool_use_error>"}]}}',
+    );
+    builder.apply(const GaiaToolUse('Edit', id: 'c'));
+    expect(builder.apply(gaiaEventOf(failed)!), isTrue);
+    expect((builder.parts.single as GaiaActivityPart).failures, [
+      'Exit code 1',
+      'File does not exist.',
+      'File has not been read yet.',
+    ]);
+    // A subagent's, and a result that wasn't an error, are nothing.
+    expect(
+      parseClaudeLine(
+        '{"type":"user","parent_tool_use_id":"p","message":{"content":['
+        '{"type":"tool_result","tool_use_id":"a","is_error":true,'
+        '"content":"x"}]}}',
+      ),
+      isA<ClaudeIgnored>(),
+    );
+    expect(
+      parseClaudeLine(
+        '{"type":"user","parent_tool_use_id":null,"message":{"content":['
+        '{"type":"tool_result","tool_use_id":"a","is_error":false,'
+        '"content":"ok"}]}}',
+      ),
+      isA<ClaudeIgnored>(),
+    );
+  });
+
+  test("a subagent's tool inputs aren't the reply's", () {
+    expect(
+      parseClaudeLine(
+        '{"type":"assistant","parent_tool_use_id":"toolu_p","message":'
+        '{"content":[{"type":"tool_use","id":"t","name":"Bash",'
+        '"input":{"command":"ls"}}]}}',
+      ),
+      isA<ClaudeIgnored>(),
+    );
+  });
+
+  test('each tool shows the input that says what it did', () {
+    String? detail(String name, Map<String, Object?> input) =>
+        (gaiaEventOf(ClaudeToolInputs({'t': (name: name, input: input)}))!
+                as GaiaToolDetails)
+            .details['t'];
+    expect(detail('WebSearch', {'query': 'dart 4'}), 'dart 4');
+    expect(
+      detail('Edit', {'file_path': 'a.dart', 'old_string': 'x'}),
+      'a.dart',
+    );
+    // Any other tool: its whole input.
+    expect(detail('ask_user', {'question': 'Q?'}), '{"question":"Q?"}');
+    // Clipped, so a long one stays small enough to sync.
+    final long = detail('Bash', {'command': 'x' * 5000})!;
+    expect(long.length, kGaiaToolDetailMax + 1);
+    expect(long, endsWith('…'));
+  });
+
   test('a resumed session keeps its id', () {
     final events = _events('resume.jsonl');
     final sessionId = events.whereType<ClaudeInit>().single.sessionId;

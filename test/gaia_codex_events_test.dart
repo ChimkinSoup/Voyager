@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +60,10 @@ void main() {
       {
         'type': 'activity',
         'tools': ['Shell'],
+        'details': [
+          r'"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
+              "-Command 'echo gaia-contract'",
+        ],
       },
       {'type': 'text', 'text': 'gaia-contract'},
     ]);
@@ -82,6 +87,56 @@ void main() {
     );
     expect(gaiaEventsOf(event).single, isA<GaiaToolUse>());
     expect((gaiaEventsOf(event).single as GaiaToolUse).name, 'Edit');
+  });
+
+  test('a failed call says why in brief, a succeeded one nothing', () {
+    String? failure(String item) =>
+        codexToolFailure(jsonDecode(item) as Map<String, Object?>);
+    expect(failure('{"exit_code":0,"status":"completed"}'), isNull);
+    expect(failure('{"exit_code":2,"status":"failed"}'), 'Exit code 2');
+    expect(failure('{"exitCode":null,"status":"declined"}'), 'Declined');
+    expect(
+      failure('{"status":"failed","error":{"message":"refused\\nmore"}}'),
+      'refused',
+    );
+    expect(failure('{"success":false}'), 'Failed');
+    expect(failure('{"query":"x"}'), isNull);
+  });
+
+  test("a search, an edit and an MCP call show what they did", () {
+    GaiaToolUse use(String item) =>
+        gaiaEventsOf(
+              parseCodexLine('{"type":"item.completed","item":$item}'),
+            ).single
+            as GaiaToolUse;
+    expect(
+      use('{"id":"i","type":"web_search","query":"flutter 4"}').detail,
+      'flutter 4',
+    );
+    expect(
+      use(
+        '{"id":"i","type":"file_change","changes":'
+        '[{"path":"a.txt","kind":"add"},{"path":"b.txt","kind":"update"}]}',
+      ).detail,
+      'a.txt\nb.txt',
+    );
+    // No paths is no detail, not an empty one dressed as JSON.
+    expect(
+      use('{"id":"i","type":"file_change","changes":[]}').detail,
+      isNull,
+    );
+    expect(gaiaClipDetail(' \n'), isNull);
+    expect(
+      gaiaClipDetail('x' * (kGaiaToolDetailMax + 1)),
+      '${'x' * kGaiaToolDetailMax}…',
+    );
+    expect(
+      use(
+        '{"id":"i","type":"mcp_tool_call","server":"docs","tool":"find",'
+        '"arguments":{"q":"x"}}',
+      ).detail,
+      'docs/find {"q":"x"}',
+    );
   });
 
   test('a known event missing a field it needs is a parse failure', () {

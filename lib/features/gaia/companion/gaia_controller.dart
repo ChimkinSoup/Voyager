@@ -3777,6 +3777,8 @@ class GaiaController extends ChangeNotifier {
     // Set once the reply is settled: a card voided as its run ends comes
     // too late to change it.
     var ended = false;
+    // The reply's next save, when the last change came too soon after one.
+    Timer? persistSoon;
     // The runner was handed the turn, so a stop may need it taken back.
     var runnerHeard = false;
     // A stop gave the message back (§9.6), or why its session kept it.
@@ -3808,7 +3810,20 @@ class GaiaController extends ChangeNotifier {
       if ((event is GaiaCardUpdate && event.saveNow) ||
           last == null ||
           DateTime.now().difference(last) > _persistEvery) {
+        persistSoon?.cancel();
+        persistSoon = null;
         unawaited(_persist(reply));
+      } else {
+        // Saved once the second is up, so a change with nothing after it,
+        // such as a tool's command just before a long run, isn't left
+        // unsaved until the next event.
+        persistSoon ??= Timer(
+          _persistEvery - DateTime.now().difference(last),
+          () {
+            persistSoon = null;
+            if (!ended) unawaited(_persist(reply));
+          },
+        );
       }
       if (event case GaiaCardUpdate(:final card) when card.isOpen) {
         _reportCard(chatId, card);
@@ -4218,6 +4233,7 @@ class GaiaController extends ChangeNotifier {
       _stopping.remove(chatId);
       _running.remove(chatId);
       _turnTools.remove(chatId);
+      persistSoon?.cancel();
       _lastPersist.remove(reply.id);
       _reportRuns();
       notifyListeners();

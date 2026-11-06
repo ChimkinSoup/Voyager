@@ -60,7 +60,14 @@ class _GaiaSpinnerState extends State<GaiaSpinner>
         child: CustomPaint(
           painter: _SpinnerPainter(
             turn: _turn,
-            color: widget.color ?? Theme.of(context).colorScheme.primary,
+            light: gaiaAstralLightFor(
+              widget.color ?? Theme.of(context).colorScheme.primary,
+              Theme.of(context).brightness,
+            ),
+            glow: gaiaAstralLight(
+              widget.color ?? Theme.of(context).colorScheme.primary,
+            ),
+            gold: gaiaAstralGoldFor(Theme.of(context).brightness),
           ),
         ),
       ),
@@ -89,17 +96,28 @@ double _trailAlpha(double behind) =>
     1 - math.pow(0.75 - math.exp(-behind * 2.2) * 0.7, 1.85).toDouble();
 
 class _SpinnerPainter extends CustomPainter {
-  _SpinnerPainter({required this.turn, required this.color})
-    : super(repaint: turn);
+  _SpinnerPainter({
+    required this.turn,
+    required this.light,
+    required this.glow,
+    required this.gold,
+  }) : super(repaint: turn);
 
   final Animation<double> turn;
-  final Color color;
+
+  /// The Astral core's light, tinted by the accent: [gaiaAstralLightFor].
+  final Color light;
+
+  /// The core's halo: [gaiaAstralLight] on either theme, since a darker one
+  /// reads as a smudge on a light background.
+  final Color glow;
+
+  /// [kGaiaAstralGold], or its deep amber on a light background.
+  final Color gold;
 
   @override
   void paint(Canvas canvas, Size size) {
     // Match the Astral material's accent-tinted light and warm gold orbit.
-    final light = gaiaAstralLight(color);
-    const gold = kGaiaAstralGold;
     final diameter = size.shortestSide;
     final radius = diameter * 0.42;
     final centre = size.center(Offset.zero);
@@ -168,8 +186,8 @@ class _SpinnerPainter extends CustomPainter {
         ..shader =
             RadialGradient(
               colors: [
-                light.withValues(alpha: light.a * 0.3),
-                light.withValues(alpha: 0),
+                glow.withValues(alpha: glow.a * 0.3),
+                glow.withValues(alpha: 0),
               ],
             ).createShader(
               Rect.fromCircle(center: centre, radius: diameter * 0.17),
@@ -180,5 +198,8 @@ class _SpinnerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SpinnerPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.turn != turn;
+      oldDelegate.light != light ||
+      oldDelegate.glow != glow ||
+      oldDelegate.gold != gold ||
+      oldDelegate.turn != turn;
 }

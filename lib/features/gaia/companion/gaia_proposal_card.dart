@@ -92,7 +92,11 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
         children: [
           Row(
             children: [
-              const Icon(Icons.edit_note, size: 18, color: kGaiaAstralGold),
+              Icon(
+                Icons.edit_note,
+                size: 18,
+                color: gaiaAstralGoldFor(Theme.of(context).brightness),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
