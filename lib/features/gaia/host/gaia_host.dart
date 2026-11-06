@@ -1117,6 +1117,19 @@ class GaiaHost {
           debugPrint('[gaia] images of $chatId not taken off: $error');
         }
         return {'mediaDeletedAt': at?.toIso8601String()};
+      case 'takeBack':
+        final chat = params['chat'] == true;
+        final messages = [
+          for (final message in params['messages']! as List)
+            GaiaMessage.fromJson(_map(message)),
+        ];
+        await store.takeBack(messages, chat: chat);
+        if (chat) {
+          final chatId = messages.first.chatId;
+          await _syncBorder(store);
+          await store.deleteDraft(chatId);
+        }
+        return null;
       case 'restoreChat':
         final chatId = params['chatId']! as String;
         await store.restoreChat(chatId);

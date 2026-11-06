@@ -477,6 +477,42 @@ void main() {
   );
 
   test(
+    'a stop while the process starts ends the turn before its prompt goes, '
+    'with nothing to take back: exec, then app-server',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final exec = runner('stop_starting');
+      final server = appServer('app_server_stop_starting');
+      try {
+        for (final GaiaAgentRunner cli in [exec, server]) {
+          final turn = cli.send(
+            chatId: 'contract',
+            sessionId: null,
+            model: _model,
+            prompt: 'Reply with just OK.',
+            onEvent: (_) {},
+          );
+          await cli.stop('contract');
+          await expectLater(
+            turn,
+            throwsA(isA<GaiaRunException>()),
+            reason: '${cli.runtimeType}',
+          );
+          expect(
+            await cli.takeBack('contract'),
+            isNull,
+            reason: '${cli.runtimeType}',
+          );
+        }
+      } finally {
+        await exec.killAll();
+        await server.killAll();
+      }
+    },
+  );
+
+  test(
     'app-server: an unknown model ends the turn with an error result',
     skip: !_enabled,
     timeout: _timeout,

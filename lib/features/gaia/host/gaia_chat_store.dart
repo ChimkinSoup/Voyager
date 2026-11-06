@@ -287,6 +287,36 @@ class GaiaChatStore {
   /// [restoreChat] can undo it.
   Future<void> deleteChat(String chatId) => _repository.softDeleteChat(chatId);
 
+  /// A stopped message given back to the composer (GAIA_HLD.md §9.6): it
+  /// and its empty reply erased, as the trash's "Delete forever" leaves a
+  /// row, and with [chat] their chat, which held nothing else. Erased even
+  /// if not stored yet, so a save still on its way stays out.
+  Future<void> takeBack(List<GaiaMessage> messages, {required bool chat}) =>
+      _serial(() async {
+        for (final message in messages) {
+          final existing = await _repository.getMessage(message.id) ?? message;
+          if (isErasedAt(existing.deletedAt)) continue;
+          await _repository.upsertMessage(
+            existing.copyWith(
+              parts: const [],
+              status: GaiaMessageStatus.cancelled,
+              deletedAt: kErasedAt,
+              version: existing.version + kEraseVersionStep,
+            ),
+          );
+        }
+        final chatId = messages.first.chatId;
+        final stored = await _repository.getChat(chatId);
+        if (!chat || stored == null || isErasedAt(stored.deletedAt)) return;
+        await _repository.upsertChat(
+          stored.copyWith(
+            title: '',
+            deletedAt: kErasedAt,
+            version: stored.version + kEraseVersionStep,
+          ),
+        );
+      });
+
   Future<void> restoreChat(String chatId) => _repository.restoreChat(chatId);
 
   /// The account [adapter]'s next messages run on (§6.5).

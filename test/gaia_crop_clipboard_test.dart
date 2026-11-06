@@ -84,7 +84,7 @@ void main() {
       ).readAsBytes();
       expect(copied.single, attached);
       expect(copied.single.sublist(1, 4), 'PNG'.codeUnits);
-      expect(controller.draft.text, '[image 1]');
+      expect(controller.draft.text, '[image 1] ');
     });
   });
 

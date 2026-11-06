@@ -7,6 +7,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/features/gaia/host/gaia_clipboard.dart';
+import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
@@ -101,6 +102,11 @@ abstract interface class GaiaInputBackend {
   /// One atomic [SendInput]; how many of [events] went in.
   int send(List<GaiaInputEvent> events);
 
+  /// Returns once [hwnd]'s thread has pumped its messages [times] times
+  /// (`WM_NULL` round trips), so has handled input sent it before; or after
+  /// [limit] if it hasn't.
+  Future<void> pumped(int hwnd, {required int times, required Duration limit});
+
   /// The windows Alt+Tab would show, front first ([gaiaListWindows]).
   List<GaiaListedWindow> listWindows();
 
@@ -161,6 +167,14 @@ abstract interface class GaiaInputBackend {
   /// Replaces the clipboard with [text] ([gaiaWriteClipboard]); false when
   /// another app held the clipboard.
   Future<bool> writeClipboard(String text);
+
+  /// Every format on the clipboard ([gaiaSaveClipboard]); null when another
+  /// app held it.
+  GaiaSavedClipboard? saveClipboard();
+
+  /// Puts back what [saveClipboard] saved, unless something has been copied
+  /// since Gaia's last [writeClipboard].
+  void restoreClipboard(GaiaSavedClipboard saved);
 }
 
 /// The `os_*` action tools (GAIA_HLD.md §15.6), answered by the main instance:
@@ -236,6 +250,22 @@ class GaiaOsControl {
   static const _maxSteps = 20;
   static const _maxText = 2000;
   static const _charPause = Duration(milliseconds: 20);
+
+  /// Text this long or longer is pasted: typed, it goes at about 30
+  /// characters a second.
+  static const _pasteFrom = 200;
+
+  /// How long an app is given to read a paste, once its thread has handled
+  /// the keys, before the user's clipboard is put back: a browser reads it in
+  /// another process. Put back after a fixed time alone, an app busy longer
+  /// than that pasted the user's clipboard.
+  static const _pasteRead = Duration(milliseconds: 500);
+
+  /// The round trips that see Ctrl+V's keys and the character it makes
+  /// handled, as qa/harness/Bg.cs counts them; and the longest a hung app is
+  /// waited for.
+  static const _pastePumps = 5;
+  static const _pasteHang = Duration(seconds: 10);
 
   /// A drag's moves from start to end, and the pause before each and before
   /// letting go, so the app sees a drag rather than a click (§8.4).
@@ -1120,7 +1150,7 @@ class GaiaOsControl {
         _backend.frame(window.hwnd),
         match,
         preview: false,
-        typing: _typingTime(step),
+        typing: _typingTime(step, window),
       );
       if (shown != null) {
         play(shown);
@@ -1724,6 +1754,7 @@ class GaiaOsControl {
     String text,
     _Active active,
   ) async {
+    if (_pastes(window, text) && await _paste(window, text, active)) return;
     final taps = gaiaTextTaps(text);
     for (final (i, tap) in taps.indexed) {
       await _waitForModifiers(active);
@@ -1742,6 +1773,41 @@ class GaiaOsControl {
         await Future<void>.delayed(_charPause);
       }
     }
+  }
+
+  /// Long text goes in as one Ctrl+V, except in a console, where Ctrl+V may
+  /// not paste.
+  bool _pastes(GaiaForegroundWindow window, String text) =>
+      text.length >= _pasteFrom && !window.console;
+
+  /// [text] put on the clipboard and pasted, then the user's clipboard put
+  /// back as it was. False, with nothing sent, when the clipboard couldn't be
+  /// had, so the text is typed instead.
+  Future<bool> _paste(
+    GaiaForegroundWindow window,
+    String text,
+    _Active active,
+  ) async {
+    final saved = _backend.saveClipboard();
+    if (saved == null) return false;
+    // Classic edit controls break lines only at CRLF.
+    final lines = text.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
+    if (!await _backend.writeClipboard(lines)) {
+      // It may have emptied the clipboard before failing.
+      _backend.restoreClipboard(saved);
+      return false;
+    }
+    try {
+      await _waitForModifiers(active);
+      active.throwIfStopped();
+      _inFront(window);
+      _send(GaiaKeyChord.parse('Ctrl+V').events, active);
+      await _backend.pumped(window.hwnd, times: _pastePumps, limit: _pasteHang);
+      await Future<void>.delayed(_pasteRead);
+    } finally {
+      _backend.restoreClipboard(saved);
+    }
+    return true;
   }
 
   /// Whatever [SendInput] took of [events], remembering keys left down: a key's
@@ -1771,9 +1837,12 @@ class GaiaOsControl {
   }
 
   /// About how long [step]'s typing takes, for its flash to last as long.
-  Duration _typingTime(_Step step) {
+  Duration _typingTime(_Step step, GaiaForegroundWindow window) {
     final text = step.text;
     if (step.action != _Action.type || text == null) return Duration.zero;
+    if (_pastes(window, text)) {
+      return _pasteRead + (step.aimed ? _settle : Duration.zero);
+    }
     // Enter and Tab each wait to settle.
     final breaks = RegExp('[\n\t]').allMatches(text).length;
     return _charPause * text.length + _settle * (breaks + (step.aimed ? 1 : 0));
@@ -2941,6 +3010,45 @@ class _Win32InputBackend implements GaiaInputBackend {
 
   @override
   Future<bool> writeClipboard(String text) => gaiaWriteClipboard(text);
+
+  @override
+  Future<void> pumped(
+    int hwnd, {
+    required int times,
+    required Duration limit,
+  }) => Isolate.run(() {
+    // Blocking, so off the UI thread.
+    final until = DateTime.now().add(limit);
+    final result = calloc<IntPtr>();
+    try {
+      for (var i = 0; i < times; i++) {
+        final left = until.difference(DateTime.now()).inMilliseconds;
+        if (left <= 0) return;
+        if (SendMessageTimeout(
+              hwnd,
+              WM_NULL,
+              0,
+              0,
+              SMTO_NORMAL,
+              left,
+              result,
+            ) ==
+            0) {
+          return;
+        }
+      }
+    } finally {
+      free(result);
+    }
+  });
+
+  @override
+  GaiaSavedClipboard? saveClipboard() => gaiaSaveClipboard();
+
+  @override
+  void restoreClipboard(GaiaSavedClipboard saved) {
+    if (gaiaClipboardIsOurs()) gaiaRestoreClipboard(saved);
+  }
 
   static const _extended = {
     VK_LWIN,

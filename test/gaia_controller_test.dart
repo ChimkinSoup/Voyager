@@ -137,6 +137,12 @@ class _Main {
       case 'restoreChat':
         await store.restoreChat(params['chatId']! as String);
         return null;
+      case 'takeBack':
+        await store.takeBack([
+          for (final message in params['messages']! as List)
+            GaiaMessage.fromJson((message as Map).cast<String, Object?>()),
+        ], chat: params['chat'] == true);
+        return null;
       case 'setLastTier':
         await store.setLastTier(
           GaiaTier.values.byName(params['tier']! as String),
@@ -1039,7 +1045,7 @@ void main() {
         'stored on its chat', () async {
       controller.draft.text = 'Compare';
       await controller.attachImage(Uint8List.fromList([1, 2, 3]));
-      expect(controller.draft.text, 'Compare [image 1]');
+      expect(controller.draft.text, 'Compare [image 1] ');
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
       await controller.send(
         controller.draft.text,
@@ -1122,7 +1128,7 @@ void main() {
       expect(runner.sent, isEmpty);
       expect(controller.chats, isEmpty);
       expect(controller.messages, isEmpty);
-      expect(controller.draft.text, 'Look [image 1]');
+      expect(controller.draft.text, 'Look [image 1] ');
       expect(main.detached, ['ref-1']);
     }
 
@@ -1171,7 +1177,7 @@ void main() {
       await controller.stop(controller.currentChatId!);
       expect(controller.currentRunning, isFalse);
       expect(controller.messages, isEmpty);
-      expect(controller.draft.text, 'Look [image 1]');
+      expect(controller.draft.text, 'Look [image 1] ');
 
       main.holdImages!.complete();
       await held;
@@ -1207,8 +1213,8 @@ void main() {
       expect(runner.sent.map((s) => s.prompt), ['One', 'Look']);
     });
 
-    test('a stop while a new chat is saved ends its run cancelled, before '
-        'any agent hears it', () async {
+    test('a stop while a new chat is saved ends its run before any agent '
+        'hears it, and gives the message back (§9.6)', () async {
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
       main.holdPutChat = Completer();
       final sending = controller.send('Look');
@@ -1219,7 +1225,9 @@ void main() {
       await settle();
 
       expect(runner.sent, isEmpty);
-      expect(controller.messages.last.status, GaiaMessageStatus.cancelled);
+      expect(runner.takenBack, isEmpty);
+      expect(controller.chats, isEmpty);
+      expect(controller.draft.text, 'Look');
       expect(controller.currentRunning, isFalse);
     });
 
@@ -1236,7 +1244,7 @@ void main() {
       await controller.attachImage(Uint8List.fromList([1]));
       await sendDraft('One');
       await controller.attachImage(Uint8List.fromList([2]));
-      expect(controller.draft.text, '[image 2]');
+      expect(controller.draft.text, '[image 2] ');
       await sendDraft('Two');
 
       // A token deleted from the draft is put back at the end.
@@ -1269,7 +1277,7 @@ void main() {
       expect(window.shown, GaiaMode.small);
       expect(p.dirname(controller.draftImages.single.path), drafts.path);
       expect(shot.existsSync(), isFalse);
-      expect(controller.draft.text, '[image 1]');
+      expect(controller.draft.text, '[image 1] ');
     });
 
     test('/this takes its crop out of the swept captures folder; one nobody '
@@ -1305,7 +1313,7 @@ void main() {
       expect(controller.draftControl?.name, 'Submit');
       expect(p.dirname(controller.draftImages.single.path), drafts.path);
       expect(used.existsSync(), isFalse);
-      expect(controller.draft.text, '[image 1]');
+      expect(controller.draft.text, '[image 1] ');
     });
 
     test('/this with its crop swept away still attaches the control', () async {
@@ -1425,8 +1433,26 @@ void main() {
       controller.draft.text = 'See';
       await controller.attachImage(Uint8List.fromList([1]));
       controller.removeDraftImage(1);
-      expect(controller.draft.text, 'See');
+      expect(controller.draft.text, 'See ');
       expect(controller.draftImages, isEmpty);
+    });
+
+    test('an image starting the draft is spaced from the text after', () async {
+      await controller.attachImage(Uint8List.fromList([1]));
+      expect(controller.draft.text, '[image 1] ');
+      expect(controller.draft.selection.baseOffset, 10);
+
+      controller.draft.value = const TextEditingValue(
+        text: 'hello',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+      controller.removeDraftImage(1);
+      await controller.attachImage(Uint8List.fromList([2]));
+      final label = controller.draftImages.single.label;
+      expect(controller.draft.text, '[image $label] hello');
+
+      controller.removeDraftImage(label);
+      expect(controller.draft.text, 'hello');
     });
 
     test("a second send while the first one's images upload is refused, and "
@@ -1470,7 +1496,7 @@ void main() {
       expect(controller.currentChatId, isNull);
       expect(controller.uploadingImages, isEmpty);
       expect(main.detached, ['ref-1']);
-      expect(controller.draft.text, 'Look [image 1] [image 2]');
+      expect(controller.draft.text, 'Look [image 1] [image 2] ');
       expect(controller.draftImages.map((image) => image.label), [1, 2]);
       expect(images.every((image) => File(image.path).existsSync()), isTrue);
       expect(toasts.single.title, "Couldn't attach [image 2]");
@@ -1502,7 +1528,7 @@ void main() {
         expect(controller.draftImages, isEmpty);
 
         await controller.selectChat(first);
-        expect(controller.draft.text, 'Look [image 1]');
+        expect(controller.draft.text, 'Look [image 1] ');
         expect(controller.draftImages.map((image) => image.label), [1]);
       },
     );
@@ -1592,7 +1618,7 @@ void main() {
         expect(restarted.draft.text, 'Fresh');
         await restarted.selectChat(chat);
         await until(() => restarted.draftImages.isNotEmpty);
-        expect(restarted.draft.text, 'Later [image 1]');
+        expect(restarted.draft.text, 'Later [image 1] ');
         final image = restarted.draftImages.single;
         expect(image.label, 1);
         expect(image.mediaId, 'draft-media-1');
@@ -1696,7 +1722,7 @@ void main() {
       await controller.attachImage(Uint8List.fromList([1]));
       expect(controller.draftImages.single.label, 2);
       expect(controller.readyToSend(), isTrue);
-      expect(controller.draft.text, 'See now [image 2]');
+      expect(controller.draft.text, 'See now [image 2] ');
     });
 
     test('a deleted draft is taken as emptied', () async {
@@ -1822,7 +1848,7 @@ void main() {
       await controller.attachPaths([png]);
       expect(controller.draftImages.single.label, 1);
       expect(controller.draftFiles, isEmpty);
-      expect(controller.draft.text, '[image 1]');
+      expect(controller.draft.text, '[image 1] ');
       // Its copy is the draft's, in the system temp folder.
       controller.removeDraftImage(1);
     });
@@ -2623,7 +2649,7 @@ void main() {
     });
 
     test('/stop stops the reply in progress', () async {
-      runner.turns.add([const ClaudeTextStart()]);
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hm')]);
       final sending = controller.send('Hi');
       await settle();
       await controller.send('/stop');
@@ -2826,7 +2852,7 @@ void main() {
         final first = controller.currentChatId!;
         controller.newChat();
         await controller.attachImage(Uint8List.fromList([1]));
-        controller.draft.text = '${controller.draft.text} waiting';
+        controller.draft.text = '${controller.draft.text}waiting';
         await controller.selectChat(first);
         await controller.attachImage(Uint8List.fromList([2]));
         controller.draftFiles.add(const GaiaFilePart(path: r'C:\a.txt'));
@@ -3090,6 +3116,157 @@ void main() {
       expect(_text(reply), 'partial');
     });
 
+    group('a stop before anything shows gives the message back (§9.6)', () {
+      late List<GaiaRunToast> toasts;
+
+      setUp(() {
+        toasts = [];
+        controller.toasts.listen(toasts.add);
+      });
+
+      /// A chat with a session, and a second message hanging, stopped.
+      Future<String> stopSecond({bool typed = false}) async {
+        runner.turns
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'))
+          ..add([const ClaudeTextStart()]);
+        await controller.send('First');
+        await settle();
+        final sending = controller.send('Second');
+        await settle();
+        if (typed) controller.draft.text = 'Typed meanwhile';
+        await controller.stop(controller.currentChatId!);
+        await sending;
+        await settle();
+        return controller.currentChatId!;
+      }
+
+      test('a new chat goes, its message back in the composer, with no '
+          'session to take it from', () async {
+        runner.turns.add([const ClaudeTextStart()]);
+        final sending = controller.send('Hi');
+        await settle();
+        final chatId = controller.currentChatId!;
+        await controller.stop(chatId);
+        await sending;
+        await settle();
+
+        expect(runner.takenBack, isEmpty);
+        expect(controller.chats, isEmpty);
+        expect(controller.currentChatId, isNull);
+        expect(controller.draft.text, 'Hi');
+        expect(await main.store.chats(), isEmpty);
+        expect(await main.store.messages(chatId), isEmpty);
+        expect(toasts, isEmpty);
+      });
+
+      test('a resumed session has the turn taken back first; the message '
+          'and its reply come off the chat', () async {
+        final chatId = await stopSecond();
+
+        expect(runner.takenBack, [chatId]);
+        expect(controller.messages.map(_text), ['First', isNotEmpty]);
+        expect((await main.messages()).map(_text), ['First', isNotEmpty]);
+        expect(controller.draft.text, 'Second');
+        expect(controller.currentRunning, isFalse);
+        expect(toasts, isEmpty);
+      });
+
+      test('a session that keeps it keeps it in the chat too, and says '
+          'why', () async {
+        runner.takeBackRefusal = "Claude Code wouldn't resume from before it.";
+        await stopSecond();
+
+        final messages = await main.messages();
+        expect(messages.map(_text), ['First', isNotEmpty, 'Second', '']);
+        expect(messages.last.status, GaiaMessageStatus.cancelled);
+        expect(controller.draft.text, isEmpty);
+        expect(toasts.single.title, 'The stopped message stays in the chat');
+        expect(toasts.single.body, runner.takeBackRefusal);
+      });
+
+      test('something typed since keeps it in the chat, untouched', () async {
+        await stopSecond(typed: true);
+
+        expect(runner.takenBack, isEmpty);
+        expect(
+          (await main.messages()).last.status,
+          GaiaMessageStatus.cancelled,
+        );
+        expect(controller.draft.text, 'Typed meanwhile');
+      });
+
+      /// [stopSecond], its take-back held: the send still under way.
+      Future<(String, Future<void>)> stopSecondHeld() async {
+        runner
+          ..takeBackGate = Completer()
+          ..turns.addAll(claudeFixtureTurns('single_turn.jsonl'))
+          ..turns.add([const ClaudeTextStart()]);
+        await controller.send('First');
+        await settle();
+        final sending = controller.send('Second');
+        await settle();
+        final chatId = controller.currentChatId!;
+        await controller.stop(chatId);
+        await settle();
+        return (chatId, sending);
+      }
+
+      test('the chat stops before its take-back is done; typed meanwhile, '
+          'the message stays, and the user is told the session no longer '
+          'has it', () async {
+        final (chatId, sending) = await stopSecondHeld();
+
+        expect(runner.takenBack, [chatId]);
+        expect(controller.currentRunning, isFalse);
+        controller.draft.text = 'Typed meanwhile';
+        runner.takeBackGate!.complete();
+        await sending;
+        await settle();
+
+        final messages = await main.messages();
+        expect(messages.map(_text), ['First', isNotEmpty, 'Second', '']);
+        expect(controller.draft.text, 'Typed meanwhile');
+        expect(toasts.single.title, 'The stopped message stays in the chat');
+        expect(toasts.single.body, contains('no longer has it'));
+      });
+
+      test('a send during the take-back waits for it, and the stopped '
+          'message stays', () async {
+        final (_, sending) = await stopSecondHeld();
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        final third = controller.send('Third');
+        await settle();
+        expect(runner.sent, hasLength(2));
+
+        runner.takeBackGate!.complete();
+        await sending;
+        await third;
+        await settle();
+
+        expect(runner.sent, hasLength(3));
+        final texts = (await main.messages()).map(_text).toList();
+        expect(texts.sublist(2, 5), ['Second', '', 'Third']);
+        expect(controller.draft.text, isEmpty);
+        expect(toasts.single.body, contains('no longer has it'));
+      });
+
+      test(
+        "a later turn's notice that a take-back didn't hold is shown",
+        () async {
+          final chatId = await stopSecond();
+          runner
+            ..notice = 'Claude Code may still remember it.'
+            ..turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+          controller.draft.clear();
+          await controller.send('Third');
+          await settle();
+
+          expect(controller.currentChatId, chatId);
+          expect(toasts.single.body, 'Claude Code may still remember it.');
+        },
+      );
+    });
+
     test('a message while the chat is running is ignored', () async {
       runner.turns.add([const ClaudeTextStart()]);
       final sending = controller.send('first');
@@ -3239,7 +3416,7 @@ void main() {
     });
 
     test("the main instance's Stop stops the run", () async {
-      runner.turns.add([const ClaudeTextStart()]);
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hm')]);
       final sending = controller.send('Hi');
       await settle();
       await main.pipe.request('stop', {'chatId': controller.currentChatId});
@@ -3420,6 +3597,39 @@ void main() {
 
         expect(controller.currentChatId, chatId);
         runner.finish(chatId!);
+      });
+
+      test('the hotkey stays on a running chat in view rather than going to '
+          'the waiting card', () async {
+        await controller.openWindow();
+        final tools = await hanging();
+        final waitingChat = controller.currentChatId!;
+        controller.newChat();
+        await hanging();
+        final running = controller.currentChatId!;
+        await ask(tools);
+
+        await controller.dismiss();
+        await controller.onHotkey('small', pressed: true);
+
+        expect(controller.currentChatId, running);
+        runner.finish(waitingChat);
+        runner.finish(running);
+      });
+
+      test("hidden, a card doesn't take the view off a running chat", () async {
+        final tools = await hanging();
+        final waitingChat = controller.currentChatId!;
+        controller.newChat();
+        await hanging();
+        final running = controller.currentChatId!;
+        await ask(tools);
+
+        expect(controller.currentChatId, running);
+        expect(window.shown, isNull);
+        expect(window.attended, 0);
+        runner.finish(waitingChat);
+        runner.finish(running);
       });
 
       test('the hotkey closing Gaia leaves the chat as it was', () async {

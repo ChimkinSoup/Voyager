@@ -4,6 +4,22 @@
 // `sdk` MCP server, and the `control_response`s answering the CLI's
 // `mcp_message` and `can_use_tool` requests (observed on 2.1.312; the
 // Agent SDK's own protocol, undocumented). See claude_code_events.dart.
+//
+// FRAGILE(cli): taking a stopped turn back (GAIA_HLD.md §9.6) leans on two
+// flags `claude --help` hides, found in the CLI's own source and checked on
+// 2.1.318:
+//   --resume-session-at <entry uuid>: a resume keeps the session only up to
+//     that entry; the next prompt branches from it, and a later plain
+//     --resume follows the branch.
+//   --resume-drops-turn <prompt uuid>: with the above in print mode, the
+//     resume is refused (an error result, then exit) unless all it cuts is
+//     that prompt's turn.
+// And on the `uuid` a stream-json user message carries becoming its entry's
+// uuid in the session JSONL, whose `uuid`/`parentUuid`/`timestamp` fields
+// are read here. Each step is checked rather than trusted: a resume with
+// the flags is started before the prompt goes back, and refused or not
+// understood it keeps the message in the chat; the next turn's entry must
+// hang off the kept one, or the user is told the session may still have it.
 
 import 'dart:async';
 import 'dart:convert';
@@ -98,6 +114,28 @@ const _mcpConfig =
     '{"mcpServers":{"$kGaiaMcpServer":'
     '{"type":"sdk","name":"$kGaiaMcpServer"}}}';
 
+/// A stopped turn taken back (§9.6): [sessionId] resumed only up to the
+/// entry [keepAt], cutting the turn of the prompt [drops].
+typedef _Rewind = ({String sessionId, String keepAt, String drops});
+
+extension on _Rewind {
+  List<String> get args => [
+    '--resume-session-at',
+    keepAt,
+    '--resume-drops-turn',
+    drops,
+  ];
+}
+
+/// A turn [ClaudeCodeRunner.stop] ended: its prompt's uuid, when it went,
+/// and the process it went to.
+typedef _StoppedTurn = ({
+  String sessionId,
+  String prompt,
+  DateTime sentAt,
+  _ClaudeProcess process,
+});
+
 /// Runs chats on the Claude Code CLI: one long-lived process per active chat,
 /// whose stdin stays open across turns. A process idle for 10 minutes is
 /// killed and the next message resumes its session; past four live, the
@@ -136,6 +174,24 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
   /// Live processes by chat id, least recently used first.
   final _live = <String, _ClaudeProcess>{};
 
+  /// The turn [stop] last caught mid-run, by chat, for [takeBack].
+  final _stopped = <String, _StoppedTurn>{};
+
+  /// Chats whose turn is on its way to a process, not yet sent.
+  final _starting = <String>{};
+
+  /// Chats stopped while [_starting]: the turn fails before its prompt goes,
+  /// so [takeBack] has nothing to take.
+  final _stoppedStarting = <String>{};
+
+  /// Taken-back turns not yet cut, by chat: the next process resuming the
+  /// session does it (see the FRAGILE note above). On disk, so a companion
+  /// restart before then still does.
+  Map<String, _Rewind>? _rewinds;
+  Future<void> _writing = Future.value();
+  File get _rewindsFile =>
+      File(p.join(p.dirname(instructionsFile), 'claude-rewinds.json'));
+
   @override
   Future<GaiaTurnResult> send({
     required String chatId,
@@ -149,10 +205,11 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    final (result, started, sessionModel) = await _send(
+    final newSessionId = sessionId ?? _uuid.v4();
+    Future<(ClaudeResult, bool, String?, String?)> attempt() => _send(
       chatId: chatId,
       sessionId: sessionId,
-      newSessionId: sessionId ?? _uuid.v4(),
+      newSessionId: newSessionId,
       model: model,
       prompt: prompt,
       images: images,
@@ -164,6 +221,21 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
     );
+    var (result, started, sessionModel, notice) = await attempt();
+    // No session with a take-back's cut: refused, say as the session changed
+    // since the cut was checked, or gone. Once more as it is, so a refusal
+    // doesn't lose the session; one that's gone is still not found.
+    if (_rewinds?[chatId] case final cut?
+        when !started && cut.sessionId == sessionId) {
+      _rewinds!.remove(chatId);
+      await _writeRewinds();
+      (result, started, sessionModel, notice) = await attempt();
+      if (started) {
+        notice ??=
+            'Claude Code may still remember the message you stopped '
+            "earlier: it wouldn't resume from before it.";
+      }
+    }
     return GaiaTurnResult(
       sessionId: result.sessionId,
       isError: result.isError,
@@ -171,6 +243,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
       contextTokens: result.contextTokens,
       contextWindow: result.contextWindowOf(sessionModel),
       sessionFound: started,
+      notice: notice,
     );
   }
 
@@ -202,9 +275,9 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
   )).$1;
 
   /// [sendRaw], whether the process got as far as a session (a resume that
-  /// finds none ends in an error result without an `init`), and the model
-  /// its `init` named.
-  Future<(ClaudeResult, bool, String?)> _send({
+  /// finds none ends in an error result without an `init`), the model its
+  /// `init` named, and a [GaiaTurnResult.notice].
+  Future<(ClaudeResult, bool, String?, String?)> _send({
     required String chatId,
     required String? sessionId,
     required String newSessionId,
@@ -217,7 +290,20 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     required String configDir,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
+    // Before anything's awaited: a stop from here on is caught.
+    _starting.add(chatId);
+    _stoppedStarting.remove(chatId);
     final content = await claudeUserContent(prompt, images);
+    // A stop's turn is only taken back straight after it.
+    _stopped.remove(chatId);
+    final rewinds = await _readRewinds();
+    var cut = rewinds[chatId];
+    if (cut != null && cut.sessionId != sessionId) {
+      // The chat has moved on to another session, which never had the turn.
+      rewinds.remove(chatId);
+      await _writeRewinds();
+      cut = null;
+    }
     var process = _live.remove(chatId);
     String? sessionFile;
     // One that never started a session (a resume that found none) is on
@@ -231,6 +317,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
         (process.model != model ||
             process.configDir != configDir ||
             !process.started ||
+            (cut != null && process.cut != cut) ||
             !process.directories.containsAll(directories))) {
       // Gone before another resumes its session.
       await process.kill();
@@ -254,6 +341,8 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
         configDir: configDir,
         onLine: onLine,
         directories: directories,
+        sessionId: sessionId ?? newSessionId,
+        cut: cut,
         sessionArgs: [
           if (instructions != null) ...[
             '--append-system-prompt-file',
@@ -261,18 +350,53 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
           ],
           ...sessionId == null
               ? ['--session-id', newSessionId]
-              : ['--resume', sessionId],
+              : ['--resume', sessionId, ...?cut?.args],
         ],
       );
     }
+    // From here to the prompt going, nothing's awaited: a stop finds it live.
+    _starting.remove(chatId);
     _live[chatId] = process;
+    // The session after a turn on a cut process: read once for both checks.
+    List<Map<String, Object?>>? entries;
     try {
-      return (
-        await process.turn(content, tools, onEvent),
-        process.started,
-        process.sessionModel,
-      );
+      if (_stoppedStarting.contains(chatId)) {
+        await process.kill();
+        throw GaiaRunException('Stopped.');
+      }
+      final result = await process.turn(content, tools, onEvent);
+      String? notice;
+      if (process.cut case final cut? when process.started) {
+        entries = await _sessionEntries(process.configDir, cut.sessionId);
+        notice = _checkCut(cut, process, entries);
+      }
+      return (result, process.started, process.sessionModel, notice);
     } finally {
+      // Once its session has the prompt's entry, the turn branches off the
+      // cut: a later process resumes as it is. One stopped before the entry
+      // was written keeps the cut for the next. One saved under another id
+      // (told of by [_checkCut]) branched too, or never will: not cut again.
+      if (process.cut case final cut? when process.started) {
+        entries ??= await _sessionEntries(process.configDir, cut.sessionId);
+        final prompt = process.prompt;
+        final sentAt = process.sentAt;
+        if (entries?.any(
+              (e) =>
+                  e['uuid'] == prompt ||
+                  (sentAt != null &&
+                      DateTime.tryParse(
+                            '${e['timestamp']}',
+                          )?.isBefore(sentAt) ==
+                          false),
+            ) ??
+            false) {
+          process.cut = null;
+          if (_rewinds?[chatId] == cut) {
+            _rewinds!.remove(chatId);
+            await _writeRewinds();
+          }
+        }
+      }
       // Read once, as the process started, and the session keeps it (§11):
       // not left on disk with a copy of the user's memories.
       if (sessionFile != null) {
@@ -383,7 +507,177 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
 
   /// Kills [chatId]'s process tree; its turn fails.
   @override
-  Future<void> stop(String chatId) async => _live.remove(chatId)?.kill();
+  Future<void> stop(String chatId) async {
+    // Still starting, maybe after a process left from an earlier turn,
+    // killed below: its own is stopped before the prompt goes.
+    if (_starting.contains(chatId)) _stoppedStarting.add(chatId);
+    final process = _live.remove(chatId);
+    if (process == null) return;
+    if (process.prompt case final prompt? when process.inTurn) {
+      _stopped[chatId] = (
+        sessionId: process.sessionId,
+        prompt: prompt,
+        sentAt: process.sentAt!,
+        process: process,
+      );
+    }
+    await process.kill();
+  }
+
+  /// Finds the stopped prompt in the session JSONL by the uuid Gaia gave it,
+  /// then checks a resume cut to just before it starts cleanly: refused, or
+  /// with flags it doesn't know, the CLI says so at once (checked on
+  /// 2.1.318). The cut itself is made by the next turn's process.
+  @override
+  Future<String?> takeBack(String chatId) async {
+    // Stopped before its prompt went: the session never had it.
+    if (_stoppedStarting.remove(chatId)) return null;
+    final turn = _stopped.remove(chatId);
+    if (turn == null) return 'Claude Code was not running it.';
+    final process = turn.process;
+    final entries = await _sessionEntries(process.configDir, turn.sessionId);
+    if (entries == null) return "Claude Code's session file wasn't found.";
+    final prompt = entries.where((e) => e['uuid'] == turn.prompt).firstOrNull;
+    if (prompt == null) {
+      // Killed before it read the prompt: the session never had it.
+      final later = entries.any(
+        (e) =>
+            DateTime.tryParse('${e['timestamp']}')?.isBefore(turn.sentAt) ==
+            false,
+      );
+      return later
+          ? 'Claude Code saved the message, but not under the id Gaia gave it.'
+          : null;
+    }
+    final keepAt = prompt['parentUuid'];
+    if (keepAt is! String) {
+      return 'The message had nothing before it to go back to.';
+    }
+    final cut = (sessionId: turn.sessionId, keepAt: keepAt, drops: turn.prompt);
+    final check = await _ClaudeProcess.start(
+      workingDirectory: workingDirectory,
+      model: process.model,
+      configDir: process.configDir,
+      onLine: onLine,
+      directories: process.directories,
+      sessionId: turn.sessionId,
+      cut: cut,
+      sessionArgs: ['--resume', turn.sessionId, ...cut.args],
+    );
+    final refused = await check.ready.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => 'it never answered',
+    );
+    await check.kill();
+    if (refused != null) {
+      return "Claude Code wouldn't resume from before it: $refused";
+    }
+    (await _readRewinds())[chatId] = cut;
+    await _writeRewinds();
+    return null;
+  }
+
+  /// After the first turn on a process resumed with [cut]: its prompt's
+  /// entry must hang off the kept one. Null when it does.
+  String? _checkCut(
+    _Rewind cut,
+    _ClaudeProcess process,
+    List<Map<String, Object?>>? entries,
+  ) {
+    final prompt = entries
+        ?.where((e) => e['uuid'] == process.prompt)
+        .firstOrNull;
+    if (prompt?['parentUuid'] == cut.keepAt) return null;
+    debugPrint(
+      '[gaia] take-back did not hold: ${process.prompt} hangs off '
+      '${prompt?['parentUuid']}, not ${cut.keepAt}',
+    );
+    return 'Claude Code may still remember the message you stopped earlier: '
+        "the way Gaia takes one back (Claude Code's undocumented "
+        '--resume-session-at) did not behave as expected.';
+  }
+
+  /// [sessionId]'s JSONL entries under [configDir], unreadable lines
+  /// skipped; null when there's no such session, or it can't be read (held
+  /// by the CLI, say).
+  Future<List<Map<String, Object?>>?> _sessionEntries(
+    String configDir,
+    String sessionId,
+  ) async {
+    try {
+      final projects = Directory(
+        p.join(claudeConfigRoot(configDir), 'projects'),
+      );
+      if (!await projects.exists()) return null;
+      await for (final project in projects.list()) {
+        final file = File(p.join(project.path, '$sessionId.jsonl'));
+        if (!await file.exists()) continue;
+        // A line cut off mid-character by a kill is only that line's loss.
+        final lines = await file.readAsLines(
+          encoding: const Utf8Codec(allowMalformed: true),
+        );
+        return [for (final line in lines) ?_entry(line)];
+      }
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] Claude Code session $sessionId unread: $error');
+    }
+    return null;
+  }
+
+  static Map<String, Object?>? _entry(String line) {
+    try {
+      final json = jsonDecode(line);
+      return json is Map<String, Object?> ? json : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<Map<String, _Rewind>> _readRewinds() async {
+    if (_rewinds case final rewinds?) return rewinds;
+    final rewinds = <String, _Rewind>{};
+    try {
+      final json = jsonDecode(await _rewindsFile.readAsString());
+      if (json is Map) {
+        for (final MapEntry(:key, :value) in json.entries) {
+          if (value case {
+            'sessionId': final String sessionId,
+            'keepAt': final String keepAt,
+            'drops': final String drops,
+          }) {
+            rewinds['$key'] = (
+              sessionId: sessionId,
+              keepAt: keepAt,
+              drops: drops,
+            );
+          }
+        }
+      }
+    } on FileSystemException catch (_) {
+    } on FormatException catch (_) {}
+    return _rewinds ??= rewinds;
+  }
+
+  /// One write at a time, each of the map as it then is. A failed one leaves
+  /// the turn's own result alone; the map in memory still holds.
+  Future<void> _writeRewinds() => _writing = _writing.then((_) async {
+    try {
+      final file = _rewindsFile;
+      await file.parent.create(recursive: true);
+      await file.writeAsString(
+        jsonEncode({
+          for (final MapEntry(:key, :value) in _rewinds!.entries)
+            key: {
+              'sessionId': value.sessionId,
+              'keepAt': value.keepAt,
+              'drops': value.drops,
+            },
+        }),
+      );
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] claude-rewinds.json not written: $error');
+    }
+  });
 
   /// Kills every process tree this runner started.
   @override
@@ -401,6 +695,8 @@ class _ClaudeProcess {
     this.configDir,
     this.directories,
     this._onRawLine,
+    this.sessionId,
+    this.cut,
   ) {
     _process.stdout
         .transform(utf8.decoder)
@@ -433,6 +729,8 @@ class _ClaudeProcess {
     required String configDir,
     required void Function(String line)? onLine,
     required Set<String> directories,
+    required String sessionId,
+    required _Rewind? cut,
     required List<String> sessionArgs,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
@@ -479,6 +777,8 @@ class _ClaudeProcess {
       configDir,
       directories,
       onLine,
+      sessionId,
+      cut,
     );
     // Registers the `sdk` server the config names; the CLI then lists its
     // tools through [_answer].
@@ -497,6 +797,27 @@ class _ClaudeProcess {
   final void Function(String line)? _onRawLine;
   final _stderr = StringBuffer();
   var exited = false;
+
+  /// The session it started or resumed.
+  final String sessionId;
+
+  /// The take-back it resumed with, until a turn on it has started.
+  _Rewind? cut;
+
+  /// The uuid the current or last turn's prompt went with, and when.
+  String? prompt;
+  DateTime? sentAt;
+
+  final _ready = Completer<String?>();
+
+  /// Null once the CLI answered `initialize`, else why it didn't: what it
+  /// printed on stderr as it refused or ended.
+  Future<String?> get ready => _ready.future;
+
+  void _settle(String reason) {
+    if (_ready.isCompleted) return;
+    _ready.complete(_stderr.isEmpty ? reason : _stderr.toString().trim());
+  }
 
   /// An `init` came: the CLI started or resumed a session. Once a process.
   var started = false;
@@ -521,8 +842,12 @@ class _ClaudeProcess {
     final turn = _turn = Completer<ClaudeResult>();
     _onEvent = onEvent;
     _tools = tools;
+    // The id its JSONL entry gets, for a take-back to find it by.
+    final uuid = prompt = _uuid.v4();
+    sentAt = DateTime.now();
     _write({
       'type': 'user',
+      'uuid': uuid,
       'message': {'role': 'user', 'content': content},
     });
     return turn.future;
@@ -628,6 +953,17 @@ class _ClaudeProcess {
     if (event case ClaudeControlResponse(:final error?)) {
       debugPrint("[gaia] Claude Code refused Gaia's tools: $error");
     }
+    if (event case ClaudeControlResponse(
+      requestId: 'gaia_initialize',
+      :final error,
+    )) {
+      if (error == null && !_ready.isCompleted) _ready.complete(null);
+      if (error != null) _settle(error);
+    }
+    // A result before any turn: the resume was refused.
+    if (event case ClaudeResult(:final text) when _turn == null) {
+      _settle(text.isEmpty ? 'it ended the session' : text);
+    }
     // Between turns there's nothing to report to.
     _onEvent?.call(event);
     if (event is ClaudeResult) {
@@ -640,6 +976,7 @@ class _ClaudeProcess {
   }
 
   void _fail(String reason) {
+    _settle(reason);
     final turn = _turn;
     _turn = null;
     _onEvent = null;

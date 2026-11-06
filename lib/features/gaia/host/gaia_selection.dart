@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:win32/win32.dart';
+import 'package:voyager/features/gaia/host/gaia_clipboard.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
 /// The selection in [window] the way E reads it (GAIA_HLD.md §15.2) when
@@ -24,7 +25,7 @@ Future<String?> gaiaCopySelection(GaiaForegroundWindow window) async {
     await Future<void>.delayed(const Duration(milliseconds: 15));
   }
   if (GetForegroundWindow() != window.hwnd) return null;
-  final saved = _readClipboard();
+  final saved = gaiaSaveClipboard();
   if (saved == null) return null;
   final before = GetClipboardSequenceNumber();
   _sendCtrlC(release: _heldModifiers());
@@ -37,7 +38,7 @@ Future<String?> gaiaCopySelection(GaiaForegroundWindow window) async {
   // The source app may still hold it open, writing its formats.
   await Future<void>.delayed(const Duration(milliseconds: 30));
   final copied = _readText();
-  _writeClipboard(saved);
+  gaiaRestoreClipboard(saved);
   return copied == null || copied.trim().isEmpty ? null : copied;
 }
 
@@ -112,11 +113,16 @@ bool _isHandleFormat(int format) =>
     }.contains(format) ||
     (format >= CF_GDIOBJFIRST && format <= CF_GDIOBJFIRST + 0xFF);
 
+/// What [gaiaSaveClipboard] took: every format, as bytes, and whether it was
+/// marked private ([gaiaClipboardPrivate]).
+typedef GaiaSavedClipboard = ({List<(int, Uint8List)> formats, bool private});
+
 /// Every format on the clipboard, as bytes; null when it couldn't be
 /// opened, when nothing may touch it.
-List<(int, Uint8List)>? _readClipboard() {
+GaiaSavedClipboard? gaiaSaveClipboard() {
   if (!_open()) return null;
   try {
+    final private = gaiaClipboardPrivate();
     final formats = <(int, Uint8List)>[];
     for (
       var format = EnumClipboardFormats(0);
@@ -139,7 +145,7 @@ List<(int, Uint8List)>? _readClipboard() {
         GlobalUnlock(memory);
       }
     }
-    return formats;
+    return (formats: formats, private: private);
   } finally {
     CloseClipboard();
   }
@@ -163,7 +169,9 @@ String? _readText() {
   }
 }
 
-void _writeClipboard(List<(int, Uint8List)> formats) {
+/// Puts back what [gaiaSaveClipboard] saved, marked so that Win+V history
+/// doesn't take it again.
+void gaiaRestoreClipboard(GaiaSavedClipboard saved) {
   if (!_open()) {
     debugPrint("[gaia] the clipboard couldn't be put back");
     return;
@@ -172,7 +180,7 @@ void _writeClipboard(List<(int, Uint8List)> formats) {
   try {
     EmptyClipboard();
     for (final (format, bytes) in [
-      ...formats,
+      ...saved.formats,
       // The format's presence is the signal; its content is never read.
       (RegisterClipboardFormat(marker), Uint8List(4)),
     ]) {
@@ -190,6 +198,7 @@ void _writeClipboard(List<(int, Uint8List)> formats) {
     free(marker);
     CloseClipboard();
   }
+  gaiaNoteRestored(private: saved.private);
 }
 
 /// Another process may hold the clipboard open for a moment.

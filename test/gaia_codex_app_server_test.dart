@@ -301,6 +301,79 @@ void main() {
     });
   });
 
+  test('a stopped turn is reverted once Codex has ended it, and a refusal '
+      'says why (§9.6)', () async {
+    const turnId = '01a19d70-2982-7df1-91d8-fe45be84a740';
+    final replay = _Replay('tools.jsonl');
+    unawaited(replay.client.initialize());
+    final turn = replay.client.send(
+      threadId: null,
+      model: 'gpt-6.1-sol',
+      input: _text('Hi'),
+      tools: _Tools(),
+      onEvent: (_) {},
+    );
+    await replay.feedThrough('turn/started');
+    replay.client.stop(_thread);
+    await expectLater(turn, throwsA(isA<GaiaRunException>()));
+
+    final reverting = replay.client.revert(_thread);
+    await Future<void>.delayed(Duration.zero);
+    expect(replay.sent.where((m) => m['method'] == 'thread/revert'), isEmpty);
+    replay.client.onLine(
+      jsonEncode({
+        'method': 'turn/completed',
+        'params': {
+          'threadId': _thread,
+          'turn': {'id': turnId, 'status': 'interrupted'},
+        },
+      }),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final revert = replay.sentFor('thread/revert');
+    expect(revert['params'], {'threadId': _thread, 'beforeTurnId': turnId});
+    replay.client.onLine(
+      jsonEncode({
+        'id': revert['id'],
+        'error': {'code': -32600, 'message': 'turn not found'},
+      }),
+    );
+    expect(await reverting, 'Codex refused to take it back: turn not found');
+    // Once only: the next stop's turn is the one taken back.
+    expect(await replay.client.revert(_thread), 'Codex was not running it.');
+  });
+
+  test('a stopped turn whose turn/start Codex refused has nothing to take '
+      'back, at once', () async {
+    final replay = _Replay('tools.jsonl');
+    unawaited(replay.client.initialize());
+    final turn = replay.client.send(
+      threadId: null,
+      model: 'gpt-6.1-sol',
+      input: _text('Hi'),
+      tools: _Tools(),
+      onEvent: (_) {},
+    );
+    while (!replay.sent.any((m) => m['method'] == 'turn/start')) {
+      await replay.feed(1);
+    }
+    replay.client.stop(_thread);
+    replay.client.onLine(
+      jsonEncode({
+        'id': replay.sentFor('turn/start')['id'],
+        'error': {'code': -32600, 'message': 'no'},
+      }),
+    );
+    await expectLater(turn, throwsA(isA<GaiaRunException>()));
+
+    // Not the 10 s wait for a `turn/completed` that never comes.
+    expect(
+      await replay.client.revert(_thread).timeout(const Duration(seconds: 1)),
+      isNull,
+    );
+    expect(replay.sent.where((m) => m['method'] == 'thread/revert'), isEmpty);
+  });
+
   test("a turn hears the account's windows, not a model's own", () async {
     final replay = _Replay('tools.jsonl');
     unawaited(replay.client.initialize());
@@ -537,6 +610,80 @@ void main() {
       );
       expect(result.sessionFound, isFalse, reason: sessionId);
       expect(result.sessionId, sessionId);
+    }
+  });
+
+  test('a stop before the turn reaches its runner ends it there, with '
+      'nothing to take back; a later send forgets it', () async {
+    final root = Directory.systemTemp.createTempSync('gaia_codex_stop_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final runners = CodexAccountRunners(
+      workingDirectory: p.join(root.path, 'ws'),
+      homesRoot: p.join(root.path, 'homes'),
+    );
+    Future<GaiaTurnResult> send() => runners.send(
+      chatId: 'chat',
+      sessionId: 'old',
+      model: 'gpt-6.1-sol',
+      prompt: 'Hi',
+      onEvent: (_) {},
+    );
+
+    final stopped = send();
+    await runners.stop('chat');
+    await expectLater(stopped, throwsA(isA<GaiaRunException>()));
+    expect(runners.isRunning('chat'), isFalse);
+    expect(await runners.takeBack('chat'), isNull);
+
+    // Not stopped: it goes on to the runner, whose home isn't set up.
+    final result = await send();
+    expect(result.isError, isTrue);
+    expect(result.text, isNot('Stopped.'));
+    expect(await runners.takeBack('chat'), 'Codex was not running it.');
+  });
+
+  test('a stop while a runner opens, which then ends with nothing sent, '
+      'ends the turn as stopped, not as what ended it', () async {
+    final root = Directory.systemTemp.createTempSync('gaia_codex_stop_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final home = p.join(root.path, 'home');
+    // A sandbox the home isn't set up for: every send ends before Codex.
+    File(p.join(root.path, 'user', 'config.toml'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('[windows]\nsandbox = "elevated"\n');
+    final exec = CodexRunner(
+      workingDirectory: p.join(root.path, 'ws'),
+      codexHome: home,
+      userCodexHome: p.join(root.path, 'user'),
+    );
+    final server = CodexAppServerRunner(
+      workingDirectory: p.join(root.path, 'ws'),
+      codexHome: home,
+      userCodexHome: p.join(root.path, 'user'),
+      fallback: exec,
+    );
+    for (final GaiaAgentRunner runner in [exec, server]) {
+      Future<GaiaTurnResult> send() => runner.send(
+        chatId: 'chat',
+        sessionId: 'old',
+        model: 'gpt-6.1-sol',
+        prompt: 'Hi',
+        onEvent: (_) {},
+      );
+      final reason = '${runner.runtimeType}';
+      final stopped = send();
+      await runner.stop('chat');
+      await expectLater(
+        stopped,
+        throwsA(isA<GaiaRunException>()),
+        reason: reason,
+      );
+      expect(await runner.takeBack('chat'), isNull, reason: reason);
+
+      // Not stopped, the home that isn't set up says so.
+      final result = await send();
+      expect(result.isError, isTrue, reason: reason);
+      expect(result.text, isNot('Stopped.'), reason: reason);
     }
   });
 }

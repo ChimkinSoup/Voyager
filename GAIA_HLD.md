@@ -989,6 +989,62 @@ original is kept so it can be re-edited.
   autocorrect toggles have to get there from the main instance and stay
   current when they change.
 
+### 9.6 Stop gives the message back (added 2026-11-05)
+
+Stop before anything shows takes the message back: it and its empty reply
+come off the chat, and its text, images, files, quotes and window go back
+in the composer, as other chat apps do. A new chat with only that message
+goes with it. That happens only when nothing showed (no text, tool or card),
+and only when the composer is still empty, so nothing typed since is
+overwritten. Otherwise the message stays in the chat with a cancelled
+reply, as before. A message sent from the phone, an abort or an update
+drain keep it too.
+
+The agent's session already has the message by then, so it's taken out of
+the session first (`GaiaAgentRunner.takeBack`). If that can't be done, the
+message stays in the chat, with a toast saying why. It runs once the chat
+has stopped, so Stop doesn't wait on it; a send to the chat meanwhile waits
+for it. If something was typed or sent meanwhile, the message stays in the
+chat with a toast saying the session no longer has it. The chat and the
+session never disagree in the direction that matters: the chat never drops
+a message the agent still remembers. A new session that was never saved
+for the chat needs nothing taken out. The main instance erases both
+messages, and a new chat, as the trash's "Delete forever" does (§8), so
+nothing lands in the trash.
+
+- **Claude Code** has no documented way to drop a turn. Gaia uses two flags
+  `claude --help` hides, found in the CLI's own source and checked on
+  2.1.318. `--resume-session-at <entry uuid>` resumes the session only up to
+  that JSONL entry, so the next prompt branches from it, and later plain
+  resumes follow the branch. `--resume-drops-turn <prompt uuid>` makes that
+  resume refuse (an error result, then exit) unless all it cuts is that
+  prompt's turn. Gaia gives each prompt a `uuid` on stdin, finds it in the
+  session JSONL after the stop, and cuts at its `parentUuid`. Since the
+  flags are undocumented, each step is checked rather than trusted:
+  - Before the message goes back, a resume with the flags is started and
+    must answer `initialize`. A CLI that doesn't know the flags fails at once
+    (`unknown option`), and so does one whose guard refuses. Either way the
+    message stays, with the CLI's own words in the toast. A prompt saved
+    under some other id fails the same way.
+  - The cut is kept on disk (`claude-rewinds.json` beside GAIA.md) until the
+    chat's next Claude Code turn has its prompt in the session JSONL, so a
+    companion restart, or a turn stopped before its prompt was saved, doesn't
+    lose it.
+  - If that turn's resume gets no session (the cut refused, say as the
+    session changed elsewhere since it was checked), the cut is dropped and
+    the turn runs once more as a plain resume, with a toast that Claude Code
+    may still remember the stopped message.
+  - After that turn, its prompt's JSONL entry must hang off the kept entry.
+    If it doesn't, a toast says Claude Code may still remember the stopped
+    message, because the undocumented flag didn't behave as expected.
+
+  `gaia_cli_contract_test.dart` checks all of this against the installed
+  CLI (`qa/harness/gaia_cli_check.ps1`).
+- **Codex** uses `thread/revert {threadId, beforeTurnId}` on `app-server`,
+  in its published (experimental) schema. It's sent once the interrupted
+  turn's `turn/completed` arrives. A refusal keeps the message. A turn that
+  went to the `codex exec` fallback can't be reverted, so it stays.
+
 ---
 
 ## 10. Blocking cards: proposals and questions

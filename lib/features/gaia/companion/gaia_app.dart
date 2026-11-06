@@ -2472,13 +2472,10 @@ class _ComposerState extends State<_Composer> {
     final token = gaiaPaletteToken(_text.value);
     if (token == null) return;
     final text = _text.text;
-    var start = token.start;
+    final start = token.start;
     var end = token.end;
-    if (end < text.length && text[end] == ' ') {
-      end++;
-    } else if (start > 0 && text[start - 1] == ' ') {
-      start--;
-    }
+    // Ending the draft, the space before stays: more is typed after it.
+    if (end < text.length && text[end] == ' ') end++;
     _text.value = TextEditingValue(
       text: text.replaceRange(start, end, ''),
       selection: TextSelection.collapsed(offset: start),

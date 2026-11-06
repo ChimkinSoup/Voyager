@@ -7,7 +7,9 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/features/gaia/host/gaia_clipboard.dart';
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
+import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
@@ -224,7 +226,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
       // Stopped mid-text, as Abort does: fewer than all of it, and no keys down.
       await control.plan('chat', 'click2', 'os_click', {'name': 'Notes'});
       await control.run('click2', once: true, check: check);
-      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 1500});
+      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 190});
       final running = control.run('long', once: true, check: check);
       await Future<void>.delayed(const Duration(milliseconds: 60));
       control.stop('Gaia is aborted.');
@@ -232,7 +234,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
       expect(result['stopped'], 'Gaia is aborted.');
       await Future<void>.delayed(const Duration(milliseconds: 400));
       final ys = RegExp('y').allMatches(lastText()).length;
-      expect(ys, inExclusiveRange(0, 1500), reason: 'stopped mid-text');
+      expect(ys, inExclusiveRange(0, 190), reason: 'stopped mid-text');
       expect(GetAsyncKeyState(VK_CONTROL) & 0x8000, 0);
       expect(GetAsyncKeyState(VK_SHIFT) & 0x8000, 0);
       expect(GetAsyncKeyState(VK_MENU) & 0x8000, 0);
@@ -249,7 +251,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
         free(input);
       }
 
-      await control.plan('chat', 'esc', 'os_type', {'text': 'z' * 1500});
+      await control.plan('chat', 'esc', 'os_type', {'text': 'z' * 190});
       final stopping = control.run('esc', once: true, check: check);
       await Future<void>.delayed(const Duration(milliseconds: 60));
       escape(up: false);
@@ -259,7 +261,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
       expect(result['stopped'], contains('Esc'));
       await Future<void>.delayed(const Duration(milliseconds: 400));
       final zs = RegExp('z').allMatches(lastText()).length;
-      expect(zs, inExclusiveRange(0, 1500), reason: 'stopped mid-text');
+      expect(zs, inExclusiveRange(0, 190), reason: 'stopped mid-text');
 
       // Another window in front: the run stops, and sends nothing.
       await control.plan('chat', 'after', 'os_key', {'keys': 'A'});
@@ -332,6 +334,112 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
       expect(result['ran'], 1);
       expect(GetForegroundWindow(), hwnd);
       await until(() => lines.contains('CLICKED'), 'the click');
+    },
+    timeout: const Timeout(Duration(minutes: 1)),
+  );
+
+  test(
+    "pastes long text, and puts back the user's clipboard, still readable",
+    () async {
+      // The user's own clipboard, every format, as it was before the test.
+      final users = gaiaSaveClipboard();
+      expect(users, isNotNull);
+      addTearDown(() => gaiaRestoreClipboard(users!));
+      Future<void> copy(String text, {bool private = false}) async {
+        final set = await Process.run('powershell', [
+          '-NoProfile',
+          '-STA',
+          '-Command',
+          'Add-Type -AssemblyName System.Windows.Forms; '
+              r'$d = New-Object Windows.Forms.DataObject; '
+              "\$d.SetText('$text'); "
+              '${private ? r"$d.SetData('ExcludeClipboardContentFromMonitorProcessing', $false, (New-Object IO.MemoryStream(,[byte[]](0,0,0,0)))); " : ''}'
+              r'[Windows.Forms.Clipboard]::SetDataObject($d, $true)',
+        ]);
+        expect(set.exitCode, 0, reason: '${set.stderr}');
+      }
+
+      final process = await Process.start('powershell', [
+        '-NoProfile',
+        '-STA',
+        '-Command',
+        probe,
+      ]);
+      final lines = <String>[];
+      process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(lines.add);
+      addTearDown(process.kill);
+      String lastText() =>
+          lines.lastWhere((l) => l.startsWith('TEXT:'), orElse: () => '');
+      Future<void> until(bool Function() done, String what) async {
+        for (var i = 0; i < 100 && !done(); i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        expect(done(), isTrue, reason: 'waiting for $what');
+      }
+
+      await until(() => lines.contains('SHOWN'), 'the window');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final hwnd = FindWindow(nullptr, 'Gaia control probe'.toNativeUtf16());
+      expect(hwnd, isNot(0));
+      final f24 = calloc<INPUT>(2);
+      for (final i in [0, 1]) {
+        f24[i].type = INPUT_KEYBOARD;
+        f24[i].ki
+          ..wVk = VK_F24
+          ..dwFlags = i == 1 ? KEYEVENTF_KEYUP : 0;
+      }
+      SendInput(2, f24, sizeOf<INPUT>());
+      free(f24);
+      SetForegroundWindow(hwnd);
+      await until(() => GetForegroundWindow() == hwnd, 'the foreground');
+
+      final control = GaiaOsControl(
+        companionPid: () => -1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+      );
+      final long = List.generate(6, (i) => 'line $i ${'p' * 100}').join('\n');
+      for (final private in [false, true]) {
+        await copy('gaia paste test copy', private: private);
+        await control.plan('chat', 'paste', 'os_type', {
+          'name': 'Notes',
+          'text': long,
+        });
+        final took = Stopwatch()..start();
+        final result = await control.run(
+          'paste',
+          once: true,
+          check: () async {},
+        );
+        took.stop();
+        expect(result['stopped'], isNull);
+        // Typed, it would be about 20 s.
+        expect(took.elapsed, lessThan(const Duration(seconds: 3)));
+        await until(
+          () => lastText().startsWith('TEXT:${long.replaceAll('\n', '|')}:'),
+          'the pasted text',
+        );
+        final after = await gaiaReadClipboard();
+        expect(after.private, private);
+        expect(after.text, private ? isNull : 'gaia paste test copy');
+        // ignore: avoid_print
+        print(
+          'pasted ${long.length} characters in ${took.elapsedMilliseconds} '
+          'ms; private copy: $private',
+        );
+        // Cleared for the next round.
+        await control.plan('chat', 'clear', 'os_steps', {
+          'steps': [
+            {'action': 'key', 'keys': 'Ctrl+A'},
+            {'action': 'key', 'keys': 'Delete'},
+          ],
+        });
+        await control.run('clear', once: true, check: () async {});
+        await until(() => lastText().startsWith('TEXT::'), 'the clear');
+      }
     },
     timeout: const Timeout(Duration(minutes: 1)),
   );
@@ -428,7 +536,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
         'window', () async {
       await act('os_click', {'name': 'Notes'});
       control.session('chat', auto: true, onUserStop: () => stops++);
-      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 1500});
+      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 190});
       final running = control.run('long', once: true, check: () async {});
       // Past the pace after the click (§5.6), so the stop lands mid-text.
       await until(
@@ -451,7 +559,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
       final typed = RegExp('y').allMatches(
         lines.lastWhere((l) => l.startsWith('TEXT:')),
       ).length;
-      expect(typed, inExclusiveRange(0, 1500));
+      expect(typed, inExclusiveRange(0, 190));
       await expectLater(
         act('os_key', {'keys': 'A'}),
         throwsA(isA<GaiaReadException>()),
@@ -464,7 +572,7 @@ $form.Add_Shown({ $other.Show(); $form.Activate(); [Console]::Out.WriteLine('SHO
     test('a click on another window mid-text stops the turn', () async {
       await act('os_click', {'name': 'Notes'});
       control.session('chat', auto: true, onUserStop: () => stops++);
-      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 1500});
+      await control.plan('chat', 'long', 'os_type', {'text': 'y' * 190});
       final running = control.run('long', once: true, check: () async {});
       await Future<void>.delayed(const Duration(milliseconds: 60));
       final frame = gaiaWindowFrame(other);

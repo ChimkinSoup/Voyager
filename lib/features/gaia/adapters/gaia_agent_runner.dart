@@ -55,6 +55,7 @@ class GaiaTurnResult {
     this.contextTokens,
     this.contextWindow,
     this.sessionFound = true,
+    this.notice,
   });
 
   /// The native session to resume next time.
@@ -72,6 +73,10 @@ class GaiaTurnResult {
 
   /// The model's context window in tokens; null when the backend doesn't say.
   final int? contextWindow;
+
+  /// Something the user should hear about the session, beside the reply:
+  /// a take-back ([GaiaAgentRunner.takeBack]) that didn't hold.
+  final String? notice;
 }
 
 /// A turn that ended without a result: the process died, or its output
@@ -123,6 +128,12 @@ abstract interface class GaiaAgentRunner {
 
   /// Kills [chatId]'s run; its turn fails.
   Future<void> stop(String chatId);
+
+  /// Takes the turn [stop] just ended for [chatId] back out of its session,
+  /// so the session's next turn goes on as if it was never sent (§9.6).
+  /// Null once it's out, or when the session never got it; otherwise why
+  /// not, and the session still has it.
+  Future<String?> takeBack(String chatId);
 
   /// Kills every run this runner started.
   Future<void> killAll();

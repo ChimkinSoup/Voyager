@@ -249,6 +249,119 @@ void main() {
   );
 
   test(
+    'a stopped turn taken back is gone from the next turn, which resumes '
+    'past it with the hidden rewind flags (§9.6)',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final cli = runner('take_back');
+      // Cheap: the flags don't depend on the model.
+      Future<GaiaTurnResult> send(
+        String? sessionId,
+        String prompt, {
+        void Function(GaiaAgentEvent event)? onEvent,
+      }) => cli.send(
+        chatId: 'contract',
+        sessionId: sessionId,
+        model: 'haiku',
+        prompt: prompt,
+        onEvent: onEvent ?? (_) {},
+      );
+      try {
+        final first = await send(
+          null,
+          'Remember the word BANANA. Reply with just OK.',
+        );
+        expect(first.isError, isFalse, reason: first.text);
+        final sessionId = first.sessionId;
+
+        // Stopped once its reply has started, as Stop is pressed.
+        var stopped = false;
+        final second = send(
+          sessionId,
+          'The second word is CHERRY. Now write a 600-word poem about '
+          'cherries.',
+          onEvent: (event) {
+            if (stopped || event is! GaiaTextDelta) return;
+            stopped = true;
+            unawaited(cli.stop('contract'));
+          },
+        );
+        await expectLater(second, throwsA(isA<GaiaRunException>()));
+        expect(await cli.takeBack('contract'), isNull);
+
+        final third = await send(
+          sessionId,
+          'List every word I have told you in this conversation, '
+          'comma-separated, nothing else.',
+        );
+        expect(third.isError, isFalse, reason: third.text);
+        expect(third.notice, isNull, reason: 'the cut held');
+        expect(third.text.toUpperCase(), contains('BANANA'));
+        expect(third.text.toUpperCase(), isNot(contains('CHERRY')));
+
+        // A later plain resume follows the branch.
+        await cli.killAll();
+        final fourth = await send(
+          sessionId,
+          'Did I ever mention a fruit other than banana? Answer yes or no.',
+        );
+        expect(fourth.text.toUpperCase(), isNot(contains('CHERRY')));
+        expect(fourth.text.toLowerCase(), contains('no'));
+      } finally {
+        await cli.killAll();
+        final rewinds = File(
+          p.join(workingDirectory.parent.path, 'claude-rewinds.json'),
+        );
+        if (rewinds.existsSync()) rewinds.deleteSync();
+      }
+    },
+  );
+
+  test(
+    'a stop while the process starts ends the turn before its prompt goes, '
+    'with nothing to take back',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final cli = runner('stop_starting');
+      Future<GaiaTurnResult> send(String? sessionId, String prompt) => cli.send(
+        chatId: 'contract',
+        sessionId: sessionId,
+        model: 'haiku',
+        prompt: prompt,
+        onEvent: (_) {},
+      );
+      try {
+        final first = await send(
+          null,
+          'Remember the word BANANA. Reply with just OK.',
+        );
+        expect(first.isError, isFalse, reason: first.text);
+        final sessionId = first.sessionId;
+        // A new process for the turn: the idle one goes on stop.
+        await cli.killAll();
+
+        final second = send(sessionId, 'The second word is CHERRY.');
+        await cli.stop('contract');
+        await expectLater(second, throwsA(isA<GaiaRunException>()));
+        expect(await cli.takeBack('contract'), isNull);
+
+        final third = await send(
+          sessionId,
+          'List every word I have told you in this conversation, '
+          'comma-separated, nothing else.',
+        );
+        expect(third.isError, isFalse, reason: third.text);
+        expect(third.text.toUpperCase(), contains('BANANA'));
+        expect(third.text.toUpperCase(), isNot(contains('CHERRY')));
+      } finally {
+        await cli.killAll();
+      }
+    },
+  );
+
+  test(
     'a tool call, a second turn on the same process, and a resume after '
     'the process is killed',
     skip: !_enabled,

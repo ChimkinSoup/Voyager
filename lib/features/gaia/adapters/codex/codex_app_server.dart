@@ -18,6 +18,11 @@
 //     new ones given on a resume (checked on 0.164.0)
 //   turn/start {threadId, model, input: [text | localImage]} -> {turn: {id}}
 //   turn/interrupt {threadId, turnId}
+//   thread/revert {threadId, beforeTurnId}: the thread's saved history
+//     without that turn and every later one, for a stopped turn taken back
+//     (GAIA_HLD.md §9.6); its result isn't read, only whether it errs.
+//     Checked on 0.166.0: the next turn, on the same server or one that
+//     resumes the thread, doesn't see the reverted turn
 //   account/rateLimits/read {} (see usage/sources/codex_rate_limits.dart)
 // What it reads:
 //   item/started, item/completed {threadId, item: {id, type, …}}: types
@@ -116,6 +121,12 @@ class _Turn {
   final GaiaTurnTools? tools;
   final void Function(GaiaAgentEvent event) onEvent;
   final done = Completer<GaiaTurnResult>();
+
+  /// Codex said the turn ended: for a stopped one, after [done] failed.
+  final ended = Completer<void>();
+
+  /// `turn/start` was refused: the thread never had its prompt.
+  var refused = false;
   String? turnId;
   int? contextTokens;
   int? contextWindow;
@@ -140,6 +151,9 @@ class CodexAppServerClient {
 
   /// Each running turn, by its thread.
   final _turns = <String, _Turn>{};
+
+  /// The turn [stop] last ended on each thread, for [revert].
+  final _stoppedTurns = <String, _Turn>{};
 
   /// Threads this process has started or resumed.
   final _loaded = <String>{};
@@ -219,6 +233,8 @@ class CodexAppServerClient {
       }
     }
     _loaded.add(thread);
+    // A stop's turn is only taken back straight after it.
+    _stoppedTurns.remove(thread);
     final turn = _turns[thread] = _Turn(tools, onEvent);
     // It can fail before it's returned: stopped, or the process gone.
     turn.done.future.ignore();
@@ -232,6 +248,9 @@ class CodexAppServerClient {
       turn.turnId ??= _string(_map(started, 'turn', ''), 'id', '');
     } on _RpcError catch (error) {
       if (_turns[thread] == turn) _turns.remove(thread);
+      // No `turn/completed` will come for a stopped one to wait on.
+      turn.refused = true;
+      if (!turn.ended.isCompleted) turn.ended.complete();
       throw GaiaRunException('Codex refused the turn: $error');
     }
     // Stopped while it was starting.
@@ -244,8 +263,36 @@ class CodexAppServerClient {
     _commands.remove(threadId);
     final turn = _turns.remove(threadId);
     if (turn == null) return;
+    _stoppedTurns[threadId] = turn;
     _interrupt(threadId, turn);
     turn.done.completeError(GaiaRunException('Stopped'));
+  }
+
+  /// Takes [threadId]'s stopped turn out of its saved history, once Codex
+  /// has ended it. Null once it's out, otherwise why not.
+  Future<String?> revert(String threadId) async {
+    final turn = _stoppedTurns[threadId];
+    if (turn == null) return 'Codex was not running it.';
+    // Still listed while it ends, for `turn/completed` to find.
+    await turn.ended.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {},
+    );
+    if (_stoppedTurns[threadId] == turn) _stoppedTurns.remove(threadId);
+    if (turn.refused) return null;
+    final turnId = turn.turnId;
+    if (turnId == null) return 'Codex never said which turn it was.';
+    try {
+      await _request('thread/revert', {
+        'threadId': threadId,
+        'beforeTurnId': turnId,
+      });
+      return null;
+    } on _RpcError catch (error) {
+      return 'Codex refused to take it back: $error';
+    } on GaiaRunException catch (error) {
+      return 'Codex refused to take it back: $error';
+    }
   }
 
   void _interrupt(String threadId, _Turn turn) {
@@ -389,7 +436,13 @@ class CodexAppServerClient {
         final ended = _map(params, 'turn', line);
         final status = _string(ended, 'status', line);
         _commands.remove(threadId);
-        if (turn == null) return;
+        if (turn == null) {
+          if (_stoppedTurns[threadId]?.ended case final stopped?
+              when !stopped.isCompleted) {
+            stopped.complete();
+          }
+          return;
+        }
         _turns.remove(threadId);
         switch (status) {
           case 'completed':
@@ -604,6 +657,16 @@ class CodexAppServerRunner implements GaiaAgentRunner {
   /// Chats stopped before their thread was known.
   final _stopped = <String>{};
 
+  /// Chats whose turn is on its way here, not yet [_sending].
+  final _opening = <String>{};
+
+  /// Chats stopped while [_opening]: the turn fails before its prompt goes,
+  /// so [takeBack] has nothing to take.
+  final _stoppedOpening = <String>{};
+
+  /// The thread each chat's last stop was on, for [takeBack].
+  final _stoppedThreads = <String, String>{};
+
   /// The server's processes as each running chat's turn began: any started
   /// since may be its commands.
   final _treeBefore = <String, Set<int>>{};
@@ -632,16 +695,59 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    Future<GaiaTurnResult> fallBack() => fallback.send(
-      chatId: chatId,
-      sessionId: sessionId,
-      model: model,
-      prompt: prompt,
-      images: images,
-      directories: directories,
-      tools: tools,
-      onEvent: onEvent,
-    );
+    // Before anything's awaited: a stop from here on is caught.
+    _opening.add(chatId);
+    _stoppedOpening.remove(chatId);
+    try {
+      final result = await _send(
+        chatId: chatId,
+        sessionId: sessionId,
+        model: model,
+        prompt: prompt,
+        images: images,
+        directories: directories,
+        tools: tools,
+        sessionInstructions: sessionInstructions,
+        onEvent: onEvent,
+      );
+      // Stopped while it opened, then ended there with nothing sent (a home
+      // not set up, a thread with other tools): stopped, not that.
+      if (_stoppedOpening.contains(chatId)) throw GaiaRunException('Stopped.');
+      return result;
+    } finally {
+      _opening.remove(chatId);
+    }
+  }
+
+  Future<GaiaTurnResult> _send({
+    required String chatId,
+    required String? sessionId,
+    required String model,
+    required String prompt,
+    required List<GaiaImageInput> images,
+    required Set<String> directories,
+    required GaiaTurnTools? tools,
+    required String sessionInstructions,
+    required void Function(GaiaAgentEvent event) onEvent,
+  }) async {
+    Future<GaiaTurnResult> fallBack() {
+      // Stopped while this one opened: never handed on.
+      _opening.remove(chatId);
+      if (_stoppedOpening.contains(chatId)) {
+        throw GaiaRunException('Stopped.');
+      }
+      return fallback.send(
+        chatId: chatId,
+        sessionId: sessionId,
+        model: model,
+        prompt: prompt,
+        images: images,
+        directories: directories,
+        tools: tools,
+        onEvent: onEvent,
+      );
+    }
+
     if (_unavailable) return fallBack();
     final (:notReady, :sandbox) = await readyCodexHome(
       codexHome,
@@ -665,8 +771,13 @@ class CodexAppServerRunner implements GaiaAgentRunner {
       return fallBack();
     }
     _idle?.cancel();
+    // From here a stop finds it [_sending].
+    _opening.remove(chatId);
     _sending.add(chatId);
+    // A stop's turn is only taken back straight after it.
+    _stoppedThreads.remove(chatId);
     try {
+      if (_stoppedOpening.contains(chatId)) throw GaiaRunException('Stopped.');
       return await process.client.send(
         threadId: sessionId,
         model: model,
@@ -683,7 +794,10 @@ class CodexAppServerRunner implements GaiaAgentRunner {
           // servers, is never taken for a command.
           _treeBefore[chatId] = _tree(process.pid, gaiaProcessParents());
           _threads[chatId] = threadId;
-          if (_stopped.remove(chatId)) process.client.stop(threadId);
+          if (_stopped.remove(chatId)) {
+            _stoppedThreads[chatId] = threadId;
+            process.client.stop(threadId);
+          }
         },
         onNewThread: (threadId) => _recordThread(threadId, kCodexToolsHash),
       );
@@ -837,6 +951,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
   Future<void> stop(String chatId) async {
     var commands = const <int>[];
     if (_threads.remove(chatId) case final threadId?) {
+      _stoppedThreads[chatId] = threadId;
       final process = _process;
       if (process != null && process.client.runningCommand(threadId)) {
         commands = _commandsOf(chatId, process);
@@ -844,6 +959,8 @@ class CodexAppServerRunner implements GaiaAgentRunner {
       process?.client.stop(threadId);
     } else if (_sending.contains(chatId)) {
       _stopped.add(chatId);
+    } else if (_opening.contains(chatId)) {
+      _stoppedOpening.add(chatId);
     }
     await Future.wait([
       for (final pid in commands)
@@ -857,6 +974,36 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         }),
       fallback.stop(chatId),
     ]);
+  }
+
+  /// Whether [chatId]'s last stop was on a thread here.
+  bool stoppedHere(String chatId) =>
+      _stoppedThreads.containsKey(chatId) ||
+      _stoppedOpening.contains(chatId) ||
+      fallback.stoppedHere(chatId);
+
+  /// A stop's turn is only taken back straight after it: a send on another
+  /// account's runner ends that here.
+  void forgetStop(String chatId) {
+    _stoppedThreads.remove(chatId);
+    _stoppedOpening.remove(chatId);
+    fallback.forgetStop(chatId);
+  }
+
+  /// `thread/revert` before the turn [stop] ended, on the server it ran on.
+  /// A turn `codex exec` ran can't be taken back; one stopped before its
+  /// prompt went has nothing to take.
+  @override
+  Future<String?> takeBack(String chatId) async {
+    if (_stoppedOpening.remove(chatId)) return null;
+    if (fallback.stoppedHere(chatId)) return fallback.takeBack(chatId);
+    final threadId = _stoppedThreads.remove(chatId);
+    if (threadId == null) return 'Codex was not running it.';
+    final process = _process;
+    if (process == null || process.exited) {
+      return "Codex's app-server ended before it could take it back.";
+    }
+    return process.client.revert(threadId);
   }
 
   /// The processes [chatId]'s commands started, each the root of its own
@@ -924,6 +1071,12 @@ class CodexAccountRunners
   final GaiaToolPipe? toolPipe;
 
   final _runners = <String, CodexAppServerRunner>{};
+
+  /// Chats whose turn hasn't reached its account's runner yet.
+  final _opening = <String>{};
+
+  /// Chats stopped while [_opening]: the turn fails before its prompt goes.
+  final _stoppedOpening = <String>{};
   String? _instructions;
 
   /// The accounts settings last named; null before they've said.
@@ -997,8 +1150,17 @@ class CodexAccountRunners
     GaiaAccount? account,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
+    // Before anything's awaited: a stop from here on is caught.
+    _opening.add(chatId);
+    _stoppedOpening.remove(chatId);
+    for (final runner in _runners.values) {
+      runner.forgetStop(chatId);
+    }
     try {
-      return await (await _runner(account)).send(
+      final runner = await _runner(account);
+      _opening.remove(chatId);
+      if (_stoppedOpening.contains(chatId)) throw GaiaRunException('Stopped.');
+      return await runner.send(
         chatId: chatId,
         sessionId: sessionId,
         model: model,
@@ -1010,6 +1172,7 @@ class CodexAccountRunners
         onEvent: onEvent,
       );
     } finally {
+      _opening.remove(chatId);
       await _prune();
     }
   }
@@ -1046,9 +1209,20 @@ class CodexAccountRunners
 
   @override
   Future<void> stop(String chatId) async {
+    if (_opening.contains(chatId)) _stoppedOpening.add(chatId);
     await Future.wait([
       for (final runner in _runners.values) runner.stop(chatId),
     ]);
+  }
+
+  @override
+  Future<String?> takeBack(String chatId) async {
+    // Stopped before a runner had it: nothing went.
+    if (_stoppedOpening.remove(chatId)) return null;
+    for (final runner in _runners.values) {
+      if (runner.stoppedHere(chatId)) return runner.takeBack(chatId);
+    }
+    return 'Codex was not running it.';
   }
 
   @override

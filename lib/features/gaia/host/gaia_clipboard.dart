@@ -23,6 +23,33 @@ typedef GaiaClipboard = ({
 /// text, marked as left out of history, isn't a password manager's.
 int? _gaiaWrote;
 
+/// The clipboard's sequence number just after Gaia last put back what the
+/// user had copied, and whether that was private: the marker the restore
+/// carries, to keep it out of Win+V history, would otherwise read as private.
+({int sequence, bool private})? _gaiaRestored;
+
+/// Whether what's on the clipboard was marked private, as password managers
+/// mark what they copy; call with the clipboard open. Gaia's own write isn't,
+/// and what Gaia put back is as private as it was.
+bool gaiaClipboardPrivate() {
+  final sequence = GetClipboardSequenceNumber();
+  if (sequence == _gaiaWrote) return false;
+  if (_gaiaRestored case (
+    sequence: final at,
+    :final private,
+  ) when at == sequence) {
+    return private;
+  }
+  return _has('ExcludeClipboardContentFromMonitorProcessing') ||
+      _has('Clipboard Viewer Ignore') ||
+      _dword('CanIncludeInClipboardHistory') == 0;
+}
+
+/// Notes that Gaia just put back what the user had copied, which was
+/// [private] or not.
+void gaiaNoteRestored({required bool private}) =>
+    _gaiaRestored = (sequence: GetClipboardSequenceNumber(), private: private);
+
 /// The clipboard's text, unless it was marked private.
 Future<GaiaClipboard> gaiaReadClipboard() async {
   if (!await _open()) {
@@ -38,11 +65,7 @@ Future<GaiaClipboard> gaiaReadClipboard() async {
   try {
     final owner = GetClipboardOwner();
     final ours = GetClipboardSequenceNumber() == _gaiaWrote;
-    final private =
-        !ours &&
-        (_has('ExcludeClipboardContentFromMonitorProcessing') ||
-            _has('Clipboard Viewer Ignore') ||
-            _dword('CanIncludeInClipboardHistory') == 0);
+    final private = gaiaClipboardPrivate();
     if (private) {
       return (
         text: null,
@@ -133,10 +156,15 @@ Future<bool> gaiaWriteClipboard(String text) async {
     _setDword('CanUploadToCloudClipboard', 0);
   } finally {
     CloseClipboard();
+    // Emptied even when the set failed: Gaia's to put back.
+    _gaiaWrote = GetClipboardSequenceNumber();
   }
-  _gaiaWrote = GetClipboardSequenceNumber();
   return true;
 }
+
+/// Whether the clipboard still holds Gaia's last write: nothing has been
+/// copied since.
+bool gaiaClipboardIsOurs() => GetClipboardSequenceNumber() == _gaiaWrote;
 
 /// [text]'s first [length] code units, one fewer rather than half an emoji's
 /// surrogate pair.

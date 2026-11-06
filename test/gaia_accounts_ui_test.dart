@@ -319,6 +319,23 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('picked from the palette at the end, the space before stays', (
+      tester,
+    ) async {
+      final controller = await pump(
+        tester,
+        accounts: const [a, aliased],
+        messages: const [],
+      );
+      await tester.enterText(find.byType(EditableText), 'hello /second');
+      await settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+      expect(controller.currentAccount(kGaiaClaudeCodeAdapter), aliased);
+      expect(draft(tester), 'hello ');
+      await finish(tester);
+    });
+
     testWidgets('turned down, the word stays and is not asked about again', (
       tester,
     ) async {

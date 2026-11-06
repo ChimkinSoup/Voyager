@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
+import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:win32/win32.dart';
@@ -229,6 +231,31 @@ class _Backend implements GaiaInputBackend {
     clipboard.add(text);
     return true;
   }
+
+  /// What the user had copied, and each time it was put back, as how many
+  /// sends had gone by then.
+  final GaiaSavedClipboard userCopy = (
+    formats: [(CF_UNICODETEXT, Uint8List(2))],
+    private: false,
+  );
+  final restoredAfter = <int>[];
+  @override
+  GaiaSavedClipboard? saveClipboard() => clipboardBusy ? null : userCopy;
+  @override
+  void restoreClipboard(GaiaSavedClipboard saved) {
+    expect(saved, same(userCopy));
+    restoredAfter.add(calls.length);
+  }
+
+  /// Each wait for the target to handle its input, as the window and how
+  /// many sends had gone by then.
+  final pumps = <(int, int)>[];
+  @override
+  Future<void> pumped(
+    int hwnd, {
+    required int times,
+    required Duration limit,
+  }) async => pumps.add((hwnd, calls.length));
 
   @override
   int rootAt(int x, int y) => rootUnder;
@@ -749,16 +776,16 @@ void main() {
     });
 
     test('Esc stops mid-text', () async {
-      await plan('os_type', {'text': 'x' * 2000});
+      await plan('os_type', {'text': 'x' * 150});
       backend.onSend = () => backend.escape = true;
       final result = await run();
       expect(result['stopped'], contains('Esc'));
       expect(result['ran'], 0);
-      expect(backend.sent.length, lessThan(4000));
+      expect(backend.sent.length, lessThan(300));
     });
 
     test('stop() lands mid-text, as Abort does, and only its chat', () async {
-      await plan('os_type', {'text': 'x' * 2000});
+      await plan('os_type', {'text': 'x' * 150});
       var sends = 0;
       backend.onSend = () {
         if (++sends == 2) {
@@ -769,6 +796,77 @@ void main() {
       final result = await run();
       expect(result['stopped'], 'Gaia is aborted.');
       expect(sends, 2);
+    });
+
+    group('long text', () {
+      final long = 'line one\n${'x' * 200}\r\nend\t.';
+      List<GaiaInputEvent> ctrlV() => const [
+        GaiaKeyEvent(VK_CONTROL, up: false),
+        GaiaKeyEvent(0x56, up: false),
+        GaiaKeyEvent(0x56, up: true),
+        GaiaKeyEvent(VK_CONTROL, up: true),
+      ];
+
+      test('is pasted, and the clipboard put back after', () async {
+        await plan('os_type', {'text': long});
+        final result = await run();
+        expect(result['stopped'], isNull);
+        expect(backend.clipboard, ['line one\r\n${'x' * 200}\r\nend\t.']);
+        expect(backend.calls, [ctrlV()]);
+        // Put back only once the window has handled the keys.
+        expect(backend.pumps, [(_target.hwnd, 1)]);
+        expect(backend.restoredAfter, [1]);
+      });
+
+      test('just under the line is typed', () async {
+        await plan('os_type', {'text': 'x' * 199});
+        await run();
+        expect(backend.clipboard, isEmpty);
+        expect(backend.calls, hasLength(199));
+      });
+
+      test('is typed when another app holds the clipboard', () async {
+        backend.clipboardBusy = true;
+        await plan('os_type', {'text': 'x' * 200});
+        expect((await run())['stopped'], isNull);
+        expect(backend.calls, hasLength(200));
+        expect(backend.restoredAfter, isEmpty);
+      });
+
+      test('is typed into a console', () async {
+        backend.window = (
+          hwnd: 7,
+          pid: 70,
+          exe: 'windowsterminal',
+          app: 'Terminal',
+          title: 'pwsh',
+          console: true,
+        );
+        await plan('os_type', {'text': 'x' * 200});
+        await run();
+        expect(backend.clipboard, isEmpty);
+        expect(backend.calls, hasLength(200));
+      });
+
+      test('never goes on the clipboard for a sensitive field', () async {
+        backend.sensitiveFocus = true;
+        await plan('os_type', {'text': long});
+        expect((await run())['stopped'], contains('never types'));
+        expect(backend.clipboard, isEmpty);
+        expect(backend.calls, isEmpty);
+      });
+
+      test('stopped before the paste still puts the clipboard back', () async {
+        await plan('os_type', {'text': long});
+        // The user switches window once the text is on the clipboard.
+        backend.onForeground = () {
+          if (backend.clipboard.isNotEmpty) backend.front = 99;
+        };
+        final result = await run();
+        expect(result['stopped'], contains('in front changed'));
+        expect(backend.calls, isEmpty);
+        expect(backend.restoredAfter, [0]);
+      });
     });
 
     test('a key left down by a short send is let go (§15.7)', () async {
@@ -1012,14 +1110,14 @@ void main() {
 
     test('Esc mid-text stops it', () async {
       auto.session('chat', auto: true, onUserStop: () => stops++);
-      await auto.plan('chat', 'card', 'os_type', {'text': 'x' * 2000});
+      await auto.plan('chat', 'card', 'os_type', {'text': 'x' * 150});
       final running = auto.run('card', once: true, check: () async {});
       await Future<void>.delayed(const Duration(milliseconds: 5));
       backend.escape = true;
       final result = await running;
       expect(result['stopped'], contains('Esc'));
       expect(stops, 1);
-      expect(backend.sent.whereType<GaiaUnicodeEvent>().length, lessThan(4000));
+      expect(backend.sent.whereType<GaiaUnicodeEvent>().length, lessThan(300));
     });
 
     test("the agent's own Esc isn't the user's", () async {

@@ -331,8 +331,10 @@ class FakeClaudeRunner
             contextTokens: event.contextTokens,
             contextWindow: event.contextWindowOf(sessionModel),
             sessionFound: !missingSessions.contains(sessionId),
+            notice: notice,
           ),
         );
+        notice = null;
       }
     }
     try {
@@ -349,6 +351,23 @@ class FakeClaudeRunner
   Future<void> stop(String chatId) async {
     stopped.add(chatId);
     _fail(_active.remove(chatId));
+  }
+
+  /// Each [takeBack]'s chat, in order; [takeBackRefusal] is its answer.
+  final takenBack = <String>[];
+  String? takeBackRefusal;
+
+  /// Held until completed, when set: a take-back that takes a while.
+  Completer<void>? takeBackGate;
+
+  /// The next scripted result's [GaiaTurnResult.notice].
+  String? notice;
+
+  @override
+  Future<String?> takeBack(String chatId) async {
+    takenBack.add(chatId);
+    await takeBackGate?.future;
+    return takeBackRefusal;
   }
 
   @override

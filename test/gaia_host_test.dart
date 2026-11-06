@@ -20,6 +20,7 @@ import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
 import 'package:voyager/features/gaia/host/gaia_os_reads.dart';
+import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
@@ -146,6 +147,16 @@ class _ControlBackend implements GaiaInputBackend {
   void close(int hwnd) {}
   @override
   Future<bool> writeClipboard(String text) async => true;
+  @override
+  GaiaSavedClipboard? saveClipboard() => (formats: [], private: false);
+  @override
+  void restoreClipboard(GaiaSavedClipboard saved) {}
+  @override
+  Future<void> pumped(
+    int hwnd, {
+    required int times,
+    required Duration limit,
+  }) async {}
 }
 
 class _Companion {

@@ -431,10 +431,17 @@ class GaiaController extends ChangeNotifier {
     final text = draft.text;
     final at = text.indexOf(token);
     if (at >= 0) {
-      // The space the insert put before it goes too.
-      final start = at > 0 && text[at - 1] == ' ' ? at - 1 : at;
+      // A space the insert put beside it goes too: the one before, or at
+      // the start, the one after.
+      var start = at;
+      var end = at + token.length;
+      if (at > 0 && text[at - 1] == ' ') {
+        start--;
+      } else if (end < text.length && text[end] == ' ') {
+        end++;
+      }
       draft.value = TextEditingValue(
-        text: text.replaceRange(start, at + token.length, ''),
+        text: text.replaceRange(start, end, ''),
         selection: TextSelection.collapsed(offset: start),
       );
     }
@@ -466,16 +473,18 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// [text] at the draft's caret, or at its end when it has none, set off
-  /// from the text before it by a space.
+  /// from the text on either side by a space.
   void _insertInDraft(String text) {
     final value = draft.value;
     final at = value.selection.isValid
         ? value.selection.end
         : value.text.length;
     final before = value.text.substring(0, at);
-    final insert = before.isEmpty || before.trimRight() != before
+    final after = value.text.substring(at);
+    var insert = before.isEmpty || before.trimRight() != before
         ? text
         : ' $text';
+    if (after.trimLeft() == after) insert = '$insert ';
     draft.value = TextEditingValue(
       text: value.text.replaceRange(at, at, insert),
       selection: TextSelection.collapsed(offset: at + insert.length),
@@ -1197,6 +1206,14 @@ class GaiaController extends ChangeNotifier {
   /// lease, by chat: no run to stop yet, so a stop takes the send back.
   final _cancelSend = <String, void Function()>{};
   final _running = <String>{};
+
+  /// A stopped message still being taken back from its session (§9.6), by
+  /// chat: run once the chat has stopped, and a send to it waits for it.
+  final _takingBack = <String, Future<void>>{};
+
+  /// Chats sent to while [_takingBack]: the stopped message isn't put back
+  /// in the draft then.
+  final _takeBackSuperseded = <String>{};
   final _lastPersist = <String, DateTime>{};
 
   /// Chats this device ran a turn in, each curated once it's been idle for
@@ -2238,10 +2255,13 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// Summoned with a card waiting on the user in another chat, Gaia goes to
-  /// the chat of the one raised last, to answer it at once.
+  /// the chat of the one raised last, to answer it at once. Not away from a
+  /// chat in view that's running: its toast and spinner point to the card.
   Future<void> _openWaitingChat() async {
     final waiting = cards.waitingChats;
-    if (waiting.isEmpty || waiting.contains(currentChatId)) return;
+    if (waiting.isEmpty || waiting.contains(currentChatId) || currentRunning) {
+      return;
+    }
     await selectChat(waiting.last);
   }
 
@@ -2939,6 +2959,11 @@ class GaiaController extends ChangeNotifier {
         when !_messages.containsKey(id) && !_running.contains(id)) {
       await _load(id);
     }
+    // After a stopped message's take-back, which then leaves it in the chat.
+    if (targetId case final id? when _takingBack.containsKey(id)) {
+      _takeBackSuperseded.add(id);
+      await _takingBack[id];
+    }
     // A remote message to a chat that's running, or just starting, waits
     // in its queue (§13).
     if (remote != null &&
@@ -3083,6 +3108,9 @@ class GaiaController extends ChangeNotifier {
     final uploads = <String>[];
     // This send's entry in [_cancelSend], set below.
     void Function()? cancel;
+    // The images [undo] puts back: once sent, copies of the stored ones, as
+    // the draft's own files are gone by then.
+    var imagesBack = images;
 
     // The send didn't happen: the question comes off the chat, and a new
     // chat with it, and it all goes back in the draft; a remote one's
@@ -3126,7 +3154,7 @@ class GaiaController extends ChangeNotifier {
           ))
             quote,
       ]);
-      _giveBack(isNew ? null : chatId, text, images, files);
+      _giveBack(isNew ? null : chatId, text, imagesBack, files);
       _reportRuns();
       _settleDrain();
     }
@@ -3471,6 +3499,14 @@ class GaiaController extends ChangeNotifier {
     // Set once the reply is settled: a card voided as its run ends comes
     // too late to change it.
     var ended = false;
+    // The runner was handed the turn, so a stop may need it taken back.
+    var runnerHeard = false;
+    // A stop gave the message back (§9.6), or why its session kept it.
+    var takenBack = false;
+    String? keptBecause;
+    // The draft's images, should the session's take-back, run once the
+    // chat has stopped, give the message back.
+    List<GaiaDraftImage>? takeBackCopies;
     void onEvent(GaiaAgentEvent event) {
       if (ended) return;
       // Kept as it comes, so a turn stopped later still counts. One from a
@@ -3668,6 +3704,8 @@ class GaiaController extends ChangeNotifier {
       // Stopped while its chat was saved or its context gathered: no runner
       // had started to hear it, so it ends here, cancelled.
       if (_stopping.contains(chatId)) throw StateError('Stopped.');
+      // From here a stop's turn may be in the agent's session (§9.6).
+      runnerHeard = script == null && runner != null;
       var result = script != null
           ? await _scripted.send(
               chatId: chatId,
@@ -3725,6 +3763,10 @@ class GaiaController extends ChangeNotifier {
           account: account,
           onEvent: onEvent,
         );
+      }
+      // An earlier take-back that didn't hold (§9.6).
+      if (result.notice case final notice?) {
+        _note("A stopped message wasn't fully taken back", notice, error: true);
       }
       // A scripted reply, or one no agent ran, has no session to resume. A failed turn's is kept when it was already
       // the chat's, or the agent got as far as replying or a tool; a
@@ -3795,8 +3837,29 @@ class GaiaController extends ChangeNotifier {
       );
     } catch (error) {
       final stopped = _stopping.contains(chatId);
-      // Its open cards go with it: nothing is left to answer them.
+      // Its open cards go with it: nothing is left to answer them. Before
+      // anything's awaited, so a late event can't change what's decided.
       ended = true;
+      // Stopped before anything showed, with nothing typed since: the
+      // message goes back to the composer, once its session no longer has
+      // it (§9.6). Otherwise it stays, as any stopped message does.
+      if (stopped &&
+          !aborted &&
+          !_drainCancelled &&
+          remote == null &&
+          builder.finished.isEmpty &&
+          _draftEmpty(chatId)) {
+        final copies = await _draftCopies(images, imageInputs);
+        if (copies != null && runnerHeard && session != null) {
+          // Once the run has ended: a stop doesn't wait on it.
+          takeBackCopies = copies;
+        } else if (copies != null && _draftEmpty(chatId)) {
+          imagesBack = copies;
+          takenBack = true;
+        } else {
+          copies?.forEach((image) => unawaited(_deleteQuietly(image.path)));
+        }
+      }
       if (account != null && script == null) {
         if (gaiaRunLimited('$error')) {
           _recordLimitHit(account);
@@ -3834,7 +3897,49 @@ class GaiaController extends ChangeNotifier {
       _reportRuns();
       notifyListeners();
     }
+    if (takeBackCopies case final copies?) {
+      final done = Completer<void>();
+      _takingBack[chatId] = done.future;
+      String? why;
+      try {
+        why = await runner!.takeBack(chatId);
+      } catch (error) {
+        why = '$error';
+      } finally {
+        _takingBack.remove(chatId);
+        done.complete();
+      }
+      final superseded = _takeBackSuperseded.remove(chatId);
+      if (why == null && !superseded && _draftEmpty(chatId)) {
+        imagesBack = copies;
+        takenBack = true;
+      } else {
+        // Typed or sent since: it stays, though the session no longer has it.
+        keptBecause =
+            why ??
+            "Something was typed or sent since, so it wasn't put back in the "
+                "draft. The agent's session no longer has it.";
+        for (final image in copies) {
+          unawaited(_deleteQuietly(image.path));
+        }
+      }
+    }
+    if (takenBack) {
+      // Off the chat everywhere, and a new chat with it; back in the draft.
+      list.removeWhere((message) => message.id == reply.id);
+      unawaited(
+        _request('takeBack', {
+          'messages': [question.toJson(), reply.toJson()],
+          'chat': isNew,
+        }),
+      );
+      undo('Stopped.');
+      return notifyListeners();
+    }
     await _persist(reply);
+    if (keptBecause case final why?) {
+      _note('The stopped message stays in the chat', why, error: true);
+    }
     _reportDone(chatId, reply);
     if (reply.status == GaiaMessageStatus.complete &&
         !debug.dummyMode &&
@@ -4048,6 +4153,42 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether [chatId]'s composer is empty: a stopped message given back
+  /// (§9.6) mustn't land over what's been typed since.
+  bool _draftEmpty(String chatId) {
+    if (chatId == currentChatId) {
+      return draft.text.isEmpty && draftImages.isEmpty && draftFiles.isEmpty;
+    }
+    final had = _drafts[_keyOf(chatId)];
+    return had == null ||
+        (had.text.text.isEmpty && had.images.isEmpty && had.files.isEmpty);
+  }
+
+  /// A sent message's [images] again for the draft, under their draft
+  /// labels: copies of the stored files [sent] went as, edits applied, since
+  /// the draft's own were deleted once sent. Null when one can't be copied.
+  Future<List<GaiaDraftImage>?> _draftCopies(
+    List<GaiaDraftImage> images,
+    List<GaiaImageInput> sent,
+  ) async {
+    final copies = <GaiaDraftImage>[];
+    try {
+      for (final (i, image) in images.indexed) {
+        final copy = p.join(_draftDirectory, '${_uuid.v4()}.img');
+        await Directory(_draftDirectory).create(recursive: true);
+        await File(sent[i].path).copy(copy);
+        copies.add(GaiaDraftImage(label: image.label, path: copy));
+      }
+      return copies;
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] stopped message kept, an image is gone: $error');
+      for (final copied in copies) {
+        unawaited(_deleteQuietly(copied.path));
+      }
+      return null;
+    }
+  }
+
   /// Takes [chatId]'s run lease (§8) through the main instance: null when
   /// this device may run it, else the name of the one running it. A main
   /// instance that can't say lets the run go ahead.
@@ -4249,7 +4390,8 @@ class GaiaController extends ChangeNotifier {
   /// A card opened in [chatId] while the user is in another app: Gaia comes
   /// up on that chat, in front of the app, but without the focus, so the
   /// keys they're typing never land on the card. Hidden, it comes up as the
-  /// small floater. Not over a crop or the pick-up pill.
+  /// small floater. Not over a crop or the pick-up pill, nor away from
+  /// another chat in view that's running: its toast is enough.
   Future<void> _attend(String chatId) async {
     // Checked again once the chat has loaded: the user may have moved.
     bool away() =>
@@ -4260,6 +4402,7 @@ class GaiaController extends ChangeNotifier {
         _window.shown != GaiaMode.pickUp;
     if (!away()) return;
     if (chatId != currentChatId) {
+      if (currentRunning) return;
       await selectChat(chatId);
       if (!away()) return;
     }

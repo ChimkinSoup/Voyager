@@ -463,7 +463,10 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'description':
         'Type text, at most 2000 characters, into a named control, which is '
         'clicked first, or with none, into whatever has focus. Password, card '
-        'and one-time code fields are refused. Approved or not like os_click.',
+        'and one-time code fields are refused. Text of 200 characters or more '
+        "is pasted, with the user's clipboard put back after, so its line "
+        "breaks and tabs don't press Enter or Tab; outside a console. Approved "
+        'or not like os_click.',
     'inputSchema': {
       'type': 'object',
       'properties': {

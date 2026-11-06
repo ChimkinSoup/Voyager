@@ -74,6 +74,13 @@ class CodexRunner implements GaiaAgentRunner {
 
   final _live = <String, _CodexProcess>{};
 
+  /// Chats whose turn is on its way to a process, not yet sent.
+  final _starting = <String>{};
+
+  /// Chats stopped while [_starting]: the turn fails before its prompt goes,
+  /// so [takeBack] has nothing to take.
+  final _stoppedStarting = <String>{};
+
   /// Whether any turn is running.
   bool get busy => _live.isNotEmpty;
 
@@ -91,6 +98,40 @@ class CodexRunner implements GaiaAgentRunner {
     String sessionInstructions = '',
     // Its home is the account: [CodexAccountRunners] picks the runner.
     GaiaAccount? account,
+    required void Function(GaiaAgentEvent event) onEvent,
+  }) async {
+    // Before anything's awaited: a stop from here on is caught.
+    _starting.add(chatId);
+    _stoppedStarting.remove(chatId);
+    _stoppedRunning.remove(chatId);
+    try {
+      final result = await _send(
+        chatId: chatId,
+        sessionId: sessionId,
+        model: model,
+        prompt: prompt,
+        images: images,
+        tools: tools,
+        onEvent: onEvent,
+      );
+      // Stopped while it started, then ended there with nothing sent (a home
+      // not set up): stopped, not that.
+      if (_stoppedStarting.contains(chatId)) {
+        throw GaiaRunException('Stopped.');
+      }
+      return result;
+    } finally {
+      _starting.remove(chatId);
+    }
+  }
+
+  Future<GaiaTurnResult> _send({
+    required String chatId,
+    required String? sessionId,
+    required String model,
+    required String prompt,
+    required List<GaiaImageInput> images,
+    required GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final (:notReady, :sandbox) = await readyCodexHome(
@@ -141,8 +182,14 @@ class CodexRunner implements GaiaAgentRunner {
         '-',
       ],
     );
+    // From here to the prompt going, nothing's awaited: a stop finds it live.
+    _starting.remove(chatId);
     final unbind = serveTools ? pipe.bind(process.pid, tools) : null;
     try {
+      if (_stoppedStarting.contains(chatId)) {
+        await process.kill();
+        throw GaiaRunException('Stopped.');
+      }
       return await process.turn(codexPrompt(prompt, images), onEvent);
     } finally {
       unbind?.call();
@@ -166,7 +213,37 @@ class CodexRunner implements GaiaAgentRunner {
   }
 
   @override
-  Future<void> stop(String chatId) async => _live.remove(chatId)?.kill();
+  Future<void> stop(String chatId) async {
+    if (_starting.contains(chatId)) _stoppedStarting.add(chatId);
+    if (_live.remove(chatId) case final process?) {
+      _stoppedRunning.add(chatId);
+      await process.kill();
+    }
+  }
+
+  /// Chats [stop] caught mid-turn: for [stoppedHere].
+  final _stoppedRunning = <String>{};
+
+  /// Whether [chatId]'s last stop was here, starting or mid-turn.
+  bool stoppedHere(String chatId) =>
+      _stoppedStarting.contains(chatId) || _stoppedRunning.contains(chatId);
+
+  /// `codex exec` has no way to drop a turn from its session; one stopped
+  /// before its prompt went has nothing to drop.
+  @override
+  Future<String?> takeBack(String chatId) async {
+    _stoppedRunning.remove(chatId);
+    return _stoppedStarting.remove(chatId)
+        ? null
+        : "codex exec can't take a turn back.";
+  }
+
+  /// A stop's turn is only taken back straight after it: a send elsewhere,
+  /// such as on another account's runner, ends that.
+  void forgetStop(String chatId) {
+    _stoppedStarting.remove(chatId);
+    _stoppedRunning.remove(chatId);
+  }
 
   @override
   Future<void> killAll() async {
