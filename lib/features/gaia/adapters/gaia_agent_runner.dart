@@ -106,8 +106,14 @@ abstract interface class GaiaAgentRunner {
   /// GAIA.md in a new session's system prompt (the memory index, §11); a
   /// resumed session keeps those it started with, since neither CLI takes
   /// new ones on a resume. [account] is the login it runs on (§6.1); null for
-  /// the one Voyager was started with. [onEvent] gets each event of the turn;
-  /// the future completes with its result, or throws a [GaiaRunException].
+  /// the one Voyager was started with. [promptId] is the user message's id,
+  /// which a backend that can names the prompt by in its session
+  /// (GAIA_FORKING_HLD.md §5.1); null for one of its own. [fork], with a null
+  /// [sessionId], makes the new session a native fork of another chat's
+  /// (§5.3), for a backend that can; one that can't make it reports
+  /// [GaiaTurnResult.sessionFound] false. [onEvent] gets each event of the
+  /// turn; the future completes with its result, or throws a
+  /// [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
@@ -118,6 +124,8 @@ abstract interface class GaiaAgentRunner {
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     GaiaAccount? account,
+    String? promptId,
+    GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   });
 
@@ -155,6 +163,28 @@ abstract interface class GaiaSessionCopier {
     required String sessionId,
     required GaiaAccount from,
     required GaiaAccount to,
+  });
+}
+
+/// Where a fork's session branches off its source chat's (GAIA_FORKING_HLD.md
+/// §5.3): [sessionId], kept up to the entry [keepAt].
+typedef GaiaForkCut = ({String sessionId, String keepAt});
+
+/// A runner whose native sessions can be forked (GAIA_FORKING_HLD.md §5).
+abstract interface class GaiaSessionForker {
+  /// The entry a fork of [chatId]'s [sessionId] on [account] keeps up to
+  /// (§5.2): just before the first of [next] the session has, or with none,
+  /// [endAt], or with none of that either, its end. [after] must be in it:
+  /// the last prompt the fork's session answers. [awaiting], a prompt just
+  /// sent, is waited for a few seconds. Null when it can't be found.
+  Future<String?> forkCut({
+    required String chatId,
+    required String sessionId,
+    required GaiaAccount account,
+    required String after,
+    required List<String> next,
+    String? awaiting,
+    String? endAt,
   });
 }
 

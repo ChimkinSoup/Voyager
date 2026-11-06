@@ -609,6 +609,64 @@ void main() {
     expect((await repo.getMessage('m1'))!.contextWindow, 200000);
   });
 
+  test(
+    "186→187 adds a fork's record and a copy's origin, none in old rows",
+    () async {
+      final seed = AppDatabase(NativeDatabase(file));
+      final seedRepo = DriftGaiaRepository(seed);
+      final chat = GaiaChat(
+        id: 'c1',
+        title: 'Hi',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      );
+      await seedRepo.upsertChat(chat);
+      final message = GaiaMessage(
+        id: 'm1',
+        chatId: 'c1',
+        seq: 0,
+        role: GaiaMessageRole.user,
+        parts: const [GaiaTextPart('hello')],
+        status: GaiaMessageStatus.complete,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await seedRepo.upsertMessage(message);
+      await seed.customStatement(
+        'ALTER TABLE gaia_chats_table DROP COLUMN fork_json',
+      );
+      await seed.customStatement(
+        'ALTER TABLE gaia_messages_table DROP COLUMN origin',
+      );
+      await seed.customStatement('PRAGMA user_version = 186');
+      await seed.close();
+
+      final upgraded = AppDatabase(NativeDatabase(file));
+      addTearDown(upgraded.close);
+      final repo = DriftGaiaRepository(upgraded);
+      expect((await repo.getChat('c1'))!.fork, isNull);
+      expect((await repo.getMessage('m1'))!.origin, isNull);
+      const record = GaiaForkRecord(
+        sessionKey: 'laptop/claude-code',
+        sourceSessionId: 's1',
+        keepAt: 'e1',
+        lastSeq: 3,
+      );
+      await repo.upsertChat(chat.copyWith(fork: record));
+      final forked = (await repo.getChat('c1'))!.fork!;
+      expect(forked.toJson(), record.toJson());
+      await repo.upsertChat(
+        chat.copyWith(fork: record).copyWith(clearFork: true),
+      );
+      expect((await repo.getChat('c1'))!.fork, isNull);
+      await repo.upsertMessage(
+        GaiaMessage.fromJson({...message.toJson(), 'origin': 'm0'}),
+      );
+      expect((await repo.getMessage('m1'))!.origin, 'm0');
+    },
+  );
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

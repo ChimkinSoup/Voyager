@@ -2212,6 +2212,10 @@ class GaiaChatsTable extends Table {
 
   /// `{deviceId: {seeScreen, at}}` (GAIA_HLD.md §8, §15.6).
   TextColumn get grantsJson => text().withDefault(const Constant('{}'))();
+
+  /// A fork's native session not made yet, as `GaiaForkRecord` JSON
+  /// (GAIA_FORKING_HLD.md §5.3). This device's alone: never synced.
+  TextColumn get forkJson => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2265,6 +2269,10 @@ class GaiaMessagesTable extends Table {
 
   /// The reply's model's context window, in tokens.
   IntColumn get contextWindow => integer().nullable()();
+
+  /// A fork's copy: the message it was first copied from
+  /// (GAIA_FORKING_HLD.md §2).
+  TextColumn get origin => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2459,7 +2467,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 186;
+  int get schemaVersion => 187;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4570,6 +4578,21 @@ class AppDatabase extends _$AppDatabase {
           'gaia_messages_table',
           gaiaMessagesTable,
           gaiaMessagesTable.contextWindow,
+        );
+      }
+      if (from >= 169 && from < 187) {
+        // Gaia's native forks (GAIA_FORKING_HLD.md §5.3).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.forkJson,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_messages_table',
+          gaiaMessagesTable,
+          gaiaMessagesTable.origin,
         );
       }
     },

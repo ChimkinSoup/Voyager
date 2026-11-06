@@ -3891,4 +3891,36 @@ Entry format:
 - Expected: one consistent message. Either "couldn't tell" with nothing pinned, or the window that came in front is offered as a guess, for example: "Gaia couldn't confirm this is what … opened, but … came in front and later calls act on it; check it's the right one." Not worded as a stop, and without "if the user stopped it".
 - Notes: not fixed. `_launch`'s timeout throws `_Stopped` (`gaia_os_control.dart`, "Gaia couldn't tell which window…"), so `gaia_chat_tools.dart` builds `_stoppedResult`, and `_windowNote` adds the adoption from the same run. Strict matching misses this launcher by design (§11.5: not the launched process's descendant, not the target's exe, no app ID). Only the reporting is wrong.
 
-<!-- Last ID: BUG-365. -->
+### BUG-366 [GAIA-FORK] A fork's first turn that fails after `init` hangs "streaming" instead of retrying by handoff
+- Severity: Major
+- Found: 2026-11-06, GAIA_FORKING_HLD.md §10.5 test 14 (`gaiaqa` on qa-128, debug build of the working tree after `a399f7a3`, Claude Code 2.1.318, Haiku)
+- Steps: fork a Claude Code chat at an earlier reply. Switch Claude Code to an account whose config dir has no login. Send in the fork.
+- Actual: the fork process starts (`--fork-session`), gets `init`, and ends its turn with "Not logged in · Please run /login". The controller drops `fork_json` and retries by handoff, as §10.5 says, but the reply stays "streaming" with nothing shown (more than 2.5 minutes). No new CLI process starts. A stop recovers it, and the next send is a handoff.
+- Expected (§10.5): the same send is retried at once by handoff, and the turn ends.
+- Notes (fixed 2026-11-06): the retry has no session and no fork, and `_send` (`claude_code_runner.dart`) took the chat's live process from `_live`, which was the failed fork's, still running. None of the reuse check's kill conditions matched, so the prompt went to the fork process, whose session had already failed. Now a live process is reused only for the session it runs (`process.sessionId != sessionId` kills it), which also covers the old "a fork is always a process of its own". No unit test: the runner's processes can't be faked. In the app, same steps: the fork process, then a `--session-id` process 1 s later; the turn ended in 2.4 s with "Not logged in", `fork_json` NULL. The next send, on the default account, was a handoff (`--session-id`, no `--fork-session`) and completed. CLI contract check (12 tests, real CLI) passed; Gaia tests 1272 pass.
+
+### BUG-367 [GAIA-FORK] Answering a copied question card in a fork marks the source chat's card answered
+- Severity: Minor
+- Found: 2026-11-06, GAIA_FORKING_HLD.md §10.3 test 9 (`gaiaqa`, debug build of the working tree after `a399f7a3`, Haiku)
+- Steps: have the agent ask a question card, and leave it open past its wait (restarting the profile mid-wait leaves it open). Fork at that reply. In the fork, pick an option and answer the card.
+- Actual: the "Re:" message goes to the fork, but the *source's* stored card becomes accepted with the answer, and the fork's card stays open. From the code, picking an option in the fork's card would also pick it in the source's.
+- Expected: the fork's card is answered; the source's stays open.
+- Notes (fixed 2026-11-06): a fork's copies kept their card ids, and `_decideStored` (`gaia_controller.dart`) updates the first message in any chat holding that id, and `_cardPicks` is keyed by card id. `forkChat` now gives copied cards new ids. Unit test (forking group): the copied card has a new id, its picks don't show on the source's, and answering it marks the fork's card and leaves the source's open. In the app: forked a chat with an open card and answered BLUE: the fork's card (new id) stored as accepted, the source's still open.
+
+### BUG-368 [GAIA-FORK] A native fork at a stopped reply doesn't have the partial reply the user saw
+- Severity: Minor
+- Found: 2026-11-06, GAIA_FORKING_HLD.md §10.3 test 9 (`gaiaqa`, debug build of the working tree after `a399f7a3`, Haiku)
+- Steps: ask for a long essay, stop it once some text shows, then fork at that stopped reply. In the fork, ask about the essay.
+- Actual: the fork's session holds the CLI's "No response requested." placeholder for that turn, not the partial text shown in the chat. The fork's `lastSeq` covers the reply, so nothing catches it up. The agent said it never started an essay.
+- Expected: the fork knows what the copied reply shows, as the source does.
+- Notes: not fixed. Not checked whether the source chat's own session has the same gap after a stop. A fix could set the record's `lastSeq` to before a stopped reply, so the first send catches up its text.
+
+### BUG-369 [GAIA-FORK] Forks of a chat not yet curated save the copied turns' memories again
+- Severity: Minor
+- Found: 2026-11-06, GAIA_FORKING_HLD.md §10.3 test 6 (`gaiaqa`, debug build of the working tree after `a399f7a3`, Haiku)
+- Steps: in a chat, state a fact (here, a favourite fruit). Before its curator runs (`kGaiaCurateAfter`, 10 min idle), fork it several times and send a turn in each fork. Wait for the curators.
+- Actual: the fact was proposed four times, once from each of four forks (and the source's own curator could add a fifth). Each fork copies `curatedSeq` as `min(source.curatedSeq, point.seq)`, which is -1, so each fork's curator reads the copied turns as new.
+- Expected (§10.1's Done-when): the curator doesn't save memories from the copied turns a second time. A fork of an already-curated chat is fine (§10.3 #6 passed).
+- Notes: not fixed. Possible fixes: give a fork `curatedSeq = point.seq` and let the source's curator own the copied turns, or have the curator skip candidates matching memories already proposed for the source chat.
+
+<!-- Last ID: BUG-369. -->

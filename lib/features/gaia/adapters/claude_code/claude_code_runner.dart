@@ -20,6 +20,13 @@
 // the flags is started before the prompt goes back, and refused or not
 // understood it keeps the message in the chat; the next turn's entry must
 // hang off the kept one, or the user is told the session may still have it.
+//
+// FRAGILE(cli): forking a chat natively (GAIA_FORKING_HLD.md §5) leans on
+// `--resume <id> --fork-session --resume-session-at <entry uuid>` making a
+// new session, under a new id its `init` names, holding the source only up
+// to that entry, and on a bad entry uuid exiting before `init` (checked on
+// 2.1.318). The fork's first prompt must then hang off the entry; if it
+// doesn't, the user is told.
 
 import 'dart:async';
 import 'dart:convert';
@@ -105,6 +112,9 @@ Future<Object> claudeUserContent(
 }
 
 const _idleTimeout = Duration(minutes: 10);
+
+/// How long a fork waits for a prompt just sent to reach the session file.
+const _forkWait = Duration(seconds: 5);
 const _maxLive = 4;
 
 /// Gaia's tools, served by Gaia itself over the control channel (§5.3):
@@ -153,7 +163,8 @@ typedef _StoppedTurn = ({
 /// prompts the CLI would show come the same way, for a card. The turn's
 /// [GaiaTurnTools] answers each. Claude Code's own `AskUserQuestion` is
 /// left out, for `ask_user` (§10.1): as a host, Gaia would be offered it.
-class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
+class ClaudeCodeRunner
+    implements GaiaAgentRunner, GaiaSessionCopier, GaiaSessionForker {
   ClaudeCodeRunner({
     required this.workingDirectory,
     required this.instructionsFile,
@@ -203,9 +214,14 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     GaiaAccount? account,
+    String? promptId,
+    GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     final newSessionId = sessionId ?? _uuid.v4();
+    // Sent twice with the same [promptId] only when the first attempt never
+    // started its session, so never saved the prompt: a session never holds
+    // two entries with one uuid (GAIA_FORKING_HLD.md §5.1).
     Future<(ClaudeResult, bool, String?, String?)> attempt() => _send(
       chatId: chatId,
       sessionId: sessionId,
@@ -217,6 +233,8 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
       tools: tools,
       sessionInstructions: sessionInstructions,
       configDir: account?.dir ?? '',
+      promptId: promptId,
+      fork: fork,
       onEvent: (event) {
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
@@ -259,6 +277,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     String configDir = '',
+    String? promptId,
     required void Function(ClaudeEvent event) onEvent,
   }) async => (await _send(
     chatId: chatId,
@@ -271,12 +290,15 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     tools: tools,
     sessionInstructions: sessionInstructions,
     configDir: configDir,
+    promptId: promptId,
+    fork: null,
     onEvent: onEvent,
   )).$1;
 
   /// [sendRaw], whether the process got as far as a session (a resume that
   /// finds none ends in an error result without an `init`), the model its
-  /// `init` named, and a [GaiaTurnResult.notice].
+  /// `init` named, and a [GaiaTurnResult.notice]. A [fork] refused before
+  /// its `init` is an error result, not started.
   Future<(ClaudeResult, bool, String?, String?)> _send({
     required String chatId,
     required String? sessionId,
@@ -288,8 +310,12 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     required GaiaTurnTools? tools,
     required String sessionInstructions,
     required String configDir,
+    required String? promptId,
+    required GaiaForkCut? fork,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
+    // Only a new session is made as a fork.
+    final forking = sessionId == null ? fork : null;
     // Before anything's awaited: a stop from here on is caught.
     _starting.add(chatId);
     _stoppedStarting.remove(chatId);
@@ -312,9 +338,11 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     // session's own instructions aren't: a resume keeps those it started
     // with, whatever file it's given (checked on 2.1.314). The account is
     // fixed too: a chat that moved to another resumes its copy of the session
-    // there (§6.5).
+    // there (§6.5). A fork is always a process of its own, and so is a new
+    // session: a fork's failed first turn is retried as one (§10.5).
     if (process != null &&
-        (process.model != model ||
+        (process.sessionId != sessionId ||
+            process.model != model ||
             process.configDir != configDir ||
             !process.started ||
             (cut != null && process.cut != cut) ||
@@ -341,16 +369,26 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
         configDir: configDir,
         onLine: onLine,
         directories: directories,
+        // A fork's is the one its `init` names.
         sessionId: sessionId ?? newSessionId,
         cut: cut,
+        fork: forking,
         sessionArgs: [
           if (instructions != null) ...[
             '--append-system-prompt-file',
             instructions,
           ],
-          ...sessionId == null
-              ? ['--session-id', newSessionId]
-              : ['--resume', sessionId, ...?cut?.args],
+          ...switch ((sessionId, forking)) {
+            (final String id, _) => ['--resume', id, ...?cut?.args],
+            (null, final fork?) => [
+              '--resume',
+              fork.sessionId,
+              '--fork-session',
+              '--resume-session-at',
+              fork.keepAt,
+            ],
+            (null, null) => ['--session-id', newSessionId],
+          },
         ],
       );
     }
@@ -364,11 +402,27 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
         await process.kill();
         throw GaiaRunException('Stopped.');
       }
-      final result = await process.turn(content, tools, onEvent);
+      ClaudeResult result;
+      try {
+        result = await process.turn(content, tools, onEvent, promptId);
+      } on GaiaRunException catch (error) {
+        if (forking == null || process.started || process.killed) rethrow;
+        // Refused before its prompt reached the model, say for a cut the
+        // source doesn't have (§6): the caller sends it again unforked.
+        debugPrint('[gaia] fork of ${forking.sessionId} refused: $error');
+        result = ClaudeResult(sessionId: '', isError: true, text: '$error');
+      }
       String? notice;
       if (process.cut case final cut? when process.started) {
         entries = await _sessionEntries(process.configDir, cut.sessionId);
         notice = _checkCut(cut, process, entries);
+      }
+      if (forking != null && process.started) {
+        notice = _checkFork(
+          forking,
+          process,
+          await _sessionEntries(process.configDir, process.sessionId),
+        );
       }
       return (result, process.started, process.sessionModel, notice);
     } finally {
@@ -562,6 +616,7 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
       directories: process.directories,
       sessionId: turn.sessionId,
       cut: cut,
+      fork: null,
       sessionArgs: ['--resume', turn.sessionId, ...cut.args],
     );
     final refused = await check.ready.timeout(
@@ -595,6 +650,76 @@ class ClaudeCodeRunner implements GaiaAgentRunner, GaiaSessionCopier {
     return 'Claude Code may still remember the message you stopped earlier: '
         "the way Gaia takes one back (Claude Code's undocumented "
         '--resume-session-at) did not behave as expected.';
+  }
+
+  /// After a fork's first turn (GAIA_FORKING_HLD.md §5.3): its prompt's entry
+  /// must hang off [fork]'s cut. Null when it does.
+  String? _checkFork(
+    GaiaForkCut fork,
+    _ClaudeProcess process,
+    List<Map<String, Object?>>? entries,
+  ) {
+    final prompt = entries
+        ?.where((e) => e['uuid'] == process.prompt)
+        .firstOrNull;
+    if (prompt?['parentUuid'] == fork.keepAt) return null;
+    debugPrint(
+      '[gaia] fork did not hold: ${process.prompt} hangs off '
+      '${prompt?['parentUuid']}, not ${fork.keepAt}',
+    );
+    return 'This fork may remember more of the chat it came from than it '
+        "shows: the way Gaia forks a chat (Claude Code's undocumented "
+        '--resume-session-at) did not behave as expected.';
+  }
+
+  @override
+  Future<String?> forkCut({
+    required String chatId,
+    required String sessionId,
+    required GaiaAccount account,
+    required String after,
+    required List<String> next,
+    String? awaiting,
+    String? endAt,
+  }) async {
+    // A prompt just sent can be a moment from the file (§5.2).
+    final until = DateTime.now().add(_forkWait);
+    var entries = await _sessionEntries(account.dir, sessionId);
+    while (awaiting != null &&
+        entries != null &&
+        !entries.any((e) => e['uuid'] == awaiting)) {
+      if (DateTime.now().isAfter(until)) return null;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      entries = await _sessionEntries(account.dir, sessionId);
+    }
+    if (entries == null) return null;
+    final byUuid = {
+      for (final entry in entries)
+        if (entry['uuid'] case final String uuid) uuid: entry,
+    };
+    if (!byUuid.containsKey(after)) return null;
+    for (final id in next) {
+      if (byUuid[id] case final entry?) {
+        return switch (entry['parentUuid']) {
+          final String parent => parent,
+          _ => null,
+        };
+      }
+    }
+    // Nothing after it: where the caller says the copies end, or the
+    // session's end, unless a take-back's cut is still to be made, whose
+    // dropped turn is the file's end.
+    if (endAt != null) return endAt;
+    if ((await _readRewinds())[chatId] case final cut?
+        when cut.sessionId == sessionId) {
+      return cut.keepAt;
+    }
+    return entries.lastWhereOrNull(
+          (e) =>
+              e['uuid'] is String &&
+              (e['type'] == 'user' || e['type'] == 'assistant'),
+        )?['uuid']
+        as String?;
   }
 
   /// [sessionId]'s JSONL entries under [configDir], unreadable lines
@@ -697,6 +822,7 @@ class _ClaudeProcess {
     this._onRawLine,
     this.sessionId,
     this.cut,
+    this.fork,
   ) {
     _process.stdout
         .transform(utf8.decoder)
@@ -731,6 +857,7 @@ class _ClaudeProcess {
     required Set<String> directories,
     required String sessionId,
     required _Rewind? cut,
+    required GaiaForkCut? fork,
     required List<String> sessionArgs,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
@@ -779,6 +906,7 @@ class _ClaudeProcess {
       onLine,
       sessionId,
       cut,
+      fork,
     );
     // Registers the `sdk` server the config names; the CLI then lists its
     // tools through [_answer].
@@ -798,11 +926,17 @@ class _ClaudeProcess {
   final _stderr = StringBuffer();
   var exited = false;
 
-  /// The session it started or resumed.
-  final String sessionId;
+  /// The session it started or resumed; a fork's, once its `init` names it.
+  String sessionId;
 
   /// The take-back it resumed with, until a turn on it has started.
   _Rewind? cut;
+
+  /// The session it forked (GAIA_FORKING_HLD.md §5.3), or null.
+  final GaiaForkCut? fork;
+
+  /// [kill] was called.
+  var killed = false;
 
   /// The uuid the current or last turn's prompt went with, and when.
   String? prompt;
@@ -832,18 +966,21 @@ class _ClaudeProcess {
 
   bool get inTurn => _turn != null;
 
-  /// [content] is text, or content blocks ([claudeUserContent]).
+  /// [content] is text, or content blocks ([claudeUserContent]). [promptId]
+  /// is the uuid it goes with; null for a random one.
   Future<ClaudeResult> turn(
     Object content,
     GaiaTurnTools? tools,
-    void Function(ClaudeEvent event) onEvent,
-  ) {
+    void Function(ClaudeEvent event) onEvent, [
+    String? promptId,
+  ]) {
     _idle?.cancel();
     final turn = _turn = Completer<ClaudeResult>();
     _onEvent = onEvent;
     _tools = tools;
-    // The id its JSONL entry gets, for a take-back to find it by.
-    final uuid = prompt = _uuid.v4();
+    // The id its JSONL entry gets, for a take-back to find it by, and a fork
+    // to cut at (GAIA_FORKING_HLD.md §5.1): the message's own, when given.
+    final uuid = prompt = promptId ?? _uuid.v4();
     sentAt = DateTime.now();
     _write({
       'type': 'user',
@@ -940,6 +1077,7 @@ class _ClaudeProcess {
     if (event is ClaudeInit) {
       started = true;
       sessionModel = event.model;
+      if (fork != null) sessionId = event.sessionId;
     }
     if (event case final ClaudeControlRequest request) {
       // Always answered: the CLI blocks on the request until it is.
@@ -987,6 +1125,7 @@ class _ClaudeProcess {
   /// Kills the whole tree: cmd, the CLI, and anything the CLI started.
   Future<void> kill() async {
     _idle?.cancel();
+    killed = true;
     if (exited) return;
     await Process.run('taskkill', ['/t', '/f', '/pid', '${_process.pid}']);
   }

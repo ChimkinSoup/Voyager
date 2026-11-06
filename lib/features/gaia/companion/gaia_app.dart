@@ -2220,6 +2220,13 @@ class _MessageView extends StatelessWidget {
         icon: Icons.edit_outlined,
         onPressed: () => onEdit(message),
       ),
+    // Not a reply still streaming, which no fork copies (§3).
+    if (message.status != GaiaMessageStatus.streaming)
+      GaiaMenuItem(
+        label: 'Fork from here',
+        icon: Icons.call_split,
+        onPressed: () => unawaited(controller.forkChat(message)),
+      ),
   ];
 
   /// Selectable, with the message's actions in its right-click menu. Gaia's

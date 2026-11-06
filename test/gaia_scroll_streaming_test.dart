@@ -27,6 +27,8 @@ class _Streaming extends FakeClaudeRunner {
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     GaiaAccount? account,
+    String? promptId,
+    GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) {
     emit = onEvent;

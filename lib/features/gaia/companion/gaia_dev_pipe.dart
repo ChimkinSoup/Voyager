@@ -51,6 +51,15 @@ class GaiaDevPipe extends GaiaPipe {
       case 'putChat':
         await _store.createChat(GaiaChat.fromJson(_map(p['chat'])));
         return null;
+      case 'forkChat':
+        await _store.forkChat(GaiaChat.fromJson(_map(p['chat'])), [
+          for (final message in p['messages']! as List)
+            GaiaMessage.fromJson(_map(message)),
+        ]);
+        return null;
+      case 'dropFork':
+        await _store.dropFork(p['chatId']! as String);
+        return null;
       case 'setSession':
         await _store.setSession(
           p['chatId']! as String,

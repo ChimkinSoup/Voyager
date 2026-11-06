@@ -97,6 +97,18 @@ class _Main {
           GaiaChat.fromJson((params['chat']! as Map).cast<String, Object?>()),
         );
         return null;
+      case 'forkChat':
+        await store.forkChat(
+          GaiaChat.fromJson((params['chat']! as Map).cast<String, Object?>()),
+          [
+            for (final message in params['messages']! as List)
+              GaiaMessage.fromJson((message as Map).cast<String, Object?>()),
+          ],
+        );
+        return null;
+      case 'dropFork':
+        await store.dropFork(params['chatId']! as String);
+        return null;
       case 'setSession':
         await store.setSession(
           params['chatId']! as String,
@@ -5238,6 +5250,696 @@ void main() {
       main.aborted = true;
       await start();
       expect(source.reads, isEmpty);
+    });
+  });
+
+  group('forking (GAIA_FORKING_HLD.md §10.1)', () {
+    final at = DateTime.utc(2026, 11, 5);
+    GaiaMessage stored(int seq, {String? text, bool deleted = false}) =>
+        GaiaMessage(
+          id: 'm$seq',
+          chatId: 'c1',
+          seq: seq,
+          role: seq.isEven ? GaiaMessageRole.user : GaiaMessageRole.assistant,
+          parts: [GaiaTextPart(text ?? 'message $seq')],
+          status: GaiaMessageStatus.complete,
+          createdAt: at.add(Duration(minutes: seq)),
+          updatedAt: at.add(Duration(minutes: seq)),
+          deletedAt: deleted ? at : null,
+        );
+
+    Future<void> storeChat({int curatedSeq = -1}) async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plans',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          tier: GaiaTier.deep,
+          curatedSeq: curatedSeq,
+          agentSessions: {
+            gaiaSessionKey('laptop'): const GaiaAgentSession(
+              sessionId: 'source-session',
+              lastSeq: 3,
+            ),
+          },
+        ),
+      );
+      for (var seq = 0; seq < 4; seq++) {
+        await main.store.putMessage(stored(seq));
+      }
+    }
+
+    Future<String> forkAt(int seq) async {
+      await controller.forkChat(
+        controller.messages.firstWhere((m) => m.seq == seq),
+      );
+      await settle();
+      return controller.currentChatId!;
+    }
+
+    test('a fork at an earlier reply copies exactly the messages up to it, '
+        'with new ids and the same seqs, and opens', () async {
+      await storeChat();
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+
+      final fork = await forkAt(1);
+      expect(fork, isNot('c1'));
+      for (final messages in [
+        controller.messages,
+        await main.store.messages(fork),
+      ]) {
+        expect(messages.map((m) => m.seq), [0, 1]);
+        expect(messages.map(_text), ['message 0', 'message 1']);
+        expect(messages.map((m) => m.id), everyElement(isNot(startsWith('m'))));
+        expect(messages.map((m) => m.chatId), everyElement(fork));
+      }
+      final chat = (await main.store.chats()).firstWhere((c) => c.id == fork);
+      expect(chat.title, 'Plans (fork)');
+      expect(chat.tier, GaiaTier.deep);
+      expect(chat.agentSessions, isEmpty);
+      // The source is as it was.
+      expect(await main.store.messages('c1'), hasLength(4));
+    });
+
+    test('answering a copied open question in a fork leaves the '
+        "source's", () async {
+      await storeChat();
+      await main.store.putMessage(
+        stored(1).copyWith(
+          parts: [
+            const GaiaCardPart(
+              id: 'card1',
+              kind: GaiaCardKind.question,
+              state: GaiaCardState.open,
+              question: 'Which day?',
+              options: [(label: 'Friday', description: '')],
+            ),
+          ],
+        ),
+      );
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+
+      final fork = await forkAt(1);
+      final copy = controller.messages[1].parts.single as GaiaCardPart;
+      expect(copy.id, isNot('card1'));
+      controller.pickCardOption(copy, 0);
+      expect(controller.cardPicks('card1'), isEmpty);
+      expect(await controller.answerCard(copy), isTrue);
+      await settle();
+
+      final forkCard = (await main.store.messages(fork))[1].parts.single;
+      expect((forkCard as GaiaCardPart).state, GaiaCardState.accepted);
+      final source = (await main.store.messages('c1'))[1].parts.single;
+      expect((source as GaiaCardPart).isOpen, isTrue);
+    });
+
+    test('a fork at an earlier prompt ends on it, unanswered', () async {
+      await storeChat();
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+
+      await forkAt(2);
+      expect(controller.messages.map((m) => m.seq), [0, 1, 2]);
+      expect(controller.messages.last.role, GaiaMessageRole.user);
+    });
+
+    test('soft-deleted messages are skipped', () async {
+      await storeChat();
+      await main.store.putMessage(stored(1, deleted: true));
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+
+      final fork = await forkAt(2);
+      expect((await main.store.messages(fork)).map((m) => m.seq), [0, 2]);
+    });
+
+    test(
+      "the curator doesn't read the copies it read in the source again",
+      () async {
+        await storeChat(curatedSeq: 2);
+        await startCompanion();
+        await controller.selectChat('c1');
+        await settle();
+
+        Future<int> curatedAt(int seq) async {
+          final fork = await forkAt(seq);
+          await controller.selectChat('c1');
+          await settle();
+          return (await main.store.chats())
+              .firstWhere((c) => c.id == fork)
+              .curatedSeq;
+        }
+
+        expect(await curatedAt(1), 1);
+        expect(await curatedAt(3), 2);
+      },
+    );
+
+    test(
+      'forking at a prompt still being answered: the fork ends on it, '
+      'the source reply runs on, and the fork hands the copies over',
+      () async {
+        await startCompanion();
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('First');
+        await settle();
+        final source = controller.currentChatId!;
+        runner.turns.add([
+          const ClaudeTextStart(),
+          const ClaudeTextDelta('Hal'),
+        ]);
+        final live = controller.send('Second');
+        await settle();
+        final reply = controller.messages.last;
+        expect(reply.status, GaiaMessageStatus.streaming);
+
+        // Not at the streaming reply.
+        await controller.forkChat(reply);
+        await settle();
+        expect(controller.currentChatId, source);
+        expect(controller.chats, hasLength(1));
+
+        final fork = await forkAt(2);
+        expect(fork, isNot(source));
+        expect(controller.messages.map((m) => m.seq), [0, 1, 2]);
+        expect(_text(controller.messages.last), 'Second');
+        expect(controller.messages.last.role, GaiaMessageRole.user);
+        expect(controller.isRunning(source), isTrue);
+        expect(controller.isRunning(fork), isFalse);
+
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Third');
+        await settle();
+        final sent = runner.sent.last;
+        expect(sent.chatId, fork);
+        expect(sent.sessionId, isNull);
+        expect(sent.prompt, startsWith('<gaia_transcript>'));
+        expect(sent.prompt, contains('joining a chat'));
+        expect(sent.prompt, contains('User:\nFirst'));
+        expect(sent.prompt, contains('User:\nSecond'));
+        expect(sent.prompt, endsWith('\nThird'));
+
+        runner.finish(source, text: 'Half done');
+        await live;
+        await settle();
+        final sourceMessages = await main.store.messages(source);
+        expect(sourceMessages.last.status, GaiaMessageStatus.complete);
+        expect(sourceMessages, hasLength(4));
+        expect(await main.store.messages(fork), hasLength(5));
+      },
+    );
+
+    test('each prompt goes with its message id', () async {
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect(runner.promptIds, [controller.messages.first.id]);
+    });
+  });
+
+  group('native forks (GAIA_FORKING_HLD.md §10.2)', () {
+    final at = DateTime.utc(2026, 11, 5);
+    const b = GaiaAccount(
+      id: 'b',
+      label: 'B',
+      adapter: kGaiaClaudeCodeAdapter,
+      dir: r'C:\b',
+    );
+    GaiaMessage stored(int seq) => GaiaMessage(
+      id: 'm$seq',
+      chatId: 'c1',
+      seq: seq,
+      role: seq.isEven ? GaiaMessageRole.user : GaiaMessageRole.assistant,
+      parts: [GaiaTextPart('message $seq')],
+      status: GaiaMessageStatus.complete,
+      createdAt: at.add(Duration(minutes: seq)),
+      updatedAt: at.add(Duration(minutes: seq)),
+    );
+
+    /// Four messages, and a Claude Code session here that has [lastSeq].
+    Future<void> storeChat({int? lastSeq = 3}) async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plans',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          tier: GaiaTier.deep,
+          agentSessions: {
+            if (lastSeq != null)
+              gaiaSessionKey('laptop'): GaiaAgentSession(
+                sessionId: 'source-session',
+                lastSeq: lastSeq,
+              ),
+          },
+        ),
+      );
+      for (var seq = 0; seq < 4; seq++) {
+        await main.store.putMessage(stored(seq));
+      }
+    }
+
+    Future<String> forkAt(int seq) async {
+      await controller.forkChat(
+        controller.messages.firstWhere((m) => m.seq == seq),
+      );
+      await settle();
+      return controller.currentChatId!;
+    }
+
+    Future<GaiaChat> chatOf(String id) async =>
+        (await main.store.chats()).firstWhere((c) => c.id == id);
+
+    Future<void> open() async {
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+    }
+
+    Future<void> turn(String prompt) async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(prompt);
+      await settle();
+    }
+
+    test('a fork at a reply records where the source session is cut, and '
+        'its first send forks it with nothing handed over', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+
+      final fork = await forkAt(1);
+      final asked = runner.cutsAsked.single;
+      expect(asked.chatId, 'c1');
+      expect(asked.sessionId, 'source-session');
+      expect(asked.account.id, kGaiaDefaultAccountId);
+      expect(asked.after, 'm0');
+      expect(asked.next, ['m2']);
+      expect(asked.awaiting, isNull);
+      final record = (await chatOf(fork)).fork!;
+      expect(record.sessionKey, gaiaSessionKey('laptop'));
+      expect(record.sourceSessionId, 'source-session');
+      expect(record.keepAt, 'entry-1');
+      expect(record.lastSeq, 1);
+      // So a fork of this fork finds them.
+      expect((await main.store.messages(fork)).map((m) => m.origin), [
+        'm0',
+        'm1',
+      ]);
+
+      await turn('Third');
+      expect(runner.forks.single, (
+        sessionId: 'source-session',
+        keepAt: 'entry-1',
+      ));
+      expect(runner.sent.single.sessionId, isNull);
+      // The session knows the copies: nothing handed over, and it keeps the
+      // source's memory index.
+      expect(runner.sent.single.prompt, 'Third');
+      expect(runner.sent.single.sessionInstructions, isEmpty);
+      final chat = await chatOf(fork);
+      expect(chat.fork, isNull);
+      expect(controller.chats.firstWhere((c) => c.id == fork).fork, isNull);
+      final session = chat.agentSessions[gaiaSessionKey('laptop')]!;
+      expect(session.sessionId, isNot('source-session'));
+      expect(session.lastSeq, 3);
+      expect(controller.messages.last.status, GaiaMessageStatus.complete);
+
+      // From here an ordinary chat's session.
+      await turn('Fourth');
+      expect(runner.forks.last, isNull);
+      expect(runner.sent.last.sessionId, session.sessionId);
+    });
+
+    test("a fork at a prompt: the session is cut before it, and the fork's "
+        'first send names it', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+
+      final fork = await forkAt(2);
+      expect(runner.cutsAsked.single.after, 'm0');
+      expect(runner.cutsAsked.single.next, ['m2']);
+      expect((await chatOf(fork)).fork!.lastSeq, 1);
+
+      await turn('Third');
+      final prompt = runner.sent.single.prompt;
+      expect(prompt, isNot(contains('joining a chat')));
+      expect(prompt, contains('message 2'));
+      expect(prompt, isNot(contains('message 1')));
+      expect(prompt, endsWith('\nThird'));
+    });
+
+    test(
+      'a refused fork falls back to a handoff, with nothing shown',
+      () async {
+        await storeChat();
+        runner
+          ..cutAt = 'bad-entry'
+          ..refusedCuts.add('bad-entry');
+        await open();
+
+        final fork = await forkAt(3);
+        await turn('Again');
+        expect(runner.forks, [
+          (sessionId: 'source-session', keepAt: 'bad-entry'),
+          null,
+        ]);
+        expect(runner.sent.map((s) => s.sessionId), [null, null]);
+        expect(runner.sent.last.prompt, contains('joining a chat'));
+        expect(runner.sent.last.prompt, contains('User:\nmessage 2'));
+        final reply = controller.messages.last;
+        expect(reply.status, GaiaMessageStatus.complete);
+        expect(reply.error, isNull);
+        final chat = await chatOf(fork);
+        expect(chat.fork, isNull);
+        expect(chat.agentSessions, hasLength(1));
+      },
+    );
+
+    test('a second fork asked while one is being made makes none', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      final at = controller.messages.firstWhere((m) => m.seq == 1);
+      await Future.wait([controller.forkChat(at), controller.forkChat(at)]);
+      await settle();
+      expect(
+        controller.chats.where((c) => c.title == 'Plans (fork)'),
+        hasLength(1),
+      );
+    });
+
+    test('no native fork without a cut, such as for prompts sent before '
+        'their ids were', () async {
+      await storeChat();
+      await open();
+      final fork = await forkAt(3);
+      expect(runner.cutsAsked, hasLength(1));
+      expect((await chatOf(fork)).fork, isNull);
+    });
+
+    test('no native fork without a session here that has the turns', () async {
+      await storeChat(lastSeq: null);
+      runner.cutAt = 'entry-1';
+      await open();
+      expect((await chatOf(await forkAt(3))).fork, isNull);
+      expect(runner.cutsAsked, isEmpty);
+    });
+
+    test(
+      'no native fork from a session that stops short of the fork',
+      () async {
+        await storeChat(lastSeq: 1);
+        runner.cutAt = 'entry-1';
+        await open();
+        expect((await chatOf(await forkAt(3))).fork, isNull);
+        expect(runner.cutsAsked, isEmpty);
+        // A fork it does reach still forks.
+        await controller.selectChat('c1');
+        await settle();
+        expect((await chatOf(await forkAt(1))).fork, isNotNull);
+      },
+    );
+
+    test("a fork whose first send goes to another account copies the source "
+        'session there first', () async {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'accounts': [
+          const GaiaAccount(
+            id: kGaiaDefaultAccountId,
+            label: 'A',
+            adapter: kGaiaClaudeCodeAdapter,
+            dir: r'C:\a',
+          ).toJson(),
+          b.toJson(),
+        ],
+      };
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      await forkAt(1);
+
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await settle();
+      await turn('Third');
+      expect(runner.copies.single.sessionId, 'source-session');
+      expect(runner.copies.single.from.id, kGaiaDefaultAccountId);
+      expect(runner.copies.single.to, b);
+      expect(runner.accounts.single, b);
+      expect(runner.forks.single?.keepAt, 'entry-1');
+      expect(runner.sent.single.prompt, 'Third');
+    });
+
+    test('a fork whose first send goes to an account the source session '
+        'already followed to forks from that copy, not over it', () async {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'accounts': [
+          const GaiaAccount(
+            id: kGaiaDefaultAccountId,
+            label: 'A',
+            adapter: kGaiaClaudeCodeAdapter,
+            dir: r'C:\a',
+          ).toJson(),
+          b.toJson(),
+        ],
+      };
+      await storeChat();
+      // The source chat moved to b, its session copied there and grown.
+      await main.store.setSession('c1', 'source-session', 3, account: b.id);
+      runner.cutAt = 'entry-1';
+      await open();
+      await forkAt(1);
+
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await settle();
+      await turn('Third');
+      expect(runner.copies, isEmpty);
+      expect(runner.accounts.single, b);
+      expect(runner.forks.single?.keepAt, 'entry-1');
+      expect(runner.sent.single.prompt, 'Third');
+    });
+
+    test('a fork whose source session cannot be copied to the account hands '
+        'the chat over', () async {
+      main.settings = {
+        ...GaiaSettings.initial().toJson(),
+        'accounts': [
+          const GaiaAccount(
+            id: kGaiaDefaultAccountId,
+            label: 'A',
+            adapter: kGaiaClaudeCodeAdapter,
+            dir: r'C:\a',
+          ).toJson(),
+          b.toJson(),
+        ],
+      };
+      await storeChat();
+      runner
+        ..cutAt = 'entry-1'
+        ..copyFails = true;
+      await open();
+      final fork = await forkAt(1);
+
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      await settle();
+      await turn('Third');
+      expect(runner.forks.single, isNull);
+      expect(runner.sent.single.prompt, contains('joining a chat'));
+      expect((await chatOf(fork)).fork, isNull);
+    });
+
+    test('a fork of a fork finds the copies by the ids they were copied '
+        'from', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      final first = await forkAt(1);
+      await turn('Third');
+      final third = controller.messages[2];
+
+      await forkAt(1);
+      expect(runner.cutsAsked.last.sessionId, isNot('source-session'));
+      expect(runner.cutsAsked.last.after, 'm0');
+      expect(runner.cutsAsked.last.next, [third.id]);
+      expect(controller.currentChatId, isNot(first));
+    });
+
+    test('forking at a prompt still being answered here waits for it to '
+        'reach the session', () async {
+      await startCompanion();
+      await turn('First');
+      final source = controller.currentChatId!;
+      final firstId = controller.messages.first.id;
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hal')]);
+      final live = controller.send('Second');
+      await settle();
+      final secondId = controller.messages[2].id;
+      runner.cutAt = 'entry-1';
+
+      final fork = await forkAt(2);
+      final asked = runner.cutsAsked.single;
+      expect(asked.after, firstId);
+      expect(asked.next, [secondId]);
+      expect(asked.awaiting, secondId);
+      expect((await chatOf(fork)).fork!.lastSeq, 1);
+
+      runner.finish(source, text: 'Half done');
+      await live;
+      await settle();
+    });
+
+    test("a fork that didn't hold is told of as the fork's", () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      await forkAt(1);
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+      runner.notice = 'It may remember more.';
+      await turn('Third');
+      expect(
+        toasts.map((toast) => toast.title),
+        contains('This fork may not match what it shows'),
+      );
+    });
+
+    test('a fork whose first turn fails with nothing to show hands the chat '
+        'over at once, rather than forking into the same failure', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      final fork = await forkAt(3);
+      runner.turns.add([
+        const ClaudeResult(
+          sessionId: 'forked',
+          isError: true,
+          text: 'Prompt is too long',
+        ),
+      ]);
+      await turn('Again');
+      expect(runner.forks, [
+        (sessionId: 'source-session', keepAt: 'entry-1'),
+        null,
+      ]);
+      expect(runner.sent.last.prompt, contains('joining a chat'));
+      expect(controller.messages.last.status, GaiaMessageStatus.complete);
+      expect((await chatOf(fork)).fork, isNull);
+    });
+
+    test('a fork whose first turn hits a usage limit keeps its record and '
+        'forks again on the next send, with no handoff retry', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      final fork = await forkAt(3);
+      runner.turns.add([
+        const ClaudeResult(
+          sessionId: 'forked',
+          isError: true,
+          text: "You've hit your usage limit",
+        ),
+      ]);
+      await controller.send('Again');
+      await settle();
+      expect(runner.sent, hasLength(1));
+      expect(controller.messages.last.status, GaiaMessageStatus.error);
+      expect((await chatOf(fork)).fork, isNotNull);
+
+      await turn('Later');
+      expect(runner.forks, [
+        (sessionId: 'source-session', keepAt: 'entry-1'),
+        (sessionId: 'source-session', keepAt: 'entry-1'),
+      ]);
+      expect((await chatOf(fork)).fork, isNull);
+    });
+
+    test('a fork whose first turn dies forks no more; one stopped still '
+        'does', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+
+      final stopped = await forkAt(3);
+      runner.turns.add([const ClaudeTextStart()]);
+      final first = controller.send('Again');
+      await settle();
+      await controller.stop(stopped);
+      await first;
+      await settle();
+      expect((await chatOf(stopped)).fork, isNotNull);
+
+      await controller.selectChat('c1');
+      await settle();
+      final died = await forkAt(3);
+      runner.turns.add([const ClaudeTextStart()]);
+      final second = controller.send('Again');
+      await settle();
+      runner.crash(died);
+      await second;
+      await settle();
+      expect(controller.messages.last.status, GaiaMessageStatus.error);
+      expect((await chatOf(died)).fork, isNull);
+    });
+
+    test('a fork not sent in yet forks natively too, from its own source '
+        'session, cut no later than its own cut', () async {
+      await storeChat();
+      runner.cutAt = 'entry-3';
+      await open();
+      final first = await forkAt(3);
+      expect((await chatOf(first)).fork!.keepAt, 'entry-3');
+
+      runner.cutAt = 'entry-1';
+      final second = await forkAt(1);
+      final asked = runner.cutsAsked.last;
+      expect(asked.chatId, first);
+      expect(asked.sessionId, 'source-session');
+      expect(asked.after, 'm0');
+      expect(asked.next, ['m2']);
+      expect(asked.endAt, 'entry-3');
+      expect(asked.awaiting, isNull);
+      final record = (await chatOf(second)).fork!;
+      expect(record.sourceSessionId, 'source-session');
+      expect(record.keepAt, 'entry-1');
+      expect(record.lastSeq, 1);
+      expect(record.sessionKey, gaiaSessionKey('laptop'));
+      expect((await main.store.messages(second)).map((m) => m.origin), [
+        'm0',
+        'm1',
+      ]);
+
+      // At its very end: nothing after it, so its own cut.
+      await controller.selectChat(first);
+      await settle();
+      await forkAt(3);
+      expect(runner.cutsAsked.last.next, isEmpty);
+      expect(runner.cutsAsked.last.endAt, 'entry-3');
+    });
+
+    test('a fork sent in on its own session forks from that, not from its '
+        'record', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+      final first = await forkAt(1);
+      await turn('Third');
+      await forkAt(1);
+      expect(runner.cutsAsked.last.chatId, first);
+      expect(runner.cutsAsked.last.endAt, isNull);
+      expect(runner.cutsAsked.last.sessionId, isNot('source-session'));
     });
   });
 }

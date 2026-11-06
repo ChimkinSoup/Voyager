@@ -365,10 +365,19 @@ class _ControlCard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: 22,
+                      Container(
+                        width: 16,
+                        margin: const EdgeInsets.only(left: 4, right: 14),
+                        alignment: Alignment.topCenter,
                         child: i < ran
-                            ? Icon(Icons.check, size: 14, color: accent)
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 1),
+                                child: Icon(
+                                  Icons.check,
+                                  size: 14,
+                                  color: accent,
+                                ),
+                              )
                             : Text(
                                 '${i + 1}',
                                 style: theme.textTheme.labelMedium?.copyWith(

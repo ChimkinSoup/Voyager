@@ -271,6 +271,48 @@ class GaiaAgentSession {
       );
 }
 
+/// A fork's native session, not made yet (GAIA_FORKING_HLD.md §5.3): its
+/// first send on Claude Code forks [sourceSessionId], kept up to the entry
+/// [keepAt], and knows the chat up to [lastSeq]. Only for [sessionKey]'s
+/// device, adapter and account; never synced.
+class GaiaForkRecord {
+  const GaiaForkRecord({
+    required this.sessionKey,
+    required this.sourceSessionId,
+    required this.keepAt,
+    required this.lastSeq,
+  });
+
+  final String sessionKey;
+  final String sourceSessionId;
+  final String keepAt;
+  final int lastSeq;
+
+  Map<String, Object?> toJson() => {
+    'sessionKey': sessionKey,
+    'sourceSessionId': sourceSessionId,
+    'keepAt': keepAt,
+    'lastSeq': lastSeq,
+  };
+
+  /// Null for anything else.
+  static GaiaForkRecord? fromJson(Object? json) => switch (json) {
+    {
+      'sessionKey': final String sessionKey,
+      'sourceSessionId': final String sourceSessionId,
+      'keepAt': final String keepAt,
+      'lastSeq': final num lastSeq,
+    } =>
+      GaiaForkRecord(
+        sessionKey: sessionKey,
+        sourceSessionId: sourceSessionId,
+        keepAt: keepAt,
+        lastSeq: lastSeq.toInt(),
+      ),
+    _ => null,
+  };
+}
+
 /// The hand under the composer (GAIA_AUTONOMY_HLD.md §4): no input, input
 /// after a card, or input with none.
 enum GaiaHand { off, ask, auto }
@@ -351,9 +393,14 @@ class GaiaChat extends SoftDeletable {
     this.curatedSeq = -1,
     this.drain = false,
     this.grants = const {},
+    this.fork,
   });
 
   final String title;
+
+  /// The native session a fork's first send makes on this device
+  /// (GAIA_FORKING_HLD.md §5.3); null once made, or for none.
+  final GaiaForkRecord? fork;
 
   /// Keyed by device id. Synced, but only applied on the device that gave it
   /// (§8), so a phone can't grant anything on the laptop.
@@ -399,6 +446,8 @@ class GaiaChat extends SoftDeletable {
     int? curatedSeq,
     bool? drain,
     Map<String, GaiaGrant>? grants,
+    GaiaForkRecord? fork,
+    bool clearFork = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -407,6 +456,7 @@ class GaiaChat extends SoftDeletable {
   }) => GaiaChat(
     drain: drain ?? this.drain,
     grants: grants ?? this.grants,
+    fork: clearFork ? null : (fork ?? this.fork),
     id: id,
     createdAt: createdAt,
     updatedAt: touch ? utcNow() : updatedAt,
@@ -439,6 +489,7 @@ class GaiaChat extends SoftDeletable {
       for (final MapEntry(:key, :value) in agentSessions.entries)
         key: value.toJson(),
     },
+    'fork': fork?.toJson(),
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -457,6 +508,7 @@ class GaiaChat extends SoftDeletable {
       curatedSeq: (json['curatedSeq'] as num?)?.toInt() ?? -1,
       drain: json['drain'] == true,
       grants: gaiaGrantsFromJson(json['grants']),
+      fork: GaiaForkRecord.fromJson(json['fork']),
     );
   }
 }
@@ -1252,6 +1304,7 @@ class GaiaMessage extends SoftDeletable {
     this.needsInput = false,
     this.contextTokens,
     this.contextWindow,
+    this.origin,
   });
 
   final String chatId;
@@ -1283,6 +1336,14 @@ class GaiaMessage extends SoftDeletable {
   /// The reply's model's context window, for the composer's tooltip; null
   /// when the backend doesn't say.
   final int? contextWindow;
+
+  /// A fork's copy (GAIA_FORKING_HLD.md §2): the id of the message it was
+  /// first copied from, which its entry in a native session is under; null
+  /// for one that isn't a copy.
+  final String? origin;
+
+  /// The uuid this message's entry has in a Claude Code session.
+  String get entryId => origin ?? id;
 
   String get text =>
       parts.whereType<GaiaTextPart>().map((part) => part.text).join('\n\n');
@@ -1317,6 +1378,7 @@ class GaiaMessage extends SoftDeletable {
     needsInput: needsInput ?? this.needsInput,
     contextTokens: contextTokens ?? this.contextTokens,
     contextWindow: contextWindow ?? this.contextWindow,
+    origin: origin,
   );
 
   Map<String, Object?> toJson() => {
@@ -1337,6 +1399,7 @@ class GaiaMessage extends SoftDeletable {
     'needsInput': needsInput,
     'contextTokens': contextTokens,
     'contextWindow': contextWindow,
+    'origin': origin,
   };
 
   factory GaiaMessage.fromJson(Map<String, Object?> json) {
@@ -1359,6 +1422,7 @@ class GaiaMessage extends SoftDeletable {
       needsInput: json['needsInput'] == true,
       contextTokens: (json['contextTokens'] as num?)?.toInt(),
       contextWindow: (json['contextWindow'] as num?)?.toInt(),
+      origin: json['origin'] as String?,
     );
   }
 }

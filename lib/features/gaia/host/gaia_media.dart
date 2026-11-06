@@ -72,6 +72,21 @@ class GaiaMedia {
     }
   }
 
+  /// Puts [mediaIds], already another chat's, on [chatId] too: a fork's
+  /// copies (GAIA_FORKING_HLD.md §2), whose images then outlive the source
+  /// chat's delete.
+  Future<void> share(String chatId, Set<String> mediaIds) async {
+    // Each one's asset row may not have synced here yet: the reference is
+    // made anyway, as a reference synced in ahead of its asset is.
+    for (final mediaId in mediaIds) {
+      await _media.addReference(
+        mediaId: mediaId,
+        collection: FirestoreCollections.gaiaChats,
+        documentId: chatId,
+      );
+    }
+  }
+
   /// Takes an image [attach] put on a chat off it again: its send didn't
   /// happen.
   Future<void> detach(String referenceId) =>

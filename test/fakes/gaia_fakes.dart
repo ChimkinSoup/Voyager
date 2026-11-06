@@ -239,7 +239,11 @@ typedef FakeClaudeSend = ({
 /// killed process does, or [finish] ends it. [sent] keeps each turn's
 /// tools, for a test to call as the agent would.
 class FakeClaudeRunner
-    implements GaiaAgentRunner, GaiaSessionCopier, GaiaAccountKeeper {
+    implements
+        GaiaAgentRunner,
+        GaiaSessionCopier,
+        GaiaAccountKeeper,
+        GaiaSessionForker {
   /// Every GAIA.md the companion set, in order.
   final instructions = <String>[];
 
@@ -252,6 +256,52 @@ class FakeClaudeRunner
 
   /// Each turn's account, in order.
   final accounts = <GaiaAccount?>[];
+
+  /// Each turn's prompt id, in order.
+  final promptIds = <String?>[];
+
+  /// Each turn's fork, in order.
+  final forks = <GaiaForkCut?>[];
+
+  /// Cuts a fork is refused at, as the CLI refuses one its source lacks.
+  final refusedCuts = <String>{};
+
+  /// Every [forkCut] asked, in order; [cutAt] is its answer.
+  final cutsAsked =
+      <
+        ({
+          String chatId,
+          String sessionId,
+          GaiaAccount account,
+          String after,
+          List<String> next,
+          String? awaiting,
+          String? endAt,
+        })
+      >[];
+  String? cutAt;
+
+  @override
+  Future<String?> forkCut({
+    required String chatId,
+    required String sessionId,
+    required GaiaAccount account,
+    required String after,
+    required List<String> next,
+    String? awaiting,
+    String? endAt,
+  }) async {
+    cutsAsked.add((
+      chatId: chatId,
+      sessionId: sessionId,
+      account: account,
+      after: after,
+      next: next,
+      awaiting: awaiting,
+      endAt: endAt,
+    ));
+    return cutAt;
+  }
 
   /// Every session copied, in order; [copyFails] says none is found.
   final copies = <({String sessionId, GaiaAccount from, GaiaAccount to})>[];
@@ -299,9 +349,13 @@ class FakeClaudeRunner
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     GaiaAccount? account,
+    String? promptId,
+    GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     accounts.add(account);
+    promptIds.add(promptId);
+    forks.add(fork);
     sent.add((
       chatId: chatId,
       sessionId: sessionId,
@@ -313,6 +367,17 @@ class FakeClaudeRunner
       sessionInstructions: sessionInstructions,
     ));
     if (sendError case final error?) throw error;
+    // Refused before its `init`, as the CLI exits: no turn is played.
+    if (fork != null &&
+        sessionId == null &&
+        refusedCuts.contains(fork.keepAt)) {
+      return GaiaTurnResult(
+        sessionId: '',
+        isError: true,
+        text: 'No message found with message.uuid of: ${fork.keepAt}',
+        sessionFound: false,
+      );
+    }
     if (turns.isEmpty) throw StateError('no scripted turn for "$prompt"');
     final events = turns.removeAt(0);
     final turn = _active[chatId] = Completer<GaiaTurnResult>();

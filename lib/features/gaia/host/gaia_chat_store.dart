@@ -54,6 +54,30 @@ class GaiaChatStore {
     await _repository.upsertChat(chat.copyWith(version: 1));
   });
 
+  /// Saves a fork the companion just made (GAIA_FORKING_HLD.md §2): [chat]
+  /// and its copied [messages], all at once. A chat already stored is left
+  /// as it is.
+  Future<void> forkChat(GaiaChat chat, List<GaiaMessage> messages) =>
+      _serial(() async {
+        if (await _repository.getChat(chat.id) != null) return;
+        await _repository.upsertChat(chat.copyWith(version: 1));
+        for (final message in messages) {
+          await _repository.upsertMessage(message.copyWith(version: 1));
+        }
+      });
+
+  /// Forgets [chatId]'s fork record (GAIA_FORKING_HLD.md §5.3): its native
+  /// session was made, or can't be.
+  Future<void> dropFork(String chatId) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.fork == null) return;
+    // This device's alone: nothing for sync to carry.
+    await _repository.upsertChat(
+      chat.copyWith(clearFork: true, bumpVersion: false, touch: false),
+      recordLocalActivity: false,
+    );
+  });
+
   /// Records the native session [chatId] resumes on this device with
   /// [adapter] and [account], and the last message it took part in; a null
   /// [sessionId] forgets it.

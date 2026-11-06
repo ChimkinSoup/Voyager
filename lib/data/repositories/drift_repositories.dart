@@ -10188,6 +10188,9 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   curatedSeq: row.curatedSeq,
   drain: row.drain,
   grants: gaiaGrantsFromJson(jsonDecode(row.grantsJson)),
+  fork: row.forkJson == null
+      ? null
+      : GaiaForkRecord.fromJson(jsonDecode(row.forkJson!)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10205,6 +10208,9 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       curatedSeq: Value(chat.curatedSeq),
       drain: Value(chat.drain),
       grantsJson: Value(jsonEncode(chat.toJson()['grants'])),
+      forkJson: Value(
+        chat.fork == null ? null : jsonEncode(chat.fork!.toJson()),
+      ),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),
@@ -10225,6 +10231,7 @@ GaiaMessage _mapGaiaMessage(GaiaMessagesTableData row) => GaiaMessage(
   needsInput: row.needsInput,
   contextTokens: row.contextTokens,
   contextWindow: row.contextWindow,
+  origin: row.origin,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10248,6 +10255,7 @@ GaiaMessagesTableCompanion _gaiaMessageCompanion(GaiaMessage message) =>
       needsInput: Value(message.needsInput),
       contextTokens: Value(message.contextTokens),
       contextWindow: Value(message.contextWindow),
+      origin: Value(message.origin),
       createdAt: Value(message.createdAt),
       updatedAt: Value(message.updatedAt),
       version: Value(message.version),

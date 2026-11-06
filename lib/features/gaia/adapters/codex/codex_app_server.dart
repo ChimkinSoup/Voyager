@@ -693,6 +693,10 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     String sessionInstructions = '',
     // Its home is the account: [CodexAccountRunners] picks the runner.
     GaiaAccount? account,
+    // Codex names its own items.
+    String? promptId,
+    // Codex doesn't fork natively (GAIA_FORKING_HLD.md §6).
+    GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Before anything's awaited: a stop from here on is caught.
@@ -1148,6 +1152,10 @@ class CodexAccountRunners
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     GaiaAccount? account,
+    // Codex names its own items.
+    String? promptId,
+    // Codex doesn't fork natively (GAIA_FORKING_HLD.md §6).
+    GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Before anything's awaited: a stop from here on is caught.

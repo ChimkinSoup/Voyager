@@ -4439,6 +4439,8 @@ GaiaChat mergeGaiaChatFromRemote(
             local?.grants ?? const {},
             gaiaGrantsFromJson(data['grants']),
           ),
+    // This device's own, never synced (GAIA_FORKING_HLD.md §5.3).
+    fork: local?.fork,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -4513,6 +4515,7 @@ Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'needsInput': message.needsInput,
   'contextTokens': message.contextTokens,
   'contextWindow': message.contextWindow,
+  if (message.origin != null) 'origin': message.origin,
   'createdAt': _dateToFirestoreRequired(message.createdAt),
   'updatedAt': _dateToFirestoreRequired(message.updatedAt),
   'version': message.version,
@@ -4551,6 +4554,7 @@ GaiaMessage mergeGaiaMessageFromRemote(
     // Kept when a build from before it rewrites the message.
     contextWindow:
         (data['contextWindow'] as num?)?.toInt() ?? local?.contextWindow,
+    origin: data['origin'] as String? ?? local?.origin,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

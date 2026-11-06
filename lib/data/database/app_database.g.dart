@@ -57919,6 +57919,17 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('{}'),
   );
+  static const VerificationMeta _forkJsonMeta = const VerificationMeta(
+    'forkJson',
+  );
+  @override
+  late final GeneratedColumn<String> forkJson = GeneratedColumn<String>(
+    'fork_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -57975,6 +57986,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     curatedSeq,
     drain,
     grantsJson,
+    forkJson,
     createdAt,
     updatedAt,
     version,
@@ -58055,6 +58067,12 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         grantsJson.isAcceptableOrUnknown(data['grants_json']!, _grantsJsonMeta),
       );
     }
+    if (data.containsKey('fork_json')) {
+      context.handle(
+        _forkJsonMeta,
+        forkJson.isAcceptableOrUnknown(data['fork_json']!, _forkJsonMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58128,6 +58146,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.string,
         data['${effectivePrefix}grants_json'],
       )!,
+      forkJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fork_json'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58175,6 +58197,10 @@ class GaiaChatsTableData extends DataClass
 
   /// `{deviceId: {seeScreen, at}}` (GAIA_HLD.md §8, §15.6).
   final String grantsJson;
+
+  /// A fork's native session not made yet, as `GaiaForkRecord` JSON
+  /// (GAIA_FORKING_HLD.md §5.3). This device's alone: never synced.
+  final String? forkJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58189,6 +58215,7 @@ class GaiaChatsTableData extends DataClass
     required this.curatedSeq,
     required this.drain,
     required this.grantsJson,
+    this.forkJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58208,6 +58235,9 @@ class GaiaChatsTableData extends DataClass
     map['curated_seq'] = Variable<int>(curatedSeq);
     map['drain'] = Variable<bool>(drain);
     map['grants_json'] = Variable<String>(grantsJson);
+    if (!nullToAbsent || forkJson != null) {
+      map['fork_json'] = Variable<String>(forkJson);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58228,6 +58258,9 @@ class GaiaChatsTableData extends DataClass
       curatedSeq: Value(curatedSeq),
       drain: Value(drain),
       grantsJson: Value(grantsJson),
+      forkJson: forkJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(forkJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58252,6 +58285,7 @@ class GaiaChatsTableData extends DataClass
       curatedSeq: serializer.fromJson<int>(json['curatedSeq']),
       drain: serializer.fromJson<bool>(json['drain']),
       grantsJson: serializer.fromJson<String>(json['grantsJson']),
+      forkJson: serializer.fromJson<String?>(json['forkJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58271,6 +58305,7 @@ class GaiaChatsTableData extends DataClass
       'curatedSeq': serializer.toJson<int>(curatedSeq),
       'drain': serializer.toJson<bool>(drain),
       'grantsJson': serializer.toJson<String>(grantsJson),
+      'forkJson': serializer.toJson<String?>(forkJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58288,6 +58323,7 @@ class GaiaChatsTableData extends DataClass
     int? curatedSeq,
     bool? drain,
     String? grantsJson,
+    Value<String?> forkJson = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58302,6 +58338,7 @@ class GaiaChatsTableData extends DataClass
     curatedSeq: curatedSeq ?? this.curatedSeq,
     drain: drain ?? this.drain,
     grantsJson: grantsJson ?? this.grantsJson,
+    forkJson: forkJson.present ? forkJson.value : this.forkJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58326,6 +58363,7 @@ class GaiaChatsTableData extends DataClass
       grantsJson: data.grantsJson.present
           ? data.grantsJson.value
           : this.grantsJson,
+      forkJson: data.forkJson.present ? data.forkJson.value : this.forkJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58345,6 +58383,7 @@ class GaiaChatsTableData extends DataClass
           ..write('curatedSeq: $curatedSeq, ')
           ..write('drain: $drain, ')
           ..write('grantsJson: $grantsJson, ')
+          ..write('forkJson: $forkJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58364,6 +58403,7 @@ class GaiaChatsTableData extends DataClass
     curatedSeq,
     drain,
     grantsJson,
+    forkJson,
     createdAt,
     updatedAt,
     version,
@@ -58382,6 +58422,7 @@ class GaiaChatsTableData extends DataClass
           other.curatedSeq == this.curatedSeq &&
           other.drain == this.drain &&
           other.grantsJson == this.grantsJson &&
+          other.forkJson == this.forkJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58398,6 +58439,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<int> curatedSeq;
   final Value<bool> drain;
   final Value<String> grantsJson;
+  final Value<String?> forkJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58413,6 +58455,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.curatedSeq = const Value.absent(),
     this.drain = const Value.absent(),
     this.grantsJson = const Value.absent(),
+    this.forkJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58429,6 +58472,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.curatedSeq = const Value.absent(),
     this.drain = const Value.absent(),
     this.grantsJson = const Value.absent(),
+    this.forkJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58449,6 +58493,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<int>? curatedSeq,
     Expression<bool>? drain,
     Expression<String>? grantsJson,
+    Expression<String>? forkJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58465,6 +58510,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (curatedSeq != null) 'curated_seq': curatedSeq,
       if (drain != null) 'drain': drain,
       if (grantsJson != null) 'grants_json': grantsJson,
+      if (forkJson != null) 'fork_json': forkJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58483,6 +58529,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<int>? curatedSeq,
     Value<bool>? drain,
     Value<String>? grantsJson,
+    Value<String?>? forkJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58499,6 +58546,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       curatedSeq: curatedSeq ?? this.curatedSeq,
       drain: drain ?? this.drain,
       grantsJson: grantsJson ?? this.grantsJson,
+      forkJson: forkJson ?? this.forkJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -58537,6 +58585,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (grantsJson.present) {
       map['grants_json'] = Variable<String>(grantsJson.value);
     }
+    if (forkJson.present) {
+      map['fork_json'] = Variable<String>(forkJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -58567,6 +58618,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('curatedSeq: $curatedSeq, ')
           ..write('drain: $drain, ')
           ..write('grantsJson: $grantsJson, ')
+          ..write('forkJson: $forkJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58716,6 +58768,15 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58776,6 +58837,7 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     needsInput,
     contextTokens,
     contextWindow,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -58886,6 +58948,12 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         ),
       );
     }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58975,6 +59043,10 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         DriftSqlType.int,
         data['${effectivePrefix}context_window'],
       ),
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59025,6 +59097,10 @@ class GaiaMessagesTableData extends DataClass
 
   /// The reply's model's context window, in tokens.
   final int? contextWindow;
+
+  /// A fork's copy: the message it was first copied from
+  /// (GAIA_FORKING_HLD.md §2).
+  final String? origin;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59043,6 +59119,7 @@ class GaiaMessagesTableData extends DataClass
     required this.needsInput,
     this.contextTokens,
     this.contextWindow,
+    this.origin,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59075,6 +59152,9 @@ class GaiaMessagesTableData extends DataClass
     }
     if (!nullToAbsent || contextWindow != null) {
       map['context_window'] = Variable<int>(contextWindow);
+    }
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -59112,6 +59192,9 @@ class GaiaMessagesTableData extends DataClass
       contextWindow: contextWindow == null && nullToAbsent
           ? const Value.absent()
           : Value(contextWindow),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59140,6 +59223,7 @@ class GaiaMessagesTableData extends DataClass
       needsInput: serializer.fromJson<bool>(json['needsInput']),
       contextTokens: serializer.fromJson<int?>(json['contextTokens']),
       contextWindow: serializer.fromJson<int?>(json['contextWindow']),
+      origin: serializer.fromJson<String?>(json['origin']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59163,6 +59247,7 @@ class GaiaMessagesTableData extends DataClass
       'needsInput': serializer.toJson<bool>(needsInput),
       'contextTokens': serializer.toJson<int?>(contextTokens),
       'contextWindow': serializer.toJson<int?>(contextWindow),
+      'origin': serializer.toJson<String?>(origin),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59184,6 +59269,7 @@ class GaiaMessagesTableData extends DataClass
     bool? needsInput,
     Value<int?> contextTokens = const Value.absent(),
     Value<int?> contextWindow = const Value.absent(),
+    Value<String?> origin = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -59206,6 +59292,7 @@ class GaiaMessagesTableData extends DataClass
     contextWindow: contextWindow.present
         ? contextWindow.value
         : this.contextWindow,
+    origin: origin.present ? origin.value : this.origin,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -59232,6 +59319,7 @@ class GaiaMessagesTableData extends DataClass
       contextWindow: data.contextWindow.present
           ? data.contextWindow.value
           : this.contextWindow,
+      origin: data.origin.present ? data.origin.value : this.origin,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59255,6 +59343,7 @@ class GaiaMessagesTableData extends DataClass
           ..write('needsInput: $needsInput, ')
           ..write('contextTokens: $contextTokens, ')
           ..write('contextWindow: $contextWindow, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59278,6 +59367,7 @@ class GaiaMessagesTableData extends DataClass
     needsInput,
     contextTokens,
     contextWindow,
+    origin,
     createdAt,
     updatedAt,
     version,
@@ -59300,6 +59390,7 @@ class GaiaMessagesTableData extends DataClass
           other.needsInput == this.needsInput &&
           other.contextTokens == this.contextTokens &&
           other.contextWindow == this.contextWindow &&
+          other.origin == this.origin &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59321,6 +59412,7 @@ class GaiaMessagesTableCompanion
   final Value<bool> needsInput;
   final Value<int?> contextTokens;
   final Value<int?> contextWindow;
+  final Value<String?> origin;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59340,6 +59432,7 @@ class GaiaMessagesTableCompanion
     this.needsInput = const Value.absent(),
     this.contextTokens = const Value.absent(),
     this.contextWindow = const Value.absent(),
+    this.origin = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59360,6 +59453,7 @@ class GaiaMessagesTableCompanion
     this.needsInput = const Value.absent(),
     this.contextTokens = const Value.absent(),
     this.contextWindow = const Value.absent(),
+    this.origin = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59387,6 +59481,7 @@ class GaiaMessagesTableCompanion
     Expression<bool>? needsInput,
     Expression<int>? contextTokens,
     Expression<int>? contextWindow,
+    Expression<String>? origin,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59407,6 +59502,7 @@ class GaiaMessagesTableCompanion
       if (needsInput != null) 'needs_input': needsInput,
       if (contextTokens != null) 'context_tokens': contextTokens,
       if (contextWindow != null) 'context_window': contextWindow,
+      if (origin != null) 'origin': origin,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59429,6 +59525,7 @@ class GaiaMessagesTableCompanion
     Value<bool>? needsInput,
     Value<int?>? contextTokens,
     Value<int?>? contextWindow,
+    Value<String?>? origin,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59449,6 +59546,7 @@ class GaiaMessagesTableCompanion
       needsInput: needsInput ?? this.needsInput,
       contextTokens: contextTokens ?? this.contextTokens,
       contextWindow: contextWindow ?? this.contextWindow,
+      origin: origin ?? this.origin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59499,6 +59597,9 @@ class GaiaMessagesTableCompanion
     if (contextWindow.present) {
       map['context_window'] = Variable<int>(contextWindow.value);
     }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59533,6 +59634,7 @@ class GaiaMessagesTableCompanion
           ..write('needsInput: $needsInput, ')
           ..write('contextTokens: $contextTokens, ')
           ..write('contextWindow: $contextWindow, ')
+          ..write('origin: $origin, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -90425,6 +90527,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<int> curatedSeq,
       Value<bool> drain,
       Value<String> grantsJson,
+      Value<String?> forkJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -90442,6 +90545,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<int> curatedSeq,
       Value<bool> drain,
       Value<String> grantsJson,
+      Value<String?> forkJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -90500,6 +90604,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<String> get grantsJson => $composableBuilder(
     column: $table.grantsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get forkJson => $composableBuilder(
+    column: $table.forkJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -90578,6 +90687,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get forkJson => $composableBuilder(
+    column: $table.forkJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -90643,6 +90757,9 @@ class $$GaiaChatsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get forkJson =>
+      $composableBuilder(column: $table.forkJson, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -90702,6 +90819,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<int> curatedSeq = const Value.absent(),
                 Value<bool> drain = const Value.absent(),
                 Value<String> grantsJson = const Value.absent(),
+                Value<String?> forkJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -90717,6 +90835,7 @@ class $$GaiaChatsTableTableTableManager
                 curatedSeq: curatedSeq,
                 drain: drain,
                 grantsJson: grantsJson,
+                forkJson: forkJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -90734,6 +90853,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<int> curatedSeq = const Value.absent(),
                 Value<bool> drain = const Value.absent(),
                 Value<String> grantsJson = const Value.absent(),
+                Value<String?> forkJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -90749,6 +90869,7 @@ class $$GaiaChatsTableTableTableManager
                 curatedSeq: curatedSeq,
                 drain: drain,
                 grantsJson: grantsJson,
+                forkJson: forkJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -90795,6 +90916,7 @@ typedef $$GaiaMessagesTableTableCreateCompanionBuilder =
       Value<bool> needsInput,
       Value<int?> contextTokens,
       Value<int?> contextWindow,
+      Value<String?> origin,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -90816,6 +90938,7 @@ typedef $$GaiaMessagesTableTableUpdateCompanionBuilder =
       Value<bool> needsInput,
       Value<int?> contextTokens,
       Value<int?> contextWindow,
+      Value<String?> origin,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -90894,6 +91017,11 @@ class $$GaiaMessagesTableTableFilterComposer
 
   ColumnFilters<int> get contextWindow => $composableBuilder(
     column: $table.contextWindow,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -90992,6 +91120,11 @@ class $$GaiaMessagesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -91067,6 +91200,9 @@ class $$GaiaMessagesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -91133,6 +91269,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<bool> needsInput = const Value.absent(),
                 Value<int?> contextTokens = const Value.absent(),
                 Value<int?> contextWindow = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -91152,6 +91289,7 @@ class $$GaiaMessagesTableTableTableManager
                 needsInput: needsInput,
                 contextTokens: contextTokens,
                 contextWindow: contextWindow,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -91173,6 +91311,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<bool> needsInput = const Value.absent(),
                 Value<int?> contextTokens = const Value.absent(),
                 Value<int?> contextWindow = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -91192,6 +91331,7 @@ class $$GaiaMessagesTableTableTableManager
                 needsInput: needsInput,
                 contextTokens: contextTokens,
                 contextWindow: contextWindow,
+                origin: origin,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

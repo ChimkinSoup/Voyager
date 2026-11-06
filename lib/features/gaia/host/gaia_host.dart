@@ -1068,6 +1068,29 @@ class GaiaHost {
         await store.createChat(GaiaChat.fromJson(_map(params['chat'])));
         await _syncBorder(store);
         return null;
+      case 'forkChat':
+        final chat = GaiaChat.fromJson(_map(params['chat']));
+        final messages = [
+          for (final message in params['messages']! as List)
+            GaiaMessage.fromJson(_map(message)),
+        ];
+        await store.forkChat(chat, messages);
+        await _syncBorder(store);
+        // Forked either way: its images just stay the source chat's if this
+        // fails.
+        try {
+          await _media?.share(chat.id, {
+            for (final message in messages)
+              for (final image in message.parts.whereType<GaiaImagePart>())
+                image.mediaId,
+          });
+        } catch (error) {
+          debugPrint('[gaia] images of ${chat.id} not shared: $error');
+        }
+        return null;
+      case 'dropFork':
+        await store.dropFork(params['chatId']! as String);
+        return null;
       case 'setSession':
         await store.setSession(
           params['chatId']! as String,

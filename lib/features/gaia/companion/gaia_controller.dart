@@ -2424,6 +2424,261 @@ class GaiaController extends ChangeNotifier {
     });
   }
 
+  /// A new chat with [at]'s chat's messages up to [at], which then goes its
+  /// own way (GAIA_FORKING_HLD.md §2), opened. The copies get new ids but
+  /// keep their seqs. Where the source's Claude Code session here has the
+  /// copied turns, the fork's first send forks that session (§5); otherwise
+  /// it hands the copied turns over (§6). Not at a reply still streaming,
+  /// which no fork copies (§3).
+  Future<void> forkChat(GaiaMessage at) async {
+    // One at a time: finding the cut can wait seconds on a prompt just sent.
+    if (_forking) return;
+    _forking = true;
+    try {
+      await _forkChat(at);
+    } finally {
+      _forking = false;
+    }
+  }
+
+  bool _forking = false;
+
+  Future<void> _forkChat(GaiaMessage at) async {
+    final source = _chat(at.chatId);
+    final list = _messages[at.chatId];
+    final point = list?.where((m) => m.id == at.id).firstOrNull;
+    if (source == null ||
+        point == null ||
+        point.status == GaiaMessageStatus.streaming) {
+      return;
+    }
+    final copied = [
+      for (final message in list!)
+        if (message.seq <= point.seq && !message.isDeleted) message,
+    ];
+    // Its stored ids come once they're attached.
+    if (copied.any(
+      (message) => message.parts.any(
+        (part) =>
+            part is GaiaImagePart && uploadingImages.contains(part.mediaId),
+      ),
+    )) {
+      return _note(
+        "Couldn't fork the chat",
+        'Its images are still being attached. Try again in a moment.',
+        error: true,
+      );
+    }
+    final record = await _forkRecord(source, point, list);
+    final now = utcNow();
+    final forkId = _uuid.v4();
+    final fork = GaiaChat(
+      id: forkId,
+      title: '${source.title} (fork)',
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+      tier: source.tier,
+      // The curator has read the copies it read in the source, and no more.
+      curatedSeq: min(source.curatedSeq, point.seq),
+      fork: record,
+    );
+    final copies = [
+      for (final message in copied)
+        GaiaMessage.fromJson({
+          ...message.toJson(),
+          'id': _uuid.v4(),
+          'chatId': forkId,
+          'updatedAt': now.toIso8601String(),
+          // So a fork of this fork finds it in a native session (§5.2).
+          'origin': message.entryId,
+          // Its own cards: answering one doesn't answer the source's.
+          'parts': [
+            for (final part in message.parts)
+              part is GaiaCardPart
+                  ? {...part.toJson(), 'id': _uuid.v4()}
+                  : part.toJson(),
+          ],
+        }),
+    ];
+    try {
+      await _pipe.request('forkChat', {
+        'chat': fork.toJson(),
+        'messages': [for (final message in copies) message.toJson()],
+      });
+    } on GaiaPipeException catch (error) {
+      return _note("Couldn't fork the chat", error.message, error: true);
+    }
+    chats = [fork, ...chats]..sort(_listed);
+    _messages[forkId] = copies;
+    await selectChat(forkId);
+  }
+
+  /// The native session a fork of [source] at [point] starts from on this
+  /// device (GAIA_FORKING_HLD.md §5.5): the source's Claude Code session here
+  /// that has every turn up to the fork, cut where they end (§5.2). Null when
+  /// there's none, and the fork hands its turns over instead (§6).
+  Future<GaiaForkRecord?> _forkRecord(
+    GaiaChat source,
+    GaiaMessage point,
+    List<GaiaMessage> list,
+  ) async {
+    const adapter = kGaiaClaudeCodeAdapter;
+    final runner = _runners[adapter];
+    if (runner is! GaiaSessionForker) return null;
+    // What the fork's session knows: up to the message before a prompt
+    // forked at, which its first send then names (§3).
+    final lastSeq = point.role == GaiaMessageRole.user
+        ? point.seq - 1
+        : point.seq;
+    // The last prompt that session answered, which it must have.
+    final answered = list.lastWhereOrNull(
+      (m) => m.role == GaiaMessageRole.user && m.seq <= lastSeq,
+    );
+    if (answered == null) return null;
+    GaiaAccount? account;
+    GaiaAgentSession? session;
+    for (final candidate in accountsFor(adapter)) {
+      final mine =
+          source.agentSessions[gaiaSessionKey(
+            _deviceId,
+            adapter: adapter,
+            account: candidate.id,
+          )];
+      if (mine != null &&
+          mine.lastSeq >= lastSeq &&
+          (session == null || mine.lastSeq > session.lastSeq)) {
+        account = candidate;
+        session = mine;
+      }
+    }
+    // A fork not sent in yet: its own record's source session, cut no later
+    // than that record's cut, which is as far as the copies go (§10.5).
+    String? endAt;
+    if (source.fork case final pending?
+        when session == null && pending.lastSeq >= lastSeq) {
+      account = _accountForKey(adapter, pending.sessionKey);
+      session = GaiaAgentSession(
+        sessionId: pending.sourceSessionId,
+        lastSeq: pending.lastSeq,
+      );
+      endAt = pending.keepAt;
+    }
+    if (account == null || session == null) return null;
+    // A turn running here on that session: its prompt may not have reached
+    // the session's file yet. A fork's first turn runs on a session of its
+    // own.
+    final live = endAt == null && _running.contains(source.id)
+        ? list.lastWhereOrNull(
+            (m) =>
+                m.status == GaiaMessageStatus.streaming &&
+                m.adapter == adapter &&
+                m.account == account!.id,
+          )
+        : null;
+    final livePrompt = live == null
+        ? null
+        : list.lastWhereOrNull(
+            (m) => m.role == GaiaMessageRole.user && m.seq < live.seq,
+          );
+    final String? keepAt;
+    try {
+      keepAt = await (runner as GaiaSessionForker).forkCut(
+        chatId: source.id,
+        sessionId: session.sessionId,
+        account: account,
+        after: answered.entryId,
+        next: [
+          for (final message in list)
+            if (message.role == GaiaMessageRole.user && message.seq > lastSeq)
+              message.entryId,
+        ],
+        awaiting: livePrompt != null && livePrompt.seq > lastSeq
+            ? livePrompt.entryId
+            : null,
+        endAt: endAt,
+      );
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] fork of ${source.id} not native: $error');
+      return null;
+    }
+    if (keepAt == null) return null;
+    return GaiaForkRecord(
+      sessionKey: gaiaSessionKey(
+        _deviceId,
+        adapter: adapter,
+        account: account.id,
+      ),
+      sourceSessionId: session.sessionId,
+      keepAt: keepAt,
+      lastSeq: lastSeq,
+    );
+  }
+
+  /// The fork record [chatId]'s first send on [to] forks with (§5.3), the
+  /// source session copied to [to] first when it's another account's
+  /// (§5.4). Null for none, as on another adapter, whose session the record
+  /// isn't for; one whose session can't be had on [to] is dropped.
+  Future<GaiaForkRecord?> _forkFor(
+    String chatId,
+    GaiaAgentRunner runner,
+    GaiaAccount to,
+  ) async {
+    final fork = _chat(chatId)?.fork;
+    if (fork == null) return null;
+    final from = _accountForKey(to.adapter, fork.sessionKey);
+    if (from == null) return null;
+    if (from.id == to.id) return fork;
+    // A chat already followed the source session to [to]: that copy is the
+    // newer one, and copying over it would lose its later turns.
+    final toKey = gaiaSessionKey(
+      _deviceId,
+      adapter: to.adapter,
+      account: to.id,
+    );
+    if (chats.any(
+      (chat) => chat.agentSessions[toKey]?.sessionId == fork.sourceSessionId,
+    )) {
+      return fork;
+    }
+    try {
+      if (runner is GaiaSessionCopier &&
+          await (runner as GaiaSessionCopier).copySession(
+            sessionId: fork.sourceSessionId,
+            from: from,
+            to: to,
+          )) {
+        return fork;
+      }
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] fork source not copied to ${to.label}: $error');
+    }
+    _dropFork(chatId);
+    return null;
+  }
+
+  /// [adapter]'s account here whose session key is [key].
+  GaiaAccount? _accountForKey(String adapter, String key) =>
+      accountsFor(adapter)
+          .where(
+            (account) =>
+                gaiaSessionKey(
+                  _deviceId,
+                  adapter: adapter,
+                  account: account.id,
+                ) ==
+                key,
+          )
+          .firstOrNull;
+
+  /// Forgets [chatId]'s fork record: its session was made, or can't be.
+  void _dropFork(String chatId) {
+    chats = [
+      for (final c in chats) c.id == chatId ? c.copyWith(clearFork: true) : c,
+    ];
+    unawaited(_request('dropFork', {'chatId': chatId}));
+  }
+
   /// Pins or unpins [chatId], moving it in the list at once.
   Future<void> setPinned(String chatId, bool pinned) async {
     chats = [
@@ -3414,6 +3669,10 @@ class GaiaController extends ChangeNotifier {
             adapter: agent.adapter,
             account: account!.id,
           )];
+    // A fork's first send here: a native session made from its source
+    // chat's, which knows the chat up to the record's lastSeq
+    // (GAIA_FORKING_HLD.md §5.3).
+    GaiaForkRecord? fork;
     // Here at once, so a next message straight away resumes it; the main
     // instance's copy follows. A null [sessionId] drops the chat's.
     void recordSession(String adapter, String? sessionId) {
@@ -3464,7 +3723,7 @@ class GaiaController extends ChangeNotifier {
       if (script != null || agent == null || runner == null) return asked;
       List<GaiaMessage> unseen() => gaiaUnseenTurns(
         _messages[chatId] ?? list,
-        lastSeq: session?.lastSeq ?? -1,
+        lastSeq: session?.lastSeq ?? fork?.lastSeq ?? -1,
         beforeSeq: question.seq,
       );
       final captioning = unseen();
@@ -3484,7 +3743,7 @@ class GaiaController extends ChangeNotifier {
       };
       final paths = await Future.wait(ids.map(imageFile));
       final imagePaths = Map.fromIterables(ids, paths);
-      return '${gaiaHandoffPreamble(recent: recent, joining: session == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: imagePaths)}\n$asked';
+      return '${gaiaHandoffPreamble(recent: recent, joining: session == null && fork == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: imagePaths)}\n$asked';
     }
 
     var retried = false;
@@ -3687,7 +3946,10 @@ class GaiaController extends ChangeNotifier {
       // here, caught up from there, rather than a transcript. Back on an
       // account it already has one on, it resumes that (§7.4).
       if (session == null && script == null && runner != null) {
-        session = await _followSession(chatId, runner, account!);
+        fork = await _forkFor(chatId, runner, account!);
+        if (fork == null) {
+          session = await _followSession(chatId, runner, account);
+        }
       }
       final sent = await handedOver();
       // Where every file the chat has attached is, not just this message's:
@@ -3737,36 +3999,66 @@ class GaiaController extends ChangeNotifier {
               images: imageInputs,
               directories: directories,
               tools: tools,
-              // A resumed session keeps the index it started with.
-              sessionInstructions: session == null ? await _memoryIndex() : '',
+              // A resumed session keeps the index it started with, and a
+              // fork its source's.
+              sessionInstructions: session == null && fork == null
+                  ? await _memoryIndex()
+                  : '',
               account: account,
+              promptId: question.id,
+              fork: fork == null
+                  ? null
+                  : (sessionId: fork.sourceSessionId, keepAt: fork.keepAt),
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
-      // folder: once more as a new session with the chat handed over.
-      if (session != null &&
-          !result.sessionFound &&
+      // folder, or a fork that couldn't be made (GAIA_FORKING_HLD.md §6):
+      // once more as a new session with the chat handed over. So is a fork
+      // whose first turn failed with nothing to show, as one cut from before
+      // a compaction might: forking again would only fail the same way. Not
+      // one stopped by a usage limit or a login, which isn't the cut's doing:
+      // it keeps the record, and the next send forks again.
+      if ((session != null || fork != null) &&
+          (!result.sessionFound ||
+              (fork != null &&
+                  result.isError &&
+                  builder.finished.isEmpty &&
+                  !gaiaRunLimited(result.text) &&
+                  !gaiaRunAuthFailed(result.text))) &&
           !_stopping.contains(chatId)) {
-        // Dropped first: a retry that dies still leaves it gone.
-        session = null;
-        retried = true;
-        recordSession(agent!.adapter, null);
+        // Dropped first: a retry that dies still leaves it gone. A fork's
+        // falls back with nothing said.
+        if (fork != null) {
+          fork = null;
+          _dropFork(chatId);
+        } else {
+          session = null;
+          retried = true;
+          recordSession(agent!.adapter, null);
+        }
         result = await runner!.send(
           chatId: chatId,
           sessionId: null,
-          model: agent.model,
+          model: agent!.model,
           prompt: await handedOver(),
           images: imageInputs,
           directories: directories,
           tools: tools,
           sessionInstructions: await _memoryIndex(),
           account: account,
+          promptId: question.id,
           onEvent: onEvent,
         );
       }
-      // An earlier take-back that didn't hold (§9.6).
+      // An earlier take-back, or the fork, that didn't hold (§9.6).
       if (result.notice case final notice?) {
-        _note("A stopped message wasn't fully taken back", notice, error: true);
+        _note(
+          fork != null
+              ? "This fork may not match what it shows"
+              : "A stopped message wasn't fully taken back",
+          notice,
+          error: true,
+        );
       }
       // A scripted reply, or one no agent ran, has no session to resume. A failed turn's is kept when it was already
       // the chat's, or the agent got as far as replying or a tool; a
@@ -3780,6 +4072,11 @@ class GaiaController extends ChangeNotifier {
           agent != null &&
           (keep || session != null)) {
         recordSession(agent.adapter, keep ? result.sessionId : null);
+      }
+      // Made: from here it's an ordinary chat's session. One that failed
+      // straight away isn't kept, and the next send forks again.
+      if (fork != null && keep && result.sessionId.isNotEmpty) {
+        _dropFork(chatId);
       }
       ended = true;
       if (account != null && runner != null && script == null) {
@@ -3837,6 +4134,15 @@ class GaiaController extends ChangeNotifier {
       );
     } catch (error) {
       final stopped = _stopping.contains(chatId);
+      // A fork whose first turn died: the next send hands the chat over
+      // rather than forking again into the same failure. A stop isn't the
+      // fork's doing, and keeps it; nor is a usage limit or a login.
+      if (fork != null &&
+          !stopped &&
+          !gaiaRunLimited('$error') &&
+          !gaiaRunAuthFailed('$error')) {
+        _dropFork(chatId);
+      }
       // Its open cards go with it: nothing is left to answer them. Before
       // anything's awaited, so a late event can't change what's decided.
       ended = true;

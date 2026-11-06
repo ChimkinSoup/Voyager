@@ -249,6 +249,192 @@ void main() {
   );
 
   test(
+    "a prompt's entry in the session JSONL has the message id it was sent "
+    'with as its uuid (GAIA_FORKING_HLD.md §5.1)',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final cli = runner('prompt_id');
+      final sessionId = _uuid.v4();
+      final promptId = _uuid.v4();
+      try {
+        final result = await cli.sendRaw(
+          chatId: 'contract',
+          sessionId: null,
+          newSessionId: sessionId,
+          model: 'haiku',
+          prompt: 'Reply with just OK.',
+          promptId: promptId,
+          onEvent: (_) {},
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        final file = Directory(p.join(claudeConfigRoot(''), 'projects'))
+            .listSync()
+            .map((dir) => File(p.join(dir.path, '$sessionId.jsonl')))
+            .firstWhere((file) => file.existsSync());
+        final users = [
+          for (final line in file.readAsLinesSync())
+            if (line.trim().isNotEmpty) jsonDecode(line) as Map,
+        ].where((entry) => entry['type'] == 'user').toList();
+        expect(users.first['uuid'], promptId);
+        expect(users.where((entry) => entry['uuid'] == promptId), hasLength(1));
+      } finally {
+        await cli.killAll();
+      }
+    },
+  );
+
+  test(
+    'a fork cut before a later prompt knows the turns before it, in a new '
+    'session, as does a fork of it at a copied turn or its own, and a bad '
+    'cut is refused before init (GAIA_FORKING_HLD.md §5)',
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final cli = runner('fork');
+      const account = GaiaAccount(
+        id: kGaiaDefaultAccountId,
+        label: 'default',
+        adapter: kGaiaClaudeCodeAdapter,
+        dir: '',
+      );
+      Future<GaiaTurnResult> send(
+        String chatId,
+        String? sessionId,
+        String prompt, {
+        String? promptId,
+        GaiaForkCut? fork,
+      }) => cli.send(
+        chatId: chatId,
+        sessionId: sessionId,
+        model: 'haiku',
+        prompt: prompt,
+        promptId: promptId,
+        fork: fork,
+        onEvent: (_) {},
+      );
+      final first = _uuid.v4();
+      final second = _uuid.v4();
+      final forkedPrompt = _uuid.v4();
+      try {
+        final one = await send(
+          'contract',
+          null,
+          'Remember the word BANANA. Reply with just OK.',
+          promptId: first,
+        );
+        expect(one.isError, isFalse, reason: one.text);
+        final source = one.sessionId;
+        final two = await send(
+          'contract',
+          source,
+          'Remember the word CHERRY too. Reply with just OK.',
+          promptId: second,
+        );
+        expect(two.isError, isFalse, reason: two.text);
+
+        final keepAt = await cli.forkCut(
+          chatId: 'contract',
+          sessionId: source,
+          account: account,
+          after: first,
+          next: [second],
+        );
+        expect(keepAt, isNotNull);
+        final forked = await send(
+          'contract-fork',
+          null,
+          'List every word I have told you to remember, comma-separated, '
+              'nothing else.',
+          promptId: forkedPrompt,
+          fork: (sessionId: source, keepAt: keepAt!),
+        );
+        expect(forked.isError, isFalse, reason: forked.text);
+        expect(forked.sessionFound, isTrue);
+        expect(forked.sessionId, isNot(source));
+        expect(forked.notice, isNull, reason: 'it hangs off the cut');
+        expect(forked.text.toUpperCase(), contains('BANANA'));
+        expect(forked.text.toUpperCase(), isNot(contains('CHERRY')));
+        final fork = forked.sessionId;
+        final later = _uuid.v4();
+        final own = await send(
+          'contract-fork',
+          fork,
+          'Remember the word DATE too. Reply with just OK.',
+          promptId: later,
+        );
+        expect(own.isError, isFalse, reason: own.text);
+
+        // A fork of the fork, at a turn it copied: the source's uuids are
+        // in the fork's session, so the cut is found by them.
+        final atCopied = await cli.forkCut(
+          chatId: 'contract-fork',
+          sessionId: fork,
+          account: account,
+          after: first,
+          next: [forkedPrompt, later],
+        );
+        expect(atCopied, keepAt);
+        final copiedFork = await send(
+          'contract-fork-2',
+          null,
+          'List every word I have told you to remember, comma-separated, '
+              'nothing else.',
+          fork: (sessionId: fork, keepAt: atCopied!),
+        );
+        expect(copiedFork.notice, isNull, reason: 'it hangs off the cut');
+        expect(copiedFork.text.toUpperCase(), contains('BANANA'));
+        expect(copiedFork.text.toUpperCase(), isNot(contains('CHERRY')));
+        expect(copiedFork.text.toUpperCase(), isNot(contains('DATE')));
+
+        // And at a turn of its own.
+        final atOwn = await cli.forkCut(
+          chatId: 'contract-fork',
+          sessionId: fork,
+          account: account,
+          after: forkedPrompt,
+          next: [later],
+        );
+        expect(atOwn, isNotNull);
+        expect(atOwn, isNot(keepAt));
+        final ownFork = await send(
+          'contract-fork-3',
+          null,
+          'Have I told you to remember the word DATE? Answer just yes or no.',
+          fork: (sessionId: fork, keepAt: atOwn!),
+        );
+        expect(ownFork.notice, isNull, reason: 'it hangs off the cut');
+        expect(ownFork.text.toLowerCase(), contains('no'));
+
+        // The source is untouched, and its next turn still knows both.
+        final three = await send(
+          'contract',
+          source,
+          'List every word I have told you to remember, comma-separated, '
+              'nothing else.',
+        );
+        expect(three.text.toUpperCase(), contains('BANANA'));
+        expect(three.text.toUpperCase(), contains('CHERRY'));
+
+        final started = DateTime.now();
+        final refused = await send(
+          'contract-refused',
+          null,
+          'Reply with just OK.',
+          fork: (sessionId: source, keepAt: _uuid.v4()),
+        );
+        expect(refused.sessionFound, isFalse);
+        expect(
+          DateTime.now().difference(started),
+          lessThan(const Duration(seconds: 30)),
+        );
+      } finally {
+        await cli.killAll();
+      }
+    },
+  );
+
+  test(
     'a stopped turn taken back is gone from the next turn, which resumes '
     'past it with the hidden rewind flags (§9.6)',
     skip: !_enabled,
