@@ -2479,8 +2479,10 @@ class GaiaController extends ChangeNotifier {
       updatedAt: now,
       lastMessageAt: now,
       tier: source.tier,
-      // The curator has read the copies it read in the source, and no more.
-      curatedSeq: min(source.curatedSeq, point.seq),
+      // The copies are the source's to curate, whether its curator has read
+      // them yet or not: each fork reading them again saved their memories
+      // once per fork (BUG-369).
+      curatedSeq: point.seq,
       fork: record,
     );
     final copies = [
@@ -2527,9 +2529,26 @@ class GaiaController extends ChangeNotifier {
     final runner = _runners[adapter];
     if (runner is! GaiaSessionForker) return null;
     // What the fork's session knows: up to the message before a prompt
-    // forked at, which its first send then names (§3).
+    // forked at, which its first send then names (§3). A reply cut short
+    // counts as forking at its prompt: the session holds the CLI's
+    // placeholder for that turn, not the partial text shown, so the first
+    // send hands both over (BUG-368).
+    final cutShort =
+        point.role != GaiaMessageRole.user &&
+        const {
+          GaiaMessageStatus.cancelled,
+          GaiaMessageStatus.interrupted,
+          GaiaMessageStatus.aborted,
+        }.contains(point.status);
+    final prompt = cutShort
+        ? list.lastWhereOrNull(
+            (m) => m.role == GaiaMessageRole.user && m.seq < point.seq,
+          )
+        : null;
     final lastSeq = point.role == GaiaMessageRole.user
         ? point.seq - 1
+        : prompt != null
+        ? prompt.seq - 1
         : point.seq;
     // The last prompt that session answered, which it must have.
     final answered = list.lastWhereOrNull(

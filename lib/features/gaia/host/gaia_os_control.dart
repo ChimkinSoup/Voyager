@@ -164,6 +164,11 @@ abstract interface class GaiaInputBackend {
   /// Asks [hwnd] to close, as its close button does (`WM_CLOSE`).
   void close(int hwnd);
 
+  /// Whether process [pid] runs as administrator while Voyager doesn't. Windows
+  /// then drops what Gaia sends its windows with no error (UIPI), so a move or
+  /// close would look sent and do nothing (BUG-364).
+  bool elevatedAboveGaia(int pid);
+
   /// Replaces the clipboard with [text] ([gaiaWriteClipboard]); false when
   /// another app held the clipboard.
   Future<bool> writeClipboard(String text);
@@ -620,6 +625,7 @@ class GaiaOsControl {
       'ran': plan.next,
       'stopped': ?stopped,
       'front': ?active.front,
+      'unconfirmed': ?active.unconfirmed,
       'adopted': ?session?.takeAdopted(),
       'steps': plan.toCard()['steps'],
     };
@@ -829,6 +835,13 @@ class GaiaOsControl {
     if (how == 'close' && window.pid == _voyagerPid) {
       throw GaiaReadException(
         "Voyager's window can't be closed this way: Gaia's tools run in it.",
+      );
+    }
+    if (_backend.elevatedAboveGaia(window.pid)) {
+      throw GaiaReadException(
+        '${window.app} runs as administrator, and Windows blocks Gaia from '
+        'minimizing, moving or closing its windows. The user can do it '
+        'themselves.',
       );
     }
     return _Step.window(
@@ -1552,6 +1565,16 @@ class GaiaOsControl {
         }
       }
       if (timedOut) {
+        // A window that came in front during the wait was adopted as Gaia's
+        // doing (§8.1), and later calls act on it: offered as a guess, not
+        // as a stop that says nothing more was sent (BUG-365).
+        if (session?.adopted != null) {
+          if (session?.pin case final guess?
+              when _backend.describe(guess.hwnd) != null) {
+            active.unconfirmed = step.target;
+            return guess;
+          }
+        }
         throw _Stopped(
           "Gaia couldn't tell which window ${step.target} opened, if any. "
           'os_windows lists what is open, and os_focus brings one up.',
@@ -2130,6 +2153,10 @@ class _Active {
 
   /// The window `os_open` or `os_focus` brought up, for the agent.
   String? front;
+
+  /// What `os_open` opened, when [front] is only the window that came in
+  /// front while it waited, not one shown to be its own.
+  String? unconfirmed;
 
   /// A drag holding the button: its window, where it started, the button's
   /// release, and where Gaia last put the cursor.
@@ -3007,6 +3034,11 @@ class _Win32InputBackend implements GaiaInputBackend {
 
   @override
   void close(int hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
+
+  late final _elevated = gaiaProcessElevated(GetCurrentProcessId());
+
+  @override
+  bool elevatedAboveGaia(int pid) => !_elevated && gaiaProcessElevated(pid);
 
   @override
   Future<bool> writeClipboard(String text) => gaiaWriteClipboard(text);

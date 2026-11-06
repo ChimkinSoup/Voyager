@@ -169,11 +169,22 @@ class GaiaChatTools implements GaiaTurnTools {
   static const _maxActivity = 200;
 
   void _logActivity(Iterable<String> labels, {String? window, String? app}) {
-    for (final label in labels) {
+    for (var label in labels) {
       // The stop can come from the session and from the step it ended:
-      // one row, after whatever ran.
-      if (label.startsWith('Stopped: ') && _activity.remove(label)) {
-        _activityTotal--;
+      // one row, after whatever ran. The step's may say more, as a drag's
+      // does, so it's the same stop when one starts with the other, and
+      // the fuller one is kept (BUG-370).
+      if (label.startsWith('Stopped: ')) {
+        final same = _activity.lastIndexWhere(
+          (row) =>
+              row.startsWith('Stopped: ') &&
+              (row.startsWith(label) || label.startsWith(row)),
+        );
+        if (same >= 0) {
+          final row = _activity.removeAt(same);
+          _activityTotal--;
+          if (row.length > label.length) label = row;
+        }
       }
       _activity.add(label);
       _activityTotal++;
@@ -528,10 +539,14 @@ class GaiaChatTools implements GaiaTurnTools {
   /// What the agent is told of the window a run left in front: the one
   /// `os_open` or `os_focus` brought up, or one that opened by itself.
   static String? _windowNote(Map<String, Object?> result) =>
-      switch ((result['front'], result['adopted'])) {
-        (final String window, _) =>
+      switch ((result['front'], result['adopted'], result['unconfirmed'])) {
+        (final String window, _, final String opened) =>
+          " Gaia couldn't confirm that $window is what $opened opened, but "
+              'it came in front, and later calls act on it. Check it is the '
+              'right one.',
+        (final String window, _, _) =>
           ' $window is in front, and later calls act on it.',
-        (_, final String window) =>
+        (_, final String window, _) =>
           ' A window opened in front, and later calls act on it: $window.',
         _ => null,
       };

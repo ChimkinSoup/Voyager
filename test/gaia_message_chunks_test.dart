@@ -2,20 +2,26 @@
 // parts travel in `gaia_message_chunks`, and come back whole on the other
 // device. Two devices share one InMemorySyncRepository as the server.
 
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/data/database/app_database.dart';
+import 'package:voyager/data/remote/firestore_sync_repository.dart'
+    show NoOpSyncRepository;
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart'
+    show SyncRepository;
 
 class _Device {
-  _Device(InMemorySyncRepository server, String deviceId) {
+  _Device(SyncRepository server, String deviceId) {
     db = AppDatabase.inMemory();
     gaia = DriftGaiaRepository(db);
     sync = RemoteSyncService(
@@ -209,5 +215,31 @@ void main() {
         );
       }
     });
+  });
+
+  // Gaia's companion keeps writing while the main window is on the sign-in
+  // page. Counted as synced, such a message was never uploaded (BUG-363).
+  // Last: the outbox worker it initializes is static, and stays.
+  test('a message written signed out is queued for the next sign-in', () async {
+    final device = _Device(NoOpSyncRepository(), 'device-a');
+    addTearDown(device.db.close);
+    OutboxSyncWorker.initialize(
+      device.db,
+      FakeFirebaseFirestore(),
+      () => null,
+      yieldDelay: Duration.zero,
+    );
+    final message = _message(const [GaiaTextPart('hi')]);
+    await device.gaia.upsertMessage(message);
+
+    await device.sync.pushRecords(FirestoreCollections.gaiaMessages, [
+      message,
+    ]);
+
+    final rows = await device.db.select(device.db.pendingUploadsTable).get();
+    expect(
+      [for (final row in rows) (row.collectionName, row.documentId)],
+      [(FirestoreCollections.gaiaMessages, 'm1')],
+    );
   });
 }

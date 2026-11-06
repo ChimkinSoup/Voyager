@@ -33,8 +33,9 @@ The source chat is left as it was, and the two chats don't stay linked.
 | `title`, marked as a fork | `agentSessions` (only the native fork's own session goes in, §5.3) |
 
 - **Soft-deleted messages are skipped**, as handoff already skips them.
-- **`curatedSeq` becomes `min(source.curatedSeq, fork point)`.** Otherwise the memory
-  curator would read the copied turns again and save their memories twice (GAIA_HLD.md §11).
+- **`curatedSeq` becomes the fork point.** The copied turns are the source's curator's,
+  read there yet or not. Otherwise each fork's curator would read them again and save their
+  memories once per fork (GAIA_HLD.md §11, BUG-369).
 - **Seqs stay the same** because `lastSeq` and `gaiaUnseenTurns` both work by seq. With
   the same seqs, the fork's session and its messages line up with no remapping.
 
@@ -325,7 +326,7 @@ whenever the native fork can't be made. Codex is unchanged and keeps using optio
   with one new pipe request, `forkChat` (`GaiaChatStore.forkChat`: the chat and all its
   copies in one serial write), and opens the fork. The fork has no `agentSessions`, so its
   first send hands the transcript over (§6). `curatedSeq` is
-  `min(source.curatedSeq, fork point)`.
+  the fork point (BUG-369).
 - **Images.** Not in §2, but needed: `GaiaMedia.share` gives the fork its own media
   references to the copied images, so deleting the source chat doesn't take the fork's
   images onto the 30-day clock. An image whose asset isn't on this device yet is skipped,
@@ -637,9 +638,9 @@ files and the database.
 - **BUG-367 (fixed):** answering a copied open question card in a fork marked the source's
   card answered, since the copy kept its card id. A fork's cards now get new ids. Live
   retest: the fork's card was stored as answered and the source's stayed open.
-- **BUG-368 (open):** a native fork at a stopped reply holds the CLI's "No response
+- **BUG-368 (fixed 2026-11-06):** a native fork at a stopped reply holds the CLI's "No response
   requested." placeholder, not the partial text the user saw, and nothing catches it up.
-- **BUG-369 (open):** a fork made before its source was curated copies `curatedSeq` -1, so
+- **BUG-369 (fixed 2026-11-06):** a fork made before its source was curated copies `curatedSeq` -1, so
   each such fork's curator saves the copied turns' memories again. One fact was proposed four
   times from four forks. This misses §10.1's Done-when line on memories, though §10.3 #6
   covers only a curated source.

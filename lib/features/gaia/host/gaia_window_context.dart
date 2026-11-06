@@ -342,6 +342,39 @@ String? gaiaProcessAppId(int pid) {
   }
 }
 
+/// Whether process [pid] runs as administrator (an elevated token). False
+/// when that can't be read.
+bool gaiaProcessElevated(int pid) {
+  final process = pid == 0
+      ? 0
+      : OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (process == 0) return false;
+  final token = calloc<IntPtr>();
+  final elevation = calloc<Uint32>();
+  final length = calloc<Uint32>();
+  try {
+    if (OpenProcessToken(process, TOKEN_QUERY, token) == 0) return false;
+    try {
+      return GetTokenInformation(
+                token.value,
+                TokenElevation,
+                elevation,
+                sizeOf<Uint32>(),
+                length,
+              ) !=
+              0 &&
+          elevation.value != 0;
+    } finally {
+      CloseHandle(token.value);
+    }
+  } finally {
+    CloseHandle(process);
+    free(token);
+    free(elevation);
+    free(length);
+  }
+}
+
 final _getApplicationUserModelId = DynamicLibrary.open('kernel32.dll')
     .lookupFunction<
       Int32 Function(IntPtr, Pointer<Uint32>, Pointer<Utf16>),

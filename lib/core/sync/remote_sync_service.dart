@@ -6654,6 +6654,21 @@ class RemoteSyncService {
     List<_SelfEcho> echoes, {
     Future<void> Function()? before,
   }) async {
+    // Signed out, nothing reaches a server, so nothing may count as synced:
+    // queued instead, for the same account's sign-in to upload and another
+    // account's to count as unsynced. Gaia's companion writes here while the
+    // main window is on the sign-in page, and a finished message is never
+    // written again to make up for it (BUG-363).
+    if (_syncRepository is NoOpSyncRepository) {
+      _settleEchoes(echoes);
+      for (final documentId in localIds) {
+        await OutboxSyncWorker.recordOwedUpload(
+          collection: collection,
+          documentId: documentId,
+        );
+      }
+      return;
+    }
     try {
       await before?.call();
       await _syncEngine.syncDocumentsImmediately(

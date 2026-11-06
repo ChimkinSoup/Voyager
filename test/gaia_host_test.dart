@@ -146,6 +146,8 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   void close(int hwnd) {}
   @override
+  bool elevatedAboveGaia(int pid) => false;
+  @override
   Future<bool> writeClipboard(String text) async => true;
   @override
   GaiaSavedClipboard? saveClipboard() => (formats: [], private: false);

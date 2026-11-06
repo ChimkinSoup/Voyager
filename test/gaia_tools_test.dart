@@ -601,6 +601,27 @@ void main() {
         expect(result.text, contains('Calculator'));
       });
 
+      test("an os_open that couldn't confirm its window says so, as a "
+          'guess and not a stop (BUG-365)', () async {
+        planAuto = true;
+        runAnswer = (_) => {
+          'ran': 1,
+          'steps': steps,
+          'front': 'Paint: "Untitled - Paint"',
+          'unconfirmed': 'Calculator',
+        };
+        final result = await tools().call('os_key', {'keys': 'A'});
+        expect(
+          result.text,
+          contains(
+            "Gaia couldn't confirm that Paint: \"Untitled - Paint\" is what "
+            'Calculator opened',
+          ),
+        );
+        expect(result.text, isNot(contains('Stopped')));
+        expect(result.text, isNot(contains('Nothing more was sent')));
+      });
+
       group('the activity card (GAIA_AUTONOMY_HLD.md §7)', () {
         test('a stop between calls gets a row, and the step it ended '
             "doesn't add a second (BUG-357)", () async {
@@ -618,6 +639,31 @@ void main() {
           await turn.call('os_steps', const {});
           expect(labels(), ['Press A', 'Press A', 'Stopped: Esc.']);
           expect(activity.last.input['total'], 3);
+        });
+
+        test("a stopped step that says more, as a drag's does, still makes "
+            'one row, with its fuller text (BUG-370)', () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 1, 'steps': steps};
+          final turn = tools();
+          await turn.call('os_steps', const {});
+          turn.logStopped('Esc.');
+          runAnswer = (_) => {
+            'ran': 0,
+            'steps': steps,
+            'stopped': 'Esc. Gaia let go where the drag started.',
+          };
+          await turn.call('os_steps', const {});
+          // And the session's coming after the step's.
+          turn.logStopped('Esc.');
+          expect(
+            [
+              for (final step in activity.last.input['steps']! as List)
+                step['label'],
+            ],
+            ['Press A', 'Stopped: Esc. Gaia let go where the drag started.'],
+          );
+          expect(activity.last.input['total'], 2);
         });
 
         test('os_clipboard: a read is a screen read, a write an action that '

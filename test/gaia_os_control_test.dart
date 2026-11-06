@@ -221,6 +221,11 @@ class _Backend implements GaiaInputBackend {
   @override
   void close(int hwnd) => arranged.add('close $hwnd');
 
+  /// Pids that run as administrator while Voyager doesn't.
+  final elevated = <int>{};
+  @override
+  bool elevatedAboveGaia(int pid) => elevated.contains(pid);
+
   /// What's been written to the clipboard; another app holds it while
   /// [clipboardBusy].
   final clipboard = <String>[];
@@ -1856,6 +1861,25 @@ void main() {
         expect(result['front'], isNull);
       });
 
+      // Adopted as Gaia's doing, and acted on by later calls: so not a stop
+      // that says nothing more was sent (BUG-365).
+      test('one that came in front meanwhile is offered as a guess', () async {
+        backend.listed = [listed(_target)];
+        backend.windows[stray.hwnd] = stray;
+        backend.onLaunch = () {
+          backend.listed = [listed(stray), listed(_target)];
+          backend.front = stray.hwnd;
+        };
+        final result = await act('os_open', {'target': 'Calculator'});
+        expect(result['stopped'], isNull);
+        expect(result['front'], 'Paint: "Untitled - Paint"');
+        expect(result['unconfirmed'], 'Calculator');
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          stray.hwnd,
+        );
+      });
+
       test("a launcher's window comes from a process it started", () async {
         const child = (
           hwnd: 91,
@@ -2489,6 +2513,23 @@ void main() {
           plan('os_window', {'window': 99, 'action': 'minimize'}),
           refused('excluded'),
         );
+      });
+
+      // Windows drops what Gaia sends it, and says nothing (BUG-364).
+      test('a window running as administrator is refused', () async {
+        backend.elevated.add(calc.pid);
+        for (final action in ['minimize', 'move', 'close']) {
+          await expectLater(
+            plan('os_window', {
+              'window': 99,
+              'action': action,
+              'left': 5,
+              'top': 6,
+            }),
+            refused('runs as administrator'),
+          );
+        }
+        expect(backend.arranged, isEmpty);
       });
 
       test('approved, it runs, flashed where the window was', () async {

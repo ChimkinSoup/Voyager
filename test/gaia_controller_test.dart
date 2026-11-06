@@ -5381,8 +5381,10 @@ void main() {
       expect((await main.store.messages(fork)).map((m) => m.seq), [0, 2]);
     });
 
+    // Read or not yet: before BUG-369 a fork of a chat not yet curated read
+    // the copies again, and each fork saved their memories once more.
     test(
-      "the curator doesn't read the copies it read in the source again",
+      "the copies are the source's to curate, read there yet or not",
       () async {
         await storeChat(curatedSeq: 2);
         await startCompanion();
@@ -5399,7 +5401,7 @@ void main() {
         }
 
         expect(await curatedAt(1), 1);
-        expect(await curatedAt(3), 2);
+        expect(await curatedAt(3), 3);
       },
     );
 
@@ -5598,6 +5600,30 @@ void main() {
       expect(prompt, contains('message 2'));
       expect(prompt, isNot(contains('message 1')));
       expect(prompt, endsWith('\nThird'));
+    });
+
+    // The session holds the CLI's placeholder for a stopped turn, not the
+    // partial text the chat shows (BUG-368).
+    test('a fork at a stopped reply is cut before its prompt, and the '
+        "fork's first send hands both over", () async {
+      await storeChat();
+      await main.store.putMessage(
+        stored(3).copyWith(status: GaiaMessageStatus.cancelled),
+      );
+      runner.cutAt = 'entry-1';
+      await open();
+
+      final fork = await forkAt(3);
+      expect(runner.cutsAsked.single.after, 'm0');
+      expect(runner.cutsAsked.single.next, ['m2']);
+      expect((await chatOf(fork)).fork!.lastSeq, 1);
+
+      await turn('Fourth');
+      final prompt = runner.sent.single.prompt;
+      expect(prompt, contains('message 2'));
+      expect(prompt, contains('message 3'));
+      expect(prompt, isNot(contains('message 1')));
+      expect(prompt, endsWith('\nFourth'));
     });
 
     test(
