@@ -302,6 +302,243 @@ void main() {
     expect(result.sessionId, _thread);
   });
 
+  test("a fork missing the thread its history starts in isn't found", () async {
+    final client = CodexAppServerClient((_) {});
+    unawaited(client.initialize());
+    client.onLine('{"id":1,"result":{}}');
+    final turn = client.send(
+      threadId: _thread,
+      model: 'gpt-6.1-sol',
+      input: _text('Hi'),
+      tools: null,
+      onEvent: (_) {},
+    );
+    // Recorded on 0.166.0, resuming a fork copied without its source.
+    client.onLine(
+      '{"error":{"code":-32600,"message":"invalid paginated history lineage '
+      'for 01a1b478-ad81-7853-ab88-82456a25ee9c: missing source rollout"},'
+      '"id":2}',
+    );
+    final result = await turn;
+    expect(result.sessionFound, isFalse);
+    expect(result.isError, isTrue);
+  });
+
+  group('forking (GAIA_REWIND_HLD.md §10.2)', () {
+    const source = '01a1b47e-2000-7000-8000-000000000000';
+    const cut = '01a1b47e-273d-70d2-94a6-b5e3e950cea3';
+    const forked = '01a1b47e-45a1-7571-beb4-e247817dc7bf';
+
+    test("a prompt's turn is found by the id it was sent with", () async {
+      for (final (id, turn) in [('gaia-fork-p1', cut), ('gaia-none', null)]) {
+        final replay = _Replay('turns.jsonl');
+        unawaited(replay.client.initialize());
+        final found = replay.client.turnOf(source, id);
+        await replay.feed();
+        expect(await found, turn, reason: id);
+        expect(replay.sentFor('thread/turns/list')['params'], {
+          'threadId': source,
+          'sortDirection': 'desc',
+        });
+      }
+    });
+
+    test('newest first, read until the last turn with the id', () async {
+      final client = CodexAppServerClient((_) {});
+      final found = client.turnOf(source, 'p');
+      String page(int id, List<String> turns, String? next) => jsonEncode({
+        'id': id,
+        'result': {
+          'data': [
+            for (final turn in turns)
+              {
+                'id': turn,
+                'items': [
+                  {'type': 'userMessage', 'clientId': turn.split('-').first},
+                ],
+              },
+          ],
+          'nextCursor': next,
+        },
+      });
+      client.onLine(page(1, ['r-4', 'q-3'], 'more'));
+      await Future<void>.delayed(Duration.zero);
+      // Not read past: a third page is never answered.
+      client.onLine(page(2, ['p-2', 'p-1'], 'more'));
+      expect(await found, 'p-2');
+    });
+
+    test("a fork's first turn forks the source kept to the cut, names its "
+        'prompt, and runs on the new thread', () async {
+      final replay = _Replay('fork.jsonl');
+      String? newThread;
+      final events = <GaiaAgentEvent>[];
+      unawaited(replay.client.initialize());
+      final turn = replay.client.send(
+        threadId: null,
+        model: 'gpt-6.1-sol',
+        input: _text('What colour did I choose earlier?'),
+        tools: _Tools(),
+        onEvent: events.add,
+        instructions: '# Memories',
+        clientId: 'gaia-fork-p3',
+        fork: (sessionId: source, keepAt: cut),
+        onNewThread: (id) async => newThread = id,
+      );
+      await replay.feed();
+      expect(replay.sentFor('thread/fork')['params'], {
+        'threadId': source,
+        'lastTurnId': cut,
+        'model': 'gpt-6.1-sol',
+        'approvalPolicy': 'on-request',
+        'excludeTurns': true,
+      });
+      expect(replay.sent.where((m) => m['method'] == 'thread/start'), isEmpty);
+      final start = replay.sentFor('turn/start')['params']! as Map;
+      expect(start['threadId'], forked);
+      expect(start['clientUserMessageId'], 'gaia-fork-p3');
+      expect(newThread, forked);
+      final result = await turn;
+      expect(result.isError, isFalse);
+      expect(result.sessionId, forked);
+      expect(result.text, 'Blue, NONE');
+    });
+
+    test(
+      'a fork Codex refuses is not found, so the chat is handed over',
+      () async {
+        final client = CodexAppServerClient((_) {});
+        unawaited(client.initialize());
+        client.onLine('{"id":1,"result":{}}');
+        final turn = client.send(
+          threadId: null,
+          model: 'gpt-6.1-sol',
+          input: _text('Hi'),
+          tools: null,
+          onEvent: (_) {},
+          fork: (sessionId: source, keepAt: cut),
+        );
+        client.onLine(
+          '{"error":{"code":-32600,"message":"turn not found"},"id":2}',
+        );
+        final result = await turn;
+        expect(result.sessionFound, isFalse);
+        expect(result.sessionId, source);
+      },
+    );
+
+    test('a fork of a thread started with other tools is handed over '
+        'without starting Codex', () async {
+      final root = Directory.systemTemp.createTempSync('gaia_codex_fork_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final home = p.join(root.path, 'home');
+      Directory(home).createSync();
+      File(
+        p.join(home, 'gaia-threads.json'),
+      ).writeAsStringSync(jsonEncode({'old': 'another-hash'}));
+      final runner = CodexAppServerRunner(
+        workingDirectory: p.join(root.path, 'ws'),
+        codexHome: home,
+        userCodexHome: p.join(root.path, 'user'),
+        fallback: CodexRunner(
+          workingDirectory: p.join(root.path, 'ws'),
+          codexHome: home,
+        ),
+      );
+      final result = await runner.send(
+        chatId: 'chat',
+        sessionId: null,
+        model: 'gpt-6.1-sol',
+        prompt: 'Hi',
+        fork: (sessionId: 'old', keepAt: cut),
+        onEvent: (_) {},
+      );
+      expect(result.sessionFound, isFalse);
+      expect(result.sessionId, 'old');
+    });
+
+    test('a forked thread copied to another home takes the thread its '
+        "history starts in, but doesn't overwrite one there", () async {
+      final root = Directory.systemTemp.createTempSync('gaia_codex_copy_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      CodexAppServerRunner runner(String home) => CodexAppServerRunner(
+        workingDirectory: p.join(root.path, 'ws'),
+        codexHome: p.join(root.path, home),
+        userCodexHome: p.join(root.path, 'user'),
+        fallback: CodexRunner(
+          workingDirectory: p.join(root.path, 'ws'),
+          codexHome: p.join(root.path, home),
+        ),
+      );
+      File rollout(String home, String thread) => File(
+        p.join(
+          root.path,
+          home,
+          'sessions',
+          '2026',
+          '11',
+          '07',
+          'rollout-2026-11-07T00-00-00-$thread.jsonl',
+        ),
+      );
+      String meta(String thread, [String? base]) => jsonEncode({
+        'type': 'session_meta',
+        'payload': {
+          'id': thread,
+          'history_base': ?(base == null ? null : {'thread_id': base}),
+        },
+      });
+      rollout('from', 'root')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('${meta('root')}\n');
+      rollout(
+        'from',
+        'middle',
+      ).writeAsStringSync('${meta('middle', 'root')}\n');
+      rollout('from', 'leaf').writeAsStringSync('${meta('leaf', 'middle')}\n');
+      // Followed here earlier, with a turn since.
+      rollout('to', 'middle')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('${meta('middle', 'root')}\n{"later":1}\n');
+
+      expect(await runner('to').copyThreadFrom(runner('from'), 'leaf'), isTrue);
+      expect(rollout('to', 'leaf').existsSync(), isTrue);
+      expect(rollout('to', 'middle').readAsStringSync(), contains('later'));
+      // Kept rather than followed: its own base was never copied here.
+      expect(rollout('to', 'root').existsSync(), isFalse);
+    });
+
+    test('an empty thread copies as it is', () async {
+      final root = Directory.systemTemp.createTempSync('gaia_codex_copy_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      CodexAppServerRunner runner(String home) => CodexAppServerRunner(
+        workingDirectory: p.join(root.path, 'ws'),
+        codexHome: p.join(root.path, home),
+        userCodexHome: p.join(root.path, 'user'),
+        fallback: CodexRunner(
+          workingDirectory: p.join(root.path, 'ws'),
+          codexHome: p.join(root.path, home),
+        ),
+      );
+      File(
+        p.join(
+          root.path,
+          'from',
+          'sessions',
+          '2026',
+          '11',
+          '07',
+          'rollout-2026-11-07T00-00-00-blank.jsonl',
+        ),
+      ).createSync(recursive: true);
+
+      expect(
+        await runner('to').copyThreadFrom(runner('from'), 'blank'),
+        isTrue,
+      );
+    });
+  });
+
   test('stop interrupts the running turn, which fails at once', () async {
     final replay = _Replay('tools.jsonl');
     unawaited(replay.client.initialize());

@@ -110,7 +110,7 @@ typedef GaiaControlHost = ({
 /// In Auto (GAIA_AUTONOMY_HLD.md §4), which [isAuto] asks the main instance at
 /// each call, actions and the CLI's prompts raise no card: what ran goes in one
 /// activity card for the turn (§7), through [onActivity].
-class GaiaChatTools implements GaiaTurnTools {
+class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
   GaiaChatTools({
     required this.chatId,
     required this.cards,
@@ -123,12 +123,20 @@ class GaiaChatTools implements GaiaTurnTools {
     this.isAuto,
     this.onActivity,
     this.resume,
+    this.onResult,
     this.hold = kGaiaCardHold,
   });
 
   final String chatId;
   final GaiaCards cards;
   final void Function(GaiaCardPart card) onCard;
+
+  /// A kept-result tool answered call `callId` (§15.6).
+  final void Function(String callId, GaiaToolResult result)? onResult;
+
+  @override
+  void keep(String callId, String name, GaiaToolResult result) =>
+      onResult?.call(callId, result);
 
   /// Whether the chat is in Auto now; never, for null.
   final Future<bool> Function()? isAuto;

@@ -10,11 +10,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart'
-    show
-        RenderAbstractViewport,
-        RenderSliverList,
-        ScrollCacheExtent,
-        SliverGeometry;
+    show RenderAbstractViewport, ScrollCacheExtent;
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart'
     show voyagerSpellCheckServiceProvider;
@@ -60,6 +56,7 @@ import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
+import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
@@ -1631,7 +1628,8 @@ class _MessagesState extends State<_Messages> {
         final list = ScrollConfiguration(
           // Scrolls without a bar.
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: _SteadyList.builder(
+          child: GaiaSteadyList.builder(
+            steady: true,
             controller: _scroll,
             reverse: true,
             scrollCacheExtent: _cacheExtent,
@@ -1823,109 +1821,6 @@ String _pinnedLabel(GaiaMessage message) {
     else if (files.length > 1)
       '${files.length} files',
   ].join(', ');
-}
-
-/// The chat's list. Scrolled up, what's being read stays put as what's below
-/// it changes; at the bottom, it follows the newest.
-class _SteadyList extends ListView {
-  _SteadyList.builder({
-    super.controller,
-    super.reverse,
-    super.scrollCacheExtent,
-    super.padding,
-    super.itemCount,
-    super.findChildIndexCallback,
-    required super.itemBuilder,
-  }) : super.builder();
-
-  @override
-  Widget buildChildLayout(BuildContext context) =>
-      _SteadySliverList(delegate: childrenDelegate);
-}
-
-class _SteadySliverList extends SliverList {
-  const _SteadySliverList({required super.delegate});
-
-  @override
-  RenderSliverList createRenderObject(BuildContext context) =>
-      _RenderSteadySliverList(
-        childManager: context as SliverMultiBoxAdaptorElement,
-      );
-}
-
-/// The list's offset counts from its bottom, so what changes below would move
-/// what's above. It's put right here, in layout: from a frame callback the
-/// moved list would already have been painted, and shake.
-class _RenderSteadySliverList extends RenderSliverList {
-  _RenderSteadySliverList({required super.childManager});
-
-  /// The child across the list's top, and how far along the list its top
-  /// was, while scrolled up.
-  RenderBox? _anchor;
-  double _anchorTop = 0;
-
-  @override
-  void performLayout() {
-    // Scrolled up since the last layout moves the list, not the anchor along
-    // it, so only what's changed below it counts.
-    final anchor = constraints.scrollOffset > 0 ? _anchor : null;
-    final top = anchor == null ? null : _measureTopOf(anchor);
-    if (top != null) {
-      final moved = max(top - _anchorTop, -constraints.scrollOffset);
-      _anchorTop = top;
-      if (moved.abs() > 0.01) {
-        geometry = SliverGeometry(scrollOffsetCorrection: moved);
-        return;
-      }
-    }
-    super.performLayout();
-    final correction = geometry!.scrollOffsetCorrection;
-    if (correction != null) {
-      // Its own, for children it found the list's start isn't where it
-      // thought: that moves every child along it.
-      _anchorTop += correction;
-    } else {
-      _anchorAcrossTop();
-    }
-  }
-
-  /// How far along the list [anchor]'s top is, laying out what's below it
-  /// first, as [anchor] could be dropped as out of view otherwise. Null once
-  /// it's not among the children laid out, as when kept alive off screen.
-  double? _measureTopOf(RenderBox anchor) {
-    final constraints = this.constraints.asBoxConstraints();
-    var child = firstChild;
-    var top = child == null ? null : childScrollOffset(child);
-    if (top == null) return null;
-    while (child != null) {
-      child.layout(constraints, parentUsesSize: true);
-      top = top! + paintExtentOf(child);
-      if (child == anchor) return top;
-      var next = childAfter(child);
-      // A message synced in between, not built yet.
-      if (next != null && indexOf(next) != indexOf(child) + 1) {
-        next = insertAndLayoutChild(
-          constraints,
-          after: child,
-          parentUsesSize: true,
-        );
-      }
-      child = next;
-    }
-    return null;
-  }
-
-  void _anchorAcrossTop() {
-    _anchor = null;
-    if (constraints.scrollOffset <= 0) return;
-    final listTop = constraints.scrollOffset + constraints.remainingPaintExtent;
-    for (var child = firstChild; child != null; child = childAfter(child)) {
-      final top = childScrollOffset(child)! + paintExtentOf(child);
-      _anchor = child;
-      _anchorTop = top;
-      if (top >= listTop) return;
-    }
-  }
 }
 
 /// Scrolling to a message that a reply growing below keeps moving along the
@@ -2252,7 +2147,18 @@ class _MessageView extends StatelessWidget {
               ),
               GaiaActivityPart(:final tools) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: GaiaActivityChip(label: _activity(tools), part: part),
+                // Rebuilt with the controller too: a result is kept after its
+                // call shows.
+                child: ListenableBuilder(
+                  listenable: controller,
+                  builder: (context, _) => GaiaActivityChip(
+                    label: _activity(tools),
+                    part: part,
+                    hasResult: (id) =>
+                        controller.hasToolResult(message.chatId, id),
+                    result: (id) => controller.toolResult(message.chatId, id),
+                  ),
+                ),
               ),
               // Rebuilt with the controller, not the message: whether it's
               // waiting and what's picked aren't on the message.

@@ -1,6 +1,8 @@
 # Gaia — Rewinding a Chat (HLD)
 
-Status: **Phase 1 built and live-tested (2026-11-06). Every §10.1 check passed; one bug found (BUG-371) and fixed. Results at the end of §10.1.**
+Status: **Phase 1 built and live-tested (2026-11-06). Every §10.1 check passed; one bug found (BUG-371) and fixed. Results at the end of §10.1.
+Phase 2 (Codex native) built 2026-11-07 and passed against the real CLI (0.166.0) through
+Gaia's runner; not yet run in the app (§10.2).**
 Built as designed, except: each `rewinds` range also names the device that made it (`by`),
 so only that device moves a late reply (§5.1); rewind isn't offered at the chat's last
 message (nothing to drop) nor at a prompt whose reply is streaming here (§4 step 0); and
@@ -45,6 +47,7 @@ Why this way round, rather than cutting the chat's own session in place:
   auto-fork, which carries on from it with a plain `--resume`.
 - **Codex needs nothing new.** Its thread moves to the auto-fork, and the chat hands over
   (§6). `thread/revert` would need every turn's id stored, which Gaia doesn't do (§10.2).
+  *Since Phase 2, Codex forks the same way: the chat's next send is `thread/fork` cut at K.*
 - **The rule from §9.6 holds by construction:** the chat never drops a message an agent
   session of its own still remembers, because it keeps no session that saw the erased
   messages. Other devices are the one gap, and §5 closes it.
@@ -184,8 +187,7 @@ The chat's next send falls back to the transcript handoff (GAIA_FORKING_HLD.md �
 
 | Case | Why |
 |---|---|
-| Codex, always | Its thread went to the auto-fork, and Codex has no native fork here |
-| No Claude Code session on this device reaches K, or `_forkRecord` finds no cut | No record is made (as for a fork, §5.5 there) |
+| No Claude Code or Codex session on this device reaches K, or `_forkRecord` finds no cut (on Codex: K's last prompt was sent before Phase 2, so its turn has no Gaia id) | No record is made (as for a fork, §5.5 there) |
 | The native fork is refused, or its first turn fails with nothing shown | Phase 2's fallback, as built (§10.4, §10.5 there) |
 | Any other device | Its session was stale (§5), or it never had one |
 
@@ -240,7 +242,7 @@ The menu item's tooltip, or the toast, says "Rewinds the conversation, not what 
 | Phase | Work | Done when |
 |---|---|---|
 | **1. Rewind** | §3 to §9 on both CLIs: native for Claude Code through the fork record, handoff for Codex | See §10.1 |
-| **2. Codex native (optional)** | §10.2 | A Codex rewind's next reply recalls a tool result from a kept turn |
+| **2. Codex native** | §10.2. Built 2026-11-07 | A Codex rewind's next reply recalls a tool result from a kept turn |
 | **3. Files (not planned)** | §10.3 | n/a |
 
 ### 10.1 Phase 1
@@ -321,16 +323,68 @@ database.
 | Memories | Pass. A chat stated a favourite tree, then a hobby, and was rewound to drop the hobby turn. After the 10-minute curator: the tree was proposed, the hobby not; the chat's `curatedSeq` is 1; the auto-fork, with no turn of its own, stayed at -1. Auto-forks that did get a turn were then curated, as §9 says. |
 | Take-back | Pass in both. In an auto-fork and in a rewound chat (on its native fork), a quick stop gave the message back, a real cut was recorded in the rewound chat, and the next turn didn't know the stopped message. The Gaia tests (forking and take-back included) pass. |
 
-### 10.2 Phase 2: Codex native (optional)
+### 10.2 Phase 2: Codex native
 
-Two possible ways, neither checked:
-- **`thread/fork`, if the app server has it.** Use it the way §2 uses Claude Code's fork:
-  the auto-fork keeps the thread, and the chat forks it at K.
-- **`thread/revert {beforeTurnId}`** on a copy of the thread. This needs each message to
-  store its Codex turn id (a new column), since today only the running turn's id is kept
-  (`codex_app_server.dart`).
+The design proposed two ways: `thread/fork` if the app server had it, or `thread/revert` on a
+copy of the thread, which would need each message to store its Codex turn id. The 0.166.0
+schema (`codex app-server generate-json-schema --experimental`) has `thread/fork` with
+`lastTurnId`, and `turn/start` takes a `clientUserMessageId` that Codex keeps on the turn's
+user message (`clientId`). So it's `thread/fork`, and no turn id is stored: Gaia names each
+prompt by its message id, as it names Claude Code's entries, and finds the turn by that id
+when it needs it.
 
-Look at `codex app-server generate-json-schema --experimental` before choosing.
+**Built (2026-11-07):**
+- **Every Codex turn names its prompt.** `turn/start` sends `clientUserMessageId` = the
+  message id (the `promptId` Claude Code already gets). A copied message's `entryId` is its
+  origin's id, so a fork's or auto-fork's copies still match their thread's turns.
+- **The cut.** `CodexAccountRunners` is now a `GaiaSessionForker`. Its `forkCut` reads the
+  thread's turns (`thread/turns/list`, every page, no resume needed) on the account's
+  app-server, started just for that when none is running. The cut is the turn of `after`,
+  the last prompt the fork answers. `next`, `awaiting` and `endAt` aren't needed: Codex's
+  turns are whole, a taken-back turn is reverted at once, and a pending record's cut is
+  never before `after`'s turn. No such turn (a prompt sent before Phase 2, or from
+  another device) means no record, and a handoff.
+- **The record.** The same `GaiaForkRecord`, keyed to the Codex session, with `keepAt` = the
+  turn id. One per chat, as before: `_forkRecord` tries the adapter the chat's tier runs
+  on first, then the other. The chat's first send on that account calls `thread/fork
+  {threadId, lastTurnId}` in place of `thread/start`, then runs the turn on the new thread.
+  The fork keeps its source's tools and instructions, so no memory index is sent, as for
+  Claude Code. A fork Codex refuses, a source thread with another set of tools, or no
+  app-server (`codex exec` can't fork) report the session not found, and Phase 1's
+  fallback hands the chat over.
+- **Forks of Codex chats go native too**, since they share `_forkRecord`
+  (GAIA_FORKING_HLD.md).
+- **`rewound`** forgets the chat's last stop. There's no process to release (one app-server
+  serves every chat) and no take-back pending (Codex's revert is immediate).
+- **A forked thread's history lives in its source's rollout.** Its rollout is `paginated`,
+  with a `history_base` naming the thread it was forked from. Copying a thread to another
+  account (`copyThreadFrom`) now takes that thread along, unless one is there already, which
+  may have later turns. Without it the resume fails with "invalid paginated history lineage
+  … missing source rollout", which now counts as not found too, so the chat hands over
+  rather than failing every send. Gaia never deletes rollouts, so on one device the source
+  is always there.
+
+**Checked against the real CLI (0.166.0):**
+- A probe outside Gaia: `clientId` survives a new process, and `thread/turns/list` and
+  `thread/fork` work there with no resume. The fork recalls a tool result from the kept
+  turn, doesn't know a later turn, and keeps its tools. The source still knows both. A fork
+  copied to a new home without its source fails as above, and with it recalls the result.
+- `gaia_codex_contract_test.dart`, "app-server fork", through Gaia's runner: `forkCut`
+  finds the turn by its Gaia id in a new process (and not an id never sent), the forked
+  first send recalls `ask_user`'s answer from the kept turn and not the dropped turn's word,
+  the source still knows both, and the fork copied to another home resumes whole. Its
+  transcript is the new fixtures, `turns.jsonl` and `fork.jsonl`.
+- A trap for anyone checking recall: Codex calls Gaia's tools from its script runner, and a
+  result reaches the model only if the script prints it. A prompt that doesn't make it read
+  the result gives a fork that "forgot" what its source never saw either.
+
+**Still to run in the app (gaiaqa):**
+- A Codex rewind, as §10.1's Claude Code check: a tool result only, then two more turns;
+  rewind at the last prompt. The chat's next send is `thread/fork` (the app-server log shows
+  it), recalls the result, and doesn't know the dropped turn. The auto-fork resumes the old
+  thread and knows everything.
+- A fork of a Codex chat is native the same way.
+- A Codex chat that last ran before Phase 2 still hands over.
 
 ### 10.3 Files (not planned)
 
@@ -356,3 +410,5 @@ out. If it's wanted, start with a contract check in `gaia_cli_contract_test.dart
 - `lib/core/sync/firestore_document_mapper.dart`: `rewinds` and its union merge.
 - `lib/features/gaia/adapters/claude_code/claude_code_runner.dart`: moving a pending
   take-back cut, and releasing the old live process.
+- Phase 2: `lib/features/gaia/adapters/codex/codex_app_server.dart` (prompt ids, the cut,
+  `thread/fork`, copying a fork's source), and `_forkRecord` in the controller.

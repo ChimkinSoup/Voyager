@@ -7,6 +7,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
+import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -565,9 +566,7 @@ void main() {
         reply(3, 'b', text: List.filled(16, 'A paragraph.').join('\n\n')),
       ],
     );
-    final list = find.byWidgetPredicate(
-      (widget) => widget.runtimeType.toString() == '_SteadyList',
-    );
+    final list = find.byType(GaiaSteadyList);
     // A scroll, for the list to see its prompt is cut off.
     await tester.drag(list, const Offset(0, 40));
     await tester.pump(const Duration(seconds: 1));

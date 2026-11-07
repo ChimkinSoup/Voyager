@@ -1290,7 +1290,9 @@ double calendarMonthEventBarHeight({
     0.0,
     double.infinity,
   );
-  if (visibleEventCount >= 4) {
+  // Keyed on the cell's capacity, not on how many events it holds: a 4th
+  // event filling the last slot must not resize the bars above it.
+  if (slotCount >= 4) {
     eventAreaHeight += style.cellPadding.bottom;
   }
   final slotGaps = (slotCount - 1) * betweenEventGap;
@@ -2314,25 +2316,29 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                   highlighted: editingEventId == event.id,
                   onTap: () => onEventTap(event),
-                  child: Container(
-                    height: 24,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  // DecoratedBox, not Container.decoration: a done event's
+                  // outline would otherwise inset the title by its width.
+                  child: DecoratedBox(
                     decoration: calendarEventFillDecoration(
                       paletteColor(event.colorValue, context),
                       borderRadius: BorderRadius.circular(6),
                       hollow: done,
                     ),
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      event.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppFonts.style(
-                        fontSize: 11,
-                        height: 1,
-                        color: calendarEventLabelColor(
-                          paletteColor(event.colorValue, context),
-                          hollow: done,
+                    child: Container(
+                      height: 24,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        event.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppFonts.style(
+                          fontSize: 11,
+                          height: 1,
+                          color: calendarEventLabelColor(
+                            paletteColor(event.colorValue, context),
+                            hollow: done,
+                          ),
                         ),
                       ),
                     ),
@@ -2463,29 +2469,33 @@ class CalendarDayEventBar extends StatelessWidget {
             eventId: calendarEventTapKey(event, date),
             isSegmentStart: isStart,
             isSegmentEnd: isEnd,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+            // DecoratedBox, not Container.decoration: a done event's outline
+            // would otherwise inset the title by its width.
+            child: DecoratedBox(
               decoration: calendarEventFillDecoration(
                 eventColor,
                 borderRadius: borderRadius,
                 hollow: done,
               ),
-              alignment: Alignment.centerLeft,
-              child: showTitle ?? isStart
-                  ? Text(
-                      event.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppFonts.style(
-                        fontSize: fontSize,
-                        height: 1,
-                        color: calendarEventLabelColor(
-                          eventColor,
-                          hollow: done,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.centerLeft,
+                child: showTitle ?? isStart
+                    ? Text(
+                        event.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppFonts.style(
+                          fontSize: fontSize,
+                          height: 1,
+                          color: calendarEventLabelColor(
+                            eventColor,
+                            hollow: done,
+                          ),
                         ),
-                      ),
-                    )
-                  : null,
+                      )
+                    : null,
+              ),
             ),
           ),
         ),

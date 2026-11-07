@@ -208,7 +208,7 @@ Map<String, Rect> _weekBlocks(WidgetTester tester) {
     final fill = find.descendant(
       of: find.byWidget(block),
       matching: find.byWidgetPredicate(
-        (w) => w is Container && w.decoration != null,
+        (w) => w is DecoratedBox && w.child is Container,
       ),
     );
     blocks[_key(block.event.id, column)] = tester.getRect(fill.first);

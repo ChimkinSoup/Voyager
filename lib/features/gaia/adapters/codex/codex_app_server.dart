@@ -13,10 +13,23 @@
 //     developerInstructions?} -> {thread: {id}}; a thread keeps its tools
 //     when it's resumed
 //   thread/resume {threadId, model, approvalPolicy} -> an error when
-//     there's no such thread ("no rollout found for thread id …"); a
+//     there's no such thread ("no rollout found for thread id …"), or a
+//     forked one's `history_base` thread is missing ("invalid paginated
+//     history lineage for <base>: missing source rollout"); a
 //     thread keeps the developer instructions it started with, and ignores
 //     new ones given on a resume (checked on 0.164.0)
-//   turn/start {threadId, model, input: [text | localImage]} -> {turn: {id}}
+//   turn/start {threadId, model, input: [text | localImage],
+//     clientUserMessageId?} -> {turn: {id}}; the id is the Gaia message's,
+//     kept with the turn's userMessage item as `clientId`
+//   thread/turns/list {threadId, cursor?} -> {data: [{id, items: [{type,
+//     clientId?}]}], nextCursor}: works on a thread this process hasn't
+//     loaded. Gaia finds a prompt's turn by its clientId, to fork there
+//     (GAIA_REWIND_HLD.md §10.2)
+//   thread/fork {threadId, lastTurnId, model, approvalPolicy, excludeTurns}
+//     -> {thread: {id}}: a new thread with the turns up to lastTurnId, its
+//     tools and instructions the source's. Checked on 0.166.0, from disk
+//     with no resume first: it recalls a tool result from a kept turn, and
+//     doesn't know a later one
 //   turn/interrupt {threadId, turnId}
 //   thread/revert {threadId, beforeTurnId}: the thread's saved history
 //     without that turn and every later one, for a stopped turn taken back
@@ -218,11 +231,14 @@ class CodexAppServerClient {
   }
 
   /// A turn on [threadId], resumed if this process hasn't loaded it, or on
-  /// a new thread, which [onNewThread] is told of. [onThread] is told the
-  /// turn's thread once [stop] can reach it. A resume that finds no thread
-  /// ends with `sessionFound: false`; one that fails otherwise, with an
-  /// error that keeps it. [instructions] are a new thread's developer
-  /// instructions; a resumed thread keeps those it started with.
+  /// a new thread, which [onNewThread] is told of: [fork]'s thread kept up
+  /// to its turn, when given. [onThread] is told the turn's thread once
+  /// [stop] can reach it. A resume that finds no thread, or a fork Codex
+  /// refuses, ends with `sessionFound: false`; a resume that fails
+  /// otherwise, with an error that keeps it. [instructions] are a new
+  /// thread's developer instructions; a resumed or forked thread keeps those
+  /// it started with. [clientId] names the prompt in the thread, for
+  /// [turnOf].
   Future<GaiaTurnResult> send({
     required String? threadId,
     required String model,
@@ -230,11 +246,33 @@ class CodexAppServerClient {
     required GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
     String instructions = '',
+    String? clientId,
+    GaiaForkCut? fork,
     void Function(String threadId)? onThread,
     Future<void> Function(String threadId)? onNewThread,
   }) async {
     final String thread;
-    if (threadId == null) {
+    if (threadId == null && fork != null) {
+      final Map<String, Object?> forked;
+      try {
+        forked = await _request('thread/fork', {
+          'threadId': fork.sessionId,
+          'lastTurnId': fork.keepAt,
+          'model': model,
+          'approvalPolicy': 'on-request',
+          'excludeTurns': true,
+        });
+      } on _RpcError catch (error) {
+        return GaiaTurnResult(
+          sessionId: fork.sessionId,
+          sessionFound: false,
+          isError: true,
+          text: error.message,
+        );
+      }
+      thread = _string(_map(forked, 'thread', ''), 'id', '');
+      await onNewThread?.call(thread);
+    } else if (threadId == null) {
       final Map<String, Object?> started;
       try {
         started = await _request('thread/start', {
@@ -260,9 +298,12 @@ class CodexAppServerClient {
         } on _RpcError catch (error) {
           return GaiaTurnResult(
             sessionId: thread,
-            // Only a missing thread: another failure keeps the chat on it.
-            // The contract check fails if Codex rewords this.
-            sessionFound: !error.message.contains('no rollout found'),
+            // Only a missing thread, or a fork missing the thread its history
+            // starts in, which can never load: another failure keeps the
+            // chat on it. The contract check fails if Codex rewords these.
+            sessionFound:
+                !error.message.contains('no rollout found') &&
+                !error.message.contains('missing source rollout'),
             isError: true,
             text: error.message,
           );
@@ -281,6 +322,7 @@ class CodexAppServerClient {
         'threadId': thread,
         'model': model,
         'input': input,
+        'clientUserMessageId': ?clientId,
       });
       turn.turnId ??= _string(_map(started, 'turn', ''), 'id', '');
     } on _RpcError catch (error) {
@@ -330,6 +372,41 @@ class CodexAppServerClient {
     } on GaiaRunException catch (error) {
       return 'Codex refused to take it back: $error';
     }
+  }
+
+  /// The id of [threadId]'s last turn whose prompt was sent as [clientId];
+  /// null when it has none, as for a prompt sent before Gaia named them.
+  /// Throws a [GaiaRunException] when Codex refuses.
+  Future<String?> turnOf(String threadId, String clientId) async {
+    String? cursor;
+    do {
+      final Map<String, Object?> page;
+      try {
+        page = await _request('thread/turns/list', {
+          'threadId': threadId,
+          // Newest first: the first match is the last turn.
+          'sortDirection': 'desc',
+          'cursor': ?cursor,
+        });
+      } on _RpcError catch (error) {
+        throw GaiaRunException(error.message);
+      }
+      for (final turn in _field<List<Object?>>(page, 'data', '')) {
+        if (turn is! Map<String, Object?>) {
+          throw CodexParseException('bad turn', '$turn');
+        }
+        if (_field<List<Object?>>(turn, 'items', '').any(
+          (item) =>
+              item is Map &&
+              item['type'] == 'userMessage' &&
+              item['clientId'] == clientId,
+        )) {
+          return _string(turn, 'id', '');
+        }
+      }
+      cursor = page['nextCursor'] as String?;
+    } while (cursor != null);
+    return null;
   }
 
   void _interrupt(String threadId, _Turn turn) {
@@ -566,7 +643,7 @@ class CodexAppServerClient {
               'name': _string(params, 'tool', line),
               'arguments': params['arguments'],
             },
-          }, tools);
+          }, tools, callId: params['callId'] as String?);
           final called = answer!['result']! as Map<String, Object?>;
           result = {
             'contentItems': [
@@ -753,9 +830,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     String sessionInstructions = '',
     // Its home is the account: [CodexAccountRunners] picks the runner.
     GaiaAccount? account,
-    // Codex names its own items.
     String? promptId,
-    // Codex doesn't fork natively (GAIA_FORKING_HLD.md §6).
     GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
@@ -772,6 +847,8 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         directories: directories,
         tools: tools,
         sessionInstructions: sessionInstructions,
+        promptId: promptId,
+        fork: sessionId == null ? fork : null,
         onEvent: onEvent,
       );
       // Stopped while it opened, then ended there with nothing sent (a home
@@ -792,13 +869,24 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required Set<String> directories,
     required GaiaTurnTools? tools,
     required String sessionInstructions,
+    required String? promptId,
+    required GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
-    Future<GaiaTurnResult> fallBack() {
+    Future<GaiaTurnResult> fallBack() async {
       // Stopped while this one opened: never handed on.
       _opening.remove(chatId);
       if (_stoppedOpening.contains(chatId)) {
         throw GaiaRunException('Stopped.');
+      }
+      // `codex exec` can't fork: the chat is handed over instead.
+      if (fork != null) {
+        return GaiaTurnResult(
+          sessionId: fork.sessionId,
+          sessionFound: false,
+          isError: true,
+          text: "Codex's app-server isn't available to fork the thread.",
+        );
       }
       return fallback.send(
         chatId: chatId,
@@ -820,9 +908,11 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     );
     if (notReady != null) return notReady;
     final threadTools = await (_threadToolsRead ??= _readThreadTools());
-    if (sessionId != null && threadTools[sessionId] != kCodexToolsHash) {
+    // A fork keeps its source's tools.
+    if ((sessionId ?? fork?.sessionId) case final thread?
+        when threadTools[thread] != kCodexToolsHash) {
       return GaiaTurnResult(
-        sessionId: sessionId,
+        sessionId: thread,
         sessionFound: false,
         isError: true,
         text: "This chat's Codex thread has another set of Gaia's tools.",
@@ -853,6 +943,8 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         tools: tools,
         onEvent: onEvent,
         instructions: sessionInstructions,
+        clientId: promptId,
+        fork: fork,
         onThread: (threadId) {
           // Once the thread is up, so what Codex starts with it, such as MCP
           // servers, is never taken for a command.
@@ -883,11 +975,34 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     }
   }
 
-  /// `account/rateLimits/read`, on the process turns use so the home's login
-  /// has one owner. One started just for this goes straight after, so idle
-  /// polling leaves no server running. Throws a [GaiaRunException] when
-  /// refused or when the server won't start.
-  Future<Map<String, Object?>> readRateLimits() async {
+  /// `account/rateLimits/read`. Throws a [GaiaRunException] when refused or
+  /// when the server won't start.
+  Future<Map<String, Object?>> readRateLimits() =>
+      _request((client) => client.readRateLimits());
+
+  /// The turn of the prompt [after] in [threadId], which a fork keeps up to
+  /// (GAIA_REWIND_HLD.md §10.2); null when there's none, or Codex can't say.
+  Future<String?> forkCut(String threadId, String after) async {
+    try {
+      return await _request((client) => client.turnOf(threadId, after));
+    } on GaiaRunException catch (error) {
+      debugPrint('[gaia] Codex fork cut of $threadId not found: $error');
+      return null;
+    } on CodexParseException catch (error) {
+      debugPrint('[gaia] Codex fork cut of $threadId not read: $error');
+      return null;
+    } on TimeoutException {
+      return null;
+    }
+  }
+
+  /// [use] on the process turns use, so the home's login has one owner. One
+  /// started just for this goes straight after, so idle polling leaves no
+  /// server running. Throws a [GaiaRunException] when the server won't
+  /// start.
+  Future<T> _request<T>(
+    Future<T> Function(CodexAppServerClient client) use,
+  ) async {
     final running = _process;
     final wasRunning = running != null && !running.exited;
     // Reading needs no sandbox set up, unlike a turn.
@@ -901,9 +1016,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     if (process == null) throw GaiaRunException('app-server unavailable');
     try {
       // Here, not just the caller's: a hung read must still reach the kill.
-      return await process.client.readRateLimits().timeout(
-        const Duration(seconds: 30),
-      );
+      return await use(process.client).timeout(const Duration(seconds: 30));
     } finally {
       if (!wasRunning && _sending.isEmpty && _process == process) {
         unawaited(process.kill());
@@ -925,11 +1038,15 @@ class CodexAppServerRunner implements GaiaAgentRunner {
   /// Takes in [source]'s thread: its rollout, at the same place under
   /// `sessions`, and the tools it was started with, or a resume here would
   /// hand it over to a new thread. A server already running here finds it
-  /// (checked on 0.166.0). False when [source] doesn't have it.
+  /// (checked on 0.166.0). A forked thread's earlier turns are read from the
+  /// thread it was forked from, its `history_base`, which comes too unless
+  /// it's here already: a copy here may have later turns. False when
+  /// [source] doesn't have it.
   Future<bool> copyThreadFrom(
     CodexAppServerRunner source,
-    String threadId,
-  ) async {
+    String threadId, {
+    bool keepExisting = false,
+  }) async {
     final sessions = Directory(p.join(source.codexHome, 'sessions'));
     if (!await sessions.exists()) return false;
     await for (final entry in sessions.list(recursive: true)) {
@@ -941,8 +1058,12 @@ class CodexAppServerRunner implements GaiaAgentRunner {
           p.relative(entry.path, from: sessions.path),
         ),
       );
+      if (keepExisting && await copy.exists()) return true;
       await copy.parent.create(recursive: true);
       await entry.copy(copy.path);
+      if (await _historyBase(copy) case final base?) {
+        await copyThreadFrom(source, base, keepExisting: true);
+      }
       final tools = await (source._threadToolsRead ??= source
           ._readThreadTools());
       if (tools[threadId] case final hash?) {
@@ -951,6 +1072,32 @@ class CodexAppServerRunner implements GaiaAgentRunner {
       return true;
     }
     return false;
+  }
+
+  /// The thread [rollout]'s history starts in, from its first line's
+  /// `session_meta`; null for a thread that wasn't forked. Read leniently:
+  /// without it, a copied fork only loses its earlier turns.
+  static Future<String?> _historyBase(File rollout) async {
+    try {
+      final first = await rollout
+          .openRead()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .first;
+      return switch (jsonDecode(first)) {
+        {
+          'type': 'session_meta',
+          'payload': {'history_base': {'thread_id': final String base}},
+        } =>
+          base,
+        _ => null,
+      };
+    } on FormatException {
+      return null;
+    } on StateError {
+      // Empty.
+      return null;
+    }
   }
 
   Future<Map<String, Object?>> _readThreadTools() async {
@@ -1123,7 +1270,11 @@ class CodexAppServerRunner implements GaiaAgentRunner {
 /// `gaia-threads.json`. The login is copied from the account's folder; the
 /// Windows sandbox is the machine's, from the user's own Codex config.
 class CodexAccountRunners
-    implements GaiaAgentRunner, GaiaSessionCopier, GaiaAccountKeeper {
+    implements
+        GaiaAgentRunner,
+        GaiaSessionCopier,
+        GaiaSessionForker,
+        GaiaAccountKeeper {
   CodexAccountRunners({
     required this.workingDirectory,
     required this.homesRoot,
@@ -1212,9 +1363,7 @@ class CodexAccountRunners
     GaiaTurnTools? tools,
     String sessionInstructions = '',
     GaiaAccount? account,
-    // Codex names its own items.
     String? promptId,
-    // Codex doesn't fork natively (GAIA_FORKING_HLD.md §6).
     GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
@@ -1237,6 +1386,8 @@ class CodexAccountRunners
         directories: directories,
         tools: tools,
         sessionInstructions: sessionInstructions,
+        promptId: promptId,
+        fork: fork,
         onEvent: onEvent,
       );
     } finally {
@@ -1261,6 +1412,36 @@ class CodexAccountRunners
     required GaiaAccount to,
   }) async =>
       (await _runner(to)).copyThreadFrom(await _runner(from), sessionId);
+
+  /// The turn of [after], which a fork keeps up to: the thread's turns are
+  /// whole, so [next], [awaiting] and [endAt] aren't needed. A later turn,
+  /// or one a pending fork record cuts at, comes after [after]'s.
+  @override
+  Future<String?> forkCut({
+    required String chatId,
+    required String sessionId,
+    required GaiaAccount account,
+    required String after,
+    required List<String> next,
+    String? awaiting,
+    String? endAt,
+  }) async {
+    try {
+      return await (await _runner(account)).forkCut(sessionId, after);
+    } finally {
+      await _prune();
+    }
+  }
+
+  /// One app-server serves every chat, so there's no process to let go, and
+  /// a take-back's revert is made at once, so none is pending. A stop's turn
+  /// is only taken back straight after it, and this one's was kept.
+  @override
+  Future<void> rewound(String chatId, String forkId) async {
+    for (final runner in _runners.values) {
+      runner.forgetStop(chatId);
+    }
+  }
 
   @override
   bool isRunning(String chatId) =>

@@ -290,7 +290,8 @@ abstract interface class GaiaSessionCopier {
 }
 
 /// Where a fork's session branches off its source chat's (GAIA_FORKING_HLD.md
-/// §5.3): [sessionId], kept up to the entry [keepAt].
+/// §5.3): [sessionId], kept up to [keepAt], Claude Code's entry or Codex's
+/// turn (GAIA_REWIND_HLD.md §10.2).
 typedef GaiaForkCut = ({String sessionId, String keepAt});
 
 /// A runner whose native sessions can be forked (GAIA_FORKING_HLD.md §5).
@@ -401,7 +402,12 @@ class GaiaTurnBuilder {
         }
         final part = _parts.last as GaiaActivityPart;
         if (id != null) _calls[id] = (_parts.length - 1, part.tools.length);
-        _parts.last = part.adding(name, detail: detail, failure: failure);
+        _parts.last = part.adding(
+          name,
+          detail: detail,
+          failure: failure,
+          id: kGaiaKeptResultTools.contains(name) ? id : null,
+        );
       case GaiaToolDetails(:final details):
         return _update(
           details,

@@ -101,6 +101,8 @@ class GaiaDevPipe extends GaiaPipe {
         await _store.restoreChat(p['chatId']! as String);
         await _store.restoreDraft(p['chatId']! as String);
         return null;
+      case 'restorableChats':
+        return await _store.restorableChatIds();
       case 'messages':
         return [
           for (final message in await _store.messages(p['chatId']! as String))

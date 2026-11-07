@@ -535,6 +535,119 @@ void main() {
   );
 
   test(
+    'app-server fork (GAIA_REWIND_HLD.md §10.2): a prompt is found by its '
+    "Gaia id in a new process, a fork kept to its turn recalls that turn's "
+    "tool result and not a later turn, and it's whole once copied to another "
+    'home',
+    skip: !_enabled,
+    timeout: const Timeout(Duration(minutes: 8)),
+    () async {
+      final source = appServer('app_server_fork_source');
+      final tools = _ContractTools();
+      final forker = appServer('app_server_fork');
+      // Another account's home: its login folder names no sandbox, so none
+      // needs setting up behind a prompt.
+      final login = Directory(p.join(root.path, 'fork-login'))
+        ..createSync(recursive: true);
+      File(
+        p.join(defaultUserCodexHome(), 'auth.json'),
+      ).copySync(p.join(login.path, 'auth.json'));
+      final copyHome = Directory(p.join(root.path, 'fork-copy-home'));
+      if (copyHome.existsSync()) copyHome.deleteSync(recursive: true);
+      final copied = CodexAppServerRunner(
+        workingDirectory: p.join(root.path, 'ws'),
+        codexHome: copyHome.path,
+        userCodexHome: login.path,
+        fallback: CodexRunner(
+          workingDirectory: p.join(root.path, 'ws'),
+          codexHome: copyHome.path,
+        ),
+      );
+      try {
+        final first = await source.send(
+          chatId: 'contract',
+          sessionId: null,
+          model: _model,
+          // A tool called from Codex's script runner reaches the model only
+          // if the script prints its result.
+          prompt:
+              'Use the ask_user tool to ask me my favourite colour, with the '
+              'options Red and Blue, and make sure you read its result (print '
+              "it if your tool runner needs that). Don't tell me what I "
+              'chose: reply only "noted".',
+          tools: tools,
+          promptId: 'gaia-fork-p1',
+          onEvent: (_) {},
+        );
+        expect(first.isError, isFalse, reason: first.text);
+        expect(tools.asked, isNotEmpty);
+        final second = await source.send(
+          chatId: 'contract',
+          sessionId: first.sessionId,
+          model: _model,
+          prompt: 'Remember the word ZULU. Reply only "ok".',
+          promptId: 'gaia-fork-p2',
+          onEvent: (_) {},
+        );
+        expect(second.isError, isFalse, reason: second.text);
+        await source.killAll();
+
+        final cut = await forker.forkCut(first.sessionId, 'gaia-fork-p1');
+        expect(cut, isNotNull);
+        expect(await forker.forkCut(first.sessionId, 'gaia-none'), isNull);
+        final events = <GaiaAgentEvent>[];
+        final forked = await forker.send(
+          chatId: 'contract-fork',
+          sessionId: null,
+          model: _model,
+          prompt:
+              'What colour did I choose earlier, and which word did I ask you '
+              'to remember? Answer as: colour, word (NONE if there is none).',
+          promptId: 'gaia-fork-p3',
+          fork: (sessionId: first.sessionId, keepAt: cut!),
+          onEvent: events.add,
+        );
+        expect(forked.isError, isFalse, reason: forked.text);
+        expect(forked.sessionFound, isTrue);
+        expect(forked.sessionId, isNot(first.sessionId));
+        expect(text(events), contains('Blue'));
+        expect(text(events).toUpperCase(), isNot(contains('ZULU')));
+        // The source is untouched, and knows both.
+        final whole = <GaiaAgentEvent>[];
+        final control = await forker.send(
+          chatId: 'contract',
+          sessionId: first.sessionId,
+          model: _model,
+          prompt:
+              'What colour did I choose earlier, and which word did I ask you '
+              'to remember? Answer as: colour, word (NONE if there is none).',
+          onEvent: whole.add,
+        );
+        expect(control.isError, isFalse, reason: control.text);
+        expect(text(whole), contains('Blue'));
+        expect(text(whole).toUpperCase(), contains('ZULU'));
+        await forker.killAll();
+
+        expect(await copied.copyThreadFrom(forker, forked.sessionId), isTrue);
+        final resumed = <GaiaAgentEvent>[];
+        final again = await copied.send(
+          chatId: 'contract-fork',
+          sessionId: forked.sessionId,
+          model: _model,
+          prompt: 'What colour did I choose earlier? One word.',
+          onEvent: resumed.add,
+        );
+        expect(again.isError, isFalse, reason: again.text);
+        expect(text(resumed), contains('Blue'));
+      } finally {
+        await source.killAll();
+        await forker.killAll();
+        await copied.killAll();
+      }
+    },
+  );
+
+  test(
     "app-server: a thread Codex doesn't have isn't found",
     skip: !_enabled,
     timeout: _timeout,

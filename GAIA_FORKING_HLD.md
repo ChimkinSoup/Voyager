@@ -7,7 +7,9 @@ It's built in two phases (§10): first forking by transcript handoff everywhere,
 Code's native fork. What Phase 1 built, and the live tests it still needs, are in §10.3;
 Phase 2's are in §10.4, and the follow-ups' in §10.5. The results of those live tests are in §10.6. The Claude Code behaviour it relies on was checked on 2.1.318 (§4), and Phase 2's
 contract check passed live on that version and on 2.1.319. Nothing in Codex was checked, since Codex
-doesn't fork natively under this design.
+doesn't fork natively under this design. **Since then (2026-11-07), Codex forks natively too**,
+through the same fork record, built as Phase 2 of rewinding (GAIA_REWIND_HLD.md §10.2): where
+this document says Codex always hands over, it now hands over only when no cut is found.
 
 ## 1. Summary
 
@@ -195,7 +197,7 @@ reaches the model. That makes it safe to retry, as take-back's check already rel
 
 **Codex** has `thread/start`, `thread/resume` and `thread/revert` in use. Whether its app
 server can fork a thread wasn't looked into. If it can, Codex could get a native fork
-later, the same way as §5.
+later, the same way as §5. *It can, and does now: GAIA_REWIND_HLD.md §10.2.*
 
 ## 7. UI
 

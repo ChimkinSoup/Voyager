@@ -29,6 +29,10 @@ typedef GaiaWindowUia = ({String? url, String? selection});
 /// Exe names, without `.exe`, whose address bar is read for the URL.
 const _browsers = {'chrome', 'msedge', 'firefox', 'brave', 'vivaldi', 'opera'};
 
+/// Exe names, without `.exe`, of apps hosting a Chromium page whose fields
+/// with no name are read as any app's are (§15.6): Obsidian's note editor is one.
+const _unnamedFieldsTrusted = {'obsidian'};
+
 /// Window classes of console hosts, where a synthetic Ctrl+C would be a
 /// SIGINT (§15.2).
 const _consoleClasses = {'ConsoleWindowClass', 'CASCADIA_HOSTING_WINDOW_CLASS'};
@@ -609,6 +613,10 @@ void _moveWindow(int hwnd, ({int left, int top, int width, int height}) frame) {
 
 bool gaiaIsBrowser(String exe) => _browsers.contains(exe.toLowerCase());
 
+/// Whether a [web] window of [exe] hides its fields with no name (§15.6).
+bool gaiaHidesUnnamedFields(String exe, {required bool web}) =>
+    web && !_unnamedFieldsTrusted.contains(exe.toLowerCase());
+
 /// Where a quoted selection came from (§15.2): "Google Chrome — Pull
 /// requests", without the app's name the title already ends in.
 String gaiaSelectionSource(GaiaForegroundWindow window) {
@@ -716,13 +724,20 @@ Future<GaiaPointedControl?> gaiaReadControl(GaiaCursorTarget target) async {
   final browser = gaiaIsBrowser(window.exe);
   final hwnd = window.hwnd;
   final web = browser || gaiaHostsChromiumPage(hwnd);
+  final hideUnnamed = gaiaHidesUnnamedFields(window.exe, web: web);
   _controlReading = true;
   final read = Isolate.run(() {
-    final first = _readControl(x, y, hwnd, browser: browser, web: web);
+    final first = _readControl(
+      x,
+      y,
+      hwnd,
+      browser: browser,
+      hideUnnamed: hideUnnamed,
+    );
     if (first == null ||
         !web ||
         !(gaiaLooksAsleep(first.type, first.name) ||
-            gaiaFieldUnjudged(first.type, first.name) ||
+            (hideUnnamed && gaiaFieldUnjudged(first.type, first.name)) ||
             gaiaNotYetAControl(
               first.type,
               first.name,
@@ -739,7 +754,13 @@ Future<GaiaPointedControl?> gaiaReadControl(GaiaCursorTarget target) async {
       wait: () => sleep(const Duration(milliseconds: 250)),
     );
     if (scan == null) return null;
-    final again = _readControl(x, y, hwnd, browser: browser, web: web);
+    final again = _readControl(
+      x,
+      y,
+      hwnd,
+      browser: browser,
+      hideUnnamed: hideUnnamed,
+    );
     return again == null ||
             gaiaNotYetAControl(
               again.type,
@@ -748,7 +769,9 @@ Future<GaiaPointedControl?> gaiaReadControl(GaiaCursorTarget target) async {
               height: again.height,
             ) ||
             // A sensitive field's name is withheld too, and it's refused as one.
-            (!again.sensitive && gaiaFieldUnjudged(again.type, again.name)) ||
+            (hideUnnamed &&
+                !again.sensitive &&
+                gaiaFieldUnjudged(again.type, again.name)) ||
             (gaiaLooksAsleep(again.type, again.name) && !scan.hasDocument)
         ? null
         : again;
@@ -790,7 +813,7 @@ GaiaPointedControl? _readControl(
   int y,
   int hwnd, {
   required bool browser,
-  required bool web,
+  required bool hideUnnamed,
 }) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   final uia = CUIAutomation.createInstance();
@@ -825,7 +848,7 @@ GaiaPointedControl? _readControl(
     );
     String? read;
     if (!sensitive &&
-        !(web && gaiaFieldUnjudged(type, name)) &&
+        !(hideUnnamed && gaiaFieldUnjudged(type, name)) &&
         SUCCEEDED(
           element.getCurrentPropertyValue(UIA_ValueValuePropertyId, value),
         ) &&
@@ -1242,6 +1265,7 @@ GaiaWindowScan? gaiaScanWindow(
   try {
     final url = browser ? _addressBar(uia, hwnd) : null;
     final web = browser || gaiaHostsChromiumPage(hwnd);
+    final hideUnnamed = gaiaHidesUnnamedFields(_exeOf(hwnd), web: web);
     if (FAILED(uia.elementFromHandle(hwnd, root.cast())) ||
         root.ref.isNull ||
         FAILED(uia.createCacheRequest(request.cast())) ||
@@ -1344,7 +1368,7 @@ GaiaWindowScan? gaiaScanWindow(
       }
       matchIf(element, type, name, bounds, isSensitive: false);
       // Nor its children, as above.
-      if (web && gaiaFieldUnjudged(type, name)) {
+      if (hideUnnamed && gaiaFieldUnjudged(type, name)) {
         unjudged.add(bounds);
         if (text && element.cachedIsOffscreen == 0 && inRegion(bounds)) {
           lines.writeln('${'  ' * depth}$type (no name, not read) $place');
@@ -1795,6 +1819,18 @@ void _release(IUnknown object) {
     ..detach()
     ..release();
   free(object.ptr);
+}
+
+/// [hwnd]'s exe name, without `.exe`, as [GaiaForegroundWindow.exe] has it.
+String _exeOf(int hwnd) {
+  final pid = calloc<Uint32>();
+  try {
+    GetWindowThreadProcessId(hwnd, pid);
+    final exe = _processPath(pid.value);
+    return exe == null ? '' : p.basenameWithoutExtension(exe);
+  } finally {
+    free(pid);
+  }
 }
 
 String? _processPath(int pid) {

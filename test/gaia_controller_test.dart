@@ -12,6 +12,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
@@ -393,9 +394,11 @@ void main() {
     Map<String, GaiaUsageSource> usageSources = const {},
     Duration usageEvery = const Duration(hours: 1),
     Duration runWorkedFor = const Duration(hours: 1),
+    GaiaToolResultStore? toolResults,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
+      toolResults: toolResults,
       cardHold: cardHold,
       curateAfter: curateAfter,
       usageSources: usageSources,
@@ -6202,6 +6205,85 @@ void main() {
       expect(runner.sent.last.prompt, 'Carry on');
     });
 
+    test(
+      'on Codex (§10.2): with sessions on both adapters, the chat forks '
+      "the tier's Codex thread natively, and the auto-fork resumes it",
+      () async {
+        final codex = FakeClaudeRunner()..cutAt = 'turn-1';
+        runner.cutAt = 'entry-1';
+        main.settings = {
+          ...GaiaSettings.initial().toJson(),
+          'agents': [
+            ...kGaiaDefaultAgents.map((agent) => agent.toJson()),
+            const GaiaAgent(
+              id: 'sol',
+              label: 'GPT-6.1 Sol',
+              adapter: kGaiaCodexAdapter,
+              model: 'gpt-6.1-sol',
+            ).toJson(),
+          ],
+          'tiers': {'quick': 'haiku', 'standard': 'sonnet', 'deep': 'sol'},
+        };
+        final codexKey = gaiaSessionKey('laptop', adapter: kGaiaCodexAdapter);
+        await main.store.createChat(
+          GaiaChat(
+            id: 'c1',
+            title: 'Plans',
+            createdAt: at,
+            updatedAt: at,
+            lastMessageAt: at,
+            tier: GaiaTier.deep,
+            agentSessions: {
+              gaiaSessionKey('laptop'): const GaiaAgentSession(
+                sessionId: 'source-session',
+                lastSeq: 3,
+              ),
+              codexKey: const GaiaAgentSession(
+                sessionId: 'thread-1',
+                lastSeq: 3,
+              ),
+            },
+          ),
+        );
+        for (var seq = 0; seq < 4; seq++) {
+          await main.store.putMessage(stored(seq));
+        }
+        await startCompanion(otherRunners: {kGaiaCodexAdapter: codex});
+        await controller.selectChat('c1');
+        await settle();
+
+        await rewindAt(1);
+        expect(codex.cutsAsked.single.sessionId, 'thread-1');
+        expect(codex.cutsAsked.single.after, 'm0');
+        expect(runner.cutsAsked, isEmpty);
+        final record = (await chatOf('c1')).fork!;
+        expect(record.sessionKey, codexKey);
+        expect(record.sourceSessionId, 'thread-1');
+        expect(record.keepAt, 'turn-1');
+        expect(codex.rewounds.single.$1, 'c1');
+
+        codex.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Again');
+        await settle();
+        expect(codex.forks.single, (sessionId: 'thread-1', keepAt: 'turn-1'));
+        expect(codex.sent.single.sessionId, isNull);
+        expect(codex.sent.single.prompt, 'Again');
+        expect(
+          codex.promptIds.single,
+          controller.messages.firstWhere((m) => m.seq == 4).id,
+        );
+
+        final fork = await autoFork();
+        await controller.selectChat(fork.id);
+        await settle();
+        codex.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Carry on');
+        await settle();
+        expect(codex.forks.last, isNull);
+        expect(codex.sent.last.sessionId, 'thread-1');
+      },
+    );
+
     test('at a prompt: the chat ends before it, and it goes back in an '
         'empty composer', () async {
       await storeChat();
@@ -6214,6 +6296,20 @@ void main() {
       expect(runner.cutsAsked.single.next, ['m2']);
       expect((await chatOf('c1')).fork!.lastSeq, 1);
       expect(await shown((await autoFork()).id), [0, 1, 2, 3]);
+    });
+
+    test("results that can't be moved don't stop the rewind", () async {
+      await storeChat();
+      await startCompanion(toolResults: _UnmovableResults());
+      await controller.selectChat('c1');
+      await settle();
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+
+      await rewindAt(2);
+      expect(controller.draft.text, 'message 2');
+      expect(runner.rewounds.single.$1, 'c1');
+      expect(toasts.single.title, 'Rewound');
     });
 
     test('at a prompt with a draft typed: the draft stays', () async {
@@ -6568,4 +6664,17 @@ class _FakeUsageSource implements GaiaUsageSource {
     if (error case final error?) throw error;
     return reply;
   }
+}
+
+/// Its files locked: nothing copies or removes.
+class _UnmovableResults extends GaiaToolResultStore {
+  _UnmovableResults() : super(Directory.systemTemp);
+
+  @override
+  Future<void> copy(String from, String to, Iterable<String> callIds) =>
+      throw const FileSystemException('locked');
+
+  @override
+  Future<void> remove(String chatId, Iterable<String> callIds) =>
+      throw const FileSystemException('locked');
 }

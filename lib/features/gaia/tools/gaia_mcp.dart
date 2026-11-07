@@ -24,6 +24,22 @@ abstract interface class GaiaTurnTools {
   });
 }
 
+/// The tools whose results the device that ran them keeps for the user to see
+/// (§15.6): the `os_*` reads. Never synced.
+const kGaiaKeptResultTools = {
+  'os_focused_window',
+  'os_read_screen',
+  'os_screenshot',
+  'os_windows',
+  'os_clipboard',
+};
+
+/// [GaiaTurnTools] that keep what a kept-result tool answered, by the
+/// backend's id for the call.
+abstract interface class GaiaResultKeeper {
+  void keep(String callId, String name, GaiaToolResult result);
+}
+
 /// A tool's answer: its text, whether it's an error the agent should see as
 /// one, and any image, as `os_screenshot` has.
 class GaiaToolResult {
@@ -762,10 +778,14 @@ const _protocolVersion = '2025-06-18';
 
 /// The response to one JSON-RPC [message], or null for a notification.
 /// [tools] is the turn the call belongs to; a call outside one fails.
+/// [callId] is the backend's id for a `tools/call`, which Claude Code puts in
+/// its `_meta` instead; a read's answer is kept under it, when [tools] keeps
+/// them.
 Future<Map<String, Object?>?> gaiaMcpAnswer(
   Map<String, Object?> message,
-  GaiaTurnTools? tools,
-) async {
+  GaiaTurnTools? tools, {
+  String? callId,
+}) async {
   final id = message['id'];
   if (id == null) return null;
   final params = (message['params'] as Map?)?.cast<String, Object?>() ?? {};
@@ -798,6 +818,18 @@ Future<Map<String, Object?>?> gaiaMcpAnswer(
           name,
           (params['arguments'] as Map?)?.cast<String, Object?>() ?? {},
         );
+        final id =
+            callId ??
+            switch (params['_meta']) {
+              {'claudecode/toolUseId': final String id} => id,
+              _ => null,
+            };
+        if (tools is GaiaResultKeeper &&
+            id != null &&
+            !answer.isError &&
+            kGaiaKeptResultTools.contains(name)) {
+          (tools as GaiaResultKeeper).keep(id, name, answer);
+        }
       }
       return result({
         'content': [

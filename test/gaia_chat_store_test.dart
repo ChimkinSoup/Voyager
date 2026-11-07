@@ -76,6 +76,21 @@ void main() {
     },
   );
 
+  test('restorable chats: live and in the trash, not erased or expired '
+      '(kept tool results, §15.6)', () async {
+    for (final id in ['live', 'trashed', 'erased', 'expired']) {
+      await store.createChat(_chat(id));
+    }
+    await store.deleteChat('trashed');
+    final erased = (await repository.getChat('erased'))!;
+    await repository.upsertChat(erased.copyWith(deletedAt: kErasedAt));
+    final expired = (await repository.getChat('expired'))!;
+    await repository.upsertChat(
+      expired.copyWith(deletedAt: DateTime.utc(2020)),
+    );
+    expect(await store.restorableChatIds(), unorderedEquals(['live', 'trashed']));
+  });
+
   test('messages come back in seq order, and a put replaces by id', () async {
     await store.createChat(_chat('c1'));
     await store.putMessage(

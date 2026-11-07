@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
+import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 import 'fakes/gaia_fakes.dart';
 
@@ -437,6 +440,144 @@ void main() {
       await visit(top);
     }
     await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  testWidgets('at the bottom, opening and closing tool calls keeps them put', (
+    tester,
+  ) async {
+    await start(tester);
+    // Calls whose list runs taller than the chat.
+    await sync(
+      tester,
+      () => messages.last = GaiaMessage(
+        id: 'm30',
+        chatId: 'c1',
+        seq: 30,
+        role: GaiaMessageRole.assistant,
+        parts: [
+          const GaiaTextPart('marker30.'),
+          GaiaActivityPart(
+            List.filled(40, 'Bash'),
+            details: [for (var i = 0; i < 40; i++) 'echo $i'],
+          ),
+        ],
+        status: GaiaMessageStatus.complete,
+        createdAt: at,
+        updatedAt: at,
+      ),
+    );
+    expect(scroll(tester).offset, 0);
+    final chip = find.text('Used Bash ×40');
+    final before = tester.getTopLeft(chip).dy;
+
+    await tester.tap(chip);
+    await settle(tester);
+    expect(find.text('echo 39'), findsOneWidget);
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
+
+    await tester.tap(chip);
+    await settle(tester);
+    expect(find.text('echo 39'), findsNothing);
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
+    expect(scroll(tester).offset, moreOrLessEquals(0));
+  });
+
+  testWidgets("on Voyager's page too, tool calls open below where they are", (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GaiaSteadyList(
+            controller: scroll,
+            reverse: true,
+            padding: const EdgeInsets.all(16),
+            children: [
+              GaiaActivityChip(
+                label: 'Used Bash ×40',
+                part: GaiaActivityPart(
+                  List.filled(40, 'Bash'),
+                  details: [for (var i = 0; i < 40; i++) 'echo $i'],
+                ),
+              ),
+              for (var i = 0; i < 10; i++) const SizedBox(height: 200),
+            ],
+          ),
+        ),
+      ),
+    );
+    final chip = find.text('Used Bash ×40');
+    final before = tester.getTopLeft(chip).dy;
+
+    await tester.tap(chip);
+    await tester.pump();
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
+    expect(scroll.offset, greaterThan(0));
+
+    await tester.tap(chip);
+    await tester.pump();
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
+    expect(scroll.offset, moreOrLessEquals(0));
+  });
+
+  testWidgets('a kept result filling in after it opens keeps the call put', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    final result = Completer<GaiaToolResult?>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GaiaSteadyList(
+            controller: scroll,
+            reverse: true,
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Room below for what opens, so Show all is on screen.
+              const SizedBox(height: 400),
+              GaiaActivityChip(
+                label: 'Used 1 tool',
+                part: const GaiaActivityPart(['os_read_screen'], ids: ['y']),
+                hasResult: (_) => true,
+                result: (_) => result.future,
+              ),
+              for (var i = 0; i < 10; i++) const SizedBox(height: 200),
+            ],
+          ),
+        ),
+      ),
+    );
+    final chip = find.text('Used 1 tool');
+    final before = tester.getTopLeft(chip).dy;
+
+    await tester.tap(chip);
+    await tester.pump();
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
+
+    result.complete(
+      GaiaToolResult(
+        text: List.filled(400, 'Button "Save"').join('\n'),
+        isError: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('Show all'), findsOneWidget);
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
+
+    await tester.tap(find.textContaining('Show all'));
+    await tester.pump();
+    expect(find.text('Show less'), findsOneWidget);
+    expect(tester.getTopLeft(chip).dy, moreOrLessEquals(before));
   });
 
   testWidgets('a message sent from here still goes down to its reply', (

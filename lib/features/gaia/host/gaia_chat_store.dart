@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
+import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -46,6 +47,20 @@ class GaiaChatStore {
   final String deviceId;
 
   Future<List<GaiaChat>> chats() => _repository.listChats();
+
+  /// The chats live or still in the trash: those deleted but neither erased
+  /// nor expired, which can still be restored.
+  Future<List<String>> restorableChatIds() async {
+    final now = utcNow();
+    bool gone(DateTime? deletedAt) =>
+        deletedAt != null &&
+        (isErasedAt(deletedAt) ||
+            const SoftDeletePolicy().isExpired(deletedAt, now));
+    return [
+      for (final chat in await _repository.listChats(includeDeleted: true))
+        if (!gone(chat.deletedAt)) chat.id,
+    ];
+  }
 
   /// Saves a chat the companion just started. A chat already stored is left
   /// as it is.

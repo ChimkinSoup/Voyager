@@ -613,30 +613,34 @@ class CalendarWeekEventBlock extends StatelessWidget {
             eventId: calendarEventTapKey(event, day),
             isSegmentStart: !bridgeLeft,
             isSegmentEnd: !bridgeRight,
-            child: Container(
-              width: totalWidth,
-              height: constraints.maxHeight,
-              padding: EdgeInsets.symmetric(
-                horizontal: totalWidth < 24 ? 2 : 6,
-                vertical: 4,
-              ),
+            // DecoratedBox, not Container.decoration: a done event's outline
+            // would otherwise inset the title by its width.
+            child: DecoratedBox(
               decoration: calendarEventFillDecoration(
                 color,
                 alpha: calendarEventBarFillAlpha,
                 borderRadius: borderRadius,
                 hollow: done,
               ),
-              child: showText
-                  ? Text(
-                      event.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: calendarEventLabelColor(color, hollow: done),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
+              child: Container(
+                width: totalWidth,
+                height: constraints.maxHeight,
+                padding: EdgeInsets.symmetric(
+                  horizontal: totalWidth < 24 ? 2 : 6,
+                  vertical: 4,
+                ),
+                child: showText
+                    ? Text(
+                        event.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: calendarEventLabelColor(color, hollow: done),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ),
           ),
         );

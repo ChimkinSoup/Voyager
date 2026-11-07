@@ -3602,6 +3602,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   /// is deliberately left alone when there is no sync service to register with.
   String? _bodyEntryId;
 
+  /// The entry whose text was last loaded into [_controller], for the field's
+  /// scroll reset. Unlike [_bodyEntryId] it doesn't move when
+  /// [fileUnfiledText] claims typed text, which must not scroll mid-typing.
+  String? _shownEntryId;
+
   bool get hasFocus => widget.focusNode.hasFocus;
 
   /// Replaces the editor's text.
@@ -3656,6 +3661,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     // through to this handler for everything it doesn't use.
     _lastText = _controller.text;
     _bodyEntryId = widget.entry?.id;
+    _shownEntryId = _bodyEntryId;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
     final entry = widget.entry;
     if (entry != null) {
@@ -3775,6 +3781,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (_bodyEntryId == null || _bodyEntryId != widget.entry?.id) {
       _controller.text = widget.entry?.body ?? '';
       _undo.reset();
+      _shownEntryId = widget.entry?.id;
     }
     _lastText = _controller.text;
     // Unconditional, unlike [_attachedEntryId] below: the controller holds this
@@ -3984,6 +3991,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           onKeyEvent: _handleBodyKey,
           readOnly: false,
           expands: true,
+          document: _shownEntryId,
           // Lifts the last line clear of the image fan in the corner.
           scrollPastEnd: _fanHasImages && widget.entry?.id != null
               ? MediaFanStack.tallest + 8

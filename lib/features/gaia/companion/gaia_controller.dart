@@ -24,6 +24,7 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -100,6 +101,7 @@ class GaiaController extends ChangeNotifier {
     Future<String> Function()? clipboard,
     Future<void> Function(Uint8List png)? copyPng,
     String? draftDirectory,
+    this._toolResults,
     this._reach,
     this._usageSources = const {},
     @visibleForTesting this._usageEvery = const Duration(minutes: 10),
@@ -149,6 +151,39 @@ class GaiaController extends ChangeNotifier {
 
   /// Where the draft's images wait until they're sent.
   final String _draftDirectory;
+
+  /// What the `os_*` reads run here answered (§15.6); null keeps none.
+  final GaiaToolResultStore? _toolResults;
+
+  /// Whether this device kept call [callId]'s result in [chatId].
+  bool hasToolResult(String chatId, String callId) =>
+      _toolResults?.has(chatId, callId) ?? false;
+
+  /// Call [callId]'s result in [chatId], as its tool answered it; null when
+  /// it isn't kept here.
+  Future<GaiaToolResult?> toolResult(String chatId, String callId) async =>
+      _toolResults?.read(chatId, callId);
+
+  /// Forgets the results of chats that can't come back: erased, or deleted
+  /// longer ago than the trash keeps them, here or elsewhere. A chat in the
+  /// trash keeps its own, for a restore.
+  Future<void> _pruneToolResults() async {
+    final store = _toolResults;
+    if (store == null) return;
+    try {
+      final kept = (await _pipe.request('restorableChats'))! as List;
+      // And those held here, which a run may not have saved yet.
+      await store.prune({
+        ...kept.cast<String>(),
+        for (final chat in chats) chat.id,
+        ..._running,
+      });
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] tool results not pruned: $error');
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] tool results not pruned: $error');
+    }
+  }
 
   /// How long a card holds its tool call (§10.1).
   final Duration _cardHold;
@@ -1491,6 +1526,7 @@ class GaiaController extends ChangeNotifier {
       });
     }
     await _refresh();
+    unawaited(_pruneToolResults());
     await _loadDrafts();
     unawaited(_loadQueue());
     unawaited(_curateMissed());
@@ -2547,6 +2583,11 @@ class GaiaController extends ChangeNotifier {
     }
     chats = [fork, ...chats]..sort(_listed);
     _messages[forkId] = copies;
+    try {
+      await _toolResults?.copy(at.chatId, forkId, gaiaKeptCallIds(copies));
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] tool results not copied: $error');
+    }
     // Shown under its original, not folded away.
     if (sidebar.collapsed.contains(fork.forkOf)) {
       unawaited(sidebar.setCollapsed(fork.forkOf!, false));
@@ -2740,6 +2781,12 @@ class GaiaController extends ChangeNotifier {
         if (message.seq < from) message,
     ];
     _messages[forkId] = copies;
+    try {
+      await _toolResults?.copy(chatId, forkId, gaiaKeptCallIds(copies));
+      await _toolResults?.remove(chatId, gaiaKeptCallIds(dropped));
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] tool results not moved: $error');
+    }
     // The old session's process and any take-back's cut go with it.
     for (final runner in _runners.values) {
       if (runner is GaiaSessionForker) {
@@ -2848,20 +2895,41 @@ class GaiaController extends ChangeNotifier {
   ];
 
   /// The native session a fork of [source] at [point] starts from on this
-  /// device (GAIA_FORKING_HLD.md §5.5): the source's Claude Code session here
-  /// that has every turn up to the fork, cut where they end (§5.2). Null when
-  /// there's none, and the fork hands its turns over instead (§6).
+  /// device (GAIA_FORKING_HLD.md §5.5): one of the source's sessions here
+  /// that has every turn up to the fork, cut where they end (§5.2), on the
+  /// adapter the source's tier runs on if it can. Null when there's none,
+  /// and the fork hands its turns over instead (§6).
   Future<GaiaForkRecord?> _forkRecord(
     GaiaChat source,
     GaiaMessage point,
     List<GaiaMessage> list,
   ) async {
-    const adapter = kGaiaClaudeCodeAdapter;
+    final tier = source.tier;
+    for (final adapter in {
+      ?(tier == null ? null : agentFor(tier)?.adapter),
+      kGaiaClaudeCodeAdapter,
+      kGaiaCodexAdapter,
+    }) {
+      if (await _forkRecordOn(adapter, source, point, list)
+          case final record?) {
+        return record;
+      }
+    }
+    return null;
+  }
+
+  /// [_forkRecord] on [adapter].
+  Future<GaiaForkRecord?> _forkRecordOn(
+    String adapter,
+    GaiaChat source,
+    GaiaMessage point,
+    List<GaiaMessage> list,
+  ) async {
     final runner = _runners[adapter];
     if (runner is! GaiaSessionForker) return null;
     // What the fork's session knows: up to the message before a prompt
     // forked at, which its first send then names (§3). A reply cut short
-    // counts as forking at its prompt: the session holds the CLI's
+    // counts as forking at its prompt: Claude Code's session holds the CLI's
     // placeholder for that turn, not the partial text shown, so the first
     // send hands both over (BUG-368).
     final cutShort =
@@ -3091,6 +3159,13 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> _load(String chatId) async {
     final list = (await _pipe.request('messages', {'chatId': chatId}))! as List;
+    // Even for a running chat, whose messages a run already set: its earlier
+    // calls' results are only known kept once listed.
+    try {
+      await _toolResults?.list(chatId);
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] tool results not listed: $error');
+    }
     // A run that started meanwhile has the newer list.
     if (_running.contains(chatId)) return;
     final loaded = (chatId, jsonEncode(list));
@@ -4244,6 +4319,14 @@ class GaiaController extends ChangeNotifier {
       chatId: chatId,
       cards: cards,
       onCard: (card) => onEvent(GaiaCardUpdate(card)),
+      onResult: (callId, result) async {
+        try {
+          await _toolResults?.save(chatId, callId, result);
+          notifyListeners();
+        } on FileSystemException catch (error) {
+          debugPrint('[gaia] tool result not kept: $error');
+        }
+      },
       read: (tool, arguments) async {
         try {
           return await _pipe.request(

@@ -1090,6 +1090,8 @@ class GaiaHost {
         };
       case 'chats':
         return [for (final chat in await store.chats()) chat.toJson()];
+      case 'restorableChats':
+        return await store.restorableChatIds();
       case 'putChat':
         await store.createChat(GaiaChat.fromJson(_map(params['chat'])));
         await _syncBorder(store);

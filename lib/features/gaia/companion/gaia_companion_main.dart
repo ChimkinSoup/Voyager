@@ -18,6 +18,7 @@ import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
@@ -78,6 +79,9 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     pipe: pipe,
     window: window,
     draftDirectory: drafts.path,
+    toolResults: GaiaToolResultStore(
+      Directory(p.join(root.path, 'gaia', 'results')),
+    ),
     reach: (host) async => (await Socket.connect(
       host,
       443,

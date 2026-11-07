@@ -47,6 +47,7 @@ class TagHighlightedTextField extends StatefulWidget {
     this.onKeyEvent,
     this.undoController,
     this.scrollPastEnd = 0,
+    this.document,
   }) : assert(
          onKeyEvent == null || tagScope != null,
          'onKeyEvent is only installed by the completion popup, which is '
@@ -94,6 +95,11 @@ class TagHighlightedTextField extends StatefulWidget {
   /// How far the text can scroll beyond its last line, for a field with
   /// something floating over its bottom corner. See [PastEndScrollController].
   final double scrollPastEnd;
+
+  /// Which document the field is showing, for a field reused across several.
+  /// A change scrolls back to the top, so the next one doesn't open at the
+  /// previous one's scroll offset.
+  final Object? document;
 
   @override
   State<TagHighlightedTextField> createState() =>
@@ -179,6 +185,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   @override
   void didUpdateWidget(covariant TagHighlightedTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.document != widget.document &&
+        _scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
     if (oldWidget.undoController != widget.undoController) {
       widget.undoController?.applyAsEdit = _applyAsEdit;
     }

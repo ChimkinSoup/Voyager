@@ -1054,28 +1054,34 @@ class _DayEventTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: calendarEventFillDecoration(
-        paletteColor(event.colorValue, context),
-        alpha: calendarDayEventTileFillAlpha,
-        borderRadius: BorderRadius.circular(8),
-        hollow: calendarEventDoneOn(event, day),
-      ),
-      child: Row(
-        children: [
-          if (!allDay) ...[
-            Text(
-              DateFormat.jm().format(event.start.toLocal()),
-              style: AppFonts.style(fontSize: 11),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Text(event.title, style: AppFonts.style(fontSize: 12)),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      // DecoratedBox, not Container.decoration: a done event's outline would
+      // otherwise inset the content by its width.
+      child: DecoratedBox(
+        decoration: calendarEventFillDecoration(
+          paletteColor(event.colorValue, context),
+          alpha: calendarDayEventTileFillAlpha,
+          borderRadius: BorderRadius.circular(8),
+          hollow: calendarEventDoneOn(event, day),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              if (!allDay) ...[
+                Text(
+                  DateFormat.jm().format(event.start.toLocal()),
+                  style: AppFonts.style(fontSize: 11),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(event.title, style: AppFonts.style(fontSize: 12)),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

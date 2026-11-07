@@ -237,6 +237,13 @@ void main() {
       expect(gaiaFieldUnjudged('Text', ''), isFalse);
     });
 
+    test("only a page's unnamed fields are hidden, and not Obsidian's", () {
+      expect(gaiaHidesUnnamedFields('chrome', web: true), isTrue);
+      expect(gaiaHidesUnnamedFields('Slack', web: true), isTrue);
+      expect(gaiaHidesUnnamedFields('Obsidian', web: true), isFalse);
+      expect(gaiaHidesUnnamedFields('notepad', web: false), isFalse);
+    });
+
     group("Firefox's Document holding the focus (BUG-344)", () {
       test('on a page, a container says nothing of which field has it', () {
         for (final type in ['Document', 'Pane', 'Window', 'Group', 'Control']) {

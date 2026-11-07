@@ -274,9 +274,10 @@ class GaiaAgentSession {
 }
 
 /// A fork's native session, not made yet (GAIA_FORKING_HLD.md §5.3): its
-/// first send on Claude Code forks [sourceSessionId], kept up to the entry
-/// [keepAt], and knows the chat up to [lastSeq]. Only for [sessionKey]'s
-/// device, adapter and account; never synced.
+/// first send on [sessionKey]'s adapter forks [sourceSessionId], kept up to
+/// [keepAt] (Claude Code's entry, or Codex's turn), and knows the chat up to
+/// [lastSeq]. Only for [sessionKey]'s device, adapter and account; never
+/// synced.
 class GaiaForkRecord {
   const GaiaForkRecord({
     required this.sessionKey,
@@ -843,6 +844,7 @@ sealed class GaiaPart {
           (json['tools']! as List).cast<String>(),
           details: (json['details'] as List?)?.cast<String?>() ?? const [],
           failures: (json['failures'] as List?)?.cast<String?>() ?? const [],
+          ids: (json['ids'] as List?)?.cast<String?>() ?? const [],
         ),
         'image' => GaiaImagePart(
           mediaId: json['mediaId']! as String,
@@ -963,10 +965,18 @@ class GaiaActivityPart extends GaiaPart {
     this.tools, {
     this.details = const [],
     this.failures = const [],
+    this.ids = const [],
   });
 
   /// Tool names, in the order they were called.
   final List<String> tools;
+
+  /// The backend's id of each of [tools] whose result a device may have kept
+  /// (the `os_*` reads), by its place: what that device finds it by. Null for
+  /// the others; shorter than [tools] as [details] can be.
+  final List<String?> ids;
+
+  String? idAt(int index) => ids.elementAtOrNull(index);
 
   /// What each of [tools] was called with, by its place: a command, a query,
   /// a path. Null where it isn't known (yet), and shorter than [tools] when
@@ -1001,16 +1011,22 @@ class GaiaActivityPart extends GaiaPart {
         for (var i = 0; i < tools.length; i++)
           i == index ? failure ?? failureAt(i) : failureAt(i),
       ],
+      ids: ids,
     );
   }
 
-  /// With [tool] called after the others.
-  GaiaActivityPart adding(String tool, {String? detail, String? failure}) =>
-      GaiaActivityPart(
-        [...tools, tool],
-        details: [...details],
-        failures: [...failures],
-      ).withCall(tools.length, detail: detail, failure: failure);
+  /// With [tool] called after the others, as [id] for one in [ids].
+  GaiaActivityPart adding(
+    String tool, {
+    String? detail,
+    String? failure,
+    String? id,
+  }) => GaiaActivityPart(
+    [...tools, tool],
+    details: [...details],
+    failures: [...failures],
+    ids: id == null ? ids : [for (var i = 0; i < tools.length; i++) idAt(i), id],
+  ).withCall(tools.length, detail: detail, failure: failure);
 
   @override
   Map<String, Object?> toJson() => {
@@ -1018,6 +1034,7 @@ class GaiaActivityPart extends GaiaPart {
     'tools': tools,
     if (details.any((detail) => detail != null)) 'details': details,
     if (failures.any((failure) => failure != null)) 'failures': failures,
+    if (ids.any((id) => id != null)) 'ids': ids,
   };
 }
 

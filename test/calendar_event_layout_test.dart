@@ -73,27 +73,27 @@ void main() {
 
   group('Calendar event layout and styling', () {
     test(
-      'calendarMonthEventBarHeight expands for 4 events to reach bottom padding',
+      'calendarMonthEventBarHeight: 4 slots reach the bottom padding, '
+      'whatever the event count',
       () {
         const style = MonthDayCellStyle.full;
         const cellHeight = 100.0;
 
-        final heightFor3 = calendarMonthEventBarHeight(
+        double heightFor(int count) => calendarMonthEventBarHeight(
           cellHeight: cellHeight,
           style: style,
-          visibleEventCount: 3,
+          visibleEventCount: count,
         );
 
-        final heightFor4 = calendarMonthEventBarHeight(
-          cellHeight: cellHeight,
-          style: style,
-          visibleEventCount: 4,
-        );
+        // Adding or removing an event must not resize the bars already there.
+        expect(heightFor(1), heightFor(4));
+        expect(heightFor(3), heightFor(4));
 
-        // 4 events should span an extra 3.0px (cellPadding.bottom) across the cell
+        // The 4 slots span the event area plus cellPadding.bottom.
+        final area = cellHeight - (style.fontSize + 8) - 2;
         expect(
-          heightFor4 * 4 + 3,
-          equals(heightFor3 * 4 + 3 + style.cellPadding.bottom),
+          heightFor(4) * 4 + 3,
+          closeTo(area + style.cellPadding.bottom, 1e-9),
         );
       },
     );

@@ -15,6 +15,7 @@ import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
+import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
@@ -374,7 +375,7 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
       body: Column(
         children: [
           Expanded(
-            child: ListView(
+            child: GaiaSteadyList(
               reverse: true,
               padding: const EdgeInsets.all(16),
               children: [
