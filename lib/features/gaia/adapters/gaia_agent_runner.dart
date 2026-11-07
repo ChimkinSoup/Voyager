@@ -10,9 +10,47 @@ sealed class GaiaAgentEvent {
   const GaiaAgentEvent();
 }
 
-/// A text block of the agent's own reply has started.
+/// A text block of the agent's own reply has started. [block] is its place
+/// in the model message, for a backend that can abandon blocks
+/// ([GaiaBlocksAbandoned]).
 class GaiaTextStart extends GaiaAgentEvent {
-  const GaiaTextStart();
+  const GaiaTextStart({this.block});
+
+  final int? block;
+}
+
+/// A model message has started: [GaiaTextStart.block] and
+/// [GaiaToolUse.block] count from it.
+class GaiaMessageStart extends GaiaAgentEvent {
+  const GaiaMessageStart();
+}
+
+/// A model call failed, and the backend tries it again after [delay]:
+/// [attempt] of at most [maxRetries]. [status] is the HTTP status it
+/// failed with; null when it never got one, as when the connection was lost.
+class GaiaRetrying extends GaiaAgentEvent {
+  const GaiaRetrying({
+    required this.attempt,
+    required this.maxRetries,
+    this.status,
+    this.delay,
+  });
+
+  final int attempt;
+  final int maxRetries;
+  final int? status;
+
+  /// Null when the backend doesn't say.
+  final Duration? delay;
+}
+
+/// The current model message's stream was cut off, and its blocks from
+/// [from] on are thrown away: the backend asks again, and what streamed of
+/// them isn't the reply.
+class GaiaBlocksAbandoned extends GaiaAgentEvent {
+  const GaiaBlocksAbandoned(this.from);
+
+  final int from;
 }
 
 class GaiaTextDelta extends GaiaAgentEvent {
@@ -24,11 +62,19 @@ class GaiaTextDelta extends GaiaAgentEvent {
 /// The agent called a tool. [detail] is what it was called with, and
 /// [failure] why it failed, when those are known already; otherwise a
 /// [GaiaToolDetails] or [GaiaToolFailures] naming [id] brings them later.
+/// [block] is as [GaiaTextStart.block].
 class GaiaToolUse extends GaiaAgentEvent {
-  const GaiaToolUse(this.name, {this.id, this.detail, this.failure});
+  const GaiaToolUse(
+    this.name, {
+    this.id,
+    this.detail,
+    this.failure,
+    this.block,
+  });
 
   final String name;
   final String? id;
+  final int? block;
   final String? detail;
   final String? failure;
 }
@@ -298,12 +344,38 @@ class GaiaTurnBuilder {
   /// [_parts], and its own in that part.
   final _calls = <String, (int, int)>{};
 
+  /// [_parts] and [_calls] as each numbered block of the current model
+  /// message started, by its number: what a [GaiaBlocksAbandoned] goes back
+  /// to.
+  final _marks = <int, (List<GaiaPart>, Map<String, (int, int)>)>{};
+
   List<GaiaPart> get parts => List.unmodifiable(_parts);
+
+  void _mark(int? block) {
+    if (block != null) _marks[block] = (List.of(_parts), Map.of(_calls));
+  }
 
   /// Applies [event]; true when [parts] changed.
   bool apply(GaiaAgentEvent event) {
     switch (event) {
-      case GaiaTextStart():
+      case GaiaMessageStart():
+        _marks.clear();
+        return false;
+      case GaiaBlocksAbandoned(:final from):
+        final blocks = _marks.keys.where((block) => block >= from).toList()
+          ..sort();
+        // None shown, as for a thinking block: nothing to take back.
+        if (blocks.isEmpty) return false;
+        final (parts, calls) = _marks[blocks.first]!;
+        _marks.clear();
+        _parts
+          ..clear()
+          ..addAll(parts);
+        _calls
+          ..clear()
+          ..addAll(calls);
+      case GaiaTextStart(:final block):
+        _mark(block);
         _parts.add(const GaiaTextPart(''));
       case GaiaTextDelta(:final text):
         if (_parts.lastOrNull case GaiaTextPart(text: final sofar)) {
@@ -311,7 +383,14 @@ class GaiaTurnBuilder {
         } else {
           _parts.add(GaiaTextPart(text));
         }
-      case GaiaToolUse(:final name, :final id, :final detail, :final failure):
+      case GaiaToolUse(
+        :final name,
+        :final id,
+        :final detail,
+        :final failure,
+        :final block,
+      ):
+        _mark(block);
         if (_parts.lastOrNull is! GaiaActivityPart) {
           _parts.add(const GaiaActivityPart([]));
         }
@@ -339,7 +418,7 @@ class GaiaTurnBuilder {
         } else {
           _parts[index] = card;
         }
-      case GaiaUsageUpdate():
+      case GaiaUsageUpdate() || GaiaRetrying():
         return false;
     }
     return true;

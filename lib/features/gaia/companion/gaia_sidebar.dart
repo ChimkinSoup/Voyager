@@ -16,7 +16,8 @@ const _squeezedChatRoom = 300.0;
 /// How far past [kGaiaSidebarMinWidth] a drag goes to close the sidebar.
 const _closeDrag = 48.0;
 
-/// The Gaia window's sidebar: whether the user has it open and how wide.
+/// The Gaia window's sidebar: whether the user has it open, how wide, and
+/// which chats have their forks folded away.
 /// Local to this desktop and never synced, like `GaiaDebug`: kept in a JSON
 /// [file] beside Gaia's other files. Null in tests, which keep nothing.
 class GaiaSidebar extends ChangeNotifier {
@@ -26,6 +27,9 @@ class GaiaSidebar extends ChangeNotifier {
 
   var open = true;
   var width = 260.0;
+
+  /// The chats whose forks are hidden under them.
+  var collapsed = <String>{};
 
   Future<void> load() async {
     final file = this.file;
@@ -39,6 +43,9 @@ class GaiaSidebar extends ChangeNotifier {
           kGaiaSidebarMaxWidth,
         );
       }
+      if (json['collapsed'] case final List ids) {
+        collapsed = {for (final id in ids) id as String};
+      }
     } catch (error) {
       debugPrint('[gaia] sidebar unreadable, using defaults: $error');
     }
@@ -51,6 +58,12 @@ class GaiaSidebar extends ChangeNotifier {
 
   Future<void> setWidth(double value, {bool save = true}) =>
       _set(() => width = value, save: save);
+
+  Future<void> setCollapsed(String chatId, bool value) => _set(
+    () => collapsed = {...collapsed}
+      ..remove(chatId)
+      ..addAll([if (value) chatId]),
+  );
 
   Future<void> _set(void Function() change, {bool save = true}) {
     change();
@@ -67,7 +80,13 @@ class GaiaSidebar extends ChangeNotifier {
     if (file == null) return;
     try {
       await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode({'open': open, 'width': width}));
+      await file.writeAsString(
+        jsonEncode({
+          'open': open,
+          'width': width,
+          'collapsed': collapsed.toList(),
+        }),
+      );
     } catch (error) {
       debugPrint('[gaia] sidebar not saved: $error');
     }

@@ -214,16 +214,49 @@ void main() {
     await finish(tester);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('a new chat is never offered Auto (§4)', (tester) async {
-    await pump(tester, withChat: false);
+  testWidgets("a new chat's Auto goes with its first message, by setAuto, and "
+      'not to the next new chat (§4)', (tester) async {
+    final (controller, _, created) = await pump(tester, withChat: false);
     await tester.tap(
       find.byIcon(Icons.pan_tool_alt_outlined),
       kind: PointerDeviceKind.mouse,
     );
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
-    expect(find.textContaining('A card before', findRichText: true), findsOne);
-    expect(find.textContaining('No cards', findRichText: true), findsNothing);
+    await tester.tap(
+      find.textContaining('No cards', findRichText: true),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Let Gaia act without asking?'), findsOneWidget);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(controller.hand, GaiaHand.auto);
+    expect(controller.canSeeScreen, isTrue);
+    expect(handCalls, isEmpty, reason: 'no chat to send it for yet');
+
+    await tester.runAsync(() async {
+      await controller.send('Mark my top 3 emails as read');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    // Saved in Ask; setAuto, which checks the notice, turns Auto on.
+    final grant = created.single.grants['laptop']!;
+    expect(
+      (grant.seeScreen, grant.canControl, grant.auto),
+      (true, true, false),
+    );
+    expect(handCalls, ['setAuto true true']);
+    expect(controller.hand, GaiaHand.auto);
+
+    controller.moveDraftToNewChat();
+    await tester.pump();
+    expect(controller.hand, GaiaHand.off);
+    expect(controller.canSeeScreen, isFalse);
     await finish(tester);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 

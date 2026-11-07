@@ -1,11 +1,12 @@
 # Gaia — Forking a Chat (HLD)
 
 Status: **Phases 1 and 2 built, with follow-ups (2026-11-06); in-app live tests run
-(2026-11-06, §10.6), two bugs found and fixed, two left open.**
+(2026-11-06, §10.6), and the four bugs they found (BUG-366 to BUG-369) fixed. Every live
+test has passed, including the compaction case and the right-click menu. Done.**
 It's built in two phases (§10): first forking by transcript handoff everywhere, then Claude
 Code's native fork. What Phase 1 built, and the live tests it still needs, are in §10.3;
 Phase 2's are in §10.4, and the follow-ups' in §10.5. The results of those live tests are in §10.6. The Claude Code behaviour it relies on was checked on 2.1.318 (§4), and Phase 2's
-contract check passed live on that version. Nothing in Codex was checked, since Codex
+contract check passed live on that version and on 2.1.319. Nothing in Codex was checked, since Codex
 doesn't fork natively under this design.
 
 ## 1. Summary
@@ -152,7 +153,9 @@ The source session lives under one account's config dir.
 - **If the fork's first send routes to the same account**, it forks in place.
 - **If it routes to another account of the same adapter**, Gaia copies the source session
   over with `copySession` first, then forks, as `_followSession` does.
-- **If it routes to another adapter**, the fork uses option 1.
+- **If it routes to another adapter**, the fork uses option 1. *As built (§10.4), that
+  send is a handoff but the fork record is kept, so a later Claude Code send still forks
+  natively and catches up the other adapter's turns.*
 
 ### 5.5 When the native fork is used
 
@@ -196,12 +199,20 @@ later, the same way as §5.
 
 ## 7. UI
 
-Not designed yet. To decide when building:
+Decided while building Phase 1; see §10.3's UI decisions. In short: "Fork from here" in
+the message's right-click menu, left out on a streaming reply; the title is the source's
+with " (fork)"; the fork opens straight away.
 
-- where the fork action sits (the message context menu is the obvious place);
-- that it's disabled on a streaming reply;
-- the fork's title;
-- whether the app opens the fork straight away.
+**Forks listed under their original.** A fork stores `forkOf`, the id of the chat at the
+root (a fork of a fork names the original), and it syncs. In the companion's sidebar and
+on the Gaia page, a fork is listed under its original, with a bracket, newest first.
+The group sits where the original's own activity puts it. When the original is pinned or
+unpinned, its forks move with it. A pinned fork is listed on its own at the top, and
+when it's unpinned it goes back under the original. A fork whose original is deleted, and
+forks made before `forkOf` existed, are listed on their own. A chevron after the
+original's title hides its forks. The companion keeps what's hidden in `sidebar.json`;
+the Gaia page keeps it only while it's open. A new fork shows its group again. A search
+on the Gaia page lists its matches without grouping them.
 
 ## 8. Known limits
 
@@ -469,13 +480,16 @@ and on Codex unless it says otherwise.
   gives the right cut. The weakest is when no later prompt exists and the cut is the
   session file's last entry: a half-written last line puts the cut one entry early, losing
   the tail of an interrupted reply.
-- **A session compacted before the fork point** was not tried. Compaction needs a chat near
-  the context window, and only a fork at a point before the compaction is affected. Whether
-  `--resume-session-at` accepts an entry from before a compaction boundary is unknown. A
-  refusal falls back on its own, and since §10.5 so does a first turn that starts and then
-  fails. **Still not tried after §10.5's test 14 (2026-11-06):** no session on the test PC had
-  a `compact_boundary` entry. The fallback it would rely on was checked live through the "Not
-  logged in" path instead, and works since BUG-366's fix (§10.6).
+- **A session compacted after the fork point falls back to handoff.** Checked 2026-11-06 on
+  2.1.319, with a manual `/compact` (§10.6). After a compaction, the CLI only knows the
+  session's post-compaction view: the `compact_boundary`, its summary and the exchange
+  compaction kept. `--resume-session-at` at an older entry is refused before `init` with
+  "No message found", like a bad uuid, so the fork is handed over with nothing shown. The
+  copied turns reach it word for word, so the agent does know them; what's lost is their tool
+  results, as with any handoff. A cut after the boundary is native and carries the compacted
+  context, just as the source has it. A cut at the kept exchange (the last turn before the
+  compaction) is accepted, but the fork gets the summary plus that exchange, not the full
+  history.
 
 **Tests added:** in `test/gaia_controller_test.dart`, group "native forks": the record and
 its cut inputs; the first send forks with nothing handed over, then resumes normally; a fork
@@ -625,7 +639,7 @@ files and the database.
 | §10.4 #9: take-back in a native fork | Pass. A stopped first send keeps the record and forks again. |
 | §10.4 #10: fork at the end after a take-back | Pass, cut at the take-back's `keepAt` |
 | §10.5 #13: fork of an unsent fork | Pass. Native against the original session; at the very end it used `endAt`; the first fork was unaffected. |
-| §10.5 #14: a fork's first turn that fails | Failed: **BUG-366**, fixed. The compaction case wasn't tried (§10.4's known limits). |
+| §10.5 #14: a fork's first turn that fails | Failed: **BUG-366**, fixed. The compaction case was run later; see the follow-up checks below. |
 
 **Found:**
 
@@ -645,5 +659,14 @@ files and the database.
   times from four forks. This misses §10.1's Done-when line on memories, though §10.3 #6
   covers only a curated source.
 
-Not run: a real right-click on the menu (checked in code), the compaction case, and forking
-at a prompt streaming on another device (not visible here until it ends).
+**Follow-up checks (2026-11-06, later):** the same setup, Claude Code 2.1.319, from a debug
+build of `f3e9f6e4`. All three passed:
+
+| Test | Result |
+|---|---|
+| Contract on 2.1.319 (§10.4 #12) | Pass, 12 of 12 |
+| Right-click menu | Pass. Right-clicking a reply still streaming (with text: Select all, Copy message, Attach as context) shows no Fork from here. With no text yet, no menu opens, since nothing is left to offer. Right-clicking that reply's prompt offers Fork from here; tapping it opened "<title> (fork)", ending on the prompt, unanswered. |
+| Compaction | Pass: a refused cut falls back. First checked against a scratch CLI session with `/compact` sent by `claude -p --resume <id>` (the CLI's own `-p` result is a JSON array of events on 2.1.319). Then in the app: two exchanges and a poem in a Haiku chat; Gaia's CLI process stopped; `/compact` run on its session from the workspace folder. A fork at the first reply (cut before the boundary): `--fork-session` refused, a `--session-id` handoff 0.6 s later, `fork_json` NULL, no toast, and it answered with the one code word the fork holds. A fork at the last reply (cut at the "Compacted" entry after the boundary) was native, hanging off `keepAt`, and knew only what the summary kept. Recorded in §10.4's known limits. |
+| Forking at a prompt whose reply streams on another device | Pass. A prompt is uploaded when sent; only a streaming reply waits (`upsertMessage`). So `qb`'s prompt showed on `gaiaqa` within 2 s while its reply streamed there. Forked at it on `gaiaqa`: the fork ended on that prompt, unanswered, with a native record (`lastSeq` the seq before it, cut at this device's session end, passing over the prompt the session never had). Its first send was native, with `qb`'s prompt in a catch-up `<gaia_transcript>` hanging off `keepAt`, and it answered with the code word that prompt set. `qb`'s reply finished normally (12k characters), and reached the source on `gaiaqa` but not the fork. |
+
+Every live test in §10.3 to §10.5 has now been run.

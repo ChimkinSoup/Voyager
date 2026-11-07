@@ -10191,6 +10191,7 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   fork: row.forkJson == null
       ? null
       : GaiaForkRecord.fromJson(jsonDecode(row.forkJson!)),
+  forkOf: row.forkOf,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10211,6 +10212,7 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       forkJson: Value(
         chat.fork == null ? null : jsonEncode(chat.fork!.toJson()),
       ),
+      forkOf: Value(chat.forkOf),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),

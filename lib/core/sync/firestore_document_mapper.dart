@@ -4383,6 +4383,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'curatedSeq': chat.curatedSeq,
   'drain': chat.drain,
   'grants': chat.toJson()['grants'],
+  'forkOf': chat.forkOf,
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4441,6 +4442,7 @@ GaiaChat mergeGaiaChatFromRemote(
           ),
     // This device's own, never synced (GAIA_FORKING_HLD.md §5.3).
     fork: local?.fork,
+    forkOf: data['forkOf'] as String? ?? local?.forkOf,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

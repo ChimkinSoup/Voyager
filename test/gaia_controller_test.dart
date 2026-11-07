@@ -4297,6 +4297,20 @@ void main() {
       await sub.cancel();
     });
 
+    test("a new chat's send that doesn't start gives its hand back with "
+        'its draft', () async {
+      await startCompanion();
+      main.heldBy = 'DESKTOP';
+      await controller.setHand(GaiaHand.auto, consented: true);
+      await controller.send('Hello');
+      await settle();
+      expect(runner.sent, isEmpty);
+      expect(controller.currentChatId, isNull);
+      expect(controller.draft.text, 'Hello');
+      expect(controller.hand, GaiaHand.auto);
+      expect(controller.canSeeScreen, isTrue);
+    });
+
     test('a prompt while aborted, or a cancel with nothing running, is '
         'refused with why', () async {
       main.aborted = true;
@@ -5343,10 +5357,26 @@ void main() {
       }
       final chat = (await main.store.chats()).firstWhere((c) => c.id == fork);
       expect(chat.title, 'Plans (fork)');
+      expect(chat.forkOf, 'c1');
       expect(chat.tier, GaiaTier.deep);
       expect(chat.agentSessions, isEmpty);
       // The source is as it was.
       expect(await main.store.messages('c1'), hasLength(4));
+    });
+
+    test("a fork of a fork names the original as the one it's under", () async {
+      await storeChat();
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+
+      final fork = await forkAt(3);
+      final forkOfFork = await forkAt(1);
+      expect(forkOfFork, isNot(fork));
+      final chat = (await main.store.chats()).firstWhere(
+        (c) => c.id == forkOfFork,
+      );
+      expect(chat.forkOf, 'c1');
     });
 
     test('answering a copied open question in a fork leaves the '
@@ -5572,6 +5602,7 @@ void main() {
       expect(asked.after, 'm0');
       expect(asked.next, ['m2']);
       expect(asked.awaiting, isNull);
+      expect(controller.forkingAt, isNull);
       final record = (await chatOf(fork)).fork!;
       expect(record.sessionKey, gaiaSessionKey('laptop'));
       expect(record.sourceSessionId, 'source-session');
@@ -5839,7 +5870,12 @@ void main() {
       final secondId = controller.messages[2].id;
       runner.cutAt = 'entry-1';
 
-      final fork = await forkAt(2);
+      final forking = controller.forkChat(controller.messages[2]);
+      expect(controller.forkingAt, secondId);
+      await forking;
+      await settle();
+      expect(controller.forkingAt, isNull);
+      final fork = controller.currentChatId!;
       final asked = runner.cutsAsked.single;
       expect(asked.after, firstId);
       expect(asked.next, [secondId]);

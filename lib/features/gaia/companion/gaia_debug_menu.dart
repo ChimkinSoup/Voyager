@@ -287,6 +287,37 @@ class _DebugMenu extends StatelessWidget {
             ),
           ],
         ),
+        heading('Connection drops'),
+        Text(
+          'Each plays in the open chat as a real run would show it: retries '
+          'under the reply, a cut-off reply taken back before it is written '
+          'again, and the two ways a run ends in an error. Needs scripted '
+          'replies.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final (label, command) in const [
+              ('Retries', '/retry'),
+              ('Overloaded', '/retry2'),
+              ('Cut off, retried', '/cut'),
+              ('May be incomplete', '/incomplete'),
+              ('Gave up', '/gaveup'),
+            ])
+              GaiaButton(
+                label: label,
+                onPressed: debug.scriptedReplies && !controller.currentRunning
+                    ? () {
+                        Navigator.of(context).pop();
+                        controller.send(command);
+                      }
+                    : null,
+              ),
+          ],
+        ),
         heading('Remember toasts'),
         Text(
           'Each toast /remember can show, as its text says it. Saved and '
@@ -358,6 +389,27 @@ class _DebugMenu extends StatelessWidget {
             ),
           ),
         ],
+        heading('Forking'),
+        Text(
+          'Shown at the end of the message forked from while the fork waits for a '
+          'prompt just sent to reach its session, up to five seconds. Shown '
+          "here on the open chat's last message for four seconds; nothing is "
+          'forked.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            label: 'Show forking',
+            onPressed: controller.messages.isEmpty
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    controller.previewForking();
+                  },
+          ),
+        ),
         heading('Taking control of the screen'),
         GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
         heading('Display'),

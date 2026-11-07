@@ -76,6 +76,10 @@ typedef _Draft = ({
   List<GaiaFilePart> files,
 });
 
+/// A retry under a streaming reply, and when its attempt is due; null when
+/// the backend didn't say.
+typedef GaiaRetry = ({GaiaRetrying retry, DateTime? due});
+
 /// The companion's state: chats read from and written to the main instance,
 /// runs on each tier's agent, the window mode, Abort, and the drain before
 /// an update (GAIA_HLD.md §3, §7, §14, §15.7).
@@ -648,6 +652,7 @@ class GaiaController extends ChangeNotifier {
     if (chatId == currentChatId) return;
     _newChatSeesScreen = false;
     _newChatCanControl = false;
+    _newChatAuto = null;
     seeScreenWarning = false;
     _draftHistories[_keyOf(currentChatId)] = draftUndo.saveHistory();
     if (draft.text.isNotEmpty ||
@@ -1215,6 +1220,13 @@ class GaiaController extends ChangeNotifier {
   /// in the draft then.
   final _takeBackSuperseded = <String>{};
   final _lastPersist = <String, DateTime>{};
+
+  /// Replies whose backend is retrying a failed model call, by message id,
+  /// with when the next attempt is due: shown under the reply until the
+  /// next event comes. Not saved.
+  final _retrying = <String, GaiaRetry>{};
+
+  GaiaRetry? retryingOf(String messageId) => _retrying[messageId];
 
   /// Chats this device ran a turn in, each curated once it's been idle for
   /// [kGaiaCurateAfter] (§11).
@@ -2438,10 +2450,34 @@ class GaiaController extends ChangeNotifier {
       await _forkChat(at);
     } finally {
       _forking = false;
+      if (_forkingAt != null) {
+        _forkingAt = null;
+        notifyListeners();
+      }
     }
   }
 
   bool _forking = false;
+
+  /// The message a fork is being made at while it waits for a prompt just
+  /// sent to reach the session (§5.2), which can take seconds; null
+  /// otherwise.
+  String? get forkingAt => _forkingAt;
+  String? _forkingAt;
+
+  /// Debug menu: "Forking…" on the open chat's last message for a few
+  /// seconds, as a fork waiting on a prompt just sent shows it.
+  void previewForking() {
+    final last = messages.lastOrNull;
+    if (last == null || _forking) return;
+    _forkingAt = last.id;
+    notifyListeners();
+    Timer(const Duration(seconds: 4), () {
+      if (_forking || _forkingAt != last.id) return;
+      _forkingAt = null;
+      notifyListeners();
+    });
+  }
 
   Future<void> _forkChat(GaiaMessage at) async {
     final source = _chat(at.chatId);
@@ -2484,6 +2520,7 @@ class GaiaController extends ChangeNotifier {
       // once per fork (BUG-369).
       curatedSeq: point.seq,
       fork: record,
+      forkOf: source.forkOf ?? source.id,
     );
     final copies = [
       for (final message in copied)
@@ -2513,6 +2550,10 @@ class GaiaController extends ChangeNotifier {
     }
     chats = [fork, ...chats]..sort(_listed);
     _messages[forkId] = copies;
+    // Shown under its original, not folded away.
+    if (sidebar.collapsed.contains(fork.forkOf)) {
+      unawaited(sidebar.setCollapsed(fork.forkOf!, false));
+    }
     await selectChat(forkId);
   }
 
@@ -2600,6 +2641,13 @@ class GaiaController extends ChangeNotifier {
         : list.lastWhereOrNull(
             (m) => m.role == GaiaMessageRole.user && m.seq < live.seq,
           );
+    final awaiting = livePrompt != null && livePrompt.seq > lastSeq
+        ? livePrompt.entryId
+        : null;
+    if (awaiting != null) {
+      _forkingAt = point.id;
+      notifyListeners();
+    }
     final String? keepAt;
     try {
       keepAt = await (runner as GaiaSessionForker).forkCut(
@@ -2612,9 +2660,7 @@ class GaiaController extends ChangeNotifier {
             if (message.role == GaiaMessageRole.user && message.seq > lastSeq)
               message.entryId,
         ],
-        awaiting: livePrompt != null && livePrompt.seq > lastSeq
-            ? livePrompt.entryId
-            : null,
+        awaiting: awaiting,
         endAt: endAt,
       );
     } on FileSystemException catch (error) {
@@ -2903,6 +2949,8 @@ class GaiaController extends ChangeNotifier {
     seeScreenWarning = on;
     if (chat == null) {
       _newChatSeesScreen = on;
+      // Auto needs reading (GAIA_AUTONOMY_HLD.md §4): off drops to Ask.
+      if (!on) _newChatAuto = null;
       notifyListeners();
       return;
     }
@@ -2927,9 +2975,13 @@ class GaiaController extends ChangeNotifier {
     await _request('setSeeScreen', {'chatId': chat.id, 'on': on});
   }
 
-  /// A new chat's *can control*, until its first message makes it one. Never
-  /// Auto (GAIA_AUTONOMY_HLD.md §4).
+  /// A new chat's *can control*, until its first message makes it one.
   var _newChatCanControl = false;
+
+  /// A new chat's Auto (GAIA_AUTONOMY_HLD.md §4), until its first message
+  /// makes it one: null when it isn't, else whether its notice was confirmed
+  /// just now. Only for that chat, never the next new one.
+  bool? _newChatAuto;
 
   /// *Can control* (§15.6) for the chat in view, on this device.
   bool get canControl => switch (currentChat) {
@@ -2940,6 +2992,7 @@ class GaiaController extends ChangeNotifier {
   /// The hand (GAIA_AUTONOMY_HLD.md §4) for the chat in view, on this device.
   GaiaHand get hand => switch (currentChat?.grants[_deviceId]) {
     final grant? when grant.isAuto => GaiaHand.auto,
+    _ when currentChat == null && _newChatAuto != null => GaiaHand.auto,
     _ => canControl ? GaiaHand.ask : GaiaHand.off,
   };
 
@@ -2952,14 +3005,17 @@ class GaiaController extends ChangeNotifier {
     }
   }
 
-  /// Sets the hand. A new chat never starts in Auto, and the main instance
-  /// refuses Auto until its notice is [consented] to, once per device (§4).
+  /// Sets the hand. A new chat's Auto is its own, never the next new chat's,
+  /// and the main instance refuses Auto until its notice is [consented] to,
+  /// once per device (§4).
   Future<void> setHand(GaiaHand to, {bool consented = false}) async {
     final chat = currentChat;
     if (to == hand) return;
     if (chat == null) {
-      if (to == GaiaHand.auto) return;
-      _newChatCanControl = to == GaiaHand.ask;
+      _newChatAuto = to == GaiaHand.auto ? consented : null;
+      // Auto needs reading (§4).
+      if (to == GaiaHand.auto) _newChatSeesScreen = true;
+      _newChatCanControl = to != GaiaHand.off;
       notifyListeners();
       return;
     }
@@ -3272,6 +3328,8 @@ class GaiaController extends ChangeNotifier {
     }
     var chat = remote == null ? currentChat : _chat(remote.chatId);
     final isNew = chat == null;
+    // A new chat's Auto notice, confirmed just now: setAuto carries it.
+    var newAutoConsented = false;
     // Claimed now, so a second send can't start while this one's images
     // upload or its tier is picked.
     final chatId = chat?.id ?? remote?.chatId ?? _uuid.v4();
@@ -3330,14 +3388,17 @@ class GaiaController extends ChangeNotifier {
                 _deviceId: GaiaGrant(
                   seeScreen: _newChatSeesScreen,
                   canControl: _newChatCanControl,
+                  auto: _newChatAuto != null,
                   at: sentAt,
                 ),
               }
             : const {},
       );
       if (remote == null) {
+        newAutoConsented = _newChatAuto ?? false;
         _newChatSeesScreen = false;
         _newChatCanControl = false;
+        _newChatAuto = null;
       }
       chats = [chat, ...chats]..sort(_listed);
       // A remote chat is listed, but the one in view stays.
@@ -3420,6 +3481,14 @@ class GaiaController extends ChangeNotifier {
       }
       windowContext = context;
       draftControl = control;
+      // A new chat's choices go back with its draft, if that's in view.
+      if (isNew && currentChatId == null && !aborted) {
+        if (chat?.grants[_deviceId] case final grant?) {
+          _newChatSeesScreen = grant.seeScreen;
+          _newChatCanControl = grant.canControl;
+          _newChatAuto = grant.auto ? newAutoConsented : null;
+        }
+      }
       // Less any attached again meanwhile.
       draftQuotes.insertAll(0, [
         for (final quote in quotes)
@@ -3620,8 +3689,31 @@ class GaiaController extends ChangeNotifier {
       // As it's listed now, so a rename while it was unsaved is kept.
       chat = (_chat(chatId) ?? chat).copyWith(tier: tier, lastMessageAt: now);
       chats = [for (final c in chats) c.id == chatId ? chat : c];
+      // Auto goes by setAuto, which checks its notice and Abort (§4).
+      final auto = chat.grants[_deviceId]?.isAuto ?? false;
+      final ask = GaiaGrant(seeScreen: true, canControl: true, at: now);
       try {
-        await _pipe.request('putChat', {'chat': chat.toJson()});
+        await _pipe.request('putChat', {
+          'chat':
+              (auto
+                      ? chat.copyWith(grants: {...chat.grants, _deviceId: ask})
+                      : chat)
+                  .toJson(),
+        });
+        if (auto) {
+          try {
+            await _pipe.request('setAuto', {
+              'chatId': chatId,
+              'on': true,
+              'consented': newAutoConsented,
+            });
+          } on GaiaPipeException catch (error) {
+            // Refused: the chat goes in Ask.
+            chat = chat.copyWith(grants: {...chat.grants, _deviceId: ask});
+            chats = [for (final c in chats) c.id == chatId ? chat : c];
+            _note("Couldn't turn on Auto", error.message, error: true);
+          }
+        }
       } on GaiaPipeException catch (error) {
         // The main instance is going away: no run whose chat can't be kept.
         debugPrint('[gaia] chat not saved, not sending: $error');
@@ -3798,6 +3890,18 @@ class GaiaController extends ChangeNotifier {
             usage[account.key]?.updatedBy(turnUsage) ?? turnUsage;
         _usageCheckedAt[account.key] = DateTime.now();
         _usageChanged();
+      }
+      if (event is GaiaRetrying) {
+        _retrying[reply.id] = (
+          retry: event,
+          due: switch (event.delay) {
+            final delay? => DateTime.now().add(delay),
+            null => null,
+          },
+        );
+        notifyListeners();
+      } else if (_retrying.remove(reply.id) != null) {
+        notifyListeners();
       }
       if (!builder.apply(event)) return;
       reply = _replace(
@@ -4235,6 +4339,7 @@ class GaiaController extends ChangeNotifier {
       _turnTools.remove(chatId);
       persistSoon?.cancel();
       _lastPersist.remove(reply.id);
+      _retrying.remove(reply.id);
       _reportRuns();
       notifyListeners();
     }
@@ -4822,6 +4927,7 @@ class GaiaController extends ChangeNotifier {
     aborted = true;
     _newChatSeesScreen = false;
     _newChatCanControl = false;
+    _newChatAuto = null;
     seeScreenWarning = false;
     _dropPointed();
     // Their tool calls refuse, and the cards show voided (§15.7).

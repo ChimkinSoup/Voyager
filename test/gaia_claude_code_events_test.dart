@@ -188,6 +188,80 @@ void main() {
     );
   });
 
+  test('a reply cut off mid-stream gives way to the one the CLI retries', () {
+    // Recorded with the wifi off partway through the story's text, and back
+    // on while the CLI retried (trimmed to five text deltas a block).
+    final events = _events('dropped_retried.jsonl');
+    expect(events.whereType<ClaudeAbandoned>().single.from, 1);
+    expect(events.whereType<ClaudeResult>().single.isError, isFalse);
+    final parts = _build(events);
+    final text = (parts.single as GaiaTextPart).text;
+    expect(text, startsWith('# The Character of the Light'));
+    // The cut-off first go began "**The Character of the Light**".
+    expect(text, isNot(contains('**')));
+  });
+
+  test('a reply cut off for good ends in an error result', () {
+    // Recorded with the wifi off while it thought, until the CLI gave up.
+    final events = _events('dropped_gave_up.jsonl');
+    expect(events.whereType<ClaudeAbandoned>().single.from, 0);
+    expect(_build(events), isEmpty);
+    final result = events.whereType<ClaudeResult>().single;
+    expect(result.isError, isTrue);
+    expect(result.text, contains("Can't reach the API server"));
+    // Each retry it made, shown as it came.
+    final retries = [
+      for (final event in events)
+        if (gaiaEventOf(event) case GaiaRetrying(
+          :final attempt,
+          :final maxRetries,
+          :final status,
+          :final delay,
+        ))
+          (attempt, maxRetries, status, delay),
+    ];
+    expect(retries.first, (1, 10, null, const Duration(milliseconds: 583)));
+    expect(retries.last, (9, 9, null, const Duration(milliseconds: 37432)));
+    expect(retries, hasLength(10));
+  });
+
+  test("a retry's status or a block's index of another type is left out", () {
+    final retry = parseClaudeLine(
+      '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,'
+      '"error_status":"529","retry_delay_ms":500}',
+    );
+    expect(retry, isA<ClaudeRetry>().having((r) => r.status, 'status', null));
+    final start = parseClaudeLine(
+      '{"type":"stream_event","event":{"type":"content_block_start",'
+      '"index":"0","content_block":{"type":"text","text":""}}}',
+    );
+    expect(start, isA<ClaudeTextStart>().having((s) => s.block, 'block', null));
+  });
+
+  test("abandoned blocks take back only their own message's parts", () {
+    final builder = GaiaTurnBuilder()
+      ..apply(const GaiaMessageStart())
+      ..apply(const GaiaTextStart(block: 0))
+      ..apply(const GaiaTextDelta('earlier message'))
+      ..apply(const GaiaMessageStart())
+      ..apply(const GaiaTextStart(block: 0))
+      ..apply(const GaiaTextDelta('kept'))
+      ..apply(const GaiaToolUse('Bash', id: 'a', block: 1))
+      ..apply(const GaiaTextStart(block: 2))
+      ..apply(const GaiaTextDelta('cut'));
+    expect(builder.apply(const GaiaBlocksAbandoned(1)), isTrue);
+    expect(builder.finished.map((part) => part.toJson()), [
+      {'type': 'text', 'text': 'earlier message'},
+      {'type': 'text', 'text': 'kept'},
+    ]);
+    // The abandoned call is gone with its part.
+    expect(builder.apply(const GaiaToolDetails({'a': 'ls'})), isFalse);
+    // A message that showed nothing before its cut takes nothing back.
+    builder.apply(const GaiaMessageStart());
+    expect(builder.apply(const GaiaBlocksAbandoned(0)), isFalse);
+    expect(builder.finished, hasLength(2));
+  });
+
   test("a subagent's tool inputs aren't the reply's", () {
     expect(
       parseClaudeLine(

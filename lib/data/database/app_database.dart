@@ -2216,6 +2216,9 @@ class GaiaChatsTable extends Table {
   /// A fork's native session not made yet, as `GaiaForkRecord` JSON
   /// (GAIA_FORKING_HLD.md §5.3). This device's alone: never synced.
   TextColumn get forkJson => text().nullable()();
+
+  /// The original chat a fork was made from (GAIA_FORKING_HLD.md §7).
+  TextColumn get forkOf => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2467,7 +2470,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 187;
+  int get schemaVersion => 188;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4593,6 +4596,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_messages_table',
           gaiaMessagesTable,
           gaiaMessagesTable.origin,
+        );
+      }
+      if (from >= 169 && from < 188) {
+        // Forks listed under their original chat (GAIA_FORKING_HLD.md §7).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.forkOf,
         );
       }
     },

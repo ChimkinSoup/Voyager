@@ -765,7 +765,10 @@ class _SidebarState extends State<_Sidebar> {
   /// and spinner haven't changed is given back as it was, which Flutter
   /// skips.
   final _tiles =
-      <String, ({GaiaChat chat, bool selected, bool running, Widget tile})>{};
+      <
+        String,
+        ({GaiaChat chat, bool selected, bool running, bool? open, Widget tile})
+      >{};
 
   /// The chat being renamed in its tile, and its field.
   String? _renaming;
@@ -872,7 +875,8 @@ class _SidebarState extends State<_Sidebar> {
     ]);
   }
 
-  Widget _tile(GaiaChat chat) {
+  /// [open]: whether the chat's forks show under it; null when it has none.
+  Widget _tile(GaiaChat chat, {bool? open}) {
     final controller = widget.controller;
     final selected = chat.id == controller.currentChatId;
     final running = controller.isRunning(chat.id);
@@ -881,7 +885,8 @@ class _SidebarState extends State<_Sidebar> {
         when !renaming &&
             identical(last.chat, chat) &&
             last.selected == selected &&
-            last.running == running) {
+            last.running == running &&
+            last.open == open) {
       return last.tile;
     }
     final tile = GestureDetector(
@@ -904,6 +909,15 @@ class _SidebarState extends State<_Sidebar> {
                 ),
               )
             : Text(chat.title, overflow: TextOverflow.ellipsis),
+        chevron: open == null
+            ? null
+            : _ForksChevron(
+                open: open,
+                onTap: () {
+                  unawaited(controller.sidebar.setCollapsed(chat.id, open));
+                  setState(() {});
+                },
+              ),
         trailing: chat.pinned || running
             ? Row(
                 mainAxisSize: MainAxisSize.min,
@@ -943,6 +957,7 @@ class _SidebarState extends State<_Sidebar> {
       chat: chat,
       selected: selected,
       running: running,
+      open: open,
       tile: tile,
     );
     return tile;
@@ -985,7 +1000,20 @@ class _SidebarState extends State<_Sidebar> {
             ).copyWith(scrollbars: false),
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              children: [for (final chat in controller.chats) _tile(chat)],
+              children: [
+                for (final (:chat, :forks) in gaiaForkGroups(controller.chats))
+                  if (forks.isEmpty)
+                    _tile(chat)
+                  else if (controller.sidebar.collapsed.contains(chat.id))
+                    _tile(chat, open: false)
+                  else ...[
+                    _tile(chat, open: true),
+                    _ForkBracket(
+                      key: ValueKey('forks of ${chat.id}'),
+                      children: [for (final fork in forks) _tile(fork)],
+                    ),
+                  ],
+              ],
             ),
           ),
         ),
@@ -1015,12 +1043,16 @@ class _ChatTile extends StatefulWidget {
   const _ChatTile({
     required this.selected,
     required this.title,
+    this.chevron,
     required this.trailing,
     required this.onTap,
   });
 
   final bool selected;
   final Widget title;
+
+  /// Right after the title: a chat's fold for its forks.
+  final Widget? chevron;
   final Widget? trailing;
 
   /// Null while it's being renamed.
@@ -1074,7 +1106,15 @@ class _ChatTileState extends State<_ChatTile> {
                     fontWeight: FontWeight.w500,
                     color: lit ? Colors.white : const Color(0xFFA3A3A3),
                   ),
-                  child: widget.title,
+                  child: widget.chevron == null
+                      ? widget.title
+                      : Row(
+                          children: [
+                            Flexible(child: widget.title),
+                            const SizedBox(width: 4),
+                            widget.chevron!,
+                          ],
+                        ),
                 ),
               ),
               if (widget.trailing case final trailing?) ...[
@@ -1087,6 +1127,85 @@ class _ChatTileState extends State<_ChatTile> {
       ),
     );
   }
+}
+
+/// Folds a chat's forks away under it, or shows them.
+class _ForksChevron extends StatelessWidget {
+  const _ForksChevron({required this.open, required this.onTap});
+
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: AnimatedRotation(
+          turns: open ? 0 : -0.25,
+          duration: const Duration(milliseconds: 150),
+          child: Icon(
+            Icons.expand_more,
+            size: 16,
+            color: DefaultTextStyle.of(context).style.color,
+            semanticLabel: open ? 'Hide forks' : 'Show forks',
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// How far a chat's forks sit in from it.
+const _forkIndent = 22.0;
+
+/// A chat's forks, in under it, with a line down from the chat that turns
+/// into the last of them.
+class _ForkBracket extends StatelessWidget {
+  const _ForkBracket({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: const _ForkBracketPainter(),
+    child: Padding(
+      padding: const EdgeInsets.only(left: _forkIndent),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    ),
+  );
+}
+
+class _ForkBracketPainter extends CustomPainter {
+  const _ForkBracketPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const x = 13.0;
+    const radius = 6.0;
+    // The last tile's middle: 36 high, then its 2 below.
+    final y = size.height - 2 - 18;
+    canvas.drawPath(
+      Path()
+        ..moveTo(x, 0)
+        ..lineTo(x, y - radius)
+        ..quadraticBezierTo(x, y, x + radius, y)
+        ..lineTo(_forkIndent + 6, y),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.white.withValues(alpha: 0.2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ForkBracketPainter oldDelegate) => false;
 }
 
 /// The width messages keep to: about 115 characters a line.
@@ -2046,6 +2165,7 @@ class _MessageView extends StatelessWidget {
                         const SizedBox(height: 6),
                       ],
                       if (message.text.isNotEmpty) _text(message.text),
+                      _forking(muted),
                     ],
                   ),
                 ),
@@ -2131,6 +2251,23 @@ class _MessageView extends StatelessWidget {
               GaiaQuotePart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },
+          // Rebuilt with the controller: a retry isn't on the message.
+          if (streaming)
+            ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) =>
+                  switch (controller.retryingOf(message.id)) {
+                    null => const SizedBox.shrink(),
+                    final retry => Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _RetryLine(
+                        key: ValueKey(retry),
+                        retry: retry,
+                        style: muted?.copyWith(color: kGaiaStatusRose),
+                      ),
+                    ),
+                  },
+            ),
           if (status != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -2143,6 +2280,7 @@ class _MessageView extends StatelessWidget {
                 ),
               ),
             ),
+          _forking(muted),
         ],
       ),
     );
@@ -2245,6 +2383,25 @@ class _MessageView extends StatelessWidget {
   Widget _text(String text, {bool markdown = false}) =>
       _MessageText(text: text, markdown: markdown, menu: _menu);
 
+  /// "Forking…" while a fork from here waits on a prompt just sent. Rebuilt
+  /// with the controller: that isn't on the message.
+  Widget _forking(TextStyle? style) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) => controller.forkingAt != message.id
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const GaiaSpinner(size: 14, label: 'Forking'),
+                const SizedBox(width: 6),
+                Text('Forking…', style: style),
+              ],
+            ),
+          ),
+  );
+
   /// Right-clicked off its text, as on the bubble's padding: the message's
   /// actions alone.
   Widget _menuArea(Widget child) => Builder(
@@ -2282,6 +2439,62 @@ class _MessageView extends StatelessWidget {
       counts[tool] = (counts[tool] ?? 0) + 1;
     }
     return 'Used ${[for (final MapEntry(:key, :value) in counts.entries) value > 1 ? '$key ×$value' : key].join(', ')}';
+  }
+}
+
+/// "Connection lost, retrying in 12s (3/10)", counting down to the attempt,
+/// then "retrying now" while it runs.
+class _RetryLine extends StatefulWidget {
+  const _RetryLine({super.key, required this.retry, this.style});
+
+  final GaiaRetry retry;
+  final TextStyle? style;
+
+  @override
+  State<_RetryLine> createState() => _RetryLineState();
+}
+
+class _RetryLineState extends State<_RetryLine> {
+  late final Timer _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() {});
+      if (_left == null) _tick.cancel();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  /// Whole seconds to the attempt, rounded up; null once it's due, or
+  /// when that isn't known.
+  int? get _left {
+    final due = widget.retry.due;
+    if (due == null) return null;
+    final ms = due.difference(DateTime.now()).inMilliseconds;
+    return ms <= 0 ? null : (ms / 1000).ceil();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final GaiaRetrying(:attempt, :maxRetries, :status) = widget.retry.retry;
+    final left = _left;
+    final when = left != null
+        ? 'retrying in ${left}s'
+        : widget.retry.due == null
+        ? 'retrying'
+        : 'retrying now';
+    return Text(
+      '${status == null ? 'Connection lost' : 'API error $status'}, '
+      '$when ($attempt/$maxRetries)…',
+      style: widget.style,
+    );
   }
 }
 
@@ -4002,8 +4215,8 @@ const _digits = [
   LogicalKeyboardKey.digit0,
 ];
 
-/// The hand's menu (GAIA_AUTONOMY_HLD.md §4). Auto isn't offered to a new
-/// chat, and the first time on this device it shows its notice.
+/// The hand's menu (GAIA_AUTONOMY_HLD.md §4). The first Auto on this device
+/// shows its notice.
 void _showHandMenu(
   BuildContext context,
   GaiaController controller,
@@ -4026,14 +4239,13 @@ void _showHandMenu(
       shortcut: current(GaiaHand.ask),
       onPressed: () => unawaited(controller.setHand(GaiaHand.ask)),
     ),
-    if (controller.currentChat != null)
-      GaiaMenuItem(
-        label: 'Auto',
-        icon: Icons.bolt,
-        detail: 'No cards, commands too',
-        shortcut: current(GaiaHand.auto),
-        onPressed: () => unawaited(_chooseAuto(context, controller)),
-      ),
+    GaiaMenuItem(
+      label: 'Auto',
+      icon: Icons.bolt,
+      detail: 'No cards, commands too',
+      shortcut: current(GaiaHand.auto),
+      onPressed: () => unawaited(_chooseAuto(context, controller)),
+    ),
   ]);
 }
 

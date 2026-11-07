@@ -140,6 +140,33 @@ void main() {
     expect(clock.elapsedMilliseconds, greaterThanOrEqualTo(390));
   });
 
+  test(
+    '/cut takes the cut-off text back, and the reply is the retried one',
+    () async {
+      final builder = GaiaTurnBuilder();
+      final retries = <int>[];
+      final result = await GaiaScriptedRunner().send(
+        chatId: 'c',
+        script: gaiaDebugScripts['/cut']!,
+        replyDelay: Duration.zero,
+        streamSpeed: 6400,
+        onEvent: (event) {
+          builder.apply(event);
+          if (event case GaiaRetrying(:final attempt)) retries.add(attempt);
+        },
+        tools: _NoTools(),
+      );
+      expect(retries, [1, 2]);
+      final texts = builder.finished.whereType<GaiaTextPart>().toList();
+      expect(texts.map((part) => part.text), [
+        'Here is the plan.',
+        endsWith('fixes the leak.'),
+      ]);
+      expect(builder.finished[1], isA<GaiaActivityPart>());
+      expect(result.text, 'Here is the plan.${texts.last.text}');
+    },
+  );
+
   test('/tools plays every detail case, the late one filled in', () async {
     final builder = GaiaTurnBuilder();
     // The mid-stream call, while its detail hasn't come.

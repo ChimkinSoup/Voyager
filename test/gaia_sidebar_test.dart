@@ -183,10 +183,14 @@ void main() {
     final first = GaiaSidebar(file: file);
     await first.setWidth(333);
     await first.setOpen(false);
+    await first.setCollapsed('a', true);
+    await first.setCollapsed('b', true);
+    await first.setCollapsed('a', false);
 
     final second = GaiaSidebar(file: file);
     await second.load();
     expect(second.width, 333);
     expect(second.open, isFalse);
+    expect(second.collapsed, {'b'});
   });
 }

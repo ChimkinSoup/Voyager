@@ -667,6 +667,31 @@ void main() {
     },
   );
 
+  test('187→188 adds the chat a fork is under, none in old rows', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    GaiaChat chat({String? forkOf}) => GaiaChat(
+      id: 'c1',
+      title: 'Hi',
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+      forkOf: forkOf,
+    );
+    await DriftGaiaRepository(seed).upsertChat(chat());
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN fork_of',
+    );
+    await seed.customStatement('PRAGMA user_version = 187');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect((await repo.getChat('c1'))!.forkOf, isNull);
+    await repo.upsertChat(chat(forkOf: 'c0'));
+    expect((await repo.getChat('c1'))!.forkOf, 'c0');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

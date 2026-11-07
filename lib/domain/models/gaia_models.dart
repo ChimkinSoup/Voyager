@@ -394,9 +394,15 @@ class GaiaChat extends SoftDeletable {
     this.drain = false,
     this.grants = const {},
     this.fork,
+    this.forkOf,
   });
 
   final String title;
+
+  /// The chat this one was forked from, at the root: a fork of a fork names
+  /// the original. Listed under it in the sidebar while neither is pinned
+  /// away from the other. Null for a chat that isn't a fork.
+  final String? forkOf;
 
   /// The native session a fork's first send makes on this device
   /// (GAIA_FORKING_HLD.md §5.3); null once made, or for none.
@@ -457,6 +463,7 @@ class GaiaChat extends SoftDeletable {
     drain: drain ?? this.drain,
     grants: grants ?? this.grants,
     fork: clearFork ? null : (fork ?? this.fork),
+    forkOf: forkOf,
     id: id,
     createdAt: createdAt,
     updatedAt: touch ? utcNow() : updatedAt,
@@ -490,6 +497,7 @@ class GaiaChat extends SoftDeletable {
         key: value.toJson(),
     },
     'fork': fork?.toJson(),
+    'forkOf': forkOf,
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -509,8 +517,29 @@ class GaiaChat extends SoftDeletable {
       drain: json['drain'] == true,
       grants: gaiaGrantsFromJson(json['grants']),
       fork: GaiaForkRecord.fromJson(json['fork']),
+      forkOf: json['forkOf'] as String?,
     );
   }
+}
+
+/// [ordered] as listed (pinned first, then most recent), with each fork
+/// taken out to sit under its original chat, in the order they came.
+/// A fork that's pinned, or whose original isn't in [ordered], stays where
+/// it was, on its own.
+List<({GaiaChat chat, List<GaiaChat> forks})> gaiaForkGroups(
+  List<GaiaChat> ordered,
+) {
+  final ids = {for (final chat in ordered) chat.id};
+  bool under(GaiaChat chat) =>
+      !chat.pinned && chat.forkOf != chat.id && ids.contains(chat.forkOf);
+  final forks = <String, List<GaiaChat>>{};
+  for (final chat in ordered) {
+    if (under(chat)) (forks[chat.forkOf!] ??= []).add(chat);
+  }
+  return [
+    for (final chat in ordered)
+      if (!under(chat)) (chat: chat, forks: forks[chat.id] ?? const []),
+  ];
 }
 
 /// A prompt waiting its turn (§13): in [chatId]'s queue, or the global one

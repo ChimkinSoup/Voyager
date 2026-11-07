@@ -31,9 +31,44 @@ class ClaudeInit extends ClaudeEvent {
   final String model;
 }
 
-/// A text block of the agent's own reply has started.
+/// A text block of the agent's own reply has started, [block] in its
+/// message.
 class ClaudeTextStart extends ClaudeEvent {
-  const ClaudeTextStart();
+  const ClaudeTextStart({this.block});
+
+  final int? block;
+}
+
+/// A message of the agent's own has started streaming.
+class ClaudeMessageStart extends ClaudeEvent {
+  const ClaudeMessageStart();
+}
+
+/// `system`/`api_retry`: a model call failed, and the CLI tries again
+/// (observed on 2.1.319).
+class ClaudeRetry extends ClaudeEvent {
+  const ClaudeRetry({
+    required this.attempt,
+    required this.maxRetries,
+    this.status,
+    this.delay,
+  });
+
+  final int attempt;
+  final int maxRetries;
+  final int? status;
+
+  /// How long the CLI waits before the attempt.
+  final Duration? delay;
+}
+
+/// The message streaming was cut off, say by a dropped connection: the CLI
+/// throws away its blocks from [from] on and asks again (observed on
+/// 2.1.319, as `message_stop`'s `abandoned_blocks`).
+class ClaudeAbandoned extends ClaudeEvent {
+  const ClaudeAbandoned(this.from);
+
+  final int from;
 }
 
 class ClaudeTextDelta extends ClaudeEvent {
@@ -45,10 +80,11 @@ class ClaudeTextDelta extends ClaudeEvent {
 /// The agent called a tool. Its input streams in after this, and comes whole
 /// in a [ClaudeToolInputs] naming [id].
 class ClaudeToolUse extends ClaudeEvent {
-  const ClaudeToolUse(this.name, {this.id});
+  const ClaudeToolUse(this.name, {this.id, this.block});
 
   final String name;
   final String? id;
+  final int? block;
 }
 
 /// An `assistant` message's tool calls, by their ids: the whole-message echo
@@ -164,9 +200,29 @@ ClaudeEvent parseClaudeLine(String line) {
 
   switch (field<String>(decoded, 'type')) {
     case 'system':
-      if (field<String>(decoded, 'subtype') != 'init') {
+      final subtype = field<String>(decoded, 'subtype');
+      // Read leniently, since it's only shown.
+      if (subtype == 'api_retry') {
+        if (decoded case {
+          'attempt': final int attempt,
+          'max_retries': final int maxRetries,
+        }) {
+          return ClaudeRetry(
+            attempt: attempt,
+            maxRetries: maxRetries,
+            status: switch (decoded['error_status']) {
+              final int s => s,
+              _ => null,
+            },
+            delay: switch (decoded['retry_delay_ms']) {
+              final num ms => Duration(milliseconds: ms.round()),
+              _ => null,
+            },
+          );
+        }
         return const ClaudeIgnored();
       }
+      if (subtype != 'init') return const ClaudeIgnored();
       return ClaudeInit(
         sessionId: field<String>(decoded, 'session_id'),
         model: field<String>(decoded, 'model'),
@@ -176,13 +232,27 @@ ClaudeEvent parseClaudeLine(String line) {
       if (decoded['parent_tool_use_id'] != null) return const ClaudeIgnored();
       final event = field<Map<String, Object?>>(decoded, 'event');
       switch (field<String>(event, 'type')) {
+        case 'message_start':
+          return const ClaudeMessageStart();
+        case 'message_stop':
+          if (decoded['abandoned_blocks'] case {
+            'from_block_index': final int from,
+          }) {
+            return ClaudeAbandoned(from);
+          }
+          return const ClaudeIgnored();
         case 'content_block_start':
           final block = field<Map<String, Object?>>(event, 'content_block');
+          final index = switch (event['index']) {
+            final int i => i,
+            _ => null,
+          };
           return switch (field<String>(block, 'type')) {
-            'text' => const ClaudeTextStart(),
+            'text' => ClaudeTextStart(block: index),
             'tool_use' => ClaudeToolUse(
               field<String>(block, 'name'),
               id: block['id'] as String?,
+              block: index,
             ),
             _ => const ClaudeIgnored(),
           };
@@ -361,15 +431,25 @@ const _detailKeys = {
 
 /// What Gaia reads of [event]; null for the session's own bookkeeping.
 GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
-  ClaudeTextStart() => const GaiaTextStart(),
+  ClaudeMessageStart() => const GaiaMessageStart(),
+  ClaudeAbandoned(:final from) => GaiaBlocksAbandoned(from),
+  ClaudeRetry(:final attempt, :final maxRetries, :final status, :final delay) =>
+    GaiaRetrying(
+      attempt: attempt,
+      maxRetries: maxRetries,
+      status: status,
+      delay: delay,
+    ),
+  ClaudeTextStart(:final block) => GaiaTextStart(block: block),
   ClaudeTextDelta(:final text) => GaiaTextDelta(text),
   // Gaia's own tools by their own names: `ask_user`, not
   // `mcp__gaia__ask_user`.
-  ClaudeToolUse(:final name, :final id) => GaiaToolUse(
+  ClaudeToolUse(:final name, :final id, :final block) => GaiaToolUse(
     name.startsWith(_gaiaToolPrefix)
         ? name.substring(_gaiaToolPrefix.length)
         : name,
     id: id,
+    block: block,
   ),
   ClaudeToolInputs(:final inputs) => GaiaToolDetails({
     for (final MapEntry(key: id, value: (:name, :input)) in inputs.entries)

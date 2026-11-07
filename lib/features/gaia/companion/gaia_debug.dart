@@ -504,6 +504,28 @@ class GaiaDebugPause extends GaiaDebugStep {
   final Duration duration;
 }
 
+/// A failed model call the CLI tries again: [attempt] of [maxRetries],
+/// after [delay]. [status] as [GaiaRetrying.status].
+class GaiaDebugRetry extends GaiaDebugStep {
+  const GaiaDebugRetry(
+    this.attempt,
+    this.maxRetries,
+    this.delay, {
+    this.status,
+  });
+
+  final int attempt;
+  final int maxRetries;
+  final Duration delay;
+  final int? status;
+}
+
+/// The stream cut off mid-message: its last text block is thrown away, as
+/// the CLI's `abandoned_blocks` throws it away, and a new message starts.
+class GaiaDebugCut extends GaiaDebugStep {
+  const GaiaDebugCut();
+}
+
 /// Ends the turn as the CLI reports a failure: an error result.
 class GaiaDebugError extends GaiaDebugStep {
   const GaiaDebugError(this.message);
@@ -566,10 +588,14 @@ class GaiaScriptedRunner {
 
     if (!await wait(replyDelay)) return;
     final reply = StringBuffer();
+    // Text blocks' places in the message, for a [GaiaDebugCut].
+    var block = 0;
+    var cut = 0;
     for (final step in script.steps) {
       switch (step) {
         case GaiaDebugText(:final text):
-          onEvent(const GaiaTextStart());
+          cut = reply.length;
+          onEvent(GaiaTextStart(block: block++));
           // What's due by the clock, so a speed below one character a tick
           // isn't rounded up to one.
           final clock = Stopwatch()..start();
@@ -630,11 +656,35 @@ class GaiaScriptedRunner {
           if (turn.isCompleted) return;
           // What the agent would be told, so a refusal shows why.
           final told = results.join('\n\n');
-          onEvent(const GaiaTextStart());
+          cut = reply.length;
+          onEvent(GaiaTextStart(block: block++));
           reply.write(told);
           onEvent(GaiaTextDelta(told));
         case GaiaDebugPause(:final duration):
           if (!await wait(duration)) return;
+        case GaiaDebugRetry(
+          :final attempt,
+          :final maxRetries,
+          :final delay,
+          :final status,
+        ):
+          onEvent(
+            GaiaRetrying(
+              attempt: attempt,
+              maxRetries: maxRetries,
+              status: status,
+              delay: delay,
+            ),
+          );
+          if (!await wait(delay)) return;
+        case GaiaDebugCut():
+          if (block > 0) onEvent(GaiaBlocksAbandoned(block - 1));
+          final kept = reply.toString().substring(0, cut);
+          reply
+            ..clear()
+            ..write(kept);
+          onEvent(const GaiaMessageStart());
+          block = 0;
         case GaiaDebugError(:final message):
           turn.complete(
             GaiaTurnResult(sessionId: '', isError: true, text: message),
@@ -1236,6 +1286,68 @@ const _scripts = {
   '/crash': GaiaDebugScript('Claude Code dies mid-reply', [
     GaiaDebugText('Starting on it. First I will read the config and then'),
     GaiaDebugCrash(),
+  ]),
+  '/retry': GaiaDebugScript(
+    'Connection lost while thinking: three retries, then the reply',
+    [
+      GaiaDebugPause(Duration(seconds: 1)),
+      GaiaDebugRetry(1, 10, Duration(seconds: 1)),
+      GaiaDebugRetry(2, 10, Duration(seconds: 2)),
+      GaiaDebugRetry(3, 10, Duration(seconds: 3)),
+      GaiaDebugText('Back again. The answer is 42.'),
+    ],
+  ),
+  '/retry2': GaiaDebugScript(
+    'Overloaded (529) twice, then the reply after a tool call',
+    [
+      GaiaDebugText("I'll check the logs."),
+      GaiaDebugTool('Bash', Duration(seconds: 1)),
+      GaiaDebugRetry(1, 10, Duration(seconds: 2), status: 529),
+      GaiaDebugRetry(2, 10, Duration(seconds: 3), status: 529),
+      GaiaDebugText('Nothing unusual in them.'),
+    ],
+  ),
+  '/cut': GaiaDebugScript(
+    'Cut off mid-reply: the partial text goes, retries, then the reply again',
+    [
+      GaiaDebugText('Here is the plan.'),
+      GaiaDebugTool('Read', Duration(milliseconds: 600)),
+      GaiaDebugText(
+        'First, the timer is never cancelled in `dispose`, so every time the '
+        'page closes it keeps',
+      ),
+      GaiaDebugPause(Duration(seconds: 1)),
+      GaiaDebugCut(),
+      GaiaDebugRetry(1, 10, Duration(seconds: 1)),
+      GaiaDebugRetry(2, 10, Duration(seconds: 2)),
+      GaiaDebugText(
+        'First, the timer is never cancelled in `dispose`, so every time the '
+        'page closes it keeps firing. Cancelling it there fixes the leak.',
+      ),
+    ],
+  ),
+  '/incomplete': GaiaDebugScript(
+    'Cut off mid-reply with no retry: "the response may be incomplete"',
+    [
+      GaiaDebugText(
+        'There are three things to change. First, the timer in `dispose`. '
+        'Second, the',
+      ),
+      GaiaDebugError(
+        'API Error: Connection lost mid-response. The response above may be '
+        'incomplete.',
+      ),
+    ],
+  ),
+  '/gaveup': GaiaDebugScript('Connection lost for good: retries run out', [
+    GaiaDebugPause(Duration(seconds: 1)),
+    GaiaDebugRetry(8, 10, Duration(seconds: 2)),
+    GaiaDebugRetry(9, 10, Duration(seconds: 2)),
+    GaiaDebugRetry(10, 10, Duration(seconds: 2)),
+    GaiaDebugError(
+      "API Error: Can't reach the API server — check your internet or DNS "
+      '(ENOTFOUND)',
+    ),
   ]),
   '/hang': GaiaDebugScript('Streams a little, then never finishes (Stop it)', [
     GaiaDebugText('Working on it. This is going to take a while.'),

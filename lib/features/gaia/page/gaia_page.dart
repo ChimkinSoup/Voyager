@@ -156,6 +156,12 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
   final _search = TextEditingController();
   var _query = '';
 
+  /// The chats whose forks are folded away under them.
+  final _collapsed = <String>{};
+
+  /// The forks listed so far, so a new one shows its group again.
+  Set<String>? _forks;
+
   @override
   void dispose() {
     _search.dispose();
@@ -175,6 +181,19 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
                 in ref.watch(gaiaBeaconsProvider).valueOrNull ?? const [])
               for (final run in beacon.runs) run.chatId,
           };
+    // A new fork shows its group again (GAIA_FORKING_HLD.md §7).
+    final forks = {
+      for (final chat in chats)
+        if (chat.forkOf != null) chat.id,
+    };
+    if (_forks case final known?) {
+      for (final chat in chats) {
+        if (chat.forkOf != null && !known.contains(chat.id)) {
+          _collapsed.remove(chat.forkOf);
+        }
+      }
+    }
+    _forks = forks;
     final query = _query.trim();
     final matches = query.isEmpty
         ? null
@@ -186,13 +205,35 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
             chat.title.toLowerCase().contains(query.toLowerCase()))
           chat,
     ];
+    // A search lists what it found on its own, forks or not.
+    final groups = query.isEmpty
+        ? gaiaForkGroups(shown)
+        : [for (final chat in shown) (chat: chat, forks: const <GaiaChat>[])];
     final pinned = [
-      for (final chat in shown)
-        if (chat.pinned) chat,
+      for (final group in groups)
+        if (group.chat.pinned) group,
     ];
     final recent = [
-      for (final chat in shown)
-        if (!chat.pinned) chat,
+      for (final group in groups)
+        if (!group.chat.pinned) group,
+    ];
+    List<Widget> rows(List<({GaiaChat chat, List<GaiaChat> forks})> groups) => [
+      for (final (:chat, :forks) in groups) ...[
+        _ChatRow(
+          chat: chat,
+          running: running.contains(chat.id),
+          open: forks.isEmpty ? null : !_collapsed.contains(chat.id),
+          onFold: () => setState(() {
+            if (!_collapsed.remove(chat.id)) _collapsed.add(chat.id);
+          }),
+        ),
+        if (!_collapsed.contains(chat.id))
+          for (final (i, fork) in forks.indexed)
+            _ForkLine(
+              last: i == forks.length - 1,
+              child: _ChatRow(chat: fork, running: running.contains(fork.id)),
+            ),
+      ],
     ];
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -274,14 +315,12 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
           ),
         if (pinned.isNotEmpty) ...[
           const _SectionLabel('Pinned'),
-          for (final chat in pinned)
-            _ChatRow(chat: chat, running: running.contains(chat.id)),
+          ...rows(pinned),
           const SizedBox(height: 12),
         ],
         if (recent.isNotEmpty) ...[
           if (pinned.isNotEmpty) const _SectionLabel('Recent'),
-          for (final chat in recent)
-            _ChatRow(chat: chat, running: running.contains(chat.id)),
+          ...rows(recent),
         ],
       ],
     );
@@ -679,11 +718,71 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+/// A fork's row, in under its original chat, with the line down from it:
+/// on through the row, or for the [last], turning into it.
+class _ForkLine extends StatelessWidget {
+  const _ForkLine({required this.last, required this.child});
+
+  final bool last;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _ForkLinePainter(
+      last: last,
+      color: Theme.of(context).colorScheme.outlineVariant,
+    ),
+    child: Padding(padding: const EdgeInsets.only(left: 22), child: child),
+  );
+}
+
+class _ForkLinePainter extends CustomPainter {
+  const _ForkLinePainter({required this.last, required this.color});
+
+  final bool last;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const x = 6.0;
+    const radius = 6.0;
+    final y = size.height / 2;
+    canvas.drawPath(
+      last
+          ? (Path()
+              ..moveTo(x, 0)
+              ..lineTo(x, y - radius)
+              ..quadraticBezierTo(x, y, x + radius, y)
+              ..lineTo(18, y))
+          : (Path()
+              ..moveTo(x, 0)
+              ..lineTo(x, size.height)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ForkLinePainter oldDelegate) =>
+      oldDelegate.last != last || oldDelegate.color != color;
+}
+
 class _ChatRow extends ConsumerWidget {
-  const _ChatRow({required this.chat, required this.running});
+  const _ChatRow({
+    required this.chat,
+    required this.running,
+    this.open,
+    this.onFold,
+  });
 
   final GaiaChat chat;
   final bool running;
+
+  /// Whether the chat's forks show under it; null when it has none.
+  final bool? open;
+  final VoidCallback? onFold;
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final overlay = Overlay.of(context, rootOverlay: true);
@@ -733,7 +832,26 @@ class _ChatRow extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      title: Text(chat.title, overflow: TextOverflow.ellipsis),
+      title: open == null
+          ? Text(chat.title, overflow: TextOverflow.ellipsis)
+          : Row(
+              children: [
+                Flexible(
+                  child: Text(chat.title, overflow: TextOverflow.ellipsis),
+                ),
+                IconButton(
+                  tooltip: open! ? 'Hide forks' : 'Show forks',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    open!
+                        ? PhosphorIconsRegular.caretDown
+                        : PhosphorIconsRegular.caretRight,
+                    size: 14,
+                  ),
+                  onPressed: onFold,
+                ),
+              ],
+            ),
       subtitle: Text(
         _when(chat.lastMessageAt.toLocal()),
         style: theme.textTheme.bodySmall?.copyWith(

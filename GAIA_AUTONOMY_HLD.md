@@ -81,7 +81,9 @@ Decisions:
   doesn't know the field reads the chat as Ask, the safer of the two.
 - **The button** opens a small menu rather than cycling, so one stray click can't reach
   Auto. Filled hand for Ask, filled hand with an accent mark for Auto.
-- **New chats never start in Auto**, even where the new-chat default remembers the hand.
+- **A new chat's Auto is its own.** Picked before the first message, it holds for that chat
+  only and is never carried to the next new chat. The chat is saved without it, then `setAuto`
+  turns it on, so the notice and Abort checks still apply.
 - **Auto needs reading.** A blind agent can't check its own work, so choosing Auto turns
   on *can see screen*, and turning that off drops the chat to Ask.
 - **Consent:** the first Auto on each device shows one notice, confirmed with Ctrl+Enter,
@@ -583,7 +585,7 @@ Built:
   both on with it; *can see screen* off drops it, *can control* off drops it, and turning either
   back on gives Ask, never Auto. Revoke and Abort clear it with the rest. `forceAuto` and
   `GAIA_FORCE_AUTO` are gone.
-- **The hand** is a menu: Off, Ask, Auto (`GaiaHand`). A new chat isn't offered Auto. The first
+- **The hand** is a menu: Off, Ask, Auto (`GaiaHand`). A new chat's Auto is its own (above). The first
   Auto on a device shows the notice, confirmed with the send key (Ctrl+Enter unless rebound),
   and the main instance refuses Auto until then (`gaia_auto_consent` beside the Abort flag).
   Auto's icon is the filled hand with a gold dot.
