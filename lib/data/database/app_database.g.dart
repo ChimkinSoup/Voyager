@@ -6134,10 +6134,10 @@ class CalendarEventsTableData extends DataClass
   final String? recurrenceParentId;
   final DateTime? recurrenceDate;
 
-  /// Marked done as a whole â€” see [CalendarEvent.isDone].
+  /// Marked done as a whole — see [CalendarEvent.isDone].
   final bool isDone;
 
-  /// A series' done marks as JSON â€” see [encodeDoneMarks].
+  /// A series' done marks as JSON — see [encodeDoneMarks].
   final String doneMarks;
 
   /// See [CalendarEvent.origin].
@@ -13420,7 +13420,7 @@ class SettingsTableData extends DataClass
   final bool snippetsEnabled;
 
   /// Whether prose fields fix obvious typos on a boundary key. See
-  /// AUTOCORRECT.md Â§10 â€” on by default, like snippets.
+  /// AUTOCORRECT.md §10 — on by default, like snippets.
   final bool autocorrectEnabled;
   final bool capsLockIndicatorEnabled;
 
@@ -13431,7 +13431,7 @@ class SettingsTableData extends DataClass
   /// references sync as ordinary documents) but can never obtain the bytes.
   final bool mediaRemoteUploadsEnabled;
 
-  /// Whether image bytes may be downloaded at all â€” both the background
+  /// Whether image bytes may be downloaded at all — both the background
   /// prefetch and an on-demand fetch when something is on screen. Off shows
   /// the "Download disabled" empty state instead of a spinner that can never
   /// resolve.
@@ -13443,7 +13443,7 @@ class SettingsTableData extends DataClass
   /// rather than merged with it.
   final bool mediaBackgroundPrefetchEnabled;
 
-  /// [SnippetExpandKey] name â€” 'tab' or 'space'.
+  /// [SnippetExpandKey] name — 'tab' or 'space'.
   final String snippetExpandKey;
 
   /// Legacy: the snippet list as a JSON array, from before snippets became
@@ -13467,7 +13467,7 @@ class SettingsTableData extends DataClass
   /// collapsed, as a JSON array.
   ///
   /// Device-local: both are deliberately absent from `settingsSyncPayload`,
-  /// which is what keeps writing them from moving [updatedAt] â€” that clock is
+  /// which is what keeps writing them from moving [updatedAt] — that clock is
   /// reserved for synced fields, and letting a tab switch move it would let
   /// merely opening the sheet overwrite a preference another device changed
   /// more recently.
@@ -13589,7 +13589,7 @@ class SettingsTableData extends DataClass
   /// to a later build shows up by default instead of silently staying off.
   final String? jobsHiddenColumnsJson;
 
-  /// Whether the Jobs page starts with archived applications shown (Â§3.1).
+  /// Whether the Jobs page starts with archived applications shown (§3.1).
   final bool jobsIncludeArchived;
 
   /// Rankings categories whose Queue section the user has collapsed, as a JSON
@@ -13606,7 +13606,7 @@ class SettingsTableData extends DataClass
   final double? rankingsDeviceLatitude;
   final double? rankingsDeviceLongitude;
 
-  /// Profile links the Jobs header copies to the clipboard (Â§3.4). Null means
+  /// Profile links the Jobs header copies to the clipboard (§3.4). Null means
   /// the slot is unset and its button is not rendered.
   final String? jobProfileLinkedInUrl;
   final String? jobProfileGitHubUrl;
@@ -13618,14 +13618,14 @@ class SettingsTableData extends DataClass
   final double? dreamSplitWidth;
 
   /// Width of the workout planner's exercise library rail. Device-local like
-  /// [journalEntryListWidth] â€” it is sized for this screen.
+  /// [journalEntryListWidth] — it is sized for this screen.
   final double? workoutLibraryWidth;
   final bool showDreamStatistics;
   final bool dreamNotesPinned;
   final String? leetcodeUsername;
   final bool showNeetCode150;
 
-  /// What a LeetCode Study or Cram session leaves off the card â€” see
+  /// What a LeetCode Study or Cram session leaves off the card — see
   /// [AppSettings.leetCodeHideDifficulty] and friends.
   final bool leetCodeHideDifficulty;
   final bool leetCodeHideTags;
@@ -13642,14 +13642,14 @@ class SettingsTableData extends DataClass
   final String srsGoodKey;
   final String srsEasyKey;
 
-  /// [WeightUnit] name â€” 'kg' or 'lb'. Display only; storage is kilograms.
+  /// [WeightUnit] name — 'kg' or 'lb'. Display only; storage is kilograms.
   final String weightUnit;
   final bool workoutRestTimerEnabled;
   final int workoutRestSeconds;
   final bool showWorkoutsOnCalendar;
   final bool showWorkoutStatistics;
 
-  /// When a *synced* setting last changed on some device â€” the whole-document
+  /// When a *synced* setting last changed on some device — the whole-document
   /// last-write-wins clock for [settingsSyncPayload]. Device-local writes
   /// (weather cache, dev flags, window state) deliberately leave it alone, so
   /// merely opening the app can't overwrite a preference another device
@@ -13661,17 +13661,17 @@ class SettingsTableData extends DataClass
   /// before the first pull ever ran.
   final DateTime? updatedAt;
 
-  /// `settingKey -> ISO instant` â€” see `AppSettings.fieldUpdatedAt`. Null on a
+  /// `settingKey -> ISO instant` — see `AppSettings.fieldUpdatedAt`. Null on a
   /// row from before per-setting stamps, which keeps "every setting changed at
   /// [updatedAt]" distinct from "no setting chosen yet" (`{}`).
   final String? fieldUpdatedAtJson;
 
   /// Which one-time upload of the newly synced collections this device has
-  /// run â€” see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
+  /// run — see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
   final int syncBackfillVersion;
 
-  /// The account whose data this device's local store holds â€” see
+  /// The account whose data this device's local store holds — see
   /// `LocalAccountStore`. Device-local, so it stays out of
   /// [settingsSyncPayload]. Null on a store no account has claimed yet.
   final String? localOwnerUid;
@@ -20093,7 +20093,7 @@ class PendingUploadData extends DataClass
 
   /// Null while the upload is still queued for retry.
   ///
-  /// Set once the failure is known to be unfixable by retrying â€” the row then
+  /// Set once the failure is known to be unfixable by retrying — the row then
   /// stays as a durable record that this document never reached the server,
   /// and the drain skips it so one rejected document can't stall the queue
   /// behind it.
@@ -20103,7 +20103,7 @@ class PendingUploadData extends DataClass
   /// ordinary re-upload.
   ///
   /// The Search popup rewrites a body without an editing session, so publishing
-  /// it means wiping the document's remote operation log and re-seeding it â€”
+  /// it means wiping the document's remote operation log and re-seeding it —
   /// and that can only be done against a reachable server, since Firestore
   /// answers both the wipe and the log listing from the local cache while
   /// offline. When the wipe can't be proven, the publish is deferred here
@@ -24358,7 +24358,7 @@ class ContributionRoomsTableData extends DataClass
   final int baselineRemainingCents;
   final DateTime baselineAsOf;
 
-  /// `[{"fromYear": 2026, "cents": 700000}, â€¦]`, ascending.
+  /// `[{"fromYear": 2026, "cents": 700000}, …]`, ascending.
   final String annualLimitsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -27011,7 +27011,7 @@ class PinnedNotesTableData extends DataClass
   final DateTime updatedAt;
   final int version;
 
-  /// The server version this row was last in step with â€” see
+  /// The server version this row was last in step with — see
   /// `resolveNoteSync`. Null when it isn't known, which falls back to the
   /// later-save-wins rule once.
   final int? syncedVersion;
@@ -27531,8 +27531,8 @@ class SecureNotesTableData extends DataClass
   final String ciphertext;
   final String nonce;
 
-  /// The vault the note was sealed under. A note from any other vault â€” one
-  /// since reset â€” is never shown.
+  /// The vault the note was sealed under. A note from any other vault — one
+  /// since reset — is never shown.
   final String vaultId;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -28442,7 +28442,7 @@ class $DismissedNotificationsTableTable extends DismissedNotificationsTable
 
 class DismissedNotificationsTableData extends DataClass
     implements Insertable<DismissedNotificationsTableData> {
-  /// `'$itemId|$urgencyTierName'` â€” see [NotificationFeedItem.dismissalKey].
+  /// `'$itemId|$urgencyTierName'` — see [NotificationFeedItem.dismissalKey].
   final String id;
   final DateTime dismissedAt;
   final DateTime updatedAt;
@@ -28450,7 +28450,7 @@ class DismissedNotificationsTableData extends DataClass
 
   /// Set when the row is un-dismissed. A dismissal has to be able to travel to
   /// another device as "no longer dismissed", and a pull only ever sees the
-  /// documents that exist â€” a hard delete would simply never arrive.
+  /// documents that exist — a hard delete would simply never arrive.
   final DateTime? deletedAt;
   const DismissedNotificationsTableData({
     required this.id,
@@ -29588,10 +29588,10 @@ class ScheduledReminderRulesTableData extends DataClass
   /// [ReminderScheduleKind] by name.
   final String scheduleKind;
 
-  /// Minutes from local midnight, 0â€“1439.
+  /// Minutes from local midnight, 0–1439.
   final int localTimeMinutes;
 
-  /// Weekly weekdays as a comma-separated list of `DateTime.monday`â€¦`sunday`.
+  /// Weekly weekdays as a comma-separated list of `DateTime.monday`…`sunday`.
   final String weeklyWeekdays;
 
   /// `yyyy-MM-dd` for a once rule. Text rather than an instant: as an instant
@@ -35720,10 +35720,10 @@ class LeetCodeProblemsTableData extends DataClass
   final String? description;
 
   /// JSON array of worked examples, one string each. Existing rows default to
-  /// an empty array â€” "no examples" â€” until the user adds some by hand.
+  /// an empty array — "no examples" — until the user adds some by hand.
   final String examplesJson;
 
-  /// JSON array of solutions, one object each â€” the write-up (approach,
+  /// JSON array of solutions, one object each — the write-up (approach,
   /// complexity, explanation, code, notes) for every way the user has solved
   /// this problem. The source of truth for all of them.
   final String solutionsJson;
@@ -36710,7 +36710,7 @@ class LeetCodeReviewLogTableData extends DataClass
   final String grade;
   final DateTime reviewedAt;
 
-  /// Bumped only by a delete or a restore â€” the other columns never change
+  /// Bumped only by a delete or a restore — the other columns never change
   /// once the row is written. See [LeetCodeReviewLog].
   final int version;
   final DateTime? deletedAt;
@@ -38867,7 +38867,7 @@ class StudyReviewLogTableData extends DataClass
   final String grade;
   final DateTime reviewedAt;
 
-  /// Bumped only by a delete or a restore â€” the other columns never change
+  /// Bumped only by a delete or a restore — the other columns never change
   /// once the row is written. See [StudyReviewLog].
   final int version;
   final DateTime? deletedAt;
@@ -40007,7 +40007,7 @@ class ExercisesTableData extends DataClass
   final int targetReps;
   final double targetWeightKg;
 
-  /// `inherit` | `custom` â€” see [WorkoutPrescriptionMode]. Custom means the
+  /// `inherit` | `custom` — see [WorkoutPrescriptionMode]. Custom means the
   /// three targets above are superseded by [setPrescriptionsJson].
   final String prescriptionMode;
 
@@ -40727,7 +40727,7 @@ class WorkoutPlansTableData extends DataClass
   final String id;
   final String name;
 
-  /// [WorkoutPlanMode] name â€” 'weekly' or 'cycle'.
+  /// [WorkoutPlanMode] name — 'weekly' or 'cycle'.
   final String mode;
   final int cycleLength;
   final DateTime cycleAnchor;
@@ -43578,10 +43578,10 @@ class JobApplicationsTableData extends DataClass
 
   /// JSON array of season ids, one per cycle this application is filed under.
   /// Empty array for "no season". Replaced the single `season_id` column in
-  /// migration 99 â€” an application can sit in more than one cycle at once.
+  /// migration 99 — an application can sit in more than one cycle at once.
   final String seasonIdsJson;
 
-  /// `stampKey -> ISO instant`, one per field â€” see `JobFieldStamps`.
+  /// `stampKey -> ISO instant`, one per field — see `JobFieldStamps`.
   final String fieldUpdatedAtJson;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -46962,7 +46962,7 @@ class MediaAssetsTableData extends DataClass
   final int width;
   final int height;
 
-  /// [MediaUploadState] / [MediaDownloadState] by `name`, not index â€” the
+  /// [MediaUploadState] / [MediaDownloadState] by `name`, not index — the
   /// enum's declaration order is then free to change without rewriting rows.
   final String uploadState;
   final String downloadState;
@@ -46971,7 +46971,7 @@ class MediaAssetsTableData extends DataClass
   final String? failureReason;
 
   /// When the refcount last hit zero. Distinct from [deletedAt] so that an
-  /// asset which becomes referenced again keeps its bytes â€” see
+  /// asset which becomes referenced again keeps its bytes — see
   /// [MediaAsset.unreferencedAt].
   final DateTime? unreferencedAt;
   final DateTime createdAt;
@@ -53984,7 +53984,7 @@ class RankingParentsTableData extends DataClass
   final bool starred;
   final int queueSortOrder;
 
-  /// `stampKey -> ISO instant`, one per field â€” see `RankingFieldStamps`.
+  /// `stampKey -> ISO instant`, one per field — see `RankingFieldStamps`.
   final String fieldUpdatedAtJson;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -57098,12 +57098,12 @@ class LeetCodeCheatEntriesTableData extends DataClass
   final String sectionId;
   final String command;
 
-  /// Null, not empty string, when unset â€” a row without one collapses its
+  /// Null, not empty string, when unset — a row without one collapses its
   /// label column rather than drawing an empty one.
   final String? label;
   final String description;
 
-  /// Null, not empty string, when unset â€” the badge's presence is the flag.
+  /// Null, not empty string, when unset — the badge's presence is the flag.
   final String? complexity;
   final double position;
   final DateTime createdAt;
@@ -57939,6 +57939,18 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _rewindsJsonMeta = const VerificationMeta(
+    'rewindsJson',
+  );
+  @override
+  late final GeneratedColumn<String> rewindsJson = GeneratedColumn<String>(
+    'rewinds_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -57997,6 +58009,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     grantsJson,
     forkJson,
     forkOf,
+    rewindsJson,
     createdAt,
     updatedAt,
     version,
@@ -58089,6 +58102,15 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         forkOf.isAcceptableOrUnknown(data['fork_of']!, _forkOfMeta),
       );
     }
+    if (data.containsKey('rewinds_json')) {
+      context.handle(
+        _rewindsJsonMeta,
+        rewindsJson.isAcceptableOrUnknown(
+          data['rewinds_json']!,
+          _rewindsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58170,6 +58192,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.string,
         data['${effectivePrefix}fork_of'],
       ),
+      rewindsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rewinds_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58203,27 +58229,31 @@ class GaiaChatsTableData extends DataClass
   final bool pinned;
 
   /// `{sessionKey: {sessionId, lastSeq}}`, one native CLI session per device,
-  /// adapter and account â€” see `gaiaSessionKey`.
+  /// adapter and account — see `gaiaSessionKey`.
   final String agentSessionsJson;
 
   /// The tier it last used (`GaiaTier.name`); null before its first message.
   final String? tier;
 
-  /// The last message the memory curator read (GAIA_HLD.md Â§11).
+  /// The last message the memory curator read (GAIA_HLD.md §11).
   final int curatedSeq;
 
-  /// Drain mode (GAIA_HLD.md Â§13).
+  /// Drain mode (GAIA_HLD.md §13).
   final bool drain;
 
-  /// `{deviceId: {seeScreen, at}}` (GAIA_HLD.md Â§8, Â§15.6).
+  /// `{deviceId: {seeScreen, at}}` (GAIA_HLD.md §8, §15.6).
   final String grantsJson;
 
   /// A fork's native session not made yet, as `GaiaForkRecord` JSON
-  /// (GAIA_FORKING_HLD.md Â§5.3). This device's alone: never synced.
+  /// (GAIA_FORKING_HLD.md §5.3). This device's alone: never synced.
   final String? forkJson;
 
-  /// The original chat a fork was made from (GAIA_FORKING_HLD.md Â§11).
+  /// The original chat a fork was made from (GAIA_FORKING_HLD.md §7).
   final String? forkOf;
+
+  /// `[{from, to, forkId, by}]`, the messages rewinds dropped
+  /// (GAIA_REWIND_HLD.md §5).
+  final String rewindsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58240,6 +58270,7 @@ class GaiaChatsTableData extends DataClass
     required this.grantsJson,
     this.forkJson,
     this.forkOf,
+    required this.rewindsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58265,6 +58296,7 @@ class GaiaChatsTableData extends DataClass
     if (!nullToAbsent || forkOf != null) {
       map['fork_of'] = Variable<String>(forkOf);
     }
+    map['rewinds_json'] = Variable<String>(rewindsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58291,6 +58323,7 @@ class GaiaChatsTableData extends DataClass
       forkOf: forkOf == null && nullToAbsent
           ? const Value.absent()
           : Value(forkOf),
+      rewindsJson: Value(rewindsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58317,6 +58350,7 @@ class GaiaChatsTableData extends DataClass
       grantsJson: serializer.fromJson<String>(json['grantsJson']),
       forkJson: serializer.fromJson<String?>(json['forkJson']),
       forkOf: serializer.fromJson<String?>(json['forkOf']),
+      rewindsJson: serializer.fromJson<String>(json['rewindsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58338,6 +58372,7 @@ class GaiaChatsTableData extends DataClass
       'grantsJson': serializer.toJson<String>(grantsJson),
       'forkJson': serializer.toJson<String?>(forkJson),
       'forkOf': serializer.toJson<String?>(forkOf),
+      'rewindsJson': serializer.toJson<String>(rewindsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58357,6 +58392,7 @@ class GaiaChatsTableData extends DataClass
     String? grantsJson,
     Value<String?> forkJson = const Value.absent(),
     Value<String?> forkOf = const Value.absent(),
+    String? rewindsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58373,6 +58409,7 @@ class GaiaChatsTableData extends DataClass
     grantsJson: grantsJson ?? this.grantsJson,
     forkJson: forkJson.present ? forkJson.value : this.forkJson,
     forkOf: forkOf.present ? forkOf.value : this.forkOf,
+    rewindsJson: rewindsJson ?? this.rewindsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58399,6 +58436,9 @@ class GaiaChatsTableData extends DataClass
           : this.grantsJson,
       forkJson: data.forkJson.present ? data.forkJson.value : this.forkJson,
       forkOf: data.forkOf.present ? data.forkOf.value : this.forkOf,
+      rewindsJson: data.rewindsJson.present
+          ? data.rewindsJson.value
+          : this.rewindsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58420,6 +58460,7 @@ class GaiaChatsTableData extends DataClass
           ..write('grantsJson: $grantsJson, ')
           ..write('forkJson: $forkJson, ')
           ..write('forkOf: $forkOf, ')
+          ..write('rewindsJson: $rewindsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58441,6 +58482,7 @@ class GaiaChatsTableData extends DataClass
     grantsJson,
     forkJson,
     forkOf,
+    rewindsJson,
     createdAt,
     updatedAt,
     version,
@@ -58461,6 +58503,7 @@ class GaiaChatsTableData extends DataClass
           other.grantsJson == this.grantsJson &&
           other.forkJson == this.forkJson &&
           other.forkOf == this.forkOf &&
+          other.rewindsJson == this.rewindsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58479,6 +58522,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<String> grantsJson;
   final Value<String?> forkJson;
   final Value<String?> forkOf;
+  final Value<String> rewindsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58496,6 +58540,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.grantsJson = const Value.absent(),
     this.forkJson = const Value.absent(),
     this.forkOf = const Value.absent(),
+    this.rewindsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58514,6 +58559,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.grantsJson = const Value.absent(),
     this.forkJson = const Value.absent(),
     this.forkOf = const Value.absent(),
+    this.rewindsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58536,6 +58582,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<String>? grantsJson,
     Expression<String>? forkJson,
     Expression<String>? forkOf,
+    Expression<String>? rewindsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58554,6 +58601,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (grantsJson != null) 'grants_json': grantsJson,
       if (forkJson != null) 'fork_json': forkJson,
       if (forkOf != null) 'fork_of': forkOf,
+      if (rewindsJson != null) 'rewinds_json': rewindsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58574,6 +58622,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<String>? grantsJson,
     Value<String?>? forkJson,
     Value<String?>? forkOf,
+    Value<String>? rewindsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58592,6 +58641,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       grantsJson: grantsJson ?? this.grantsJson,
       forkJson: forkJson ?? this.forkJson,
       forkOf: forkOf ?? this.forkOf,
+      rewindsJson: rewindsJson ?? this.rewindsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -58636,6 +58686,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (forkOf.present) {
       map['fork_of'] = Variable<String>(forkOf.value);
     }
+    if (rewindsJson.present) {
+      map['rewinds_json'] = Variable<String>(rewindsJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -58668,6 +58721,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('grantsJson: $grantsJson, ')
           ..write('forkJson: $forkJson, ')
           ..write('forkOf: $forkOf, ')
+          ..write('rewindsJson: $rewindsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59148,7 +59202,7 @@ class GaiaMessagesTableData extends DataClass
   final int? contextWindow;
 
   /// A fork's copy: the message it was first copied from
-  /// (GAIA_FORKING_HLD.md Â§2).
+  /// (GAIA_FORKING_HLD.md §2).
   final String? origin;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -60324,10 +60378,10 @@ class GaiaSettingsTableData extends DataClass
   final String? defaultTier;
   final String claudeConfigDir;
 
-  /// `[GaiaAccount]` as JSON (Â§6.1).
+  /// `[GaiaAccount]` as JSON (§6.1).
   final String accountsJson;
 
-  /// `{adapter: accountId}` as JSON (Â§6.5).
+  /// `{adapter: accountId}` as JSON (§6.5).
   final String currentAccountsJson;
   final String utilityModel;
   final bool autoRoute;
@@ -90578,6 +90632,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<String> grantsJson,
       Value<String?> forkJson,
       Value<String?> forkOf,
+      Value<String> rewindsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -90597,6 +90652,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<String> grantsJson,
       Value<String?> forkJson,
       Value<String?> forkOf,
+      Value<String> rewindsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -90665,6 +90721,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<String> get forkOf => $composableBuilder(
     column: $table.forkOf,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rewindsJson => $composableBuilder(
+    column: $table.rewindsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -90753,6 +90814,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get rewindsJson => $composableBuilder(
+    column: $table.rewindsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -90824,6 +90890,11 @@ class $$GaiaChatsTableTableAnnotationComposer
   GeneratedColumn<String> get forkOf =>
       $composableBuilder(column: $table.forkOf, builder: (column) => column);
 
+  GeneratedColumn<String> get rewindsJson => $composableBuilder(
+    column: $table.rewindsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -90885,6 +90956,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<String> grantsJson = const Value.absent(),
                 Value<String?> forkJson = const Value.absent(),
                 Value<String?> forkOf = const Value.absent(),
+                Value<String> rewindsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -90902,6 +90974,7 @@ class $$GaiaChatsTableTableTableManager
                 grantsJson: grantsJson,
                 forkJson: forkJson,
                 forkOf: forkOf,
+                rewindsJson: rewindsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -90921,6 +90994,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<String> grantsJson = const Value.absent(),
                 Value<String?> forkJson = const Value.absent(),
                 Value<String?> forkOf = const Value.absent(),
+                Value<String> rewindsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -90938,6 +91012,7 @@ class $$GaiaChatsTableTableTableManager
                 grantsJson: grantsJson,
                 forkJson: forkJson,
                 forkOf: forkOf,
+                rewindsJson: rewindsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

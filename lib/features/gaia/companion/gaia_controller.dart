@@ -54,6 +54,10 @@ const kGaiaCurateAfter = Duration(minutes: 10);
 /// cut short (§11): older turns are left unread.
 const kGaiaCurateMissedWithin = Duration(days: 7);
 
+/// How long a rewind waits for a reply still coming from another device
+/// (GAIA_REWIND_HLD.md §5.1); one later stays hidden and isn't moved.
+const kGaiaLateReplyWait = Duration(hours: 24);
+
 /// How many messages' images are captioned at once: each is a CLI process.
 const _captionsAtOnce = 3;
 
@@ -2131,6 +2135,7 @@ class GaiaController extends ChangeNotifier {
     }
     final shown = currentChatId;
     if (shown != null && !_running.contains(shown)) await _load(shown);
+    unawaited(_moveLateReplies());
   }
 
   /// What the window was before pick-up mode's pill (§15.3), to go back
@@ -2320,6 +2325,15 @@ class GaiaController extends ChangeNotifier {
   Future<void> openChat(String chatId) async {
     await openWindow();
     await selectChat(chatId);
+  }
+
+  /// The user finished moving or resizing Gaia's window. Grabbing it brought
+  /// Gaia in front, which paused an Auto turn's screen control (§5.2); moving
+  /// it out of the way isn't looking at it, so the turn goes on.
+  void moved() {
+    if (_pipe.connected) {
+      unawaited(_pipe.request('osResume', {}).catchError((_) => null));
+    }
   }
 
   /// Escape or close: a floater opened over the Gaia window turns back into
@@ -2522,24 +2536,7 @@ class GaiaController extends ChangeNotifier {
       fork: record,
       forkOf: source.forkOf ?? source.id,
     );
-    final copies = [
-      for (final message in copied)
-        GaiaMessage.fromJson({
-          ...message.toJson(),
-          'id': _uuid.v4(),
-          'chatId': forkId,
-          'updatedAt': now.toIso8601String(),
-          // So a fork of this fork finds it in a native session (§5.2).
-          'origin': message.entryId,
-          // Its own cards: answering one doesn't answer the source's.
-          'parts': [
-            for (final part in message.parts)
-              part is GaiaCardPart
-                  ? {...part.toJson(), 'id': _uuid.v4()}
-                  : part.toJson(),
-          ],
-        }),
-    ];
+    final copies = _copiesInto(forkId, copied, now);
     try {
       await _pipe.request('forkChat', {
         'chat': fork.toJson(),
@@ -2556,6 +2553,299 @@ class GaiaController extends ChangeNotifier {
     }
     await selectChat(forkId);
   }
+
+  /// [messages] copied into [chatId] as a fork copies them: new ids, the
+  /// same seqs.
+  List<GaiaMessage> _copiesInto(
+    String chatId,
+    Iterable<GaiaMessage> messages,
+    DateTime now,
+  ) => [
+    for (final message in messages)
+      GaiaMessage.fromJson({
+        ...message.toJson(),
+        'id': _uuid.v4(),
+        'chatId': chatId,
+        'updatedAt': now.toIso8601String(),
+        // So a fork of this fork finds it in a native session (§5.2).
+        'origin': message.entryId,
+        // Its own cards: answering one doesn't answer the source's.
+        'parts': [
+          for (final part in message.parts)
+            part is GaiaCardPart
+                ? {...part.toJson(), 'id': _uuid.v4()}
+                : part.toJson(),
+        ],
+      }),
+  ];
+
+  /// Whether "Rewind to here" is offered at [message] (GAIA_REWIND_HLD.md
+  /// §3): not at a reply still streaming, nor at a prompt whose reply is
+  /// still to come or still streaming, nor at the chat's last message, which
+  /// leaves nothing to rewind.
+  bool canRewind(GaiaMessage message) {
+    final list = _messages[message.chatId];
+    if (list == null || message.status == GaiaMessageStatus.streaming) {
+      return false;
+    }
+    final next = list.where((m) => m.seq > message.seq).firstOrNull;
+    return next != null &&
+        !(message.role == GaiaMessageRole.user &&
+            next.status == GaiaMessageStatus.streaming);
+  }
+
+  /// Takes [at]'s chat back to [at] (GAIA_REWIND_HLD.md §4): the messages
+  /// after it, or from it for a prompt, go to an auto-fork that keeps the
+  /// chat's sessions, and the chat carries on without them, its next send
+  /// forking its old session where it now ends (§2). A prompt rewound at goes
+  /// back in an empty composer. A turn running here is stopped first, kept,
+  /// and draining is paused. The chat stays open.
+  Future<void> rewindChat(GaiaMessage at) async {
+    // One at a time, and not while a fork is made: both read the sessions.
+    if (_forking) return;
+    _forking = true;
+    try {
+      await _rewindChat(at);
+    } finally {
+      _forking = false;
+    }
+  }
+
+  /// Chats a rewind is stopping: the stopped message stays, for the
+  /// auto-fork, rather than going back to the composer (§4 step 0).
+  final _keepStopped = <String>{};
+
+  /// Rewinds made here whose late replies are all moved, by auto-fork id
+  /// (§5.1).
+  final _settledRewinds = <String>{};
+
+  Future<void> _rewindChat(GaiaMessage at) async {
+    final chatId = at.chatId;
+    if (!canRewind(at) || _chat(chatId) == null) return;
+    // Before anything is stopped or paused, so a rewind that can't happen
+    // leaves the chat as it was.
+    if (_messages[chatId]!.any(
+      (message) =>
+          !message.isDeleted &&
+          message.parts.any(
+            (part) =>
+                part is GaiaImagePart && uploadingImages.contains(part.mediaId),
+          ),
+    )) {
+      return _note(
+        "Couldn't rewind the chat",
+        'Its images are still being attached. Try again in a moment.',
+        error: true,
+      );
+    }
+    // Nothing in the queue goes into the rewound chat by itself: it was
+    // written for the turns being dropped (§4 step 0).
+    if (_chat(chatId)!.drain) {
+      chats = [
+        for (final c in chats) c.id == chatId ? c.copyWith(drain: false) : c,
+      ];
+      notifyListeners();
+      await _request('setDrain', {'chatId': chatId, 'drain': false});
+    }
+    // A send still starting goes back to the composer, as any stop takes it
+    // back; one running is stopped and kept.
+    if (_cancelSend.containsKey(chatId)) {
+      await stop(chatId);
+    } else if (_running.contains(chatId)) {
+      _keepStopped.add(chatId);
+      try {
+        await stop(chatId);
+        await _whenIdle(chatId);
+      } finally {
+        _keepStopped.remove(chatId);
+      }
+    }
+    final source = _chat(chatId);
+    final list = _messages[chatId];
+    if (source == null || list == null || !list.any((m) => m.id == at.id)) {
+      return;
+    }
+    // K, the last message the chat keeps (§4); null keeps none.
+    final keep = at.role == GaiaMessageRole.user
+        ? list.lastWhereOrNull((m) => m.seq < at.seq && !m.isDeleted)
+        : at;
+    final from = (keep?.seq ?? -1) + 1;
+    final last = list.last;
+    final rewind = GaiaRewind(
+      from: from,
+      // A prompt still to be answered elsewhere: its reply's seq too, so the
+      // reply lands in the range (§5.1).
+      to: last.role == GaiaMessageRole.user ? last.seq + 1 : last.seq,
+      forkId: _uuid.v4(),
+      by: _deviceId,
+    );
+    // A reply streaming on another device is moved once it ends (§5.1).
+    final copied = [
+      for (final message in list)
+        if (!message.isDeleted && message.status != GaiaMessageStatus.streaming)
+          message,
+    ];
+    final record = keep == null ? null : await _forkRecord(source, keep, list);
+    final now = utcNow();
+    final forkId = rewind.forkId;
+    final fork = GaiaChat(
+      id: forkId,
+      title: '${source.title} (before rewind)',
+      createdAt: now,
+      updatedAt: now,
+      // Among the forks by when its conversation last moved (§7).
+      lastMessageAt: source.lastMessageAt,
+      tier: source.tier,
+      // The chat's curator has read what it has read (§9).
+      curatedSeq: source.curatedSeq,
+      // It's the chat as it was, so every session still matches it (§2).
+      agentSessions: source.agentSessions,
+      fork: source.fork,
+      forkOf: source.forkOf ?? source.id,
+      rewinds: source.rewinds,
+    );
+    final copies = _copiesInto(forkId, copied, now);
+    final dropped = [
+      for (final message in copied)
+        if (message.seq >= from) message,
+    ];
+    try {
+      await _pipe.request('rewindChat', {
+        'chatId': chatId,
+        'fork': fork.toJson(),
+        'copies': [for (final message in copies) message.toJson()],
+        'dropped': [for (final message in dropped) message.toJson()],
+        'record': record?.toJson(),
+        'rewind': rewind.toJson(),
+      });
+    } on GaiaPipeException catch (error) {
+      return _note("Couldn't rewind the chat", error.message, error: true);
+    }
+    // The auto-fork already has the range's end: no reply is still to come.
+    if (copied.lastOrNull?.seq == rewind.to) _settledRewinds.add(forkId);
+    chats = [
+      fork,
+      for (final c in chats)
+        c.id == chatId
+            ? c.copyWith(
+                agentSessions: const {},
+                fork: record,
+                clearFork: record == null,
+                rewinds: [...c.rewinds, rewind],
+              )
+            : c,
+    ]..sort(_listed);
+    _messages[chatId] = [
+      for (final message in list)
+        if (message.seq < from) message,
+    ];
+    _messages[forkId] = copies;
+    // The old session's process and any take-back's cut go with it.
+    for (final runner in _runners.values) {
+      if (runner is GaiaSessionForker) {
+        await (runner as GaiaSessionForker).rewound(chatId, forkId);
+      }
+    }
+    // Shown under its original, not folded away.
+    if (sidebar.collapsed.contains(fork.forkOf)) {
+      unawaited(sidebar.setCollapsed(fork.forkOf!, false));
+    }
+    // The prompt back in the composer, as Edit & resend puts it (§4 step 5),
+    // unless something's been typed there.
+    var draftKept = false;
+    if (at.role == GaiaMessageRole.user) {
+      if (chatId == currentChatId && _draftEmpty(chatId)) {
+        editMessage(at);
+      } else {
+        draftKept = true;
+      }
+    }
+    notifyListeners();
+    // Tapped, it opens the auto-fork.
+    _toasts.add((
+      chatId: forkId,
+      title: 'Rewound',
+      body:
+          "The later messages are in '${fork.title}'"
+          '${draftKept ? ', your message too; your draft was kept' : ''}. '
+          'This rewinds the conversation, not what was done.',
+      error: false,
+      question: false,
+    ));
+  }
+
+  /// Once [chatId] has no run here.
+  Future<void> _whenIdle(String chatId) async {
+    if (!_running.contains(chatId)) return;
+    final idle = Completer<void>();
+    void check() {
+      if (!_running.contains(chatId) && !idle.isCompleted) idle.complete();
+    }
+
+    addListener(check);
+    try {
+      await idle.future;
+    } finally {
+      removeListener(check);
+    }
+  }
+
+  /// Replies another device finished in a range a rewind here dropped
+  /// (GAIA_REWIND_HLD.md §5.1), each moved into the range's auto-fork. A
+  /// rewind is settled once its auto-fork has the range's end, or once it
+  /// has waited [kGaiaLateReplyWait].
+  Future<void> _moveLateReplies() async {
+    if (_movingLate) return;
+    _movingLate = true;
+    try {
+      for (final chat in [...chats]) {
+        List<GaiaMessage>? stored;
+        for (final rewind in chat.rewinds) {
+          if (rewind.by != _deviceId ||
+              _settledRewinds.contains(rewind.forkId)) {
+            continue;
+          }
+          final fork = _chat(rewind.forkId);
+          if (fork == null ||
+              utcNow().difference(fork.createdAt) > kGaiaLateReplyWait ||
+              (await _messagesOf(
+                rewind.forkId,
+              )).any((m) => m.seq >= rewind.to)) {
+            _settledRewinds.add(rewind.forkId);
+            continue;
+          }
+          stored ??= await _messagesOf(chat.id);
+          for (final late in stored) {
+            if (!rewind.covers(late.seq) ||
+                late.isDeleted ||
+                late.status == GaiaMessageStatus.streaming) {
+              continue;
+            }
+            await _pipe.request('moveLate', {
+              'late': late.toJson(),
+              'copy': _copiesInto(rewind.forkId, [
+                late,
+              ], utcNow()).single.toJson(),
+            });
+          }
+        }
+      }
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] late reply not moved: $error');
+    } finally {
+      _movingLate = false;
+    }
+  }
+
+  var _movingLate = false;
+
+  /// [chatId]'s messages as stored, those deleted and those a rewind dropped
+  /// too.
+  Future<List<GaiaMessage>> _messagesOf(String chatId) async => [
+    for (final json
+        in (await _pipe.request('messages', {'chatId': chatId}))! as List)
+      GaiaMessage.fromJson((json as Map).cast<String, Object?>()),
+  ];
 
   /// The native session a fork of [source] at [point] starts from on this
   /// device (GAIA_FORKING_HLD.md §5.5): the source's Claude Code session here
@@ -2606,6 +2896,7 @@ class GaiaController extends ChangeNotifier {
             account: candidate.id,
           )];
       if (mine != null &&
+          !source.rewound(mine.lastSeq) &&
           mine.lastSeq >= lastSeq &&
           (session == null || mine.lastSeq > session.lastSeq)) {
         account = candidate;
@@ -2805,9 +3096,14 @@ class GaiaController extends ChangeNotifier {
     final loaded = (chatId, jsonEncode(list));
     if (loaded == _loaded && _messages.containsKey(chatId)) return;
     _loaded = loaded;
+    final chat = _chat(chatId);
     _messages[chatId] = [
-      for (final message in list)
-        GaiaMessage.fromJson((message as Map).cast<String, Object?>()),
+      for (final json in list)
+        if (GaiaMessage.fromJson((json as Map).cast<String, Object?>())
+            case final message
+            // A rewind's, never shown here (GAIA_REWIND_HLD.md §5.1).
+            when !(chat?.rewound(message.seq) ?? false))
+          message,
     ];
     notifyListeners();
   }
@@ -3078,7 +3374,7 @@ class GaiaController extends ChangeNotifier {
         final popped = aborted || _running.contains(chatId)
             ? null
             : await _pipe
-                  .request('queuePop', {'chatId': chatId})
+                  .request('queuePop', {'chatId': chatId, 'draining': true})
                   .catchError((Object _) => null);
         if (popped is! Map) {
           if (!_running.contains(chatId)) {
@@ -3415,7 +3711,8 @@ class GaiaController extends ChangeNotifier {
     var question = GaiaMessage(
       id: _uuid.v4(),
       chatId: chatId,
-      seq: list.isEmpty ? 0 : list.last.seq + 1,
+      // Past any a rewind dropped (GAIA_REWIND_HLD.md §5).
+      seq: chat.nextSeq(list.lastOrNull),
       role: GaiaMessageRole.user,
       parts: [
         GaiaTextPart(prompt),
@@ -3815,6 +4112,13 @@ class GaiaController extends ChangeNotifier {
           'lastSeq': reply.seq,
         }),
       );
+    }
+
+    // Its last turn dropped by a rewind: stale, and the chat is handed over
+    // (GAIA_REWIND_HLD.md §5).
+    if (session != null && (_chat(chatId) ?? chat).rewound(session.lastSeq)) {
+      session = null;
+      recordSession(agent!.adapter, null);
     }
 
     // What the session didn't see: the whole chat for a new session, or
@@ -4290,6 +4594,7 @@ class GaiaController extends ChangeNotifier {
       if (stopped &&
           !aborted &&
           !_drainCancelled &&
+          !_keepStopped.contains(chatId) &&
           remote == null &&
           builder.finished.isEmpty &&
           _draftEmpty(chatId)) {
@@ -4421,6 +4726,7 @@ class GaiaController extends ChangeNotifier {
             account: account.id,
           )];
       if (session != null &&
+          !chat.rewound(session.lastSeq) &&
           account.id != to.id &&
           (newest == null || session.lastSeq > newest.lastSeq)) {
         from = account;
@@ -4530,10 +4836,13 @@ class GaiaController extends ChangeNotifier {
           if (GaiaMessage.fromJson((json as Map).cast<String, Object?>())
               case final message
               when message.seq > from &&
-                  message.status != GaiaMessageStatus.streaming)
+                  message.status != GaiaMessageStatus.streaming &&
+                  !chat.rewound(message.seq))
             message,
       ];
-      if (turns.isEmpty) return;
+      // Only copies: a rewind's auto-fork not carried on, whose dropped turns
+      // aren't learned from until it is (GAIA_REWIND_HLD.md §9).
+      if (turns.every((message) => message.origin != null)) return;
       index = await _pipe.request('memoryIndex') as String? ?? '';
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] curator: $error');

@@ -1,5 +1,6 @@
 #include "gaia_control_border.h"
 
+#include <dwmapi.h>
 #include <objidl.h>
 #include <shellscalingapi.h>
 
@@ -1316,10 +1317,29 @@ GaiaControlBorder::~GaiaControlBorder() { Hide(); }
 
 void GaiaControlBorder::Show(const std::wstring& label, unsigned int accent,
                              GaiaEffectStyle style) {
+  // The strips are painted in the accent and style; the label is only on the
+  // notch, which is relaid in place, as rebuilding flashes the whole border.
+  const bool rebuild = windows_.empty() || !notch_ || !button_window_ ||
+                       accent != accent_ || style != style_;
   label_ = label;
   accent_ = accent;
   style_ = style;
-  Rebuild();
+  if (rebuild) {
+    Rebuild();
+    return;
+  }
+  MONITORINFO info = {sizeof(info)};
+  if (!::GetMonitorInfo(notch_monitor_, &info)) {
+    Rebuild();
+    return;
+  }
+  const RECT& bounds = info.rcMonitor;
+  const POINT at = {LayoutNotch(notch_monitor_, bounds), bounds.top};
+  // Resized, moved and repainted in one update, so it never shows torn.
+  PaintNotch(&at);
+  ::SetWindowPos(button_window_, nullptr, at.x + button_.left,
+                 at.y + button_.top, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 void GaiaControlBorder::Hide() {
@@ -1377,7 +1397,7 @@ BOOL CALLBACK GaiaControlBorder::AddMonitor(HMONITOR monitor, HDC, LPRECT,
   return TRUE;
 }
 
-void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
+int GaiaControlBorder::LayoutNotch(HMONITOR monitor, const RECT& bounds) {
   const int padding = Scaled(kNotchPadding, monitor);
   const int gap = Scaled(kGap, monitor);
   const int orb = Scaled(kOrbSize, monitor);
@@ -1402,8 +1422,14 @@ void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
                  height - kNotchRim};
   notch_size_ = {width, height};
   notch_monitor_ = monitor;
-  const int left = bounds.left + (bounds.right - bounds.left - width) / 2;
-  notch_ = AddWindow(left, bounds.top, width, height, false);
+  return bounds.left + (bounds.right - bounds.left - width) / 2;
+}
+
+void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
+  const int left = LayoutNotch(monitor, bounds);
+  const int button_width = button_.right - button_.left;
+  const int button_height = button_.bottom - button_.top;
+  notch_ = AddWindow(left, bounds.top, notch_size_.cx, notch_size_.cy, false);
   if (notch_) PaintNotch();
   // The notch's clicks pass through, so the button is a window of its own, over
   // the one painted on the notch. Alpha 1 is as little as still takes a click.
@@ -1416,7 +1442,7 @@ void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
   hit.Present(button_window_);
 }
 
-void GaiaControlBorder::PaintNotch() {
+void GaiaControlBorder::PaintNotch(const POINT* at) {
   const int width = notch_size_.cx;
   const int height = notch_size_.cy;
   Canvas canvas(width, height);
@@ -1490,7 +1516,11 @@ void GaiaControlBorder::PaintNotch() {
   DrawLabel(canvas, label_, label_rect_, TextSize(monitor), kTextLift);
   DrawLabel(canvas, kButtonText, button_, TextSize(monitor),
             kButtonTextLift);
-  canvas.Present(notch_);
+  if (at) {
+    canvas.PresentAt(notch_, *at, 255);
+  } else {
+    canvas.Present(notch_);
+  }
 }
 
 void GaiaControlBorder::SetButtonState(bool hover, bool pressed) {
@@ -1869,6 +1899,7 @@ void GaiaFlashes::Tick() {
     }
     ++it;
   }
+  KeepOnTop();
   if (!hiding_.empty()) {
     // A few at a time, in one batch, which costs about what hiding one alone
     // does.
@@ -1889,6 +1920,67 @@ void GaiaFlashes::Tick() {
     ::KillTimer(timer_window_, kFlashTimer);
     ticking_ = false;
   }
+}
+
+// A flash shows where Gaia acts, which may be under Gaia's own floater, and the
+// floater comes up topmost again mid-play, as for a card. Whatever visible
+// window now overlaps a flash from above, the flashes go back over it. Only
+// the windows above the first flash are looked at, a few at most. One still
+// over them the tick after is in a band above topmost (Start, an IME), which
+// can't be passed, and is left be for the rest of the play.
+void GaiaFlashes::KeepOnTop() {
+  std::vector<HWND> ours;
+  for (const auto& active : active_) {
+    if (active->effect) ours.push_back(active->effect);
+    if (active->spark) ours.push_back(active->spark);
+    ours.insert(ours.end(), active->outline.begin(), active->outline.end());
+    ours.insert(ours.end(), active->faded.begin(), active->faded.end());
+  }
+  if (ours.empty()) {
+    raised_over_ = nullptr;
+    unpassable_.clear();
+    return;
+  }
+  for (HWND above = ::GetTopWindow(nullptr); above;
+       above = ::GetWindow(above, GW_HWNDNEXT)) {
+    if (std::find(ours.begin(), ours.end(), above) != ours.end()) {
+      raised_over_ = nullptr;
+      return;
+    }
+    if (!::IsWindowVisible(above)) continue;
+    // Not on screen, as Start and Search are while closed.
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(::DwmGetWindowAttribute(above, DWMWA_CLOAKED, &cloaked,
+                                          sizeof(cloaked))) &&
+        cloaked) {
+      continue;
+    }
+    wchar_t name[32] = {};
+    ::GetClassName(above, name, 32);
+    if (::wcscmp(name, kFlashClass) == 0) continue;
+    if (std::find(unpassable_.begin(), unpassable_.end(), above) !=
+        unpassable_.end()) {
+      continue;
+    }
+    RECT over;
+    if (!::GetWindowRect(above, &over)) continue;
+    for (HWND window : ours) {
+      RECT mine;
+      RECT both;
+      if (::GetWindowRect(window, &mine) &&
+          ::IntersectRect(&both, &over, &mine)) {
+        if (above == raised_over_) {
+          unpassable_.push_back(above);
+          raised_over_ = nullptr;
+          return;
+        }
+        for (HWND flash : ours) ShowOnTop(flash);
+        raised_over_ = above;
+        return;
+      }
+    }
+  }
+  raised_over_ = nullptr;
 }
 
 void GaiaFlashes::StopAll() {

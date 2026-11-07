@@ -86,7 +86,7 @@ const _radius = 100.0;
 const _follow = 18.0;
 
 /// The field's fill and, until the cursor is over it, its edge.
-const _fill = Color(0xFF27272A);
+const gaiaFieldFill = Color(0xFF27272A);
 const _edge = Color(0xFF404040);
 
 /// What the light follows.
@@ -556,7 +556,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 400),
             decoration: BoxDecoration(
-              color: _fill,
+              color: gaiaFieldFill,
               borderRadius: BorderRadius.circular(6),
               // The light takes over from the edge under the cursor.
               boxShadow: [

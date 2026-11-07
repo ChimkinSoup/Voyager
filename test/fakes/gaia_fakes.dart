@@ -303,6 +303,13 @@ class FakeClaudeRunner
     return cutAt;
   }
 
+  /// Every [rewound] told, in order.
+  final rewounds = <(String, String)>[];
+
+  @override
+  Future<void> rewound(String chatId, String forkId) async =>
+      rewounds.add((chatId, forkId));
+
   /// Every session copied, in order; [copyFails] says none is found.
   final copies = <({String sessionId, GaiaAccount from, GaiaAccount to})>[];
   var copyFails = false;

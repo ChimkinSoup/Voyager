@@ -171,6 +171,12 @@ class GaiaWindow {
         unsized ? const Size(1, 1) : _minimumSize,
       );
     }
+    // Taking the Gaia window's place, as a floater does: put back behind
+    // the user's app, it goes back to where it was among their windows, not
+    // straight under that app, where it would be Alt+Tab's next.
+    if (shown == GaiaMode.window && mode != GaiaMode.window) {
+      _windowAbove = _visibleAbove(hwnd);
+    }
     _rememberFrame();
     _fullScreen = fullScreen ?? _fullScreen;
     final full = mode == GaiaMode.window && _fullScreen;
@@ -215,14 +221,20 @@ class GaiaWindow {
       ShowWindow(hwnd, SW_RESTORE);
     }
     // The shell only notices a tool-window style change on a window that is
-    // shown again after it.
+    // shown again after it. A floater is layered, at full opacity, so that the
+    // main instance can let its actions' mouse input through it to the window
+    // under it (WS_EX_TRANSPARENT, only while it sends). Never left let
+    // through here.
     final exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     final wantStyle = floater
-        ? (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW
-        : (exStyle & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW;
+        ? (exStyle | WS_EX_TOOLWINDOW | WS_EX_LAYERED) &
+              ~(WS_EX_APPWINDOW | WS_EX_TRANSPARENT)
+        : (exStyle & ~(WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT)) |
+              WS_EX_APPWINDOW;
     if (wantStyle != exStyle) {
       ShowWindow(hwnd, SW_HIDE);
       SetWindowLongPtr(hwnd, GWL_EXSTYLE, wantStyle);
+      if (floater) SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
     }
     // Without a maximise box, a floater dragged to the screen's edge isn't
     // snapped to half of it or maximised; nor is Win+Up a full-screen window.
@@ -285,9 +297,12 @@ class GaiaWindow {
       // Still cloaked, so it never shows in front on the way.
       SetForegroundWindow(back);
       if (!floater) {
+        // Not after one minimised since, which sits at the bottom.
+        final above =
+            _onScreen(_windowAbove) && IsIconic(_windowAbove) == 0;
         SetWindowPos(
           hwnd,
-          back,
+          above ? _windowAbove : back,
           0,
           0,
           0,
@@ -300,12 +315,45 @@ class GaiaWindow {
     }
     _cloak(hwnd, false);
     if (!focusless && !behind) _takeForeground(hwnd);
+    if (!floater) _windowAbove = 0;
     shown = mode;
     _showing = false;
   }
 
   /// Mid-[show], which can hide the window on the way.
   var _showing = false;
+
+  /// The window the Gaia window was just under when a floater took its
+  /// place; 0 for none.
+  int _windowAbove = 0;
+
+  /// The nearest visible window above [hwnd] that isn't topmost; 0 when
+  /// [hwnd] is under none.
+  static int _visibleAbove(int hwnd) {
+    for (
+      var above = GetWindow(hwnd, GW_HWNDPREV);
+      above != 0;
+      above = GetWindow(above, GW_HWNDPREV)
+    ) {
+      // Topmost windows are all above the rest.
+      if (GetWindowLongPtr(above, GWL_EXSTYLE) & WS_EX_TOPMOST != 0) return 0;
+      if (_onScreen(above)) return above;
+    }
+    return 0;
+  }
+
+  /// Visible and not cloaked: suspended store apps and windows on other
+  /// virtual desktops are "visible" but cloaked.
+  static bool _onScreen(int hwnd) {
+    if (IsWindowVisible(hwnd) == 0) return false;
+    final cloaked = calloc<Int32>();
+    try {
+      DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloaked, sizeOf<Int32>());
+      return cloaked.value == 0;
+    } finally {
+      free(cloaked);
+    }
+  }
 
   /// A card waits on the user, who is in another app: the window on screen
   /// comes in front of it, out of the taskbar if minimised, without the

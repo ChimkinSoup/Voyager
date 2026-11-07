@@ -109,6 +109,32 @@ class _Main {
       case 'dropFork':
         await store.dropFork(params['chatId']! as String);
         return null;
+      case 'rewindChat':
+        GaiaMessage message(Object? json) =>
+            GaiaMessage.fromJson((json! as Map).cast<String, Object?>());
+        await store.rewindChat(
+          params['chatId']! as String,
+          fork: GaiaChat.fromJson(
+            (params['fork']! as Map).cast<String, Object?>(),
+          ),
+          copies: [for (final json in params['copies']! as List) message(json)],
+          dropped: [
+            for (final json in params['dropped']! as List) message(json),
+          ],
+          record: GaiaForkRecord.fromJson(params['record']),
+          rewind: gaiaRewindsFromJson([params['rewind']]).single,
+        );
+        return null;
+      case 'moveLate':
+        await store.moveLate(
+          GaiaMessage.fromJson(
+            (params['late']! as Map).cast<String, Object?>(),
+          ),
+          GaiaMessage.fromJson(
+            (params['copy']! as Map).cast<String, Object?>(),
+          ),
+        );
+        return null;
       case 'setSession':
         await store.setSession(
           params['chatId']! as String,
@@ -205,7 +231,10 @@ class _Main {
           front: params['front'] == true,
         )).toJson();
       case 'queuePop':
-        return (await store.queuePop(params['chatId'] as String?))?.toJson();
+        return (await store.queuePop(
+          params['chatId'] as String?,
+          draining: params['draining'] == true,
+        ))?.toJson();
       case 'setDrain':
         await store.setDrain(
           params['chatId']! as String,
@@ -6026,6 +6055,489 @@ void main() {
       expect(runner.cutsAsked.last.chatId, first);
       expect(runner.cutsAsked.last.endAt, isNull);
       expect(runner.cutsAsked.last.sessionId, isNot('source-session'));
+    });
+  });
+
+  group('rewinding (GAIA_REWIND_HLD.md §10.1)', () {
+    final at = DateTime.utc(2026, 11, 6);
+    GaiaMessage stored(int seq) => GaiaMessage(
+      id: 'm$seq',
+      chatId: 'c1',
+      seq: seq,
+      role: seq.isEven ? GaiaMessageRole.user : GaiaMessageRole.assistant,
+      parts: [GaiaTextPart('message $seq')],
+      status: GaiaMessageStatus.complete,
+      createdAt: at.add(Duration(minutes: seq)),
+      updatedAt: at.add(Duration(minutes: seq)),
+    );
+
+    /// [count] messages, and a Claude Code session here that has [lastSeq].
+    Future<void> storeChat({
+      int count = 4,
+      int? lastSeq = 3,
+      List<GaiaRewind> rewinds = const [],
+    }) async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plans',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          tier: GaiaTier.deep,
+          curatedSeq: 1,
+          rewinds: rewinds,
+          agentSessions: {
+            if (lastSeq != null)
+              gaiaSessionKey('laptop'): GaiaAgentSession(
+                sessionId: 'source-session',
+                lastSeq: lastSeq,
+              ),
+          },
+        ),
+      );
+      for (var seq = 0; seq < count; seq++) {
+        await main.store.putMessage(stored(seq));
+      }
+    }
+
+    Future<void> open() async {
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+    }
+
+    Future<void> rewindAt(int seq) async {
+      await controller.rewindChat(
+        controller.messages.firstWhere((m) => m.seq == seq),
+      );
+      await settle();
+    }
+
+    Future<GaiaChat> chatOf(String id) async =>
+        (await main.store.chats()).firstWhere((c) => c.id == id);
+
+    Future<GaiaChat> autoFork() async => (await main.store.chats()).lastWhere(
+      (c) => c.title.endsWith('(before rewind)'),
+    );
+
+    Future<List<int>> shown(String chatId) async => [
+      for (final message in await main.store.messages(chatId))
+        if (!message.isDeleted) message.seq,
+    ];
+
+    Future<void> turn(String prompt) async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(prompt);
+      await settle();
+    }
+
+    test('at a reply: the later messages go to an auto-fork with the '
+        "chat's sessions, and the chat forks its old session where it now "
+        'ends', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+
+      await rewindAt(1);
+      expect(controller.currentChatId, 'c1');
+      expect(controller.messages.map((m) => m.seq), [0, 1]);
+      expect(await shown('c1'), [0, 1]);
+      expect(controller.draftIsEmpty, isTrue);
+
+      final fork = await autoFork();
+      expect(fork.title, 'Plans (before rewind)');
+      expect(fork.forkOf, 'c1');
+      expect(fork.tier, GaiaTier.deep);
+      expect(fork.curatedSeq, 1);
+      // The chat's own, as its last message left it.
+      expect(fork.lastMessageAt, at.add(const Duration(minutes: 3)));
+      expect(fork.rewinds, isEmpty);
+      expect(
+        fork.agentSessions[gaiaSessionKey('laptop')]?.sessionId,
+        'source-session',
+      );
+      final copies = await main.store.messages(fork.id);
+      expect(copies.map((m) => m.seq), [0, 1, 2, 3]);
+      expect(copies.map(_text), [
+        'message 0',
+        'message 1',
+        'message 2',
+        'message 3',
+      ]);
+      expect(copies.map((m) => m.origin), ['m0', 'm1', 'm2', 'm3']);
+
+      // Cut at K exactly as a fork at K is.
+      expect(runner.cutsAsked.single.after, 'm0');
+      expect(runner.cutsAsked.single.next, ['m2']);
+      final chat = await chatOf('c1');
+      expect(chat.agentSessions, isEmpty);
+      expect(chat.fork!.sourceSessionId, 'source-session');
+      expect(chat.fork!.keepAt, 'entry-1');
+      expect(chat.fork!.lastSeq, 1);
+      expect(chat.rewinds, [
+        GaiaRewind(from: 2, to: 3, forkId: fork.id, by: 'laptop'),
+      ]);
+      expect(runner.rewounds, [('c1', fork.id)]);
+
+      // The chat's next send: a native fork with nothing handed over, past
+      // the dropped seqs.
+      await turn('Again');
+      expect(runner.forks.single, (
+        sessionId: 'source-session',
+        keepAt: 'entry-1',
+      ));
+      expect(runner.sent.single.sessionId, isNull);
+      expect(runner.sent.single.prompt, 'Again');
+      expect(controller.messages.map((m) => m.seq), [0, 1, 4, 5]);
+
+      // The auto-fork's: a plain resume of the old session.
+      await controller.selectChat(fork.id);
+      await settle();
+      expect(controller.messages.map((m) => m.seq), [0, 1, 2, 3]);
+      await turn('Carry on');
+      expect(runner.forks.last, isNull);
+      expect(runner.sent.last.chatId, fork.id);
+      expect(runner.sent.last.sessionId, 'source-session');
+      expect(runner.sent.last.prompt, 'Carry on');
+    });
+
+    test('at a prompt: the chat ends before it, and it goes back in an '
+        'empty composer', () async {
+      await storeChat();
+      runner.cutAt = 'entry-1';
+      await open();
+
+      await rewindAt(2);
+      expect(controller.messages.map((m) => m.seq), [0, 1]);
+      expect(controller.draft.text, 'message 2');
+      expect(runner.cutsAsked.single.next, ['m2']);
+      expect((await chatOf('c1')).fork!.lastSeq, 1);
+      expect(await shown((await autoFork()).id), [0, 1, 2, 3]);
+    });
+
+    test('at a prompt with a draft typed: the draft stays', () async {
+      await storeChat();
+      await open();
+      controller.draft.text = 'half typed';
+
+      await rewindAt(2);
+      expect(controller.messages.map((m) => m.seq), [0, 1]);
+      expect(controller.draft.text, 'half typed');
+    });
+
+    test('at the first prompt: the chat keeps nothing, and its next send '
+        'hands nothing over', () async {
+      await storeChat();
+      await open();
+
+      await rewindAt(0);
+      expect(controller.messages, isEmpty);
+      expect(controller.draft.text, 'message 0');
+      expect(runner.cutsAsked, isEmpty);
+      expect((await chatOf('c1')).fork, isNull);
+
+      await turn('Fresh');
+      expect(runner.sent.single.sessionId, isNull);
+      expect(runner.sent.single.prompt, 'Fresh');
+      expect(controller.messages.map((m) => m.seq), [4, 5]);
+    });
+
+    test('with no session here to cut, the next send hands the kept '
+        'messages over without the dropped ones', () async {
+      await storeChat(lastSeq: null);
+      await open();
+
+      await rewindAt(1);
+      expect((await chatOf('c1')).fork, isNull);
+      await turn('Again');
+      final prompt = runner.sent.single.prompt;
+      expect(runner.sent.single.sessionId, isNull);
+      expect(prompt, contains('joining a chat'));
+      expect(prompt, contains('message 1'));
+      expect(prompt, isNot(contains('message 2')));
+      expect(prompt, isNot(contains('message 3')));
+    });
+
+    test('rewinding twice gives two ranges, and seqs stay past both', () async {
+      await storeChat();
+      await open();
+
+      await rewindAt(1);
+      await turn('Again');
+      expect(controller.messages.map((m) => m.seq), [0, 1, 4, 5]);
+      await rewindAt(1);
+      final rewinds = (await chatOf('c1')).rewinds;
+      expect(rewinds.map((r) => (r.from, r.to)), [(2, 3), (2, 5)]);
+      expect(rewinds.map((r) => r.forkId).toSet(), hasLength(2));
+      await turn('Once more');
+      expect(controller.messages.map((m) => m.seq), [0, 1, 6, 7]);
+    });
+
+    group('a session here whose last turn', () {
+      final rewind = GaiaRewind(from: 2, to: 5, forkId: 'f', by: 'desktop');
+
+      test('a rewind dropped is stale: dropped, and the chat handed '
+          'over', () async {
+        await storeChat(lastSeq: 3, rewinds: [rewind]);
+        await open();
+        expect(controller.messages.map((m) => m.seq), [0, 1]);
+
+        await turn('Again');
+        expect(runner.sent.single.sessionId, isNull);
+        expect(runner.sent.single.prompt, contains('joining a chat'));
+        expect(runner.sent.single.prompt, isNot(contains('message 3')));
+        expect(controller.messages.map((m) => m.seq), [0, 1, 6, 7]);
+        final session = (await chatOf(
+          'c1',
+        )).agentSessions[gaiaSessionKey('laptop')]!;
+        expect(session.sessionId, isNot('source-session'));
+        expect(session.lastSeq, 7);
+      });
+
+      for (final (lastSeq, why) in [(1, 'came before'), (7, 'came after')]) {
+        test('$why a rewind is resumed', () async {
+          await storeChat(count: 2, lastSeq: lastSeq, rewinds: [rewind]);
+          await open();
+          await turn('Again');
+          expect(runner.sent.single.sessionId, 'source-session');
+        });
+      }
+    });
+
+    test("isn't offered at a reply streaming, a prompt still being "
+        'answered, or the last message', () async {
+      await storeChat();
+      await open();
+      expect(controller.messages.map(controller.canRewind), [
+        true,
+        true,
+        true,
+        false,
+      ]);
+
+      runner.turns.add([const ClaudeTextStart()]);
+      final live = controller.send('Fifth');
+      await settle();
+      expect(controller.messages.map(controller.canRewind), [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+      ]);
+      runner.finish('c1');
+      await live;
+      await settle();
+
+      // A prompt last, its reply running on another device.
+      await main.store.putMessage(stored(6));
+      main.pipe.notify('changed');
+      await settle();
+      expect(controller.messages.last.seq, 6);
+      expect(controller.canRewind(controller.messages.last), isFalse);
+    });
+
+    test('refused while images upload, before anything is stopped or the '
+        'queue paused', () async {
+      await storeChat();
+      await open();
+      await controller.toggleDrain();
+      await settle();
+      final toasts = <GaiaRunToast>[];
+      controller.toasts.listen(toasts.add);
+      main.holdImages = Completer();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.attachImage(Uint8List.fromList([1, 2, 3]));
+      final sending = controller.send(
+        'Look',
+        images: controller.takeDraftImages(),
+      );
+      await settle();
+      expect(controller.uploadingImages, isNotEmpty);
+
+      await rewindAt(1);
+      expect(toasts.last.title, "Couldn't rewind the chat");
+      expect(runner.stopped, isEmpty);
+      expect((await chatOf('c1')).drain, isTrue);
+      expect(controller.messages.map((m) => m.seq), [0, 1, 2, 3, 4]);
+
+      main.holdImages!.complete();
+      await sending;
+      await settle();
+    });
+
+    test('while a turn runs here: it is stopped and kept, not given back, '
+        'and the queue waits', () async {
+      await storeChat();
+      await open();
+      runner.turns.add(const []);
+      final live = controller.send('Fifth');
+      await settle();
+      await controller.enqueue('Later');
+      await controller.toggleDrain();
+      await settle();
+
+      await rewindAt(1);
+      await live;
+      await settle();
+      expect(runner.stopped, ['c1']);
+      expect(runner.takenBack, isEmpty);
+      expect(controller.draftIsEmpty, isTrue);
+      expect(controller.messages.map((m) => m.seq), [0, 1]);
+      final copies = await main.store.messages((await autoFork()).id);
+      expect(copies.map((m) => m.seq), [0, 1, 2, 3, 4, 5]);
+      expect(_text(copies[4]), 'Fifth');
+      expect(copies[5].status, GaiaMessageStatus.cancelled);
+      expect(await shown('c1'), [0, 1]);
+      // Not drained into the rewound chat.
+      expect((await chatOf('c1')).drain, isFalse);
+      expect(controller.queueFor('c1').map((item) => item.text), ['Later']);
+      expect(runner.sent, hasLength(1));
+    });
+
+    test('a reply from another device that ends after the rewind is never '
+        'shown in the chat, and is moved to the auto-fork once', () async {
+      // The chat ends on a prompt another device is answering.
+      await storeChat(count: 5);
+      await open();
+
+      await rewindAt(1);
+      final fork = await autoFork();
+      expect((await chatOf('c1')).rewinds.single.to, 5);
+      expect(await shown(fork.id), [0, 1, 2, 3, 4]);
+
+      // Its reply, streaming there, then done.
+      final reply = GaiaMessage(
+        id: 'm5',
+        chatId: 'c1',
+        seq: 5,
+        role: GaiaMessageRole.assistant,
+        parts: const [GaiaTextPart('late reply')],
+        status: GaiaMessageStatus.streaming,
+        createdAt: at,
+        updatedAt: at,
+      );
+      await main.store.putMessage(reply);
+      main.pipe.notify('changed');
+      await settle();
+      expect(controller.messages.map((m) => m.seq), [0, 1]);
+      expect(await shown(fork.id), [0, 1, 2, 3, 4]);
+
+      await main.store.putMessage(
+        reply.copyWith(status: GaiaMessageStatus.complete),
+      );
+      for (var i = 0; i < 2; i++) {
+        main.pipe.notify('changed');
+        await settle();
+      }
+      expect(controller.messages.map((m) => m.seq), [0, 1]);
+      expect(await shown('c1'), [0, 1]);
+      final moved = await main.store.messages(fork.id);
+      expect(moved.map((m) => m.seq), [0, 1, 2, 3, 4, 5]);
+      expect(_text(moved.last), 'late reply');
+
+      // The chat's next send doesn't know it.
+      await turn('Again');
+      expect(runner.sent.single.prompt, isNot(contains('late reply')));
+      expect(controller.messages.map((m) => m.seq), [0, 1, 6, 7]);
+    });
+
+    for (final (age, scans) in [(1, true), (25, false)]) {
+      test('a reply still to come is waited for ${age}h: '
+          '${scans ? 'still checked' : 'no longer'}', () async {
+        await storeChat(
+          count: 2,
+          rewinds: [
+            const GaiaRewind(from: 2, to: 5, forkId: 'f', by: 'laptop'),
+          ],
+        );
+        final made = DateTime.now().toUtc().subtract(Duration(hours: age));
+        await main.store.createChat(
+          GaiaChat(
+            id: 'f',
+            title: 'Plans (before rewind)',
+            createdAt: made,
+            updatedAt: made,
+            lastMessageAt: made,
+            tier: GaiaTier.deep,
+          ),
+        );
+        await open();
+        int fetches() => main.requests.where((m) => m == 'messages').length;
+        final before = fetches();
+        main.pipe.notify('changed');
+        await settle();
+        // The chat in view's own load, and the auto-fork's and chat's while
+        // it waits.
+        expect(fetches() - before, scans ? 3 : 1);
+      });
+    }
+
+    test("the chat's curator reads what it kept, not what was "
+        'dropped', () async {
+      await storeChat();
+      final utility = FakeUtilityRunner((_) => '[]');
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      await controller.selectChat('c1');
+      await settle();
+      await turn('Dropped prompt');
+
+      await rewindAt(3);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      final read = [
+        for (final (i, job) in utility.jobs.indexed)
+          if (job.startsWith('You keep')) utility.inputs[i],
+      ];
+      expect(read.single, contains('message 3'));
+      expect(read.single, isNot(contains('Dropped prompt')));
+      expect((await chatOf('c1')).curatedSeq, 3);
+    });
+
+    test('an auto-fork not carried on is not curated, even when this '
+        'device ran its last turn', () async {
+      final now = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+      await main.repository.upsertChat(
+        GaiaChat(
+          id: 'f',
+          title: 'Plans (before rewind)',
+          createdAt: now,
+          updatedAt: now,
+          lastMessageAt: now,
+          curatedSeq: 1,
+          forkOf: 'c1',
+          agentSessions: {
+            gaiaSessionKey('laptop'): const GaiaAgentSession(
+              sessionId: 'source-session',
+              lastSeq: 3,
+            ),
+          },
+        ),
+      );
+      for (var seq = 0; seq < 4; seq++) {
+        await main.repository.upsertMessage(
+          GaiaMessage.fromJson({
+            ...stored(seq).toJson(),
+            'id': 'f$seq',
+            'chatId': 'f',
+            'origin': 'm$seq',
+          }),
+        );
+      }
+      final utility = FakeUtilityRunner((_) => '[]');
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      expect(utility.jobs.where((job) => job.startsWith('You keep')), isEmpty);
+      expect((await chatOf('f')).curatedSeq, 1);
     });
   });
 }

@@ -62,6 +62,10 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   int rootAt(int x, int y) => 7;
   @override
+  List<int> seeThrough(int gaiaPid, List<({int x, int y})> at) => const [];
+  @override
+  void solid(List<int> hwnds) {}
+  @override
   String windowClass(int hwnd) => '';
   @override
   ({int left, int top, int width, int height}) frame(int hwnd) =>

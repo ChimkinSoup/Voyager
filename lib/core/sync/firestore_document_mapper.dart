@@ -4384,6 +4384,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'drain': chat.drain,
   'grants': chat.toJson()['grants'],
   'forkOf': chat.forkOf,
+  'rewinds': chat.toJson()['rewinds'],
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4443,6 +4444,14 @@ GaiaChat mergeGaiaChatFromRemote(
     // This device's own, never synced (GAIA_FORKING_HLD.md §5.3).
     fork: local?.fork,
     forkOf: data['forkOf'] as String? ?? local?.forkOf,
+    // A union, so two devices' rewinds both count (GAIA_REWIND_HLD.md §5);
+    // an erase takes the remote's.
+    rewinds: isErasedPayload(data)
+        ? gaiaRewindsFromJson(data['rewinds'])
+        : gaiaMergeRewinds(
+            local?.rewinds ?? const [],
+            gaiaRewindsFromJson(data['rewinds']),
+          ),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

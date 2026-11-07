@@ -71,7 +71,7 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
-/// `osStop {chatId}`, `osResume {chatId}`, `autoConsented` (a bool),
+/// `osStop {chatId}`, `osResume {chatId?}`, `autoConsented` (a bool),
 /// `setAuto {chatId, on, consented}`, `isAuto {chatId}` (a bool), `rearm`,
 /// and the `runs {runs}`, `runDone {chatId, title,
 /// body}` and `drained` events. Main to companion: the `abort`, `stop
@@ -934,9 +934,19 @@ class GaiaHost {
 
   Future<void> _revokeGrants() async {
     final store = await _attached.future;
-    await store.revokeGrants();
-    await _syncBorder(store);
+    _revokingGrants++;
+    try {
+      await store.revokeGrants();
+    } finally {
+      // The last revoke to end catches the border up, even one that failed.
+      if (--_revokingGrants == 0) await _syncBorder(store);
+    }
   }
+
+  /// One chat's grants are saved at a time: the border waits for the last,
+  /// rather than rebuilding for each count on the way down. A count, as Abort
+  /// and the border's button may revoke at once.
+  var _revokingGrants = 0;
 
   /// The border's button (§15.6): both grants off on every chat here, as Abort
   /// takes them, but agents keep running and Gaia isn't aborted.
@@ -959,11 +969,26 @@ class GaiaHost {
   String? _borderLabel;
   int? _borderAccent;
 
+  /// Shares [messages]' images with [chatId]; on failure they just stay
+  /// where they were.
+  Future<void> _shareImages(String chatId, List<GaiaMessage> messages) async {
+    try {
+      await _media?.share(chatId, {
+        for (final message in messages)
+          for (final image in message.parts.whereType<GaiaImagePart>())
+            image.mediaId,
+      });
+    } catch (error) {
+      debugPrint('[gaia] images of $chatId not shared: $error');
+    }
+  }
+
   /// The border shows while any chat here has *can control* on (§15.6), and
   /// names it, for finding the toggle again. A chat in Auto is named with its
   /// mode, and while a turn acts, how to stop it (GAIA_AUTONOMY_HLD.md §4).
   Future<void> _syncBorder(GaiaChatStore store) async {
     final chats = await store.controlledChats();
+    if (_revokingGrants > 0) return;
     final auto = chats.any((chat) => chat.auto);
     final named = switch (chats) {
       [] => null,
@@ -983,7 +1008,8 @@ class GaiaHost {
       '' => 'Gaia is in control',
       _ => 'Gaia is in control: $named',
     };
-    // Showing rebuilds its windows, and most changes don't touch it.
+    // Showing repaints the notch (and rebuilds every window for a new accent),
+    // and most changes don't touch it.
     if (_borderSynced &&
         label == _borderLabel &&
         (label == null || _accent == _borderAccent)) {
@@ -1078,15 +1104,33 @@ class GaiaHost {
         await _syncBorder(store);
         // Forked either way: its images just stay the source chat's if this
         // fails.
-        try {
-          await _media?.share(chat.id, {
-            for (final message in messages)
-              for (final image in message.parts.whereType<GaiaImagePart>())
-                image.mediaId,
-          });
-        } catch (error) {
-          debugPrint('[gaia] images of ${chat.id} not shared: $error');
-        }
+        await _shareImages(chat.id, messages);
+        return null;
+      case 'rewindChat':
+        final fork = GaiaChat.fromJson(_map(params['fork']));
+        final copies = [
+          for (final message in params['copies']! as List)
+            GaiaMessage.fromJson(_map(message)),
+        ];
+        await store.rewindChat(
+          params['chatId']! as String,
+          fork: fork,
+          copies: copies,
+          dropped: [
+            for (final message in params['dropped']! as List)
+              GaiaMessage.fromJson(_map(message)),
+          ],
+          record: GaiaForkRecord.fromJson(params['record']),
+          rewind: gaiaRewindsFromJson([params['rewind']]).single,
+        );
+        await _syncBorder(store);
+        // Rewound either way: its images just stay the chat's if this fails.
+        await _shareImages(fork.id, copies);
+        return null;
+      case 'moveLate':
+        final copy = GaiaMessage.fromJson(_map(params['copy']));
+        await store.moveLate(GaiaMessage.fromJson(_map(params['late'])), copy);
+        await _shareImages(copy.chatId, [copy]);
         return null;
       case 'dropFork':
         await store.dropFork(params['chatId']! as String);
@@ -1351,7 +1395,7 @@ class GaiaHost {
         _osControl.drop(params['cardId']! as String);
         return null;
       case 'osResume':
-        _osControl.resume(params['chatId']! as String);
+        _osControl.resume(params['chatId'] as String?);
         return null;
       case 'osStop':
         _osControl.stop(
@@ -1459,7 +1503,10 @@ class GaiaHost {
           front: params['front'] == true,
         )).toJson();
       case 'queuePop':
-        return (await store.queuePop(params['chatId'] as String?))?.toJson();
+        return (await store.queuePop(
+          params['chatId'] as String?,
+          draining: params['draining'] == true,
+        ))?.toJson();
       case 'setDrain':
         await store.setDrain(
           params['chatId']! as String,

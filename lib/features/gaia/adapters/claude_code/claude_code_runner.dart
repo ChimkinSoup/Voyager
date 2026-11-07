@@ -632,6 +632,19 @@ class ClaudeCodeRunner
     return null;
   }
 
+  @override
+  Future<void> rewound(String chatId, String forkId) async {
+    if (_live[chatId] case final process? when !process.inTurn) {
+      _live.remove(chatId);
+      unawaited(process.kill());
+    }
+    final rewinds = await _readRewinds();
+    if (rewinds.remove(chatId) case final cut?) {
+      rewinds[forkId] = cut;
+      await _writeRewinds();
+    }
+  }
+
   /// After the first turn on a process resumed with [cut]: its prompt's
   /// entry must hang off the kept one. Null when it does.
   String? _checkCut(

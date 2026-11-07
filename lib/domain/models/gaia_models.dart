@@ -3,6 +3,8 @@
 /// pipe to the companion as JSON.
 library;
 
+import 'dart:math';
+
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
@@ -313,6 +315,66 @@ class GaiaForkRecord {
   };
 }
 
+/// The messages a rewind dropped from a chat (GAIA_REWIND_HLD.md §5): seqs
+/// [from] to [to], never used again there, and now in the auto-fork
+/// [forkId]. [by] is the device that made it, the only one that moves a late
+/// reply in the range over to the auto-fork (§5.1).
+class GaiaRewind {
+  const GaiaRewind({
+    required this.from,
+    required this.to,
+    required this.forkId,
+    required this.by,
+  });
+
+  final int from;
+  final int to;
+  final String forkId;
+  final String by;
+
+  bool covers(int seq) => seq >= from && seq <= to;
+
+  Map<String, Object?> toJson() => {
+    'from': from,
+    'to': to,
+    'forkId': forkId,
+    'by': by,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is GaiaRewind &&
+      other.from == from &&
+      other.to == to &&
+      other.forkId == forkId &&
+      other.by == by;
+
+  @override
+  int get hashCode => Object.hash(from, to, forkId, by);
+}
+
+List<GaiaRewind> gaiaRewindsFromJson(Object? json) => [
+  if (json is List)
+    for (final value in json)
+      if (value case {
+        'from': final num from,
+        'to': final num to,
+        'forkId': final String forkId,
+        'by': final String by,
+      })
+        GaiaRewind(from: from.toInt(), to: to.toInt(), forkId: forkId, by: by),
+];
+
+/// [local] and [remote] together, so two devices' rewinds both count (§5).
+List<GaiaRewind> gaiaMergeRewinds(
+  List<GaiaRewind> local,
+  List<GaiaRewind> remote,
+) => [
+  ...local,
+  for (final rewind in remote)
+    if (!local.contains(rewind)) rewind,
+];
+
 /// The hand under the composer (GAIA_AUTONOMY_HLD.md §4): no input, input
 /// after a card, or input with none.
 enum GaiaHand { off, ask, auto }
@@ -395,9 +457,27 @@ class GaiaChat extends SoftDeletable {
     this.grants = const {},
     this.fork,
     this.forkOf,
+    this.rewinds = const [],
   });
 
   final String title;
+
+  /// The messages rewinds dropped (GAIA_REWIND_HLD.md §5): never shown here,
+  /// and their seqs never used again.
+  final List<GaiaRewind> rewinds;
+
+  /// Whether a rewind dropped [seq]: a message there isn't shown, and a
+  /// session that last took part there is stale (§5).
+  bool rewound(int seq) => rewinds.any((rewind) => rewind.covers(seq));
+
+  /// The seq a new message takes after [last]'s: past every dropped one
+  /// too (§5).
+  int nextSeq(GaiaMessage? last) =>
+      [
+        if (last != null) last.seq,
+        for (final rewind in rewinds) rewind.to,
+      ].fold(-1, max) +
+      1;
 
   /// The chat this one was forked from, at the root: a fork of a fork names
   /// the original. Listed under it in the sidebar while neither is pinned
@@ -454,6 +534,7 @@ class GaiaChat extends SoftDeletable {
     Map<String, GaiaGrant>? grants,
     GaiaForkRecord? fork,
     bool clearFork = false,
+    List<GaiaRewind>? rewinds,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -464,6 +545,7 @@ class GaiaChat extends SoftDeletable {
     grants: grants ?? this.grants,
     fork: clearFork ? null : (fork ?? this.fork),
     forkOf: forkOf,
+    rewinds: rewinds ?? this.rewinds,
     id: id,
     createdAt: createdAt,
     updatedAt: touch ? utcNow() : updatedAt,
@@ -498,6 +580,7 @@ class GaiaChat extends SoftDeletable {
     },
     'fork': fork?.toJson(),
     'forkOf': forkOf,
+    'rewinds': [for (final rewind in rewinds) rewind.toJson()],
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -518,6 +601,7 @@ class GaiaChat extends SoftDeletable {
       grants: gaiaGrantsFromJson(json['grants']),
       fork: GaiaForkRecord.fromJson(json['fork']),
       forkOf: json['forkOf'] as String?,
+      rewinds: gaiaRewindsFromJson(json['rewinds']),
     );
   }
 }

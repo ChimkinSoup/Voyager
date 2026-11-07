@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io' show FileSystemEntity, FileSystemEntityType, Process, pid;
 import 'dart:isolate';
+import 'dart:math' show max, min;
 
 import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
@@ -62,6 +63,16 @@ abstract interface class GaiaInputBackend {
 
   /// The top-level window at a point; clicks go only if it's the target.
   int rootAt(int x, int y);
+
+  /// Lets the mouse through Gaia's own windows on screen, the companion's
+  /// ([gaiaPid]) and the notch, to what's under them; returns those it
+  /// changed, for [solid]. Only a layered window can be let through, and only
+  /// one over the box [at] spans: the user's own clicks elsewhere, as on the
+  /// notch's button, still land on Gaia's.
+  List<int> seeThrough(int gaiaPid, List<({int x, int y})> at);
+
+  /// Undoes [seeThrough] for [hwnds].
+  void solid(List<int> hwnds);
 
   /// [hwnd]'s window class, which tells the taskbar from Start, and finds the
   /// border's own windows.
@@ -277,6 +288,10 @@ class GaiaOsControl {
   static const _dragMoves = 10;
   static const _dragPause = Duration(milliseconds: 30);
 
+  /// The longest a step's mouse input is waited on to reach its window
+  /// through Gaia's ([_throughGaia]).
+  static const _routeWait = Duration(milliseconds: 500);
+
   /// How long a drag cut short waits, moved back to its start, before letting
   /// go: an app that hasn't yet seen the move takes the release where the drag
   /// had reached (BUG-359; 40 ms was enough for a WinForms trackbar).
@@ -298,11 +313,14 @@ class GaiaOsControl {
   /// The session waits while Gaia is in front (§5.2).
   bool get sessionPaused => _session?.pausedAt != null;
 
-  /// The user answered Gaia mid-run (§5.2): a session waiting for its window
-  /// to come back in front goes on, and its next step brings it there.
-  void resume(String chatId) {
+  /// The user answered Gaia mid-run, or dragged its window (§5.2): a session
+  /// waiting for its window to come back in front goes on, and its next step
+  /// brings it there. Any chat's without [chatId].
+  void resume([String? chatId]) {
     final session = _session;
-    if (session == null || session.chatId != chatId) return;
+    if (session == null || (chatId != null && session.chatId != chatId)) {
+      return;
+    }
     _paused(session, null);
   }
 
@@ -1174,12 +1192,12 @@ class GaiaOsControl {
     }
     switch (step.action) {
       case _Action.click:
-        _click(window, step, point!);
+        await _click(window, step, point!);
       case _Action.scroll:
-        _scroll(window, step, point!);
+        await _scroll(window, step, point!);
       case _Action.type:
         if (step.aimed) {
-          _click(window, step, point!, plain: true);
+          await _click(window, step, point!, plain: true);
           await Future<void>.delayed(_settle);
         }
         await _checkFocus(window);
@@ -1433,40 +1451,49 @@ class GaiaOsControl {
     final (down, up) = _backend.buttonsSwapped
         ? (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP)
         : (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
-    _backend.moveCursor(from.x, from.y);
-    // Set first, so that a stop even mid-send lets go.
-    active.drag = (window: window.hwnd, from: from, up: up, at: from);
-    active.dragLostFront = false;
-    _send([GaiaMouseEvent(down)], active);
-    final until = DateTime.now().add(_holdLimit);
-    void next() {
-      if (_backend.foreground() != window.hwnd) active.dragLostFront = true;
-      if (DateTime.now().isAfter(until)) {
-        throw _Stopped('The drag held the button too long.');
+    // Through Gaia's windows the whole way, as [_throughGaia].
+    final changed = _backend.seeThrough(companionPid(), [from, to]);
+    try {
+      _backend.moveCursor(from.x, from.y);
+      // Set first, so that a stop even mid-send lets go.
+      active.drag = (window: window.hwnd, from: from, up: up, at: from);
+      active.dragLostFront = false;
+      _send([GaiaMouseEvent(down)], active);
+      final until = DateTime.now().add(_holdLimit);
+      void next() {
+        if (_backend.foreground() != window.hwnd) active.dragLostFront = true;
+        if (DateTime.now().isAfter(until)) {
+          throw _Stopped('The drag held the button too long.');
+        }
+        active.throwIfStopped();
+        _inFront(window);
       }
-      active.throwIfStopped();
-      _inFront(window);
-    }
 
-    for (var i = 1; i <= _dragMoves; i++) {
+      for (var i = 1; i <= _dragMoves; i++) {
+        await Future<void>.delayed(_dragPause);
+        next();
+        final at = (
+          x: from.x + (to.x - from.x) * i ~/ _dragMoves,
+          y: from.y + (to.y - from.y) * i ~/ _dragMoves,
+        );
+        _backend.moveCursor(at.x, at.y);
+        active.drag = (window: window.hwnd, from: from, up: up, at: at);
+        // An app sees the move as input, as a real mouse's.
+        _send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)], active);
+      }
       await Future<void>.delayed(_dragPause);
       next();
-      final at = (
-        x: from.x + (to.x - from.x) * i ~/ _dragMoves,
-        y: from.y + (to.y - from.y) * i ~/ _dragMoves,
-      );
-      _backend.moveCursor(at.x, at.y);
-      active.drag = (window: window.hwnd, from: from, up: up, at: at);
-      // An app sees the move as input, as a real mouse's.
-      _send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)], active);
+      if (_backend.rootAt(to.x, to.y) != window.hwnd) {
+        throw _Stopped('Another window is covering ${to.x},${to.y}.');
+      }
+      _send([GaiaMouseEvent(up)], active);
+      active.drag = null;
+      if (changed.isNotEmpty) {
+        await _backend.pumped(window.hwnd, times: 2, limit: _routeWait);
+      }
+    } finally {
+      _backend.solid(changed);
     }
-    await Future<void>.delayed(_dragPause);
-    next();
-    if (_backend.rootAt(to.x, to.y) != window.hwnd) {
-      throw _Stopped('Another window is covering ${to.x},${to.y}.');
-    }
-    _send([GaiaMouseEvent(up)], active);
-    active.drag = null;
   }
 
   /// Opens [step]'s target and finds the window it opened. Only a window shown
@@ -1691,13 +1718,47 @@ class GaiaOsControl {
     } on GaiaReadException catch (error) {
       throw _Stopped(error.message);
     }
-    if (_backend.rootAt(point.x, point.y) != window.hwnd) {
+    final root = _rootAt(point.x, point.y);
+    if (root != window.hwnd) {
+      // The Gaia window itself isn't let through, only floaters.
+      final gaias = root != 0 && _backend.describe(root)?.pid == companionPid();
       throw _Stopped(
-        'Another window is covering ${point.x},${point.y}, perhaps Gaia. Move '
-        'it, or ask the user to.',
+        '${gaias ? "Gaia's own window" : 'Another window'} is covering '
+        '${point.x},${point.y}. Move it, or ask the user to.',
       );
     }
     return point;
+  }
+
+  /// The top-level window at [x],[y] under Gaia's own, which input sent
+  /// through [_throughGaia] reaches.
+  int _rootAt(int x, int y) {
+    final changed = _backend.seeThrough(companionPid(), [(x: x, y: y)]);
+    try {
+      return _backend.rootAt(x, y);
+    } finally {
+      _backend.solid(changed);
+    }
+  }
+
+  /// Runs [act], a step's mouse input, with Gaia's own windows letting it
+  /// through to [target] under them. Windows routes input to the window under
+  /// the cursor as it takes it, after [SendInput] returns, so they stay so
+  /// until [target] has had it.
+  Future<void> _throughGaia(
+    int target,
+    ({int x, int y}) point,
+    void Function() act,
+  ) async {
+    final changed = _backend.seeThrough(companionPid(), [point]);
+    try {
+      act();
+      if (changed.isNotEmpty) {
+        await _backend.pumped(target, times: 2, limit: _routeWait);
+      }
+    } finally {
+      _backend.solid(changed);
+    }
   }
 
   /// An `anywhere` click's point (§5.5): another window, the taskbar or the
@@ -1708,7 +1769,7 @@ class GaiaOsControl {
     _Step step,
   ) async {
     final (x, y) = (step.x!, step.y!);
-    final root = _backend.rootAt(x, y);
+    final root = _rootAt(x, y);
     final under = root == 0 ? null : _backend.describe(root);
     if (under == null) throw _Stopped('Nothing is at $x,$y.');
     if (under.pid == companionPid() ||
@@ -1730,43 +1791,49 @@ class GaiaOsControl {
     return (x: x, y: y);
   }
 
-  void _click(
+  Future<void> _click(
     GaiaForegroundWindow window,
     _Step step,
     ({int x, int y}) point, {
     bool plain = false,
-  }) {
+  }) async {
     _inFront(window);
     final right = !plain && step.button == 'right';
     // A swapped mouse's left button is sent as its right.
     final (down, up) = right != _backend.buttonsSwapped
         ? (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP)
         : (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
-    _backend.moveCursor(point.x, point.y);
-    _send([
-      for (var i = 0; i < (!plain && step.doubleClick ? 2 : 1); i++) ...[
-        GaiaMouseEvent(down),
-        GaiaMouseEvent(up),
-      ],
-    ], _active!);
+    // An `anywhere` click goes to whatever window is there.
+    final target = step.anywhere ? _rootAt(point.x, point.y) : window.hwnd;
+    await _throughGaia(target, point, () {
+      _backend.moveCursor(point.x, point.y);
+      _send([
+        for (var i = 0; i < (!plain && step.doubleClick ? 2 : 1); i++) ...[
+          GaiaMouseEvent(down),
+          GaiaMouseEvent(up),
+        ],
+      ], _active!);
+    });
   }
 
-  void _scroll(
+  Future<void> _scroll(
     GaiaForegroundWindow window,
     _Step step,
     ({int x, int y}) point,
-  ) {
+  ) async {
     _inFront(window);
-    _backend.moveCursor(point.x, point.y);
     final horizontal = step.direction == 'left' || step.direction == 'right';
     // Positive is up, and right.
     final sign = step.direction == 'down' || step.direction == 'left' ? -1 : 1;
-    _send([
-      GaiaMouseEvent(
-        horizontal ? MOUSEEVENTF_HWHEEL : MOUSEEVENTF_WHEEL,
-        data: sign * step.amount * _wheelDelta,
-      ),
-    ], _active!);
+    await _throughGaia(window.hwnd, point, () {
+      _backend.moveCursor(point.x, point.y);
+      _send([
+        GaiaMouseEvent(
+          horizontal ? MOUSEEVENTF_HWHEEL : MOUSEEVENTF_WHEEL,
+          data: sign * step.amount * _wheelDelta,
+        ),
+      ], _active!);
+    });
   }
 
   /// A character at a time, looking up between them so that Abort, Esc or a
@@ -1888,32 +1955,48 @@ class GaiaOsControl {
     final lostFront =
         drag != null &&
         (active.dragLostFront || _backend.foreground() != drag.window);
-    if (drag != null) {
-      stopFlashes?.call();
-      userHasMouse = _backend.cursorAt() != drag.at;
-      // Not once the window lost the front: the move back, button down, and
-      // the release would go to whatever is in front now.
-      if (!userHasMouse && !lostFront) {
-        _backend.moveCursor(drag.from.x, drag.from.y);
-        // The app sees the move back as input, then has time to handle it
-        // before the button comes up there (BUG-359).
-        _backend.send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)]);
-        if (session != null) session.inputMark = _backend.lastInput();
-        await Future<void>.delayed(_releaseSettle);
-        // The user may have taken the mouse meanwhile: that's theirs, and the
-        // button comes up where they have it.
-        if (session != null) _noteUserInput(session, DateTime.now());
-        movedBack = _backend.cursorAt() == drag.from;
-        userHasMouse = !movedBack;
+    // The drag's own window may be under Gaia's, as it went (see [_drag]).
+    final changed = drag == null
+        ? const <int>[]
+        // Where the user may have the mouse too, as it lets go there.
+        : _backend.seeThrough(companionPid(), [
+            drag.from,
+            drag.at,
+            _backend.cursorAt(),
+          ]);
+    try {
+      if (drag != null) {
+        stopFlashes?.call();
+        userHasMouse = _backend.cursorAt() != drag.at;
+        // Not once the window lost the front: the move back, button down, and
+        // the release would go to whatever is in front now.
+        if (!userHasMouse && !lostFront) {
+          _backend.moveCursor(drag.from.x, drag.from.y);
+          // The app sees the move back as input, then has time to handle it
+          // before the button comes up there (BUG-359).
+          _backend.send(const [GaiaMouseEvent(MOUSEEVENTF_MOVE)]);
+          if (session != null) session.inputMark = _backend.lastInput();
+          await Future<void>.delayed(_releaseSettle);
+          // The user may have taken the mouse meanwhile: that's theirs, and the
+          // button comes up where they have it.
+          if (session != null) _noteUserInput(session, DateTime.now());
+          movedBack = _backend.cursorAt() == drag.from;
+          userHasMouse = !movedBack;
+        }
       }
+      _backend.send([
+        if (drag != null) GaiaMouseEvent(drag.up),
+        for (final vk in active.held.toList().reversed)
+          GaiaKeyEvent(vk, up: true),
+      ]);
+      // Gaia's own release isn't the user's input.
+      if (session != null) session.inputMark = _backend.lastInput();
+      if (changed.isNotEmpty) {
+        await _backend.pumped(drag!.window, times: 2, limit: _routeWait);
+      }
+    } finally {
+      _backend.solid(changed);
     }
-    _backend.send([
-      if (drag != null) GaiaMouseEvent(drag.up),
-      for (final vk in active.held.toList().reversed)
-        GaiaKeyEvent(vk, up: true),
-    ]);
-    // Gaia's own release isn't the user's input.
-    if (session != null) session.inputMark = _backend.lastInput();
     active.held.clear();
     active.drag = null;
     if (drag == null) return null;
@@ -2627,6 +2710,61 @@ class _Win32InputBackend implements GaiaInputBackend {
       return under == 0 ? 0 : GetAncestor(under, GA_ROOT);
     } finally {
       free(point);
+    }
+  }
+
+  @override
+  List<int> seeThrough(int gaiaPid, List<({int x, int y})> at) {
+    final changed = <int>[];
+    final owner = calloc<Uint32>();
+    final rect = calloc<RECT>();
+    final xs = at.map((point) => point.x);
+    final ys = at.map((point) => point.y);
+    final (left, right) = (xs.reduce(min), xs.reduce(max));
+    final (top, bottom) = (ys.reduce(min), ys.reduce(max));
+    try {
+      for (
+        var hwnd = GetTopWindow(NULL);
+        hwnd != 0;
+        hwnd = GetWindow(hwnd, GW_HWNDNEXT)
+      ) {
+        if (IsWindowVisible(hwnd) == 0) continue;
+        final style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        // Already let through, as the flashes are, it's left as it is.
+        if (style & WS_EX_LAYERED == 0 || style & WS_EX_TRANSPARENT != 0) {
+          continue;
+        }
+        GetWindowThreadProcessId(hwnd, owner);
+        final gaias =
+            owner.value == gaiaPid ||
+            (owner.value == pid &&
+                windowClass(hwnd) == GaiaOsControl._borderClass);
+        if (!gaias) continue;
+        if (GetWindowRect(hwnd, rect) == 0 ||
+            rect.ref.left > right ||
+            rect.ref.right <= left ||
+            rect.ref.top > bottom ||
+            rect.ref.bottom <= top) {
+          continue;
+        }
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
+        changed.add(hwnd);
+      }
+    } finally {
+      free(owner);
+      free(rect);
+    }
+    return changed;
+  }
+
+  @override
+  void solid(List<int> hwnds) {
+    for (final hwnd in hwnds) {
+      SetWindowLongPtr(
+        hwnd,
+        GWL_EXSTYLE,
+        GetWindowLongPtr(hwnd, GWL_EXSTYLE) & ~WS_EX_TRANSPARENT,
+      );
     }
   }
 

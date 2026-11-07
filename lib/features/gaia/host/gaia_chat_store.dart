@@ -66,6 +66,49 @@ class GaiaChatStore {
         }
       });
 
+  /// A rewind of [chatId] (GAIA_REWIND_HLD.md §4), all at once: the
+  /// auto-fork [fork] with its [copies]; then [dropped] erased from the chat,
+  /// its sessions cleared, its fork record set to [record], and [rewind]
+  /// added to what it dropped. Nothing when the chat is gone, or the
+  /// auto-fork is already stored.
+  Future<void> rewindChat(
+    String chatId, {
+    required GaiaChat fork,
+    required List<GaiaMessage> copies,
+    required List<GaiaMessage> dropped,
+    required GaiaForkRecord? record,
+    required GaiaRewind rewind,
+  }) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null ||
+        chat.isDeleted ||
+        await _repository.getChat(fork.id) != null) {
+      return;
+    }
+    await _repository.upsertChat(fork.copyWith(version: 1));
+    for (final message in copies) {
+      await _repository.upsertMessage(message.copyWith(version: 1));
+    }
+    await _erase(dropped);
+    await _repository.upsertChat(
+      chat.copyWith(
+        agentSessions: const {},
+        fork: record,
+        clearFork: record == null,
+        rewinds: [...chat.rewinds, rewind],
+      ),
+    );
+  });
+
+  /// A reply that ended in a range a rewind dropped, moved to the range's
+  /// auto-fork (GAIA_REWIND_HLD.md §5.1): [copy] saved there, [late] erased.
+  Future<void> moveLate(GaiaMessage late, GaiaMessage copy) =>
+      _serial(() async {
+        if (await _repository.getChat(copy.chatId) == null) return;
+        await _repository.upsertMessage(copy.copyWith(version: 1));
+        await _erase([late]);
+      });
+
   /// Forgets [chatId]'s fork record (GAIA_FORKING_HLD.md §5.3): its native
   /// session was made, or can't be.
   Future<void> dropFork(String chatId) => _serial(() async {
@@ -297,15 +340,24 @@ class GaiaChatStore {
   });
 
   /// Takes [chatId]'s next waiting prompt off its queue, marked sent, so no
-  /// device sends it again; null when there's none.
-  Future<GaiaQueueItem?> queuePop(String? chatId) => _serial(() async {
-    final next = (await _repository.listQueue())
-        .where((item) => item.chatId == chatId)
-        .firstOrNull;
-    if (next == null) return null;
-    await _repository.upsertQueueItem(next.copyWith(consumedAt: utcNow()));
-    return next;
-  });
+  /// device sends it again; null when there's none. For [draining], null too
+  /// once the chat's drain mode is off: the companion's copy of the chat can
+  /// be a moment behind, as when a rewind has just paused it
+  /// (GAIA_REWIND_HLD.md §4 step 0).
+  Future<GaiaQueueItem?> queuePop(String? chatId, {bool draining = false}) =>
+      _serial(() async {
+        if (draining &&
+            chatId != null &&
+            !((await _repository.getChat(chatId))?.drain ?? false)) {
+          return null;
+        }
+        final next = (await _repository.listQueue())
+            .where((item) => item.chatId == chatId)
+            .firstOrNull;
+        if (next == null) return null;
+        await _repository.upsertQueueItem(next.copyWith(consumedAt: utcNow()));
+        return next;
+      });
 
   /// Deleted from Gaia's sidebar: tombstoned, as on the Gaia page, so
   /// [restoreChat] can undo it.
@@ -317,18 +369,7 @@ class GaiaChatStore {
   /// if not stored yet, so a save still on its way stays out.
   Future<void> takeBack(List<GaiaMessage> messages, {required bool chat}) =>
       _serial(() async {
-        for (final message in messages) {
-          final existing = await _repository.getMessage(message.id) ?? message;
-          if (isErasedAt(existing.deletedAt)) continue;
-          await _repository.upsertMessage(
-            existing.copyWith(
-              parts: const [],
-              status: GaiaMessageStatus.cancelled,
-              deletedAt: kErasedAt,
-              version: existing.version + kEraseVersionStep,
-            ),
-          );
-        }
+        await _erase(messages);
         final chatId = messages.first.chatId;
         final stored = await _repository.getChat(chatId);
         if (!chat || stored == null || isErasedAt(stored.deletedAt)) return;
@@ -340,6 +381,23 @@ class GaiaChatStore {
           ),
         );
       });
+
+  /// [messages] erased, as the trash's "Delete forever" leaves a row, even
+  /// if not stored yet, so a save still on its way stays out.
+  Future<void> _erase(List<GaiaMessage> messages) async {
+    for (final message in messages) {
+      final existing = await _repository.getMessage(message.id) ?? message;
+      if (isErasedAt(existing.deletedAt)) continue;
+      await _repository.upsertMessage(
+        existing.copyWith(
+          parts: const [],
+          status: GaiaMessageStatus.cancelled,
+          deletedAt: kErasedAt,
+          version: existing.version + kEraseVersionStep,
+        ),
+      );
+    }
+  }
 
   Future<void> restoreChat(String chatId) => _repository.restoreChat(chatId);
 

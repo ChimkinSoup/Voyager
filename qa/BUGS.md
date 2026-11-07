@@ -3939,4 +3939,12 @@ Entry format:
 - Notes: `_logActivity` (`gaia_chat_tools.dart`) dropped an earlier stop row only when its text was identical. The step's result adds the drag note, so the session's shorter row stayed.
 - Notes (fixed 2026-11-06): two stop rows are the same stop when one starts with the other, and the fuller text is kept, in either order. Unit test in `gaia_tools_test.dart` (fails on the old code). Live, the same drag and Esc on a rebuilt `gaiaqa`: one row, with the drag note, and the slider back at 10.
 
-<!-- Last ID: BUG-370. -->
+### BUG-371 [GAIA-REWIND] A rewind during a reply could drain the queue into the rewound chat
+- Severity: Major
+- Found: 2026-11-06, GAIA_REWIND_HLD.md §10.1 live check "rewinding while a turn runs here" (`gaiaqa`, debug build of the working tree, Haiku)
+- Steps: in a chat in drain mode with a prompt queued, start a long reply, then rewind to an earlier message while it streams.
+- Actual: the rewind paused drain mode and stopped the reply, but a few seconds later the queued prompt was sent into the rewound chat anyway, and the queue emptied. The stored chat said drain off.
+- Expected (§4 step 0): nothing in the queue goes into the rewound chat by itself.
+- Notes (fixed 2026-11-06): the companion decides to drain from its own copy of the chat, and a refresh fetched while the reply streamed (drain still on) could land after the rewind turned it off. Once the rewind's erase is stored, deleted messages aren't listed, so the chat's last message is a clean reply and the drain went ahead. A drain's pop now asks the main instance to pop only if the stored chat is still in drain mode (`GaiaChatStore.queuePop(draining: true)`). Store test in `gaia_chat_store_test.dart`. Live, the same steps twice (the reply stopped at 911 characters the second time): drain off, the prompt still queued 25 s later, nothing sent.
+
+<!-- Last ID: BUG-371. -->

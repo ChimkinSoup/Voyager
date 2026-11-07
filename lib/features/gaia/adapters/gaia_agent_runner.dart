@@ -309,6 +309,11 @@ abstract interface class GaiaSessionForker {
     String? awaiting,
     String? endAt,
   });
+
+  /// [chatId]'s sessions now belong to [forkId], a rewind's auto-fork
+  /// (GAIA_REWIND_HLD.md §4): [chatId]'s idle process is let go, and a
+  /// take-back's cut still to be made goes to [forkId] with its session.
+  Future<void> rewound(String chatId, String forkId);
 }
 
 typedef GaiaCliVersion = (int, int, int);

@@ -263,7 +263,29 @@ class _Backend implements GaiaInputBackend {
   }) async => pumps.add((hwnd, calls.length));
 
   @override
-  int rootAt(int x, int y) => rootUnder;
+  int rootAt(int x, int y) =>
+      gaiaOver != null && !seeingThrough ? gaiaOver! : rootUnder;
+
+  /// A Gaia window over the target, which [seeThrough] lets the mouse
+  /// through; and each send, as whether it went while it did.
+  int? gaiaOver;
+  var seeingThrough = false;
+  final sentThrough = <bool>[];
+
+  /// The points each [seeThrough] was for.
+  final seenThroughAt = <List<({int x, int y})>>[];
+  @override
+  List<int> seeThrough(int gaiaPid, List<({int x, int y})> at) {
+    seenThroughAt.add(at);
+    if (gaiaOver == null) return const [];
+    seeingThrough = true;
+    return [gaiaOver!];
+  }
+
+  @override
+  void solid(List<int> hwnds) {
+    if (hwnds.isNotEmpty) seeingThrough = false;
+  }
 
   /// Window classes, by hwnd; none for the rest.
   final classes = <int, String>{};
@@ -317,6 +339,7 @@ class _Backend implements GaiaInputBackend {
   int send(List<GaiaInputEvent> events) {
     final took = sendLimit ?? events.length;
     calls.add(events);
+    sentThrough.add(seeingThrough);
     sent.addAll(events.take(took));
     inputTick++;
     sendLimit = null;
@@ -665,6 +688,25 @@ void main() {
       final result = await run();
       expect(result['stopped'], contains('covering'));
       expect(backend.calls, isEmpty);
+    });
+
+    test('clicks and scrolls through a Gaia window over the target', () async {
+      backend.gaiaOver = 50;
+      await plan('os_steps', {
+        'steps': [
+          {'action': 'click', 'name': 'Save'},
+          {'action': 'scroll', 'direction': 'down', 'amount': 3},
+        ],
+      });
+      final result = await run();
+      expect(result['stopped'], isNull);
+      expect(backend.calls.length, 2);
+      expect(backend.sentThrough, [true, true]);
+      // Only Gaia's windows over the point itself.
+      expect(backend.seenThroughAt, everyElement(hasLength(1)));
+      // Solid again once the target has had each.
+      expect(backend.seeingThrough, isFalse);
+      expect(backend.pumps.map((p) => p.$1), [_target.hwnd, _target.hwnd]);
     });
 
     test('stops if the control has gone', () async {
@@ -1556,6 +1598,7 @@ void main() {
         'an anywhere click lands outside the window, on another app',
         () async {
           backend.rootUnder = other.hwnd;
+          backend.gaiaOver = 99;
           final result = await act('os_click', {
             'x': 900,
             'y': 700,
@@ -1563,6 +1606,8 @@ void main() {
           });
           expect(result['stopped'], isNull);
           expect(backend.cursor.last, (900, 700));
+          // Gaia lets it through until the app there has had it.
+          expect(backend.pumps.single.$1, other.hwnd);
         },
       );
 
@@ -1621,6 +1666,19 @@ void main() {
       expect(stops, 0);
       auto.endTurn();
       expect(told, 4);
+    });
+
+    test('dragging Gaia resumes the session, whichever chat holds it '
+        '(§5.2)', () async {
+      await act('os_key', {'keys': 'A'});
+      backend.front = gaia.hwnd;
+      backend.gaiaInFront = true;
+      await Future<void>.delayed(look);
+      expect(auto.sessionPaused, isTrue);
+      auto.resume();
+      expect(auto.sessionPaused, isFalse);
+      expect((await act('os_key', {'keys': 'B'}))['stopped'], isNull);
+      expect(stops, 0);
     });
 
     test('steps start at least the pace apart (§5.6)', () async {
@@ -2987,6 +3045,16 @@ void main() {
         expect(result['stopped'], contains('covering 500,500'));
         expect(buttons(), [MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP]);
         expect(backend.cursor.last, (10, 10));
+        // Through Gaia's windows over the drag's path, then over where it
+        // had reached and where it lets go.
+        expect(
+          backend.seenThroughAt,
+          contains(equals([(x: 10, y: 10), (x: 500, y: 500)])),
+        );
+        expect(backend.seenThroughAt.last.take(2), [
+          (x: 10, y: 10),
+          (x: 500, y: 500),
+        ]);
       });
 
       test('the button is never held past the limit', () async {

@@ -249,8 +249,13 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
     final theme = Theme.of(context);
     final chats = ref.watch(gaiaChatsProvider).valueOrNull ?? const [];
     final chat = _chat(chats);
-    final messages =
-        ref.watch(gaiaMessagesProvider(widget.chatId)).valueOrNull ?? const [];
+    final messages = [
+      for (final message
+          in ref.watch(gaiaMessagesProvider(widget.chatId)).valueOrNull ??
+              const <GaiaMessage>[])
+        // A rewind's, never shown here (GAIA_REWIND_HLD.md §5.1).
+        if (!(chat?.rewound(message.seq) ?? false)) message,
+    ];
     final beacons = ref.watch(gaiaBeaconsProvider).valueOrNull ?? const [];
     final now = ref.watch(gaiaClockProvider).valueOrNull ?? DateTime.now();
     final live = ref.watch(gaiaLiveProvider(widget.chatId)).valueOrNull;

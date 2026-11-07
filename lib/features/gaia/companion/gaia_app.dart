@@ -895,17 +895,51 @@ class _SidebarState extends State<_Sidebar> {
       child: _ChatTile(
         selected: selected,
         title: renaming
-            // In the tile's own text style, as its title was.
-            ? Builder(
-                builder: (context) => TextField(
-                  controller: _rename,
-                  focusNode: _renameFocus,
-                  autofocus: true,
-                  style: DefaultTextStyle.of(context).style,
-                  decoration: const InputDecoration.collapsed(hintText: ''),
-                  contextMenuBuilder: gaiaTextMenu,
-                  onSubmitted: (_) => _endRename(keep: true),
-                  onTapOutside: (_) => _endRename(keep: true),
+            // In the tile's own text style, as its title was, in Gaia's
+            // field: its fill, and its edge lit in the accent. Out past the
+            // title on both sides by its padding, and the text collapsed and
+            // centred as the title is, so the text stays put.
+            ? LayoutBuilder(
+                builder: (context, constraints) => OverflowBox(
+                  maxWidth: constraints.maxWidth + 8,
+                  child: Container(
+                    height: 30,
+                    // With the 1 of the edge, the 4 it's out by.
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    alignment: Alignment.centerLeft,
+                    decoration: BoxDecoration(
+                      color: gaiaFieldFill,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _rename,
+                      focusNode: _renameFocus,
+                      autofocus: true,
+                      // Not merged over the theme's text style, whose line
+                      // height and spacing would move the text.
+                      style: DefaultTextStyle.of(context).style.copyWith(
+                        inherit: false,
+                        textBaseline: TextBaseline.alphabetic,
+                      ),
+                      decoration: const InputDecoration(
+                        isCollapsed: true,
+                        // The box above is the fill: the theme's would show
+                        // as a faint one round the text.
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                      ),
+                      contextMenuBuilder: gaiaTextMenu,
+                      onSubmitted: (_) => _endRename(keep: true),
+                      onTapOutside: (_) => _endRename(keep: true),
+                    ),
+                  ),
                 ),
               )
             : Text(chat.title, overflow: TextOverflow.ellipsis),
@@ -1068,7 +1102,9 @@ class _ChatTileState extends State<_ChatTile> {
   @override
   Widget build(BuildContext context) {
     final selected = widget.selected;
-    final lit = selected || _hovered;
+    // Not while it's being renamed: the field is what's under the cursor.
+    final hovered = _hovered && widget.onTap != null;
+    final lit = selected || hovered;
     return MouseRegion(
       cursor: widget.onTap == null
           ? MouseCursor.defer
@@ -1087,7 +1123,7 @@ class _ChatTileState extends State<_ChatTile> {
             color: Colors.white.withValues(
               alpha: selected
                   ? 0.08
-                  : _hovered
+                  : hovered
                   ? 0.05
                   : 0,
             ),
@@ -1187,7 +1223,7 @@ class _ForkBracketPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const x = 13.0;
+    const x = 12.0;
     const radius = 6.0;
     // The last tile's middle: 36 high, then its 2 below.
     final y = size.height - 2 - 18;
@@ -1196,7 +1232,8 @@ class _ForkBracketPainter extends CustomPainter {
         ..moveTo(x, 0)
         ..lineTo(x, y - radius)
         ..quadraticBezierTo(x, y, x + radius, y)
-        ..lineTo(_forkIndent + 6, y),
+        // Short of the tile, which starts at _forkIndent.
+        ..lineTo(_forkIndent - 4, y),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
@@ -2375,6 +2412,14 @@ class _MessageView extends StatelessWidget {
         label: 'Fork from here',
         icon: Icons.call_split,
         onPressed: () => unawaited(controller.forkChat(message)),
+      ),
+    // Not where nothing would be dropped, or what's dropped is still coming
+    // (GAIA_REWIND_HLD.md §3).
+    if (controller.canRewind(message))
+      GaiaMenuItem(
+        label: 'Rewind to here',
+        icon: Icons.history,
+        onPressed: () => unawaited(controller.rewindChat(message)),
       ),
   ];
 

@@ -106,6 +106,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   // Before start, which can already show the window.
   windowManager.addListener(_DismissOnClose(controller));
   windowManager.addListener(_TrackFocus(controller, window));
+  windowManager.addListener(_ResumeAfterDrag(controller));
   _escapeCancelsCrop(controller);
   await controller.start();
   if (pipe is GaiaDevPipe) {
@@ -183,6 +184,21 @@ class _DismissOnClose with WindowListener {
 
   @override
   void onWindowClose() => controller.dismiss();
+}
+
+/// window_manager reports moved and resized on `WM_EXITSIZEMOVE` after a move
+/// or a resize, so only once a drag of the window or its edge ends, not for
+/// one made in code.
+class _ResumeAfterDrag with WindowListener {
+  _ResumeAfterDrag(this.controller);
+
+  final GaiaController controller;
+
+  @override
+  void onWindowMoved() => controller.moved();
+
+  @override
+  void onWindowResized() => controller.moved();
 }
 
 /// Hiding and minimising blur too: window_manager reports focus from

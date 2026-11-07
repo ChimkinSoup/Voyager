@@ -57,6 +57,28 @@ class GaiaDevPipe extends GaiaPipe {
             GaiaMessage.fromJson(_map(message)),
         ]);
         return null;
+      case 'rewindChat':
+        await _store.rewindChat(
+          p['chatId']! as String,
+          fork: GaiaChat.fromJson(_map(p['fork'])),
+          copies: [
+            for (final message in p['copies']! as List)
+              GaiaMessage.fromJson(_map(message)),
+          ],
+          dropped: [
+            for (final message in p['dropped']! as List)
+              GaiaMessage.fromJson(_map(message)),
+          ],
+          record: GaiaForkRecord.fromJson(p['record']),
+          rewind: gaiaRewindsFromJson([p['rewind']]).single,
+        );
+        return null;
+      case 'moveLate':
+        await _store.moveLate(
+          GaiaMessage.fromJson(_map(p['late'])),
+          GaiaMessage.fromJson(_map(p['copy'])),
+        );
+        return null;
       case 'dropFork':
         await _store.dropFork(p['chatId']! as String);
         return null;

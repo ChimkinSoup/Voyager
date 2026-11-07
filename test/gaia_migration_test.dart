@@ -692,6 +692,32 @@ void main() {
     expect((await repo.getChat('c1'))!.forkOf, 'c0');
   });
 
+  test('188→189 adds what rewinds dropped, none in old rows', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    GaiaChat chat({List<GaiaRewind> rewinds = const []}) => GaiaChat(
+      id: 'c1',
+      title: 'Hi',
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+      rewinds: rewinds,
+    );
+    await DriftGaiaRepository(seed).upsertChat(chat());
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN rewinds_json',
+    );
+    await seed.customStatement('PRAGMA user_version = 188');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect((await repo.getChat('c1'))!.rewinds, isEmpty);
+    const rewind = GaiaRewind(from: 2, to: 5, forkId: 'f', by: 'laptop');
+    await repo.upsertChat(chat(rewinds: [rewind]));
+    expect((await repo.getChat('c1'))!.rewinds, [rewind]);
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

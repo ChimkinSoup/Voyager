@@ -62,6 +62,20 @@ void main() {
 
   tearDown(() => db.close());
 
+  // A rewind pauses drain mode, and the companion's copy of the chat can
+  // still say it's on (GAIA_REWIND_HLD.md §4 step 0).
+  test(
+    "a drain's pop takes nothing once the chat's drain mode is off",
+    () async {
+      await store.createChat(_chat('c1'));
+      await store.enqueue('c1', 'Later');
+      expect(await store.queuePop('c1', draining: true), isNull);
+      expect(await store.queue('c1'), hasLength(1));
+      await store.setDrain('c1', true);
+      expect((await store.queuePop('c1', draining: true))?.text, 'Later');
+    },
+  );
+
   test('messages come back in seq order, and a put replaces by id', () async {
     await store.createChat(_chat('c1'));
     await store.putMessage(
@@ -372,6 +386,29 @@ void main() {
         local: local,
       );
       expect(erased.agentSessions, isEmpty);
+    });
+
+    test("rewinds merge as a union, so two devices' both count", () {
+      const mine = GaiaRewind(from: 2, to: 3, forkId: 'f1', by: 'laptop');
+      const theirs = GaiaRewind(from: 4, to: 7, forkId: 'f2', by: 'desktop');
+      final local = _chat('c1').copyWith(rewinds: [mine]);
+      final remote = _chat(
+        'c1',
+      ).copyWith(rewinds: [theirs, mine], version: local.version + 1);
+      final merged = mergeGaiaChatFromRemote(
+        gaiaChatToFirestore(remote),
+        'c1',
+        local: local,
+      );
+      expect(merged.rewinds, [mine, theirs]);
+      // A copy that lacks one keeps it.
+      final stale = mergeGaiaChatFromRemote(
+        gaiaChatToFirestore(_chat('c1').copyWith(version: merged.version + 1)),
+        'c1',
+        local: merged,
+      );
+      expect(stale.rewinds, [mine, theirs]);
+      expect(GaiaChat.fromJson(merged.toJson()).rewinds, [mine, theirs]);
     });
 
     test("a winning copy doesn't take curatedSeq back", () {

@@ -2219,6 +2219,10 @@ class GaiaChatsTable extends Table {
 
   /// The original chat a fork was made from (GAIA_FORKING_HLD.md §7).
   TextColumn get forkOf => text().nullable()();
+
+  /// `[{from, to, forkId, by}]`, the messages rewinds dropped
+  /// (GAIA_REWIND_HLD.md §5).
+  TextColumn get rewindsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2470,7 +2474,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 188;
+  int get schemaVersion => 189;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4605,6 +4609,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_chats_table',
           gaiaChatsTable,
           gaiaChatsTable.forkOf,
+        );
+      }
+      if (from >= 169 && from < 189) {
+        // What rewinds dropped (GAIA_REWIND_HLD.md §5).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.rewindsJson,
         );
       }
     },

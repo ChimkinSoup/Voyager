@@ -37,8 +37,11 @@ class GaiaControlBorder {
 
   HWND AddWindow(int left, int top, int width, int height, bool clickable);
   void Rebuild();
+  // Lays the notch out for |label_| on |monitor| and returns its left edge.
+  int LayoutNotch(HMONITOR monitor, const RECT& bounds);
   void AddNotch(HMONITOR monitor, const RECT& bounds);
-  void PaintNotch();
+  // Moves it to |at| as well, if given, at its new size.
+  void PaintNotch(const POINT* at = nullptr);
   void SetButtonState(bool hover, bool pressed);
 
   std::function<void()> on_revoke_;
@@ -105,6 +108,8 @@ class GaiaFlashes {
   HWND Acquire();
   void Release(HWND window);
   void Tick();
+  // Puts the flashes back on top of a window brought up over them mid-play.
+  void KeepOnTop();
 
   HWND timer_window_ = nullptr;
   bool ticking_ = false;
@@ -112,6 +117,10 @@ class GaiaFlashes {
   // Finished windows, hidden one a frame, as hiding is the costliest update.
   std::vector<HWND> hiding_;
   std::vector<std::unique_ptr<Active>> active_;
+  // The window KeepOnTop last put the flashes over, and those still over
+  // them a tick after, which it no longer tries to pass.
+  HWND raised_over_ = nullptr;
+  std::vector<HWND> unpassable_;
 };
 
 #endif  // RUNNER_GAIA_CONTROL_BORDER_H_
