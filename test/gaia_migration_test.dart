@@ -718,6 +718,43 @@ void main() {
     expect((await repo.getChat('c1'))!.rewinds, [rewind]);
   });
 
+  test('189→190 adds chapters, none in old rows', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    final seedRepo = DriftGaiaRepository(seed);
+    await seedRepo.upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Hi',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    final message = GaiaMessage(
+      id: 'm1',
+      chatId: 'c1',
+      seq: 0,
+      role: GaiaMessageRole.user,
+      parts: const [GaiaTextPart('hello')],
+      status: GaiaMessageStatus.complete,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await seedRepo.upsertMessage(message);
+    await seed.customStatement(
+      'ALTER TABLE gaia_messages_table DROP COLUMN chapter',
+    );
+    await seed.customStatement('PRAGMA user_version = 189');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect((await repo.getMessage('m1'))!.chapter, isNull);
+    await repo.upsertMessage(message.copyWith(chapter: 'Greetings'));
+    expect((await repo.getMessage('m1'))!.chapter, 'Greetings');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

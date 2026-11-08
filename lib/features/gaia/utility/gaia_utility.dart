@@ -121,6 +121,37 @@ class GaiaUtility {
     }
   }
 
+  /// A title for the chapter [message] starts (GAIA_CHAPTERS_HLD.md §4),
+  /// from it and [partner], the other half of its turn; null to keep the
+  /// first-line one.
+  Future<String?> chapterTitle(
+    GaiaMessage message,
+    GaiaMessage? partner,
+  ) async {
+    String line(GaiaMessage m) =>
+        '${m.role == GaiaMessageRole.user ? 'User' : 'Assistant'}: '
+        '${_clip(m.text, 2000)}';
+    final turn = [
+      if (partner != null && partner.seq < message.seq) partner,
+      message,
+      if (partner != null && partner.seq > message.seq) partner,
+    ];
+    try {
+      final answer = await _runner
+          .generate(
+            'Write a title of at most five words for the part of a '
+            'conversation that starts with the exchange in <input>. '
+            'Reply with the title only.',
+            turn.map(line).join('\n\n'),
+          )
+          .timeout(_titleTimeout);
+      return cleanTitle(answer);
+    } catch (error) {
+      debugPrint('[gaia] chapter title: $error');
+      return null;
+    }
+  }
+
   /// A summary of [transcript] for an agent taking the chat over (§7.4),
   /// or null to leave the older turns out.
   Future<String?> summarize(String transcript) async {

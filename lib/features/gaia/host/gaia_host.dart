@@ -233,6 +233,7 @@ class GaiaHost {
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
   StreamSubscription<void>? _queueChanges;
+  StreamSubscription<void>? _chapterChanges;
   Timer? _changedSoon;
   var _settings = GaiaSettings.initial();
 
@@ -357,6 +358,22 @@ class GaiaHost {
     _queueChanges = repository.watchQueue().listen((_) {
       if (_pipe.connected) _pipe.notify('queue');
     });
+    // Each chapter changed, by message id, null for unpinned: by sync too,
+    // under a running chat the companion doesn't reload
+    // (GAIA_CHAPTERS_HLD.md §3.1).
+    Map<String, String>? chapters;
+    _chapterChanges = repository.watchChapters().listen((now) {
+      final was = chapters;
+      chapters = now;
+      if (was == null || !_pipe.connected) return;
+      final changed = <String, Object?>{
+        for (final MapEntry(:key, :value) in now.entries)
+          if (was[key] != value) key: value,
+        for (final id in was.keys)
+          if (!now.containsKey(id)) id: null,
+      };
+      if (changed.isNotEmpty) _pipe.notify('chapters', changed);
+    });
     _settingsChanges = repository.watchSettings().listen((settings) {
       _settings = settings;
       unawaited(_applyHotkeys(settings.keybinds));
@@ -405,6 +422,7 @@ class GaiaHost {
     unawaited(_settingsChanges?.cancel());
     unawaited(_draftChanges?.cancel());
     unawaited(_queueChanges?.cancel());
+    unawaited(_chapterChanges?.cancel());
     await _power?.shutdown();
     await _beacon?.dispose();
     if (_started) await _pipe.close();
@@ -1244,6 +1262,13 @@ class GaiaHost {
         return written == null
             ? null
             : gaiaChecksToJson(gaiaChecksOf(written.parts));
+      case 'setChapter':
+        await store.setChapter(
+          params['messageId']! as String,
+          params['chapter'] as String?,
+          from: params['from'] as String?,
+        );
+        return null;
       case 'attachImage':
         final media = _media;
         if (media == null) throw GaiaPipeException('no media store');

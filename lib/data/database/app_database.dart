@@ -2280,6 +2280,9 @@ class GaiaMessagesTable extends Table {
   /// A fork's copy: the message it was first copied from
   /// (GAIA_FORKING_HLD.md §2).
   TextColumn get origin => text().nullable()();
+
+  /// The title of the chapter the message starts (GAIA_CHAPTERS_HLD.md §3).
+  TextColumn get chapter => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2474,7 +2477,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 189;
+  int get schemaVersion => 190;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4618,6 +4621,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_chats_table',
           gaiaChatsTable,
           gaiaChatsTable.rewindsJson,
+        );
+      }
+      if (from >= 169 && from < 190) {
+        // Chapters (GAIA_CHAPTERS_HLD.md §3).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_messages_table',
+          gaiaMessagesTable,
+          gaiaMessagesTable.chapter,
         );
       }
     },

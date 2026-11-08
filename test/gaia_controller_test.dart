@@ -203,6 +203,14 @@ class _Main {
         return written == null
             ? null
             : gaiaChecksToJson(gaiaChecksOf(written.parts));
+      case 'setChapter':
+        if (refuseChapter) throw GaiaPipeException('refused');
+        await store.setChapter(
+          params['messageId']! as String,
+          params['chapter'] as String?,
+          from: params['from'] as String?,
+        );
+        return null;
       case 'toggleCheck':
         final written = await store.toggleCheck(
           params['messageId']! as String,
@@ -349,6 +357,9 @@ class _Main {
 
   /// How many `attachImage`s succeed before the rest are refused.
   var refuseImagesAfter = 1 << 30;
+
+  /// Whether `setChapter` is refused.
+  var refuseChapter = false;
 
   /// Each `detachImage`'s reference, in order.
   final detached = <String>[];
@@ -2903,7 +2914,7 @@ void main() {
 
         controller.moveDraftToNewChat();
         expect(controller.currentChatId, isNull);
-        expect(controller.draft.text, '[image 1] waiting\n\n[image 2]');
+        expect(controller.draft.text, '[image 1] waiting\n\n[image 2] ');
         expect(controller.draftImages.map((image) => image.label), [1, 2]);
         expect(controller.draftFiles.map((file) => file.path), [r'C:\a.txt']);
 
@@ -2927,6 +2938,23 @@ void main() {
 
       await controller.selectChat(first);
       expect(controller.draft.text, isEmpty);
+    });
+
+    test('a draft moved to a new chat keeps the space it ends with', () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      // A screenshot's token and the space after it, then /new picked.
+      await controller.attachImage(Uint8List.fromList([1]));
+      expect(controller.draft.text, '[image 1] ');
+
+      controller.moveDraftToNewChat();
+      expect(controller.currentChatId, isNull);
+      expect(controller.draft.text, '[image 1] ');
+      expect(
+        controller.draft.selection,
+        const TextSelection.collapsed(offset: 10),
+      );
     });
 
     test('a draft carries between the floaters and the Gaia window', () async {
@@ -6058,6 +6086,265 @@ void main() {
       expect(runner.cutsAsked.last.chatId, first);
       expect(runner.cutsAsked.last.endAt, isNull);
       expect(runner.cutsAsked.last.sessionId, isNot('source-session'));
+    });
+  });
+
+  group('chapters (GAIA_CHAPTERS_HLD.md §8)', () {
+    final at = DateTime.utc(2026, 11, 7);
+    GaiaMessage stored(int seq, {String? text}) => GaiaMessage(
+      id: 'm$seq',
+      chatId: 'c1',
+      seq: seq,
+      role: seq.isEven ? GaiaMessageRole.user : GaiaMessageRole.assistant,
+      parts: [GaiaTextPart(text ?? 'message $seq\nmore')],
+      status: GaiaMessageStatus.complete,
+      createdAt: at.add(Duration(minutes: seq)),
+      updatedAt: at.add(Duration(minutes: seq)),
+    );
+
+    late FakeUtilityRunner utility;
+
+    /// The chapter [seq]'s message had shown when the utility model was
+    /// asked; set by its answer.
+    String? shownWhenAsked;
+
+    /// Four messages in chat c1, opened, with a utility model that answers
+    /// [answer] and notes what the chapter showed meanwhile.
+    Future<void> open({
+      String Function(String job)? answer,
+      int seq = 0,
+      int count = 4,
+    }) async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plans',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          agentSessions: {
+            gaiaSessionKey('laptop'): const GaiaAgentSession(
+              sessionId: 'source-session',
+              lastSeq: 3,
+            ),
+          },
+        ),
+      );
+      for (var i = 0; i < count; i++) {
+        await main.store.putMessage(stored(i));
+      }
+      utility = FakeUtilityRunner((job) {
+        shownWhenAsked = controller.messages
+            .firstWhere((m) => m.seq == seq)
+            .chapter;
+        return (answer ?? (_) => 'Chapter title')(job);
+      });
+      await startCompanion(utility: GaiaUtility(utility));
+      await controller.selectChat('c1');
+      await settle();
+    }
+
+    GaiaMessage shown(int seq) =>
+        controller.messages.firstWhere((m) => m.seq == seq);
+
+    /// The chapter title jobs' inputs: the curator asks the utility model
+    /// too.
+    List<String> chapterInputs() => [
+      for (final (i, job) in utility.jobs.indexed)
+        if (job.contains('at most five words')) utility.inputs[i],
+    ];
+
+    Future<String?> storedChapter(String chatId, int seq) async =>
+        (await main.store.messages(
+          chatId,
+        )).firstWhere((m) => m.seq == seq).chapter;
+
+    Future<void> pin(int seq) async {
+      await controller.pinChapter(shown(seq));
+      await settle();
+    }
+
+    test('pinning a prompt shows its first line at once, then the utility '
+        "model's title from the prompt and its reply", () async {
+      shownWhenAsked = null;
+      await open();
+      await pin(0);
+
+      expect(shownWhenAsked, 'message 0');
+      expect(shown(0).chapter, 'Chapter title');
+      expect(await storedChapter('c1', 0), 'Chapter title');
+      expect(
+        chapterInputs().single,
+        'User: message 0\nmore\n\nAssistant: message 1\nmore',
+      );
+    });
+
+    test('pinning a reply names it from its prompt and it', () async {
+      await open(seq: 1);
+      await pin(1);
+      expect(await storedChapter('c1', 1), 'Chapter title');
+      expect(
+        chapterInputs().single,
+        'User: message 0\nmore\n\nAssistant: message 1\nmore',
+      );
+    });
+
+    test('with the utility model failing, the first line stays', () async {
+      await open(answer: (_) => throw StateError('no Claude account'));
+      await pin(0);
+      expect(shown(0).chapter, 'message 0');
+      expect(await storedChapter('c1', 0), 'message 0');
+    });
+
+    test('a rename before the title lands is kept', () async {
+      await open(
+        answer: (_) {
+          unawaited(controller.setChapter(shown(0), 'Mine'));
+          return 'Chapter title';
+        },
+      );
+      await pin(0);
+      expect(shown(0).chapter, 'Mine');
+      expect(await storedChapter('c1', 0), 'Mine');
+    });
+
+    test('an unpin before the title lands stays unpinned', () async {
+      await open(
+        answer: (_) {
+          unawaited(controller.setChapter(shown(0), null));
+          return 'Chapter title';
+        },
+      );
+      await pin(0);
+      expect(shown(0).chapter, isNull);
+      expect(await storedChapter('c1', 0), isNull);
+    });
+
+    test('a chapter changed elsewhere is shown without a reload, as a '
+        'running chat needs', () async {
+      await open();
+      final id = shown(0).id;
+      main.pipe.notify('chapters', {id: 'Synced'});
+      await settle();
+      expect(shown(0).chapter, 'Synced');
+      main.pipe.notify('chapters', {id: null});
+      await settle();
+      expect(shown(0).chapter, isNull);
+    });
+
+    test('a change the main instance refuses goes back as it was', () async {
+      await open();
+      await pin(0);
+      main.refuseChapter = true;
+      await controller.setChapter(shown(0), 'Renamed');
+      await settle();
+      expect(shown(0).chapter, 'Chapter title');
+      await controller.setChapter(shown(0), null);
+      await settle();
+      expect(shown(0).chapter, 'Chapter title');
+    });
+
+    test('rename and unpin are shown and stored; an empty title changes '
+        'nothing', () async {
+      await open();
+      await pin(0);
+
+      await controller.setChapter(shown(0), '  Renamed ');
+      await settle();
+      expect(shown(0).chapter, 'Renamed');
+      expect(await storedChapter('c1', 0), 'Renamed');
+
+      await controller.setChapter(shown(0), '   ');
+      await settle();
+      expect(await storedChapter('c1', 0), 'Renamed');
+
+      await controller.setChapter(shown(0), null);
+      await settle();
+      expect(shown(0).chapter, isNull);
+      expect(await storedChapter('c1', 0), isNull);
+    });
+
+    test('a long first line is cut to 60 characters, and a message with no '
+        'text is titled "Chapter"', () {
+      GaiaMessage of(List<GaiaPart> parts) => stored(0).copyWith(parts: parts);
+      expect(
+        gaiaFirstLineChapter(of([GaiaTextPart('${'a' * 70}\nb')])),
+        '${'a' * 60}…',
+      );
+      expect(
+        gaiaFirstLineChapter(of(const [GaiaFilePart(path: r'C:\a.txt')])),
+        'Chapter',
+      );
+      // Not between an emoji's two halves.
+      expect(
+        gaiaFirstLineChapter(of([GaiaTextPart('${'a' * 59}\u{1F600}b')])),
+        '${'a' * 59}…',
+      );
+    });
+
+    test(
+      'offered on a message with none, not on a reply still streaming',
+      () async {
+        await open();
+        expect(controller.canPinChapter(shown(0)), isTrue);
+        expect(
+          controller.canPinChapter(
+            shown(1).copyWith(status: GaiaMessageStatus.streaming),
+          ),
+          isFalse,
+        );
+        await pin(0);
+        expect(controller.canPinChapter(shown(0)), isFalse);
+      },
+    );
+
+    test('a fork after two chapters has both', () async {
+      await open();
+      await pin(0);
+      await pin(2);
+      await controller.forkChat(shown(3));
+      await settle();
+      final fork = controller.currentChatId!;
+      expect(fork, isNot('c1'));
+      expect(controller.messages.map((m) => m.chapter), [
+        'Chapter title',
+        null,
+        'Chapter title',
+        null,
+      ]);
+      expect(await storedChapter(fork, 2), 'Chapter title');
+    });
+
+    test('a rewind between two chapters keeps the first in the chat; the '
+        'auto-fork has both', () async {
+      runner.cutAt = 'entry-1';
+      await open(answer: (_) => 'Chapter ${controller.messages.length}');
+      await controller.setChapter(shown(0), 'First');
+      await controller.setChapter(shown(2), 'Second');
+      await settle();
+
+      await controller.rewindChat(shown(1));
+      await settle();
+      expect(controller.messages.map((m) => m.chapter), ['First', null]);
+      final fork = (await main.store.chats()).lastWhere(
+        (c) => c.title.endsWith('(before rewind)'),
+      );
+      expect(
+        [for (final m in await main.store.messages(fork.id)) m.chapter],
+        ['First', null, 'Second', null],
+      );
+    });
+
+    test("the agent's prompt never carries a chapter's title", () async {
+      await open();
+      await controller.setChapter(shown(0), 'Secret chapter');
+      await settle();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('What chapters does this chat have?');
+      await settle();
+      final sent = runner.sent.single;
+      expect(sent.prompt, isNot(contains('Secret chapter')));
+      expect(sent.sessionInstructions, isNot(contains('Secret chapter')));
     });
   });
 

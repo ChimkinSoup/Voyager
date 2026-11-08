@@ -9919,6 +9919,19 @@ class DriftGaiaRepository implements GaiaRepository {
       .map((_) {});
 
   @override
+  Stream<Map<String, String>> watchChapters() {
+    final table = _db.gaiaMessagesTable;
+    final query = _db.selectOnly(table)
+      ..addColumns([table.id, table.chapter])
+      ..where(table.chapter.isNotNull() & table.deletedAt.isNull());
+    return query.watch().map(
+      (rows) => {
+        for (final row in rows) row.read(table.id)!: row.read(table.chapter)!,
+      },
+    );
+  }
+
+  @override
   Future<GaiaSettings> getSettings() async =>
       await getSettingsRecord() ?? GaiaSettings.initial();
 
@@ -10236,6 +10249,7 @@ GaiaMessage _mapGaiaMessage(GaiaMessagesTableData row) => GaiaMessage(
   contextTokens: row.contextTokens,
   contextWindow: row.contextWindow,
   origin: row.origin,
+  chapter: row.chapter,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10260,6 +10274,7 @@ GaiaMessagesTableCompanion _gaiaMessageCompanion(GaiaMessage message) =>
       contextTokens: Value(message.contextTokens),
       contextWindow: Value(message.contextWindow),
       origin: Value(message.origin),
+      chapter: Value(message.chapter),
       createdAt: Value(message.createdAt),
       updatedAt: Value(message.updatedAt),
       version: Value(message.version),

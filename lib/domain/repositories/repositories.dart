@@ -898,6 +898,10 @@ abstract class GaiaRepository {
   /// Fires after any write to the chats or messages.
   Stream<void> watchChanges();
 
+  /// Every live message's chapter, by message id, for those with one
+  /// (GAIA_CHAPTERS_HLD.md §3); again after each write to the messages.
+  Stream<Map<String, String>> watchChapters();
+
   /// The settings, or [GaiaSettings.initial] before any are saved.
   Future<GaiaSettings> getSettings();
   Stream<GaiaSettings> watchSettings();

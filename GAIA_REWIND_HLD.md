@@ -1,8 +1,8 @@
 # Gaia — Rewinding a Chat (HLD)
 
 Status: **Phase 1 built and live-tested (2026-11-06). Every §10.1 check passed; one bug found (BUG-371) and fixed. Results at the end of §10.1.
-Phase 2 (Codex native) built 2026-11-07 and passed against the real CLI (0.166.0) through
-Gaia's runner; not yet run in the app (§10.2).**
+Phase 2 (Codex native) built 2026-11-07, passed against the real CLI (0.166.0) through
+Gaia's runner, and passed its in-app checks the same day (§10.2).**
 Built as designed, except: each `rewinds` range also names the device that made it (`by`),
 so only that device moves a late reply (§5.1); rewind isn't offered at the chat's last
 message (nothing to drop) nor at a prompt whose reply is streaming here (§4 step 0); and
@@ -378,13 +378,21 @@ when it needs it.
   result reaches the model only if the script prints it. A prompt that doesn't make it read
   the result gives a fork that "forgot" what its source never saw either.
 
-**Still to run in the app (gaiaqa):**
-- A Codex rewind, as §10.1's Claude Code check: a tool result only, then two more turns;
-  rewind at the last prompt. The chat's next send is `thread/fork` (the app-server log shows
-  it), recalls the result, and doesn't know the dropped turn. The auto-fork resumes the old
-  thread and knows everything.
-- A fork of a Codex chat is native the same way.
-- A Codex chat that last ran before Phase 2 still hands over.
+**Live test results (2026-11-07)**
+
+Run on `gaiaqa`, from a debug build of `4f8ece18` copied aside, with Codex 0.166.0 (Deep).
+Native forks were confirmed from the rollouts: a forked thread's `session_meta` names
+`forked_from_id` and a `history_base` cut at an ordinal of its source.
+
+| Check | Result |
+|---|---|
+| Codex rewind | Pass. Three turns: `ask_user` answered Narwhal (in the tool result only; the reply was "noted"), then BANANA, then KIWI. Rewound at the KIWI prompt (it came back in the empty composer). The chat's next send was a new thread forked from the old one, cut after the BANANA turn and before the KIWI turn, with no transcript. It answered Narwhal and didn't know KIWI, and took seqs 6 and 7. The auto-fork's send resumed the old thread (no new rollout) and answered Narwhal and KIWI. |
+| A fork of a Codex chat | Pass. Forking the auto-fork at the BANANA reply: its first send was `thread/fork` of the old thread at the same cut. It answered Narwhal and didn't know KIWI. |
+| A chat from before Phase 2 | Pass. "Remembering the BANANA word" (last run 2026-11-06; its rollout has no `client_id`) rewound at its first reply had no fork record. Its next send started an unforked thread with a `<gaia_transcript>` and answered BANANA. |
+
+A trap for anyone rerunning this: `gaiaqa`'s Codex homes have no sandbox marker, so a shell
+command fails ("orchestrator_helper_launch_canceled") and gives no result to recall. Use
+`ask_user`, as above.
 
 ### 10.3 Files (not planned)
 

@@ -406,6 +406,7 @@ class GaiaChatStore {
       await _repository.upsertMessage(
         existing.copyWith(
           parts: const [],
+          clearChapter: true,
           status: GaiaMessageStatus.cancelled,
           deletedAt: kErasedAt,
           version: existing.version + kEraseVersionStep,
@@ -502,6 +503,7 @@ class GaiaChatStore {
   /// erased meanwhile: the run's later writes are dropped, or they'd bring the
   /// erased text back. Its task ticks stay as stored: only [toggleCheck]
   /// changes them, from the companion or the Gaia page, as it streams too.
+  /// Its chapter stays as stored too: only [setChapter] changes it.
   Future<GaiaMessage?> putMessage(GaiaMessage message) => _serial(() async {
     final existing = await _repository.getMessage(message.id);
     if (existing != null && existing.isDeleted) return null;
@@ -512,6 +514,9 @@ class GaiaChatStore {
       parts: existing == null
           ? null
           : gaiaKeepChecks(message.parts, gaiaChecksOf(existing.parts)),
+      // A first write keeps its own: one pinned before it was stored.
+      chapter: existing == null ? message.chapter : existing.chapter,
+      clearChapter: existing != null && existing.chapter == null,
       version: (existing?.version ?? 0) + 1,
     );
     await _repository.upsertMessage(written);
@@ -535,6 +540,27 @@ class GaiaChatStore {
   ) => _serial(
     () => gaiaToggleCheck(_repository, messageId, part, task, flipped),
   );
+
+  /// Message [messageId]'s chapter set to [chapter], or unpinned for null
+  /// (GAIA_CHAPTERS_HLD.md §3.1). Nothing for a message gone or deleted, nor
+  /// with [from] given when the stored chapter isn't [from], so the utility
+  /// model's title never overwrites a rename.
+  Future<GaiaMessage?> setChapter(
+    String messageId,
+    String? chapter, {
+    String? from,
+  }) => _serial(() async {
+    final existing = await _repository.getMessage(messageId);
+    if (existing == null || existing.isDeleted) return null;
+    if (from != null && existing.chapter != from) return null;
+    if (existing.chapter == chapter) return null;
+    final written = existing.copyWith(
+      chapter: chapter,
+      clearChapter: chapter == null,
+    );
+    await _repository.upsertMessage(written);
+    return written;
+  });
 
   /// Writes that read what they change, one at a time: a tick written
   /// between a streaming reply's read and its write would be lost, as would

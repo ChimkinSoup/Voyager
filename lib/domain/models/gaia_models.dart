@@ -1497,6 +1497,7 @@ class GaiaMessage extends SoftDeletable {
     this.contextTokens,
     this.contextWindow,
     this.origin,
+    this.chapter,
   });
 
   final String chatId;
@@ -1534,6 +1535,10 @@ class GaiaMessage extends SoftDeletable {
   /// for one that isn't a copy.
   final String? origin;
 
+  /// The title of the chapter this message starts (GAIA_CHAPTERS_HLD.md §3);
+  /// null for none. Never empty.
+  final String? chapter;
+
   /// The uuid this message's entry has in a Claude Code session.
   String get entryId => origin ?? id;
 
@@ -1548,6 +1553,8 @@ class GaiaMessage extends SoftDeletable {
     bool? needsInput,
     int? contextTokens,
     int? contextWindow,
+    String? chapter,
+    bool clearChapter = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -1571,6 +1578,7 @@ class GaiaMessage extends SoftDeletable {
     contextTokens: contextTokens ?? this.contextTokens,
     contextWindow: contextWindow ?? this.contextWindow,
     origin: origin,
+    chapter: clearChapter ? null : (chapter ?? this.chapter),
   );
 
   Map<String, Object?> toJson() => {
@@ -1592,6 +1600,7 @@ class GaiaMessage extends SoftDeletable {
     'contextTokens': contextTokens,
     'contextWindow': contextWindow,
     'origin': origin,
+    'chapter': chapter,
   };
 
   factory GaiaMessage.fromJson(Map<String, Object?> json) {
@@ -1615,8 +1624,22 @@ class GaiaMessage extends SoftDeletable {
       contextTokens: (json['contextTokens'] as num?)?.toInt(),
       contextWindow: (json['contextWindow'] as num?)?.toInt(),
       origin: json['origin'] as String?,
+      chapter: json['chapter'] as String?,
     );
   }
+}
+
+/// A new chapter's title until the utility model names it
+/// (GAIA_CHAPTERS_HLD.md §4): [message]'s first line, cut to 60 characters,
+/// or "Chapter" for a message with no text.
+String gaiaFirstLineChapter(GaiaMessage message) {
+  final text = message.text.trim();
+  if (text.isEmpty) return 'Chapter';
+  final line = text.split('\n').first.trim();
+  if (line.length <= 60) return line;
+  // Not between an emoji's two halves.
+  final cut = (line.codeUnitAt(59) & 0xFC00) == 0xD800 ? 59 : 60;
+  return '${line.substring(0, cut)}…';
 }
 
 List<GaiaPart> gaiaPartsFromJson(List<Object?> json) => [

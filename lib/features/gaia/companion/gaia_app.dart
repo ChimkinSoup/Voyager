@@ -1319,20 +1319,67 @@ class _MessagesState extends State<_Messages> {
   /// Each built message's context, so the list can tell where it sits.
   final _placed = <String, BuildContext>{};
 
-  /// The user's message heading the turn at the list's top, while it's
-  /// scrolled off above: pinned over the chat, to go back to.
-  String? _pinned;
+  /// What the list's scroll shows over it, as [_cutOff] finds it, and
+  /// [scrolledUp] far enough from the newest to offer a way back down. Its
+  /// own notifier, so scrolling rebuilds only what's over the list.
+  final _over = ValueNotifier<
+    ({String? pinned, String? chapter, bool chapterOff, bool scrolledUp})
+  >((pinned: null, chapter: null, chapterOff: false, scrolledUp: false));
   bool _placing = false;
 
-  /// Scrolled far enough up from the newest to offer a way back down.
-  bool _scrolledUp = false;
+  /// The message whose chapter is being renamed in its divider, and its
+  /// field.
+  String? _renaming;
+  final _rename = TextEditingController();
+  final _renameFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _seen = {for (final message in widget.messages) message.id};
     _reply = _latestReply(widget.messages);
+    // The chapter being read, for the rail, before any scroll.
+    _place();
   }
+
+  void _startRename(GaiaMessage message) {
+    final title = message.chapter ?? '';
+    _rename.value = TextEditingValue(
+      text: title,
+      selection: TextSelection(baseOffset: 0, extentOffset: title.length),
+    );
+    setState(() => _renaming = message.id);
+    // Asked for, not autofocused, as the sidebar's rename.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _renaming == message.id) _renameFocus.requestFocus();
+    });
+  }
+
+  /// Enter or a click away keeps the new title; Esc doesn't, nor does an
+  /// empty one, which doesn't unpin.
+  void _endRename({required bool keep}) {
+    final id = _renaming;
+    if (id == null) return;
+    setState(() => _renaming = null);
+    final message = widget.messages.where((m) => m.id == id).firstOrNull;
+    if (keep && message != null) {
+      unawaited(widget.controller.setChapter(message, _rename.text));
+    }
+  }
+
+  /// What right-clicking a chapter's divider offers.
+  List<GaiaMenuItem> _chapterMenu(GaiaMessage message) => [
+    GaiaMenuItem(
+      label: 'Rename chapter',
+      icon: Icons.edit_outlined,
+      onPressed: () => _startRename(message),
+    ),
+    GaiaMenuItem(
+      label: 'Unpin chapter',
+      icon: Icons.bookmark_remove_outlined,
+      onPressed: () => unawaited(widget.controller.setChapter(message, null)),
+    ),
+  ];
 
   @override
   void didUpdateWidget(_Messages old) {
@@ -1383,7 +1430,10 @@ class _MessagesState extends State<_Messages> {
 
   @override
   void dispose() {
+    _rename.dispose();
+    _renameFocus.dispose();
     _scroll.dispose();
+    _over.dispose();
     super.dispose();
   }
 
@@ -1401,31 +1451,33 @@ class _MessagesState extends State<_Messages> {
     );
   }
 
-  /// [_pinned] afresh once the list's laid out.
+  /// [_over] afresh once the list's laid out.
   void _place() {
     if (_placing) return;
     _placing = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _placing = false;
       if (!mounted) return;
-      final pinned = _cutOff();
-      final scrolledUp = _scroll.hasClients && _scroll.offset > 100;
-      if (pinned != _pinned || scrolledUp != _scrolledUp) {
-        setState(() {
-          _pinned = pinned;
-          _scrolledUp = scrolledUp;
-        });
-      }
+      final (:pinned, :chapter, :chapterOff) = _cutOff();
+      _over.value = (
+        pinned: pinned,
+        chapter: chapter,
+        chapterOff: chapterOff,
+        scrolledUp: _scroll.hasClients && _scroll.offset > 100,
+      );
     });
     // Told of a change after a frame, as of metrics, there may be no next.
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  /// The user's message, with text, heading the turn across the list's
-  /// top, when that's scrolled above it.
-  String? _cutOff() {
+  /// [pinned]: the user's message, with text, heading the turn across the
+  /// list's top, when that's scrolled above it. [chapter]: the message
+  /// heading the chapter across the top, and [chapterOff] when its divider
+  /// is scrolled above it.
+  ({String? pinned, String? chapter, bool chapterOff}) _cutOff() {
+    const none = (pinned: null, chapter: null, chapterOff: false);
     final list = context.findRenderObject();
-    if (list is! RenderBox) return null;
+    if (list is! RenderBox) return none;
     final messages = widget.messages;
     for (final (i, message) in messages.indexed) {
       // Unbuilt messages have no place yet.
@@ -1438,11 +1490,38 @@ class _MessagesState extends State<_Messages> {
         (message) => message.role == GaiaMessageRole.user,
         i,
       );
-      if (prompt < 0 || (prompt == i && top >= 0)) return null;
-      final pinned = messages[prompt];
-      return _pinnedLabel(pinned).isEmpty ? null : pinned.id;
+      var chapter = messages.lastIndexWhere(
+        (message) => message.chapter != null,
+        i,
+      );
+      // At the bottom, a chapter too near the end to reach the top is still
+      // the one being read: the last whose divider is on screen.
+      if (_scroll.hasClients &&
+          _scroll.offset <= _scroll.position.minScrollExtent) {
+        final last = messages.lastIndexWhere((message) {
+          if (message.chapter == null) return false;
+          final box = _placed[message.id]?.findRenderObject();
+          return box is RenderBox &&
+              box.hasSize &&
+              box.localToGlobal(Offset.zero, ancestor: list).dy <
+                  list.size.height;
+        });
+        if (last > chapter) chapter = last;
+      }
+      return (
+        pinned:
+            prompt < 0 ||
+                (prompt == i && top >= 0) ||
+                _pinnedLabel(messages[prompt]).isEmpty
+            ? null
+            : messages[prompt].id,
+        chapter: chapter < 0 ? null : messages[chapter].id,
+        // One below the top, from the bottom, has its divider in view.
+        chapterOff:
+            chapter >= 0 && chapter <= i && !(chapter == i && top >= 0),
+      );
     }
-    return null;
+    return none;
   }
 
   /// How far past the list's edges it's built, while [_reveal] reaches a
@@ -1590,6 +1669,7 @@ class _MessagesState extends State<_Messages> {
       onCopyImage: _copyImage,
       onEdit: _edit,
       onAttach: _attach,
+      onRenameChapter: _startRename,
       controller: widget.controller,
       gutter: gutter,
       orbTier: orbTier,
@@ -1622,9 +1702,18 @@ class _MessagesState extends State<_Messages> {
       // in Claude's apps; narrower chats keep only a small gutter.
       builder: (context, constraints) {
         final gutter = max(16.0, (constraints.maxWidth - _column) / 2);
-        final pinned = messages
-            .where((message) => message.id == _pinned)
-            .firstOrNull;
+        // The rail's entries (GAIA_CHAPTERS_HLD.md §6.3): the chat's start,
+        // while no chapter heads it, then each chapter in order.
+        final chapters = [
+          if (messages.any((message) => message.chapter != null) &&
+              messages.first.chapter == null)
+            (id: messages.first.id, title: 'Start of chat'),
+          for (final message in messages)
+            if (message.chapter case final title?)
+              (id: message.id, title: title),
+        ];
+        // Clear of the chapter rail where the gutter's too narrow.
+        final left = chapters.isEmpty ? gutter : max(gutter, _railWidth);
         final list = ScrollConfiguration(
           // Scrolls without a bar.
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
@@ -1633,7 +1722,7 @@ class _MessagesState extends State<_Messages> {
             controller: _scroll,
             reverse: true,
             scrollCacheExtent: _cacheExtent,
-            padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 16),
+            padding: EdgeInsets.fromLTRB(left, 16, gutter, 16),
             itemCount: messages.length,
             // A new message shifts the rest along; found by their keys,
             // they keep their views rather than each taking its neighbour's.
@@ -1651,7 +1740,7 @@ class _MessagesState extends State<_Messages> {
                   : _movedAccount(messages, movedReply, widget.controller);
               final view = _view(
                 message,
-                gutter: gutter,
+                gutter: left,
                 orbTier: i == latest ? tier : null,
                 orbKey: i == latest
                     ? _orbKeys.putIfAbsent(message.chatId, GlobalKey.new)
@@ -1670,6 +1759,16 @@ class _MessagesState extends State<_Messages> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Above a vendor divider: it heads the section.
+                      if (message.chapter case final chapter?)
+                        _ChapterDivider(
+                          title: chapter,
+                          renaming: _renaming == message.id,
+                          rename: _rename,
+                          renameFocus: _renameFocus,
+                          onEndRename: _endRename,
+                          menu: () => _chapterMenu(message),
+                        ),
                       if (switched != null || moved != null)
                         _VendorDivider(
                           text: moved == null
@@ -1702,37 +1801,84 @@ class _MessagesState extends State<_Messages> {
               list,
               Positioned(
                 top: 8,
-                left: gutter,
+                left: left,
                 right: gutter,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 150),
-                  transitionBuilder: gaiaPinnedFade,
-                  child: pinned == null
-                      ? const SizedBox.shrink()
-                      // One key for every prompt, so only coming and going
-                      // fades the box.
-                      : GaiaPinnedPrompt(
-                          key: const ValueKey('pinned'),
-                          id: pinned.id,
-                          text: _pinnedLabel(pinned),
-                          onTap: () => _reveal(pinned.id),
-                        ),
+                child: ValueListenableBuilder(
+                  valueListenable: _over,
+                  builder: (context, over, _) {
+                    final pinned = messages
+                        .where((message) => message.id == over.pinned)
+                        .firstOrNull;
+                    final chapter = over.chapterOff
+                        ? messages
+                              .where(
+                                (message) =>
+                                    message.id == over.chapter &&
+                                    message.chapter != null,
+                              )
+                              .firstOrNull
+                        : null;
+                    return AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 150),
+                      transitionBuilder: gaiaPinnedFade,
+                      child: pinned == null && chapter == null
+                          ? const SizedBox.shrink()
+                          // One key for every prompt, so only coming and
+                          // going fades the box.
+                          : GaiaPinnedPrompt(
+                              key: const ValueKey('pinned'),
+                              id: pinned?.id,
+                              text: pinned == null
+                                  ? null
+                                  : _pinnedLabel(pinned),
+                              onTap: pinned == null
+                                  ? null
+                                  : () => _reveal(pinned.id),
+                              chapterId: chapter?.id,
+                              chapter: chapter?.chapter,
+                              onChapterTap: chapter == null
+                                  ? null
+                                  : () => _reveal(chapter.id),
+                            ),
+                    );
+                  },
                 ),
               ),
+              if (chapters.isNotEmpty)
+                Positioned(
+                  top: 8,
+                  left: 0,
+                  child: ValueListenableBuilder(
+                    valueListenable: _over,
+                    builder: (context, over, _) => _ChapterRail(
+                      chapters: chapters,
+                      current:
+                          chapters
+                              .where((entry) => entry.id == over.chapter)
+                              .map((entry) => entry.id)
+                              .firstOrNull ??
+                          chapters.first.id,
+                      onPick: (id) => unawaited(_reveal(id)),
+                    ),
+                  ),
+                ),
               Positioned(
                 bottom: 12,
                 left: 0,
                 right: 0,
                 child: Center(
-                  // Not clicked while it fades out.
-                  child: IgnorePointer(
-                    ignoring: !_scrolledUp,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 150),
-                      transitionBuilder: gaiaPinnedFade,
-                      child: _scrolledUp
-                          ? _ToBottom(onTap: _toBottom)
-                          : const SizedBox.shrink(),
+                  child: ValueListenableBuilder(
+                    valueListenable: _over,
+                    // Not clicked while it fades out.
+                    builder: (context, over, _) => IgnorePointer(
+                      ignoring: !over.scrolledUp,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 150),
+                        transitionBuilder: gaiaPinnedFade,
+                        child: over.scrolledUp
+                            ? _ToBottom(onTap: _toBottom)
+                            : const SizedBox.shrink(),
+                      ),
                     ),
                   ),
                 ),
@@ -1957,6 +2103,239 @@ class _VendorDivider extends StatelessWidget {
   }
 }
 
+/// Above a message that starts a chapter (GAIA_CHAPTERS_HLD.md §6.2): its
+/// title in the accent, with a bookmark, in [_VendorDivider]'s look. Renamed
+/// in place, as the sidebar renames a chat.
+class _ChapterDivider extends StatelessWidget {
+  const _ChapterDivider({
+    required this.title,
+    required this.renaming,
+    required this.rename,
+    required this.renameFocus,
+    required this.onEndRename,
+    required this.menu,
+  });
+
+  final String title;
+  final bool renaming;
+  final TextEditingController rename;
+  final FocusNode renameFocus;
+  final void Function({required bool keep}) onEndRename;
+  final List<GaiaMenuItem> Function() menu;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final style = theme.textTheme.labelSmall?.copyWith(color: accent);
+    final label = renaming
+        ? SizedBox(
+            width: 240,
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.escape): () =>
+                    onEndRename(keep: false),
+              },
+              child: TextField(
+                controller: rename,
+                focusNode: renameFocus,
+                style: style,
+                decoration: const InputDecoration(
+                  isCollapsed: true,
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
+                contextMenuBuilder: gaiaTextMenu,
+                onSubmitted: (_) => onEndRename(keep: true),
+                onTapOutside: (_) => onEndRename(keep: true),
+              ),
+            ),
+          )
+        : Flexible(
+            child: Text(title, style: style, overflow: TextOverflow.ellipsis),
+          );
+    return GestureDetector(
+      onSecondaryTapUp: (details) =>
+          showGaiaMenu(context, details.globalPosition, menu()),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          children: [
+            const Expanded(child: Divider()),
+            const SizedBox(width: 8),
+            Icon(Icons.bookmark, size: 12, color: accent),
+            const SizedBox(width: 4),
+            label,
+            const SizedBox(width: 8),
+            const Expanded(child: Divider()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// How much of the chat's left the chapter rail takes, which the pinned bar
+/// keeps clear of.
+const _railWidth = 44.0;
+
+/// The chat's chapters as faint lines down its top left
+/// (GAIA_CHAPTERS_HLD.md §6.3): the one being read longer and in the accent,
+/// the lines easing between lengths as the chat scrolls from one chapter to
+/// the next. Hovered, they open into the chapters' titles, each clicked to
+/// glide to it.
+class _ChapterRail extends StatefulWidget {
+  const _ChapterRail({
+    required this.chapters,
+    required this.current,
+    required this.onPick,
+  });
+
+  final List<({String id, String title})> chapters;
+
+  /// The id of the chapter being read.
+  final String current;
+  final void Function(String id) onPick;
+
+  @override
+  State<_ChapterRail> createState() => _ChapterRailState();
+}
+
+class _ChapterRailState extends State<_ChapterRail> {
+  bool _open = false;
+
+  static const _ease = Duration(milliseconds: 250);
+
+  /// A chapter's dash, in the rail and the list alike.
+  Widget _dash(bool current, ThemeData theme, {double long = 18}) =>
+      AnimatedContainer(
+        duration: _ease,
+        curve: Curves.easeOutCubic,
+        width: current ? long : 10,
+        height: 2,
+        decoration: BoxDecoration(
+          color: current
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      );
+
+  Widget _lines(ThemeData theme) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+    child: SizedBox(
+      width: _railWidth - 26,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 6,
+        children: [
+          for (final chapter in widget.chapters)
+            _dash(chapter.id == widget.current, theme),
+        ],
+      ),
+    ),
+  );
+
+  Widget _list(ThemeData theme) => Padding(
+    // Its first dash where the rail's was.
+    padding: const EdgeInsets.only(left: 6),
+    child: Material(
+      color: theme.colorScheme.surfaceContainerHigh,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(10),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300, maxHeight: 360),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(4),
+          child: IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final chapter in widget.chapters)
+                  _row(chapter, chapter.id == widget.current, theme),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _row(
+    ({String id, String title}) chapter,
+    bool current,
+    ThemeData theme,
+  ) => Material(
+    color: current
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.08)
+        : Colors.transparent,
+    borderRadius: BorderRadius.circular(6),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: () {
+        setState(() => _open = false);
+        widget.onPick(chapter.id);
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 7, 12, 7),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _dash(current, theme, long: 14),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                chapter.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: current
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _open = true),
+      onExit: (_) => setState(() => _open = false),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 150),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            alignment: Alignment.topLeft,
+            scale: Tween(begin: 0.96, end: 1.0).animate(animation),
+            child: child,
+          ),
+        ),
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.topLeft,
+          children: [...previous, ?current],
+        ),
+        child: _open
+            ? KeyedSubtree(key: const ValueKey('list'), child: _list(theme))
+            : KeyedSubtree(key: const ValueKey('rail'), child: _lines(theme)),
+      ),
+    );
+  }
+}
+
 class _MessageView extends StatelessWidget {
   const _MessageView({
     required this.message,
@@ -1966,6 +2345,7 @@ class _MessageView extends StatelessWidget {
     required this.onCopyImage,
     required this.onEdit,
     required this.onAttach,
+    required this.onRenameChapter,
     required this.controller,
     required this.gutter,
     required this.orbTier,
@@ -1981,6 +2361,9 @@ class _MessageView extends StatelessWidget {
   final void Function(GaiaImagePart image) onCopyImage;
   final void Function(GaiaMessage message) onEdit;
   final void Function(GaiaMessage message) onAttach;
+
+  /// Its chapter's title to edit in its divider.
+  final void Function(GaiaMessage message) onRenameChapter;
   final GaiaController controller;
 
   /// The list's margin either side of the messages.
@@ -2327,6 +2710,26 @@ class _MessageView extends StatelessWidget {
         icon: Icons.history,
         onPressed: () => unawaited(controller.rewindChat(message)),
       ),
+    // Not a reply still streaming, whose text can still change
+    // (GAIA_CHAPTERS_HLD.md §6.1).
+    if (controller.canPinChapter(message))
+      GaiaMenuItem(
+        label: 'Pin as chapter',
+        icon: Icons.bookmark_add_outlined,
+        onPressed: () => unawaited(controller.pinChapter(message)),
+      ),
+    if (message.chapter != null) ...[
+      GaiaMenuItem(
+        label: 'Rename chapter',
+        icon: Icons.edit_outlined,
+        onPressed: () => onRenameChapter(message),
+      ),
+      GaiaMenuItem(
+        label: 'Unpin chapter',
+        icon: Icons.bookmark_remove_outlined,
+        onPressed: () => unawaited(controller.setChapter(message, null)),
+      ),
+    ],
   ];
 
   /// Selectable, with the message's actions in its right-click menu. Gaia's

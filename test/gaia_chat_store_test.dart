@@ -243,6 +243,72 @@ void main() {
     expect(await repository.searchChatIds('secret'), isEmpty);
   });
 
+  group('chapters (GAIA_CHAPTERS_HLD.md §3.1)', () {
+    setUp(() async {
+      await store.createChat(_chat('c1'));
+      await store.putMessage(_message('m', 1));
+    });
+
+    Future<String?> chapter() async =>
+        (await repository.getMessage('m'))!.chapter;
+
+    test("a whole-message put keeps the stored chapter, whatever the "
+        "companion's copy says", () async {
+      await store.setChapter('m', 'Stored');
+      await store.putMessage(_message('m', 1, text: 'answered'));
+      expect(await chapter(), 'Stored');
+      await store.putMessage(
+        _message('m', 1).copyWith(chapter: 'Stale', bumpVersion: false),
+      );
+      expect(await chapter(), 'Stored');
+    });
+
+    test('a first put keeps its own chapter: one pinned before it was '
+        'stored', () async {
+      await store.putMessage(
+        _message('n', 2).copyWith(chapter: 'Early', bumpVersion: false),
+      );
+      expect((await repository.getMessage('n'))!.chapter, 'Early');
+    });
+
+    test('watchChapters gives each live message with a chapter', () async {
+      final seen = <Map<String, String>>[];
+      final sub = repository.watchChapters().listen(seen.add);
+      await pumpEventQueue();
+      await store.setChapter('m', 'Stored');
+      await pumpEventQueue();
+      await store.setChapter('m', null);
+      await pumpEventQueue();
+      await sub.cancel();
+      expect(seen.first, isEmpty);
+      expect(seen, contains(equals({'m': 'Stored'})));
+      expect(seen.last, isEmpty);
+    });
+
+    test('setChapter with from writes only over that title', () async {
+      await store.setChapter('m', 'First line');
+      await store.setChapter('m', 'Renamed');
+      await store.setChapter('m', 'Utility', from: 'First line');
+      expect(await chapter(), 'Renamed');
+      await store.setChapter('m', 'Utility', from: 'Renamed');
+      expect(await chapter(), 'Utility');
+      // An unpin is stored, and the utility's title doesn't bring it back.
+      await store.setChapter('m', null);
+      await store.setChapter('m', 'Late', from: 'Utility');
+      expect(await chapter(), isNull);
+    });
+
+    test('nothing for a message gone, and a take-back erases it', () async {
+      await store.setChapter('gone', 'X');
+      expect(await repository.getMessage('gone'), isNull);
+      await store.setChapter('m', 'Stored');
+      await store.takeBack([(await repository.getMessage('m'))!], chat: false);
+      expect(await chapter(), isNull);
+      await store.setChapter('m', 'Again');
+      expect(await chapter(), isNull);
+    });
+  });
+
   test('a deleted chat leaves the list and comes back on restore', () async {
     await store.createChat(_chat('c1'));
     await repository.softDeleteChat('c1');
@@ -441,6 +507,18 @@ void main() {
         local: local,
       );
       expect(ahead.curatedSeq, 20);
+    });
+
+    test("a message's chapter: taken when the payload has it, an explicit "
+        'null unpinning, and kept from a build before chapters', () {
+      final local = _message('m', 1).copyWith(chapter: 'Mine');
+      final remote = local.copyWith(version: local.version + 5);
+      final payload = gaiaMessageToFirestore(remote);
+      GaiaMessage merge(Map<String, dynamic> data) =>
+          mergeGaiaMessageFromRemote(data, 'm', local: local);
+      expect(merge({...payload, 'chapter': 'Theirs'}).chapter, 'Theirs');
+      expect(merge({...payload, 'chapter': null}).chapter, isNull);
+      expect(merge({...payload}..remove('chapter')).chapter, 'Mine');
     });
 
     test('a message round-trips through Firestore', () {

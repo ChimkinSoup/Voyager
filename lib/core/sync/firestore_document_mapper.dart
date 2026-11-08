@@ -4527,6 +4527,7 @@ Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'contextTokens': message.contextTokens,
   'contextWindow': message.contextWindow,
   if (message.origin != null) 'origin': message.origin,
+  'chapter': message.chapter,
   'createdAt': _dateToFirestoreRequired(message.createdAt),
   'updatedAt': _dateToFirestoreRequired(message.updatedAt),
   'version': message.version,
@@ -4566,6 +4567,11 @@ GaiaMessage mergeGaiaMessageFromRemote(
     contextWindow:
         (data['contextWindow'] as num?)?.toInt() ?? local?.contextWindow,
     origin: data['origin'] as String? ?? local?.origin,
+    // Kept when a build from before chapters rewrites the message; an
+    // unpin syncs as an explicit null.
+    chapter: data.containsKey('chapter')
+        ? data['chapter'] as String?
+        : local?.chapter,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

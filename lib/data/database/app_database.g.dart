@@ -58880,6 +58880,17 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _chapterMeta = const VerificationMeta(
+    'chapter',
+  );
+  @override
+  late final GeneratedColumn<String> chapter = GeneratedColumn<String>(
+    'chapter',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58941,6 +58952,7 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
     contextTokens,
     contextWindow,
     origin,
+    chapter,
     createdAt,
     updatedAt,
     version,
@@ -59057,6 +59069,12 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
       );
     }
+    if (data.containsKey('chapter')) {
+      context.handle(
+        _chapterMeta,
+        chapter.isAcceptableOrUnknown(data['chapter']!, _chapterMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -59150,6 +59168,10 @@ class $GaiaMessagesTableTable extends GaiaMessagesTable
         DriftSqlType.string,
         data['${effectivePrefix}origin'],
       ),
+      chapter: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapter'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -59204,6 +59226,9 @@ class GaiaMessagesTableData extends DataClass
   /// A fork's copy: the message it was first copied from
   /// (GAIA_FORKING_HLD.md §2).
   final String? origin;
+
+  /// The title of the chapter the message starts (GAIA_CHAPTERS_HLD.md §3).
+  final String? chapter;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -59223,6 +59248,7 @@ class GaiaMessagesTableData extends DataClass
     this.contextTokens,
     this.contextWindow,
     this.origin,
+    this.chapter,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -59258,6 +59284,9 @@ class GaiaMessagesTableData extends DataClass
     }
     if (!nullToAbsent || origin != null) {
       map['origin'] = Variable<String>(origin);
+    }
+    if (!nullToAbsent || chapter != null) {
+      map['chapter'] = Variable<String>(chapter);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -59298,6 +59327,9 @@ class GaiaMessagesTableData extends DataClass
       origin: origin == null && nullToAbsent
           ? const Value.absent()
           : Value(origin),
+      chapter: chapter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chapter),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -59327,6 +59359,7 @@ class GaiaMessagesTableData extends DataClass
       contextTokens: serializer.fromJson<int?>(json['contextTokens']),
       contextWindow: serializer.fromJson<int?>(json['contextWindow']),
       origin: serializer.fromJson<String?>(json['origin']),
+      chapter: serializer.fromJson<String?>(json['chapter']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -59351,6 +59384,7 @@ class GaiaMessagesTableData extends DataClass
       'contextTokens': serializer.toJson<int?>(contextTokens),
       'contextWindow': serializer.toJson<int?>(contextWindow),
       'origin': serializer.toJson<String?>(origin),
+      'chapter': serializer.toJson<String?>(chapter),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -59373,6 +59407,7 @@ class GaiaMessagesTableData extends DataClass
     Value<int?> contextTokens = const Value.absent(),
     Value<int?> contextWindow = const Value.absent(),
     Value<String?> origin = const Value.absent(),
+    Value<String?> chapter = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -59396,6 +59431,7 @@ class GaiaMessagesTableData extends DataClass
         ? contextWindow.value
         : this.contextWindow,
     origin: origin.present ? origin.value : this.origin,
+    chapter: chapter.present ? chapter.value : this.chapter,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -59423,6 +59459,7 @@ class GaiaMessagesTableData extends DataClass
           ? data.contextWindow.value
           : this.contextWindow,
       origin: data.origin.present ? data.origin.value : this.origin,
+      chapter: data.chapter.present ? data.chapter.value : this.chapter,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59447,6 +59484,7 @@ class GaiaMessagesTableData extends DataClass
           ..write('contextTokens: $contextTokens, ')
           ..write('contextWindow: $contextWindow, ')
           ..write('origin: $origin, ')
+          ..write('chapter: $chapter, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59471,6 +59509,7 @@ class GaiaMessagesTableData extends DataClass
     contextTokens,
     contextWindow,
     origin,
+    chapter,
     createdAt,
     updatedAt,
     version,
@@ -59494,6 +59533,7 @@ class GaiaMessagesTableData extends DataClass
           other.contextTokens == this.contextTokens &&
           other.contextWindow == this.contextWindow &&
           other.origin == this.origin &&
+          other.chapter == this.chapter &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59516,6 +59556,7 @@ class GaiaMessagesTableCompanion
   final Value<int?> contextTokens;
   final Value<int?> contextWindow;
   final Value<String?> origin;
+  final Value<String?> chapter;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59536,6 +59577,7 @@ class GaiaMessagesTableCompanion
     this.contextTokens = const Value.absent(),
     this.contextWindow = const Value.absent(),
     this.origin = const Value.absent(),
+    this.chapter = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59557,6 +59599,7 @@ class GaiaMessagesTableCompanion
     this.contextTokens = const Value.absent(),
     this.contextWindow = const Value.absent(),
     this.origin = const Value.absent(),
+    this.chapter = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59585,6 +59628,7 @@ class GaiaMessagesTableCompanion
     Expression<int>? contextTokens,
     Expression<int>? contextWindow,
     Expression<String>? origin,
+    Expression<String>? chapter,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59606,6 +59650,7 @@ class GaiaMessagesTableCompanion
       if (contextTokens != null) 'context_tokens': contextTokens,
       if (contextWindow != null) 'context_window': contextWindow,
       if (origin != null) 'origin': origin,
+      if (chapter != null) 'chapter': chapter,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59629,6 +59674,7 @@ class GaiaMessagesTableCompanion
     Value<int?>? contextTokens,
     Value<int?>? contextWindow,
     Value<String?>? origin,
+    Value<String?>? chapter,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59650,6 +59696,7 @@ class GaiaMessagesTableCompanion
       contextTokens: contextTokens ?? this.contextTokens,
       contextWindow: contextWindow ?? this.contextWindow,
       origin: origin ?? this.origin,
+      chapter: chapter ?? this.chapter,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59703,6 +59750,9 @@ class GaiaMessagesTableCompanion
     if (origin.present) {
       map['origin'] = Variable<String>(origin.value);
     }
+    if (chapter.present) {
+      map['chapter'] = Variable<String>(chapter.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59738,6 +59788,7 @@ class GaiaMessagesTableCompanion
           ..write('contextTokens: $contextTokens, ')
           ..write('contextWindow: $contextWindow, ')
           ..write('origin: $origin, ')
+          ..write('chapter: $chapter, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -91060,6 +91111,7 @@ typedef $$GaiaMessagesTableTableCreateCompanionBuilder =
       Value<int?> contextTokens,
       Value<int?> contextWindow,
       Value<String?> origin,
+      Value<String?> chapter,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -91082,6 +91134,7 @@ typedef $$GaiaMessagesTableTableUpdateCompanionBuilder =
       Value<int?> contextTokens,
       Value<int?> contextWindow,
       Value<String?> origin,
+      Value<String?> chapter,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -91165,6 +91218,11 @@ class $$GaiaMessagesTableTableFilterComposer
 
   ColumnFilters<String> get origin => $composableBuilder(
     column: $table.origin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapter => $composableBuilder(
+    column: $table.chapter,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -91268,6 +91326,11 @@ class $$GaiaMessagesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get chapter => $composableBuilder(
+    column: $table.chapter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -91346,6 +91409,9 @@ class $$GaiaMessagesTableTableAnnotationComposer
   GeneratedColumn<String> get origin =>
       $composableBuilder(column: $table.origin, builder: (column) => column);
 
+  GeneratedColumn<String> get chapter =>
+      $composableBuilder(column: $table.chapter, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -91413,6 +91479,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<int?> contextTokens = const Value.absent(),
                 Value<int?> contextWindow = const Value.absent(),
                 Value<String?> origin = const Value.absent(),
+                Value<String?> chapter = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -91433,6 +91500,7 @@ class $$GaiaMessagesTableTableTableManager
                 contextTokens: contextTokens,
                 contextWindow: contextWindow,
                 origin: origin,
+                chapter: chapter,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -91455,6 +91523,7 @@ class $$GaiaMessagesTableTableTableManager
                 Value<int?> contextTokens = const Value.absent(),
                 Value<int?> contextWindow = const Value.absent(),
                 Value<String?> origin = const Value.absent(),
+                Value<String?> chapter = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -91475,6 +91544,7 @@ class $$GaiaMessagesTableTableTableManager
                 contextTokens: contextTokens,
                 contextWindow: contextWindow,
                 origin: origin,
+                chapter: chapter,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

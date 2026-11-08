@@ -9,31 +9,57 @@ Color gaiaPromptColor(ThemeData theme) => Color.alphaBlend(
 
 /// The prompt of the turn being read, once scrolled off above, as in
 /// Claude Code: its first line, clicked to go back to it. Slim, with an
-/// accent rail down its left.
+/// accent rail down its left. Led by the title of the chapter being read,
+/// in the accent, once its divider has scrolled off above
+/// (GAIA_CHAPTERS_HLD.md §6.4): each half goes to its own message, and
+/// either can be absent.
 class GaiaPinnedPrompt extends StatelessWidget {
   const GaiaPinnedPrompt({
     super.key,
-    required this.id,
-    required this.text,
-    required this.onTap,
+    this.id,
+    this.text,
+    this.onTap,
+    this.chapterId,
+    this.chapter,
+    this.onChapterTap,
   });
 
   /// The prompt's message's.
-  final String id;
-  final String text;
-  final VoidCallback onTap;
+  final String? id;
+  final String? text;
+  final VoidCallback? onTap;
+
+  /// The chapter's message's.
+  final String? chapterId;
+  final String? chapter;
+  final VoidCallback? onChapterTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final shape = BorderRadius.circular(6);
+    final style = theme.textTheme.bodySmall;
+    final prompt = text == null
+        ? null
+        : _Text(
+            id: id!,
+            text: text!,
+            style: style?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          );
+    final title = chapter == null
+        ? null
+        : _Text(
+            id: chapterId!,
+            text: chapter!,
+            style: style?.copyWith(color: accent),
+          );
     return Material(
       color: gaiaPromptColor(theme),
       borderRadius: shape,
       child: InkWell(
         borderRadius: shape,
-        onTap: onTap,
+        onTap: onTap ?? onChapterTap,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
           child: Row(
@@ -53,15 +79,16 @@ class GaiaPinnedPrompt extends StatelessWidget {
                 color: accent,
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: _Text(
-                  id: id,
-                  text: text,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+              if (title != null && prompt != null) ...[
+                // Its own tap target, over the box's, which goes to the
+                // prompt.
+                Flexible(
+                  child: GestureDetector(onTap: onChapterTap, child: title),
                 ),
-              ),
+                Text(' · ', style: style?.copyWith(color: accent)),
+                Expanded(child: prompt),
+              ] else
+                Expanded(child: title ?? prompt!),
             ],
           ),
         ),

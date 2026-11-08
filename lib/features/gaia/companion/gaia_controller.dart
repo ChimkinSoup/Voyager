@@ -2074,6 +2074,8 @@ class GaiaController extends ChangeNotifier {
         unawaited(_applySettings(params));
       case 'changed':
         unawaited(_refresh().then((_) => _drainIdle()));
+      case 'chapters':
+        _adoptChapters(params);
       case 'drafts':
         unawaited(_loadDrafts());
       case 'queue':
@@ -2447,7 +2449,8 @@ class GaiaController extends ChangeNotifier {
     );
     final joined = [
       if (draft.text.trim().isNotEmpty) draft.text.trimRight(),
-      if (text.trim().isNotEmpty) text.trim(),
+      // The space it ends with stays: more is typed after it.
+      if (text.trim().isNotEmpty) text.trimLeft(),
     ].join('\n\n');
     draft.value = TextEditingValue(
       text: joined,
@@ -2484,6 +2487,75 @@ class GaiaController extends ChangeNotifier {
       'title': title,
       'from': from,
     });
+  }
+
+  /// [message] made the start of a chapter (GAIA_CHAPTERS_HLD.md §4): titled
+  /// with its first line at once, then by the utility model, unless it was
+  /// renamed or unpinned meanwhile. Not at a reply still streaming.
+  Future<void> pinChapter(GaiaMessage message) async {
+    final shown = _shown(message);
+    if (shown == null || !canPinChapter(shown)) return;
+    final from = gaiaFirstLineChapter(shown);
+    await setChapter(shown, from);
+    final user = shown.role == GaiaMessageRole.user;
+    final partner = _messages[shown.chatId]
+        ?.where(
+          (m) => m.seq == shown.seq + (user ? 1 : -1) && m.role != shown.role,
+        )
+        .firstOrNull;
+    final title = await _utility?.chapterTitle(
+      shown,
+      partner?.status == GaiaMessageStatus.streaming ? null : partner,
+    );
+    if (title == null) return;
+    await setChapter(shown, title, from: from);
+  }
+
+  /// Whether "Pin as chapter" is offered on [message]: one with no chapter,
+  /// and not a reply still streaming, whose text can still change.
+  bool canPinChapter(GaiaMessage message) =>
+      message.chapter == null &&
+      !(message.role == GaiaMessageRole.assistant &&
+          message.status == GaiaMessageStatus.streaming);
+
+  /// [message]'s chapter renamed to [chapter], or unpinned for null
+  /// (GAIA_CHAPTERS_HLD.md §3.1): shown at once, then stored. With [from],
+  /// only over that title, so the utility model's never overwrites a
+  /// rename. An empty title changes nothing.
+  Future<void> setChapter(
+    GaiaMessage message,
+    String? chapter, {
+    String? from,
+  }) async {
+    final shown = _shown(message);
+    chapter = chapter?.trim();
+    if (shown == null || chapter == '' || shown.chapter == chapter) return;
+    if (from != null && shown.chapter != from) return;
+    final before = shown.chapter;
+    void show(GaiaMessage message, String? chapter) {
+      final list = _messages[message.chatId]!;
+      list[list.indexOf(message)] = message.copyWith(
+        chapter: chapter,
+        clearChapter: chapter == null,
+        bumpVersion: false,
+        touch: false,
+      );
+      notifyListeners();
+    }
+
+    show(shown, chapter);
+    try {
+      await _pipe.request('setChapter', {
+        'messageId': shown.id,
+        'chapter': chapter,
+        'from': ?from,
+      });
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] chapter not saved: $error');
+      // Back as it was, unless changed again meanwhile.
+      final now = _shown(message);
+      if (now != null && now.chapter == chapter) show(now, before);
+    }
   }
 
   /// A new chat with [at]'s chat's messages up to [at], which then goes its
@@ -5366,7 +5438,9 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// Swaps [updated] in for [old] in its chat's list, and redraws.
-  /// [textOnly]: only its text changed, which [streamed] tells.
+  /// [textOnly]: only its text changed, which [streamed] tells. The listed
+  /// copy's chapter stays, as the store keeps it: only [setChapter] changes
+  /// it, and a run's copy of its prompt can be older.
   GaiaMessage _replace(
     GaiaMessage old,
     GaiaMessage updated, {
@@ -5374,7 +5448,18 @@ class GaiaController extends ChangeNotifier {
   }) {
     final list = _messages[old.chatId];
     final index = list?.indexWhere((m) => m.id == old.id) ?? -1;
-    if (index >= 0) list![index] = updated;
+    if (index >= 0) {
+      final chapter = list![index].chapter;
+      if (updated.chapter != chapter) {
+        updated = updated.copyWith(
+          chapter: chapter,
+          clearChapter: chapter == null,
+          bumpVersion: false,
+          touch: false,
+        );
+      }
+      list[index] = updated;
+    }
     if (textOnly) {
       // Only the shown chat's messages are drawn.
       if (old.chatId == currentChatId) streamed.value++;
@@ -5390,6 +5475,27 @@ class GaiaController extends ChangeNotifier {
       gaiaKeepChecks(parts, gaiaChecksOf(_shown(reply)?.parts ?? const []));
 
   /// [message] as it's shown now.
+  /// [chapters] changed as stored, by message id, null for unpinned: shown
+  /// in each listed chat, a running one too, which [_load] leaves alone.
+  void _adoptChapters(Map<String, Object?> chapters) {
+    var changed = false;
+    for (final list in _messages.values) {
+      for (final (i, message) in list.indexed) {
+        if (!chapters.containsKey(message.id)) continue;
+        final chapter = chapters[message.id] as String?;
+        if (message.chapter == chapter) continue;
+        list[i] = message.copyWith(
+          chapter: chapter,
+          clearChapter: chapter == null,
+          bumpVersion: false,
+          touch: false,
+        );
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
   GaiaMessage? _shown(GaiaMessage message) =>
       _messages[message.chatId]?.where((m) => m.id == message.id).firstOrNull;
 
