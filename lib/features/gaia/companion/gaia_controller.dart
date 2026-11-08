@@ -1181,6 +1181,41 @@ class GaiaController extends ChangeNotifier {
   /// The user's slash commands (§9.2).
   var commands = const <GaiaCommand>[];
 
+  /// Each CLI account's own `/` commands (GAIA_NATIVE_COMMANDS.md §3), by
+  /// adapter and account; null while they're being read.
+  final _natives = <String, List<GaiaNativeCommand>?>{};
+
+  /// The `/` commands the next message's CLI runs itself; null while they're
+  /// being read, empty for a CLI without any.
+  List<GaiaNativeCommand>? get nativeCommands {
+    final agent = agentFor(nextTier);
+    if (agent == null) return const [];
+    final runner = _runners[agent.adapter];
+    if (runner is! GaiaNativeCommander) return const [];
+    final commander = runner as GaiaNativeCommander;
+    final account = currentAccount(agent.adapter);
+    final key = '${agent.adapter}/${account.key}';
+    if (_natives.containsKey(key)) return _natives[key];
+    _natives[key] = null;
+    unawaited(
+      commander
+          .nativeCommands(account)
+          .catchError((Object error) {
+            debugPrint('[gaia] CLI commands not read: $error');
+            return const <GaiaNativeCommand>[];
+          })
+          .then((natives) {
+            _natives[key] = natives;
+            // Asked again in a while, if the CLI couldn't say.
+            if (natives.isEmpty) {
+              Timer(const Duration(minutes: 1), () => _natives.remove(key));
+            }
+            notifyListeners();
+          }),
+    );
+    return null;
+  }
+
   /// Rebound keys (§9.1), by `GaiaKeybind` name.
   var keybinds = const <String, String>{};
 
@@ -3693,6 +3728,33 @@ class GaiaController extends ChangeNotifier {
       if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
       if (gaiaRememberText(text) case final memory?) return remember(memory);
     }
+    // A command the CLI runs itself goes as typed, alone: the CLI reads one
+    // only when it starts the message (GAIA_NATIVE_COMMANDS.md §5). Only the
+    // ones the palette offers: a Gaia name the CLI shares is Gaia's.
+    final native =
+        remote == null && resent == null && text.trimLeft().startsWith('/')
+        ? gaiaNativeIn(text, [
+            for (final item in gaiaPaletteItems(
+              commands,
+              accounts: accounts,
+              natives: nativeCommands ?? const [],
+            ))
+              ?item.native,
+          ])
+        : null;
+    if (native != null &&
+        (images.isNotEmpty ||
+            files.isNotEmpty ||
+            draftQuotes.isNotEmpty ||
+            draftControl != null)) {
+      _note(
+        'Send /${native.name} on its own',
+        'A CLI command has to be the whole message. Send the attachments '
+            'with your next one.',
+        error: true,
+      );
+      return _giveBack(currentChatId, text, images, files);
+    }
     var prompt = resent != null
         ? text.trim()
         : (await _expand(text.trim())).trim();
@@ -3772,9 +3834,10 @@ class GaiaController extends ChangeNotifier {
         : (resent?.quotes ?? draftQuotes).first.text;
     // The summon's window goes with this message only. A remote one has
     // neither, nor quotes: they're the desktop's draft's.
+    // Not a command's: the window waits for the next message.
     final context = resent != null
         ? resent.context
-        : remote == null
+        : remote == null && native == null
         ? windowContext
         : null;
     final control = resent != null
@@ -3786,7 +3849,7 @@ class GaiaController extends ChangeNotifier {
         resent?.quotes ??
         (remote == null ? [...draftQuotes] : <GaiaQuotePart>[]);
     if (remote == null && resent == null) {
-      windowContext = null;
+      if (native == null) windowContext = null;
       draftControl = null;
       draftQuotes.clear();
     }
@@ -4015,7 +4078,9 @@ class GaiaController extends ChangeNotifier {
         : remote.tier ?? chat.tier ?? defaultTier ?? lastTier;
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
+    // Nor a command's, whose CLI is the one its palette row came from.
     if (isNew &&
+        native == null &&
         (remote == null ? pickedTier == null : remote.tier == null) &&
         !debug.dummyMode) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
@@ -4027,6 +4092,8 @@ class GaiaController extends ChangeNotifier {
             ? 'dummy mode'
             : !isNew
             ? 'not a new chat'
+            : native != null
+            ? 'a CLI command'
             : 'tier picked: ${(remote?.tier ?? pickedTier)!.name}'}',
       );
     }
@@ -4266,6 +4333,14 @@ class GaiaController extends ChangeNotifier {
       );
       final captioning = unseen();
       if (captioning.isEmpty) return asked;
+      // Catching the session up would put the chat ahead of the command,
+      // and the CLI would read it as text (GAIA_NATIVE_COMMANDS.md §5).
+      if (native != null) {
+        throw GaiaRunException(
+          "${agent.label} hasn't caught up on this chat yet. Send a message "
+          'first, then /${native.name}.',
+        );
+      }
       // Images go as captions and files (§7.4): the captions first, for a
       // while, read back from the messages they were written to.
       await _caption(captioning).timeout(_captionWait, onTimeout: () {});

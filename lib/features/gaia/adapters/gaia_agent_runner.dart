@@ -319,6 +319,23 @@ abstract interface class GaiaSessionForker {
   Future<void> rewound(String chatId, String forkId);
 }
 
+/// A `/` command the CLI runs itself (GAIA_NATIVE_COMMANDS.md): its name
+/// without the slash, what it does, and what it takes after it.
+typedef GaiaNativeCommand = ({
+  String name,
+  String description,
+  String argumentHint,
+});
+
+/// A runner whose CLI has `/` commands of its own (GAIA_NATIVE_COMMANDS.md).
+/// A message starting with one goes to the runner as typed, and the runner
+/// has its CLI run it.
+abstract interface class GaiaNativeCommander {
+  /// [account]'s commands, less those Gaia keeps out (§4); empty when they
+  /// can't be read.
+  Future<List<GaiaNativeCommand>> nativeCommands(GaiaAccount? account);
+}
+
 typedef GaiaCliVersion = (int, int, int);
 
 /// The first `x.y.z` in a CLI's `--version` output.

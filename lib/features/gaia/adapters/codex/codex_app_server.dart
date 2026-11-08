@@ -146,6 +146,15 @@ String? _toolDetail(String type, Map<String, Object?> item) {
   };
 }
 
+/// Codex's `/compact`: its app-server's own request, since as text the model
+/// only claims to have compacted (GAIA_NATIVE_COMMANDS.md §6, checked on
+/// 0.166.0).
+const GaiaNativeCommand kCodexCompact = (
+  name: 'compact',
+  description: 'Free up context by summarizing the thread so far',
+  argumentHint: '',
+);
+
 /// Item types that aren't the agent acting.
 const _notTools = {
   'userMessage',
@@ -242,7 +251,8 @@ class CodexAppServerClient {
   /// otherwise, with an error that keeps it. [instructions] are a new
   /// thread's developer instructions; a resumed or forked thread keeps those
   /// it started with. [clientId] names the prompt in the thread, for
-  /// [turnOf].
+  /// [turnOf]. [compact] compacts [threadId] instead of sending [input]: a
+  /// turn of its own, with no reply (GAIA_NATIVE_COMMANDS.md §6).
   Future<GaiaTurnResult> send({
     required String? threadId,
     required String model,
@@ -255,6 +265,7 @@ class CodexAppServerClient {
     GaiaForkCut? fork,
     void Function(String threadId)? onThread,
     Future<void> Function(String threadId)? onNewThread,
+    bool compact = false,
   }) async {
     final String thread;
     if (threadId == null && fork != null) {
@@ -323,14 +334,19 @@ class CodexAppServerClient {
     turn.done.future.ignore();
     onThread?.call(thread);
     try {
-      final started = await _request('turn/start', {
-        'threadId': thread,
-        'model': model,
-        'effort': ?effort,
-        'input': input,
-        'clientUserMessageId': ?clientId,
-      });
-      turn.turnId ??= _string(_map(started, 'turn', ''), 'id', '');
+      if (compact) {
+        // Its turn's id comes with `turn/started` (checked on 0.166.0).
+        await _request('thread/compact/start', {'threadId': thread});
+      } else {
+        final started = await _request('turn/start', {
+          'threadId': thread,
+          'model': model,
+          'effort': ?effort,
+          'input': input,
+          'clientUserMessageId': ?clientId,
+        });
+        turn.turnId ??= _string(_map(started, 'turn', ''), 'id', '');
+      }
     } on _RpcError catch (error) {
       if (_turns[thread] == turn) _turns.remove(thread);
       // No `turn/completed` will come for a stopped one to wait on.
@@ -641,15 +657,19 @@ class CodexAppServerClient {
 
       switch (method) {
         case 'item/tool/call':
-          final answer = await gaiaMcpAnswer({
-            'jsonrpc': '2.0',
-            'id': 0,
-            'method': 'tools/call',
-            'params': {
-              'name': _string(params, 'tool', line),
-              'arguments': params['arguments'],
+          final answer = await gaiaMcpAnswer(
+            {
+              'jsonrpc': '2.0',
+              'id': 0,
+              'method': 'tools/call',
+              'params': {
+                'name': _string(params, 'tool', line),
+                'arguments': params['arguments'],
+              },
             },
-          }, tools, callId: params['callId'] as String?);
+            tools,
+            callId: params['callId'] as String?,
+          );
           final called = answer!['result']! as Map<String, Object?>;
           result = {
             'contentItems': [
@@ -741,6 +761,41 @@ class CodexAppServerClient {
       debugPrint('[gaia] Codex model/list failed: $error');
     }
     return efforts;
+  }
+
+  /// The skills Codex finds for [cwd], enabled ones only, with their files
+  /// (GAIA_NATIVE_COMMANDS.md §6). Read leniently, since they're only
+  /// offered. Throws a [GaiaRunException] when the server refuses.
+  Future<List<({String name, String description, String path})>> listSkills(
+    String cwd,
+  ) async {
+    final Map<String, Object?> listed;
+    try {
+      listed = await _request('skills/list', {
+        'cwds': [cwd],
+      });
+    } on _RpcError catch (error) {
+      throw GaiaRunException(error.message);
+    }
+    return [
+      if (listed['data'] case final List entries)
+        for (final entry in entries)
+          if (entry case {'skills': final List skills})
+            for (final skill in skills)
+              if (skill case {
+                'name': final String name,
+                'path': final String path,
+                'enabled': true,
+              })
+                (
+                  name: name,
+                  description:
+                      skill['shortDescription'] as String? ??
+                      skill['description'] as String? ??
+                      '',
+                  path: path,
+                ),
+    ];
   }
 
   /// The account's usage windows (§6.2). Throws a [GaiaRunException] when
@@ -914,11 +969,40 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
+    // A command of Codex's own (GAIA_NATIVE_COMMANDS.md §6): `/compact` is a
+    // request of its own, and a skill goes as a skill input with the text.
+    final command = RegExp(
+      r'^/([\w-]+)(?:\s|$)',
+    ).firstMatch(prompt.trim())?.group(1);
+    final compact = command == kCodexCompact.name;
+    if (compact && prompt.trim() != '/${kCodexCompact.name}') {
+      return GaiaTurnResult(
+        sessionId: sessionId ?? '',
+        isError: true,
+        text: "Codex's /compact takes no instructions.",
+      );
+    }
+    if (compact && sessionId == null) {
+      return const GaiaTurnResult(
+        sessionId: '',
+        isError: true,
+        text: 'There is nothing to compact yet: this chat has no Codex thread.',
+      );
+    }
+    final skill = _skills?.where((skill) => skill.name == command).firstOrNull;
+
     Future<GaiaTurnResult> fallBack() async {
       // Stopped while this one opened: never handed on.
       _opening.remove(chatId);
       if (_stoppedOpening.contains(chatId)) {
         throw GaiaRunException('Stopped.');
+      }
+      if (compact) {
+        return GaiaTurnResult(
+          sessionId: sessionId!,
+          isError: true,
+          text: "Codex's app-server isn't available, and only it can compact.",
+        );
       }
       // `codex exec` can't fork: the chat is handed over instead.
       if (fork != null) {
@@ -974,13 +1058,18 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     _stoppedThreads.remove(chatId);
     try {
       if (_stoppedOpening.contains(chatId)) throw GaiaRunException('Stopped.');
-      return await process.client.send(
+      final result = await process.client.send(
         threadId: sessionId,
         model: model,
         // Named every turn: a thread keeps the last one it was given, which
         // may be another agent's.
         effort: effort ?? await process.client.defaultEffort(model),
+        compact: compact,
         input: [
+          // Its instructions go with the text, which keeps the `/name`
+          // (GAIA_NATIVE_COMMANDS.md §6).
+          if (skill != null)
+            {'type': 'skill', 'name': skill.name, 'path': skill.path},
           {'type': 'text', 'text': codexPrompt(prompt, images)},
           for (final image in images)
             {'type': 'localImage', 'path': image.path},
@@ -1002,6 +1091,12 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         },
         onNewThread: (threadId) => _recordThread(threadId, kCodexToolsHash),
       );
+      // A compaction has no reply of its own to show.
+      if (compact && !result.isError) {
+        onEvent(const GaiaTextStart());
+        onEvent(const GaiaTextDelta('Compacted.'));
+      }
+      return result;
     } finally {
       _threads.remove(chatId);
       _sending.remove(chatId);
@@ -1024,6 +1119,35 @@ class CodexAppServerRunner implements GaiaAgentRunner {
   /// when the server won't start.
   Future<Map<String, Object?>> readRateLimits() =>
       _request((client) => client.readRateLimits());
+
+  /// The skills [nativeCommands] last read, for a turn to send one by.
+  List<({String name, String description, String path})>? _skills;
+
+  /// `/compact` and the home's enabled skills (GAIA_NATIVE_COMMANDS.md §6);
+  /// empty when the server can't say.
+  Future<List<GaiaNativeCommand>> nativeCommands() async {
+    try {
+      final skills = await _request(
+        (client) => client.listSkills(workingDirectory),
+      );
+      _skills = skills;
+      return [
+        kCodexCompact,
+        for (final skill in skills)
+          if (skill.name != kCodexCompact.name)
+            (
+              name: skill.name,
+              description: skill.description,
+              argumentHint: '',
+            ),
+      ];
+    } on GaiaRunException catch (error) {
+      debugPrint('[gaia] Codex skills not read: $error');
+      return const [];
+    } on TimeoutException {
+      return const [];
+    }
+  }
 
   /// The turn of the prompt [after] in [threadId], which a fork keeps up to
   /// (GAIA_REWIND_HLD.md §10.2); null when there's none, or Codex can't say.
@@ -1319,7 +1443,8 @@ class CodexAccountRunners
         GaiaAgentRunner,
         GaiaSessionCopier,
         GaiaSessionForker,
-        GaiaAccountKeeper {
+        GaiaAccountKeeper,
+        GaiaNativeCommander {
   CodexAccountRunners({
     required this.workingDirectory,
     required this.homesRoot,
@@ -1439,6 +1564,15 @@ class CodexAccountRunners
       );
     } finally {
       _opening.remove(chatId);
+      await _prune();
+    }
+  }
+
+  @override
+  Future<List<GaiaNativeCommand>> nativeCommands(GaiaAccount? account) async {
+    try {
+      return await (await _runner(account)).nativeCommands();
+    } finally {
       await _prune();
     }
   }

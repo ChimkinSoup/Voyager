@@ -160,10 +160,27 @@ class ClaudeControlRequest extends ClaudeEvent {
 /// `control_response`: the CLI's answer to a request of Gaia's, the
 /// `initialize` that registers its tools. [error] when it failed.
 class ClaudeControlResponse extends ClaudeEvent {
-  const ClaudeControlResponse({required this.requestId, this.error});
+  const ClaudeControlResponse({
+    required this.requestId,
+    this.error,
+    this.commands,
+  });
 
   final String requestId;
   final String? error;
+
+  /// The `/` commands an `initialize` response lists (GAIA_NATIVE_COMMANDS.md
+  /// §3, observed on 2.1.319); null on any other response.
+  final List<GaiaNativeCommand>? commands;
+}
+
+/// `system`/`compact_boundary`: the session was compacted, from [preTokens]
+/// to [postTokens] (observed on 2.1.319). Null when it doesn't say.
+class ClaudeCompacted extends ClaudeEvent {
+  const ClaudeCompacted({this.preTokens, this.postTokens});
+
+  final int? preTokens;
+  final int? postTokens;
 }
 
 /// Anything the adapter doesn't read: hooks, status, subagent output,
@@ -221,6 +238,19 @@ ClaudeEvent parseClaudeLine(String line) {
           );
         }
         return const ClaudeIgnored();
+      }
+      // Read leniently, since it's only shown.
+      if (subtype == 'compact_boundary') {
+        final metadata = decoded['compact_metadata'];
+        int? tokens(String key) =>
+            switch (metadata is Map ? metadata[key] : null) {
+              final num n => n.toInt(),
+              _ => null,
+            };
+        return ClaudeCompacted(
+          preTokens: tokens('pre_tokens'),
+          postTokens: tokens('post_tokens'),
+        );
       }
       if (subtype != 'init') return const ClaudeIgnored();
       return ClaudeInit(
@@ -332,6 +362,18 @@ ClaudeEvent parseClaudeLine(String line) {
         error: response['subtype'] == 'success'
             ? null
             : response['error'] as String? ?? 'failed',
+        commands: switch (response['response']) {
+          {'commands': final List commands} => [
+            for (final command in commands)
+              if (command case {'name': final String name})
+                (
+                  name: name,
+                  description: command['description'] as String? ?? '',
+                  argumentHint: command['argumentHint'] as String? ?? '',
+                ),
+          ],
+          _ => null,
+        },
       );
     default:
       return const ClaudeIgnored();
@@ -461,6 +503,7 @@ GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
   ClaudeResult() ||
   ClaudeControlRequest() ||
   ClaudeControlResponse() ||
+  ClaudeCompacted() ||
   ClaudeIgnored() => null,
 };
 

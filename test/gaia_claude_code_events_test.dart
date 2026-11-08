@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 
@@ -358,5 +359,56 @@ void main() {
     expect(isTestedClaudeVersion((2, 2, 0)), isFalse);
     expect(isTestedClaudeVersion((2, 1, 300)), isTrue);
     expect(parseClaudeVersion('command not found'), isNull);
+  });
+
+  // GAIA_NATIVE_COMMANDS.md §3 and §5, recorded on 2.1.319 in safe mode.
+  group('native commands', () {
+    final events = _events('native_commands.jsonl');
+
+    test("initialize lists the CLI's commands", () {
+      final commands = events
+          .whereType<ClaudeControlResponse>()
+          .single
+          .commands!;
+      final compact = commands.firstWhere((c) => c.name == 'compact');
+      expect(compact.description, contains('summarizing'));
+      expect(compact.argumentHint, isNotEmpty);
+      // Safe mode: the bundled ones only, no plugin skills.
+      expect(commands.any((c) => c.name.contains(':')), isFalse);
+    });
+
+    test('a command the CLI runs itself streams nothing; its output is the '
+        'result', () {
+      final turn = _turns(events)[1];
+      expect(turn.whereType<ClaudeTextDelta>(), isEmpty);
+      final result = turn.whereType<ClaudeResult>().single;
+      expect(
+        claudeCommandOutput(result.text, null),
+        startsWith('Reloaded skills:'),
+      );
+    });
+
+    test('/compact shows how far the session shrank', () {
+      final turn = _turns(events)[2];
+      expect(turn.whereType<ClaudeTextDelta>(), isEmpty);
+      final compacted = turn.whereType<ClaudeCompacted>().single;
+      expect(compacted.preTokens, isNotNull);
+      expect(compacted.postTokens, isNotNull);
+      expect(turn.whereType<ClaudeResult>().single.text, isEmpty);
+      expect(
+        claudeCommandOutput('', compacted),
+        matches(RegExp(r'^Compacted: [\d.]+k? → [\d.]+k? tokens\.$')),
+      );
+      expect(claudeCommandOutput('', const ClaudeCompacted()), 'Compacted.');
+    });
+
+    test('blocked commands are caught by name or alias, at the start only', () {
+      expect(claudeBlockedCommandIn('/clear'), 'clear');
+      expect(claudeBlockedCommandIn('  /reset now'), 'reset');
+      expect(claudeBlockedCommandIn('/model sonnet'), 'model');
+      expect(claudeBlockedCommandIn('/compact'), isNull);
+      expect(claudeBlockedCommandIn('/clearly not'), isNull);
+      expect(claudeBlockedCommandIn('please /clear'), isNull);
+    });
   });
 }

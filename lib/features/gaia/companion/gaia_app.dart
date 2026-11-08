@@ -1323,9 +1323,10 @@ class _MessagesState extends State<_Messages> {
   /// What the list's scroll shows over it, as [_cutOff] finds it, and
   /// [scrolledUp] far enough from the newest to offer a way back down. Its
   /// own notifier, so scrolling rebuilds only what's over the list.
-  final _over = ValueNotifier<
-    ({String? pinned, String? chapter, bool chapterOff, bool scrolledUp})
-  >((pinned: null, chapter: null, chapterOff: false, scrolledUp: false));
+  final _over =
+      ValueNotifier<
+        ({String? pinned, String? chapter, bool chapterOff, bool scrolledUp})
+      >((pinned: null, chapter: null, chapterOff: false, scrolledUp: false));
   bool _placing = false;
 
   /// The message whose chapter is being renamed in its divider, and its
@@ -1518,8 +1519,7 @@ class _MessagesState extends State<_Messages> {
             : messages[prompt].id,
         chapter: chapter < 0 ? null : messages[chapter].id,
         // One below the top, from the bottom, has its divider in view.
-        chapterOff:
-            chapter >= 0 && chapter <= i && !(chapter == i && top >= 0),
+        chapterOff: chapter >= 0 && chapter <= i && !(chapter == i && top >= 0),
       );
     }
     return none;
@@ -3124,6 +3124,15 @@ class _ComposerState extends State<_Composer> {
   var _highlight = 0;
   String? _paletteClosedFor;
 
+  /// A `/word` no command has, turned away once for the draft as it stood
+  /// then (GAIA_NATIVE_COMMANDS.md §7): sent again unchanged, it goes.
+  ({String word, String? suggestion})? _unknown;
+  String? _unknownFor;
+
+  /// A `/word` none of Gaia's own name, held while the CLI's commands are
+  /// still being read: sent now, a CLI command would go as text.
+  var _reading = false;
+
   /// The palette hovers over the chat from the overlay, above the
   /// composer, rather than pushing the chat up.
   final _portal = OverlayPortalController();
@@ -3180,8 +3189,13 @@ class _ComposerState extends State<_Composer> {
 
   void _onDraft() {
     unawaited(_takeCommands());
-    // The palette follows the draft.
-    setState(() => _highlight = 0);
+    // The palette follows the draft, and the unknown command's line goes
+    // once it changes.
+    setState(() {
+      _highlight = 0;
+      if (_text.text != _unknownFor) _unknown = _unknownFor = null;
+      _reading = false;
+    });
   }
 
   /// A draft image clicked: the annotation editor (§9.4).
@@ -3242,12 +3256,32 @@ class _ComposerState extends State<_Composer> {
     final token = gaiaPaletteToken(_text.value);
     if (token == null || _text.text == _paletteClosedFor) return const [];
     return filterGaiaPalette([
-      for (final item in gaiaPaletteItems(
+      for (final item in _paletteItems(widget.controller.nativeCommands))
+        if (token.whole || (item.command == null && item.native == null)) item,
+    ], token.query);
+  }
+
+  /// Every row the palette can show, the CLI's own [natives] among them.
+  List<GaiaPaletteItem> _paletteItems(List<GaiaNativeCommand>? natives) =>
+      gaiaPaletteItems(
         widget.controller.commands,
         accounts: widget.controller.accounts,
-      ))
-        if (token.whole || item.command == null) item,
-    ], token.query);
+        natives: natives ?? const [],
+      );
+
+  /// The unknown command's suggestion in place of its `/word`.
+  void _useSuggestion() {
+    final unknown = _unknown;
+    final suggestion = unknown?.suggestion;
+    if (unknown == null || suggestion == null) return;
+    final text = _text.text.trimLeft().replaceFirst(
+      '/${unknown.word}',
+      '/$suggestion',
+    );
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: suggestion.length + 1),
+    );
   }
 
   /// The palette's `/word` taken out of the draft, with a space beside it.
@@ -3287,6 +3321,13 @@ class _ComposerState extends State<_Composer> {
     } else if (item.account case final account?) {
       _cutToken();
       await switchGaiaAccount(context, controller, account.adapter, account);
+    } else if (item.native case final native?) {
+      // Its arguments, if any, go after it (GAIA_NATIVE_COMMANDS.md §5).
+      final text = '/${native.name} ';
+      _text.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
     } else if (item.command case final command?) {
       // Closed over a standalone command left unsent mid-reply, so it
       // waits like any other draft.
@@ -3309,7 +3350,19 @@ class _ComposerState extends State<_Composer> {
   /// stands. Otherwise the keys go to list editing ([_listKey]).
   KeyEventResult _paletteKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
-    if (_palette.isEmpty) return _listKey(node, event);
+    if (_palette.isEmpty) {
+      // Tab takes the unknown command's suggestion.
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.tab &&
+          _unknown?.suggestion != null &&
+          !HardwareKeyboard.instance.isShiftPressed &&
+          !HardwareKeyboard.instance.isControlPressed &&
+          !HardwareKeyboard.instance.isAltPressed) {
+        _useSuggestion();
+        return KeyEventResult.handled;
+      }
+      return _listKey(node, event);
+    }
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
         keyboard.isAltPressed ||
@@ -3480,6 +3533,31 @@ class _ComposerState extends State<_Composer> {
     if (gaiaQueueText(_text.text) case final queued?) {
       _text.clear();
       return widget.controller.enqueue(queued);
+    }
+    // A `/word` no command has stays, once, rather than going to the agent
+    // as text (GAIA_NATIVE_COMMANDS.md §7). Not while the CLI's own are still
+    // being read, which would turn theirs away too.
+    final natives = _text.text.trimLeft().startsWith('/')
+        ? widget.controller.nativeCommands
+        : null;
+    if (!widget.controller.currentRunning &&
+        natives != null &&
+        _text.text != _unknownFor) {
+      if (gaiaUnknownCommand(_text.text, _paletteItems(natives))
+          case final unknown?) {
+        setState(() {
+          _unknown = unknown;
+          _unknownFor = _text.text;
+        });
+        return;
+      }
+    }
+    if (!widget.controller.currentRunning &&
+        _text.text.trimLeft().startsWith('/') &&
+        natives == null &&
+        gaiaUnknownCommand(_text.text, _paletteItems(null)) != null) {
+      setState(() => _reading = true);
+      return;
     }
     if (await _submitCard(widget.controller)) return;
     final controller = widget.controller;
@@ -3751,6 +3829,17 @@ class _ComposerState extends State<_Composer> {
                               ),
                             ),
                     ),
+                    if (_unknown case final unknown?)
+                      _UnknownCommandLine(unknown: unknown),
+                    if (_reading && controller.nativeCommands == null)
+                      _ReadingCommandsLine(
+                        cli:
+                            kGaiaClis[controller
+                                    .agentFor(controller.nextTier)
+                                    ?.adapter]
+                                ?.name ??
+                            'the CLI',
+                      ),
                     GaiaVanish(
                       key: _vanish,
                       controller: _text,
@@ -3843,6 +3932,66 @@ class _ComposerState extends State<_Composer> {
       },
     );
     return MediaPasteOwnerScope(pasteImage: _pasteImage, child: composer);
+  }
+}
+
+/// Under the draft's unknown `/word` (GAIA_NATIVE_COMMANDS.md §7): what it
+/// may have meant, and what the keys do.
+class _UnknownCommandLine extends StatelessWidget {
+  const _UnknownCommandLine({required this.unknown});
+
+  final ({String word, String? suggestion}) unknown;
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestion = unknown.suggestion;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.help_outline, size: 16, color: kGaiaStatusRose),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              suggestion == null
+                  ? 'Unknown command /${unknown.word}. Send again to send it '
+                        'as typed.'
+                  : 'Unknown command /${unknown.word}. Did you mean '
+                        '/$suggestion? Tab uses it; send again to send as '
+                        'typed.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Under a `/word` held while [cli]'s own commands are still being read
+/// (GAIA_NATIVE_COMMANDS.md §7). It goes once they're in.
+class _ReadingCommandsLine extends StatelessWidget {
+  const _ReadingCommandsLine({required this.cli});
+
+  final String cli;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.hourglass_empty, size: 16, color: kGaiaStatusRose),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Reading $cli's commands. Send again in a moment.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

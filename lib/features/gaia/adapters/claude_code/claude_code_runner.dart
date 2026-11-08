@@ -124,6 +124,66 @@ const _mcpConfig =
     '{"mcpServers":{"$kGaiaMcpServer":'
     '{"type":"sdk","name":"$kGaiaMcpServer"}}}';
 
+/// Claude Code's own commands Gaia doesn't run, aliases included, with why
+/// (GAIA_NATIVE_COMMANDS.md §4): they'd change the session or a setting
+/// behind Gaia's back, cost money, or do nothing in a headless chat.
+const kClaudeBlockedCommands = {
+  'clear': "it starts a new Claude Code session Gaia wouldn't follow. Use /new",
+  'reset': "it starts a new Claude Code session Gaia wouldn't follow. Use /new",
+  'model': "it lasts only until Gaia restarts the process. Use Gaia's tiers",
+  'effort': "it lasts only until Gaia restarts the process. Use Gaia's tiers",
+  'advisor': 'it lasts only until Gaia restarts the process',
+  'fast': "fast mode isn't available to Gaia's Claude Code",
+  'rename': 'Gaia names its own chats',
+  'name': 'Gaia names its own chats',
+  'config': "it changes Claude Code's settings for every chat",
+  'settings': "it changes Claude Code's settings for every chat",
+  'output-style': "it changes Claude Code's settings for every chat",
+  'autocompact': "it changes Claude Code's settings for every chat",
+  'auto-mode-setup': "Gaia answers Claude Code's permission prompts itself",
+  'mcp': "it can turn off Gaia's own tools",
+  'init': "it writes a CLAUDE.md into Gaia's workspace, for every chat",
+  'import': "it copies other agents' settings into Claude Code's",
+  'design': "it changes your account's Design access",
+  'design-consent': "it changes your account's Design access",
+  'design-revoke': "it changes your account's Design access",
+  'usage-credits': "it changes your account's billing",
+  'extra-usage': "it changes your account's billing",
+  'ultrareview': 'it starts a paid cloud review',
+  'loop': "it stops when Gaia's idle process does",
+  'goal': "it keeps Claude Code working past Gaia's turn",
+  'color': 'it only colours the terminal',
+  'focus': 'it only changes the terminal view',
+  'heapdump': "it's for debugging Claude Code itself",
+  'agents': 'Claude Code removed it',
+  'reload-plugins': "Gaia's Claude Code runs without plugins",
+  '__remote-workflow': 'it only runs in cloud sessions',
+  'workflow-launch-exec': 'it only runs in cloud sessions',
+};
+
+/// The blocked command [prompt] starts with, by name; null when it starts
+/// with none.
+String? claudeBlockedCommandIn(String prompt) {
+  final name = RegExp(r'^/([\w-]+)(?:\s|$)').firstMatch(prompt.trim());
+  return kClaudeBlockedCommands.containsKey(name?.group(1))
+      ? name!.group(1)
+      : null;
+}
+
+/// What a turn that ran a command the CLI handles itself shows, when nothing
+/// streamed (GAIA_NATIVE_COMMANDS.md §5): its output, or for `/compact`,
+/// how far the session shrank.
+String claudeCommandOutput(String result, ClaudeCompacted? compacted) {
+  if (result.trim().isNotEmpty) return result.trim();
+  if (compacted == null) return '';
+  String tokens(int n) => n < 1000 ? '$n' : '${(n / 1000).toStringAsFixed(1)}k';
+  return switch (compacted) {
+    ClaudeCompacted(preTokens: final pre?, postTokens: final post?) =>
+      'Compacted: ${tokens(pre)} → ${tokens(post)} tokens.',
+    _ => 'Compacted.',
+  };
+}
+
 /// A stopped turn taken back (§9.6): [sessionId] resumed only up to the
 /// entry [keepAt], cutting the turn of the prompt [drops].
 typedef _Rewind = ({String sessionId, String keepAt, String drops});
@@ -164,7 +224,11 @@ typedef _StoppedTurn = ({
 /// [GaiaTurnTools] answers each. Claude Code's own `AskUserQuestion` is
 /// left out, for `ask_user` (§10.1): as a host, Gaia would be offered it.
 class ClaudeCodeRunner
-    implements GaiaAgentRunner, GaiaSessionCopier, GaiaSessionForker {
+    implements
+        GaiaAgentRunner,
+        GaiaSessionCopier,
+        GaiaSessionForker,
+        GaiaNativeCommander {
   ClaudeCodeRunner({
     required this.workingDirectory,
     required this.instructionsFile,
@@ -219,7 +283,22 @@ class ClaudeCodeRunner
     GaiaForkCut? fork,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
+    // Kept from the CLI even typed past the palette (GAIA_NATIVE_COMMANDS.md
+    // §4).
+    if (claudeBlockedCommandIn(prompt) case final name?) {
+      return GaiaTurnResult(
+        sessionId: sessionId ?? '',
+        isError: true,
+        text:
+            "Gaia doesn't run Claude Code's /$name: "
+            '${kClaudeBlockedCommands[name]}.',
+      );
+    }
     final newSessionId = sessionId ?? _uuid.v4();
+    // Whether the reply streamed any text, and the compaction a `/compact`
+    // made: a command the CLI runs itself streams none (§5).
+    var streamed = false;
+    ClaudeCompacted? compacted;
     // Sent twice with the same [promptId] only when the first attempt never
     // started its session, so never saved the prompt: a session never holds
     // two entries with one uuid (GAIA_FORKING_HLD.md §5.1).
@@ -238,6 +317,8 @@ class ClaudeCodeRunner
       promptId: promptId,
       fork: fork,
       onEvent: (event) {
+        if (event is ClaudeTextDelta) streamed = true;
+        if (event is ClaudeCompacted) compacted = event;
         if (gaiaEventOf(event) case final event?) onEvent(event);
       },
     );
@@ -254,6 +335,14 @@ class ClaudeCodeRunner
         notice ??=
             'Claude Code may still remember the message you stopped '
             "earlier: it wouldn't resume from before it.";
+      }
+    }
+    // A command the CLI ran itself: its output comes whole, in the result.
+    if (!result.isError && !streamed && prompt.trimLeft().startsWith('/')) {
+      final output = claudeCommandOutput(result.text, compacted);
+      if (output.isNotEmpty) {
+        onEvent(const GaiaTextStart());
+        onEvent(GaiaTextDelta(output));
       }
     }
     return GaiaTurnResult(
@@ -500,6 +589,67 @@ class ClaudeCodeRunner
 
   @override
   bool isRunning(String chatId) => _live[chatId]?.inTurn ?? false;
+
+  /// Each config dir's commands, read once per companion run.
+  final _nativeCommands = <String, Future<List<GaiaNativeCommand>>>{};
+
+  @override
+  Future<List<GaiaNativeCommand>> nativeCommands(GaiaAccount? account) {
+    final configDir = account?.dir ?? '';
+    return _nativeCommands[configDir] ??= _readNativeCommands(configDir)
+        .catchError((Object error) {
+          debugPrint('[gaia] Claude Code commands not read: $error');
+          return const <GaiaNativeCommand>[];
+        })
+        .then((commands) {
+          // Asked again next time: the CLI may not have been ready.
+          if (commands.isEmpty) _nativeCommands.remove(configDir);
+          return commands;
+        });
+  }
+
+  /// The commands an `initialize` response lists (GAIA_NATIVE_COMMANDS.md
+  /// §3), from a process started just to hear it and then killed. No message
+  /// goes, so it makes no session (checked on 2.1.319). Safe mode lists only
+  /// Claude Code's bundled commands and skills, not the user's own.
+  Future<List<GaiaNativeCommand>> _readNativeCommands(String configDir) async {
+    final sessionId = _uuid.v4();
+    final _ClaudeProcess process;
+    try {
+      process = await _ClaudeProcess.start(
+        workingDirectory: workingDirectory,
+        // Any: no model is called.
+        model: 'haiku',
+        effort: null,
+        configDir: configDir,
+        onLine: null,
+        directories: const {},
+        sessionId: sessionId,
+        cut: null,
+        fork: null,
+        sessionArgs: ['--session-id', sessionId],
+      );
+    } on ProcessException catch (error) {
+      debugPrint('[gaia] Claude Code commands not read: $error');
+      return const [];
+    }
+    try {
+      final refused = await process.ready.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => 'no initialize response',
+      );
+      if (refused != null) {
+        debugPrint('[gaia] Claude Code commands not read: $refused');
+        return const [];
+      }
+      return [
+        for (final command in process.commands ?? const <GaiaNativeCommand>[])
+          if (!kClaudeBlockedCommands.containsKey(command.name)) command,
+      ];
+    } finally {
+      await process.kill();
+    }
+  }
 
   /// GAIA.md changed. Processes between turns are let go, so each chat's
   /// next message resumes under the new text; one mid-turn finishes on the
@@ -982,6 +1132,9 @@ class _ClaudeProcess {
   /// An `init` came: the CLI started or resumed a session. Once a process.
   var started = false;
 
+  /// The `/` commands its `initialize` response listed; null before it.
+  List<GaiaNativeCommand>? commands;
+
   /// The model `init` named: [model] resolved, as `modelUsage` keys it.
   String? sessionModel;
   Timer? _idle;
@@ -1121,6 +1274,9 @@ class _ClaudeProcess {
       requestId: 'gaia_initialize',
       :final error,
     )) {
+      if (event case ClaudeControlResponse(:final commands?)) {
+        this.commands = commands;
+      }
       if (error == null && !_ready.isCompleted) _ready.complete(null);
       if (error != null) _settle(error);
     }

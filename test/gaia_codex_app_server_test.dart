@@ -966,4 +966,90 @@ void main() {
       expect(result.text, isNot('Stopped.'), reason: reason);
     }
   });
+
+  // GAIA_NATIVE_COMMANDS.md §6: `/compact` is the server's own request, a
+  // turn with no reply (shapes recorded on 0.166.0).
+  test('compacting resumes the thread, then waits on its own turn', () async {
+    final sent = <Map<String, Object?>>[];
+    final client = CodexAppServerClient(
+      (line) => sent.add((jsonDecode(line) as Map).cast()),
+    );
+    unawaited(client.initialize());
+    client.onLine('{"id":1,"result":{}}');
+    final turn = client.send(
+      threadId: _thread,
+      model: 'gpt-6.1-sol',
+      input: const [],
+      tools: null,
+      onEvent: (_) {},
+      compact: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    client.onLine('{"id":2,"result":{}}');
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.last['method'], 'thread/compact/start');
+    expect(sent.last['params'], {'threadId': _thread});
+    expect(sent.any((m) => m['method'] == 'turn/start'), isFalse);
+    client
+      ..onLine('{"id":3,"result":{}}')
+      ..onLine(
+        '{"method":"turn/started","params":{"threadId":"$_thread",'
+        '"turn":{"id":"t1","items":[],"status":"inProgress"}}}',
+      )
+      ..onLine(
+        '{"method":"item/started","params":{"item":{"type":'
+        '"contextCompaction","id":"c1"},"threadId":"$_thread",'
+        '"turnId":"t1"}}',
+      )
+      ..onLine(
+        '{"method":"turn/completed","params":{"threadId":"$_thread",'
+        '"turn":{"id":"t1","items":[],"status":"completed"}}}',
+      );
+    final result = await turn;
+    expect(result.isError, isFalse);
+    expect(result.sessionId, _thread);
+  });
+
+  test('skills are listed enabled only, with their files', () async {
+    final client = CodexAppServerClient((_) {});
+    unawaited(client.initialize());
+    client.onLine('{"id":1,"result":{}}');
+    final skills = client.listSkills(r'C:\work');
+    client.onLine(
+      jsonEncode({
+        'id': 2,
+        'result': {
+          'data': [
+            {
+              'cwd': r'C:\work',
+              'errors': <Object?>[],
+              'skills': [
+                {
+                  'name': 'imagegen',
+                  'description': 'Generate or edit raster images',
+                  'enabled': true,
+                  'path': r'C:\home\skills\.system\imagegen\SKILL.md',
+                  'scope': 'system',
+                },
+                {
+                  'name': 'off',
+                  'description': 'Turned off',
+                  'enabled': false,
+                  'path': r'C:\home\skills\off\SKILL.md',
+                  'scope': 'user',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    expect(await skills, [
+      (
+        name: 'imagegen',
+        description: 'Generate or edit raster images',
+        path: r'C:\home\skills\.system\imagegen\SKILL.md',
+      ),
+    ]);
+  });
 }

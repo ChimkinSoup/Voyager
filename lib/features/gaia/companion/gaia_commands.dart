@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 
@@ -26,8 +27,8 @@ enum GaiaBuiltin {
   final String description;
 }
 
-/// One row of the `/` palette: a built-in, a tier, an account's alias, or a
-/// user's command.
+/// One row of the `/` palette: a built-in, a tier, an account's alias, a
+/// user's command, or one of the CLI's own (GAIA_NATIVE_COMMANDS.md).
 typedef GaiaPaletteItem = ({
   String name,
   String description,
@@ -35,54 +36,83 @@ typedef GaiaPaletteItem = ({
   GaiaTier? tier,
   GaiaAccount? account,
   GaiaCommand? command,
+  GaiaNativeCommand? native,
 });
 
 List<GaiaPaletteItem> gaiaPaletteItems(
   List<GaiaCommand> commands, {
   List<GaiaAccount> accounts = const [],
-}) => [
-  for (final builtin in GaiaBuiltin.values)
-    (
-      name: builtin.name,
-      description: builtin.description,
-      builtin: builtin,
-      tier: null,
-      account: null,
-      command: null,
-    ),
-  for (final tier in GaiaTier.values)
-    (
-      name: tier.command.substring(1),
-      description: 'Switch to ${tier.label}',
-      builtin: null,
-      tier: tier,
-      account: null,
-      command: null,
-    ),
-  for (final account in accounts)
-    if (account.alias.isNotEmpty)
+  List<GaiaNativeCommand> natives = const [],
+}) {
+  final taken = {
+    for (final builtin in GaiaBuiltin.values) builtin.name,
+    for (final tier in GaiaTier.values) tier.command.substring(1),
+    for (final account in accounts)
+      if (account.alias.isNotEmpty) account.alias,
+    for (final command in commands) command.name,
+  };
+  return [
+    for (final builtin in GaiaBuiltin.values)
       (
-        name: account.alias,
-        description:
-            'Switch to ${account.label} '
-            '(${kGaiaClis[account.adapter]?.name ?? account.adapter})',
+        name: builtin.name,
+        description: builtin.description,
+        builtin: builtin,
+        tier: null,
+        account: null,
+        command: null,
+        native: null,
+      ),
+    for (final tier in GaiaTier.values)
+      (
+        name: tier.command.substring(1),
+        description: 'Switch to ${tier.label}',
+        builtin: null,
+        tier: tier,
+        account: null,
+        command: null,
+        native: null,
+      ),
+    for (final account in accounts)
+      if (account.alias.isNotEmpty)
+        (
+          name: account.alias,
+          description:
+              'Switch to ${account.label} '
+              '(${kGaiaClis[account.adapter]?.name ?? account.adapter})',
+          builtin: null,
+          tier: null,
+          account: account,
+          command: null,
+          native: null,
+        ),
+    for (final command in commands)
+      (
+        name: command.name,
+        description: command.description.isEmpty
+            ? command.template.split('\n').first
+            : command.description,
         builtin: null,
         tier: null,
-        account: account,
-        command: null,
+        account: null,
+        command: command,
+        native: null,
       ),
-  for (final command in commands)
-    (
-      name: command.name,
-      description: command.description.isEmpty
-          ? command.template.split('\n').first
-          : command.description,
-      builtin: null,
-      tier: null,
-      account: null,
-      command: command,
-    ),
-];
+    // The CLI's own, less any a row above already names: Gaia's win.
+    for (final native in natives)
+      if (!taken.contains(native.name))
+        (
+          name: native.name,
+          description: native.argumentHint.isEmpty
+              ? native.description
+              : '${native.description} (${native.argumentHint})',
+          builtin: null,
+          tier: null,
+          account: null,
+          command: null,
+          native: native,
+        ),
+  ];
+}
 
 /// [items] that fuzzily match [query] (what's typed after the slash),
 /// best first: the very name, a prefix, then a substring, then the letters in
@@ -201,4 +231,63 @@ String? gaiaThisRest(String draft) {
 GaiaBuiltin? gaiaBuiltinIn(String draft) {
   final text = draft.trim();
   return GaiaBuiltin.values.where((b) => '/${b.name}' == text).firstOrNull;
+}
+
+/// The CLI command (GAIA_NATIVE_COMMANDS.md) [draft] starts with: `/name`,
+/// then a space or the end. Null when it starts with none of [natives].
+GaiaNativeCommand? gaiaNativeIn(String draft, List<GaiaNativeCommand> natives) {
+  final name = RegExp(r'^/([\w-]+)(?:\s|$)').firstMatch(draft.trim());
+  if (name == null) return null;
+  return natives.where((n) => n.name == name.group(1)).firstOrNull;
+}
+
+/// A `/word` starting [draft] that no row of [items] names (GAIA_NATIVE_COMMANDS.md
+/// §7), with the closest one's name as [suggestion]; null when the draft
+/// doesn't start with a `/word`, or one of [items] is it. A word with a
+/// second slash in it, as a path's `/usr/bin`, isn't a `/word`.
+({String word, String? suggestion})? gaiaUnknownCommand(
+  String draft,
+  List<GaiaPaletteItem> items,
+) {
+  final match = RegExp(r'^/([\w-]+)(?:\s|$)').firstMatch(draft.trim());
+  if (match == null) return null;
+  final word = match.group(1)!;
+  if (items.any((item) => item.name == word)) return null;
+  return (
+    word: word,
+    suggestion:
+        filterGaiaPalette(items, word).firstOrNull?.name ??
+        gaiaClosestName(word, [for (final item in items) item.name]),
+  );
+}
+
+/// The one of [names] fewest edits from [word], when it's at most two away:
+/// a typo's like `/qeueu`, which [filterGaiaPalette] wouldn't match.
+String? gaiaClosestName(String word, List<String> names) {
+  int distance(String a, String b) {
+    var row = List.generate(b.length + 1, (i) => i);
+    for (var i = 1; i <= a.length; i++) {
+      final next = [i, ...List.filled(b.length, 0)];
+      for (var j = 1; j <= b.length; j++) {
+        next[j] = [
+          row[j] + 1,
+          next[j - 1] + 1,
+          row[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1),
+        ].reduce((x, y) => x < y ? x : y);
+      }
+      row = next;
+    }
+    return row[b.length];
+  }
+
+  String? best;
+  var bestDistance = 3;
+  for (final name in names) {
+    final d = distance(word.toLowerCase(), name.toLowerCase());
+    if (d < bestDistance) {
+      best = name;
+      bestDistance = d;
+    }
+  }
+  return best;
 }

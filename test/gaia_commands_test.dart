@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 
 /// Slash commands (GAIA_HLD.md §9.2): templates, built-ins and the palette.
@@ -164,5 +165,66 @@ void main() {
       filterGaiaPalette(items, 'explain').single.description,
       'Plain words',
     );
+  });
+
+  // GAIA_NATIVE_COMMANDS.md.
+  group('native commands', () {
+    const natives = <GaiaNativeCommand>[
+      (
+        name: 'compact',
+        description: 'Free up context',
+        argumentHint: '[focus]',
+      ),
+      (name: 'usage', description: 'Show usage', argumentHint: ''),
+      // Clashes with Gaia's own /new: Gaia's wins.
+      (name: 'new', description: 'Clear the session', argumentHint: ''),
+    ];
+
+    test("the palette lists them after Gaia's, which win a clash", () {
+      final items = gaiaPaletteItems(commands, natives: natives);
+      expect(
+        items.where((i) => i.name == 'new').single.builtin,
+        GaiaBuiltin.newChat,
+      );
+      final compact = items.singleWhere((i) => i.name == 'compact');
+      expect(compact.native, natives.first);
+      expect(compact.description, 'Free up context ([focus])');
+    });
+
+    test('a draft starting with one, then a space or the end, is one', () {
+      expect(gaiaNativeIn('/compact', natives), natives[0]);
+      expect(gaiaNativeIn(' /compact keep the API notes', natives), natives[0]);
+      expect(gaiaNativeIn('/compacted', natives), isNull);
+      expect(gaiaNativeIn('please /usage', natives), isNull);
+    });
+
+    group('an unknown /word', () {
+      final items = gaiaPaletteItems(commands, natives: natives);
+
+      test('is caught with the closest command', () {
+        expect(gaiaUnknownCommand('/quee fix the tests', items), (
+          word: 'quee',
+          suggestion: 'queue',
+        ));
+        // Not a prefix or letters in order: the fewest edits.
+        expect(gaiaUnknownCommand('/usgae', items)?.suggestion, 'usage');
+      });
+
+      test('says only that when nothing is close', () {
+        expect(gaiaUnknownCommand('/zzzzzz', items), (
+          word: 'zzzzzz',
+          suggestion: null,
+        ));
+      });
+
+      test("isn't a known command, a path, or a slash later on", () {
+        expect(gaiaUnknownCommand('/usage', items), isNull);
+        expect(gaiaUnknownCommand('/explain this', items), isNull);
+        expect(gaiaUnknownCommand('/usr/bin is missing', items), isNull);
+        expect(gaiaUnknownCommand('/etc/hosts', items), isNull);
+        expect(gaiaUnknownCommand('look in /etc', items), isNull);
+        expect(gaiaUnknownCommand('', items), isNull);
+      });
+    });
   });
 }
