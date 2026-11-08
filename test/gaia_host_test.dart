@@ -79,6 +79,20 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   Future<String?> address(int hwnd) async => null;
   @override
+  Future<GaiaDirectResult?> direct(
+    int hwnd, {
+    required bool browser,
+    required ({String name, String? type})? control,
+    required ({int x, int y}) at,
+    required GaiaDirectAct act,
+  }) async => (ran: null, miss: GaiaDirectMiss.noPattern);
+  @override
+  bool cloaked(int hwnd) => false;
+  @override
+  List<int> appWindows(int pid, int owner) => const [];
+  @override
+  int owner(int hwnd) => 0;
+  @override
   Future<bool?> focusSensitive(int hwnd, {required bool browser}) async =>
       false;
   @override
@@ -88,7 +102,9 @@ class _ControlBackend implements GaiaInputBackend {
   @override
   int lastInput() => 0;
   @override
-  void watchInput(bool on) {}
+  bool watchInput(bool on) => on;
+  @override
+  Duration? sinceUserSwitch() => null;
   @override
   void moveCursor(int x, int y) {}
   @override

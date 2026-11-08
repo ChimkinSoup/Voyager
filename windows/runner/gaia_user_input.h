@@ -8,6 +8,19 @@
 // moving or its wheel (GAIA_AUTONOMY_HLD.md §5.2).
 bool GaiaIsUserPress(bool keyboard, WPARAM message, DWORD flags);
 
+// What a low-level keyboard hook has seen of a keyboard window switch so far.
+struct GaiaSwitchKeys {
+  bool alt_tab = false;
+  bool win = false;
+};
+
+// Whether a low-level keyboard hook's event, in order after those |state|
+// has seen, ends the user's own window switch: Alt let go after Tab was
+// pressed with it (Alt+Tab), or a key pressed with Win held (Win+1 to Win+9,
+// Win+E and the like). Injected keys are left out.
+bool GaiaEndsSwitch(GaiaSwitchKeys& state, WPARAM message, DWORD vk,
+                    DWORD flags);
+
 // An Auto session's watch for the user stepping in, looked up by Dart over FFI.
 // With |on|, low-level hooks on a thread of their own count the user's presses;
 // returns 0 if they couldn't go in. Off takes them out.
@@ -15,5 +28,9 @@ extern "C" __declspec(dllexport) int GaiaWatchUserInput(int on);
 
 // The user's presses counted so far.
 extern "C" __declspec(dllexport) unsigned int GaiaUserInputCount();
+
+// Milliseconds since the user last switched windows from the keyboard, as
+// GaiaEndsSwitch tells; 0xFFFFFFFF if they haven't while the hooks were in.
+extern "C" __declspec(dllexport) unsigned int GaiaUserSwitchAge();
 
 #endif  // RUNNER_GAIA_USER_INPUT_H_

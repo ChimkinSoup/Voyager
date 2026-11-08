@@ -61,6 +61,7 @@ void main() {
         'voyager_calendar',
         'voyager_journal',
         'voyager_workouts',
+        'voyager_trackers',
         'propose_todo',
         'propose_calendar_event',
         'propose_journal_entry',

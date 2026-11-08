@@ -215,6 +215,10 @@ dependency_overrides:
     path: third_party/irondash_engine_context-0.5.5
   super_native_extensions:
     path: third_party/super_native_extensions-0.9.1
+  # Patched: a toast Windows won't show returns false instead of aborting the
+  # app on an uncaught WinRT error (VOYAGER PATCH in src/ffi_api.cpp, BUG-375).
+  flutter_local_notifications_windows:
+    path: third_party/flutter_local_notifications_windows-3.1.1
 
 flutter:
   uses-material-design: true

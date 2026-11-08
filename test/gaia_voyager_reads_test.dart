@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -20,6 +22,7 @@ void main() {
       calendar: DriftCalendarRepository(db),
       journal: DriftJournalRepository(db),
       workouts: DriftWorkoutRepository(db),
+      trackers: DriftTrackerRepository(db),
       now: () => DateTime(2026, 10, 28, 9),
     );
   });
@@ -201,6 +204,199 @@ void main() {
     expect(text, contains('Mood: 6/10'));
     expect(text, contains('Rainy.'));
     expect(text, isNot(contains('Out of range.')));
+  });
+
+  test('trackers: each tracker\'s readings in the range, filtered by '
+      'name', () async {
+    final trackers = DriftTrackerRepository(db);
+    Future<void> tracker(String id, String name, TrackerType type) =>
+        trackers.upsertTracker(
+          StatisticTracker(
+            id: id,
+            createdAt: at,
+            updatedAt: at,
+            name: name,
+            type: type,
+            cadence: TrackerCadence.daily,
+          ),
+        );
+    await tracker('k1', 'Weight', TrackerType.integer);
+    await tracker('k2', 'Meditated', TrackerType.boolean);
+    await tracker('k3', 'Pushups', TrackerType.counter);
+    for (final (id, day, kg) in [
+      ('v1', 26, 82.4),
+      ('v2', 27, 82.1),
+      ('v3', 20, 90.0),
+    ]) {
+      await trackers.upsertValue(
+        TrackerValue(
+          id: id,
+          createdAt: at,
+          updatedAt: at,
+          trackerId: 'k1',
+          periodStart: DateTime(2026, 10, day),
+          intValue: kg,
+        ),
+      );
+    }
+    await trackers.upsertValue(
+      TrackerValue(
+        id: 'v4',
+        createdAt: at,
+        updatedAt: at,
+        trackerId: 'k2',
+        periodStart: DateTime(2026, 10, 27),
+        boolValue: true,
+      ),
+    );
+    for (final (id, day, delta) in [('a1', 26, 10), ('a2', 27, 5)]) {
+      await trackers.upsertAdjustment(
+        CounterAdjustment(
+          id: id,
+          createdAt: at,
+          updatedAt: at,
+          trackerId: 'k3',
+          day: DateTime(2026, 10, day),
+          deviceId: 'd1',
+          delta: delta,
+        ),
+      );
+    }
+
+    final all = await reads.read('voyager_trackers', {
+      'from': '2026-10-26',
+      'to': '2026-10-27',
+    });
+    expect(
+      all,
+      contains(
+        '## Weight (number, daily)\n'
+        '- 2026-10-26 Monday: 82.4\n'
+        '- 2026-10-27 Tuesday: 82.1',
+      ),
+    );
+    expect(all, isNot(contains(': 90')));
+    expect(
+      all,
+      contains('## Meditated (yes/no, daily)\n- 2026-10-27 Tuesday: yes'),
+    );
+    expect(all, contains('- 2026-10-27 Tuesday: 15'));
+
+    final weight = await reads.read('voyager_trackers', {
+      'from': '2026-10-01',
+      'to': '2026-10-28',
+      'tracker': 'weight',
+    });
+    expect(weight, contains('- 2026-10-20 Tuesday: 90'));
+    expect(weight, isNot(contains('Meditated')));
+
+    await expectLater(
+      reads.read('voyager_trackers', {
+        'from': '2026-10-01',
+        'to': '2026-10-28',
+        'tracker': 'Sleep',
+      }),
+      throwsA(isA<GaiaReadException>()),
+    );
+  });
+
+  test('trackers: periods overlapping the range, off-cadence rows hidden, '
+      'limits ordered', () async {
+    final trackers = DriftTrackerRepository(db);
+    await trackers.upsertTracker(
+      StatisticTracker(
+        id: 'm1',
+        createdAt: at,
+        updatedAt: at,
+        name: 'Mood',
+        type: TrackerType.integer,
+        cadence: TrackerCadence.monthly,
+        defaultInt: 10,
+        integerCap: 5,
+      ),
+    );
+    await trackers.upsertTracker(
+      StatisticTracker(
+        id: 'w1',
+        createdAt: at,
+        updatedAt: at,
+        name: 'Runs',
+        type: TrackerType.integer,
+        cadence: TrackerCadence.weekly,
+      ),
+    );
+    for (final (id, trackerId, day, n) in [
+      ('mv', 'm1', DateTime(2026, 10, 1), 7.0),
+      ('wv', 'w1', DateTime(2026, 10, 26), 3.0), // Monday: this week.
+      ('old', 'w1', DateTime(2026, 10, 22), 9.0), // Thursday: a daily row.
+    ]) {
+      await trackers.upsertValue(
+        TrackerValue(
+          id: id,
+          createdAt: at,
+          updatedAt: at,
+          trackerId: trackerId,
+          periodStart: day,
+          intValue: n,
+        ),
+      );
+    }
+
+    await trackers.upsertTracker(
+      StatisticTracker(
+        id: 'c1',
+        createdAt: at,
+        updatedAt: at,
+        name: 'Pages',
+        type: TrackerType.counter,
+        cadence: TrackerCadence.daily,
+      ),
+    );
+    for (final (id, day, delta) in [('p1', 16, 4), ('p2', 20, 6)]) {
+      await trackers.upsertAdjustment(
+        CounterAdjustment(
+          id: id,
+          createdAt: at,
+          updatedAt: at,
+          trackerId: 'c1',
+          day: DateTime(2026, 10, day),
+          deviceId: 'd1',
+          delta: delta,
+        ),
+      );
+    }
+
+    final text = await reads.read('voyager_trackers', {
+      'from': '2026-10-15',
+      'to': '2026-10-28',
+    });
+    expect(
+      text,
+      contains(
+        '## Pages (counter, running total, listed where it changed, daily)\n'
+        '- 2026-10-15 Thursday: 0\n'
+        '- 2026-10-16 Friday: 4\n'
+        '- 2026-10-20 Tuesday: 10\n</voyager_data>',
+      ),
+    );
+    expect(
+      text,
+      contains(
+        '## Mood (number from 5 to 10, monthly, dated by period start)\n'
+        '- 2026-10-01 Thursday: 7',
+      ),
+    );
+    expect(text, contains('- 2026-10-26 Monday: 3'));
+    expect(text, isNot(contains(': 9')));
+
+    await expectLater(
+      reads.read('voyager_trackers', {
+        'from': '2026-10-01',
+        'to': '2026-10-28',
+        'tracker': ['Mood'],
+      }),
+      throwsA(isA<GaiaReadException>()),
+    );
   });
 
   test('an unknown tool is refused', () async {

@@ -1016,6 +1016,8 @@ class GaiaHost {
     };
     final acting = switch (_osControl.sessionChat) {
       null => '',
+      _ when _osControl.sessionWaiting != null =>
+        ' · Gaia is waiting to use ${_osControl.sessionWaiting}',
       _ when _osControl.sessionPaused => ' · Paused',
       _ => ' · Esc to stop',
     };

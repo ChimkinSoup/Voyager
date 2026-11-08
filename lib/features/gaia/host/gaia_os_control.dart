@@ -86,6 +86,28 @@ abstract interface class GaiaInputBackend {
     required ({String name, String? type}) control,
   });
 
+  /// Calls [act] on [hwnd]'s control named [control] at [at] through UI
+  /// Automation, sending no input (GAIA_AUTONOMY_HLD.md §13.3); a scroll with
+  /// no [control] scrolls the window's largest scrollable control. Null when
+  /// the app didn't answer in time, by which point the call may have landed.
+  Future<GaiaDirectResult?> direct(
+    int hwnd, {
+    required bool browser,
+    required ({String name, String? type})? control,
+    required ({int x, int y}) at,
+    required GaiaDirectAct act,
+  });
+
+  /// Whether [hwnd] is cloaked: on another virtual desktop.
+  bool cloaked(int hwnd);
+
+  /// The visible, titled top-level windows of process [pid] or owned by
+  /// [owner] ([gaiaAppWindows]).
+  List<int> appWindows(int pid, int owner);
+
+  /// [hwnd]'s owner window; 0 for none.
+  int owner(int hwnd);
+
   /// A browser's address; null when it can't be read.
   Future<String?> address(int hwnd);
 
@@ -102,8 +124,13 @@ abstract interface class GaiaInputBackend {
   /// every 16 ms, so input in the same tick as Gaia's can't be told from it.
   int lastInput();
 
-  /// Turns on the runner's count for [lastInput], for an Auto session.
-  void watchInput(bool on);
+  /// Turns on the runner's count for [lastInput], for an Auto session: whether
+  /// it's on.
+  bool watchInput(bool on);
+
+  /// How long ago the user last switched windows from the keyboard (Alt+Tab,
+  /// Win+1 and the like), while [watchInput] is on; else null.
+  Duration? sinceUserSwitch();
   void moveCursor(int x, int y);
 
   /// Where the cursor is.
@@ -216,6 +243,8 @@ class GaiaOsControl {
     this._pauseLimit = const Duration(minutes: 5),
     this._openWait = const Duration(seconds: 10),
     this._holdLimit = const Duration(seconds: 5),
+    this._pauseBefore = const Duration(seconds: 2),
+    this._frontWait = const Duration(seconds: 30),
   }) : _voyagerPid = voyagerPid ?? pid,
        _backend = backend ?? _Win32InputBackend();
 
@@ -258,9 +287,19 @@ class GaiaOsControl {
   /// The longest a drag holds the button (§8.4).
   final Duration _holdLimit;
 
+  /// How long the user must have pressed nothing for a step that needs the
+  /// front to bring its window there, and how long such a step waits for
+  /// that (§13.4).
+  final Duration _pauseBefore;
+  final Duration _frontWait;
+
   final _plans = <String, _Plan>{};
   _Active? _active;
   _Session? _session;
+
+  /// Whether [GaiaInputBackend.lastInput] is the runner's press count, which
+  /// mouse moves and Gaia's own input don't move.
+  var _inputCounted = false;
 
   static const _reask = Duration(milliseconds: 250);
   static const _maxSteps = 20;
@@ -313,6 +352,10 @@ class GaiaOsControl {
   /// The session waits while Gaia is in front (§5.2).
   bool get sessionPaused => _session?.pausedAt != null;
 
+  /// The app a step that needs the front is waiting to use, for the user to
+  /// pause first (§13.4).
+  String? get sessionWaiting => _session?.waiting;
+
   /// The user answered Gaia mid-run, or dragged its window (§5.2): a session
   /// waiting for its window to come back in front goes on, and its next step
   /// brings it there. Any chat's without [chatId].
@@ -353,7 +396,7 @@ class GaiaOsControl {
           'session is locked. os_open can open one.',
         );
       }
-      _backend.watchInput(true);
+      _inputCounted = _backend.watchInput(true);
       final front = _backend.foreground();
       final started = session = _session = _Session(
         chatId,
@@ -394,6 +437,7 @@ class GaiaOsControl {
     final session = _session;
     if (session == null || (chatId != null && session.chatId != chatId)) return;
     session.watch?.cancel();
+    _giveBackWatch?.cancel();
     _backend.watchInput(false);
     session.latch ??= 'The turn ended.';
     if (_active?.chatId == session.chatId) _active!.stop(session.latch!);
@@ -402,22 +446,61 @@ class GaiaOsControl {
   }
 
   /// One look for the user stepping in (§5.2, §5.3), every 20 ms for the whole
-  /// session, whatever the agent is doing.
+  /// session, whatever the agent is doing. The user may work in another window
+  /// meanwhile (§13.5).
   void _look(_Session session) {
     if (session.latch != null) return;
     final now = DateTime.now();
+    final mark = session.inputMark;
     _noteUserInput(session, now);
-    if (_backend.escapeDown() && !now.isBefore(session.ownEscapeUntil)) {
+    final front = _backend.foreground();
+    final pin = session.pin;
+    // Only the runner's count leaves out Gaia's own input.
+    if (_inputCounted &&
+        session.inputMark != mark &&
+        front != 0 &&
+        _backend.describe(front)?.pid == session.watchApp?.pid) {
+      session.lastUserInApp = now;
+    }
+    // A press in the pinned window, already in front, is the user taking it
+    // over (§13.5). Not the click that brings it there, nor during a step
+    // that needs the front.
+    if (_inputCounted &&
+        session.inputMark != mark &&
+        pin != null &&
+        front == pin.hwnd &&
+        session.lastFront == pin.hwnd &&
+        !session.frontStep) {
+      return _userStop(
+        session,
+        'The user pressed a key or clicked in ${pin.app}, taking it over.',
+      );
+    }
+    // Esc in the user's own app, closing a menu there, isn't for Gaia.
+    if (_backend.escapeDown() &&
+        !now.isBefore(session.ownEscapeUntil) &&
+        front != 0 &&
+        (front == pin?.hwnd ||
+            _backend.describe(front)?.pid == companionPid())) {
       return _userStop(session, 'The user pressed Esc.');
     }
+    _adoptBehind(session, now);
     final pausedAt = session.pausedAt;
     if (pausedAt != null && now.difference(pausedAt) > _pauseLimit) {
       return _userStop(session, 'Gaia stayed in front for too long.');
     }
-    final front = _backend.foreground();
     // Mid-switch, nothing is in front.
-    if (front == 0 || front == session.lastFront) return;
+    if (front == 0) return;
+    if (front == session.lastFront) {
+      // Given back between two looks, unseen.
+      if (front == session.givingBack) session.givingBack = null;
+      return;
+    }
     session.lastFront = front;
+    if (front == session.givingBack) {
+      session.givingBack = null;
+      return;
+    }
     if (front == session.pin?.hwnd) {
       session
         ..engaged = true
@@ -440,7 +523,6 @@ class GaiaOsControl {
     // still Gaia's doing: a splash handing over to its main window (BUG-362).
     // Not a further window while the pin stays open, as Outlook's reminder
     // beside its main window would be.
-    final pin = session.pin;
     final stepStarted = session.stepStarted;
     final untouched =
         stepStarted != null &&
@@ -450,8 +532,10 @@ class GaiaOsControl {
     final caused =
         lastStep != null &&
         (now.difference(lastStep) <= _adoptWithin ||
+            session.directCall ||
             (untouched && pinsApp && pinClosed)) &&
-        (lastUser == null || now.difference(lastUser) > _adoptWithin);
+        (lastUser == null || now.difference(lastUser) > _adoptWithin) &&
+        !_userSwitchedWithin(_adoptWithin);
     if (!caused) {
       // A splash may show its main window a moment before it closes, or close
       // first, and Windows puts another window in front until the main one
@@ -468,8 +552,9 @@ class GaiaOsControl {
           return;
         }
       }
+      // The user's own switch: they work there while Gaia goes on (§13.5).
       session.handover = null;
-      return _userStop(session, 'The user switched to another window.');
+      return;
     }
     session.handover = null;
     // The taskbar and the desktop aren't windows to act in; the next step
@@ -488,11 +573,82 @@ class GaiaOsControl {
     });
   }
 
+  /// A new window of the pinned window's app, or one it owns, within
+  /// [_adoptWithin] of a step: opened by that step, maybe behind, as Windows
+  /// keeps a background app's dialog from taking the front (§13.5).
+  void _adoptBehind(_Session session, DateTime now) {
+    final watch = session.watchApp;
+    final lastStep = session.lastStep;
+    if (watch == null ||
+        lastStep == null ||
+        (now.difference(lastStep) > _adoptWithin && !session.directCall)) {
+      return;
+    }
+    // A window the user may have opened in that app themselves (§13.5).
+    final inApp = session.lastUserInApp;
+    final started = session.stepStarted;
+    if (inApp != null && started != null && !inApp.isBefore(started)) return;
+    if (started != null && _userSwitchedWithin(now.difference(started))) return;
+    // After the user pressed anything since the step began, another window of
+    // the app may be theirs, opened from elsewhere (a document from Explorer):
+    // only a window the pin owns, a dialog of the step's, is Gaia's.
+    final lastUser = session.lastUserInput;
+    final userSince =
+        started != null && lastUser != null && !lastUser.isBefore(started);
+    // Past [_adoptWithin], only a held call's modal dialog: look less often.
+    if (now.difference(lastStep) > _adoptWithin) {
+      final looked = session.heldLook;
+      if (looked != null && now.difference(looked) < _heldLookEvery) return;
+      session.heldLook = now;
+    }
+    for (final hwnd in _backend.appWindows(watch.pid, watch.hwnd)) {
+      if (!watch.known.add(hwnd) || hwnd == session.pin?.hwnd) continue;
+      if (userSince && _backend.owner(hwnd) != watch.hwnd) continue;
+      final window = _backend.describe(hwnd);
+      if (window == null || window.pid == companionPid()) continue;
+      session
+        ..pin = window
+        ..adopted = '${window.app}: ${jsonEncode(window.title)}';
+      // The rest opened with it, not as later windows to move the pin to.
+      watch.known.addAll(_backend.appWindows(watch.pid, watch.hwnd));
+      final frame = _backend.frame(hwnd);
+      if (_visible(window, (
+        x: frame.left + frame.width ~/ 2,
+        y: frame.top + frame.height ~/ 2,
+      ))) {
+        flash?.call({'kind': 'window', ..._rectOf(frame), 'label': window.app});
+      }
+      return;
+    }
+  }
+
+  /// How often [_adoptBehind] looks while a held direct call keeps it going.
+  static const _heldLookEvery = Duration(milliseconds: 250);
+
+  /// What a step's new windows are told apart from (§13.5).
+  void _watchApp(_Session? session, GaiaForegroundWindow window) {
+    if (session == null) return;
+    session.watchApp = (
+      pid: window.pid,
+      hwnd: window.hwnd,
+      known: _backend.appWindows(window.pid, window.hwnd).toSet(),
+    );
+  }
+
+  /// Whether [at] in [window] is on screen for the user to see, so a flash
+  /// there marks something (§13.6).
+  bool _visible(GaiaForegroundWindow window, ({int x, int y}) at) =>
+      !_backend.minimized(window.hwnd) &&
+      !_backend.cloaked(window.hwnd) &&
+      _rootAt(at.x, at.y) == window.hwnd;
+
   void _paused(_Session session, DateTime? at) {
     final changed = (session.pausedAt == null) != (at == null);
     session.pausedAt = at;
     if (changed) onSession?.call();
   }
+
+  static const _taskbars = {'Shell_TrayWnd', 'Shell_SecondaryTrayWnd'};
 
   static const _taskbarOrDesktop = {
     'Shell_TrayWnd',
@@ -604,14 +760,18 @@ class GaiaOsControl {
     final activateFirst = plan.next;
     try {
       do {
-        await _step(
-          plan,
-          active,
-          check,
-          // In a run approved once, Gaia comes in front only if the user
-          // clicked it, which is the window changing.
-          mayActivate: !once || plan.next == activateFirst,
-        );
+        try {
+          await _step(
+            plan,
+            active,
+            check,
+            // In a run approved once, Gaia comes in front only if the user
+            // clicked it, which is the window changing.
+            mayActivate: !once || plan.next == activateFirst,
+          );
+        } finally {
+          session?.frontStep = false;
+        }
         plan.next++;
         if (once && plan.next < plan.steps.length) {
           await Future<void>.delayed(_settle);
@@ -645,6 +805,7 @@ class GaiaOsControl {
       'front': ?active.front,
       'unconfirmed': ?active.unconfirmed,
       'adopted': ?session?.takeAdopted(),
+      if (active.notes.isNotEmpty) 'how': active.notes,
       'steps': plan.toCard()['steps'],
     };
   }
@@ -1120,7 +1281,9 @@ class GaiaOsControl {
     }
     await check();
     active.throwIfStopped();
-    await _waitForModifiers(active);
+    // A direct call sends no input, so a held key changes nothing (§13.3).
+    final direct = step.direct;
+    if (!direct) await _waitForModifiers(active);
     if (step.action == _Action.open || step.action == _Action.focus) {
       return _bringUp(step, session, active);
     }
@@ -1135,9 +1298,12 @@ class GaiaOsControl {
       }
       return;
     }
-    final GaiaForegroundWindow window;
+    GaiaForegroundWindow window;
     if (session != null) {
-      window = await _sessionTarget(session, active);
+      // A direct step needs no front, nor waits while Gaia is there (§13.5).
+      window = direct
+          ? _pinned(session, active)
+          : await _sessionTarget(session, active, step);
     } else {
       window = plan.window!;
       if (mayActivate) {
@@ -1171,24 +1337,38 @@ class GaiaOsControl {
         'types into.',
       );
     }
+    _watchApp(session, window);
+    var flashed = false;
+    if (direct) {
+      final at = step.aim(_backend.frame(window.hwnd), match);
+      // Only where the user can see it (§13.6); a set value arrives at once,
+      // as a paste does.
+      if (_visible(window, at)) {
+        flashed = await _flashStep(step, window, match, active, _pasteRead);
+      }
+      if (await _callDirect(window, step, at, active, session)) return;
+      // Not one a pattern can do: as real input, in front (§13.4).
+      if (session != null) {
+        final before = window.hwnd;
+        window = await _sessionTarget(session, active, step);
+        // The control and its point were found in the window before.
+        if (window.hwnd != before) {
+          throw _Stopped(
+            'Another window took over before this step could run as input, '
+            'and later calls act on it. Read the screen again.',
+          );
+        }
+        _checkWindow(window);
+      }
+      await _waitForModifiers(active);
+    }
     final point = step.anywhere
         ? await _anywhereAt(window, step)
         : step.aimed || step.action == _Action.scroll
         ? _pointOf(window, step, match)
         : null;
-    if (flash case final play?) {
-      final shown = step.flash(
-        _backend.frame(window.hwnd),
-        match,
-        preview: false,
-        typing: _typingTime(step, window),
-      );
-      if (shown != null) {
-        play(shown);
-        // The flash leads, so the eye gets there first (§6.2).
-        await Future<void>.delayed(_leadIn);
-        active.throwIfStopped();
-      }
+    if (!flashed) {
+      await _flashStep(step, window, match, active, _typingTime(step, window));
     }
     switch (step.action) {
       case _Action.click:
@@ -1237,6 +1417,190 @@ class GaiaOsControl {
     active.throwIfStopped();
   }
 
+  /// Plays [step]'s flash and waits its lead-in; whether there was one.
+  Future<bool> _flashStep(
+    _Step step,
+    GaiaForegroundWindow window,
+    GaiaControlMatch? match,
+    _Active active,
+    Duration typing,
+  ) async {
+    final play = flash;
+    if (play == null) return false;
+    final shown = step.flash(
+      _backend.frame(window.hwnd),
+      match,
+      preview: false,
+      typing: typing,
+    );
+    if (shown == null) return false;
+    play(shown);
+    // The flash leads, so the eye gets there first (§6.2).
+    await Future<void>.delayed(_leadIn);
+    active.throwIfStopped();
+    return true;
+  }
+
+  /// [step] called on its control through UI Automation (§13.3). False when
+  /// no pattern can do it, so it goes as real input; a refusal stops the run.
+  Future<bool> _callDirect(
+    GaiaForegroundWindow window,
+    _Step step,
+    ({int x, int y}) at,
+    _Active active,
+    _Session? session,
+  ) async {
+    // What it opens is Gaia's doing (§13.5).
+    session?.lastStep = DateTime.now();
+    session?.directCall = true;
+    // Some apps take the front for a call anyway, from inside themselves, as
+    // a WinForms list does for a select, where gaia_uia_quiet.cpp can't stop
+    // it: the window the user was in goes back in front (BUG-372).
+    final before = _backend.foreground();
+    _giveBackWatch?.cancel();
+    _giveBackMark = _backend.lastInput();
+    _pressedAt = null;
+    final watch = _giveBackWatch =
+        before == 0 || _backend.describe(before)?.pid == window.pid
+        ? null
+        : Timer.periodic(
+            const Duration(milliseconds: 10),
+            (_) => _giveBack(before, window, active, session),
+          );
+    final GaiaDirectResult? result;
+    try {
+      result = await _backend.direct(
+        window.hwnd,
+        browser: gaiaIsBrowser(window.exe),
+        control: step.name == null ? null : (name: step.name!, type: step.type),
+        at: at,
+        act: (
+          kind: switch (step.action) {
+            _Action.type => GaiaDirectKind.type,
+            _Action.scroll => GaiaDirectKind.scroll,
+            _ => GaiaDirectKind.click,
+          },
+          text: step.text,
+          direction: step.direction,
+          amount: step.amount,
+        ),
+      );
+    } finally {
+      session?.directCall = false;
+      // A list took the front just as its call returned.
+      if (watch != null) Timer(_giveBackAfter, watch.cancel);
+    }
+    session?.lastStep = DateTime.now();
+    final what = step.name == null ? null : jsonEncode(step.name);
+    if (result == null) {
+      // A modal dialog it opened holds the call until it closes: what the
+      // next read shows.
+      active.notes.add(
+        "${step.directNote(null)}, and ${window.app} hasn't answered yet",
+      );
+      return true;
+    }
+    switch (result.miss) {
+      case null:
+        active.notes.add('${step.directNote(result.ran)} directly');
+        return true;
+      case GaiaDirectMiss.notFound:
+        throw _Stopped('The control $what is not on screen.');
+      case GaiaDirectMiss.sensitive:
+        throw _Stopped(
+          'That is a password, card or one-time code field, which Gaia never '
+          'types into.',
+        );
+      case GaiaDirectMiss.disabled:
+        throw _Stopped('The control $what is disabled.');
+      case GaiaDirectMiss.denied:
+        throw _Stopped(
+          '${window.app} runs as administrator, and Windows blocks Gaia from '
+          'acting in it. The user can do it themselves.',
+        );
+      case GaiaDirectMiss.busy:
+        throw _Stopped(_stuck);
+      case GaiaDirectMiss.noPattern ||
+          GaiaDirectMiss.hasText ||
+          GaiaDirectMiss.page:
+        return false;
+    }
+  }
+
+  /// How long after a direct call returns its app taking the front is still
+  /// its doing.
+  static const _giveBackAfter = Duration(milliseconds: 300);
+
+  /// The watch [_giveBack] runs on; ended when Gaia brings a window to the
+  /// front itself.
+  Timer? _giveBackWatch;
+
+  /// [GaiaInputBackend.lastInput] as [_giveBack] last saw it, and when it last
+  /// moved: the user's press.
+  int? _giveBackMark;
+  DateTime? _pressedAt;
+
+  /// How soon after the user's press a window coming in front is theirs.
+  static const _switchAfterPress = Duration(milliseconds: 300);
+
+  /// Whether the user switched windows from the keyboard within [within].
+  bool _userSwitchedWithin(Duration within) {
+    final since = _backend.sinceUserSwitch();
+    return since != null && since <= within;
+  }
+
+  /// [before] back in front, if [window]'s app took it from there.
+  void _giveBack(
+    int before,
+    GaiaForegroundWindow window,
+    _Active active,
+    _Session? session,
+  ) {
+    final now = DateTime.now();
+    final mark = _backend.lastInput();
+    if (mark != _giveBackMark) {
+      _giveBackMark = mark;
+      _pressedAt = now;
+    }
+    final front = _backend.foreground();
+    if (front == 0 ||
+        front == before ||
+        _backend.describe(front)?.pid != window.pid) {
+      return;
+    }
+    // The user clicking into it, or on the taskbar, just now: their own
+    // switch, which they then work in (§13.5). Typing elsewhere isn't.
+    // Alt+Tab, Win+1 and the like are theirs too, wherever the cursor is.
+    if (_userSwitchedWithin(_switchAfterPress)) {
+      _giveBackWatch?.cancel();
+      return;
+    }
+    final pressedAt = _pressedAt;
+    if (_inputCounted &&
+        pressedAt != null &&
+        now.difference(pressedAt) <= _switchAfterPress) {
+      final cursor = _backend.cursorAt();
+      final under = _backend.rootAt(cursor.x, cursor.y);
+      if (under == front || _taskbars.contains(_backend.windowClass(under))) {
+        _giveBackWatch?.cancel();
+        return;
+      }
+    }
+    // Not the user switching back to their app (§13.5).
+    session?.givingBack = before;
+    if (_backend.activate(before)) return;
+    // The app in front holds the right to it; an unbound key gets it (§5.4).
+    try {
+      _send(const [
+        GaiaKeyEvent(VK_F24, up: false),
+        GaiaKeyEvent(VK_F24, up: true),
+      ], active);
+    } on _Stopped {
+      return;
+    }
+    _backend.activate(before);
+  }
+
   Future<void> _checkFocus(GaiaForegroundWindow window) async {
     final sensitive = await _backend.focusSensitive(
       window.hwnd,
@@ -1274,6 +1638,14 @@ class GaiaOsControl {
   /// goes in [_Active.front] for the agent.
   Future<void> _bringUp(_Step step, _Session? session, _Active active) async {
     await _waitWhilePaused(session, active);
+    // Not up under the user's typing either (§13.4).
+    if (session != null) {
+      if (step.action == _Action.open) {
+        await _waitForPause(session, active, step.target!);
+      } else if (_backend.foreground() != step.window!.hwnd) {
+        await _waitForPause(session, active, step.window!.app);
+      }
+    }
     final GaiaForegroundWindow window;
     if (step.action == _Action.open) {
       window = await _launch(step, session, active);
@@ -1364,7 +1736,12 @@ class GaiaOsControl {
       throw _Stopped(error.message);
     }
     final before = _backend.frame(window.hwnd);
-    if (!_backend.minimized(window.hwnd)) {
+    // A "save changes?" prompt after a close may open behind (§13.5).
+    _watchApp(session, window);
+    if (_visible(window, (
+      x: before.left + before.width ~/ 2,
+      y: before.top + before.height ~/ 2,
+    ))) {
       flash?.call({'kind': 'window', ..._rectOf(before), 'label': window.app});
       await Future<void>.delayed(_leadIn);
       active.throwIfStopped();
@@ -1641,6 +2018,7 @@ class GaiaOsControl {
     bool unprompted = false,
     bool fromAnywhere = false,
   }) async {
+    _giveBackWatch?.cancel();
     final front = _backend.foreground();
     if (front == window.hwnd) return;
     if (!fromAnywhere && !_backend.inFrontOfTarget(front, companionPid())) {
@@ -1682,11 +2060,23 @@ class GaiaOsControl {
     }
   }
 
-  /// The pinned window, in front: waiting while Gaia is (§5.2), and bringing it
-  /// up with no click behind it (§5.4).
+  /// The pinned window, for a step that needs no front (§13.5).
+  GaiaForegroundWindow _pinned(_Session session, _Active active) {
+    _look(session);
+    active.throwIfStopped();
+    return session.pin ??
+        (throw _Stopped(
+          'There is no window to act on yet. os_open or os_focus one.',
+        ));
+  }
+
+  /// The pinned window, in front, for [step], which needs it there: waiting
+  /// while Gaia is (§5.2), then for the user to pause in their own work
+  /// (§13.4), and bringing it up with no click behind it (§5.4).
   Future<GaiaForegroundWindow> _sessionTarget(
     _Session session,
     _Active active,
+    _Step step,
   ) async {
     _look(session);
     active.throwIfStopped();
@@ -1703,8 +2093,51 @@ class GaiaOsControl {
         (throw _Stopped(
           'There is no window to act on yet. os_open or os_focus one.',
         ));
-    await _bringInFront(window, active, unprompted: true);
+    if (_backend.foreground() != window.hwnd) {
+      await _waitForPause(session, active, window.app);
+      session.frontStep = true;
+      await _bringInFront(window, active, unprompted: true, fromAnywhere: true);
+      active.notes.add('brought ${window.app} to the front for: ${step.label}');
+    }
+    session.frontStep = true;
     return window;
+  }
+
+  /// Waits for the user to have pressed nothing for [_pauseBefore], so the
+  /// window doesn't come up under their typing (§13.4). The notch says so
+  /// meanwhile. Refused after [_frontWait].
+  Future<void> _waitForPause(
+    _Session session,
+    _Active active,
+    String app,
+  ) async {
+    final until = DateTime.now().add(_frontWait);
+    try {
+      while (true) {
+        _look(session);
+        active.throwIfStopped();
+        final now = DateTime.now();
+        final last = session.lastUserInput;
+        if (last == null || now.difference(last) >= _pauseBefore) return;
+        if (now.isAfter(until)) {
+          throw _Stopped(
+            'This step needs $app in front, and the user kept working in '
+            "another window, so Gaia didn't take it from them. Ask the user, "
+            'or try again later.',
+          );
+        }
+        if (session.waiting == null) {
+          session.waiting = app;
+          onSession?.call();
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    } finally {
+      if (session.waiting != null) {
+        session.waiting = null;
+        onSession?.call();
+      }
+    }
   }
 
   ({int x, int y}) _pointOf(
@@ -2207,6 +2640,13 @@ class _Session {
   DateTime? lastStep;
   int inputMark;
   DateTime? lastUserInput;
+
+  /// When the user last pressed a key or clicked while a window of
+  /// [watchApp]'s app was in front.
+  DateTime? lastUserInApp;
+
+  /// When [GaiaOsControl._adoptBehind] last looked for a held call's dialog.
+  DateTime? heldLook;
   DateTime ownEscapeUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// When the last step started, for pacing (§5.6).
@@ -2218,6 +2658,26 @@ class _Session {
 
   /// The window adopted since the agent was last told.
   String? adopted;
+
+  /// A step that needs the front is running: the user's presses in the
+  /// target don't end the run (§13.5).
+  bool frontStep = false;
+
+  /// A direct call hasn't returned: a window that comes up meanwhile is its
+  /// doing, however long past [GaiaOsControl._adoptWithin], as a modal dialog
+  /// holds the call that opened it (BUG-374).
+  bool directCall = false;
+
+  /// The window Gaia is putting back in front, after a direct call's app took
+  /// it: its coming back isn't a window to adopt (BUG-372).
+  int? givingBack;
+
+  /// The app a step that needs the front waits to use (§13.4).
+  String? waiting;
+
+  /// The app whose new windows a step may have opened behind, and the ones it
+  /// already had (§13.5).
+  ({int pid, int hwnd, Set<int> known})? watchApp;
 
   String? takeAdopted() {
     final told = adopted;
@@ -2240,6 +2700,9 @@ class _Active {
   /// What `os_open` opened, when [front] is only the window that came in
   /// front while it waited, not one shown to be its own.
   String? unconfirmed;
+
+  /// How each step ran, where the agent should know (§13.7).
+  final notes = <String>[];
 
   /// A drag holding the button: its window, where it started, the button's
   /// release, and where Gaia last put the cursor.
@@ -2345,6 +2808,34 @@ class _Step {
   GaiaControlMatch? match;
 
   bool get aimed => name != null || x != null;
+
+  /// Can go through UI Automation, with no input (§13.2): a named control's
+  /// plain click or typing, or a scroll not at a point. A double or right
+  /// click, or a point, is the pointer's; so is text with Enter or Tab, which
+  /// a set value would keep as characters rather than press.
+  bool get direct => switch (action) {
+    _Action.click =>
+      name != null && button == 'left' && !doubleClick && !anywhere,
+    _Action.type => name != null && !text!.contains(RegExp(r'[\r\n\t]')),
+    _Action.scroll => name != null || x == null,
+    _ => false,
+  };
+
+  /// What a direct call did, for the agent (§13.7): [ran] null when the app
+  /// hadn't answered.
+  String directNote(GaiaDirectRan? ran) {
+    final what = name == null ? null : jsonEncode(name);
+    return switch ((action, ran)) {
+      (_Action.type, _) => 'typed into $what',
+      (_Action.scroll, _) =>
+        'scrolled $direction ${what == null ? 'in the window' : 'over $what'}',
+      (_, GaiaDirectRan.toggle) => 'toggled $what',
+      (_, GaiaDirectRan.select) => 'selected $what',
+      (_, GaiaDirectRan.expand) => 'expanded $what',
+      (_, GaiaDirectRan.collapse) => 'collapsed $what',
+      _ => 'pressed $what',
+    };
+  }
 
   /// Where it acts: [match]'s middle, its point, or the middle of [frame].
   ({int x, int y}) aim(
@@ -2690,8 +3181,13 @@ class _Win32InputBackend implements GaiaInputBackend {
   GaiaForegroundWindow? describe(int hwnd) =>
       IsWindow(hwnd) == 0 ? null : gaiaDescribeWindow(hwnd);
 
+  /// The top-level window in front. Windows can report a control's own child
+  /// window there, as after a UI Automation call on it (BUG-373).
   @override
-  int foreground() => GetForegroundWindow();
+  int foreground() {
+    final front = GetForegroundWindow();
+    return front == 0 ? 0 : GetAncestor(front, GA_ROOT);
+  }
 
   @override
   bool inFrontOfTarget(int hwnd, int gaiaPid) =>
@@ -2794,6 +3290,38 @@ class _Win32InputBackend implements GaiaInputBackend {
   );
 
   @override
+  Future<GaiaDirectResult?> direct(
+    int hwnd, {
+    required bool browser,
+    required ({String name, String? type})? control,
+    required ({int x, int y}) at,
+    required GaiaDirectAct act,
+  }) async {
+    // Nothing was called: an earlier call into the window is still stuck.
+    if (gaiaScreenBusy(hwnd)) return (ran: null, miss: GaiaDirectMiss.busy);
+    _keepUiaBehind?.call();
+    return gaiaScreenWork<GaiaDirectResult>(
+      hwnd,
+      () => gaiaActOnControl(
+        hwnd,
+        browser: browser,
+        find: control,
+        at: at,
+        act: act,
+      ),
+    );
+  }
+
+  @override
+  bool cloaked(int hwnd) => gaiaWindowCloaked(hwnd);
+
+  @override
+  List<int> appWindows(int pid, int owner) => gaiaAppWindows(pid, owner);
+
+  @override
+  int owner(int hwnd) => GetWindow(hwnd, GW_OWNER);
+
+  @override
   Future<String?> address(int hwnd) =>
       gaiaScreenWork<String?>(hwnd, () => gaiaReadAddress(hwnd));
 
@@ -2828,7 +3356,20 @@ class _Win32InputBackend implements GaiaInputBackend {
       'GaiaUserInputCount',
     ),
   );
+  static final _switchAge = _runnerExport(
+    (runner) => runner.lookupFunction<Uint32 Function(), int Function()>(
+      'GaiaUserSwitchAge',
+    ),
+  );
   var _counting = false;
+
+  /// Stops UI Automation's own input from taking the target to the front
+  /// during a direct call (gaia_uia_quiet.cpp, BUG-372).
+  static final _keepUiaBehind = _runnerExport(
+    (runner) => runner.lookupFunction<Int32 Function(), int Function()>(
+      'GaiaKeepUiaBehind',
+    ),
+  );
 
   static F? _runnerExport<F>(F Function(DynamicLibrary runner) lookup) {
     try {
@@ -2839,10 +3380,18 @@ class _Win32InputBackend implements GaiaInputBackend {
   }
 
   @override
-  void watchInput(bool on) {
+  bool watchInput(bool on) {
     final watch = _watch;
-    if (watch == null || _count == null) return;
-    _counting = watch(on ? 1 : 0) != 0 && on;
+    if (watch == null || _count == null) return false;
+    return _counting = watch(on ? 1 : 0) != 0 && on;
+  }
+
+  @override
+  Duration? sinceUserSwitch() {
+    final age = _counting ? _switchAge?.call() : null;
+    return age == null || age == 0xFFFFFFFF
+        ? null
+        : Duration(milliseconds: age);
   }
 
   @override

@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "gaia_control_border.cpp"
   "gaia_pipe.cpp"
   "gaia_tool_pipe.cpp"
+  "gaia_uia_quiet.cpp"
   "gaia_user_input.cpp"
   "main.cpp"
   "utils.cpp"

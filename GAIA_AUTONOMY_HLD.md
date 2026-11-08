@@ -10,6 +10,9 @@ BUG-364 and BUG-365, two misleading results from §11.5 and §11.7, are open (Mi
 run, by decision: a second monitor. It changes GAIA_HLD.md §5.2, §10.1, §12.2, §15.6,
 §15.7 and §20; §12 below lists how.
 
+**§13, background runs: designed 2026-11-08, not built.** Its questions were decided with
+Juno the same day (§13.10). Phase B1 is next.
+
 ## 1. Summary
 
 Today every mouse or keyboard action Gaia takes stops at a card. Marking three emails
@@ -1034,3 +1037,385 @@ Applied for Phases 3 and 4, 2026-11-04, and §15.6's list of tools for Phase 5.
 - **Phase 9C notes:** "Approving takes someone at the screen" stays true of Ask only.
 - **§20:** the 2026-11-01 decisions on screen text and the phone get a dated amendment rather than
   a rewrite, keeping the reasoning for why Ask exists.
+
+## 13. Background runs
+
+Status: designed 2026-11-08, and §13.10's questions decided with Juno that day. Phase B1
+was run the same day (§13.11), and this section was corrected to match it. B2 and B3 are
+built and unit-tested (`gaia_os_control_test.dart`, "direct calls" and the Auto session
+group). Their live done-checks were run on 2026-11-08 (§13.12). A direct call took the
+foreground (BUG-372), so a run didn't stay in the background. Fixed and re-checked the same
+day (§13.13).
+
+### 13.1 Summary
+
+Today every action is real input: `SendInput` at a point on screen (`gaia_os_control.dart`
+`_send`). Real input goes to whatever window is in front, so a run needs its window in front.
+That's why §5.4's foreground work exists, and why switching windows yourself stops a run (§5.2).
+You can't use the PC while Gaia does.
+
+This design lets an action on a **named control** call that control through UI Automation
+instead: press a button, tick a box, pick a list item, set a field's text. No input is sent,
+the cursor doesn't move, and the window doesn't need to be in front. That's how
+`vercel-labs/agent-desktop` acts on Windows (its README: actions "use the accessibility API
+without moving the pointer or taking focus"). Gaia already reads the same tree, so only
+the acting side is new.
+
+With that, **a run stays in the background**: you keep working in another app while Gaia works
+in its own window behind it. Flashes play only for actions you can see (§13.6).
+
+Not a goal: adding agent-desktop itself. As a second MCP server it would skip every check the
+`os_` tools make: sensitive fields, exclusions, the vault, cards, the grants.
+
+### 13.2 What can run in the background
+
+| Action | Direct call | Otherwise |
+|---|---|---|
+| `os_click` on a named control, left, single | SelectionItem's Select, else Invoke, else Toggle, else ExpandCollapse (expand if collapsed, else collapse) | Needs the front |
+| `os_click` double or right, or at x and y | None: a double click, a context menu and a point are pointer things | Needs the front |
+| `os_type` into a named field | Value's `SetValue`, when the field is empty and isn't on a Firefox page (below) | Needs the front |
+| `os_type` with no control | None: "whatever has focus" means the focus of the window in front | Needs the front |
+| `os_scroll` | `SetScrollPercent` on the control's nearest scrollable ancestor, or the window's largest scrollable control: one call, each notch a tenth of what the control shows (§13.11) | Needs the front |
+| `os_key`, `os_drag` | None. Posting key messages misses Chromium, UWP and modifier state | Needs the front |
+| `os_window` | Already works on a window behind (§8.3), except `close`, which today makes what's in front the target | `close` adopts as §13.5 says |
+| `os_open`, `os_focus` | They bring a window up by definition, and launches take the front themselves (§3) | As today, but in Auto they wait for your pause as §13.4 says |
+| Reads | `os_read_screen`, `os_windows`, `os_clipboard` already work on a window behind, but see browsers below | As today |
+
+**Order for a click (corrected from B1).** SelectionItem first. A list, tree or tab item
+offers both SelectionItem and Invoke, and Invoke on it is a double-click: in Explorer it
+opened the file. A single click selects, so Select is the click. Then Invoke, which is what a
+button's click does, then Toggle, then ExpandCollapse. LegacyIAccessible's `DoDefaultAction` is
+left out (§13.10, question 3).
+
+**Typing replaces, so only into an empty field.** `SetValue` sets the whole value, while today's
+`os_type` inserts at the caret. Into an empty field the two are the same. Into one with text,
+the step needs the front, rather than appending at the end (§13.10, question 4).
+Line breaks and tabs arrive as text, as a paste's already do today.
+
+**Pages and a set value (corrected from B1).** This said that a page's script keeps its own
+copy of a field's text, updated from key events, so that a set value would be lost on submit.
+In Chrome it isn't: `SetValue` on an `<input>` fires the page's `input` and `change` events, and
+a submit saw the value. So typing on a Chromium page (Chrome, Edge, Electron, WebView2) goes
+direct like any field. Firefox's page tree never came up in B1, so typing in Firefox still needs
+the front. A rich editor with no Value pattern, such as a mail body, falls back to real input
+anyway. Clicks on a page go through too: Chromium maps Invoke to a click event.
+
+**Browsers behind other windows (corrected from B1).** This said that a Chromium page leaves
+its window's tree while the window is fully covered, which would have kept background runs out of
+Gmail in a browser. In Chrome 156 it doesn't. A page covered before any read joined the tree on
+the second read, a second after the first. Invoke on its button clicked it, and that held fully
+covered, half covered and in front. Screenshots of a covered window still can't show it, which is
+a different matter. Firefox's page tree didn't come up on a fresh profile (§13.11).
+
+**No detection of a call that did nothing.** Some apps accept Invoke and ignore it. Gaia can't
+tell that from a button whose effect is invisible, so it doesn't try. The result says how the
+step ran ("pressed 'Send' directly"), and the tools already tell the agent to read the screen
+after acting.
+
+### 13.3 How a direct call runs
+
+- **Found and called in the same worker.** COM objects can't cross isolates. The scan that
+  matches a name (`gaiaScanWindow`'s `matches`) runs on a worker isolate under
+  `gaiaScreenWork`, so the call happens there too, on the element it matched. The isolate gets
+  the action and hands back which pattern ran, or why none could.
+- **Same matching as today:** name and type as `os_read_screen` shows them, one match only.
+  Two matches are refused as today.
+- **Sensitive fields stay refused:** a match marked sensitive is refused before any call, as for
+  real input. `SetValue` is also refused where `IsPassword` is set, even if the name passed.
+- **Bounded.** A provider can block: in B1 a WinForms button opening a modal dialog held
+  Invoke until the dialog closed. The call runs under `gaiaScreenWork`'s 8 s budget. Over budget,
+  the step counts as sent, the result says the app hasn't answered, and the run carries on: the
+  dialog is what the next read shows. A window that comes up while the call is held is the
+  call's to adopt, however long that takes (BUG-374).
+- **A Win32 button is clicked by a posted `BM_CLICK` (corrected, BUG-374).** Its Invoke sends
+  the same message and waits for the click to be handled. While it waits, every other UI
+  Automation call from Gaia's process into that app waits too, so a dialog the click opened
+  couldn't be read. Posted, the click doesn't wait. Found by its window's class (`Button`, or
+  WinForms' `.BUTTON.`). Other frameworks' Invoke is already asynchronous.
+- **No focus taken (BUG-372).** Before a pattern call, UI Automation gives the control focus,
+  injecting an unassigned key to be allowed to, and that takes the user's foreground. The
+  runner stubs UIAutomationCore's own `SendInput` in Gaia's process (`gaia_uia_quiet.cpp`). A
+  WinForms list's Select does the same from inside the app, so Gaia also puts the user's
+  window back if the call's app takes the front, during the call and for 300 ms after.
+- **Slow.** On this machine each call lands about 2 s after it's made (§13.11): UI Automation
+  waits that long for the focus it couldn't take. So a direct step takes about 2 s, against a
+  few hundred milliseconds for real input. A posted button click doesn't wait. A scroll is one call
+  for that reason, whatever its notches.
+- **Elevated windows still fail** (UIPI blocks UI Automation calls into them, as it blocks
+  input). The call returns access denied and the result says so.
+- **In Ask too.** The method doesn't depend on the mode. A card's step runs the same way in
+  either.
+
+### 13.4 Steps that need the front
+
+Some steps can't run in the background (§13.2). What happens to them, as decided (§13.10,
+question 1):
+
+- If you've pressed nothing for **2 s** (the §5.2 input hooks count presses), the window comes up
+  as §5.4 brings it, and the step runs as real input, as today. The flashes play.
+- If you're typing or clicking, the step **waits** for a 2 s pause, up to 30 s, with the notch
+  saying "Gaia is waiting to use {app}". After 30 s the step is refused, and the result tells the
+  agent it needs the window in front and to ask you or try later. `os_open` and `os_focus` wait
+  the same way, so neither brings a window up under your typing.
+- Once the step has run, the window stays where it is. You switching back to your app doesn't
+  stop the run (§13.5).
+
+`os_steps` runs each step its own way, so a list can mix direct steps with steps that need the
+front.
+
+### 13.5 Stopping and the pin in the background
+
+§5.2 and §5.3 assumed the target is in front. Changes:
+
+| Today | In the background |
+|---|---|
+| Switching windows yourself ends the run | Doesn't. That's the point. |
+| You pressing keys in the target does nothing special | **Ends the run**, as taking over. A press while the target is in front, from the input hooks, outside a step that needs the front |
+| Gaia in front pauses actions | Direct steps carry on, so you can watch progress in the floater. Steps that need the front wait, as §13.4 says |
+| Esc anywhere ends the turn | Esc ends it only while the target or Gaia is in front, since Esc in your own app (closing a menu) shouldn't kill a run you can't see (§13.10, question 2) |
+| A window Gaia caused is adopted if it takes the front within 1.5 s | Also adopted without taking the front: a new visible top-level window owned by the pinned window, or from its process, within 1.5 s of a step. A background app's dialog often doesn't take the front, as Windows' foreground lock stops it |
+| The Stop button, Revoke, Abort | Unchanged |
+
+Owned or same-process is required for adoption without the front, so a window your own work
+opens elsewhere is never adopted. Once you've pressed anything since the step began, only a
+window the pinned window owns is: another window of its app may be yours, as a document opened
+from Explorer into the same Word process. Exclusions and the vault are checked on adoption, as now.
+
+### 13.6 Flashes only where you can see them
+
+A flash plays only if what it marks is visible:
+
+- **A point** (click, scroll): `rootAt` at the point is the target window, which is the check
+  real clicks already make, and the target isn't minimized or cloaked (another virtual desktop).
+- **A field** (type): the same at the field's centre.
+- **A window outline** (open, focus, adopt, `os_window`): the window's centre.
+- **A keycap** (`os_key`): only ever runs in front, so it always plays.
+
+A flash checked visible plays in full, even if a window covers it partway through. Skipped
+flashes leave no trace, and the activity card (§7) still lists the step. Direct steps keep
+§5.6's pacing either way, so a run in view and one behind go at the same pace.
+
+**Typing's flash** for a set value uses the paste duration (`_typingTime`'s `_pasteRead`), since the
+text arrives at once, as a paste's does. No native change.
+
+**The border** (GAIA_HLD.md §15.6) frames the monitors, not the target, so it shows as now.
+
+### 13.7 What the agent is told
+
+- Each step's result says how it ran: "pressed 'Send' directly", "typed into 'Subject'
+  directly", or "brought Outlook to the front to press Ctrl+S".
+- `os_click`'s description adds: naming a control lets Gaia act without taking the user's
+  screen, so name controls rather than give points. It says so already for accuracy.
+- ~~`os_read_screen` on a fully covered browser says the page isn't readable while covered.~~
+  Dropped: B1 found a covered Chrome page readable (§13.2).
+
+### 13.8 Risks
+
+- **You can't see what Gaia does.** Background runs remove the flashes as a check (§9 lists them
+  as a mitigation). The activity card is the only view while the window is covered. A steered
+  agent in the background is as fast as in front, and less noticed. Auto's consent notice should
+  say that runs can happen behind your other windows.
+- **Esc reaches less** (§13.10, question 2). The Stop button is the stop while
+  you're in another app.
+- **A direct call skips the app's input handling.** An app that validates on key events or
+  mouse-down, rather than on its own click, may behave differently from a real click. The result
+  says the step ran directly, so the agent can retry by bringing the window forward.
+- **Text set into an empty field is the whole value at once.** Autocomplete and as-you-type
+  validation don't run until the next real event.
+
+### 13.9 Phases
+
+| Phase | Work | Done when |
+|---|---|---|
+| **B1. Spike** | A throwaway harness calls each pattern on a covered window, in Notepad, Settings, Explorer, a WinForms or Win32 dialog app, Outlook, Chrome (Gmail), Firefox and an Electron app | For each app: which patterns exist on its buttons, boxes, lists and fields; whether a covered page keeps its tree (Chrome, Edge, Firefox); whether Invoke on a covered page's button clicks it; whether an Invoke that opens a modal dialog blocks; whether a background dialog takes the front. Recorded here as §13.11, and §13.2 corrected to match |
+| **B2. Direct click and type** | §13.3 in the scan worker; click and type through it, else real input; §13.6's visibility rule; §13.7's result text | With Gaia behind Notepad: a direct click on Settings' toggle and typing into an empty Explorer search box land, with no flash and the cursor unmoved; brought in front, the same steps flash; a password field is refused; tests cover the pattern order and the fallbacks |
+| **B3. Background session** | §13.4's wait, §13.5's stop rules and adoption without the front; scroll | In qa, a real Auto turn edits a native app's settings while you type in another app, and nothing reaches your app; a press in the target stops it; a dialog opened behind is adopted; a step needing the front waits for your pause |
+
+GAIA_HLD.md §15.6 and §15.7 get dated amendments when B3 is done: direct actions, the target
+rule in the background, and Esc's reach.
+
+Progress, 2026-11-08:
+- **B1: done** (§13.11). Outlook, Settings and Obsidian weren't measured.
+- **B2: built.** The direct call is `gaiaActOnControl` (`gaia_window_context.dart`), reached
+  through `GaiaInputBackend.direct`. The step logic is in `GaiaOsControl._step` and
+  `_callDirect`. Unit tests cover the pattern choice per step, the visibility rule, the
+  refusals and the fallbacks. The B1 harness ran the worker side live against WinForms,
+  Explorer and Chrome. **Not yet run:** the live check through a real Voyager in qa.
+- **B3: built**, with the same tests plus the wait for the user's pause, the take-over press,
+  Esc's reach and adoption behind. **Not yet run:** the live qa Auto turn. GAIA_HLD.md's
+  amendments are written already, since the code now behaves that way.
+- **Live check, 2026-11-08: B2's and B3's done-checks not met** (§13.12). Direct calls land,
+  but bring their window to the front (BUG-372), with BUG-373 and BUG-374 behind it. The
+  wait for the user's pause, the take-over press and Esc in the user's own app pass.
+- **Fixed, 2026-11-08** (§13.13): BUG-372 to BUG-374. B2's and B3's checks with the target
+  covered are met, with a stand-in typist. Settings, Firefox and scroll are still not run.
+- The Auto notice (`gaia_app.dart` `_chooseAuto`) now says runs can happen behind your
+  windows, and gives the new stops (§13.8). The notch reads "Gaia is waiting to use {app}"
+  during §13.4's wait.
+
+### 13.10 Decided
+
+Decided with Juno, 2026-11-08, each as recommended:
+
+1. **Steps that need the front, during a background run** (§13.4): the window comes forward only
+   after you've paused for 2 s, else the step waits up to 30 s and is refused. Rejected: coming
+   forward at once, as today, which breaks the background promise on every key press; and always
+   refusing, which makes Auto stop for a question each time.
+2. **Esc's reach** (§13.5): only while the target or Gaia is in front, not anywhere as today.
+3. **`DoDefaultAction` as the last try for a click** (§13.2): decided from Phase B1's findings.
+   **Left out.** In B1 it didn't widen what a page could do: the one page element with no other
+   pattern, a `div` with a click handler, has no default action either. Elsewhere its "default"
+   is unpredictable: on a WinForms list item it's a double-click.
+4. **Typing into a field that has text** (§13.2): needs the front. Rejected: appending at the end
+   by setting the old value plus the new text, which gets the caret position wrong if the agent
+   meant somewhere else.
+
+### 13.11 Phase B1 results (2026-11-08)
+
+A throwaway harness ran the real `gaiaActOnControl` in `gaiaScreenWork` against covered windows.
+The windows came from a WinForms app built for the spike, a local test page in Chrome 156 and
+Firefox 159 (each on a fresh scratch profile, not Juno's), and an Explorer window on a scratch
+folder. The cover was a topmost, no-activate window. The harness and its output are in that day's
+session scratchpad, not the repo. Windows 11 25H2.
+
+| App | What offers what | Covered |
+|---|---|---|
+| WinForms (Win32 proxies) | Buttons: Invoke. Check box: Invoke and Toggle. List items: Invoke and SelectionItem. Tree item: SelectionItem and ExpandCollapse. Fields: Value. Panel and multi-line box: Scroll. Drop-down list: Value only | All acted on |
+| Chrome page | Buttons and links: Invoke. Check box: Toggle. `select`: ExpandCollapse. Input: Value. Document: Scroll. A `div` with a click handler: nothing | Page kept in the tree, even covered before the first read; every pattern landed |
+| Explorer | Buttons: Invoke. Tree items: SelectionItem and ExpandCollapse. File items: Invoke and SelectionItem. Search box: Value | `SetValue` into the search box ran the search |
+| Firefox page | The page's own controls never joined the tree in 16 s on a fresh profile | Not measured |
+
+Findings, each now in §13.2–§13.3:
+
+1. **Invoke on an item is a double-click.** On Explorer's file item it opened the file, so
+   SelectionItem now comes first. On the WinForms list box, Select changed the selection but
+   didn't fire the app's own change handler: a programmatic select sends no notification (§13.8's
+   risk of skipping the app's input handling).
+2. **Each pattern call lands about 2 s after it's made.** Invoke, Toggle, Select, Expand,
+   `SetValue` and Scroll all took 2.0 to 2.1 s, in WinForms, Chrome and Explorer alike, and the
+   app saw the click at the end of that time, not the start. It didn't change with MTA or STA,
+   nor with `CUIAutomation` or `CUIAutomation8`. `DoDefaultAction` took 1 to 3 ms, and so did
+   calls that did nothing. The cause isn't known. A direct step is slow but works. So that a
+   scroll doesn't multiply it, a scroll is one `SetScrollPercent`.
+3. **A modal dialog holds the call until it closes**, and **a background app's dialog doesn't
+   take the front**, as Windows' foreground lock stops it. Both are what §13.3's budget and §13.5's
+   adoption without the front were designed for.
+4. **Chrome takes a set value** (§13.2), and **a covered Chrome page stays readable**
+   (§13.2). Both lift limits the design had assumed.
+5. **Refusals cost nothing.** A disabled button, a field with text and a password field were
+   each told apart in about 60 ms, with no call made.
+
+Not measured: Outlook (not installed), Settings and Obsidian (the harness didn't find their
+frames), and Firefox beyond the above.
+
+Incident: the harness's first run used Invoke on Explorer's `a.txt` item, which opened it in
+Notepad. Notepad came up in front, restoring Juno's saved tabs with `a.txt` among them, and was
+left open. That finding is what moved SelectionItem first.
+
+### 13.12 B2 and B3 live check (2026-11-08)
+
+Run on `gaiaqa`, from a scratch copy of the debug build with a fresh Dart bundle of the working
+tree, since Juno's own run held the build folder and its bundle predated B2. Real Haiku turns in
+Auto, 11 in all. The target was a scratch WinForms form ("Gaia BG Probe": a check box, an
+empty field, a field with text, a password field, a list, and a Save button whose click asks
+"Restart now?" in a modal `MessageBox`). A scratch "Cover App" window stood in for Notepad,
+so Notepad couldn't reopen Juno's saved tabs. Explorer on a scratch folder and a local page in
+a scratch Chrome profile were tried with no model. A watcher logged, every 10 ms, the foreground
+window, the cursor and `gaiaqa`'s visible flash windows. B3's rounds had Juno typing for real,
+since the input hooks ignore injected keys.
+
+**The finding: a direct call takes the foreground (BUG-372).** Every call that acted brought its
+window to the front: Invoke, Select and SetValue on the form, SetValue in Explorer's search box
+(the search ran), and Invoke and SetValue on the Chrome page. With Juno typing in Cover App,
+Gaia's press on the check box pulled the form in front mid-word. Juno's next key unticked it
+again, and a "." went into the field Gaia had just set. A plain .NET UI Automation Invoke from
+PowerShell does the same, so it's the platform and the apps, not Gaia's code. B1 covered its
+windows with a topmost no-activate window and didn't watch the foreground, so it missed this.
+Until it's dealt with, a run doesn't stay behind your windows, which is §13.1's point.
+
+Two more follow from it:
+- On WinForms the foreground becomes the control's own child window ("Dark mode", "Save"), and
+  the session adopts it as a new window, so the next named step isn't found (BUG-373).
+- A direct click that opens a modal dialog holds its isolate until the dialog closes, as §13.3
+  expects. But the form stays in Gaia's busy list, so every read for the rest of the turn
+  failed and the agent couldn't answer the dialog (BUG-374). An outside client could read the
+  dialog throughout.
+
+B2's done-check, item by item:
+- **Direct click and type with the target covered:** both landed directly ("pressed "Dark mode"
+  directly", "typed into "Display name" directly"), with the cursor unmoved and no flash before
+  the call. But the window came to the front (above).
+- **The same steps in front:** both flashed, and still ran directly.
+- **A password field:** refused, in a real turn and through `gaiaActOnControl` with no model
+  (`sensitive`, about 40 ms, no call). A field with text gave `hasText`, which falls back to
+  real input.
+- **Settings' toggle** wasn't tried, nor scroll.
+
+B3's, with Juno at the keys:
+- **A step that needs the front waits for your pause: met.** `os_key` Ctrl+S waited 27.7 s with
+  the session's `waiting` set to BgApps (the notch's "Gaia is waiting to use BgApps") while
+  Juno typed. The form came forward 2.04 s after Juno's last key and took the keys. Cover App
+  got all 311 of Juno's keys, and none reached the form.
+- **A press in the target stops the run: met,** 3 of 3, each "The user pressed a key or clicked
+  in BgApps, taking it over." One was a click in the form before the cover came up. One was an
+  Esc in the form once it came forward, which is reported as the take-over, not as Esc, since
+  that check comes first.
+- **Esc in your own app doesn't stop the run: met.** 4 presses in Cover App, and the run went on.
+- **A dialog opened behind is adopted:** not shown. The dialog came to the front because of
+  BUG-372, and was adopted that way.
+- **A real Auto turn edits a native app's settings while you type elsewhere, and nothing
+  reaches your app: not met,** because of BUG-372.
+- Not run: Esc with Gaia's own window in front, a run on Settings or Firefox.
+
+Harness notes:
+- A scripted switch to another window within 1.5 s of a Gaia step is adopted as Gaia's doing
+  (§11.6), and Haiku's steps come too quickly to switch safely between them. So in B3 Juno
+  made the switch with a real click, after the agent's `os_focus` and a `sleep` the prompt
+  asked for.
+- Reading this probe doesn't show a check box's state, so the agent couldn't confirm "Dark
+  mode" was ticked.
+- Haiku named the list "Theme" as a ComboBox once, and that step was refused.
+- One turn's end aborted the main instance in the notifications plugin (BUG-375), unrelated to
+  §13.
+
+### 13.13 Fixes and re-check (2026-11-08)
+
+The causes, found with a low-level hook that logs injected keys and a stand-in typist (a key
+every 150 ms into Cover App, injected, so Gaia's hooks don't count it but it lands where the
+user's keys would):
+
+- **BUG-372.** UI Automation, inside Gaia's process, injects VK 0xB9 before a pattern call to
+  get the right to focus the control, and the target then takes the foreground. Stubbing
+  UIAutomationCore's own `SendInput` stops it for WinForms buttons, check boxes and fields,
+  Explorer and Chrome. A WinForms list item's Select injects from inside the app, which Gaia
+  can't stop, so Gaia gives the front back instead (§13.3).
+- **BUG-373.** The foreground is read as its top-level window.
+- **BUG-374.** The dialog came later than `_adoptWithin`. And it couldn't be read, because the
+  held Invoke blocks Gaia's process's UI Automation calls into the app (§13.3).
+- **The 2 s per call** (§13.11, finding 2) is UI Automation waiting for that focus.
+
+Re-run on `gaiaqa` from an out-of-tree build of the working tree, Haiku, Auto, the cover in
+front and the typist on:
+
+- **A direct click and type with the target covered: met.** The form's check box, field and
+  list item, and the Chrome page's button and field, ran directly. All keys went to Cover App
+  (105 of 105 and 186 of 186), and no window was adopted. Select brought the form forward for
+  15 ms before Gaia gave the front back.
+- **A dialog opened behind is adopted: met.** "pressed "Save" directly", the dialog read, then
+  "pressed "No" directly", with 82 of 82 keys in Cover App.
+- **A real Auto turn edits a native app's settings while you type elsewhere, and nothing
+  reaches your app: met** with the stand-in typist, not Juno at the keys. The B3 items Juno ran
+  (the wait for a pause, the take-over press, Esc in your own app) weren't re-run.
+- Not run: Settings, Firefox, scroll.
+
+**`os_focus` waits for your pause (2026-11-08).** `os_open` and `os_focus` now wait as §13.4's
+steps do. Checked on `gaiaqa` from a debug build of the working tree, Haiku, Auto, two real
+`os_focus` turns on a scratch "QA Focus Target" window with a scratch "Cover App" in front and
+the stand-in typist on. The input hooks ignore injected keys, so "you're typing" was stood in for
+by setting the session's last user input every 20 ms from a VM eval, which is what the hooks feed.
+- **Typing throughout: met.** The notch's `waiting` was FocusTarget for 30.0 s, then the step was
+  refused with "…so Gaia didn't take it from them. Ask the user, or try again later." Cover App
+  stayed in front, with 375 of 375 keys.
+- **Typing that stops: met.** Typing stopped 8.00 s in, and the target came in front at 10.00 s,
+  2 s after the last input. 51 of 51 keys went to Cover App.
+- Not run: `os_open`'s wait (the same code path), and Juno at the keys.

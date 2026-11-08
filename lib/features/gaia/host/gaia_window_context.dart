@@ -1249,13 +1249,27 @@ GaiaWindowScan? gaiaSettleScan(
 /// [gaiaScreenWork]. With [text] off, only what [GaiaWindowScan.sensitive]
 /// needs. [region] keeps the tree to controls touching it, in physical screen
 /// pixels. [find] fills [GaiaWindowScan.matches] with the on-screen controls
-/// of that name. Null when its tree couldn't be read at all.
+/// of that name. Null when its tree couldn't be read at all. [onMatch] is
+/// handed each match's element as it's found, and [onScrollable] each
+/// on-screen control that can scroll, neither inside a sensitive field: what
+/// [gaiaActOnControl] acts on.
 GaiaWindowScan? gaiaScanWindow(
   int hwnd, {
   required bool browser,
   required bool text,
   ({int left, int top, int width, int height})? region,
   ({String name, String? type})? find,
+  void Function(
+    IUIAutomation uia,
+    IUIAutomationElement element,
+    GaiaControlMatch match,
+  )?
+  onMatch,
+  void Function(
+    IUIAutomationElement element,
+    ({int left, int top, int right, int bottom}) bounds,
+  )?
+  onScrollable,
 }) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   final uia = CUIAutomation.createInstance();
@@ -1273,7 +1287,7 @@ GaiaWindowScan? gaiaScanWindow(
       return null;
     }
     final cache = _detached(IUIAutomationCacheRequest(request));
-    for (final property in const [
+    for (final property in [
       UIA_ControlTypePropertyId,
       UIA_NamePropertyId,
       UIA_AutomationIdPropertyId,
@@ -1282,6 +1296,7 @@ GaiaWindowScan? gaiaScanWindow(
       UIA_BoundingRectanglePropertyId,
       UIA_IsTextPatternAvailablePropertyId,
       UIA_HasKeyboardFocusPropertyId,
+      if (onScrollable != null) UIA_IsScrollPatternAvailablePropertyId,
     ]) {
       cache.addProperty(property);
     }
@@ -1316,14 +1331,16 @@ GaiaWindowScan? gaiaScanWindow(
           !gaiaControlMatches(find, name: name, type: type)) {
         return;
       }
-      matches.add((
+      final match = (
         type: type,
         sensitive: isSensitive,
         left: bounds.left,
         top: bounds.top,
         right: bounds.right,
         bottom: bounds.bottom,
-      ));
+      );
+      matches.add(match);
+      onMatch?.call(uia, element, match);
     }
 
     bool inRegion(({int left, int top, int right, int bottom}) bounds) =>
@@ -1367,6 +1384,11 @@ GaiaWindowScan? gaiaScanWindow(
         return;
       }
       matchIf(element, type, name, bounds, isSensitive: false);
+      if (onScrollable != null &&
+          element.cachedIsOffscreen == 0 &&
+          _cachedFlag(element, UIA_IsScrollPatternAvailablePropertyId)) {
+        onScrollable(element, bounds);
+      }
       // Nor its children, as above.
       if (hideUnnamed && gaiaFieldUnjudged(type, name)) {
         unjudged.add(bounds);
@@ -1444,6 +1466,381 @@ GaiaWindowScan? gaiaScanWindow(
     free(cached);
     _release(uia);
     CoUninitialize();
+  }
+}
+
+/// What a direct call is asked to do (GAIA_AUTONOMY_HLD.md §13.2): a left
+/// click, typing [text], or scrolling [amount] notches in [direction].
+typedef GaiaDirectAct = ({
+  GaiaDirectKind kind,
+  String? text,
+  String? direction,
+  int amount,
+});
+
+enum GaiaDirectKind { click, type, scroll }
+
+/// The pattern a direct call ran.
+enum GaiaDirectRan {
+  invoke,
+  toggle,
+  select,
+  expand,
+  collapse,
+  setValue,
+  scroll,
+}
+
+/// Why a direct call didn't run. [noPattern], [hasText] and [page] leave the
+/// step to real input, with the window in front; [busy] is an earlier call
+/// into the window still stuck.
+enum GaiaDirectMiss {
+  notFound,
+  sensitive,
+  disabled,
+  denied,
+  noPattern,
+  hasText,
+  page,
+  busy,
+}
+
+typedef GaiaDirectResult = ({GaiaDirectRan? ran, GaiaDirectMiss? miss});
+
+/// Whether a [gaiaScreenWork] for [hwnd] is still running.
+bool gaiaScreenBusy(int hwnd) => _screenWorking.contains(hwnd);
+
+/// Acts on [hwnd]'s control named [find] at [at] through UI Automation, with no
+/// input sent (§13.3): found as `os_read_screen` shows it, by the same walk,
+/// and called on the element it matched, so it must run where that walk does,
+/// within [gaiaScreenWork]. A scroll with no [find] scrolls the window's
+/// largest scrollable control.
+GaiaDirectResult gaiaActOnControl(
+  int hwnd, {
+  required bool browser,
+  required ({String name, String? type})? find,
+  required ({int x, int y}) at,
+  required GaiaDirectAct act,
+}) {
+  // A page keeps its own copy of a field's text. Chromium sends the page an
+  // input event for a set value; Firefox wasn't seen to (§13.11).
+  if (act.kind == GaiaDirectKind.type &&
+      _exeOf(hwnd).toLowerCase() == 'firefox') {
+    return (ran: null, miss: GaiaDirectMiss.page);
+  }
+  // Held open past the scan's own, for the largest scrollable kept from it.
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  final largest = calloc<COMObject>();
+  var largestArea = 0;
+  GaiaDirectResult? result;
+  try {
+    gaiaScanWindow(
+      hwnd,
+      browser: browser,
+      text: false,
+      find: find,
+      onMatch: (uia, element, match) {
+        if (result != null ||
+            at.x < match.left ||
+            at.x >= match.right ||
+            at.y < match.top ||
+            at.y >= match.bottom) {
+          return;
+        }
+        // Clicking one, to focus it for the user, is fine; typing isn't.
+        if (match.sensitive && act.kind == GaiaDirectKind.type) {
+          result = (ran: null, miss: GaiaDirectMiss.sensitive);
+          return;
+        }
+        // Caught here: the scan's own catch would make it "not found".
+        try {
+          result = _directCall(uia, element, act);
+        } on WindowsException catch (error) {
+          result = (
+            ran: null,
+            miss: _missOf(error.hr) ?? GaiaDirectMiss.notFound,
+          );
+        }
+      },
+      onScrollable: find != null || act.kind != GaiaDirectKind.scroll
+          ? null
+          : (element, bounds) {
+              final area =
+                  (bounds.right - bounds.left) * (bounds.bottom - bounds.top);
+              if (area <= largestArea) return;
+              largestArea = area;
+              _releaseFound(largest);
+              largest.ref.lpVtbl = element.ptr.ref.lpVtbl;
+              IUnknown(largest)
+                ..detach()
+                ..addRef();
+            },
+    );
+    if (result case final done?) return done;
+    if (find != null) return (ran: null, miss: GaiaDirectMiss.notFound);
+    if (largest.ref.isNull) return (ran: null, miss: GaiaDirectMiss.noPattern);
+    return _scroll(_detached(IUIAutomationElement(largest)), act);
+  } on WindowsException catch (error) {
+    // The window went away, or its app refused the call.
+    return (ran: null, miss: _missOf(error.hr) ?? GaiaDirectMiss.notFound);
+  } finally {
+    _releaseFound(largest);
+    free(largest);
+    CoUninitialize();
+  }
+}
+
+/// `BM_CLICK`, which the win32 package has no name for.
+const _bmClick = 0x00F5;
+
+/// [element]'s own window, when it's a Win32 push button (a WinForms one's
+/// class is `WindowsForms10.BUTTON...`); else null.
+int? _win32Button(IUIAutomationElement element) {
+  if (element.currentControlType != UIA_ButtonControlTypeId) return null;
+  final hwnd = element.currentNativeWindowHandle;
+  if (hwnd == 0) return null;
+  final className = wsalloc(256);
+  try {
+    GetClassName(hwnd, className, 256);
+    final name = className.toDartString().toUpperCase();
+    return name == 'BUTTON' || name.contains('.BUTTON.') ? hwnd : null;
+  } finally {
+    free(className);
+  }
+}
+
+/// [act] on [element]: a click as its pattern does it, in §13.2's order.
+GaiaDirectResult _directCall(
+  IUIAutomation uia,
+  IUIAutomationElement element,
+  GaiaDirectAct act,
+) {
+  if (element.currentIsEnabled == 0) {
+    return (ran: null, miss: GaiaDirectMiss.disabled);
+  }
+  switch (act.kind) {
+    case GaiaDirectKind.click:
+      // A Win32 button's Invoke sends it BM_CLICK and waits for the click to
+      // be handled: a modal dialog the click opens holds the call until it
+      // closes, and every other UI Automation call from Gaia's process into
+      // that app waits behind it (BUG-374). Posted, the same click doesn't.
+      // Failing, the patterns below say why.
+      if (_win32Button(element) case final button?
+          when PostMessage(button, _bmClick, 0, 0) != 0) {
+        return (ran: GaiaDirectRan.invoke, miss: null);
+      }
+      // A click on an item selects it, where Invoke would open it, as a
+      // double-click does (§13.11); Invoke is what a button's click does.
+      for (final (id, ran) in const [
+        (UIA_SelectionItemPatternId, GaiaDirectRan.select),
+        (UIA_InvokePatternId, GaiaDirectRan.invoke),
+        (UIA_TogglePatternId, GaiaDirectRan.toggle),
+        (UIA_ExpandCollapsePatternId, GaiaDirectRan.expand),
+      ]) {
+        final called = _withPattern(element, id, (pattern) {
+          switch (ran) {
+            case GaiaDirectRan.invoke:
+              return (
+                _detached(IUIAutomationInvokePattern(pattern)).invoke(),
+                ran,
+              );
+            case GaiaDirectRan.toggle:
+              return (
+                _detached(IUIAutomationTogglePattern(pattern)).toggle(),
+                ran,
+              );
+            case GaiaDirectRan.select:
+              return (
+                _detached(IUIAutomationSelectionItemPattern(pattern)).select(),
+                ran,
+              );
+            default:
+              final expander = _detached(
+                IUIAutomationExpandCollapsePattern(pattern),
+              );
+              return switch (expander.currentExpandCollapseState) {
+                ExpandCollapseState_LeafNode => null,
+                ExpandCollapseState_Collapsed => (
+                  expander.expand(),
+                  GaiaDirectRan.expand,
+                ),
+                _ => (expander.collapse(), GaiaDirectRan.collapse),
+              };
+          }
+        });
+        if (called == null) continue;
+        final (hr, did) = called;
+        if (SUCCEEDED(hr)) return (ran: did, miss: null);
+        if (_missOf(hr) case final miss?) return (ran: null, miss: miss);
+        // Offered and failed: the next pattern may still do it.
+      }
+      return (ran: null, miss: GaiaDirectMiss.noPattern);
+    case GaiaDirectKind.type:
+      if (element.currentIsPassword != 0) {
+        return (ran: null, miss: GaiaDirectMiss.sensitive);
+      }
+      final typed = _withPattern(element, UIA_ValuePatternId, (pattern) {
+        final value = _detached(IUIAutomationValuePattern(pattern));
+        if (value.currentIsReadOnly != 0) return GaiaDirectMiss.noPattern;
+        // A set value replaces the whole value, so only into an empty field.
+        if (_taken(value.currentValue).isNotEmpty) {
+          return GaiaDirectMiss.hasText;
+        }
+        final text = act.text!.toNativeUtf16();
+        try {
+          final hr = value.setValue(text);
+          return SUCCEEDED(hr) ? null : _missOf(hr) ?? GaiaDirectMiss.noPattern;
+        } finally {
+          free(text);
+        }
+      }, unsupported: GaiaDirectMiss.noPattern);
+      return typed == null
+          ? (ran: GaiaDirectRan.setValue, miss: null)
+          : (ran: null, miss: typed);
+    case GaiaDirectKind.scroll:
+      // The control's nearest scrollable ancestor, itself first.
+      final walker = IUIAutomationTreeWalker(uia.controlViewWalker);
+      final at = calloc<COMObject>()..ref.lpVtbl = element.ptr.ref.lpVtbl;
+      IUnknown(at)
+        ..detach()
+        ..addRef();
+      var current = at;
+      try {
+        while (true) {
+          final scrolled = _scroll(
+            _detached(IUIAutomationElement(current)),
+            act,
+          );
+          if (scrolled.miss != GaiaDirectMiss.noPattern) return scrolled;
+          final parent = calloc<COMObject>();
+          final hr = walker.getParentElement(
+            current.ref.lpVtbl.cast(),
+            parent.cast(),
+          );
+          _releaseFound(current);
+          free(current);
+          current = parent;
+          // Past the window is the desktop, which doesn't scroll.
+          if (FAILED(hr) || parent.ref.isNull) {
+            return (ran: null, miss: GaiaDirectMiss.noPattern);
+          }
+        }
+      } finally {
+        _releaseFound(current);
+        free(current);
+        _release(walker);
+      }
+  }
+}
+
+/// [element] scrolled [act]'s notches, each a tenth of what it shows, in one
+/// call: each call lands about 2 s after it's made (§13.11). No pattern when
+/// it can't scroll that way.
+GaiaDirectResult _scroll(IUIAutomationElement element, GaiaDirectAct act) {
+  final horizontal = act.direction == 'left' || act.direction == 'right';
+  final sign = act.direction == 'down' || act.direction == 'right' ? 1 : -1;
+  final scrolled = _withPattern(element, UIA_ScrollPatternId, (pattern) {
+    final scroller = _detached(IUIAutomationScrollPattern(pattern));
+    final can = horizontal
+        ? scroller.currentHorizontallyScrollable
+        : scroller.currentVerticallyScrollable;
+    if (can == 0) return GaiaDirectMiss.noPattern;
+    final (at, shown) = horizontal
+        ? (
+            scroller.currentHorizontalScrollPercent,
+            scroller.currentHorizontalViewSize,
+          )
+        : (
+            scroller.currentVerticalScrollPercent,
+            scroller.currentVerticalViewSize,
+          );
+    final to = (at + sign * act.amount * shown / 10).clamp(0.0, 100.0);
+    // UIA_ScrollPatternNoScroll: the other axis stays as it is.
+    const stay = -1.0;
+    final hr = horizontal
+        ? scroller.setScrollPercent(to, stay)
+        : scroller.setScrollPercent(stay, to);
+    return SUCCEEDED(hr) ? null : _missOf(hr) ?? GaiaDirectMiss.noPattern;
+  }, unsupported: GaiaDirectMiss.noPattern);
+  return scrolled == null
+      ? (ran: GaiaDirectRan.scroll, miss: null)
+      : (ran: null, miss: scrolled);
+}
+
+/// [call] on [element]'s pattern [id]; [unsupported] when it has none.
+T? _withPattern<T>(
+  IUIAutomationElement element,
+  int id,
+  T? Function(Pointer<COMObject> pattern) call, {
+  T? unsupported,
+}) {
+  final pattern = calloc<COMObject>();
+  try {
+    if (FAILED(element.getCurrentPattern(id, pattern.cast())) ||
+        pattern.ref.isNull) {
+      return unsupported;
+    }
+    return call(pattern);
+  } finally {
+    _releaseFound(pattern);
+    free(pattern);
+  }
+}
+
+/// A failed call's reason the agent is told, where it has one.
+GaiaDirectMiss? _missOf(int hr) => switch (hr.toUnsigned(32)) {
+  0x80070005 => GaiaDirectMiss.denied,
+  UIA_E_ELEMENTNOTENABLED => GaiaDirectMiss.disabled,
+  // UIA_E_ELEMENTNOTAVAILABLE: it went away.
+  0x80040201 => GaiaDirectMiss.notFound,
+  _ => null,
+};
+
+bool _cachedFlag(IUIAutomationElement element, int property) {
+  final value = calloc<VARIANT>();
+  try {
+    return SUCCEEDED(element.getCachedPropertyValue(property, value)) &&
+        value.ref.vt == VT_BOOL &&
+        value.ref.boolVal;
+  } finally {
+    VariantClear(value);
+    free(value);
+  }
+}
+
+/// Whether [hwnd] is cloaked: on another virtual desktop, or a suspended Store
+/// app's.
+bool gaiaWindowCloaked(int hwnd) {
+  final cloaked = calloc<Int32>();
+  try {
+    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloaked, sizeOf<Int32>());
+    return cloaked.value != 0;
+  } finally {
+    free(cloaked);
+  }
+}
+
+/// The visible, titled top-level windows of process [pid] or owned by [owner]:
+/// a dialog its app opened, maybe behind (GAIA_AUTONOMY_HLD.md §13.5). Not a
+/// menu or tooltip, which are untitled tool windows.
+List<int> gaiaAppWindows(int pid, int owner) {
+  final handles = _enumerated = [];
+  EnumWindows(Pointer.fromFunction<WNDENUMPROC>(_collectWindow, 0), 0);
+  final process = calloc<Uint32>();
+  try {
+    return [
+      for (final hwnd in handles)
+        if (IsWindowVisible(hwnd) != 0 &&
+            GetWindowTextLength(hwnd) != 0 &&
+            GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW == 0 &&
+            (GetWindow(hwnd, GW_OWNER) == owner ||
+                (GetWindowThreadProcessId(hwnd, process) != 0 &&
+                    process.value == pid)) &&
+            !gaiaWindowCloaked(hwnd))
+          hwnd,
+    ];
+  } finally {
+    free(process);
   }
 }
 

@@ -1,9 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:intl/intl.dart';
+import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/services/periodic_prompt_service.dart';
 
 /// The `voyager_*` read tools (GAIA_HLD.md §5.3), answered by the main
 /// instance from its own repositories: plain text for the agent, framed as
@@ -17,6 +22,7 @@ class GaiaVoyagerReads {
     required this.calendar,
     required this.journal,
     required this.workouts,
+    required this.trackers,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -24,6 +30,7 @@ class GaiaVoyagerReads {
   final CalendarRepository calendar;
   final JournalRepository journal;
   final WorkoutRepository workouts;
+  final TrackerRepository trackers;
   final DateTime Function() _now;
 
   /// [tool]'s answer to [arguments]. Throws a [GaiaReadException] the agent
@@ -34,6 +41,7 @@ class GaiaVoyagerReads {
       'voyager_calendar' => ('calendar', await _calendar(arguments)),
       'voyager_journal' => ('journal', await _journal(arguments)),
       'voyager_workouts' => ('workouts', await _workouts(arguments)),
+      'voyager_trackers' => ('trackers', await _trackers(arguments)),
       _ => throw GaiaReadException('Unknown tool: $tool'),
     };
     final today = _day(_now());
@@ -250,6 +258,94 @@ class GaiaVoyagerReads {
           '${done.isEmpty ? 'no sets done' : done.map(_setLabel).join(', ')}'
           ' (${done.length} of ${sets.length} sets done)',
         );
+      }
+      out.writeln();
+    }
+    return out.toString();
+  }
+
+  /// The user's own trackers, not the analytics page's built-in ones: those
+  /// are derived from journal entries and workouts, which have reads of
+  /// their own.
+  Future<String> _trackers(Map<String, Object?> arguments) async {
+    final (from, to) = _range(arguments, maxDays: 366);
+    final rawName = arguments['tracker'];
+    if (rawName != null && rawName is! String) {
+      throw GaiaReadException('"tracker" must be a tracker\'s name.');
+    }
+    final name = (rawName as String?)?.trim().toLowerCase();
+    final shown = [
+      for (final tracker in await trackers.listTrackers())
+        if (name == null || name.isEmpty || tracker.name.toLowerCase() == name)
+          tracker,
+    ];
+    if (shown.isEmpty && name != null && name.isNotEmpty) {
+      throw GaiaReadException(
+        'No tracker is called "${arguments['tracker']}".',
+      );
+    }
+    final periods = PeriodicPromptService();
+    final out = StringBuffer();
+    for (final tracker in shown) {
+      final values = tracker.type == TrackerType.counter
+          ? counterSeriesValues(
+              tracker,
+              await trackers.listAdjustments(tracker.id),
+              today: _day(_now()),
+            )
+          : [
+              for (final value in await trackers.listValues(tracker.id))
+                if (hasReadingOfType(value, tracker.type)) value,
+            ];
+      // Every period overlapping the range, so a month started before
+      // "from" still counts. A row not on a period start of the current
+      // cadence (logged before the cadence changed) is hidden, as the
+      // analytics page hides it.
+      DateTime periodOf(DateTime day) =>
+          periods.trackerPeriodStartFor(day, tracker.cadence);
+      final firstPeriod = periodOf(from);
+      final inRange = [
+        for (final value in values)
+          if (_day(value.periodStart) case final start
+              when start == periodOf(start) &&
+                  !start.isBefore(firstPeriod) &&
+                  !start.isAfter(to))
+            value,
+      ]..sort((a, b) => a.periodStart.compareTo(b.periodStart));
+      // A counter has a total for every period; only the first and the ones
+      // that changed it are worth the agent's context.
+      if (tracker.type == TrackerType.counter) {
+        double? last;
+        inRange.retainWhere((value) {
+          final changed = value.intValue != last;
+          last = value.intValue;
+          return changed;
+        });
+      }
+      final cap = tracker.integerCap;
+      final low = cap == null ? null : math.min(tracker.defaultInt, cap);
+      final high = cap == null ? null : math.max(tracker.defaultInt, cap);
+      final kind = switch (tracker.type) {
+        TrackerType.integer =>
+          cap == null ? 'number' : 'number from $low to $high',
+        TrackerType.boolean => 'yes/no',
+        TrackerType.enumType => 'one of ${tracker.enumOptions.join(', ')}',
+        TrackerType.counter =>
+          'counter, running total, listed where it changed',
+      };
+      out.writeln(
+        '## ${tracker.name} ($kind, ${tracker.cadence.name}'
+        '${tracker.cadence == TrackerCadence.daily ? '' : ', dated by period start'})',
+      );
+      if (inRange.isEmpty) out.writeln('(no readings)');
+      for (final value in inRange) {
+        final reading = switch (tracker.type) {
+          TrackerType.integer ||
+          TrackerType.counter => formatTrackerNumber(value.intValue!),
+          TrackerType.boolean => value.boolValue! ? 'yes' : 'no',
+          TrackerType.enumType => value.enumValue!,
+        };
+        out.writeln('- ${_dayLabel(_day(value.periodStart))}: $reading');
       }
       out.writeln();
     }

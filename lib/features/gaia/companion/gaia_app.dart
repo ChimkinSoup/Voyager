@@ -4974,7 +4974,10 @@ Future<void> _chooseAuto(
             'what it does.\n\n'
             'Text it reads, on a page or in an email, can steer it. Use Auto '
             'for tasks you chose, and Ask for anything strangers wrote.\n\n'
-            'Esc stops a run, and so does switching windows yourself.',
+            'Gaia may work in a window behind the ones you use, where you '
+            "can't see it. Its activity card lists each step.\n\n"
+            'The Stop button stops a run. So does Esc while Gaia or its '
+            'window is in front, or a key you press in that window.',
           ),
           actions: [
             GaiaButton(

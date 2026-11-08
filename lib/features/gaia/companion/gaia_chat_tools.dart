@@ -447,6 +447,7 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     var once = false;
     String? adopted;
     String? stopped;
+    final how = <String>[];
     while (ran < total) {
       if (!once) {
         final open = cardWith(GaiaCardState.open, ran: ran);
@@ -488,6 +489,7 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
         ran = (result['ran']! as num).toInt();
         plan = {...plan, 'steps': result['steps']};
         adopted = _windowNote(result) ?? adopted;
+        how.addAll([for (final note in result['how'] as List? ?? []) '$note']);
         stopped = result['stopped'] as String?;
       } catch (error) {
         control.drop(id);
@@ -497,10 +499,11 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
       if (stopped != null) break;
     }
     onCard(cardWith(GaiaCardState.accepted, ran: ran, stopped: stopped));
+    final notes = '${adopted ?? ''}${_howNote(how)}';
     return _withRead(
       stopped == null
-          ? _sentResult(total, adopted)
-          : _stoppedResult(ran, total, stopped, adopted),
+          ? _sentResult(total, notes)
+          : _stoppedResult(ran, total, stopped, notes),
       arguments,
     );
   }
@@ -526,7 +529,9 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
       return GaiaToolResult(text: '$error', isError: true);
     }
     final ran = (result['ran']! as num).toInt();
-    final adopted = _windowNote(result);
+    final adopted =
+        '${_windowNote(result) ?? ''}'
+        '${_howNote([for (final note in result['how'] as List? ?? []) '$note'])}';
     final stopped = result['stopped'] as String?;
     _logActivity(
       [
@@ -555,9 +560,14 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
         (final String window, _, _) =>
           ' $window is in front, and later calls act on it.',
         (_, final String window, _) =>
-          ' A window opened in front, and later calls act on it: $window.',
+          ' A window opened, maybe behind others, and later calls act on it: '
+              '$window.',
         _ => null,
       };
+
+  /// How the steps ran, where Gaia didn't simply send input (§13.7).
+  static String _howNote(List<String> how) =>
+      how.isEmpty ? '' : ' How it ran: ${how.join('; ')}.';
 
   static GaiaToolResult _sentResult(int total, String? adopted) =>
       GaiaToolResult(

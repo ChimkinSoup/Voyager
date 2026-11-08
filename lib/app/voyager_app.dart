@@ -266,6 +266,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         calendar: ref.read(calendarRepositoryProvider),
         journal: ref.read(journalRepositoryProvider),
         workouts: ref.read(workoutRepositoryProvider),
+        trackers: ref.read(trackerRepositoryProvider),
       ),
       executor: GaiaExecutor(
         todos: ref.read(todoRepositoryProvider),

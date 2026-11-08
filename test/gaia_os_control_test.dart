@@ -313,6 +313,47 @@ class _Backend implements GaiaInputBackend {
   );
   @override
   Future<String?> address(int hwnd) async => url;
+
+  /// What [direct] answers (GAIA_AUTONOMY_HLD.md §13.3); null for an app that
+  /// didn't answer in time. No pattern by default, so a step goes as input.
+  GaiaDirectResult? directAnswer = (ran: null, miss: GaiaDirectMiss.noPattern);
+
+  /// Each direct call, as its kind, control and point.
+  final directs = <(GaiaDirectKind, String?, ({int x, int y}))>[];
+
+  /// Runs once per [direct], before it answers: a dialog the call opened.
+  void Function()? onDirect;
+
+  /// How long [direct] takes to answer after [onDirect]: a modal dialog holds
+  /// the call that opened it.
+  var directHold = Duration.zero;
+  @override
+  Future<GaiaDirectResult?> direct(
+    int hwnd, {
+    required bool browser,
+    required ({String name, String? type})? control,
+    required ({int x, int y}) at,
+    required GaiaDirectAct act,
+  }) async {
+    directs.add((act.kind, control?.name, at));
+    onDirect?.call();
+    await Future<void>.delayed(directHold);
+    return directAnswer;
+  }
+
+  final cloakedWindows = <int>{};
+  @override
+  bool cloaked(int hwnd) => cloakedWindows.contains(hwnd);
+
+  /// The pinned app's windows, as [appWindows] lists them.
+  var appWindowList = <int>[];
+  @override
+  List<int> appWindows(int pid, int owner) => appWindowList;
+
+  /// Owner windows, by hwnd; none for the rest.
+  final owners = <int, int>{};
+  @override
+  int owner(int hwnd) => owners[hwnd] ?? 0;
   @override
   Future<bool?> focusSensitive(int hwnd, {required bool browser}) async =>
       sensitiveFocus;
@@ -323,7 +364,16 @@ class _Backend implements GaiaInputBackend {
   @override
   int lastInput() => inputTick;
   @override
-  void watchInput(bool on) {}
+  bool watchInput(bool on) => on;
+
+  /// When the user last switched windows from the keyboard, if they have.
+  DateTime? userSwitchAt;
+  @override
+  Duration? sinceUserSwitch() {
+    final at = userSwitchAt;
+    return at == null ? null : DateTime.now().difference(at);
+  }
+
   @override
   void moveCursor(int x, int y) => cursor.add((x, y));
 
@@ -1033,6 +1083,8 @@ void main() {
         adoptWithin: const Duration(milliseconds: 300),
         handoverWait: const Duration(milliseconds: 200),
         pauseLimit: const Duration(milliseconds: 300),
+        pauseBefore: const Duration(milliseconds: 100),
+        frontWait: const Duration(milliseconds: 400),
       );
     });
     tearDown(() => auto.endTurn());
@@ -1181,54 +1233,133 @@ void main() {
       backend.escape = false;
     });
 
-    test('the user switching window ends the turn, even right after a step, '
-        'with nothing sent to it (§5.2)', () async {
+    test(
+      'the user switching to their own window leaves the turn going; a '
+      'step that needs the front waits for their pause (§13.4, §13.5)',
+      () async {
+        await act('os_key', {'keys': 'A'});
+        backend.inputTick++;
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        final started = DateTime.now();
+        final next = await act('os_key', {'keys': 'B'});
+        expect(next['stopped'], isNull);
+        expect(
+          DateTime.now().difference(started),
+          greaterThanOrEqualTo(const Duration(milliseconds: 30)),
+          reason: 'waited for the user to pause',
+        );
+        expect(backend.front, _target.hwnd);
+        expect(
+          backend.calls.last,
+          contains(const GaiaKeyEvent(0x42, up: false)),
+        );
+        expect(
+          (next['how']! as List).single,
+          startsWith('brought Notepad to the front for: Press B'),
+        );
+      },
+    );
+
+    test('while the user keeps typing, a step that needs the front waits, '
+        'the notch says so, and it is refused at last (§13.4)', () async {
       await act('os_key', {'keys': 'A'});
-      final sent = backend.calls.length;
       backend.inputTick++;
       backend.front = other.hwnd;
+      final typing = Timer.periodic(
+        const Duration(milliseconds: 30),
+        (_) => backend.inputTick++,
+      );
+      addTearDown(typing.cancel);
       await Future<void>.delayed(look);
-      expect(stops, 1);
-      await expectLater(act('os_key', {'keys': 'B'}), refused('switched'));
+      final sent = backend.calls.length;
+      final going = act('os_key', {'keys': 'B'});
+      // Past the pace between steps (§5.6).
+      await Future<void>.delayed(const Duration(milliseconds: 330));
+      expect(auto.sessionWaiting, 'Notepad');
+      final result = await going;
+      typing.cancel();
+      expect(result['stopped'], contains('Ask the user'));
       expect(backend.calls, hasLength(sent));
+      expect(backend.front, other.hwnd);
+      expect(auto.sessionWaiting, isNull);
+      expect(stops, 0);
     });
 
-    test("Gaia's own later sends don't hide the user's input", () async {
-      auto.session('chat', auto: true, onUserStop: () => stops++);
-      await auto.plan('chat', 'card', 'os_type', {'text': 'x' * 40});
-      var sends = 0;
-      backend.onSend = () {
-        // The user's Alt+Tab goes in early, and the switch lands a few sends on.
-        if (++sends == 2) Future.microtask(() => backend.inputTick++);
-        if (sends == 6) backend.front = other.hwnd;
-      };
-      final result = await auto.run('card', once: true, check: () async {});
-      expect(result['stopped'], isNotNull);
+    test(
+      'the user switching away mid-text stops that input, not the turn',
+      () async {
+        auto.session('chat', auto: true, onUserStop: () => stops++);
+        await auto.plan('chat', 'card', 'os_type', {'text': 'x' * 40});
+        var sends = 0;
+        backend.onSend = () {
+          if (++sends == 6) backend.front = other.hwnd;
+        };
+        final result = await auto.run('card', once: true, check: () async {});
+        backend.onSend = null;
+        expect(result['stopped'], contains('window in front changed'));
+        expect(backend.sent.whereType<GaiaUnicodeEvent>().length, 12);
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        expect(auto.session('chat', auto: true, onUserStop: () {}), isNotNull);
+      },
+    );
+
+    test('a press in the pinned window, in front, is the user taking it '
+        'over (§13.5)', () async {
+      await act('os_key', {'keys': 'A'});
+      await Future<void>.delayed(look);
+      backend.inputTick++;
       await Future<void>.delayed(look);
       expect(stops, 1);
       expect(
         () => auto.session('chat', auto: true, onUserStop: () {}),
-        refused('switched'),
+        refused('taking it over'),
       );
     });
 
-    test('input well before a step is not a reason to stop', () async {
-      auto.session('chat', auto: true, onUserStop: () => stops++);
-      backend.inputTick++;
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      backend.onSend = () => backend.front = other.hwnd;
-      await act('os_key', {'keys': 'A'});
-      backend.onSend = null;
-      await Future<void>.delayed(look);
-      expect(stops, 0);
-    });
+    test(
+      'the click that brings the pinned window up is not taking over',
+      () async {
+        await act('os_key', {'keys': 'A'});
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
+        backend.inputTick++;
+        backend.front = _target.hwnd;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+      },
+    );
 
-    test('a switch long after any step ends it, input or not', () async {
+    test(
+      "Esc in the user's own app isn't for Gaia; in Gaia it is (§13.5)",
+      () async {
+        await act('os_key', {'keys': 'A'});
+        // The user's own switch, not a window the step opened.
+        backend.inputTick++;
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
+        backend.escape = true;
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        backend.front = gaia.hwnd;
+        await Future<void>.delayed(look);
+        backend.escape = false;
+        expect(stops, 1);
+      },
+    );
+
+    test('a switch long after any step leaves the turn going', () async {
       auto.session('chat', auto: true, onUserStop: () => stops++);
       await Future<void>.delayed(const Duration(milliseconds: 350));
       backend.front = other.hwnd;
       await Future<void>.delayed(look);
-      expect(stops, 1);
+      expect(stops, 0);
+      expect(
+        auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+        _target.hwnd,
+      );
     });
 
     group("the pinned app's own window, later than adoptWithin (BUG-362)", () {
@@ -1276,18 +1407,28 @@ void main() {
         expect(next['adopted'], contains('main'));
       });
 
-      test('ends the turn if the pin stays open past the wait, as a reminder '
-          'beside the main window would', () async {
+      // Since §13.5, a window not shown to be Gaia's is the user's: left
+      // alone, neither adopted nor a stop.
+      Matcher pinIs(int hwnd) => isA<GaiaForegroundWindow>().having(
+        (window) => window.hwnd,
+        'hwnd',
+        hwnd,
+      );
+
+      test('is left alone if the pin stays open past the wait, as a reminder '
+          'beside the main window would be', () async {
         await act('os_key', {'keys': 'A'});
         await Future<void>.delayed(const Duration(milliseconds: 350));
         backend.front = main.hwnd;
-        await Future<void>.delayed(look);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
         expect(stops, 0);
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-        expect(stops, 1);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {}),
+          pinIs(_target.hwnd),
+        );
       });
 
-      test('ends the turn on user input while it waits for the pin to '
+      test('is left alone on user input while it waits for the pin to '
           'close', () async {
         await act('os_key', {'keys': 'A'});
         await Future<void>.delayed(const Duration(milliseconds: 350));
@@ -1295,21 +1436,31 @@ void main() {
         await Future<void>.delayed(look);
         backend.inputTick++;
         await Future<void>.delayed(look);
-        expect(stops, 1);
+        expect(stops, 0);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {}),
+          pinIs(_target.hwnd),
+        );
       });
 
-      test('ends the turn after the user has touched the PC', () async {
+      test('is not adopted after the user has touched the PC', () async {
         await act('os_key', {'keys': 'A'});
         await Future<void>.delayed(const Duration(milliseconds: 350));
+        backend.front = other.hwnd;
+        await Future<void>.delayed(look);
         backend.inputTick++;
         await Future<void>.delayed(look);
         closePin();
         backend.front = main.hwnd;
         await Future<void>.delayed(look);
-        expect(stops, 1);
+        expect(stops, 0);
+        expect(
+          () => auto.session('chat', auto: true, onUserStop: () {}),
+          refused('closed'),
+        );
       });
 
-      test('ends the turn after input during a step, though Gaia sent '
+      test('is not adopted after input during a step, though Gaia sent '
           'more after it', () async {
         auto.session('chat', auto: true, onUserStop: () => stops++);
         await auto.plan('chat', 'card', 'os_type', {'text': 'abcdef'});
@@ -1323,7 +1474,11 @@ void main() {
         closePin();
         backend.front = main.hwnd;
         await Future<void>.delayed(look);
-        expect(stops, 1);
+        expect(stops, 0);
+        expect(
+          () => auto.session('chat', auto: true, onUserStop: () {}),
+          refused('closed'),
+        );
       });
 
       test('is adopted when the pin closes first and another window is in '
@@ -1343,26 +1498,34 @@ void main() {
         expect(next['adopted'], contains('main'));
       });
 
-      test("another app's window, with none of the pinned app's after, ends "
-          'the turn once the wait is over', () async {
+      test("another app's window, with none of the pinned app's after, is "
+          'never adopted', () async {
         await act('os_key', {'keys': 'A'});
         await Future<void>.delayed(const Duration(milliseconds: 350));
         closePin();
         backend.front = other.hwnd;
-        await Future<void>.delayed(look);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
         expect(stops, 0);
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-        expect(stops, 1);
+        expect(
+          () => auto.session('chat', auto: true, onUserStop: () {}),
+          refused('closed'),
+        );
       });
 
-      test("another app's window while the pin is open ends the turn at "
-          'once', () async {
-        await act('os_key', {'keys': 'A'});
-        await Future<void>.delayed(const Duration(milliseconds: 350));
-        backend.front = other.hwnd;
-        await Future<void>.delayed(look);
-        expect(stops, 1);
-      });
+      test(
+        "another app's window while the pin is open is the user's",
+        () async {
+          await act('os_key', {'keys': 'A'});
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          backend.front = other.hwnd;
+          await Future<void>.delayed(look);
+          expect(stops, 0);
+          expect(
+            auto.session('chat', auto: true, onUserStop: () {}),
+            pinIs(_target.hwnd),
+          );
+        },
+      );
     });
 
     test('a window its step opened is adopted, and the agent told', () async {
@@ -1432,14 +1595,605 @@ void main() {
       expect(stops, 1);
     });
 
-    test('another app coming in front while paused stops it', () async {
+    test('another app coming in front while paused ends the pause, not the '
+        'turn', () async {
       await act('os_key', {'keys': 'A'});
       backend.front = gaia.hwnd;
       await Future<void>.delayed(look);
+      expect(auto.sessionPaused, isTrue);
       backend.inputTick++;
       backend.front = other.hwnd;
       await Future<void>.delayed(look);
-      expect(stops, 1);
+      expect(stops, 0);
+      expect(auto.sessionPaused, isFalse);
+    });
+
+    group('direct calls (GAIA_AUTONOMY_HLD.md §13)', () {
+      setUp(() {
+        backend.directAnswer = (ran: GaiaDirectRan.invoke, miss: null);
+        // The user works in another app, which covers the pin.
+        backend.front = other.hwnd;
+        backend.rootUnder = other.hwnd;
+      });
+
+      test('a named click runs behind, with no input, no flash and the '
+          'cursor left alone', () async {
+        final flashes = <Map<String, Object?>>[];
+        auto = GaiaOsControl(
+          companionPid: () => 1,
+          exclusions: () => excluded,
+          vaultUnlocked: () => vault,
+          voyagerPid: 70,
+          backend: backend,
+          settle: Duration.zero,
+          flash: flashes.add,
+        );
+        final result = await act('os_click', {'name': 'Save'});
+        expect(result['stopped'], isNull);
+        expect(backend.directs.single.$1, GaiaDirectKind.click);
+        expect(backend.directs.single.$2, 'Save');
+        expect(backend.directs.single.$3, (x: 20, y: 20));
+        expect(backend.calls, isEmpty);
+        expect(backend.cursor, isEmpty);
+        expect(backend.activated, 0);
+        expect(backend.front, other.hwnd);
+        expect(flashes, isEmpty);
+        expect(result['how'], ['pressed "Save" directly']);
+      });
+
+      test('in view, the same click flashes (§13.6)', () async {
+        final flashes = <Map<String, Object?>>[];
+        backend.rootUnder = _target.hwnd;
+        auto = GaiaOsControl(
+          companionPid: () => 1,
+          exclusions: () => excluded,
+          vaultUnlocked: () => vault,
+          voyagerPid: 70,
+          backend: backend,
+          settle: Duration.zero,
+          flash: flashes.add,
+        );
+        await act('os_click', {'name': 'Save'});
+        expect(flashes.single['kind'], 'click');
+        expect(backend.calls, isEmpty);
+      });
+
+      test('a window on another desktop is not in view', () async {
+        final flashes = <Map<String, Object?>>[];
+        backend.rootUnder = _target.hwnd;
+        backend.cloakedWindows.add(_target.hwnd);
+        auto = GaiaOsControl(
+          companionPid: () => 1,
+          exclusions: () => excluded,
+          vaultUnlocked: () => vault,
+          voyagerPid: 70,
+          backend: backend,
+          settle: Duration.zero,
+          flash: flashes.add,
+        );
+        await act('os_click', {'name': 'Save'});
+        expect(flashes, isEmpty);
+      });
+
+      test('typing, a scroll and a selection say how they ran', () async {
+        backend.matches = [
+          (
+            type: 'Edit',
+            sensitive: false,
+            left: 10,
+            top: 10,
+            right: 30,
+            bottom: 30,
+          ),
+        ];
+        backend.directAnswer = (ran: GaiaDirectRan.setValue, miss: null);
+        final typed = await act('os_type', {'name': 'Subject', 'text': 'Hi'});
+        expect(typed['how'], ['typed into "Subject" directly']);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        backend.directAnswer = (ran: GaiaDirectRan.scroll, miss: null);
+        final scrolled = await act('os_scroll', {'direction': 'down'});
+        expect(scrolled['how'], ['scrolled down in the window directly']);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        backend.directAnswer = (ran: GaiaDirectRan.select, miss: null);
+        final selected = await act('os_click', {'name': 'Subject'});
+        expect(selected['how'], ['selected "Subject" directly']);
+        expect(backend.calls, isEmpty);
+        expect(backend.directs.map((d) => d.$1), [
+          GaiaDirectKind.type,
+          GaiaDirectKind.scroll,
+          GaiaDirectKind.click,
+        ]);
+      });
+
+      test('a double or right click, a point, a key or a drag never goes '
+          'direct', () async {
+        backend.front = _target.hwnd;
+        backend.rootUnder = _target.hwnd;
+        await act('os_click', {'name': 'Save', 'double': true});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await act('os_click', {'name': 'Save', 'button': 'right'});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await act('os_click', {'x': 20, 'y': 20});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await act('os_key', {'keys': 'A'});
+        expect(backend.directs, isEmpty);
+      });
+
+      test('no pattern for it: as real input, once the user pauses, with the '
+          'pin brought up', () async {
+        backend.directAnswer = (ran: null, miss: GaiaDirectMiss.noPattern);
+        backend.onDirect = () => backend.rootUnder = _target.hwnd;
+        final result = await act('os_click', {'name': 'Save'});
+        expect(result['stopped'], isNull);
+        expect(backend.directs, hasLength(1));
+        expect(backend.front, _target.hwnd);
+        expect(backend.cursor, [(20, 20)]);
+        expect((result['how']! as List).single, startsWith('brought Notepad'));
+      });
+
+      test(
+        'a field with text is typed into as real input (§13.10 q4)',
+        () async {
+          backend.matches = [
+            (
+              type: 'Edit',
+              sensitive: false,
+              left: 10,
+              top: 10,
+              right: 30,
+              bottom: 30,
+            ),
+          ];
+          backend.directAnswer = (ran: null, miss: GaiaDirectMiss.hasText);
+          backend.onDirect = () => backend.rootUnder = _target.hwnd;
+          final result = await act('os_type', {
+            'name': 'Subject',
+            'text': 'ab',
+          });
+          expect(result['stopped'], isNull);
+          expect(backend.sent.whereType<GaiaUnicodeEvent>(), hasLength(4));
+        },
+      );
+
+      test('refusals stop the run with nothing sent', () async {
+        for (final (miss, words) in [
+          (GaiaDirectMiss.sensitive, 'password'),
+          (GaiaDirectMiss.disabled, 'disabled'),
+          (GaiaDirectMiss.denied, 'administrator'),
+          (GaiaDirectMiss.notFound, 'not on screen'),
+          (GaiaDirectMiss.busy, "didn't answer"),
+        ]) {
+          backend.directAnswer = (ran: null, miss: miss);
+          final result = await act('os_click', {'name': 'Save'});
+          expect(result['stopped'], contains(words), reason: '$miss');
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
+        expect(backend.calls, isEmpty);
+        expect(stops, 0);
+      });
+
+      test(
+        "an app that doesn't answer counts as sent, and the agent is told",
+        () async {
+          backend.directAnswer = null;
+          final result = await act('os_click', {'name': 'Send'});
+          expect(result['stopped'], isNull);
+          expect(result['how'], [
+            'pressed "Send", and Notepad hasn\'t answered yet',
+          ]);
+        },
+      );
+
+      test('direct steps carry on while Gaia is in front', () async {
+        await act('os_click', {'name': 'Save'});
+        backend.front = gaia.hwnd;
+        backend.gaiaInFront = true;
+        // The pin must have been in front once for Gaia in front to pause.
+        await Future<void>.delayed(look);
+        final result = await act('os_click', {'name': 'Save'});
+        expect(result['stopped'], isNull);
+        expect(backend.directs, hasLength(2));
+      });
+
+      test("a dialog the step opened behind is adopted: its app's or owned "
+          'by the pin (§13.5)', () async {
+        const dialog = (
+          hwnd: 72,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'Save as',
+          console: false,
+        );
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[dialog.hwnd] = dialog;
+        backend.appWindowList = [_target.hwnd];
+        backend.onDirect = () => backend.appWindowList = [_target.hwnd, 72];
+        final first = await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(stops, 0);
+        expect(backend.front, other.hwnd, reason: 'never brought up');
+        final second = await act('os_click', {'name': 'Save'});
+        expect('${first['adopted']}${second['adopted']}', contains('Save as'));
+        expect(auto.session('chat', auto: true, onUserStop: () {})?.hwnd, 72);
+      });
+
+      test("the user's window goes back in front when the call's app takes "
+          'it anyway, and is not adopted (BUG-372)', () async {
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[other.hwnd] = other;
+        // As a WinForms list does for a select, from inside the app.
+        backend.onDirect = () => backend.front = _target.hwnd;
+        backend.directHold = const Duration(milliseconds: 100);
+        final result = await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(result['stopped'], isNull);
+        expect(backend.front, other.hwnd);
+        expect(result['adopted'], isNull);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          _target.hwnd,
+        );
+        expect(stops, 0);
+      });
+
+      test('a call made with the target in front leaves it there', () async {
+        backend.windows[_target.hwnd] = _target;
+        backend.front = _target.hwnd;
+        backend.rootUnder = _target.hwnd;
+        await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(backend.front, _target.hwnd);
+        expect(backend.activated, 0);
+      });
+
+      test('a modal dialog that holds the call is adopted past adoptWithin, '
+          'so reads go to it while the call is stuck (BUG-374)', () async {
+        const dialog = (
+          hwnd: 72,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'Restart now?',
+          console: false,
+        );
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[dialog.hwnd] = dialog;
+        backend.appWindowList = [_target.hwnd];
+        backend.onDirect = () async {
+          // The dialog shows once the app runs the click, later than
+          // adoptWithin (300 ms here) after the call was made.
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+          backend.appWindowList = [_target.hwnd, 72];
+        };
+        backend
+          ..directHold = const Duration(milliseconds: 800)
+          ..directAnswer = null;
+        final result = await act('os_click', {'name': 'Save'});
+        expect(result['how'], [
+          'pressed "Save", and Notepad hasn\'t answered yet',
+        ]);
+        expect(result['adopted'], contains('Restart now?'));
+        expect(auto.session('chat', auto: true, onUserStop: () {})?.hwnd, 72);
+        expect(stops, 0);
+      });
+
+      test("a window of the pin's app that comes up after the user's own "
+          'input in that app is theirs, not adopted', () async {
+        const mine = (
+          hwnd: 73,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'mine.txt',
+          console: false,
+        );
+        const theirs = (
+          hwnd: 72,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'Untitled',
+          console: false,
+        );
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[mine.hwnd] = mine
+          ..[theirs.hwnd] = theirs;
+        backend.appWindowList = [_target.hwnd, mine.hwnd];
+        // The user works in their own window of the same app, as with two
+        // Explorer windows.
+        backend.front = mine.hwnd;
+        backend.onDirect = () async {
+          // Past adoptWithin, while the call is held, they open another
+          // window there.
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          backend.inputTick += 1;
+          await Future<void>.delayed(look);
+          backend.appWindowList = [_target.hwnd, mine.hwnd, theirs.hwnd];
+        };
+        backend
+          ..directHold = const Duration(milliseconds: 900)
+          ..directAnswer = null;
+        final result = await act('os_click', {'name': 'Save'});
+        expect(result['adopted'], isNull);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          _target.hwnd,
+        );
+      });
+
+      test("the user clicking into the app's other window during a held call "
+          "is their switch: it isn't given back, nor adopted", () async {
+        const mine = (
+          hwnd: 73,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'mine.txt',
+          console: false,
+        );
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[other.hwnd] = other
+          ..[mine.hwnd] = mine;
+        backend.appWindowList = [_target.hwnd, mine.hwnd];
+        backend.onDirect = () async {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          backend
+            ..rootUnder = mine.hwnd
+            ..inputTick += 1
+            ..front = mine.hwnd;
+        };
+        backend
+          ..directHold = const Duration(milliseconds: 700)
+          ..directAnswer = null;
+        final result = await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(backend.front, mine.hwnd);
+        expect(result['adopted'], isNull);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          _target.hwnd,
+        );
+        expect(stops, 0);
+      });
+
+      test("the user's keyboard switch to the app during a held call, with the "
+          "cursor elsewhere, is theirs too, as is a window it opens", () async {
+        const mine = (
+          hwnd: 73,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'mine.txt',
+          console: false,
+        );
+        const opened = (
+          hwnd: 74,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'Untitled',
+          console: false,
+        );
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[other.hwnd] = other
+          ..[mine.hwnd] = mine
+          ..[opened.hwnd] = opened;
+        backend.appWindowList = [_target.hwnd, mine.hwnd];
+        backend.rootUnder = other.hwnd;
+        backend.onDirect = () async {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          // Alt+Tab to their own window, then Win+E-style, a new one.
+          backend
+            ..userSwitchAt = DateTime.now()
+            ..front = mine.hwnd;
+          await Future<void>.delayed(look);
+          backend
+            ..userSwitchAt = DateTime.now()
+            ..appWindowList = [_target.hwnd, mine.hwnd, opened.hwnd];
+        };
+        backend
+          ..directHold = const Duration(milliseconds: 800)
+          ..directAnswer = null;
+        final result = await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(backend.front, mine.hwnd);
+        expect(result['adopted'], isNull);
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          _target.hwnd,
+        );
+        expect(stops, 0);
+      });
+
+      test('the app taking the front while the user types elsewhere is '
+          'still given back (BUG-372)', () async {
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[other.hwnd] = other;
+        backend.rootUnder = other.hwnd;
+        backend.onDirect = () {
+          backend
+            ..inputTick += 1
+            ..front = _target.hwnd;
+        };
+        backend.directHold = const Duration(milliseconds: 100);
+        final result = await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(result['stopped'], isNull);
+        expect(backend.front, other.hwnd);
+      });
+
+      test("a give-back no look saw doesn't hide the user's later switch to "
+          'that window', () async {
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[other.hwnd] = other;
+        backend.rootUnder = other.hwnd;
+        auto.session('chat', auto: true, onUserStop: () => stops++);
+        // Whether a look sees the target in front before it's given back
+        // depends on the timers, so a few rounds.
+        for (var round = 0; round < 6; round++) {
+          // Past the last call's give-back watch.
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          // Engaged, so Gaia in front pauses. Each switch is the user's click.
+          backend
+            ..inputTick += 1
+            ..front = _target.hwnd;
+          await Future<void>.delayed(look);
+          backend
+            ..inputTick += 1
+            ..front = other.hwnd;
+          await Future<void>.delayed(look);
+          backend.onDirect = () => backend.front = _target.hwnd;
+          final result = await act('os_click', {'name': 'Save'});
+          await Future<void>.delayed(look);
+          expect(result['stopped'], isNull, reason: 'round $round');
+          // Read as Windows is, finishing a switch it agreed to.
+          expect(backend.foreground(), other.hwnd, reason: 'round $round');
+          backend
+            ..inputTick += 1
+            ..front = gaia.hwnd
+            ..gaiaInFront = true;
+          await Future<void>.delayed(look);
+          expect(auto.sessionPaused, isTrue, reason: 'round $round');
+          backend
+            ..inputTick += 1
+            ..front = other.hwnd
+            ..gaiaInFront = false;
+          await Future<void>.delayed(look);
+          expect(auto.sessionPaused, isFalse, reason: 'round $round');
+          expect(
+            auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+            _target.hwnd,
+            reason: 'round $round',
+          );
+        }
+        expect(stops, 0);
+      });
+
+      test("after the user's input elsewhere, only a window the pin owns is "
+          "adopted behind, not another of its app's (§13.5)", () async {
+        const theirs = (
+          hwnd: 73,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'report.txt',
+          console: false,
+        );
+        const dialog = (
+          hwnd: 72,
+          pid: 70,
+          exe: 'notepad',
+          app: 'Notepad',
+          title: 'Save as',
+          console: false,
+        );
+        backend.windows
+          ..[_target.hwnd] = _target
+          ..[other.hwnd] = other
+          ..[theirs.hwnd] = theirs
+          ..[dialog.hwnd] = dialog;
+        backend.owners[dialog.hwnd] = _target.hwnd;
+        backend.appWindowList = [_target.hwnd];
+        backend.onDirect = () async {
+          // The user, in their own app, opens a document of the pin's app
+          // from there, as from Explorer.
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          backend.inputTick += 1;
+          await Future<void>.delayed(look);
+          backend.appWindowList = [_target.hwnd, theirs.hwnd];
+          await Future<void>.delayed(look);
+          expect(
+            auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+            _target.hwnd,
+          );
+          // Then the step's own dialog.
+          backend.appWindowList = [_target.hwnd, theirs.hwnd, dialog.hwnd];
+        };
+        backend
+          ..directHold = const Duration(milliseconds: 600)
+          ..directAnswer = null;
+        final result = await act('os_click', {'name': 'Save'});
+        expect(result['adopted'], contains('Save as'));
+        expect(
+          auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+          dialog.hwnd,
+        );
+        expect(stops, 0);
+      });
+
+      test('windows a step opens together are adopted once, the top one, '
+          'not one after another', () async {
+        for (final (hwnd, title) in [(72, 'Main'), (73, 'Splash')]) {
+          backend.windows[hwnd] = (
+            hwnd: hwnd,
+            pid: 70,
+            exe: 'notepad',
+            app: 'Notepad',
+            title: title,
+            console: false,
+          );
+        }
+        backend.windows[_target.hwnd] = _target;
+        backend.appWindowList = [_target.hwnd];
+        backend.onDirect = () => backend.appWindowList = [_target.hwnd, 72, 73];
+        await act('os_click', {'name': 'Save'});
+        await Future<void>.delayed(look);
+        expect(auto.session('chat', auto: true, onUserStop: () {})?.hwnd, 72);
+      });
+
+      test(
+        'a scroll at a point, and text with Enter or Tab, go as input',
+        () async {
+          await act('os_scroll', {'x': 120, 'y': 400, 'direction': 'down'});
+          await act('os_type', {'name': 'Save', 'text': 'invoices\n'});
+          await act('os_type', {'name': 'Save', 'text': 'a\tb'});
+          expect(backend.directs, isEmpty);
+          await act('os_scroll', {'direction': 'down'});
+          await act('os_type', {'name': 'Save', 'text': 'invoices'});
+          expect(backend.directs.map((call) => call.$1), [
+            GaiaDirectKind.scroll,
+            GaiaDirectKind.type,
+          ]);
+        },
+      );
+
+      test(
+        "a window the user's own work opens elsewhere isn't adopted",
+        () async {
+          backend.appWindowList = [_target.hwnd];
+          await act('os_click', {'name': 'Save'});
+          // Not the pin's app, so appWindows never lists it.
+          backend.front = other.hwnd;
+          await Future<void>.delayed(look);
+          expect(
+            auto.session('chat', auto: true, onUserStop: () {})?.hwnd,
+            _target.hwnd,
+          );
+        },
+      );
+
+      test('in Ask, a named click still goes direct, with the window in '
+          'front as ever', () async {
+        backend.front = _target.hwnd;
+        await control.plan('chat', 'card', 'os_click', {'name': 'Save'});
+        final result = await control.run(
+          'card',
+          once: true,
+          check: () async {},
+        );
+        expect(result['stopped'], isNull);
+        expect(backend.directs, hasLength(1));
+        expect(backend.calls, isEmpty);
+      });
     });
 
     test('one session at a time: another chat is refused', () async {
@@ -2292,6 +3046,63 @@ void main() {
       expect(backend.front, calc.hwnd);
     });
 
+    test('in Auto, os_focus waits for the user to pause too, and is refused '
+        'while they keep typing (§13.4)', () async {
+      final control = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => const [],
+        vaultUnlocked: () => false,
+        backend: backend,
+        settle: Duration.zero,
+        leadIn: Duration.zero,
+        pace: Duration.zero,
+        pauseBefore: const Duration(milliseconds: 100),
+        frontWait: const Duration(milliseconds: 300),
+      );
+      addTearDown(control.endTurn);
+      backend.listed = [listed(_target), listed(calc)];
+      // The user types in their own window, not the pin.
+      const mine = (
+        hwnd: 98,
+        pid: 95,
+        exe: 'word',
+        app: 'Word',
+        title: 'Notes',
+        console: false,
+      );
+      backend
+        ..windows[mine.hwnd] = mine
+        ..front = mine.hwnd;
+      control.session(
+        'chat',
+        auto: true,
+        onUserStop: () {},
+        needsWindow: false,
+      );
+      final typing = Timer.periodic(
+        const Duration(milliseconds: 30),
+        (_) => backend.inputTick++,
+      );
+      addTearDown(typing.cancel);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await control.plan('chat', 'card', 'os_focus', {'window': 'Calculator'});
+      final refused = await control.run('card', once: true, check: () async {});
+      expect(refused['stopped'], contains('kept working'));
+      expect(backend.front, mine.hwnd);
+      expect(backend.activated, 0);
+      typing.cancel();
+      await control.plan('chat', 'card', 'os_focus', {'window': 'Calculator'});
+      final started = DateTime.now();
+      final result = await control.run('card', once: true, check: () async {});
+      expect(result['stopped'], isNull);
+      expect(
+        DateTime.now().difference(started),
+        greaterThanOrEqualTo(const Duration(milliseconds: 50)),
+        reason: 'waited for the pause',
+      );
+      expect(backend.front, calc.hwnd);
+    });
+
     test('a window that closed before os_focus ran is a stop', () async {
       backend.listed = [listed(calc)];
       await control.plan('chat', 'card', 'os_focus', {'window': 99});
@@ -2591,6 +3402,7 @@ void main() {
       });
 
       test('approved, it runs, flashed where the window was', () async {
+        backend.rootUnder = 99;
         for (final (arguments, did) in [
           ({'action': 'minimize'}, 'minimize 99'),
           ({'action': 'maximize'}, 'maximize 99'),

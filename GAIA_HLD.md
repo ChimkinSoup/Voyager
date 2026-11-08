@@ -1372,6 +1372,19 @@ no step-list cards, the turn's target stays pinned, and the stop model below it 
 Esc, switching windows yourself, and the rest of §5.3 there. The refusals don't
 change.
 
+**Direct actions and background runs (amended 2026-11-08, GAIA_AUTONOMY_HLD.md §13):**
+a named control's plain click or typing, and any scroll, first go through UI
+Automation's patterns, with no input sent and no need for the window in front.
+That holds in Ask and Auto alike. The other actions, and any step no pattern can
+do, still need the front. In Auto, a step that needs the front waits for a 2 s
+pause in the user's own work before bringing the pinned window up, and is refused
+after 30 s. Switching windows yourself no longer ends an Auto run. A press in the
+pinned window while it's in front does, and so does Esc while that window or Gaia
+is in front. A new window of the pinned window's app, or one it owns, is adopted
+within 1.5 s of a step even if it opens behind. Flashes play only where the user
+can see them. The sensitive-field, exclusion and vault refusals apply to direct
+calls as to input.
+
 **The target window is never Gaia (decided 2026-11-01).** In Ask, every `os.*` call
 works out its target when it runs; in Auto, it's the session's pinned window
 (GAIA_AUTONOMY_HLD.md §5.2). If the foreground window is one of Gaia's,
@@ -1451,6 +1464,13 @@ one step list, and ends the turn. Esc or switching windows also sets a latch, so
 that turn's `os_*` calls are refused however slowly its agent stops, and turns the
 chat's drain mode off, so the next queued prompt doesn't carry on
 (GAIA_AUTONOMY_HLD.md §5.3).
+
+**Esc's reach in Auto (amended 2026-11-08, GAIA_AUTONOMY_HLD.md §13.5).** Esc ends
+an Auto turn only while the pinned window or Gaia is in front: Esc in the user's
+own app, closing a menu there, is theirs. Switching windows no longer stops a run;
+a press in the pinned window while it's in front does, with the same latch. The
+Stop button, Revoke and Abort are unchanged, and the Stop button is the stop while
+the user is in another app.
 
 ---
 
@@ -1649,11 +1669,13 @@ Phase 4A as built (2026-10-28):
   Claude Code gets `MCP_TOOL_TIMEOUT` past the hold. A 75 s held call
   works on both (2.1.312, 0.164.0).
 - **Tools.** `ask_user` (a question, up to 9 options, multi-select, a
-  recommended one), plus four reads answered by the main instance:
+  recommended one), plus five reads answered by the main instance:
   `voyager_todos` (open tasks by list with subtasks, by due date or list),
   `voyager_calendar` (up to 62 days, repeating events on each day they
   occur, moved occurrences in their place), `voyager_journal` (up to 31
-  days) and `voyager_workouts` (up to 62 days, sets per exercise). Each
+  days), `voyager_workouts` (up to 62 days, sets per exercise) and
+  `voyager_trackers` (up to 366 days, the user's own analytics trackers
+  with each reading; not the built-in derived ones). Each
   read is plain text in a `<voyager_data>` block framed as reference, not
   instructions, with today's date. None of them reads secure notes. Reads
   are on in every chat: the workspace toggle (§5.2) waits for workspace

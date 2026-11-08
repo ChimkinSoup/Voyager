@@ -42,6 +42,35 @@ int main() {
   Expect(!GaiaIsUserPress(false, WM_LBUTTONDOWN, LLMHF_INJECTED),
          "an injected click doesn't");
 
+  {
+    GaiaSwitchKeys keys;
+    Expect(!GaiaEndsSwitch(keys, WM_SYSKEYDOWN, VK_LMENU, LLKHF_ALTDOWN),
+           "Alt down isn't a switch");
+    Expect(!GaiaEndsSwitch(keys, WM_SYSKEYDOWN, VK_TAB, LLKHF_ALTDOWN),
+           "Alt+Tab's Tab isn't yet");
+    Expect(!GaiaEndsSwitch(keys, WM_SYSKEYUP, VK_TAB, LLKHF_ALTDOWN),
+           "nor Tab let go");
+    Expect(GaiaEndsSwitch(keys, WM_KEYUP, VK_LMENU, 0),
+           "Alt let go after Alt+Tab is");
+    Expect(!GaiaEndsSwitch(keys, WM_SYSKEYDOWN, VK_LMENU, LLKHF_ALTDOWN) &&
+               !GaiaEndsSwitch(keys, WM_KEYUP, VK_LMENU, 0),
+           "Alt alone isn't");
+    Expect(!GaiaEndsSwitch(keys, WM_KEYDOWN, VK_LWIN, 0),
+           "Win down isn't");
+    Expect(GaiaEndsSwitch(keys, WM_KEYDOWN, '1', 0), "Win+1 is");
+    Expect(!GaiaEndsSwitch(keys, WM_KEYDOWN, VK_TAB, 0), "Win+Tab isn't");
+    Expect(!GaiaEndsSwitch(keys, WM_KEYUP, VK_LWIN, 0), "Win up isn't");
+    Expect(!GaiaEndsSwitch(keys, WM_KEYDOWN, '1', 0), "1 after Win isn't");
+    Expect(!GaiaEndsSwitch(keys, WM_KEYDOWN, VK_TAB, 0) &&
+               !GaiaEndsSwitch(keys, WM_KEYDOWN, 'A', 0),
+           "typing isn't");
+    GaiaSwitchKeys injected;
+    GaiaEndsSwitch(injected, WM_SYSKEYDOWN, VK_TAB,
+                   LLKHF_ALTDOWN | LLKHF_INJECTED);
+    Expect(!GaiaEndsSwitch(injected, WM_KEYUP, VK_LMENU, 0),
+           "an injected Alt+Tab isn't the user's");
+  }
+
   for (int round = 0; round < 2; ++round) {
     Expect(GaiaWatchUserInput(1) == 1, "the hooks go in");
     const unsigned int before = GaiaUserInputCount();
@@ -60,6 +89,7 @@ int main() {
     move.mi.dwFlags = MOUSEEVENTF_MOVE;
     SendAndWait(&move, 1);
     Expect(GaiaUserInputCount() == before, "injected input isn't counted");
+    Expect(GaiaUserSwitchAge() == 0xFFFFFFFF, "no switch yet");
     Expect(GaiaWatchUserInput(0) == 1, "the hooks come out");
   }
 

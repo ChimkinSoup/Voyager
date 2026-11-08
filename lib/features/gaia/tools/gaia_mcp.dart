@@ -207,6 +207,25 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     },
   },
   {
+    'name': 'voyager_trackers',
+    'description':
+        "Read the user's analytics trackers from Voyager (body weight, "
+        'habits, counts…): each tracker with its readings from one day to '
+        'another, at most 366 days.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'from': {'type': 'string', 'description': 'YYYY-MM-DD, inclusive.'},
+        'to': {'type': 'string', 'description': 'YYYY-MM-DD, inclusive.'},
+        'tracker': {
+          'type': 'string',
+          'description': "A tracker's name: only that tracker.",
+        },
+      },
+      'required': ['from', 'to'],
+    },
+  },
+  {
     'name': 'propose_todo',
     'description':
         'Propose a new task in Voyager, or a change to one. Nothing is '
@@ -428,7 +447,9 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'description':
         'Click in the window the os_ tools work on. Name the control as '
         "os_read_screen shows it; use x and y alone only for what it can't "
-        'describe. Runs at once or after the user approves a card, depending '
+        'describe. A named control can also be pressed without taking the '
+        "user's screen, while they work in another window, so name controls "
+        'rather than give points. Runs at once or after the user approves a card, depending '
         "on the chat's mode, and the result says what ran. Works only if the "
         'user has turned on "can control" for this chat, with the hand button '
         'under the composer. After any action, read the screen again rather '

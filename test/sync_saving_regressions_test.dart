@@ -1308,6 +1308,34 @@ void main() {
           expect(editor.text, 'hello world!!');
         },
       );
+
+      test(
+        '${kind.name}: started empty, its first upload coming back late does '
+        'not copy the text in again ahead of itself',
+        () async {
+          // The "I'm Free!" entry (10-08): the last remote text seen was the
+          // new entry's "", and the upload made while typing paused at `"As`
+          // came back unrecognised after more was typed. Diffed from "", all
+          // of it went in again at the start: P + P + C.
+          var at = Duration.zero;
+          a.sync.echoClock = () => at;
+          final editor = await openEditor(a, kind, '');
+          await save(editor, kind);
+          at = const Duration(hours: 1);
+          await deliver(a, kind.collection);
+
+          editor.type('the question only stated "As');
+          await save(editor, kind);
+          editor.type('sume 2 students"');
+          // The autosave stores it at once; the upload is what lags.
+          await kind.saveLocally(a, editor.text);
+
+          at = const Duration(hours: 2);
+          await deliver(a, kind.collection);
+
+          expect(editor.text, 'the question only stated "Assume 2 students"');
+        },
+      );
     }
 
     test("another device's text lands once, and the caret stays put", () async {
