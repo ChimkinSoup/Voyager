@@ -4728,7 +4728,8 @@ GaiaCombo _sendCombo(GaiaController controller) =>
     parseGaiaCombo(GaiaKeybind.send.defaultCombo)!;
 
 /// Edit & resend: [message] into the composer, once the user says to
-/// replace what's in it, with the send keybind or the button.
+/// replace what's in it, with the send keybind or the button, and the
+/// focus there to edit it.
 Future<void> _editMessage(
   BuildContext context,
   GaiaController controller,
@@ -4766,6 +4767,7 @@ Future<void> _editMessage(
     if (confirmed != true) return;
   }
   controller.editMessage(message);
+  controller.focusComposer();
 }
 
 /// In place of the composer while Voyager waits to quit or update (§3.2):

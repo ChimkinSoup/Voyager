@@ -231,16 +231,18 @@ abstract interface class GaiaAgentRunner {
   /// new ones on a resume. [account] is the login it runs on (§6.1); null for
   /// the one Voyager was started with. [promptId] is the user message's id,
   /// which a backend that can names the prompt by in its session
-  /// (GAIA_FORKING_HLD.md §5.1); null for one of its own. [fork], with a null
-  /// [sessionId], makes the new session a native fork of another chat's
-  /// (§5.3), for a backend that can; one that can't make it reports
-  /// [GaiaTurnResult.sessionFound] false. [onEvent] gets each event of the
-  /// turn; the future completes with its result, or throws a
+  /// (GAIA_FORKING_HLD.md §5.1); null for one of its own. [effort] is the
+  /// agent's thinking level ([GaiaAgent.effort]); null for the CLI's default.
+  /// [fork], with a null [sessionId], makes the new session a native fork of
+  /// another chat's (§5.3), for a backend that can; one that can't make it
+  /// reports [GaiaTurnResult.sessionFound] false. [onEvent] gets each event
+  /// of the turn; the future completes with its result, or throws a
   /// [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},

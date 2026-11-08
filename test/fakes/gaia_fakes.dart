@@ -174,7 +174,6 @@ class FakeGaiaWindow implements GaiaWindow {
     bool? fullScreen,
     bool activate = true,
   }) async {
-    away = !foreground;
     shown = mode;
     this.frame = frame;
     this.behind = behind || !activate;
@@ -204,11 +203,7 @@ class FakeGaiaWindow implements GaiaWindow {
   void blurred() {
     if (shown == null) return;
     returnTo = 0;
-    away = true;
   }
-
-  @override
-  var away = false;
 
   /// How many times [attend] brought the window up for a card.
   var attended = 0;
@@ -225,6 +220,7 @@ typedef FakeClaudeSend = ({
   String chatId,
   String? sessionId,
   String model,
+  String? effort,
   String prompt,
   List<GaiaImageInput> images,
   Set<String> directories,
@@ -350,6 +346,7 @@ class FakeClaudeRunner
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
@@ -367,6 +364,7 @@ class FakeClaudeRunner
       chatId: chatId,
       sessionId: sessionId,
       model: model,
+      effort: effort,
       prompt: prompt,
       images: images,
       directories: directories,

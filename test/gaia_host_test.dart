@@ -1850,16 +1850,19 @@ void main() {
       });
     });
 
-    test('with the vault unlocked, C and D capture nothing and the companion '
-        'says why', () {
+    test('with the vault unlocked, C and D still capture: Voyager keeps '
+        'itself out of the picture', () {
       run(show: true, vaultUnlocked: true, (async, host) {
         connect(async);
         for (final hotkey in [GaiaHotkey.region, GaiaHotkey.screen]) {
           host.onHotkey(hotkey);
           async.flushMicrotasks();
-          expect(captured, isEmpty);
-          expect(companions.single.events.last, 'refused vault');
         }
+        expect(captured, hasLength(2));
+        expect(
+          companions.single.events.where((e) => e.startsWith('refused')),
+          isEmpty,
+        );
       });
     });
 

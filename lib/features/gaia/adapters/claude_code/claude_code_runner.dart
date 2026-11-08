@@ -208,6 +208,7 @@ class ClaudeCodeRunner
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
@@ -227,6 +228,7 @@ class ClaudeCodeRunner
       sessionId: sessionId,
       newSessionId: newSessionId,
       model: model,
+      effort: effort,
       prompt: prompt,
       images: images,
       directories: directories,
@@ -284,6 +286,7 @@ class ClaudeCodeRunner
     sessionId: sessionId,
     newSessionId: newSessionId,
     model: model,
+    effort: null,
     prompt: prompt,
     images: images,
     directories: const {},
@@ -304,6 +307,7 @@ class ClaudeCodeRunner
     required String? sessionId,
     required String newSessionId,
     required String model,
+    required String? effort,
     required String prompt,
     required List<GaiaImageInput> images,
     required Set<String> directories,
@@ -339,10 +343,12 @@ class ClaudeCodeRunner
     // with, whatever file it's given (checked on 2.1.314). The account is
     // fixed too: a chat that moved to another resumes its copy of the session
     // there (§6.5). A fork is always a process of its own, and so is a new
-    // session: a fork's failed first turn is retried as one (§10.5).
+    // session: a fork's failed first turn is retried as one (§10.5). So is
+    // the effort, a flag like the model.
     if (process != null &&
         (process.sessionId != sessionId ||
             process.model != model ||
+            process.effort != effort ||
             process.configDir != configDir ||
             !process.started ||
             (cut != null && process.cut != cut) ||
@@ -366,6 +372,7 @@ class ClaudeCodeRunner
       process = await _ClaudeProcess.start(
         workingDirectory: workingDirectory,
         model: model,
+        effort: effort,
         configDir: configDir,
         onLine: onLine,
         directories: directories,
@@ -611,6 +618,7 @@ class ClaudeCodeRunner
     final check = await _ClaudeProcess.start(
       workingDirectory: workingDirectory,
       model: process.model,
+      effort: process.effort,
       configDir: process.configDir,
       onLine: onLine,
       directories: process.directories,
@@ -830,6 +838,7 @@ class _ClaudeProcess {
   _ClaudeProcess._(
     this._process,
     this.model,
+    this.effort,
     this.configDir,
     this.directories,
     this._onRawLine,
@@ -865,6 +874,7 @@ class _ClaudeProcess {
   static Future<_ClaudeProcess> start({
     required String workingDirectory,
     required String model,
+    required String? effort,
     required String configDir,
     required void Function(String line)? onLine,
     required Set<String> directories,
@@ -902,6 +912,7 @@ class _ClaudeProcess {
           'AskUserQuestion',
           '--model',
           model,
+          if (effort != null) ...['--effort', effort],
           // Outside the workspace, where attached files are read (§9.3).
           for (final directory in directories) ...['--add-dir', directory],
           ...sessionArgs,
@@ -914,6 +925,7 @@ class _ClaudeProcess {
         includeParentEnvironment: false,
       ),
       model,
+      effort,
       configDir,
       directories,
       onLine,
@@ -933,6 +945,7 @@ class _ClaudeProcess {
 
   final Process _process;
   final String model;
+  final String? effort;
   final String configDir;
   final Set<String> directories;
   final void Function(String line)? _onRawLine;

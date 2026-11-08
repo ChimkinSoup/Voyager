@@ -674,10 +674,10 @@ class GaiaHost {
   /// C and D (§15.1): the monitor under the cursor, captured here and now,
   /// while whatever the user wanted in the shot is still on screen; the
   /// companion crops (C) or attaches (D) it. Aborted, nothing is captured
-  /// (§15.7), nor with the vault unlocked, whose windows it could show (§15.6).
+  /// (§15.7). The vault needs no check: while it's unlocked, Voyager's window
+  /// keeps itself out of captures (secure_window.dart, §15.6).
   Future<void> _captureScreen(GaiaHotkey hotkey) async {
     if (_aborted) return _sendOrLaunch('refused', {'reason': 'aborted'});
-    if (_vaultUnlocked()) return _sendOrLaunch('refused', {'reason': 'vault'});
     final dir = await _captureDirectory();
     final capture = await _captureScreenTo(
       p.join(dir.path, 'capture-${DateTime.now().microsecondsSinceEpoch}.bmp'),

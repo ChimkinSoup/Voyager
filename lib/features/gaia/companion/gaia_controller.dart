@@ -1237,10 +1237,6 @@ class GaiaController extends ChangeNotifier {
   /// The drain's Cancel stopped the runs: their replies are `interrupted`.
   var _drainCancelled = false;
 
-  /// The mode to go back to when a floater opened over the Gaia window is
-  /// dismissed (§3.3).
-  GaiaMode? _returnTo;
-
   final _stopping = <String>{};
 
   /// Each running chat's tools for its turn.
@@ -2053,7 +2049,7 @@ class GaiaController extends ChangeNotifier {
       case 'pointed':
         _onPointed(params);
       case 'refused':
-        unawaited(_onRefused(vault: params['reason'] == 'vault'));
+        unawaited(_onRefused());
       case 'recheckUsage':
         for (final account in _usageSources.keys.expand(accountsFor)) {
           if (account.key == params['key']) unawaited(_readUsage(account));
@@ -2251,15 +2247,12 @@ class GaiaController extends ChangeNotifier {
     await _show(_window.shown ?? GaiaMode.small);
   }
 
-  /// A capture hotkey while aborted (§15.7), or with [vault] unlocked (§15.6):
-  /// Gaia comes up saying so.
-  Future<void> _onRefused({bool vault = false}) async {
+  /// A capture hotkey while aborted (§15.7): Gaia comes up saying so.
+  Future<void> _onRefused() async {
     _toasts.add((
       chatId: '',
-      title: vault ? "Can't capture the screen" : 'Gaia is aborted',
-      body: vault
-          ? "Voyager's secure vault is unlocked. Lock it to use this."
-          : 'Re-arm it to use this.',
+      title: 'Gaia is aborted',
+      body: 'Re-arm it to use this.',
       error: true,
       question: false,
     ));
@@ -2285,25 +2278,17 @@ class GaiaController extends ChangeNotifier {
                 shown == GaiaMode.window &&
                 (key == 'window' ||
                     (key == 'fullScreen' && _window.fullScreen))));
-    if (closes) {
-      // A floater closes rather than going back to the Gaia window it was
-      // opened over, which the next press would turn back into the floater.
-      if (key == shown?.name) _returnTo = null;
-      return dismiss();
-    }
+    if (closes) return dismiss();
     await _openWaitingChat();
     switch (key) {
       case 'small':
-        _returnTo = shown == GaiaMode.window ? GaiaMode.window : _returnTo;
         await _show(GaiaMode.small);
       case 'large':
-        _returnTo = shown == GaiaMode.window ? GaiaMode.window : _returnTo;
         await _show(GaiaMode.large);
       case 'window':
         await openWindow();
       case 'fullScreen':
         await _openLastChat();
-        _returnTo = null;
         await _show(GaiaMode.window, fullScreen: true);
     }
     _summoned.add(null);
@@ -2325,7 +2310,6 @@ class GaiaController extends ChangeNotifier {
   Future<void> _onSplit(GaiaFrame half) async {
     if (cropping != null) return finishCrop(null);
     _dropPickUp();
-    _returnTo = null;
     await _show(GaiaMode.window, frame: half, fullScreen: false);
     _summoned.add(null);
   }
@@ -2355,7 +2339,6 @@ class GaiaController extends ChangeNotifier {
   bool get fullScreen => _window.fullScreen;
 
   Future<void> openWindow() async {
-    _returnTo = null;
     await _show(GaiaMode.window);
   }
 
@@ -2374,18 +2357,11 @@ class GaiaController extends ChangeNotifier {
     }
   }
 
-  /// Escape or close: a floater opened over the Gaia window turns back into
-  /// it; anything else hides. Runs carry on (§14).
+  /// Escape or close: hides, a floater opened over the Gaia window included,
+  /// since it took the window's place (§3.3). Runs carry on (§14).
   Future<void> dismiss() async {
     if (cropping != null) return finishCrop(null);
     if (_pickingUp) return cancelPickUp();
-    final back = _returnTo;
-    _returnTo = null;
-    // Not in the Gaia window when the floater came up, or gone to another
-    // app since, the user gets that app back, with the window behind it.
-    if (back != null && _window.shown != back) {
-      return _show(back, behind: _window.away);
-    }
     _window.hide();
     onScreen.value = false;
   }
@@ -4592,6 +4568,7 @@ class GaiaController extends ChangeNotifier {
               chatId: chatId,
               sessionId: session?.sessionId,
               model: agent.model,
+              effort: agent.effort,
               prompt: sent,
               images: imageInputs,
               directories: directories,
@@ -4637,6 +4614,7 @@ class GaiaController extends ChangeNotifier {
           chatId: chatId,
           sessionId: null,
           model: agent!.model,
+          effort: agent.effort,
           prompt: await handedOver(),
           images: imageInputs,
           directories: directories,

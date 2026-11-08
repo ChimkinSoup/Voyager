@@ -184,6 +184,7 @@ class GaiaAgent {
     required this.label,
     required this.adapter,
     required this.model,
+    this.effort,
   });
 
   final String id;
@@ -195,11 +196,16 @@ class GaiaAgent {
   /// Pinned on every call (§5.1).
   final String model;
 
+  /// The thinking level it runs at, one of [kGaiaEfforts] for its adapter;
+  /// null for the CLI's default.
+  final String? effort;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'label': label,
     'adapter': adapter,
     'model': model,
+    'effort': ?effort,
   };
 
   factory GaiaAgent.fromJson(Map<String, Object?> json) => GaiaAgent(
@@ -207,8 +213,49 @@ class GaiaAgent {
     label: json['label']! as String,
     adapter: json['adapter']! as String,
     model: json['model']! as String,
+    effort: json['effort'] as String?,
   );
 }
+
+/// The thinking levels each adapter's CLI takes: Claude Code's `--effort`
+/// (2.1.319's `--help`), and the levels Codex's `model/list` advertises
+/// (0.166.0; `ultra` not on every model).
+const kGaiaEfforts = {
+  kGaiaClaudeCodeAdapter: ['low', 'medium', 'high', 'xhigh', 'max'],
+  kGaiaCodexAdapter: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+};
+
+/// The Codex models `model/list` gave no `ultra` for on 0.166.0.
+const kGaiaCodexModelsWithoutUltra = {'gpt-6-luna', 'gpt-5.6-luna'};
+
+/// The levels of [kGaiaEfforts] that [model] on [adapter] takes.
+List<String> gaiaEfforts(String adapter, String model) => [
+  for (final effort in kGaiaEfforts[adapter] ?? const <String>[])
+    if (effort != 'ultra' || !kGaiaCodexModelsWithoutUltra.contains(model))
+      effort,
+];
+
+/// The models offered when adding an agent, by adapter: Claude's current
+/// ones, and those Codex's `model/list` gave on 0.166.0. Others can still be
+/// typed in.
+const kGaiaModels = {
+  kGaiaClaudeCodeAdapter: [
+    'claude-fable-5-1',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+    'claude-haiku-5-5',
+  ],
+  kGaiaCodexAdapter: [
+    'gpt-6.1-sol',
+    'gpt-6.1-terra',
+    'gpt-6-sol',
+    'gpt-6-astra',
+    'gpt-6-luna',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ],
+};
 
 /// The agents a new install starts with: Claude Code's three models, one
 /// per tier.

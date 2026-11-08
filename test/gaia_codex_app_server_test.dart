@@ -265,6 +265,27 @@ void main() {
     );
   });
 
+  test("a model's default effort comes from model/list, read once", () async {
+    final replay = _Replay('model_list.jsonl');
+    unawaited(replay.client.initialize());
+    final sol = replay.client.defaultEffort('gpt-6-sol');
+    final low = replay.client.defaultEffort('gpt-6.1-sol');
+    final hidden = replay.client.defaultEffort('gpt-reserve');
+    final typed = replay.client.defaultEffort('not-a-model');
+    await replay.feed();
+    expect(await sol, 'medium');
+    expect(await low, 'low');
+    expect(await hidden, 'medium');
+    expect(await typed, isNull);
+    expect(replay.sent.where((message) => message['method'] == 'model/list'), [
+      {
+        'id': 2,
+        'method': 'model/list',
+        'params': {'includeHidden': true},
+      },
+    ]);
+  });
+
   test('a thread Codex has no record of is not found', () async {
     final replay = _Replay('missing_thread.jsonl');
     unawaited(replay.client.initialize());

@@ -18,9 +18,13 @@
 //     history lineage for <base>: missing source rollout"); a
 //     thread keeps the developer instructions it started with, and ignores
 //     new ones given on a resume (checked on 0.164.0)
-//   turn/start {threadId, model, input: [text | localImage],
+//   turn/start {threadId, model, effort?, input: [text | localImage],
 //     clientUserMessageId?} -> {turn: {id}}; the id is the Gaia message's,
-//     kept with the turn's userMessage item as `clientId`
+//     kept with the turn's userMessage item as `clientId`. The effort holds
+//     for the thread's later turns too, until one names another, so an
+//     agent with none sends its model's default
+//   model/list {includeHidden, cursor?} -> {data: [{id,
+//     defaultReasoningEffort, supportedReasoningEfforts}], nextCursor}
 //   thread/turns/list {threadId, cursor?} -> {data: [{id, items: [{type,
 //     clientId?}]}], nextCursor}: works on a thread this process hasn't
 //     loaded. Gaia finds a prompt's turn by its clientId, to fork there
@@ -242,6 +246,7 @@ class CodexAppServerClient {
   Future<GaiaTurnResult> send({
     required String? threadId,
     required String model,
+    String? effort,
     required List<Map<String, Object?>> input,
     required GaiaTurnTools? tools,
     required void Function(GaiaAgentEvent event) onEvent,
@@ -321,6 +326,7 @@ class CodexAppServerClient {
       final started = await _request('turn/start', {
         'threadId': thread,
         'model': model,
+        'effort': ?effort,
         'input': input,
         'clientUserMessageId': ?clientId,
       });
@@ -705,6 +711,38 @@ class CodexAppServerClient {
     _send({'id': id, 'result': result});
   }
 
+  /// [model]'s default thinking level, from `model/list`; null for a model
+  /// it doesn't list, or when it fails.
+  Future<String?> defaultEffort(String model) async =>
+      (await (_defaultEfforts ??= _readDefaultEfforts()))[model];
+
+  Future<Map<String, String>>? _defaultEfforts;
+
+  Future<Map<String, String>> _readDefaultEfforts() async {
+    final efforts = <String, String>{};
+    String? cursor;
+    try {
+      do {
+        final page = await _request('model/list', {
+          'includeHidden': true,
+          'cursor': ?cursor,
+        });
+        for (final model in _field<List<Object?>>(page, 'data', '')) {
+          if (model is! Map<String, Object?>) continue;
+          efforts[_string(model, 'id', '')] = _string(
+            model,
+            'defaultReasoningEffort',
+            '',
+          );
+        }
+        cursor = page['nextCursor'] as String?;
+      } while (cursor != null);
+    } on _RpcError catch (error) {
+      debugPrint('[gaia] Codex model/list failed: $error');
+    }
+    return efforts;
+  }
+
   /// The account's usage windows (§6.2). Throws a [GaiaRunException] when
   /// the server refuses.
   Future<Map<String, Object?>> readRateLimits() async {
@@ -823,6 +861,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
@@ -842,6 +881,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         chatId: chatId,
         sessionId: sessionId,
         model: model,
+        effort: effort,
         prompt: prompt,
         images: images,
         directories: directories,
@@ -864,6 +904,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required String chatId,
     required String? sessionId,
     required String model,
+    required String? effort,
     required String prompt,
     required List<GaiaImageInput> images,
     required Set<String> directories,
@@ -892,6 +933,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         chatId: chatId,
         sessionId: sessionId,
         model: model,
+        effort: effort,
         prompt: prompt,
         images: images,
         directories: directories,
@@ -935,6 +977,9 @@ class CodexAppServerRunner implements GaiaAgentRunner {
       return await process.client.send(
         threadId: sessionId,
         model: model,
+        // Named every turn: a thread keeps the last one it was given, which
+        // may be another agent's.
+        effort: effort ?? await process.client.defaultEffort(model),
         input: [
           {'type': 'text', 'text': codexPrompt(prompt, images)},
           for (final image in images)
@@ -1357,6 +1402,7 @@ class CodexAccountRunners
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},
@@ -1381,6 +1427,7 @@ class CodexAccountRunners
         chatId: chatId,
         sessionId: sessionId,
         model: model,
+        effort: effort,
         prompt: prompt,
         images: images,
         directories: directories,

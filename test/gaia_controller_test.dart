@@ -2161,23 +2161,6 @@ void main() {
       });
     });
 
-    test(
-      'a capture refused for the vault says so, not that Gaia is aborted',
-      () async {
-        final toasts = <String>[];
-        final listening = controller.toasts.listen(
-          (toast) => toasts.add('${toast.title}: ${toast.body}'),
-        );
-        addTearDown(listening.cancel);
-        main.pipe.notify('refused', {'reason': 'vault'});
-        main.pipe.notify('refused', {'reason': 'aborted'});
-        await settle();
-        expect(toasts, hasLength(2));
-        expect(toasts.first, contains('vault'));
-        expect(toasts.last, startsWith('Gaia is aborted'));
-      },
-    );
-
     test('removed from the draft, it stays out', () async {
       summonFrom(window: chrome.toJson());
       await settle();
@@ -2394,6 +2377,41 @@ void main() {
       final reply = (await main.messages()).last;
       expect(reply.status, GaiaMessageStatus.error);
       expect(reply.error, contains("GPT-6.1 Sol can't run"));
+    });
+
+    test("a tier runs at its agent's effort; one with none, the CLI's default",
+        () async {
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      main.companion.onEvent!('settings', {
+        ...GaiaSettings.initial().toJson(),
+        'agents': [
+          const GaiaAgent(
+            id: 'opus-low',
+            label: 'Opus 5.5 low',
+            adapter: kGaiaClaudeCodeAdapter,
+            model: 'claude-opus-5-5',
+            effort: 'low',
+          ).toJson(),
+          const GaiaAgent(
+            id: 'opus',
+            label: 'Opus 5.5',
+            adapter: kGaiaClaudeCodeAdapter,
+            model: 'claude-opus-5-5',
+          ).toJson(),
+        ],
+        'tiers': {'standard': 'opus-low', 'deep': 'opus'},
+      });
+      await settle();
+      await controller.send('Run echo gaia-fixture');
+      await settle();
+      controller.pickTier(GaiaTier.deep);
+      await controller.send('Now say done');
+      await settle();
+
+      expect(runner.sent.map((s) => (s.model, s.effort)), [
+        ('claude-opus-5-5', 'low'),
+        ('claude-opus-5-5', null),
+      ]);
     });
 
     test('a tier with no agent ends in an error naming it', () async {
@@ -4233,7 +4251,8 @@ void main() {
 
     for (final key in ['small', 'large']) {
       test(
-        'a $key floater over the Gaia window dismisses back to it',
+        'a $key floater over the Gaia window took its place: dismissed, '
+        'it hides',
         () async {
           await press('window');
           await press(key);
@@ -4242,40 +4261,10 @@ void main() {
             key == 'small' ? GaiaMode.small : GaiaMode.large,
           );
           await controller.dismiss();
-          expect(window.shown, GaiaMode.window);
-          await controller.dismiss();
           expect(window.shown, isNull);
+          expect(controller.onScreen.value, isFalse);
         },
       );
-
-      test('a $key floater over the Gaia window the user was in dismisses '
-          'back to it in front', () async {
-        await press('window');
-        await press(key);
-        await controller.dismiss();
-        expect(window.shown, GaiaMode.window);
-        expect(window.behind, isFalse);
-      });
-
-      test('a $key floater over the Gaia window the user wasn\'t in '
-          'dismisses back to it behind their app', () async {
-        await press('window');
-        window.behind = true;
-        await press(key);
-        await controller.dismiss();
-        expect(window.shown, GaiaMode.window);
-        expect(window.behind, isTrue);
-      });
-
-      test('a $key floater over the Gaia window the user left for another '
-          'app dismisses back to it behind that app', () async {
-        await press('window');
-        await press(key);
-        window.blurred();
-        await controller.dismiss();
-        expect(window.shown, GaiaMode.window);
-        expect(window.behind, isTrue);
-      });
 
       test('a $key floater over the Gaia window hides when its hotkey is '
           'pressed again', () async {

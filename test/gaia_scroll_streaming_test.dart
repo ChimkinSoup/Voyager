@@ -21,6 +21,7 @@ class _Streaming extends FakeClaudeRunner {
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     Set<String> directories = const {},

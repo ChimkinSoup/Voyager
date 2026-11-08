@@ -1905,7 +1905,8 @@ class _AgentsSection extends ConsumerWidget {
                           value: agent.id,
                           child: Text(
                             '${agent.label} · '
-                            '${_adapterLabels[agent.adapter] ?? agent.adapter}',
+                            '${_adapterLabels[agent.adapter] ?? agent.adapter}'
+                            '${agent.effort == null ? '' : ' · ${agent.effort} effort'}',
                           ),
                         ),
                     ],
@@ -1941,7 +1942,8 @@ class _AgentsSection extends ConsumerWidget {
             title: Text(agent.label),
             subtitle: Text(
               '${_adapterLabels[agent.adapter] ?? agent.adapter} · '
-              '${agent.model}',
+              '${agent.model}'
+              '${agent.effort == null ? '' : ' · ${agent.effort} effort'}',
               style: muted,
             ),
             trailing: IconButton(
@@ -1979,6 +1981,13 @@ class _AddAgentDialogState extends State<_AddAgentDialog> {
   final _model = TextEditingController();
   var _adapter = kGaiaClaudeCodeAdapter;
 
+  /// Null for the CLI's default.
+  String? _effort;
+
+  /// The model is typed in, not one of [kGaiaModels].
+  var _custom = false;
+  static const _customItem = '';
+
   @override
   void dispose() {
     _label.dispose();
@@ -1988,6 +1997,11 @@ class _AddAgentDialogState extends State<_AddAgentDialog> {
 
   bool get _valid =>
       _label.text.trim().isNotEmpty && _model.text.trim().isNotEmpty;
+
+  List<String> get _efforts => gaiaEfforts(_adapter, _model.text.trim());
+
+  /// [_effort], unless the model now chosen doesn't take it.
+  String? get _chosenEffort => _efforts.contains(_effort) ? _effort : null;
 
   @override
   Widget build(BuildContext context) {
@@ -2006,18 +2020,64 @@ class _AddAgentDialogState extends State<_AddAgentDialog> {
                 for (final MapEntry(:key, :value) in _adapterLabels.entries)
                   DropdownMenuItem(value: key, child: Text(value)),
               ],
-              onChanged: (adapter) => setState(() => _adapter = adapter!),
+              onChanged: (adapter) => setState(() {
+                _adapter = adapter!;
+                // Each CLI has its own models and levels.
+                if (!_custom) _model.clear();
+                if (!(kGaiaEfforts[_adapter] ?? []).contains(_effort)) {
+                  _effort = null;
+                }
+              }),
             ),
             const SizedBox(height: 8),
-            VoyagerTextField(
-              controller: _model,
-              decoration: InputDecoration(
-                labelText: 'Model',
-                hintText: _adapter == kGaiaCodexAdapter
-                    ? 'e.g. gpt-6.1-sol'
-                    : 'e.g. claude-sonnet-5-5',
+            DropdownButton<String>(
+              isExpanded: true,
+              value: _custom
+                  ? _customItem
+                  : (kGaiaModels[_adapter] ?? []).contains(_model.text)
+                  ? _model.text
+                  : null,
+              hint: const Text('Model'),
+              items: [
+                for (final model in kGaiaModels[_adapter] ?? <String>[])
+                  DropdownMenuItem(value: model, child: Text(model)),
+                const DropdownMenuItem(
+                  value: _customItem,
+                  child: Text('Custom…'),
+                ),
+              ],
+              onChanged: (model) => setState(() {
+                _custom = model == _customItem;
+                _model.text = model!;
+              }),
+            ),
+            if (_custom) ...[
+              const SizedBox(height: 8),
+              VoyagerTextField(
+                controller: _model,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Model',
+                  hintText: _adapter == kGaiaCodexAdapter
+                      ? 'e.g. gpt-6.1-sol'
+                      : 'e.g. claude-sonnet-5-5',
+                ),
+                onChanged: (_) => setState(() {}),
               ),
-              onChanged: (_) => setState(() {}),
+            ],
+            const SizedBox(height: 8),
+            DropdownButton<String?>(
+              isExpanded: true,
+              value: _chosenEffort,
+              items: [
+                const DropdownMenuItem(child: Text('Default effort')),
+                for (final effort in _efforts)
+                  DropdownMenuItem(
+                    value: effort,
+                    child: Text('$effort effort'),
+                  ),
+              ],
+              onChanged: (effort) => setState(() => _effort = effort),
             ),
             const SizedBox(height: 8),
             VoyagerTextField(
@@ -2045,6 +2105,7 @@ class _AddAgentDialogState extends State<_AddAgentDialog> {
                     label: _label.text.trim(),
                     adapter: _adapter,
                     model: _model.text.trim(),
+                    effort: _chosenEffort,
                   ),
                 )
               : null,

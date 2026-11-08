@@ -81,6 +81,15 @@ class FlutterWindow : public Win32Window {
       cover_channel_;
   std::vector<HWINEVENTHOOK> cover_hooks_;
 
+  // Out of screen captures while the vault is unlocked (secure_window.dart).
+  // Hiding the window clears its affinity, and setting it on a hidden window
+  // can leave a blank frame on screen, so it's applied only while visible
+  // and again on every show.
+  void ApplySecure();
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      secure_window_channel_;
+  bool secure_ = false;
+
   UINT show_main_window_message_ = 0;
   UINT quit_message_ = 0;
   UINT show_gaia_message_ = 0;

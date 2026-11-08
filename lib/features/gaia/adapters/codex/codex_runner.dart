@@ -89,6 +89,7 @@ class CodexRunner implements GaiaAgentRunner {
     required String chatId,
     required String? sessionId,
     required String model,
+    String? effort,
     required String prompt,
     List<GaiaImageInput> images = const [],
     // Its sandboxes read anywhere: `--add-dir` is for writing.
@@ -113,6 +114,7 @@ class CodexRunner implements GaiaAgentRunner {
         chatId: chatId,
         sessionId: sessionId,
         model: model,
+        effort: effort,
         prompt: prompt,
         images: images,
         tools: tools,
@@ -133,6 +135,7 @@ class CodexRunner implements GaiaAgentRunner {
     required String chatId,
     required String? sessionId,
     required String model,
+    required String? effort,
     required String prompt,
     required List<GaiaImageInput> images,
     required GaiaTurnTools? tools,
@@ -158,6 +161,7 @@ class CodexRunner implements GaiaAgentRunner {
         '--skip-git-repo-check',
         '-m',
         model,
+        if (effort != null) ...['-c', 'model_reasoning_effort=$effort'],
         if (sandbox != null) ...['-c', 'windows.sandbox=$sandbox'],
         // TOML literal strings: a path's backslashes stay as they are. The
         // path's is multi-line, which may hold an apostrophe.

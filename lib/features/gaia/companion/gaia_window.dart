@@ -54,10 +54,11 @@ class GaiaWindow {
   /// summoned from. 0 for none, which leaves it to Windows.
   int returnTo = 0;
 
-  /// Where the Gaia window was when last on screen, so a floater opened
-  /// over it can put it back: its frame when not maximised or minimised (in
-  /// workspace coordinates, as [GetWindowPlacement] gives them) and whether
-  /// it was maximised or minimised.
+  /// Where the Gaia window was when last on screen, so it opens again
+  /// there, a floater having taken its place or not: its frame when not
+  /// maximised or minimised (in workspace coordinates, as
+  /// [GetWindowPlacement] gives them) and whether it was maximised or
+  /// minimised.
   ({
     ({int left, int top, int width, int height}) frame,
     bool maximized,
@@ -71,8 +72,9 @@ class GaiaWindow {
   final _floaterFrames = <GaiaMode, GaiaFrame>{};
 
   /// The Gaia window covers the monitor under the cursor, taskbar and all,
-  /// whenever it's shown, until it's left. A floater opened over it goes back
-  /// to it. [_windowPlacement] stays where it was before, to leave it for.
+  /// whenever it's shown, until it's left, a floater taking its place in
+  /// between included. [_windowPlacement] stays where it was before, to
+  /// leave it for.
   bool get fullScreen => _fullScreen;
   var _fullScreen = false;
 
@@ -160,7 +162,6 @@ class GaiaWindow {
     _showing = true;
     final front = GetForegroundWindow();
     if (front != hwnd) _cameFrom = front;
-    away = front != hwnd;
     final back = _cameFrom;
     behind = behind && IsWindowVisible(back) != 0 && IsIconic(back) == 0;
     // The chat's minimum size would hold the pill at the size of one.
@@ -399,17 +400,12 @@ class GaiaWindow {
   void blurred() {
     if (shown == null || _showing) return;
     returnTo = 0;
-    away = true;
     final front = GetForegroundWindow();
     // Not the taskbar or the desktop: no app to put Gaia behind.
     if (front != 0 && front != _hwnd && !gaiaIsShellWindow(front)) {
       _cameFrom = front;
     }
   }
-
-  /// The user was in another app when Gaia last came up, or has gone to one
-  /// since: [show]'s `behind` puts the window back behind it.
-  var away = false;
 
   /// The app in front when Gaia last came up; see [show]'s `behind`.
   int _cameFrom = 0;

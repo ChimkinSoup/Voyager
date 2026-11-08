@@ -244,6 +244,23 @@ bool FlutterWindow::OnCreate() {
           result->NotImplemented();
         }
       });
+  secure_window_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "voyager/secure_window",
+          &flutter::StandardMethodCodec::GetInstance());
+  secure_window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const auto* secure = std::get_if<bool>(call.arguments());
+        if (call.method_name() == "set" && secure) {
+          secure_ = *secure;
+          ApplySecure();
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   if (start_hidden_) {
@@ -268,6 +285,7 @@ void FlutterWindow::OnDestroy() {
   gaia_border_channel_ = nullptr;
   gaia_border_.Hide();
   cover_channel_ = nullptr;
+  secure_window_channel_ = nullptr;
   instance_channel_ = nullptr;
   gaia_pipe_channel_ = nullptr;
   gaia_pipe_ = nullptr;
@@ -357,6 +375,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
+  if (message == WM_WINDOWPOSCHANGED && secure_ &&
+      (reinterpret_cast<const WINDOWPOS*>(lparam)->flags & SWP_SHOWWINDOW)) {
+    ApplySecure();
+  }
+
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
@@ -378,6 +401,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+void FlutterWindow::ApplySecure() {
+  HWND window = GetHandle();
+  if (!window || !::IsWindowVisible(window)) return;
+  // From Windows 10 2004; older ones ignore it.
+  ::SetWindowDisplayAffinity(window,
+                             secure_ ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
 }
 
 void FlutterWindow::WatchCover(bool watch) {

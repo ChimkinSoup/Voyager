@@ -163,10 +163,10 @@ Gaia is floater-first. Its window has three modes:
 - **One window at a time** (accepted for v1). The companion is one Flutter engine, so it has
   one OS window, and the modes are states of that window. If the Gaia window
   is open and the user presses A or B, the window becomes that floater over
-  the current app, in the same chat. Dismissing the floater puts it back where
-  the Gaia window was. Voyager's `FloaterWindow` already does this
-  save-placement-and-restore round trip for the main window, so the approach
-  carries over.
+  the current app, in the same chat. The floater takes the window's place:
+  dismissing it hides Gaia and gives the foreground back to the app the user
+  was in before the Gaia window, the same as closing the window would. The
+  window's placement is kept, so the next G puts it back where it was.
 - Showing a floater *and* the Gaia window at once would need a second window:
   a third process, or Flutter's multi-window API once it's stable (ADR 004
   option 3). Not worth it for v1.
@@ -1381,8 +1381,11 @@ action that needs its target in front activates it first.
 
 These are separate from what the user attaches. Hotkeys C/D and `/this` are
 the user's choice. These tools are the agent asking to look or act. C and D
-still refuse while the vault is unlocked (decided 2026-11-02), wherever Voyager's
-windows are: they capture a whole monitor.
+capture while the vault is unlocked (revised 2026-11-07, over refusing wherever
+Voyager's windows were): Voyager's main window keeps itself out of every capture
+then, with `WDA_EXCLUDEFROMCAPTURE` (`secure_window.dart`), so the shot shows
+what's behind it. This hides it from the user's own screenshots and screen shares
+too, until the vault locks.
 
 Safety, partly borrowed from nus-desktop:
 - **Two grants per chat, both off by default:** *can see screen* (the read

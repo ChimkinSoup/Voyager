@@ -1810,8 +1810,8 @@ void main() {
   // FLAG_SECURE (§6.8): set while the vault is open, on any page.
   testWidgets('the window is secure while the vault is open', (tester) async {
     final calls = <bool>[];
-    SecureWindow.useAndroid = true;
-    addTearDown(() => SecureWindow.useAndroid = false);
+    SecureWindow.useNative = true;
+    addTearDown(() => SecureWindow.useNative = false);
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('voyager/secure_window'),
       (call) async {
