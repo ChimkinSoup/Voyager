@@ -40,6 +40,7 @@ import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_crop_overlay.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
+import 'package:voyager/features/gaia/companion/gaia_action_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
@@ -2396,98 +2397,105 @@ class _MessageView extends StatelessWidget {
       // Images and files float on their own above the prompt's bubble; a
       // message of only those has no bubble. Just sent, its text and
       // attachments gather in out of particles.
-      return GaiaAppear(
-        play: appear,
-        ready: images.isEmpty
-            ? null
-            : () => Future.wait([
-                for (final image in images)
-                  GaiaImageThumb.precache(
-                    context,
-                    imageFile(image.mediaId),
-                    96,
-                  ),
-              ]),
-        onDone: onAppeared,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (images.isNotEmpty || files.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(left: 48, bottom: 8),
-                child: GaiaAppearPart(
-                  child: Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final image in images)
-                        GestureDetector(
-                          onSecondaryTapUp: (details) =>
-                              showGaiaMenu(context, details.globalPosition, [
-                                GaiaMenuItem(
-                                  label: 'Open',
-                                  icon: Icons.open_in_full,
-                                  onPressed: () => onOpen(image),
-                                ),
-                                GaiaMenuItem(
-                                  label: 'Copy image',
-                                  icon: Icons.content_copy,
-                                  onPressed: () => onCopyImage(image),
-                                ),
-                              ]),
-                          child: GaiaImageThumb(
-                            file: imageFile(image.mediaId),
-                            label: image.label,
-                            height: 96,
-                            uploading: uploading.contains(image.mediaId),
-                            onTap: () => onOpen(image),
+      return _HoverActions(
+        alignment: Alignment.centerRight,
+        inset: 0,
+        copy: message.text,
+        actions: _actions,
+        controller: controller,
+        child: GaiaAppear(
+          play: appear,
+          ready: images.isEmpty
+              ? null
+              : () => Future.wait([
+                  for (final image in images)
+                    GaiaImageThumb.precache(
+                      context,
+                      imageFile(image.mediaId),
+                      96,
+                    ),
+                ]),
+          onDone: onAppeared,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (images.isNotEmpty || files.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 48, bottom: 8),
+                  child: GaiaAppearPart(
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final image in images)
+                          GestureDetector(
+                            onSecondaryTapUp: (details) =>
+                                showGaiaMenu(context, details.globalPosition, [
+                                  GaiaMenuItem(
+                                    label: 'Open',
+                                    icon: Icons.open_in_full,
+                                    onPressed: () => onOpen(image),
+                                  ),
+                                  GaiaMenuItem(
+                                    label: 'Copy image',
+                                    icon: Icons.content_copy,
+                                    onPressed: () => onCopyImage(image),
+                                  ),
+                                ]),
+                            child: GaiaImageThumb(
+                              file: imageFile(image.mediaId),
+                              label: image.label,
+                              height: 96,
+                              uploading: uploading.contains(image.mediaId),
+                              onTap: () => onOpen(image),
+                            ),
                           ),
-                        ),
-                      for (final file in files)
-                        GaiaFileCard(file: file, height: 56),
-                    ],
+                        for (final file in files)
+                          GaiaFileCard(file: file, height: 56),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            if (window != null ||
-                control != null ||
-                quotes.isNotEmpty ||
-                message.text.isNotEmpty)
-              _bubble(
-                gaiaPromptColor(theme),
-                Alignment.centerRight,
-                GaiaAppearPart(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (window != null) ...[
-                        _ContextChip(label: window.label),
-                        const SizedBox(height: 6),
+              if (window != null ||
+                  control != null ||
+                  quotes.isNotEmpty ||
+                  message.text.isNotEmpty)
+                _bubble(
+                  gaiaPromptColor(theme),
+                  Alignment.centerRight,
+                  GaiaAppearPart(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (window != null) ...[
+                          _ContextChip(label: window.label),
+                          const SizedBox(height: 6),
+                        ],
+                        if (control != null) ...[
+                          _ContextChip(
+                            label: control.label,
+                            icon: Icons.ads_click,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                        for (final quote in quotes) ...[
+                          _ContextChip(
+                            label: quote.label,
+                            icon: Icons.format_quote,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                        if (message.text.isNotEmpty) _text(message.text),
+                        _forking(muted),
                       ],
-                      if (control != null) ...[
-                        _ContextChip(
-                          label: control.label,
-                          icon: Icons.ads_click,
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      for (final quote in quotes) ...[
-                        _ContextChip(
-                          label: quote.label,
-                          icon: Icons.format_quote,
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      if (message.text.isNotEmpty) _text(message.text),
-                      _forking(muted),
-                    ],
+                    ),
                   ),
-                ),
-              )
-            else
-              const SizedBox(height: 4),
-          ],
+                )
+              else
+                const SizedBox(height: 4),
+            ],
+          ),
         ),
       );
     }
@@ -2514,6 +2522,7 @@ class _MessageView extends StatelessWidget {
     // fading behind it.
     final bubble = _bubble(
       indent: indent,
+      padding: _replyPadding,
       theme.scaffoldBackgroundColor,
       Alignment.centerLeft,
       Column(
@@ -2614,28 +2623,37 @@ class _MessageView extends StatelessWidget {
     // Just off the text, however wide the gutter, and level with
     // the newest line: the bubble's margin and padding below it, then half a
     // line. A Stack with or without the orb, so the bubble isn't built
-    // afresh as the orb comes and goes.
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        bubble,
-        if (tier != null)
-          Positioned(
-            left: indent + _bubblePadding.left - kGaiaOrbSize - _orbGap,
-            bottom:
-                _bubbleMargin + _bubblePadding.bottom + 10 - kGaiaOrbSize / 2,
-            child: GaiaOrb(
-              key: orbKey,
-              tier: tier.index,
-              startedAt: message.createdAt,
-              state: !streaming
-                  ? GaiaOrbState.glyph
-                  : message.parts.lastOrNull is GaiaTextPart
-                  ? GaiaOrbState.speaking
-                  : GaiaOrbState.thinking,
+    // afresh as the orb comes and goes. Its actions' icons line up with its
+    // text; none while it streams.
+    return _HoverActions(
+      alignment: Alignment.centerLeft,
+      inset: indent + _bubblePadding.left - kGaiaActionIconPadding,
+      above: _HoverActions._above - _replyPadding.bottom,
+      copy: message.text,
+      actions: streaming ? null : _actions,
+      controller: controller,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          bubble,
+          if (tier != null)
+            Positioned(
+              left: indent + _bubblePadding.left - kGaiaOrbSize - _orbGap,
+              bottom:
+                  _bubbleMargin + _replyPadding.bottom + 10 - kGaiaOrbSize / 2,
+              child: GaiaOrb(
+                key: orbKey,
+                tier: tier.index,
+                startedAt: message.createdAt,
+                state: !streaming
+                    ? GaiaOrbState.glyph
+                    : message.parts.lastOrNull is GaiaTextPart
+                    ? GaiaOrbState.speaking
+                    : GaiaOrbState.thinking,
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2646,6 +2664,7 @@ class _MessageView extends StatelessWidget {
     Alignment alignment,
     Widget child, {
     double indent = 0,
+    EdgeInsets padding = _bubblePadding,
   }) {
     return Align(
       alignment: alignment,
@@ -2656,7 +2675,7 @@ class _MessageView extends StatelessWidget {
             bottom: _bubbleMargin,
             left: alignment == Alignment.centerRight ? 48 : indent,
           ),
-          padding: _bubblePadding,
+          padding: padding,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(12),
@@ -2687,6 +2706,24 @@ class _MessageView extends StatelessWidget {
         icon: Icons.format_quote,
         onPressed: () => onAttach(message),
       ),
+    ..._actions(),
+    if (message.chapter != null) ...[
+      GaiaMenuItem(
+        label: 'Rename chapter',
+        icon: Icons.edit_outlined,
+        onPressed: () => onRenameChapter(message),
+      ),
+      GaiaMenuItem(
+        label: 'Unpin chapter',
+        icon: Icons.bookmark_remove_outlined,
+        onPressed: () => unawaited(controller.setChapter(message, null)),
+      ),
+    ],
+  ];
+
+  /// What the bar under the message offers on hover after copying it, as
+  /// Claude's desktop app does: those of [_menu] that act on the message.
+  List<GaiaMenuItem> _actions() => [
     if (message.role == GaiaMessageRole.user &&
         (message.text.isNotEmpty ||
             message.parts.any((part) => part is GaiaQuotePart)))
@@ -2718,18 +2755,6 @@ class _MessageView extends StatelessWidget {
         icon: Icons.bookmark_add_outlined,
         onPressed: () => unawaited(controller.pinChapter(message)),
       ),
-    if (message.chapter != null) ...[
-      GaiaMenuItem(
-        label: 'Rename chapter',
-        icon: Icons.edit_outlined,
-        onPressed: () => onRenameChapter(message),
-      ),
-      GaiaMenuItem(
-        label: 'Unpin chapter',
-        icon: Icons.bookmark_remove_outlined,
-        onPressed: () => unawaited(controller.setChapter(message, null)),
-      ),
-    ],
   ];
 
   /// Selectable, with the message's actions in its right-click menu. Gaia's
@@ -2770,14 +2795,19 @@ class _MessageView extends StatelessWidget {
     ),
   );
 
-  /// Below each bubble.
-  static const _bubbleMargin = 12.0;
+  /// Below each bubble, above its actions' bar.
+  static const _bubbleMargin = 0.0;
 
   /// Between the orb and Gaia's text.
   static const _orbGap = 10.0;
 
   /// At least this between the orb and the chat's left edge.
   static const _orbMargin = 16.0;
+
+  /// Gaia's: a little below, so her last line clears the faint bubble, which
+  /// her actions' bar makes up for, sitting as far under her text as the
+  /// user's do under their bubble.
+  static const _replyPadding = EdgeInsets.fromLTRB(12, 8, 12, 4);
 
   static const _bubblePadding = EdgeInsets.symmetric(
     horizontal: 12,
@@ -2793,6 +2823,174 @@ class _MessageView extends StatelessWidget {
       counts[tool] = (counts[tool] ?? 0) + 1;
     }
     return 'Used ${[for (final MapEntry(:key, :value) in counts.entries) value > 1 ? '$key ×$value' : key].join(', ')}';
+  }
+}
+
+/// A message, with a bar of faint icons under it while the cursor's anywhere
+/// across its row, as in Claude's desktop app: Copy, then [actions]. The bar's
+/// room is always kept, so nothing moves as it shows.
+class _HoverActions extends StatefulWidget {
+  const _HoverActions({
+    required this.alignment,
+    required this.inset,
+    required this.copy,
+    required this.actions,
+    required this.controller,
+    required this.child,
+    this.above = _above,
+  });
+
+  /// The bar's side: the message's own.
+  final Alignment alignment;
+
+  /// From the bar's side to its first icon's button.
+  final double inset;
+
+  /// The text Copy puts on the clipboard; no Copy when null or empty.
+  final String? copy;
+
+  /// Null for no bar.
+  final List<GaiaMenuItem> Function()? actions;
+
+  /// What [actions] depend on beyond the message, as whether a rewind's
+  /// possible.
+  final GaiaController controller;
+  final Widget child;
+
+  /// Between the message and the icons' hover boxes.
+  final double above;
+
+  /// Between the message and the icons' hover boxes, and below them, as in
+  /// Claude's desktop app.
+  static const _above = 4.0;
+  static const _below = 8.0;
+
+  @override
+  State<_HoverActions> createState() => _HoverActionsState();
+}
+
+class _HoverActionsState extends State<_HoverActions>
+    with SingleTickerProviderStateMixin {
+  var _hovered = false;
+
+  /// Focus on the row or one of its icons, which shows the bar as hovering
+  /// does, so Tab reaches its actions.
+  var _focused = false;
+
+  /// The bar's opacity; it's built only while not dismissed.
+  late final _fade = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 150),
+  )..addStatusListener((_) => setState(() {}));
+
+  /// Copy's icon a tick for a moment after copying.
+  var _copied = false;
+  Timer? _copiedTimer;
+
+  @override
+  void didUpdateWidget(_HoverActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A reply that finishes streaming under the cursor fades its bar in.
+    _sync();
+  }
+
+  @override
+  void dispose() {
+    _copiedTimer?.cancel();
+    _fade.dispose();
+    super.dispose();
+  }
+
+  void _hover(bool hovered) {
+    _hovered = hovered;
+    _sync();
+  }
+
+  void _focus(bool focused) {
+    _focused = focused;
+    _sync();
+  }
+
+  void _sync() {
+    if ((_hovered || _focused) && widget.actions != null) {
+      unawaited(_fade.forward());
+    } else {
+      unawaited(_fade.reverse());
+    }
+  }
+
+  void _copy(String text) {
+    unawaited(Clipboard.setData(ClipboardData(text: text)));
+    _copiedTimer?.cancel();
+    setState(() => _copied = true);
+    _copiedTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = widget.actions;
+    final shown = (_hovered || _focused) && actions != null;
+    return Focus(
+      onFocusChange: _focus,
+      child: MouseRegion(
+        opaque: false,
+        hitTestBehavior: HitTestBehavior.translucent,
+        onEnter: (_) => _hover(true),
+        onExit: (_) => _hover(false),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            widget.child,
+            SizedBox(height: widget.above),
+            SizedBox(
+              height: kGaiaActionIconExtent,
+              child: _fade.isDismissed || actions == null
+                  ? null
+                  : IgnorePointer(
+                      ignoring: !shown,
+                      child: FadeTransition(
+                        opacity: _fade,
+                        child: Align(
+                          alignment: widget.alignment,
+                          child: Padding(
+                            padding: widget.alignment == Alignment.centerRight
+                                ? EdgeInsets.only(right: widget.inset)
+                                : EdgeInsets.only(left: widget.inset),
+                            // Rebuilt with the controller: what's offered isn't
+                            // all on the message.
+                            child: ListenableBuilder(
+                              listenable: widget.controller,
+                              builder: (context, _) => Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (widget.copy case final text?
+                                      when text.isNotEmpty)
+                                    GaiaActionIcon(
+                                      label: _copied ? 'Copied' : 'Copy',
+                                      icon: _copied ? Icons.check : Icons.copy,
+                                      onPressed: () => _copy(text),
+                                    ),
+                                  for (final action in actions())
+                                    GaiaActionIcon(
+                                      label: action.label,
+                                      icon: action.icon!,
+                                      onPressed: action.onPressed,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(height: _HoverActions._below),
+          ],
+        ),
+      ),
+    );
   }
 }
 
