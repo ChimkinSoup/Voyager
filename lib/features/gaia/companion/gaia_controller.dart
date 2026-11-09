@@ -1178,6 +1178,20 @@ class GaiaController extends ChangeNotifier {
   /// The tier picked for the next message, over the chat's own (§7.2).
   GaiaTier? pickedTier;
 
+  /// New chats sent from here whose first tier the router may still pick,
+  /// from their send until it answers or is skipped.
+  final _routing = <String>{};
+
+  /// Whether the router picks the next message's tier when none is picked
+  /// (§7.2): a new chat's first, until the router has answered.
+  bool get routable =>
+      (_utility?.autoRoute ?? false) &&
+      !debug.dummyMode &&
+      (currentChatId == null || _routing.contains(currentChatId));
+
+  /// Whether the current chat is sent and waiting on the router for its tier.
+  bool get routing => _routing.contains(currentChatId);
+
   /// The user's slash commands (§9.2).
   var commands = const <GaiaCommand>[];
 
@@ -2028,10 +2042,49 @@ class GaiaController extends ChangeNotifier {
   int? get contextWindow => _contextReply?.contextWindow;
 
   /// Whether switching the current chat to [tier] needs the user's yes
-  /// (§7.5): a change after the chat's first reply.
-  bool switchNeedsConfirm(GaiaTier tier) =>
-      tier != nextTier &&
-      messages.any((message) => message.role == GaiaMessageRole.assistant);
+  /// (§7.5): after the chat's first reply, a change to a tier or account
+  /// other than the one that reply ran on, whose prompt cache would be lost.
+  /// Back to that one costs nothing.
+  bool switchNeedsConfirm(GaiaTier tier) {
+    if (tier == nextTier) return false;
+    final reply = messages.lastWhereOrNull(
+      (message) => message.role == GaiaMessageRole.assistant,
+    );
+    if (reply == null) return false;
+    if (tier != currentChat?.tier) return true;
+    final adapter = agentFor(tier)?.adapter;
+    return adapter != null &&
+        currentAccount(adapter).id != (reply.account ?? kGaiaDefaultAccountId);
+  }
+
+  /// The tier the current chat's last reply ran on; null before one.
+  GaiaTier? get lastReplyTier =>
+      messages.any((message) => message.role == GaiaMessageRole.assistant)
+      ? currentChat?.tier
+      : null;
+
+  /// The model that wrote [reply], and its account when there's more than
+  /// one, for its hover bar; null for a message no model wrote.
+  String? replyLabel(GaiaMessage reply) {
+    final model = reply.model;
+    if (model == null) return null;
+    final adapter = reply.adapter;
+    final name =
+        agents
+            .firstWhereOrNull(
+              (agent) =>
+                  agent.model == model &&
+                  (adapter == null || agent.adapter == adapter),
+            )
+            ?.label ??
+        model;
+    if (adapter == null || accountsFor(adapter).length < 2) return name;
+    final id = reply.account ?? kGaiaDefaultAccountId;
+    return switch (accountsFor(adapter).firstWhereOrNull((a) => a.id == id)) {
+      final account? => '$name · ${account.label}',
+      null => name,
+    };
+  }
 
   /// The tier the next message in the current chat goes to (§7.2).
   GaiaTier get nextTier =>
@@ -2040,8 +2093,8 @@ class GaiaController extends ChangeNotifier {
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
 
-  /// The tier picker, for the next message.
-  void pickTier(GaiaTier tier) {
+  /// The tier picker, for the next message: null leaves it to the router.
+  void pickTier(GaiaTier? tier) {
     pickedTier = tier;
     notifyListeners();
   }
@@ -3885,6 +3938,8 @@ class GaiaController extends ChangeNotifier {
       chats = [chat, ...chats]..sort(_listed);
       // A remote chat is listed, but the one in view stays.
       if (remote == null) currentChatId = chatId;
+      // The picker shows Auto until the router answers.
+      if (remote == null && native == null) _routing.add(chatId);
     }
     final list = _messages[chatId] ??= [];
     // Shown at once, its images from the draft's own files while they're
@@ -3946,6 +4001,7 @@ class GaiaController extends ChangeNotifier {
       uploading.forEach(_imageFiles.remove);
       list.removeWhere((message) => message.id == question.id);
       _running.remove(chatId);
+      _routing.remove(chatId);
       if (isNew) {
         chats = [
           for (final c in chats)
@@ -4088,7 +4144,15 @@ class GaiaController extends ChangeNotifier {
         !debug.dummyMode) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
       tier = await _utility?.route(topic) ?? tier;
+      // In the picker at once, not once the chat is saved below.
+      if (_routing.remove(chatId)) {
+        chats = [
+          for (final c in chats) c.id == chatId ? c.copyWith(tier: tier) : c,
+        ];
+        notifyListeners();
+      }
     } else {
+      _routing.remove(chatId);
       debugPrint(
         '[gaia] router: skipped, '
         '${debug.dummyMode
@@ -4157,7 +4221,15 @@ class GaiaController extends ChangeNotifier {
     }
     // After the router, so the reply's orb doesn't count it as bloom time.
     final now = utcNow();
-    if (remote == null) pickedTier = null;
+    // A pick is the chat in view's: one made in another chat stays there.
+    if (remote == null && currentChatId == chatId) {
+      // A pick made while the router or the lease was awaited wins (§7.2).
+      if (pickedTier case final picked? when picked != tier) {
+        debugPrint('[gaia] router: overridden, tier picked: ${picked.name}');
+        tier = picked;
+      }
+      pickedTier = null;
+    }
     final agent = agentFor(tier);
     // Saved stamped with the reply, as it always was: a message later than
     // its chat's last has the main instance write the chat again, which

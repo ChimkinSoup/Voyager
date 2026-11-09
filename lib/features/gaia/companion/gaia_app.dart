@@ -53,7 +53,7 @@ import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
-import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
+import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
@@ -1461,11 +1461,20 @@ class _MessagesState extends State<_Messages> {
       _placing = false;
       if (!mounted) return;
       final (:pinned, :chapter, :chapterOff) = _cutOff();
+      final scrolledUp = _scroll.hasClients && _scroll.offset > 100;
+      // Diagnostic for the to-bottom button stuck on screen.
+      if (scrolledUp != _over.value.scrolledUp) {
+        debugPrint(
+          '[gaia] to-bottom ${scrolledUp ? 'shown' : 'hidden'}: offset '
+          '${_scroll.hasClients ? _scroll.offset.round() : 'none'}, '
+          'animations ${widget.controller.onScreen.value ? 'on' : 'off'}',
+        );
+      }
       _over.value = (
         pinned: pinned,
         chapter: chapter,
         chapterOff: chapterOff,
-        scrolledUp: _scroll.hasClients && _scroll.offset > 100,
+        scrolledUp: scrolledUp,
       );
     });
     // Told of a change after a frame, as of metrics, there may be no next.
@@ -1577,6 +1586,8 @@ class _MessagesState extends State<_Messages> {
 
   /// Down to the newest message.
   void _toBottom() {
+    // Diagnostic for the to-bottom button stuck on screen.
+    debugPrint('[gaia] to-bottom tapped');
     if (!_scroll.hasClients) return;
     if (MediaQuery.disableAnimationsOf(context)) return _scroll.jumpTo(0);
     _scroll.animateTo(
@@ -2641,6 +2652,7 @@ class _MessageView extends StatelessWidget {
       above: _HoverActions._above - _replyPadding.bottom,
       copy: message.text,
       actions: streaming ? null : _actions,
+      label: controller.replyLabel(message),
       controller: controller,
       child: Stack(
         clipBehavior: Clip.none,
@@ -2848,6 +2860,7 @@ class _HoverActions extends StatefulWidget {
     required this.controller,
     required this.child,
     this.above = _above,
+    this.label,
   });
 
   /// The bar's side: the message's own.
@@ -2869,6 +2882,9 @@ class _HoverActions extends StatefulWidget {
 
   /// Between the message and the icons' hover boxes.
   final double above;
+
+  /// Muted text after the icons, as which model wrote a reply.
+  final String? label;
 
   /// Between the message and the icons' hover boxes, and below them, as in
   /// Claude's desktop app.
@@ -2987,6 +3003,21 @@ class _HoverActionsState extends State<_HoverActions>
                                       label: action.label,
                                       icon: action.icon!,
                                       onPressed: action.onPressed,
+                                    ),
+                                  if (widget.label case final label?)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6),
+                                      child: Text(
+                                        label,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -3839,17 +3870,6 @@ class _ComposerState extends State<_Composer> {
                               ),
                             ),
                     ),
-                    if (_unknown case final unknown?)
-                      _UnknownCommandLine(unknown: unknown),
-                    if (_reading && controller.nativeCommands == null)
-                      _ReadingCommandsLine(
-                        cli:
-                            kGaiaClis[controller
-                                    .agentFor(controller.nextTier)
-                                    ?.adapter]
-                                ?.name ??
-                            'the CLI',
-                      ),
                     GaiaVanish(
                       key: _vanish,
                       controller: _text,
@@ -3932,7 +3952,26 @@ class _ComposerState extends State<_Composer> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    _ComposerStatus(controller: controller),
+                    _ComposerStatus(
+                      controller: controller,
+                      // In the status line, not a line of its own, so the
+                      // composer keeps its height and the chat stays put.
+                      notice: switch (_unknown) {
+                        (:final word, suggestion: null) =>
+                          'Unknown command /${_clipCommand(word)}. Send again '
+                              'to send as typed.',
+                        (:final word, :final suggestion?) =>
+                          'Unknown command /${_clipCommand(word)}. Tab for '
+                              '/${_clipCommand(suggestion)}, or send again to '
+                              'send as typed.',
+                        null
+                            when _reading &&
+                                controller.nativeCommands == null =>
+                          "Reading ${kGaiaClis[controller.agentFor(controller.nextTier)?.adapter]?.name ?? 'the CLI'}'s "
+                              'commands. Send again in a moment.',
+                        _ => null,
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -3942,66 +3981,6 @@ class _ComposerState extends State<_Composer> {
       },
     );
     return MediaPasteOwnerScope(pasteImage: _pasteImage, child: composer);
-  }
-}
-
-/// Under the draft's unknown `/word` (GAIA_NATIVE_COMMANDS.md §7): what it
-/// may have meant, and what the keys do.
-class _UnknownCommandLine extends StatelessWidget {
-  const _UnknownCommandLine({required this.unknown});
-
-  final ({String word, String? suggestion}) unknown;
-
-  @override
-  Widget build(BuildContext context) {
-    final suggestion = unknown.suggestion;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.help_outline, size: 16, color: kGaiaStatusRose),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              suggestion == null
-                  ? 'Unknown command /${unknown.word}. Send again to send it '
-                        'as typed.'
-                  : 'Unknown command /${unknown.word}. Did you mean '
-                        '/$suggestion? Tab uses it; send again to send as '
-                        'typed.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Under a `/word` held while [cli]'s own commands are still being read
-/// (GAIA_NATIVE_COMMANDS.md §7). It goes once they're in.
-class _ReadingCommandsLine extends StatelessWidget {
-  const _ReadingCommandsLine({required this.cli});
-
-  final String cli;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.hourglass_empty, size: 16, color: kGaiaStatusRose),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              "Reading $cli's commands. Send again in a moment.",
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -4334,13 +4313,21 @@ String _tokensK(int tokens) => tokens >= 1000000 && tokens % 1000000 == 0
     ? '${tokens ~/ 1000000}M'
     : '${(tokens / 1000).round()}k';
 
+/// A long `/word` trails off, so the rest of the status line's notice shows.
+String _clipCommand(String word) =>
+    word.length > 16 ? '${word.substring(0, 16)}...' : word;
+
 /// Under the composer: the current chat's context, the next message's
 /// account usage, and the tier picker. Hovering the context shows how much
 /// of the model's window it fills.
 class _ComposerStatus extends StatelessWidget {
-  const _ComposerStatus({required this.controller});
+  const _ComposerStatus({required this.controller, this.notice});
 
   final GaiaController controller;
+
+  /// The draft's unknown or held `/word` (GAIA_NATIVE_COMMANDS.md §7), in
+  /// place of the context count until the draft changes.
+  final String? notice;
 
   @override
   Widget build(BuildContext context) {
@@ -4360,28 +4347,55 @@ class _ComposerStatus extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Tooltip(
-              message: controller.seeScreenWarning || tokens == null
-                  ? ''
-                  : switch (controller.contextWindow) {
-                      final window? when window > 0 =>
-                        '${_tokensK(tokens)} of ${_tokensK(window)} tokens '
-                            '(${(tokens * 100 / window).round()}%)',
-                      _ => '',
-                    },
-              child: Text(
-                controller.seeScreenWarning
-                    ? 'Agent tools could leak or obey screen text.'
-                    : tokens == null
-                    ? ''
-                    : '${_tokensK(tokens)} context',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: controller.seeScreenWarning
-                      ? kGaiaStatusRose
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
+            child: notice != null
+                ? Tooltip(
+                    message: notice!,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.help_outline,
+                          size: 14,
+                          color: kGaiaStatusRose,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            notice!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kGaiaStatusRose,
+                              fontSize:
+                                  (theme.textTheme.bodySmall?.fontSize ?? 12) -
+                                  1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Tooltip(
+                    message: controller.seeScreenWarning || tokens == null
+                        ? ''
+                        : switch (controller.contextWindow) {
+                            final window? when window > 0 =>
+                              '${_tokensK(tokens)} of ${_tokensK(window)} tokens '
+                                  '(${(tokens * 100 / window).round()}%)',
+                            _ => '',
+                          },
+                    child: Text(
+                      controller.seeScreenWarning
+                          ? 'Agent tools could leak or obey screen text.'
+                          : tokens == null
+                          ? ''
+                          : '${_tokensK(tokens)} context',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: controller.seeScreenWarning
+                            ? kGaiaStatusRose
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
           ),
         ),
         const SizedBox(width: 4),
@@ -4608,7 +4622,10 @@ class _RingPainter extends CustomPainter {
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that
 /// opens onto all three; before it, once its adapter has several, the account
-/// (§6.5), whose options open above the tiers' from either.
+/// (§6.5), whose options open above the tiers' from either. In a new chat,
+/// Auto leaves the tier to the router: its glyph runs through the tiers
+/// until the router answers, then settles into the tier picked as the
+/// notch's ring flashes.
 class _TierPicker extends StatelessWidget {
   const _TierPicker({required this.controller});
 
@@ -4616,44 +4633,48 @@ class _TierPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auto = controller.routable && controller.pickedTier == null;
+    final routing = auto && controller.routing;
     final adapter = controller.agentFor(controller.nextTier)?.adapter;
     final accounts = adapter == null
         ? const <GaiaAccount>[]
         : controller.accountsFor(adapter);
-    return GaiaNotch(
-      items: [
-        if (accounts.length > 1)
-          GaiaNotchItem<GaiaAccount>(
-            options: [
-              for (final account in accounts)
-                GaiaNotchOption(
-                  value: account,
-                  label: account.label,
-                  detail: switch (controller.usage[account.key]?.fiveHour) {
-                    final window? => '${(window.usedNow * 100).round()}% used',
-                    null => null,
-                  },
-                ),
-            ],
-            value: controller.currentAccount(adapter!),
-            onChanged: (account) =>
-                switchGaiaAccount(context, controller, adapter, account),
+    return GaiaRouteFlash(
+      routing: routing,
+      chatId: controller.currentChatId,
+      picked: controller.pickedTier != null,
+      child: GaiaNotch(
+        items: [
+          if (accounts.length > 1)
+            GaiaNotchItem<GaiaAccount>(
+              options: [
+                for (final account in accounts)
+                  GaiaNotchOption(
+                    value: account,
+                    label: account.label,
+                    detail: switch (controller.usage[account.key]?.fiveHour) {
+                      final window? =>
+                        '${(window.usedNow * 100).round()}% used',
+                      null => null,
+                    },
+                  ),
+              ],
+              value: controller.currentAccount(adapter!),
+              onChanged: (account) =>
+                  switchGaiaAccount(context, controller, adapter, account),
+            ),
+          gaiaTierItem(
+            autoOffered: controller.routable,
+            tier: auto ? null : controller.nextTier,
+            routing: routing,
+            agent: (tier) => controller.agentFor(tier)?.label,
+            lastReply: controller.lastReplyTier,
+            onChanged: (tier) => tier == null
+                ? controller.pickTier(null)
+                : switchGaiaTier(context, controller, tier),
           ),
-        GaiaNotchItem<GaiaTier>(
-          options: [
-            for (final tier in GaiaTier.values)
-              GaiaNotchOption(
-                value: tier,
-                label: tier.label,
-                detail: controller.agentFor(tier)?.label ?? 'No agent',
-                icon: (color, {required lit}) =>
-                    GaiaTierGlyph(level: tier.index, color: color, lit: lit),
-              ),
-          ],
-          value: controller.nextTier,
-          onChanged: (tier) => switchGaiaTier(context, controller, tier),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

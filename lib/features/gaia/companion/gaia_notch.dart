@@ -15,6 +15,7 @@ class GaiaNotchOption<T> {
     required this.value,
     required this.label,
     this.detail,
+    this.note,
     this.icon,
   });
 
@@ -23,6 +24,9 @@ class GaiaNotchOption<T> {
 
   /// Muted text after the label, such as the model a tier runs on.
   final String? detail;
+
+  /// Muted text after [detail] in the open list only, not the trigger.
+  final String? note;
 
   /// Drawn before the label in [color], and moving with it. [lit] while
   /// hovered, focused or selected.
@@ -429,7 +433,10 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
           child: AnimatedSize(
             duration: _springTime,
             curve: const _SpringCurve(_shellSpring),
-            alignment: _corner,
+            // Closed, it follows a trigger easing to a new width a frame
+            // behind; from the left, that frame clips only the bar's end,
+            // past the text.
+            alignment: shown == null ? Alignment.bottomLeft : _corner,
             child: Stack(
               key: _frame,
               alignment: _corner,
@@ -711,7 +718,18 @@ class _Bar extends StatelessWidget {
       height: 22,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
-      child: text,
+      // A new option's text, wider or narrower, eases its trigger to fit,
+      // shown inside it as it goes (as the tier picker's, Auto to a tier);
+      // the ring follows it. A fresh one for a flight, which takes its
+      // text's size at once, so the shell's morph alone resizes round it.
+      // The text keeps its state through the swap by its key.
+      child: AnimatedSize(
+        key: ValueKey(flight != null),
+        duration: _springTime,
+        curve: const _SpringCurve(_shellSpring),
+        alignment: Alignment.centerLeft,
+        child: text,
+      ),
     );
     if (flight != null) {
       trigger = _Fly(
@@ -1120,6 +1138,15 @@ class _OptionsState extends State<_Options>
                       if (option.detail case final detail?)
                         TextSpan(
                           text: '  $detail',
+                          style: TextStyle(
+                            color: active
+                                ? Colors.white.withValues(alpha: 0.75)
+                                : _muted,
+                          ),
+                        ),
+                      if (option.note case final note?)
+                        TextSpan(
+                          text: ' · $note',
                           style: TextStyle(
                             color: active
                                 ? Colors.white.withValues(alpha: 0.75)

@@ -613,7 +613,9 @@ Precedence, highest first:
 3. **The chat's current tier.** A chat keeps the tier it last used.
 4. **Auto-router**, only for the first message of a new chat when auto is on.
    The utility model classifies the prompt in about a second, using a GAIA-owned
-   rubric the user can edit.
+   rubric the user can edit. The picker shows this as **Auto** (also offered in
+   its menu, to undo a pick): its glyph runs through the tiers, faster once
+   sent, then settles into the tier the router picked as the notch flashes.
 5. **Last used tier globally** (new chat, auto off).
 
 Why the router only picks the first message and doesn't re-route every

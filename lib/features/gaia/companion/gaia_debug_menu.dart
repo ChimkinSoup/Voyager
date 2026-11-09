@@ -19,7 +19,9 @@ import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
+import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast_icon_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
@@ -90,6 +92,16 @@ class _DebugMenu extends StatelessWidget {
           style: muted,
         ),
         const GaiaOrbMessagePreview(),
+        heading('Auto picking a tier'),
+        Text(
+          "A new chat's tier picker, with a stand-in router: Send asks it, "
+          'Auto runs through the tiers faster while it decides, then settles '
+          "into its answer as the notch flashes. A tier picked in the notch's "
+          'menu meanwhile wins. The account notch beside it always shows '
+          'here, with stand-in accounts when the provider has only one.',
+          style: muted,
+        ),
+        _AutoRoutePreview(controller: controller),
         heading('Replies'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -512,6 +524,195 @@ const _files = [
   GaiaFilePart(path: r'C:\Users\Gaia\Documents\notes.md'),
   GaiaFilePart(path: r'C:\Users\Gaia\Pictures\Screenshots', folder: true),
 ];
+
+/// The tier picker of a new chat (GAIA_HLD.md §7.2), as the composer has it,
+/// with a stand-in router that answers [_answer] after [_think]. New chat
+/// starts over.
+class _AutoRoutePreview extends StatefulWidget {
+  const _AutoRoutePreview({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  State<_AutoRoutePreview> createState() => _AutoRoutePreviewState();
+}
+
+class _AutoRoutePreviewState extends State<_AutoRoutePreview> {
+  static const _think = Duration(milliseconds: 1600);
+
+  var _answer = GaiaTier.deep;
+
+  /// Stands in for the chat's id: each new chat is another.
+  var _chat = 0;
+
+  /// The user's pick, which wins over the router's.
+  GaiaTier? _picked;
+  var _routing = false;
+
+  /// The tier the chat went on, once sent.
+  GaiaTier? _sent;
+  Timer? _router;
+
+  /// The account picked in the account notch, by id.
+  String? _accountId;
+
+  @override
+  void dispose() {
+    _router?.cancel();
+    super.dispose();
+  }
+
+  void _send() {
+    if (_picked case final picked?) {
+      setState(() => _sent = picked);
+      return;
+    }
+    setState(() => _routing = true);
+    _router = Timer(_think * timeDilation, () {
+      if (!mounted) return;
+      setState(() {
+        _routing = false;
+        _sent = _picked ?? _answer;
+      });
+    });
+  }
+
+  void _newChat() {
+    _router?.cancel();
+    setState(() {
+      _chat++;
+      _picked = null;
+      _routing = false;
+      _sent = null;
+    });
+  }
+
+  /// The account notch for [tier]'s adapter, as the composer has it once
+  /// that adapter has several accounts: its own when it has, else two
+  /// stand-ins, so it always shows here.
+  GaiaNotchItem<GaiaAccount> _accountItem(GaiaTier tier) {
+    final controller = widget.controller;
+    final adapter = controller.agentFor(tier)?.adapter ?? '';
+    final own = controller.accountsFor(adapter);
+    final accounts = own.length > 1
+        ? own
+        : [
+            for (final (id, label) in [('a', 'Account A'), ('b', 'Account B')])
+              GaiaAccount(id: id, label: label, adapter: adapter, dir: ''),
+          ];
+    return GaiaNotchItem<GaiaAccount>(
+      options: [
+        for (final account in accounts)
+          GaiaNotchOption(
+            value: account,
+            label: account.label,
+            detail: switch (controller.usage[account.key]?.fiveHour) {
+              final window? => '${(window.usedNow * 100).round()}% used',
+              null => null,
+            },
+          ),
+      ],
+      value: accounts.firstWhere(
+        (account) => account.id == _accountId,
+        orElse: () => own.length > 1
+            ? controller.currentAccount(adapter)
+            : accounts.first,
+      ),
+      onChanged: (account) => setState(() => _accountId = account.id),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final auto = _sent == null && _picked == null;
+    final routing = auto && _routing;
+    // The tier the composer's notch goes by: until the router answers, the
+    // one a new chat starts on.
+    final shown =
+        _picked ??
+        _sent ??
+        widget.controller.defaultTier ??
+        widget.controller.lastTier;
+    final status = switch ((_sent, _picked)) {
+      _ when routing => 'Asking the router…',
+      (final sent?, null) => 'Sent on ${sent.label}, picked by the router.',
+      (final sent?, _) => 'Sent on ${sent.label}, your pick.',
+      (null, final picked?) => 'Picked ${picked.label}: the router is skipped.',
+      (null, null) => 'Auto: the router picks on Send.',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: Text(status, style: theme.textTheme.bodySmall)),
+              GaiaRouteFlash(
+                routing: routing,
+                chatId: '$_chat',
+                picked: _picked != null,
+                child: GaiaNotch(
+                  items: [
+                    _accountItem(shown),
+                    gaiaTierItem(
+                      autoOffered: _sent == null,
+                      tier: auto ? null : _picked ?? _sent,
+                      routing: routing,
+                      agent: (tier) => widget.controller.agentFor(tier)?.label,
+                      onChanged: (tier) => setState(() => _picked = tier),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('The router answers', style: theme.textTheme.bodySmall),
+            SegmentedButton<GaiaTier>(
+              showSelectedIcon: false,
+              segments: [
+                for (final tier in GaiaTier.values)
+                  ButtonSegment(value: tier, label: Text(tier.label)),
+              ],
+              selected: {_answer},
+              onSelectionChanged: (picked) =>
+                  setState(() => _answer = picked.single),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            GaiaButton(
+              icon: Icons.send,
+              label: 'Send',
+              onPressed: _routing || _sent != null ? null : _send,
+            ),
+            GaiaButton(
+              icon: Icons.refresh,
+              label: 'New chat',
+              onPressed: _newChat,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
 
 /// A sent message with two images, uploading and then attached, and
 /// [_files].

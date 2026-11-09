@@ -77,15 +77,16 @@ void main() {
     await settle(tester);
   }
 
+  /// The visible shell's box: the ring's, not a trigger's.
+  Finder shellBox() => find
+      .descendant(
+        of: find.byType(GaiaGlowRing),
+        matching: find.byType(AnimatedSize),
+      )
+      .first;
+
   /// The visible shell: the overlay's, not the placeholder.
-  Size shell(WidgetTester tester) => tester.getSize(
-    find
-        .descendant(
-          of: find.byType(Overlay).first,
-          matching: find.byType(AnimatedSize),
-        )
-        .last,
-  );
+  Size shell(WidgetTester tester) => tester.getSize(shellBox());
 
   testWidgets('two first options sit side by side; three are listed', (
     tester,
@@ -167,10 +168,7 @@ void main() {
     expect(find.textContaining('deep', findRichText: true), findsOneWidget);
     // Grows from its bottom right corner (inside its border).
     final placeholder = tester.getBottomRight(find.byType(GaiaNotch));
-    expect(
-      tester.getBottomRight(find.byType(AnimatedSize).last),
-      placeholder - const Offset(1, 1),
-    );
+    expect(tester.getBottomRight(shellBox()), placeholder - const Offset(1, 1));
 
     await tester.tap(find.textContaining('deep', findRichText: true));
     await settle(tester);
@@ -178,6 +176,50 @@ void main() {
     expect(shell(tester).height, 24);
     expect(find.textContaining('deep', findRichText: true), findsWidgets);
     expect(field.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets("an option's note shows in the list, never the trigger", (
+    tester,
+  ) async {
+    await loadRealFonts(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: VoyagerTheme.dark(accent: const Color(0xFF3B82F6)),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: GaiaNotch(
+                items: [
+                  GaiaNotchItem<int>(
+                    options: const [
+                      GaiaNotchOption(value: 0, label: 'Quick', note: 'last'),
+                      GaiaNotchOption(value: 1, label: 'Standard', note: 'own'),
+                    ],
+                    value: 1,
+                    onChanged: (_) {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+    expect(find.textContaining('own', findRichText: true), findsNothing);
+
+    await tester.tap(find.textContaining('Standard', findRichText: true).last);
+    await settle(tester);
+    expect(
+      find.textContaining('Quick · last', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Standard · own', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a turned-down change keeps the selection', (tester) async {
@@ -304,52 +346,48 @@ void main() {
     expect(hidden('standard'), findsNothing);
   });
 
-  testWidgets(
-    'the rising selection lands exactly as its row looks',
-    (tester) async {
-      await pump(tester);
-      await tester.tap(
-        find.textContaining('standard', findRichText: true).last,
-      );
-      await tester.pump();
-      Finder inShell(String text) => find.descendant(
+  testWidgets('the rising selection lands exactly as its row looks', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.textContaining('standard', findRichText: true).last);
+    await tester.pump();
+    Finder inShell(String text) => find.descendant(
+      of: find.byType(CompositedTransformFollower),
+      matching: find.textContaining(text, findRichText: true),
+    );
+    Finder hiddenRow() => find.descendant(
+      of: find.descendant(
         of: find.byType(CompositedTransformFollower),
-        matching: find.textContaining(text, findRichText: true),
-      );
-      Finder hiddenRow() => find.descendant(
-        of: find.descendant(
-          of: find.byType(CompositedTransformFollower),
-          matching: find.byType(Expanded),
-        ),
-        matching: find.textContaining('standard', findRichText: true),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-      final early = tester.getRect(hiddenRow());
-      await tester.pump(const Duration(milliseconds: 280));
+        matching: find.byType(Expanded),
+      ),
+      matching: find.textContaining('standard', findRichText: true),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final early = tester.getRect(hiddenRow());
+    await tester.pump(const Duration(milliseconds: 280));
 
-      // Nearly landed: the copy is the row's text, at the row's size. The
-      // first in the shell is the trigger's own, keeping the bar's size.
-      final copy = tester.renderObject<RenderBox>(inShell('standard').at(1));
-      final real = tester.renderObject<RenderBox>(hiddenRow());
-      expect(copy.size, real.size);
-      expect(
-        copy.getTransformTo(null).getMaxScaleOnAxis(),
-        closeTo(real.getTransformTo(null).getMaxScaleOnAxis(), 0.01),
-      );
+    // Nearly landed: the copy is the row's text, at the row's size. The
+    // first in the shell is the trigger's own, keeping the bar's size.
+    final copy = tester.renderObject<RenderBox>(inShell('standard').at(1));
+    final real = tester.renderObject<RenderBox>(hiddenRow());
+    expect(copy.size, real.size);
+    expect(
+      copy.getTransformTo(null).getMaxScaleOnAxis(),
+      closeTo(real.getTransformTo(null).getMaxScaleOnAxis(), 0.01),
+    );
 
-      // ...and the row it lands on has been in its place all along.
-      expect(
-        tester.getRect(hiddenRow()),
-        rectMoreOrLessEquals(early, epsilon: 0.1),
-      );
-      await settle(tester);
-      expect(
-        tester.getRect(hiddenRow()),
-        rectMoreOrLessEquals(early, epsilon: 0.1),
-      );
-    },
-    variant: const TargetPlatformVariant({TargetPlatform.windows}),
-  );
+    // ...and the row it lands on has been in its place all along.
+    expect(
+      tester.getRect(hiddenRow()),
+      rectMoreOrLessEquals(early, epsilon: 0.1),
+    );
+    await settle(tester);
+    expect(
+      tester.getRect(hiddenRow()),
+      rectMoreOrLessEquals(early, epsilon: 0.1),
+    );
+  }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
 
   testWidgets('the selected dot rises with its row', (tester) async {
     await pump(tester);
@@ -370,6 +408,69 @@ void main() {
         .first;
     expect(tester.renderObject(trigger), paints..circle(radius: 3));
   });
+
+  testWidgets(
+    'a wider option set from outside eases its trigger, inside the ring',
+    (tester) async {
+      await loadRealFonts(tester);
+      var long = false;
+      late StateSetter setState;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: VoyagerTheme.dark(accent: const Color(0xFF3B82F6)),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.centerRight,
+              child: StatefulBuilder(
+                builder: (context, set) {
+                  setState = set;
+                  return GaiaNotch(
+                    items: [
+                      GaiaNotchItem<String>(
+                        options: [
+                          for (final name in ['alpha', 'beta'])
+                            GaiaNotchOption(value: name, label: name),
+                        ],
+                        value: 'alpha',
+                        onChanged: (_) {},
+                      ),
+                      GaiaNotchItem<bool>(
+                        options: [
+                          GaiaNotchOption(value: false, label: 'Auto'),
+                          GaiaNotchOption(
+                            value: true,
+                            label: 'deep',
+                            detail: 'a long model name',
+                          ),
+                        ],
+                        value: long,
+                        onChanged: (_) {},
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      final before = shell(tester).width;
+      setState(() => long = true);
+      // A frame at a time: the ring follows a frame behind.
+      for (var frame = 0; frame < 30; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final ring = tester.getRect(find.byType(GaiaGlowRing));
+        expect(tester.getRect(find.text('alpha')).left, greaterThan(ring.left));
+        // The trigger's text shows only inside its box, inside the ring.
+        final text = find.ancestor(
+          of: find.textContaining('deep', findRichText: true),
+          matching: find.byType(AnimatedSize),
+        );
+        expect(tester.getRect(text.first).right, lessThan(ring.right - 1));
+      }
+      expect(shell(tester).width, greaterThan(before + 50));
+    },
+  );
 
   group('two items', () {
     late String account;
@@ -551,31 +652,24 @@ void main() {
       expect(row('quick'), findsOneWidget);
     });
 
-    testWidgets(
-      'never narrower than the capsule; the accounts share a row',
-      (tester) async {
-        await pumpBoth(tester);
-        final bar = shell(tester);
-        final left = tester.getBottomLeft(find.byType(GaiaNotch)).dx;
-        await tester.tap(
-          find.textContaining('alpha', findRichText: true).first,
-        );
-        await settle(tester);
-        expect(shell(tester).width, greaterThanOrEqualTo(bar.width));
-        expect(
-          tester.getBottomLeft(find.byType(AnimatedSize).last).dx,
-          lessThanOrEqualTo(left + 1),
-        );
-        expect(
-          tester.getCenter(row('alpha')).dy,
-          moreOrLessEquals(tester.getCenter(row('beta')).dy, epsilon: 0.1),
-        );
-        await tester.tap(row('beta'));
-        await settle(tester);
-        expect(picks, ['beta']);
-      },
-      variant: const TargetPlatformVariant({TargetPlatform.windows}),
-    );
+    testWidgets('never narrower than the capsule; the accounts share a row', (
+      tester,
+    ) async {
+      await pumpBoth(tester);
+      final bar = shell(tester);
+      final left = tester.getBottomLeft(find.byType(GaiaNotch)).dx;
+      await tester.tap(find.textContaining('alpha', findRichText: true).first);
+      await settle(tester);
+      expect(shell(tester).width, greaterThanOrEqualTo(bar.width));
+      expect(tester.getBottomLeft(shellBox()).dx, lessThanOrEqualTo(left + 1));
+      expect(
+        tester.getCenter(row('alpha')).dy,
+        moreOrLessEquals(tester.getCenter(row('beta')).dy, epsilon: 0.1),
+      );
+      await tester.tap(row('beta'));
+      await settle(tester);
+      expect(picks, ['beta']);
+    }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
   });
 
   group('right-click menu', () {

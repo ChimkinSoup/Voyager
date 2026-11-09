@@ -106,6 +106,13 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
       ),
     ),
   );
+  // Diagnostic for the to-bottom button stuck on screen: its animations
+  // stop while this is off.
+  controller.onScreen.addListener(
+    () => debugPrint(
+      '[gaia] animations ${controller.onScreen.value ? 'on' : 'off'}',
+    ),
+  );
   runApp(GaiaApp(controller: controller));
   // Before start, which can already show the window.
   windowManager.addListener(_DismissOnClose(controller));

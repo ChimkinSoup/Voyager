@@ -2379,40 +2379,42 @@ void main() {
       expect(reply.error, contains("GPT-6.1 Sol can't run"));
     });
 
-    test("a tier runs at its agent's effort; one with none, the CLI's default",
-        () async {
-      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
-      main.companion.onEvent!('settings', {
-        ...GaiaSettings.initial().toJson(),
-        'agents': [
-          const GaiaAgent(
-            id: 'opus-low',
-            label: 'Opus 5.5 low',
-            adapter: kGaiaClaudeCodeAdapter,
-            model: 'claude-opus-5-5',
-            effort: 'low',
-          ).toJson(),
-          const GaiaAgent(
-            id: 'opus',
-            label: 'Opus 5.5',
-            adapter: kGaiaClaudeCodeAdapter,
-            model: 'claude-opus-5-5',
-          ).toJson(),
-        ],
-        'tiers': {'standard': 'opus-low', 'deep': 'opus'},
-      });
-      await settle();
-      await controller.send('Run echo gaia-fixture');
-      await settle();
-      controller.pickTier(GaiaTier.deep);
-      await controller.send('Now say done');
-      await settle();
+    test(
+      "a tier runs at its agent's effort; one with none, the CLI's default",
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+        main.companion.onEvent!('settings', {
+          ...GaiaSettings.initial().toJson(),
+          'agents': [
+            const GaiaAgent(
+              id: 'opus-low',
+              label: 'Opus 5.5 low',
+              adapter: kGaiaClaudeCodeAdapter,
+              model: 'claude-opus-5-5',
+              effort: 'low',
+            ).toJson(),
+            const GaiaAgent(
+              id: 'opus',
+              label: 'Opus 5.5',
+              adapter: kGaiaClaudeCodeAdapter,
+              model: 'claude-opus-5-5',
+            ).toJson(),
+          ],
+          'tiers': {'standard': 'opus-low', 'deep': 'opus'},
+        });
+        await settle();
+        await controller.send('Run echo gaia-fixture');
+        await settle();
+        controller.pickTier(GaiaTier.deep);
+        await controller.send('Now say done');
+        await settle();
 
-      expect(runner.sent.map((s) => (s.model, s.effort)), [
-        ('claude-opus-5-5', 'low'),
-        ('claude-opus-5-5', null),
-      ]);
-    });
+        expect(runner.sent.map((s) => (s.model, s.effort)), [
+          ('claude-opus-5-5', 'low'),
+          ('claude-opus-5-5', null),
+        ]);
+      },
+    );
 
     test('a tier with no agent ends in an error naming it', () async {
       main.companion.onEvent!('settings', {
@@ -2459,6 +2461,30 @@ void main() {
       await settle();
       expect(controller.switchNeedsConfirm(GaiaTier.deep), isTrue);
       expect(controller.switchNeedsConfirm(GaiaTier.standard), isFalse);
+    });
+
+    test("a switch back to the last reply's tier needs no yes", () async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      controller.pickTier(GaiaTier.quick);
+      expect(controller.switchNeedsConfirm(GaiaTier.standard), isFalse);
+      expect(controller.switchNeedsConfirm(GaiaTier.deep), isTrue);
+    });
+
+    test('the last reply keeps its tier and model past a switch', () async {
+      expect(controller.lastReplyTier, isNull);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      controller.pickTier(GaiaTier.deep);
+      expect(controller.lastReplyTier, GaiaTier.standard);
+      // One account: no account named.
+      expect(
+        controller.replyLabel(controller.messages.last),
+        controller.agentFor(GaiaTier.standard)!.label,
+      );
+      expect(controller.replyLabel(controller.messages.first), isNull);
     });
 
     test("a reply keeps its session's context size, for the warning", () async {
@@ -2767,6 +2793,94 @@ void main() {
         expect((await main.chat()).tier, GaiaTier.deep);
       },
     );
+
+    test(
+      'the picker shows Auto until the router answers, then its tier',
+      () async {
+        await startCompanion(utility: utility('deep'));
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        expect(controller.routable, isTrue);
+        final seen = <(bool, GaiaTier)>[];
+        void record() => seen.add((controller.routing, controller.nextTier));
+        controller.addListener(record);
+        await controller.send('Hi');
+        await settle();
+        controller.removeListener(record);
+
+        expect(seen.first, (true, GaiaTier.standard), reason: 'routing');
+        final answered = seen.indexWhere((s) => !s.$1);
+        expect(seen[answered], (false, GaiaTier.deep));
+        expect(seen.skip(answered).every((s) => !s.$1), isTrue);
+        expect(controller.routable, isFalse);
+      },
+    );
+
+    test(
+      'a tier picked while the router decides wins over its answer',
+      () async {
+        await startCompanion(
+          utility: GaiaUtility(
+            FakeUtilityRunner((job) {
+              if (!job.startsWith('Route')) return 'Generated title';
+              controller.pickTier(GaiaTier.quick);
+              return 'deep';
+            }),
+          ),
+        );
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+
+        expect(runner.sent.single.model, 'claude-haiku-5-5');
+        expect((await main.chat()).tier, GaiaTier.quick);
+        expect(controller.pickedTier, isNull);
+      },
+    );
+
+    test(
+      'a tier picked in another chat while the router decides stays there',
+      () async {
+        await startCompanion(
+          utility: GaiaUtility(
+            FakeUtilityRunner((job) {
+              if (!job.startsWith('Route')) return 'Generated title';
+              controller.newChat();
+              controller.pickTier(GaiaTier.quick);
+              return 'deep';
+            }),
+          ),
+        );
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+
+        expect(runner.sent.single.model, 'claude-opus-5-5');
+        expect((await main.chat()).tier, GaiaTier.deep);
+        expect(controller.pickedTier, GaiaTier.quick);
+      },
+    );
+
+    test('Auto picked again after a tier leaves it to the router', () async {
+      await startCompanion(utility: utility('deep'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      controller.pickTier(GaiaTier.quick);
+      controller.pickTier(null);
+      await controller.send('Hi');
+      await settle();
+
+      expect(runner.sent.single.model, 'claude-opus-5-5');
+      expect(calls, contains('route'));
+    });
+
+    test('no Auto with the router off', () async {
+      await startCompanion(utility: utility('deep'));
+      main.companion.onEvent!('settings', {
+        ...GaiaSettings.initial().toJson(),
+        'autoRoute': false,
+      });
+      await settle();
+      expect(controller.routable, isFalse);
+    });
 
     test('a new chat starts the router ahead of its first message', () async {
       final runner = FakeUtilityRunner((_) => 'quick');
@@ -4250,21 +4364,15 @@ void main() {
     });
 
     for (final key in ['small', 'large']) {
-      test(
-        'a $key floater over the Gaia window took its place: dismissed, '
-        'it hides',
-        () async {
-          await press('window');
-          await press(key);
-          expect(
-            window.shown,
-            key == 'small' ? GaiaMode.small : GaiaMode.large,
-          );
-          await controller.dismiss();
-          expect(window.shown, isNull);
-          expect(controller.onScreen.value, isFalse);
-        },
-      );
+      test('a $key floater over the Gaia window took its place: dismissed, '
+          'it hides', () async {
+        await press('window');
+        await press(key);
+        expect(window.shown, key == 'small' ? GaiaMode.small : GaiaMode.large);
+        await controller.dismiss();
+        expect(window.shown, isNull);
+        expect(controller.onScreen.value, isFalse);
+      });
 
       test('a $key floater over the Gaia window hides when its hotkey is '
           'pressed again', () async {
@@ -4717,6 +4825,34 @@ void main() {
         gaiaSessionKey('laptop'),
       ]);
       expect(gaiaSessionKey('laptop'), 'laptop/$kGaiaClaudeCodeAdapter');
+    });
+
+    test(
+      "back to the last reply's tier on another account needs a yes",
+      () async {
+        await start();
+        await turn('Hi');
+        final sent = controller.nextTier;
+        final other = GaiaTier.values.firstWhere(
+          (tier) =>
+              tier != sent &&
+              controller.agentFor(tier)?.adapter == kGaiaClaudeCodeAdapter,
+        );
+        controller.pickTier(other);
+        expect(controller.switchNeedsConfirm(sent), isFalse);
+        controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+        expect(controller.switchNeedsConfirm(sent), isTrue);
+      },
+    );
+
+    test("a reply's label names its account", () async {
+      await start();
+      await turn('Hi');
+      controller.switchAccount(kGaiaClaudeCodeAdapter, b);
+      expect(
+        controller.replyLabel(controller.messages.last),
+        '${controller.agentFor(controller.nextTier)!.label} · A',
+      );
     });
 
     test('a switch copies the session over and resumes it', () async {
