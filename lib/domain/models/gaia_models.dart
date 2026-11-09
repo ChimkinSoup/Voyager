@@ -1676,6 +1676,39 @@ class GaiaMessage extends SoftDeletable {
   }
 }
 
+/// A message Gaia's search found (GAIA_HLD.md §17): [snippet] is its text
+/// around the match, each matched term between [start] and [end].
+class GaiaSearchHit {
+  const GaiaSearchHit({
+    required this.chatId,
+    required this.messageId,
+    required this.seq,
+    required this.snippet,
+  });
+
+  static const start = '\u0001';
+  static const end = '\u0002';
+
+  final String chatId;
+  final String messageId;
+  final int seq;
+  final String snippet;
+
+  Map<String, Object?> toJson() => {
+    'chatId': chatId,
+    'messageId': messageId,
+    'seq': seq,
+    'snippet': snippet,
+  };
+
+  factory GaiaSearchHit.fromJson(Map<String, Object?> json) => GaiaSearchHit(
+    chatId: json['chatId']! as String,
+    messageId: json['messageId']! as String,
+    seq: (json['seq']! as num).toInt(),
+    snippet: json['snippet']! as String,
+  );
+}
+
 /// A new chapter's title until the utility model names it
 /// (GAIA_CHAPTERS_HLD.md §4): [message]'s first line, cut to 60 characters,
 /// or "Chapter" for a message with no text.

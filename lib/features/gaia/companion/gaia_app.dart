@@ -9,8 +9,7 @@ import 'package:flutter/gestures.dart'
     show computeHitSlop, kDoubleTapSlop, kDoubleTapTimeout, kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/rendering.dart'
-    show RenderAbstractViewport, ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart'
     show voyagerSpellCheckServiceProvider;
@@ -49,6 +48,7 @@ import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_search.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
@@ -293,6 +293,8 @@ class _RunToastsState extends State<_RunToasts> {
           ? null
           : () => widget.controller.selectChat(toast.chatId),
     );
+    // A run's toast, not the UI's own, into Voyager's notification history.
+    widget.controller.toastShown(toast.title, toast.body);
   }
 
   @override
@@ -370,6 +372,8 @@ class _GaiaShell extends StatelessWidget {
           control: true,
           shift: true,
         ): controller.moveDraftToNewChat,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
+            showGaiaSearch(context, controller),
         const SingleActivator(
           LogicalKeyboardKey.keyD,
           control: true,
@@ -1004,16 +1008,32 @@ class _SidebarState extends State<_Sidebar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DragToMoveArea(
-          child: SizedBox(
-            height: 52,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Gaia', style: theme.textTheme.titleMedium),
+        SizedBox(
+          height: 52,
+          child: Row(
+            children: [
+              Expanded(
+                child: DragToMoveArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Gaia', style: theme.textTheme.titleMedium),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              // Not in the drag area, whose double click would hold back its
+              // clicks till it's sure there's no second.
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: GaiaButton(
+                  icon: Icons.search,
+                  size: 32,
+                  onPressed: () => showGaiaSearch(context, controller),
+                ),
+              ),
+            ],
           ),
         ),
         Padding(
@@ -1342,6 +1362,26 @@ class _MessagesState extends State<_Messages> {
     _reply = _latestReply(widget.messages);
     // The chapter being read, for the rail, before any scroll.
     _place();
+    _takeReveal();
+  }
+
+  /// The message a search just scrolled to, lit a moment so it's found.
+  String? _flashed;
+
+  /// Up to the message a search picked ([GaiaController.revealing]), once
+  /// the list has it.
+  void _takeReveal() {
+    final id = widget.controller.revealing;
+    if (id == null || !widget.messages.any((message) => message.id == id)) {
+      return;
+    }
+    widget.controller.revealing = null;
+    // Not mid-build, as scrolling notifies.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _reveal(id);
+      if (mounted) setState(() => _flashed = id);
+    });
   }
 
   void _startRename(GaiaMessage message) {
@@ -1387,6 +1427,7 @@ class _MessagesState extends State<_Messages> {
   void didUpdateWidget(_Messages old) {
     super.didUpdateWidget(old);
     _place();
+    _takeReveal();
     // The user's latest message new while a reply's claimed here: just sent
     // from this window, so it gathers in. Its reply may already be in after
     // it. The controller adds to the list it gave last time, so it's told
@@ -1534,22 +1575,19 @@ class _MessagesState extends State<_Messages> {
     return none;
   }
 
-  /// How far past the list's edges it's built, while [_reveal] reaches a
-  /// message out of it; the default otherwise.
-  ScrollCacheExtent? _cacheExtent;
-
   /// Up to [id]'s message, its top to the list's.
   Future<void> _reveal(String id) async {
-    // A long reply can keep it from being built: built further out, off
-    // screen, till it is. Its place known, the way there is one glide, not
-    // jumps through the replies between or a stop short at the list's
-    // guessed end.
-    var viewports = 1.0;
-    while (mounted &&
-        _placed[id] == null &&
-        widget.messages.any((message) => message.id == id)) {
-      viewports *= 2;
-      setState(() => _cacheExtent = ScrollCacheExtent.viewport(viewports));
+    // Not built, the list is laid out around it, just above the top, rather
+    // than through every message between, each costly to build; then the
+    // last of the way is a glide.
+    final i = widget.messages.indexWhere((message) => message.id == id);
+    if (_placed[id] == null && i >= 0) {
+      final built = _placed.values.firstOrNull;
+      final at = built == null
+          ? null
+          : GaiaSteadyList.jumpTo(built, widget.messages.length - 1 - i);
+      if (at == null) return;
+      _scroll.jumpTo(max(0.0, at - _scroll.position.viewportDimension));
       await WidgetsBinding.instance.endOfFrame;
     }
     final box = _placed[id]?.findRenderObject();
@@ -1581,7 +1619,6 @@ class _MessagesState extends State<_Messages> {
       position.beginActivity(glide);
       await glide.done;
     }
-    if (mounted) setState(() => _cacheExtent = null);
   }
 
   /// Down to the newest message.
@@ -1733,7 +1770,6 @@ class _MessagesState extends State<_Messages> {
             steady: true,
             controller: _scroll,
             reverse: true,
-            scrollCacheExtent: _cacheExtent,
             padding: EdgeInsets.fromLTRB(left, 16, gutter, 16),
             itemCount: messages.length,
             // A new message shifts the rest along; found by their keys,
@@ -1789,7 +1825,15 @@ class _MessagesState extends State<_Messages> {
                                     '· a transcript carried over'
                               : 'Switched to $moved',
                         ),
-                      view,
+                      _Flash(
+                        on: _flashed == message.id,
+                        onDone: () {
+                          if (mounted && _flashed == message.id) {
+                            setState(() => _flashed = null);
+                          }
+                        },
+                        child: view,
+                      ),
                     ],
                   ),
                 ),
@@ -1960,6 +2004,85 @@ class _PlacedState extends State<_Placed> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// Lights [child] in the accent as [on] turns true, and fades it back out,
+/// then calls [onDone]: a message a search scrolled to, so it's found.
+class _Flash extends StatefulWidget {
+  const _Flash({required this.on, required this.onDone, required this.child});
+
+  final bool on;
+  final VoidCallback onDone;
+  final Widget child;
+
+  @override
+  State<_Flash> createState() => _FlashState();
+}
+
+class _FlashState extends State<_Flash> with SingleTickerProviderStateMixin {
+  late final _fade = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.on) _run();
+  }
+
+  @override
+  void didUpdateWidget(_Flash old) {
+    super.didUpdateWidget(old);
+    if (widget.on && !old.on) _run();
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    try {
+      await _fade.forward(from: 0).orCancel;
+    } on TickerCanceled {
+      // Scrolled away mid-flash: done, or it would flash again rebuilt.
+      if (!mounted) widget.onDone();
+      return;
+    }
+    if (mounted) widget.onDone();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return AnimatedBuilder(
+      animation: _fade,
+      builder: (context, child) {
+        // Held lit for the first third, then faded out.
+        final t = _fade.isAnimating
+            ? 1 -
+                  Curves.easeOut.transform(
+                    ((_fade.value - 1 / 3) * 1.5).clamp(0.0, 1.0),
+                  )
+            : 0.0;
+        // Unlit, nothing painted; kept in the tree, so the message isn't
+        // rebuilt afresh as it lights.
+        return DecoratedBox(
+          decoration: t == 0
+              ? const BoxDecoration()
+              : BoxDecoration(
+                  color: accent.withValues(alpha: 0.1 * t),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: accent.withValues(alpha: 0.4 * t)),
+                ),
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
 }
 
 /// What [message] shows pinned over the chat: its first line, or failing

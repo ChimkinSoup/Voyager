@@ -30,7 +30,6 @@ class GaiaSteadyList extends ListView {
     super.key,
     super.controller,
     super.reverse,
-    super.scrollCacheExtent,
     super.padding,
     super.itemCount,
     super.findChildIndexCallback,
@@ -60,6 +59,21 @@ class GaiaSteadyList extends ListView {
   @override
   Widget buildChildLayout(BuildContext context) =>
       _SteadySliverList(delegate: childrenDelegate, steady: steady);
+
+  /// Lays the list out next around its child at [index], about where it
+  /// would be, rather than through every child between, a frame's work
+  /// for each: a long way off, as a search's message. The scroll offset of
+  /// its bottom, as reckoned from [child], a child of the list's laid out;
+  /// null when there's none.
+  static double? jumpTo(BuildContext child, int index) {
+    var box = child.findRenderObject();
+    while (box != null && box.parent is! _RenderSteadySliverList) {
+      box = box.parent;
+    }
+    return box == null
+        ? null
+        : (box.parent! as _RenderSteadySliverList).jumpTo(index);
+  }
 }
 
 class _SteadySliverList extends SliverList {
@@ -109,8 +123,36 @@ class _RenderSteadySliverList extends RenderSliverList {
     markNeedsLayout();
   }
 
+  /// The child [jumpTo] has the next layout start from, and where along
+  /// the list.
+  (int, double)? _jump;
+
+  /// See [GaiaSteadyList.jumpTo]. Where it would be is reckoned from the
+  /// children laid out: the space they take on average for each between.
+  /// The list corrects itself as the children between are laid out.
+  double? jumpTo(int index) {
+    final first = firstChild;
+    final last = lastChild;
+    if (first == null || last == null) return null;
+    final start = childScrollOffset(first)!;
+    final end = childScrollOffset(last)! + paintExtentOf(last);
+    final average = (end - start) / (indexOf(last) - indexOf(first) + 1);
+    final at = index > indexOf(last)
+        ? end + (index - indexOf(last) - 1) * average
+        : max(0.0, start - (indexOf(first) - index) * average);
+    _jump = (index, at);
+    markNeedsLayout();
+    return at + constraints.precedingScrollExtent;
+  }
+
   @override
   void performLayout() {
+    if (_jump case (final index, final at)) {
+      _jump = null;
+      _anchor = null;
+      collectGarbage(childCount, 0);
+      addInitialChild(index: index, layoutOffset: at);
+    }
     // Scrolled up since the last layout moves the list, not the anchor along
     // it, so only what's changed below it counts.
     final anchor = (steady && constraints.scrollOffset > 0) || _held

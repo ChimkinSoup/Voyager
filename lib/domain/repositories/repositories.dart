@@ -895,6 +895,10 @@ abstract class GaiaRepository {
   /// Live chats with a message matching every word of [query], as a prefix.
   Future<Set<String>> searchChatIds(String query);
 
+  /// Messages of live chats matching every word of [query], as a prefix,
+  /// newest first: at most [limit].
+  Future<List<GaiaSearchHit>> searchMessages(String query, {int limit = 50});
+
   /// Fires after any write to the chats or messages.
   Stream<void> watchChanges();
 

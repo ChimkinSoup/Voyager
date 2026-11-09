@@ -258,9 +258,12 @@ class _DebugMenu extends StatelessWidget {
                 mark: GaiaToastMark.info,
                 title: 'A toast with a long body',
                 body:
-                    'It runs well past two lines, so the end of it should '
-                    'be cut off with an ellipsis rather than growing the '
-                    'toast any taller than two lines of body text allow.',
+                    'It runs well past two lines, so the toast grows to '
+                    'show all of it, up to eight lines of body text, and '
+                    'stays up longer to give time to read it. Anything '
+                    'past eight lines is cut off with an ellipsis rather '
+                    'than growing the toast taller still, which would '
+                    'cover most of a small floater.',
               ),
             ),
           ],

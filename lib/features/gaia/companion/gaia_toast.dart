@@ -12,8 +12,12 @@ const _spin = math.pi / 8;
 
 const _radius = 8.0;
 
-/// How long a toast stays up while the cursor isn't on it.
-const _dwell = Duration(seconds: 4);
+/// How long a toast stays up while the cursor isn't on it: longer for a
+/// longer body, at about 200 words a minute, up to 15s.
+Duration _dwellFor(String body) {
+  final words = body.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+  return Duration(milliseconds: math.min(4000 + words * 300, 15000));
+}
 
 OverlayEntry? _current;
 
@@ -104,7 +108,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     super.initState();
     _ticker = createTicker(_tick)..start();
     _shown.forward();
-    _dwellTimer = Timer(_dwell, _dismiss);
+    _dwellTimer = Timer(_dwellFor(widget.body), _dismiss);
   }
 
   @override
@@ -159,7 +163,9 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
               onExit: (_) {
                 _cursor = null;
                 _hover.reverse();
-                if (!_leaving) _dwellTimer = Timer(_dwell, _dismiss);
+                if (!_leaving) {
+                  _dwellTimer = Timer(_dwellFor(widget.body), _dismiss);
+                }
               },
               child: GestureDetector(
                 onTap: () {
@@ -167,7 +173,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
                   unawaited(_dismiss());
                 },
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 400),
+                  constraints: const BoxConstraints(maxWidth: 480),
                   child: Material(
                     type: MaterialType.transparency,
                     child: _ring(colors),
@@ -247,7 +253,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
                           const SizedBox(height: 2),
                           Text(
                             widget.body,
-                            maxLines: 2,
+                            maxLines: 8,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.7),

@@ -689,6 +689,8 @@ class GaiaController extends ChangeNotifier {
   void _viewChat(String? chatId) {
     _chatViewed = true;
     if (chatId == currentChatId) return;
+    // A search's message left unreached isn't scrolled to later.
+    revealing = null;
     _newChatSeesScreen = false;
     _newChatCanControl = false;
     _newChatAuto = null;
@@ -1123,6 +1125,10 @@ class GaiaController extends ChangeNotifier {
   /// own toast.
   Stream<GaiaRunToast> get toasts => _toasts.stream;
   final _toasts = StreamController<GaiaRunToast>.broadcast();
+
+  /// A toast Gaia showed, into Voyager's notification history.
+  void toastShown(String title, String body) =>
+      _pipe.notify('toasted', {'title': title, 'body': body});
 
   /// Gaia opened by [onHotkey], or [focusComposer]: the composer takes the
   /// focus, to type straight away.
@@ -2530,11 +2536,39 @@ class GaiaController extends ChangeNotifier {
   }
 
   Future<void> selectChat(String chatId) async {
+    revealing = null;
     if (chatId != currentChatId) pickedTier = null;
     _viewChat(chatId);
     notifyListeners();
     if (_messages.containsKey(chatId)) return;
     await _load(chatId);
+  }
+
+  /// Messages matching [query] in live chats, newest first (GAIA_HLD.md
+  /// §17). Not a rewind's, which are never shown here.
+  Future<List<GaiaSearchHit>> searchMessages(String query) async {
+    final list =
+        (await _pipe.request('searchMessages', {'query': query}))! as List;
+    return [
+      for (final json in list)
+        if (GaiaSearchHit.fromJson((json as Map).cast<String, Object?>())
+            case final hit
+            when !(_chat(hit.chatId)?.rewound(hit.seq) ?? false))
+          hit,
+    ];
+  }
+
+  /// The message a search picked, which the chat scrolls to once it shows
+  /// it; null once it has.
+  String? revealing;
+
+  /// [chatId] opened at [messageId].
+  Future<void> revealMessage(String chatId, String messageId) {
+    // Set after selecting, which forgets any earlier one, but before the
+    // frame its notifying asks for.
+    final selected = selectChat(chatId);
+    revealing = messageId;
+    return selected;
   }
 
   /// The user's own name for [chatId], which the utility model's title

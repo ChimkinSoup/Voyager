@@ -414,6 +414,59 @@ void main() {
       expect(await repository.searchChatIds('kiwi'), {'c1'});
     });
 
+    test('finds messages, newest first, their terms marked', () async {
+      await store.putMessage(
+        _message(
+          'c',
+          1,
+          text: 'The drift schema, then the migration',
+          at: _created.add(const Duration(minutes: 1)),
+        ),
+      );
+      final hits = await store.searchMessages('migr');
+      expect([for (final hit in hits) hit.messageId], ['c', 'a']);
+      expect(hits.first.chatId, 'c1');
+      expect(hits.first.seq, 1);
+      expect(
+        hits.first.snippet,
+        'The drift schema, then the '
+        '${GaiaSearchHit.start}migration${GaiaSearchHit.end}',
+      );
+      expect(await store.searchMessages('  '), isEmpty);
+      await repository.softDeleteChat('c2');
+      expect(await store.searchMessages('bread'), isEmpty);
+    });
+
+    test("a rewind's messages aren't hits, nor take the limit's", () async {
+      await store.putMessage(
+        _message(
+          'r',
+          1,
+          text: 'Drift, rewound',
+          at: _created.add(const Duration(minutes: 1)),
+        ),
+      );
+      final c1 = (await repository.getChat('c1'))!;
+      await repository.upsertChat(
+        c1.copyWith(
+          rewinds: const [
+            GaiaRewind(from: 1, to: 1, forkId: 'f', by: 'laptop'),
+          ],
+        ),
+      );
+      final hits = await repository.searchMessages('drift', limit: 1);
+      expect([for (final hit in hits) hit.messageId], ['a']);
+    });
+
+    test('a hit crosses the pipe as it was', () async {
+      final [hit] = await store.searchMessages('bread');
+      final back = GaiaSearchHit.fromJson(hit.toJson());
+      expect(
+        (back.chatId, back.messageId, back.seq, back.snippet),
+        (hit.chatId, hit.messageId, hit.seq, hit.snippet),
+      );
+    });
+
     test('an account wipe empties it', () async {
       for (final table in db.allTables) {
         await db.delete(table).go();

@@ -345,14 +345,34 @@ class _GaiaPaletteState extends State<GaiaPalette>
   }
 }
 
+/// A [GaiaMenu]'s panel for a panel of Gaia's own, such as the search's:
+/// [child] in its ring, growing out of its middle.
+class GaiaPanel extends StatelessWidget {
+  const GaiaPanel({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      _MenuShell(growFrom: Alignment.center, scales: true, child: child);
+}
+
 /// A [GaiaMenu]'s panel: [child] in a [GaiaGlowRing] with its shadow,
 /// growing on the notch's spring out of its [growFrom] corner, as the
 /// notch grows out of its bar.
 class _MenuShell extends StatefulWidget {
-  const _MenuShell({required this.growFrom, required this.child});
+  const _MenuShell({
+    required this.growFrom,
+    required this.child,
+    this.scales = false,
+  });
 
   final Alignment growFrom;
   final Widget child;
+
+  /// Grows as a whole, its contents with it, rather than its ring opening
+  /// over contents already their size.
+  final bool scales;
 
   @override
   State<_MenuShell> createState() => _MenuShellState();
@@ -378,7 +398,7 @@ class _MenuShellState extends State<_MenuShell>
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
+    final shell = MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedBuilder(
@@ -400,18 +420,30 @@ class _MenuShellState extends State<_MenuShell>
         child: GaiaGlowRing(
           radius: _radius,
           hovered: _hovered,
-          child: AnimatedBuilder(
-            animation: _grown,
-            builder: (context, rows) => Align(
-              alignment: widget.growFrom,
-              widthFactor: lerpDouble(0.5, 1, _grown.value),
-              heightFactor: lerpDouble(0.15, 1, _grown.value),
-              child: rows,
-            ),
-            child: widget.child,
-          ),
+          child: widget.scales
+              ? widget.child
+              : AnimatedBuilder(
+                  animation: _grown,
+                  builder: (context, rows) => Align(
+                    alignment: widget.growFrom,
+                    widthFactor: lerpDouble(0.5, 1, _grown.value),
+                    heightFactor: lerpDouble(0.15, 1, _grown.value),
+                    child: rows,
+                  ),
+                  child: widget.child,
+                ),
         ),
       ),
+    );
+    if (!widget.scales) return shell;
+    return AnimatedBuilder(
+      animation: _grown,
+      builder: (context, shell) => Transform.scale(
+        scale: lerpDouble(0.5, 1, _grown.value),
+        alignment: widget.growFrom,
+        child: shell,
+      ),
+      child: shell,
     );
   }
 }

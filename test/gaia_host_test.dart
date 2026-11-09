@@ -7,6 +7,7 @@ import 'package:file/memory.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -1768,6 +1769,22 @@ void main() {
         companions.single.pipe.disconnect();
         async.flushMicrotasks();
         expect(host.runs.value, isEmpty);
+      });
+    });
+
+    test("Gaia's own toasts go into the notification history", () {
+      run(show: true, (async, host) {
+        connect(async);
+        NotificationHistory.instance.clear();
+        companions.single.pipe
+          ..notify('toasted', {'title': 'Deleted Hi', 'body': 'Click to undo'})
+          ..notify('toasted', {'title': 'Saved', 'body': ''});
+        async.flushMicrotasks();
+        final records = NotificationHistory.instance.records;
+        expect(
+          [for (final r in records) (r.message, r.origin, r.detail)],
+          [('Saved', 'Gaia', null), ('Deleted Hi', 'Gaia', 'Click to undo')],
+        );
       });
     });
 

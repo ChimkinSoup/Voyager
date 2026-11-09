@@ -108,6 +108,11 @@ class GaiaDevPipe extends GaiaPipe {
           for (final message in await _store.messages(p['chatId']! as String))
             message.toJson(),
         ];
+      case 'searchMessages':
+        return [
+          for (final hit in await _store.searchMessages(p['query']! as String))
+            hit.toJson(),
+        ];
       case 'putMessage':
         final written = await _store.putMessage(
           GaiaMessage.fromJson(_map(p['message'])),

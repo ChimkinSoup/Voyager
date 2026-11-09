@@ -496,6 +496,9 @@ class GaiaChatStore {
   Future<List<GaiaMessage>> messages(String chatId) =>
       _repository.listMessages(chatId);
 
+  Future<List<GaiaSearchHit>> searchMessages(String query) =>
+      _repository.searchMessages(query);
+
   /// A message's first write also moves its chat to the top. Gives back
   /// what was written, or null for nothing.
   ///

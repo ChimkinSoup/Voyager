@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -62,7 +63,8 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// {chatId, adapter, account, sessionId, lastSeq}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
 /// pinned}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
-/// {chatId, mediaDeletedAt}`, `messages {chatId}`, `putMessage {message}`,
+/// {chatId, mediaDeletedAt}`, `messages {chatId}`, `searchMessages {query}`
+/// (`[GaiaSearchHit]`), `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `memoryIndex` (§11),
@@ -74,7 +76,7 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// `osStop {chatId}`, `osResume {chatId?}`, `autoConsented` (a bool),
 /// `setAuto {chatId, on, consented}`, `isAuto {chatId}` (a bool), `rearm`,
 /// and the `runs {runs}`, `runDone {chatId, title,
-/// body}` and `drained` events. Main to companion: the `abort`, `stop
+/// body}`, `toasted {title, body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId}`, `split {left, top, width, height}`, `accent {argb}`, `settings
 /// {..}` and `changed` events.
@@ -1075,6 +1077,13 @@ class GaiaHost {
           params['title']! as String,
           params['body']! as String,
         );
+      case 'toasted':
+        final body = params['body']! as String;
+        NotificationHistory.instance.record(
+          params['title']! as String,
+          origin: 'Gaia',
+          detail: body.isEmpty ? null : body,
+        );
       case 'drained':
         _drained?.complete();
         _drained = null;
@@ -1243,6 +1252,13 @@ class GaiaHost {
             params['chatId']! as String,
           ))
             message.toJson(),
+        ];
+      case 'searchMessages':
+        return [
+          for (final hit in await store.searchMessages(
+            params['query']! as String,
+          ))
+            hit.toJson(),
         ];
       case 'putMessage':
         final written = await store.putMessage(

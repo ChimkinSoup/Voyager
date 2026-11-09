@@ -9888,13 +9888,8 @@ class DriftGaiaRepository implements GaiaRepository {
 
   @override
   Future<Set<String>> searchChatIds(String query) async {
-    final words = query.trim().split(RegExp(r'\s+'))
-      ..removeWhere((word) => word.isEmpty);
-    if (words.isEmpty) return {};
-    // Each word quoted, so FTS5's own syntax in it is plain text.
-    final match = words
-        .map((word) => '"${word.replaceAll('"', '""')}"*')
-        .join(' ');
+    final match = _gaiaMatch(query);
+    if (match == null) return {};
     final rows = await _db
         .customSelect(
           'SELECT DISTINCT s.chat_id AS chat_id '
@@ -9906,6 +9901,70 @@ class DriftGaiaRepository implements GaiaRepository {
         )
         .get();
     return {for (final row in rows) row.read<String>('chat_id')};
+  }
+
+  @override
+  Future<List<GaiaSearchHit>> searchMessages(
+    String query, {
+    int limit = 50,
+  }) async {
+    final match = _gaiaMatch(query);
+    if (match == null) return const [];
+    final rows = await _db
+        .customSelect(
+          // The newest [limit] picked first, so only theirs are snippeted;
+          // a rewind's dropped messages not among them (GAIA_REWIND_HLD.md
+          // §5). Search rows sit at their message's rowid.
+          'SELECT s.chat_id AS chat_id, s.message_id AS message_id, '
+          'h.seq AS seq, '
+          'snippet(gaia_message_search, 0, ?, ?, ?, 16) AS snippet '
+          'FROM ('
+          'SELECT m.rowid AS r, m.seq AS seq, m.created_at AS created_at '
+          'FROM gaia_message_search s '
+          'JOIN gaia_chats_table c ON c.id = s.chat_id '
+          'JOIN gaia_messages_table m ON m.rowid = s.rowid '
+          'WHERE gaia_message_search MATCH ? AND c.deleted_at IS NULL '
+          'AND NOT EXISTS (SELECT 1 FROM json_each(c.rewinds_json) w '
+          "WHERE m.seq BETWEEN json_extract(w.value, '\$.from') "
+          "AND json_extract(w.value, '\$.to')) "
+          'ORDER BY m.created_at DESC LIMIT ?'
+          ') h '
+          'JOIN gaia_message_search s ON s.rowid = h.r '
+          'WHERE gaia_message_search MATCH ? '
+          'ORDER BY h.created_at DESC',
+          variables: [
+            Variable.withString(GaiaSearchHit.start),
+            Variable.withString(GaiaSearchHit.end),
+            Variable.withString('…'),
+            Variable.withString(match),
+            Variable.withInt(limit),
+            Variable.withString(match),
+          ],
+          readsFrom: {
+            _db.gaiaMessageSearch,
+            _db.gaiaChatsTable,
+            _db.gaiaMessagesTable,
+          },
+        )
+        .get();
+    return [
+      for (final row in rows)
+        GaiaSearchHit(
+          chatId: row.read<String>('chat_id'),
+          messageId: row.read<String>('message_id'),
+          seq: row.read<int>('seq'),
+          snippet: row.read<String>('snippet'),
+        ),
+    ];
+  }
+
+  /// [query] as an FTS5 match of every word as a prefix; null for no words.
+  static String? _gaiaMatch(String query) {
+    final words = query.trim().split(RegExp(r'\s+'))
+      ..removeWhere((word) => word.isEmpty);
+    if (words.isEmpty) return null;
+    // Each word quoted, so FTS5's own syntax in it is plain text.
+    return words.map((word) => '"${word.replaceAll('"', '""')}"*').join(' ');
   }
 
   @override
