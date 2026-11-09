@@ -2475,15 +2475,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _journalWriteCoordinator = ref.read(journalWriteCoordinatorProvider);
     _journalDebugLogger = ref.read(journalDebugLoggerProvider);
     // Watched so attaching or removing an image adds or drops the row's
-    // image icon (the todo page's trigger).
+    // image icon (the todo page's trigger). Selected, so a reload that finds
+    // the same set doesn't rebuild the page.
     _entriesWithImages =
-        ref
-            .watch(
-              mediaOwnersWithImagesProvider(
-                FirestoreCollections.journalEntries,
-              ),
-            )
-            .valueOrNull ??
+        ref.watch(
+          mediaOwnersWithImagesProvider(
+            FirestoreCollections.journalEntries,
+          ).select((owners) => owners.valueOrNull),
+        ) ??
         const <String>{};
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind == QuickCaptureKind.journal) {

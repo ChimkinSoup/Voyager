@@ -2023,12 +2023,22 @@ class _KeepAliveState extends State<_KeepAlive>
 /// another one: the point a chat moved between vendors (§7.4).
 String? _switchedFrom(List<GaiaMessage> messages, int index) {
   final adapter = messages[index].adapter;
-  if (messages[index].role != GaiaMessageRole.assistant || adapter == null) {
+  // A reply that failed before any output may never have carried the
+  // transcript over (a CLI command refused before catching up), so the
+  // divider waits for one that got going. One that streamed some and then
+  // failed had its session, and the transcript with it.
+  bool neverStarted(GaiaMessage message) =>
+      message.status == GaiaMessageStatus.error && message.parts.isEmpty;
+  if (messages[index].role != GaiaMessageRole.assistant ||
+      adapter == null ||
+      neverStarted(messages[index])) {
     return null;
   }
   for (var i = index - 1; i >= 0; i--) {
     final earlier = messages[i];
-    if (earlier.role != GaiaMessageRole.assistant || earlier.adapter == null) {
+    if (earlier.role != GaiaMessageRole.assistant ||
+        earlier.adapter == null ||
+        neverStarted(earlier)) {
       continue;
     }
     return earlier.adapter == adapter ? null : earlier.adapter;

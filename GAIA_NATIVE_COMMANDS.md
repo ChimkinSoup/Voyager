@@ -1,7 +1,7 @@
 # Gaia — CLI-Native `/` Commands (HLD)
 
-Status: **Built 2026-11-08, with unit tests and a live check of the Claude Code runner (§9).
-Not yet tried by hand in the companion's UI, and the Codex runner path is untested live (§9).**
+Status: **Built 2026-11-08, with unit tests and live checks of both runners and the
+companion's UI (§9).**
 The CLI behaviour it relies on was checked on Claude Code 2.1.319 and Codex 0.166.0. Both
 are FRAGILE(cli): re-check §3 to §6 when a CLI version moves.
 
@@ -22,7 +22,8 @@ on, and runs them there.
   saying so and suggesting the closest command. Tab takes the suggestion, and sending again
   unchanged sends it as typed.
 - **Gaia's own commands win any name clash.** For example, Claude Code's `/new` is an
-  alias of its `/clear`, but `/new` stays Gaia's.
+  alias of its `/clear`, but `/new` stays Gaia's. `/clear` and `/reset` are aliases of Gaia's
+  `/new` too, so they never reach the CLI from the composer.
 
 ## 2. Decisions at a glance
 
@@ -91,7 +92,7 @@ did:
 | `/list-agents` (`/peers`) | Lists other Claude sessions on the machine | Allowed |
 | `/doctor`, `/insights`, `/team-onboarding`, `/security-review`, `/debug`, `/schedule` | Run through the model, with tools behind Gaia's permission cards | Allowed |
 | Bundled skills (`/code-review`, `/simplify`, `/dataviz`, …) | Expanded into the prompt; the model runs them | Allowed |
-| `/clear` (`/reset`, `/new`) | Emits `conversation_reset` with a **new session id**; the next `--resume` of the old id carries on the old conversation | **Blocked**: Gaia would keep resuming the old session. Use Gaia's `/new` |
+| `/clear` (`/reset`, `/new`) | Emits `conversation_reset` with a **new session id**; the next `--resume` of the old id carries on the old conversation | **Blocked**: Gaia would keep resuming the old session. Typed in the composer, `/clear` and `/reset` are Gaia's `/new` |
 | `/model <x>`, `/effort <x>` | "for this session only"; Gaia passes `--model`/`--effort` on every process start | **Blocked**: undone silently at the next restart. Tiers own these |
 | `/advisor` | Session setting | Blocked, for the same reason |
 | `/fast` | "not available in the Agent SDK" | Blocked: does nothing |
@@ -184,7 +185,7 @@ quota, the CLI tried to make sense of `/quee`, and the queue never got the text.
   then the stop button.
 - **Aliases aren't known:** Claude Code's `/cost` is an alias of `/usage`, but the palette
   only has names, so `/cost` gets the unknown line. Sending again works, since the CLI knows
-  the alias. A blocked alias like `/reset` is still refused by the runner.
+  the alias. Gaia's own aliases are known: `/clear` and `/reset` are its `/new`.
 
 ## 8. `/btw`
 
@@ -209,14 +210,28 @@ session, ask there, and throw the fork away.
 - **Live, Codex app-server** (Python over stdio, 0.166.0): `skills/list`, a skill input, text
   `/compact` faked, and `thread/compact/start` compacted. Gaia's `CodexAppServerRunner` path
   itself isn't tested live.
-- **Still to do by hand in the companion:**
-  - The palette shows the CLI's rows, and picking one inserts `/name `.
-  - `/compact` and `/usage` in a Claude chat.
-  - `/compact` and a skill in a Codex chat.
-  - The unknown line, Tab, and the second send.
-  - The "Reading … commands" hold: `/compact` sent in the first seconds of a run.
-  - A command with a quote attached is refused, with the draft kept.
-  - A command in a chat just moved to another account fails with the catch-up message.
+- **Live in the companion** (2026-11-08, `gaiaqa`, debug build of the working tree, bg input):
+  all passed.
+  - Palette: `/co` lists `/code-review`, `/compact`, `/context` and others with descriptions;
+    clicking `/compact` inserts `/compact `.
+  - Claude: `/usage` as a new chat's first message came back as the reply. `/compact` showed
+    "Compacted: 22.1k → 3.8k tokens.", and the next turn still knew the topic.
+  - Codex: `/compact` showed "Compacted." and the rollout has a `compacted` item.
+    `/apple-design …` went as a `skill` input with the `<skill>` body injected, and the model
+    answered from it.
+  - Unknown: `/usgae` held with "Did you mean /usage?"; Tab took it. `/zzqx …` held without
+    a suggestion, then went as typed on the second send.
+  - `/clear` shows the `/new` row and starts a new chat; `/reset` does the same.
+  - Hold: with the list forced to "being read", `/compact` showed "Reading Claude Code's
+    commands." and wasn't sent.
+  - A command with a file attached was refused ("Send /usage on its own"), with the draft
+    and file given back. Tried with a file, not a quote: the same check covers both.
+  - Catch-up: tried after an agent switch (a Claude chat moved to Deep), not an account
+    switch; `/compact` failed with "Codex Sol hasn't caught up on this chat yet…".
+  - **A harness artefact, not a bug:** with the window parked off-screen, the header, sidebar,
+    Stop button and message list sometimes kept old state after a turn or a chat switch. On
+    a visible window they updated at once, whether Gaia was focused or not, after a turn
+    and after a chat switch.
 
 ## 10. Open items
 

@@ -2265,7 +2265,7 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
 
 /// Names Gaia's own commands take (§9.2), which a user command can't.
 final _reservedCommandNames = {
-  for (final builtin in GaiaBuiltin.values) builtin.name,
+  for (final builtin in GaiaBuiltin.values) ...builtin.names,
   for (final tier in GaiaTier.values) tier.command.substring(1),
 };
 

@@ -497,6 +497,46 @@ void main() {
   });
 
   testWidgets(
+    'the caret stays in view as the field narrows or widens',
+    (tester) async {
+      await pumpField(tester, maxLines: 3);
+      final long = List.filled(
+        12,
+        'the quick brown fox jumps over the lazy dog',
+      ).join(' ');
+      await tester.enterText(find.byType(EditableText), long);
+      await settle(tester);
+
+      void expectCaretShown() {
+        final editable = tester
+            .state<EditableTextState>(find.byType(EditableText))
+            .renderEditable;
+        final rect = editable.getLocalRectForCaret(text.selection.extent);
+        expect(rect.top, greaterThanOrEqualTo(-1));
+        expect(rect.bottom, lessThanOrEqualTo(editable.size.height + 1));
+      }
+
+      expectCaretShown();
+      for (final width in [320.0, 600.0, 240.0]) {
+        await buildField(tester, width: width, maxLines: 3);
+        await settle(tester);
+        expectCaretShown();
+      }
+      // The caret moved up a few lines, then the field widened.
+      for (var i = 0; i < 4; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      }
+      await settle(tester);
+      expect(text.selection.extentOffset, lessThan(long.length));
+      expectCaretShown();
+      await buildField(tester, width: 400, maxLines: 3);
+      await settle(tester);
+      expectCaretShown();
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
     'a resting cursor keeps the light as the field moves or scrolls under it',
     (tester) async {
       await pumpField(tester, maxLines: 3);

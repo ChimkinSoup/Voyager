@@ -1277,6 +1277,7 @@ class GaiaHost {
         final image = await media.attach(
           params['chatId']! as String,
           params['path']! as String,
+          mediaId: params['mediaId'] as String?,
         );
         return {
           'mediaId': image.mediaId,

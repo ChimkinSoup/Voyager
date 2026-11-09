@@ -341,10 +341,15 @@ final mediaOwnersWithImagesProvider =
     FutureProvider.family<Set<String>, String>((ref, collection) async {
       final service = ref.watch(mediaServiceProvider);
       final references = await service.repository.listReferences();
-      return {
+      final owners = {
         for (final reference in references)
           if (reference.collection == collection) reference.documentId,
       };
+      // The same set when nothing changed, so pages watching it through
+      // `select` skip the rebuild: every transfer and attach anywhere
+      // notifies the service, and the pages are large.
+      final previous = ref.state.valueOrNull;
+      return previous != null && setEquals(previous, owners) ? previous : owners;
     });
 
 /// How much disk the image cache is using, for the settings readout.

@@ -1147,13 +1147,14 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
     final settings = ref.watch(settingsProvider.settled).valueOrNull;
     // Watched here rather than in _buildEntryList, which runs inside a
     // LayoutBuilder after build, so attaching or removing an image adds or
-    // drops the row's image icon (the todo page's trigger).
+    // drops the row's image icon (the todo page's trigger). Selected, so a
+    // reload that finds the same set doesn't rebuild the page.
     final entriesWithImages =
-        ref
-            .watch(
-              mediaOwnersWithImagesProvider(FirestoreCollections.dreamEntries),
-            )
-            .valueOrNull ??
+        ref.watch(
+          mediaOwnersWithImagesProvider(
+            FirestoreCollections.dreamEntries,
+          ).select((owners) => owners.valueOrNull),
+        ) ??
         const <String>{};
     if (!_appliedSavedWidth && settings != null) {
       _splitWidth = settings.dreamSplitWidth;

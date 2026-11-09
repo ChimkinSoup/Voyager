@@ -267,7 +267,32 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   void _afterFrame(Duration _) {
     if (!mounted) return;
     SchedulerBinding.instance.addPostFrameCallback(_afterFrame);
+    _keepCaretInView();
     _aim();
+  }
+
+  /// The text's size when [_keepCaretInView] last looked.
+  Size? _textSize;
+
+  /// Resized, as when the window snaps to half the screen, the text reflows
+  /// under a scroll offset that no longer shows the caret: Flutter scrolls
+  /// to it only on an edit or a caret move. Not while the text is sent and
+  /// sweeping away.
+  void _keepCaretInView() {
+    final box = context.findRenderObject();
+    if (box == null || !box.attached) return;
+    var editable = _editable;
+    if (editable == null || !editable.attached) {
+      editable = _editable = findEditable(box);
+    }
+    if (editable == null || !editable.hasSize) return;
+    final was = _textSize;
+    _textSize = editable.size;
+    if (was == null || was == editable.size) return;
+    if (context.findAncestorStateOfType<GaiaVanishState>()?.sweep != null) {
+      return;
+    }
+    bringCursorIntoView(fieldKey: _fieldKey);
   }
 
   /// Sends the light to what it follows, held inside the field so a caret

@@ -4011,6 +4011,9 @@ class GaiaController extends ChangeNotifier {
             (await _pipe.request('attachImage', {
                   'chatId': chatId,
                   'path': upload,
+                  // Ingested when it joined the draft: its asset is the
+                  // unedited image.
+                  if (image.edits.isEmpty) 'mediaId': ?image.mediaId,
                 }))!
                 as Map;
         if (stopped) {

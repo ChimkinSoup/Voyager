@@ -3029,12 +3029,13 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final listsAsync = ref.watch(todoListsProvider.settled);
     // Watched so attaching or removing an image in the edit panel adds or
     // drops the row's image icon without anything else having to invalidate.
+    // Selected, so a reload that finds the same set doesn't rebuild the page.
     _tasksWithImages =
-        ref
-            .watch(
-              mediaOwnersWithImagesProvider(FirestoreCollections.todoTasks),
-            )
-            .valueOrNull ??
+        ref.watch(
+          mediaOwnersWithImagesProvider(
+            FirestoreCollections.todoTasks,
+          ).select((owners) => owners.valueOrNull),
+        ) ??
         const <String>{};
     ref.listen<AsyncValue<Map<String, ({int active, int completed})>>>(
       todoListStatsProvider,

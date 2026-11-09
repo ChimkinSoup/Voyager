@@ -613,6 +613,65 @@ void main() {
     await finish(tester);
   });
 
+  GaiaMessage codex(int seq, GaiaMessageStatus status, {bool output = true}) =>
+      GaiaMessage(
+        id: 'm$seq',
+        chatId: 'c1',
+        seq: seq,
+        role: GaiaMessageRole.assistant,
+        parts: [if (output) GaiaTextPart('Reply $seq')],
+        status: status,
+        createdAt: at,
+        updatedAt: at,
+        adapter: kGaiaCodexAdapter,
+      );
+
+  testWidgets('a reply failed before any output leaves the vendor divider '
+      'to the next', (tester) async {
+    await pump(
+      tester,
+      accounts: const [a, b],
+      messages: [
+        asked(0, 'First prompt'),
+        reply(1, kGaiaDefaultAccountId),
+        // A CLI command refused before the session caught up.
+        asked(2, '/compact'),
+        codex(3, GaiaMessageStatus.error, output: false),
+        asked(4, 'Third prompt'),
+        codex(5, GaiaMessageStatus.complete),
+      ],
+    );
+    final divider = find.textContaining('a transcript carried over');
+    expect(divider, findsOneWidget);
+    double y(Finder finder) => tester.getTopLeft(finder).dy;
+    expect(y(find.text('/compact')), lessThan(y(divider)));
+    expect(y(divider), lessThan(y(find.text('Third prompt'))));
+    await finish(tester);
+  });
+
+  testWidgets('a reply that streamed and then failed carries the divider', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      accounts: const [a, b],
+      messages: [
+        asked(0, 'First prompt'),
+        reply(1, kGaiaDefaultAccountId),
+        asked(2, 'Second prompt'),
+        codex(3, GaiaMessageStatus.error),
+        asked(4, 'Third prompt'),
+        codex(5, GaiaMessageStatus.complete),
+      ],
+    );
+    final divider = find.textContaining('a transcript carried over');
+    expect(divider, findsOneWidget);
+    double y(Finder finder) => tester.getTopLeft(finder).dy;
+    expect(y(find.text('Reply 1')), lessThan(y(divider)));
+    expect(y(divider), lessThan(y(find.text('Second prompt'))));
+    await finish(tester);
+  });
+
   testWidgets('the divider arriving leaves the prompt as it is', (
     tester,
   ) async {

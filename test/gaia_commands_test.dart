@@ -64,6 +64,17 @@ void main() {
     expect(gaiaBuiltinIn('/stop now'), isNull);
   });
 
+  test('/clear and /reset are /new', () {
+    expect(gaiaBuiltinIn('/clear'), GaiaBuiltin.newChat);
+    expect(gaiaBuiltinIn('/reset'), GaiaBuiltin.newChat);
+    final items = gaiaPaletteItems(const []);
+    expect(
+      filterGaiaPalette(items, 'clear').first.builtin,
+      GaiaBuiltin.newChat,
+    );
+    expect(gaiaUnknownCommand('/clear', items), isNull);
+  });
+
   test('/remember takes the rest of the draft', () {
     expect(gaiaRememberText('/remember  I like tea \n'), 'I like tea');
     expect(

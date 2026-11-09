@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/domain/models/media_models.dart';
 
 /// An image attached to a chat, as stored: its asset and the local file
 /// holding the bytes an agent gets.
@@ -25,7 +26,43 @@ class GaiaMedia {
 
   /// Ingests the image at [path] onto [chatId]. Throws
   /// `MediaIngestException` for one the module refuses.
-  Future<GaiaStoredImage> attach(String chatId, String path) async {
+  ///
+  /// [mediaId], a draft's image already ingested (§9.3), is put on [chatId]
+  /// as it is: ingesting [path] again only finds the same asset, after a
+  /// decode and re-encode that take seconds an image in a debug build. [path]
+  /// is ingested after all when that asset or its file isn't here, or when
+  /// its upload may have been purged since: ingesting is what sends it again
+  /// (BUG-265).
+  Future<GaiaStoredImage> attach(
+    String chatId,
+    String path, {
+    String? mediaId,
+  }) async {
+    final stored = mediaId == null ? null : await _media.asset(mediaId);
+    final file =
+        stored == null ||
+            stored.deletedAt != null ||
+            (stored.uploadState == MediaUploadState.uploaded &&
+                stored.retentionClockStartedAt != null)
+        ? null
+        : await _media.fileStore.fileForAsset(stored);
+    if (stored != null && file != null) {
+      final reference = await _media.trackAttach(
+        () => _media.addReference(
+          mediaId: stored.id,
+          collection: FirestoreCollections.gaiaChats,
+          documentId: chatId,
+        ),
+      );
+      return (
+        mediaId: stored.id,
+        referenceId: reference.id,
+        path: file.path,
+        mimeType: stored.mimeType,
+        width: stored.width,
+        height: stored.height,
+      );
+    }
     final reference = await _media.attachBytes(
       bytes: await File(path).readAsBytes(),
       collection: FirestoreCollections.gaiaChats,

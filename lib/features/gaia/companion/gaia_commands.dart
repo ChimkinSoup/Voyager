@@ -8,7 +8,9 @@ import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 /// Gaia's own commands (GAIA_HLD.md §9.2) that run rather than expand. The
 /// others the HLD lists come with their phases.
 enum GaiaBuiltin {
-  newChat('new', 'Start a new chat'),
+  /// `/clear` and `/reset` too, as in Claude Code, where they would start a
+  /// session Gaia wouldn't follow (GAIA_NATIVE_COMMANDS.md §4).
+  newChat('new', 'Start a new chat', aliases: {'clear', 'reset'}),
   stop('stop', 'Stop the reply in progress'),
 
   /// Takes the rest of the draft: see [gaiaRememberText].
@@ -21,10 +23,16 @@ enum GaiaBuiltin {
   drain('drain', 'Send queued prompts one after another, on or off'),
   thisControl('this', 'Attach the control the cursor was on when Gaia opened');
 
-  const GaiaBuiltin(this.name, this.description);
+  const GaiaBuiltin(this.name, this.description, {this.aliases = const {}});
 
   final String name;
   final String description;
+
+  /// Other names it runs by, which the palette matches as well.
+  final Set<String> aliases;
+
+  /// [name] and [aliases]: every `/word` it takes.
+  Set<String> get names => {name, ...aliases};
 }
 
 /// One row of the `/` palette: a built-in, a tier, an account's alias, a
@@ -45,7 +53,7 @@ List<GaiaPaletteItem> gaiaPaletteItems(
   List<GaiaNativeCommand> natives = const [],
 }) {
   final taken = {
-    for (final builtin in GaiaBuiltin.values) builtin.name,
+    for (final builtin in GaiaBuiltin.values) ...builtin.names,
     for (final tier in GaiaTier.values) tier.command.substring(1),
     for (final account in accounts)
       if (account.alias.isNotEmpty) account.alias,
@@ -135,9 +143,20 @@ List<GaiaPaletteItem> filterGaiaPalette(
     return i == q.length ? 2 : null;
   }
 
+  // A built-in's best over its name and aliases. An alias counts only as
+  // the very name or a prefix, so `/s` doesn't bring up `/new` for `reset`.
+  int? best(GaiaPaletteItem item) {
+    final scores = [
+      score(item.name),
+      for (final alias in item.builtin?.aliases ?? const <String>{})
+        if (score(alias) case final s? when s <= 0) s,
+    ].nonNulls;
+    return scores.isEmpty ? null : scores.reduce((a, b) => a < b ? a : b);
+  }
+
   final scored = [
     for (final (index, item) in items.indexed)
-      if (score(item.name) case final s?) (s, index, item),
+      if (best(item) case final s?) (s, index, item),
   ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
   return [for (final (_, _, item) in scored) item];
 }
@@ -230,7 +249,9 @@ String? gaiaThisRest(String draft) {
 /// The built-in [draft] is, alone; null otherwise.
 GaiaBuiltin? gaiaBuiltinIn(String draft) {
   final text = draft.trim();
-  return GaiaBuiltin.values.where((b) => '/${b.name}' == text).firstOrNull;
+  return GaiaBuiltin.values
+      .where((b) => b.names.any((n) => '/$n' == text))
+      .firstOrNull;
 }
 
 /// The CLI command (GAIA_NATIVE_COMMANDS.md) [draft] starts with: `/name`,
@@ -252,7 +273,12 @@ GaiaNativeCommand? gaiaNativeIn(String draft, List<GaiaNativeCommand> natives) {
   final match = RegExp(r'^/([\w-]+)(?:\s|$)').firstMatch(draft.trim());
   if (match == null) return null;
   final word = match.group(1)!;
-  if (items.any((item) => item.name == word)) return null;
+  if (items.any(
+    (item) =>
+        item.name == word || (item.builtin?.names.contains(word) ?? false),
+  )) {
+    return null;
+  }
   return (
     word: word,
     suggestion:
