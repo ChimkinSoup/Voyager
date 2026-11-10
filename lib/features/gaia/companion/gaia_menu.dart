@@ -269,6 +269,7 @@ class GaiaPalette extends StatefulWidget {
     required this.items,
     required this.highlight,
     required this.width,
+    this.animate = true,
   });
 
   final List<GaiaMenuItem> items;
@@ -276,6 +277,10 @@ class GaiaPalette extends StatefulWidget {
   /// Lit as a hovered row is.
   final int highlight;
   final double width;
+
+  /// Grows in and brings its rows in one by one; false, already open, as
+  /// when it takes the side questions' place.
+  final bool animate;
 
   @override
   State<GaiaPalette> createState() => _GaiaPaletteState();
@@ -289,6 +294,7 @@ class _GaiaPaletteState extends State<GaiaPalette>
   late final _entrance = AnimationController(
     vsync: this,
     duration: _optionsDelay + _optionsStagger * (_rowsAtOpen - 1) + _springTime,
+    value: widget.animate ? 0 : 1,
   )..forward();
 
   @override
@@ -301,6 +307,7 @@ class _GaiaPaletteState extends State<GaiaPalette>
   Widget build(BuildContext context) {
     return _MenuShell(
       growFrom: Alignment.bottomLeft,
+      animate: widget.animate,
       // Less the ring's edge.
       child: SizedBox(
         width: widget.width - 2,
@@ -345,6 +352,76 @@ class _GaiaPaletteState extends State<GaiaPalette>
   }
 }
 
+/// [child] in [decoration], coming in as the palette does: growing on the
+/// shell's spring out of its bottom left corner, its contents drifting in
+/// behind. It comes in once, when first built; it takes the full width it's
+/// given.
+class GaiaGrowIn extends StatefulWidget {
+  const GaiaGrowIn({super.key, required this.decoration, required this.child});
+
+  final BoxDecoration decoration;
+  final Widget child;
+
+  @override
+  State<GaiaGrowIn> createState() => _GaiaGrowInState();
+}
+
+class _GaiaGrowInState extends State<GaiaGrowIn>
+    with SingleTickerProviderStateMixin {
+  late final _entrance = AnimationController(
+    vsync: this,
+    duration: _optionsDelay + _springTime,
+  )..forward();
+  late final _grown = CurvedAnimation(
+    parent: _entrance,
+    curve: Interval(
+      0,
+      _springTime.inMicroseconds / _entrance.duration!.inMicroseconds,
+      curve: const _SpringCurve(_shellSpring),
+    ),
+  );
+
+  @override
+  void dispose() {
+    _grown.dispose();
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    // Loose, so it can be narrower than it's given while it grows.
+    builder: (context, constraints) => Align(
+      alignment: Alignment.bottomLeft,
+      heightFactor: 1,
+      child: AnimatedBuilder(
+        animation: _grown,
+        builder: (context, contents) => Container(
+          decoration: widget.decoration,
+          child: ClipRect(
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              widthFactor: lerpDouble(0.5, 1, _grown.value),
+              heightFactor: lerpDouble(0.15, 1, _grown.value),
+              child: contents,
+            ),
+          ),
+        ),
+        child: SizedBox(
+          width: constraints.maxWidth - widget.decoration.padding.horizontal,
+          child: _Entering(
+            entrance: _entrance,
+            delay: _optionsDelay,
+            leaving: null,
+            leaveDelay: Duration.zero,
+            child: widget.child,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// A [GaiaMenu]'s panel for a panel of Gaia's own, such as the search's:
 /// [child] in its ring, growing out of its middle.
 class GaiaPanel extends StatelessWidget {
@@ -365,6 +442,7 @@ class _MenuShell extends StatefulWidget {
     required this.growFrom,
     required this.child,
     this.scales = false,
+    this.animate = true,
   });
 
   final Alignment growFrom;
@@ -374,14 +452,20 @@ class _MenuShell extends StatefulWidget {
   /// over contents already their size.
   final bool scales;
 
+  /// Grows in; false, already grown.
+  final bool animate;
+
   @override
   State<_MenuShell> createState() => _MenuShellState();
 }
 
 class _MenuShellState extends State<_MenuShell>
     with SingleTickerProviderStateMixin {
-  late final _grow = AnimationController(vsync: this, duration: _springTime)
-    ..forward();
+  late final _grow = AnimationController(
+    vsync: this,
+    duration: _springTime,
+    value: widget.animate ? 0 : 1,
+  )..forward();
   late final _grown = CurvedAnimation(
     parent: _grow,
     curve: const _SpringCurve(_shellSpring),

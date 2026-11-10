@@ -763,7 +763,7 @@ void main() {
 
       testWidgets('sends one that takes no arguments', (tester) async {
         final runner = await startNative(tester);
-        await type(tester, '/cont');
+        await type(tester, '/conte');
         expect(find.byKey(const ValueKey('/context')), findsOneWidget);
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump();
@@ -809,7 +809,7 @@ void main() {
         controller.send('hi');
         await tester.pump();
         expect(controller.currentRunning, isTrue);
-        await type(tester, '/cont');
+        await type(tester, '/conte');
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump(const Duration(seconds: 1));
         expect(runner.stopped, isEmpty);
@@ -823,7 +823,7 @@ void main() {
       ) async {
         final runner = await startNative(tester);
         await controller.attachPaths(['C:/notes.txt']);
-        await type(tester, '/cont');
+        await type(tester, '/conte');
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump(const Duration(seconds: 1));
         expect(runner.sent, isEmpty);
@@ -834,7 +834,7 @@ void main() {
 
       testWidgets('Tab only completes it', (tester) async {
         final runner = await startNative(tester);
-        await type(tester, '/cont');
+        await type(tester, '/conte');
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.pump();
         expect(controller.draft.text, '/context ');

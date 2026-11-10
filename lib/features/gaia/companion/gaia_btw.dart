@@ -7,6 +7,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
@@ -273,7 +274,10 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
         child: Focus(
           focusNode: _focus,
           onKeyEvent: (_, event) => _key(event),
-          child: Container(
+          // Comes in as the palette does, as it opens. Only then: hidden
+          // under the palette and back, it keeps its state, so it's simply
+          // there again.
+          child: GaiaGrowIn(
             // Squared off at the bottom, where it meets the composer.
             decoration: BoxDecoration(
               // Opaque, as the field it sits on.
@@ -283,22 +287,27 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
               ),
               border: Border(top: BorderSide(color: accent, width: 2)),
             ),
-            constraints: BoxConstraints(maxHeight: max(160, widget.maxHeight)),
-            child: ListenableBuilder(
-              listenable: Listenable.merge([
-                _controller,
-                _controller.btwStreamed,
-              ]),
-              builder: (context, _) {
-                if (_controller.currentChatId != _openOn) {
-                  // Another chat in view: they're that chat's no longer.
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) close();
-                  });
-                  return const SizedBox.shrink();
-                }
-                return _body(context, accent);
-              },
+            child: ConstrainedBox(
+              // Less the accent's edge.
+              constraints: BoxConstraints(
+                maxHeight: max(160, widget.maxHeight) - 2,
+              ),
+              child: ListenableBuilder(
+                listenable: Listenable.merge([
+                  _controller,
+                  _controller.btwStreamed,
+                ]),
+                builder: (context, _) {
+                  if (_controller.currentChatId != _openOn) {
+                    // Another chat in view: they're that chat's no longer.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) close();
+                    });
+                    return const SizedBox.shrink();
+                  }
+                  return _body(context, accent);
+                },
+              ),
             ),
           ),
         ),

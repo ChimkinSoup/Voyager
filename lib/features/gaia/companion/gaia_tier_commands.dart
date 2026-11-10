@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 
 /// An inline tier command (GAIA_HLD.md §7.3) found in the composer's text:
 /// the tier, and the text with the command taken out.
@@ -43,6 +44,26 @@ GaiaAccountCommand? findGaiaAccountCommand(
   return found == null
       ? null
       : (account: byCommand[found.command]!, value: found.value);
+}
+
+/// One of [gaiaInlineBuiltins] found the same way.
+typedef GaiaInlineBuiltin = ({GaiaBuiltin builtin, TextEditingValue value});
+
+/// The first completed one of [gaiaInlineBuiltins], by any of its names, in
+/// [value], by the same rules as [findGaiaTierCommand]. Null when there's
+/// none.
+GaiaInlineBuiltin? findGaiaInlineBuiltin(
+  TextEditingValue value, {
+  bool atEnd = false,
+}) {
+  final byCommand = {
+    for (final builtin in gaiaInlineBuiltins)
+      for (final name in builtin.names) '/$name': builtin,
+  };
+  final found = _findCommand(value, byCommand.keys, atEnd: atEnd);
+  return found == null
+      ? null
+      : (builtin: byCommand[found.command]!, value: found.value);
 }
 
 ({String command, TextEditingValue value})? _findCommand(

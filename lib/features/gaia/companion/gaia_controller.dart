@@ -19,6 +19,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_chat_tools.dart';
+import 'package:voyager/features/gaia/companion/gaia_command_uses.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
@@ -97,6 +98,7 @@ class GaiaController extends ChangeNotifier {
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
+    GaiaCommandUses? commandUses,
     this._utility,
     Future<String> Function()? clipboard,
     Future<void> Function(Uint8List png)? copyPng,
@@ -118,7 +120,8 @@ class GaiaController extends ChangeNotifier {
                key: value.version,
            },
        debug = debug ?? GaiaDebug(),
-       sidebar = sidebar ?? GaiaSidebar();
+       sidebar = sidebar ?? GaiaSidebar(),
+       commandUses = commandUses ?? GaiaCommandUses();
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
@@ -132,6 +135,9 @@ class GaiaController extends ChangeNotifier {
 
   /// The Gaia window's sidebar: open or not, and its width.
   final GaiaSidebar sidebar;
+
+  /// The palette's commands by when they were last used.
+  final GaiaCommandUses commandUses;
 
   /// The router and chat titles (§5.1); null for none.
   final GaiaUtility? _utility;
@@ -540,6 +546,24 @@ class GaiaController extends ChangeNotifier {
 
   void dropWindowContext() {
     windowContext = null;
+    notifyListeners();
+  }
+
+  /// The window of the last summon, which `/window` puts back once removed
+  /// or sent.
+  GaiaContextPart? _summonWindow;
+
+  /// `/window`: the chip off the draft, or back on it.
+  void toggleWindowContext() {
+    if (windowContext != null) return dropWindowContext();
+    if (_summonWindow == null) {
+      return _note(
+        'No window to attach',
+        'Gaia was opened with no window in front, or "Say which window Gaia '
+            'was opened from" is off in Settings.',
+      );
+    }
+    windowContext = _summonWindow;
     notifyListeners();
   }
 
@@ -2146,6 +2170,7 @@ class GaiaController extends ChangeNotifier {
             GaiaPart.fromJson(json.cast()) as GaiaContextPart,
           _ => null,
         };
+        _summonWindow = windowContext;
         _summonSelection = params['selection'] as String? ?? '';
         notifyListeners();
       case 'pointed':
@@ -3536,8 +3561,48 @@ class GaiaController extends ChangeNotifier {
         openBtws();
       case GaiaBuiltin.usage:
         _usageOpens.add(null);
+      case GaiaBuiltin.controlOff:
+        await setHand(GaiaHand.off);
+        noteHand();
+      case GaiaBuiltin.controlAsk:
+        await setHand(GaiaHand.ask);
+        noteHand();
+      // The composer shows Auto's notice first; this is for a send from
+      // elsewhere, which can't, as a popped queue's.
+      case GaiaBuiltin.controlAuto:
+        if (!await autoConsented()) {
+          return _note(
+            'Auto not turned on',
+            "Pick Auto from the hand's menu once to read its notice.",
+          );
+        }
+        await setHand(GaiaHand.auto);
+        noteHand();
+      case GaiaBuiltin.screen:
+        final wasAuto = hand == GaiaHand.auto;
+        await toggleSeeScreen();
+        _note(
+          canSeeScreen ? 'Screen on' : 'Screen off',
+          canSeeScreen
+              ? 'Gaia can see your screen in this chat.'
+              : wasAuto
+              ? "Gaia can't see your screen. Control dropped to Ask."
+              : "Gaia can't see your screen in this chat.",
+        );
+      case GaiaBuiltin.window:
+        toggleWindowContext();
     }
   }
+
+  /// The hand's toast, after a command set it.
+  void noteHand() => switch (hand) {
+    GaiaHand.off => _note(
+      'Control off',
+      "Gaia can't click or type in this chat.",
+    ),
+    GaiaHand.ask => _note('Control: Ask', 'A card before each step list.'),
+    GaiaHand.auto => _note('Control: Auto', 'No cards, commands too.'),
+  };
 
   /// Asks the window to show the usage bars (`/usage`).
   Stream<void> get usageOpens => _usageOpens.stream;

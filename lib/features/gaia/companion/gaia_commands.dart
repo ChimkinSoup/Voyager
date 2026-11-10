@@ -29,7 +29,27 @@ enum GaiaBuiltin {
 
   /// Gaia's usage bars rather than the CLI's own text, which is laid out
   /// for a terminal (GAIA_NATIVE_COMMANDS.md §5).
-  usage('usage', 'Show plan usage for the next message\'s accounts');
+  usage('usage', 'Show plan usage for the next message\'s accounts'),
+
+  /// The hand (GAIA_AUTONOMY_HLD.md §4), anywhere in the draft like a tier
+  /// command: see [gaiaInlineBuiltins]. Least first, so `/con` picks Off.
+  controlOff(
+    'control-off',
+    "Gaia can't click or type in this chat",
+    aliases: {'controloff'},
+  ),
+  controlAsk(
+    'control-ask',
+    'Gaia acts after a card you approve',
+    aliases: {'controlask'},
+  ),
+  controlAuto(
+    'control-auto',
+    'Gaia acts with no cards, commands too',
+    aliases: {'controlauto'},
+  ),
+  screen('screen', 'Let Gaia see your screen in this chat, on or off'),
+  window('window', 'Attach or remove the window Gaia was opened from');
 
   const GaiaBuiltin(this.name, this.description, {this.aliases = const {}});
 
@@ -42,6 +62,15 @@ enum GaiaBuiltin {
   /// [name] and [aliases]: every `/word` it takes.
   Set<String> get names => {name, ...aliases};
 }
+
+/// The built-ins that also fire inline, once completed, as a tier command
+/// does: see [findGaiaInlineBuiltin]. Not `/screen` or `/window`, which
+/// toggle, so pasted or restored text would flip them each time.
+const gaiaInlineBuiltins = {
+  GaiaBuiltin.controlOff,
+  GaiaBuiltin.controlAsk,
+  GaiaBuiltin.controlAuto,
+};
 
 /// One row of the `/` palette: a built-in, a tier, an account's alias, a
 /// user's command, or one of the CLI's own (GAIA_NATIVE_COMMANDS.md).
@@ -135,8 +164,9 @@ List<GaiaPaletteItem> gaiaPaletteItems(
 /// order.
 List<GaiaPaletteItem> filterGaiaPalette(
   List<GaiaPaletteItem> items,
-  String query,
-) {
+  String query, {
+  List<String> recent = const [],
+}) {
   final q = query.toLowerCase();
   int? score(String name) {
     // So an alias like `q` isn't lost under the `/queue` it's a prefix of.
@@ -162,11 +192,27 @@ List<GaiaPaletteItem> filterGaiaPalette(
     return scores.isEmpty ? null : scores.reduce((a, b) => a < b ? a : b);
   }
 
-  final scored = [
-    for (final (index, item) in items.indexed)
-      if (best(item) case final s?) (s, index, item),
-  ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
-  return [for (final (_, _, item) in scored) item];
+  // Within a kind of match, the most recently used first; never used, in
+  // [items]' order.
+  int order(int index, GaiaPaletteItem item) {
+    final used = recent.indexOf(item.name);
+    return used == -1 ? recent.length + index : used;
+  }
+
+  final scored =
+      [
+        for (final (index, item) in items.indexed)
+          if (best(item) case final s?) (s, order(index, item), index, item),
+      ]..sort(
+        (a, b) => a.$1 != b.$1
+            ? a.$1 - b.$1
+            // Rows of one name share an order: [items]' order settles it, as
+            // the sort isn't stable.
+            : a.$2 != b.$2
+            ? a.$2 - b.$2
+            : a.$3 - b.$3,
+      );
+  return [for (final (_, _, _, item) in scored) item];
 }
 
 /// The `/word` being typed at the caret, for the palette: its query (what's

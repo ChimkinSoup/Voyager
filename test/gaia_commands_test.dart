@@ -2,7 +2,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_command_uses.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 
 /// Slash commands (GAIA_HLD.md §9.2): templates, built-ins and the palette.
 void main() {
@@ -151,6 +153,11 @@ void main() {
       'this',
       'btw',
       'usage',
+      'control-off',
+      'control-ask',
+      'control-auto',
+      'screen',
+      'window',
       'quick',
       'std',
       'deep',
@@ -160,12 +167,15 @@ void main() {
     ]);
     expect(filterGaiaPalette(items, 's').map((i) => i.name), [
       'stop',
+      'screen',
       'std',
       'swap',
       'this',
       'usage',
+      'control-ask',
     ]);
     expect(filterGaiaPalette(items, 'ee').map((i) => i.name), [
+      'screen',
       'deep',
       'remember',
       'queue',
@@ -240,5 +250,99 @@ void main() {
         expect(gaiaUnknownCommand('', items), isNull);
       });
     });
+  });
+
+  test('/con offers control-off first, then ask, then auto', () {
+    final items = gaiaPaletteItems(const []);
+    expect(
+      [for (final item in filterGaiaPalette(items, 'con').take(3)) item.name],
+      ['control-off', 'control-ask', 'control-auto'],
+    );
+    // A typo still finds them.
+    expect(filterGaiaPalette(items, 'contrlauto').first.name, 'control-auto');
+  });
+
+  test('a control command fires inline once completed', () {
+    final found = findGaiaInlineBuiltin(
+      const TextEditingValue(text: 'open spotify /control-auto and play'),
+    )!;
+    expect(found.builtin, GaiaBuiltin.controlAuto);
+    expect(found.value.text, 'open spotify and play');
+    // Joined, as typed quickly.
+    expect(
+      findGaiaInlineBuiltin(
+        const TextEditingValue(text: '/controloff hi'),
+      )?.builtin,
+      GaiaBuiltin.controlOff,
+    );
+    expect(
+      findGaiaInlineBuiltin(
+        const TextEditingValue(text: 'go /control-ask'),
+        atEnd: true,
+      )?.builtin,
+      GaiaBuiltin.controlAsk,
+    );
+    // Not before it's completed, inside a path, or in code.
+    expect(
+      findGaiaInlineBuiltin(const TextEditingValue(text: 'a /control-ask')),
+      isNull,
+    );
+    expect(
+      findGaiaInlineBuiltin(
+        const TextEditingValue(text: 'see /control-off/x now'),
+      ),
+      isNull,
+    );
+    expect(
+      findGaiaInlineBuiltin(
+        const TextEditingValue(text: 'run `/control-off ` ok'),
+      ),
+      isNull,
+    );
+    // The toggles never inline, as pasted text would flip them; alone
+    // they run.
+    for (final text in ['look /screen now', 'see /window ok']) {
+      expect(findGaiaInlineBuiltin(TextEditingValue(text: text)), isNull);
+    }
+    expect(gaiaBuiltinIn('/window'), GaiaBuiltin.window);
+    expect(gaiaBuiltinIn('/screen'), GaiaBuiltin.screen);
+  });
+
+  test('the most recently used comes first among equal matches', () {
+    final items = gaiaPaletteItems(commands);
+    final uses = GaiaCommandUses()
+      ..use('control-auto')
+      ..use('swap')
+      ..use('control-auto');
+    expect(uses.recent, ['control-auto', 'swap']);
+    expect(
+      filterGaiaPalette(
+        items,
+        'con',
+        recent: uses.recent,
+      ).take(3).map((i) => i.name),
+      ['control-auto', 'control-off', 'control-ask'],
+    );
+    // A recent loose match never beats a prefix.
+    expect(
+      filterGaiaPalette(items, 's', recent: uses.recent).first.name,
+      'swap',
+    );
+    expect(
+      filterGaiaPalette(items, 'ctrl', recent: ['usage']).first.name,
+      'control-off',
+    );
+  });
+
+  test('rows of one recent name keep their order in a long palette', () {
+    // Over 32 rows, where the sort isn't stable.
+    final items = gaiaPaletteItems([
+      const GaiaCommand(name: 'screen', template: 'mine'),
+      for (var i = 0; i < 40; i++)
+        GaiaCommand(name: 'screen-$i', template: 'x'),
+    ]);
+    final rows = filterGaiaPalette(items, 'screen', recent: ['screen']);
+    expect(rows[0].builtin, GaiaBuiltin.screen);
+    expect(rows[1].command?.template, 'mine');
   });
 }

@@ -3362,6 +3362,10 @@ class _ComposerState extends State<_Composer> {
   final _fieldMark = GlobalKey();
   final _link = LayerLink();
 
+  /// The field's top edge, where the palette sits in the side questions'
+  /// place while they're open.
+  final _fieldLink = LayerLink();
+
   @override
   void initState() {
     super.initState();
@@ -3482,10 +3486,15 @@ class _ComposerState extends State<_Composer> {
   List<GaiaPaletteItem> get _palette {
     final token = gaiaPaletteToken(_text.value);
     if (token == null || _text.text == _paletteClosedFor) return const [];
-    return filterGaiaPalette([
-      for (final item in _paletteItems(widget.controller.nativeCommands))
-        if (token.whole || (item.command == null && item.native == null)) item,
-    ], token.query);
+    return filterGaiaPalette(
+      [
+        for (final item in _paletteItems(widget.controller.nativeCommands))
+          if (token.whole || (item.command == null && item.native == null))
+            item,
+      ],
+      token.query,
+      recent: widget.controller.commandUses.recent,
+    );
   }
 
   /// Every row the palette can show, the CLI's own [natives] among them.
@@ -3495,6 +3504,16 @@ class _ComposerState extends State<_Composer> {
         accounts: widget.controller.accounts,
         natives: natives ?? const [],
       );
+
+  /// A command used, for the palette's order: by its row's name, so an
+  /// alias counts as its built-in.
+  void _used(String word) {
+    for (final item in _paletteItems(widget.controller.nativeCommands)) {
+      if (item.name == word || (item.builtin?.names.contains(word) ?? false)) {
+        return widget.controller.commandUses.use(item.name);
+      }
+    }
+  }
 
   /// The unknown command's suggestion in place of its `/word`.
   void _useSuggestion() {
@@ -3532,12 +3551,15 @@ class _ComposerState extends State<_Composer> {
   /// [complete] (Tab) asks only for its name.
   Future<void> _pick(GaiaPaletteItem item, {bool complete = false}) async {
     final controller = widget.controller;
+    // A use counts once it runs: those that only fill the draft count as
+    // [_submit] sends them.
     if (item.builtin
         case GaiaBuiltin.remember || GaiaBuiltin.queue || GaiaBuiltin.btw) {
       // What else the draft held becomes what's remembered, queued, or asked
       // beside the chat. `/btw` with nothing else opens the panel.
       _cutToken();
       if (item.builtin == GaiaBuiltin.btw && _text.text.trim().isEmpty) {
+        _used(item.name);
         controller.openBtws();
         _focus.requestFocus();
         return;
@@ -3549,13 +3571,20 @@ class _ComposerState extends State<_Composer> {
       );
     } else if (item.builtin case final builtin?) {
       _cutToken();
-      await controller.runBuiltin(builtin);
+      if (await _runBuiltin(builtin)) _used(item.name);
     } else if (item.tier case final tier?) {
       _cutToken();
-      await switchGaiaTier(context, controller, tier);
+      if (await switchGaiaTier(context, controller, tier)) _used(item.name);
     } else if (item.account case final account?) {
       _cutToken();
-      await switchGaiaAccount(context, controller, account.adapter, account);
+      if (await switchGaiaAccount(
+        context,
+        controller,
+        account.adapter,
+        account,
+      )) {
+        _used(item.name);
+      }
     } else if (item.native case final native?) {
       // Its arguments, if any, go after it (GAIA_NATIVE_COMMANDS.md §5).
       // One that takes none sends, closed over as a standalone command is.
@@ -3750,7 +3779,11 @@ class _ComposerState extends State<_Composer> {
     final command = findGaiaTierCommand(_text.value, atEnd: atEnd);
     if (command == null) return true;
     _text.value = command.value;
-    return switchGaiaTier(context, widget.controller, command.tier);
+    if (!await switchGaiaTier(context, widget.controller, command.tier)) {
+      return false;
+    }
+    _used(command.tier.command.substring(1));
+    return true;
   }
 
   /// Aliases turned down, while the draft still holds them: the word was just
@@ -3782,10 +3815,38 @@ class _ComposerState extends State<_Composer> {
     );
     if (confirmed) {
       _text.value = command.value;
+      _used(account.alias);
     } else {
       _declinedAliases.add(account);
     }
     return confirmed;
+  }
+
+  /// A built-in from the composer. `/control-auto` shows Auto's notice the
+  /// first time on this device, as the hand's menu does. False when it was
+  /// turned down.
+  Future<bool> _runBuiltin(GaiaBuiltin builtin) async {
+    final controller = widget.controller;
+    if (builtin != GaiaBuiltin.controlAuto) {
+      await controller.runBuiltin(builtin);
+      return true;
+    }
+    await _chooseAuto(context, controller);
+    if (controller.hand != GaiaHand.auto) return false;
+    controller.noteHand();
+    return true;
+  }
+
+  /// One of [gaiaInlineBuiltins], once completed: taken out of the draft
+  /// whether or not it's confirmed, as a tier command is. False when the
+  /// user turned Auto down.
+  Future<bool> _takeInlineBuiltin({bool atEnd = false}) async {
+    final command = findGaiaInlineBuiltin(_text.value, atEnd: atEnd);
+    if (command == null) return true;
+    _text.value = command.value;
+    if (!await _runBuiltin(command.builtin)) return false;
+    _used(command.builtin.name);
+    return true;
   }
 
   /// Taking the draft's commands: each cut re-enters [_onDraft].
@@ -3801,6 +3862,7 @@ class _ComposerState extends State<_Composer> {
         final before = _text.text;
         if (!await _takeTierCommand(atEnd: atEnd) || !mounted) return false;
         if (!await _takeAccountCommand(atEnd: atEnd) || !mounted) return false;
+        if (!await _takeInlineBuiltin(atEnd: atEnd) || !mounted) return false;
         if (_text.text == before) return true;
       }
     } finally {
@@ -3820,6 +3882,11 @@ class _ComposerState extends State<_Composer> {
 
   /// [_send] without the palette.
   Future<void> _submit() async {
+    // Counted once it runs, as [gaiaNativeIn] and [expandGaiaCommand] read
+    // it; a built-in by its own name below.
+    final typed = RegExp(
+      r'^/([\w-]+)(?:\s|$)',
+    ).firstMatch(_text.text.trimLeft())?.group(1);
     // `/this` with the question after it: the same as picking it first.
     if (gaiaThisRest(_text.text) case final rest?) {
       final typed = _text.value;
@@ -3838,22 +3905,26 @@ class _ComposerState extends State<_Composer> {
     // A built-in runs even mid-reply: /stop is for exactly then.
     if (gaiaBuiltinIn(_text.text) case final builtin?) {
       _text.clear();
-      return widget.controller.runBuiltin(builtin);
+      if (await _runBuiltin(builtin)) _used(builtin.name);
+      return;
     }
     // So is /remember (§11), which never goes to the agent.
     if (gaiaRememberText(_text.text) case final memory?) {
       _text.clear();
+      _used(GaiaBuiltin.remember.name);
       return widget.controller.remember(memory);
     }
     // And /queue (§13), which waits its turn.
     if (gaiaQueueText(_text.text) case final queued?) {
       _text.clear();
+      _used(GaiaBuiltin.queue.name);
       return widget.controller.enqueue(queued);
     }
     // And /btw (GAIA_BTW_HLD.md §3): a side question, never queued, and
     // never the stop a send is mid-reply. The draft's attachments stay.
     if (gaiaBtwText(_text.text) case final question?) {
       _text.clear();
+      _used(GaiaBuiltin.btw.name);
       return widget.controller.askBtw(question);
     }
     // A `/word` no command has stays, once, rather than going to the agent
@@ -3902,6 +3973,7 @@ class _ComposerState extends State<_Composer> {
     _text.clear();
     // Its undo steps hold the text just sent, whose images have gone with it.
     controller.draftUndo.reset();
+    if (typed != null) _used(typed);
     controller.send(
       text,
       images: controller.takeDraftImages(),
@@ -4018,12 +4090,18 @@ class _ComposerState extends State<_Composer> {
                       // The composer's full width, so nothing under it peeks
                       // out at the sides.
                       width: constraints.maxWidth - 2 * side,
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: GaiaBtwDock(
-                          key: _btwDock,
-                          controller: controller,
-                          maxHeight: _roomOverField(),
+                      // Hidden while the palette shows, which would sit under
+                      // it, and back as it was once the palette goes.
+                      child: Visibility(
+                        visible: palette.isEmpty,
+                        maintainState: true,
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: GaiaBtwDock(
+                            key: _btwDock,
+                            controller: controller,
+                            maxHeight: _roomOverField(),
+                          ),
                         ),
                       ),
                     ),
@@ -4036,17 +4114,24 @@ class _ComposerState extends State<_Composer> {
                     ? const SizedBox.shrink()
                     : Align(
                         alignment: Alignment.topLeft,
+                        // Over the chips, or, standing in for the side
+                        // questions, just where they were, over them too.
                         child: CompositedTransformFollower(
-                          link: _link,
+                          link: controller.btwPanelOpen ? _fieldLink : _link,
                           showWhenUnlinked: false,
                           targetAnchor: Alignment.topLeft,
                           followerAnchor: Alignment.bottomLeft,
                           child: TapRegion(
                             groupId: gaiaBtwTapGroup,
                             child: Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
+                              padding: EdgeInsets.only(
+                                bottom: controller.btwPanelOpen ? 0 : 8,
+                              ),
                               child: GaiaPalette(
                                 width: constraints.maxWidth - 2 * side,
+                                // Already open over the side questions it
+                                // takes the place of.
+                                animate: !controller.btwPanelOpen,
                                 highlight: _highlight.clamp(
                                   0,
                                   palette.length - 1,
@@ -4225,7 +4310,10 @@ class _ComposerState extends State<_Composer> {
                         ),
                         // The field's top edge, which the side questions sit on.
                         // What's above it floats over the chat.
-                        GaiaFieldLine(key: _fieldMark),
+                        CompositedTransformTarget(
+                          link: _fieldLink,
+                          child: GaiaFieldLine(key: _fieldMark),
+                        ),
                         GaiaVanish(
                           key: _vanish,
                           controller: _text,

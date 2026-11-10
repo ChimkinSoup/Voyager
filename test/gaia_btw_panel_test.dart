@@ -11,6 +11,7 @@ import 'package:voyager/features/gaia/companion/gaia_btw.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
@@ -495,6 +496,51 @@ void main() {
     expect(find.byType(GaiaMarkdown), findsWidgets);
     expect(answerShown(tester), 'Newer answer.');
     expect(controller.draft.text, '');
+  });
+
+  testWidgets('the palette stands in for them while it shows', (tester) async {
+    final controller = await pump(tester);
+    await tester.tap(find.text('2 btws'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GaiaMarkdown), findsWidgets);
+
+    await tester.enterText(find.byType(GaiaTextField), '/');
+    await tester.pump();
+    expect(find.byType(GaiaPalette), findsOneWidget);
+    expect(find.byType(GaiaMarkdown), findsNothing);
+    expect(controller.btwPanelOpen, isTrue);
+
+    await tester.enterText(find.byType(GaiaTextField), '');
+    await tester.pumpAndSettle();
+    expect(find.byType(GaiaPalette), findsNothing);
+    expect(answerShown(tester), 'Newer answer.');
+  });
+
+  testWidgets('they grow in as they open, but neither they nor the palette '
+      'animates as one stands in for the other', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('2 btws'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final growing = tester.getSize(find.byType(GaiaBtwDock)).height;
+    await tester.pumpAndSettle();
+    final open = tester.getSize(find.byType(GaiaBtwDock)).height;
+    expect(growing, lessThan(open));
+    // On the field, over the chip.
+    final bottom = tester.getRect(find.byType(GaiaBtwDock)).bottom;
+
+    await tester.enterText(find.byType(GaiaTextField), '/');
+    await tester.pump();
+    final first = tester.getSize(find.byType(GaiaPalette));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(GaiaPalette)), first);
+    // Just where they were, not up over the chip as it is without them.
+    expect(tester.getRect(find.byType(GaiaPalette)).bottom, bottom);
+
+    await tester.enterText(find.byType(GaiaTextField), '');
+    await tester.pump();
+    expect(tester.getSize(find.byType(GaiaBtwDock)).height, open);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a click in the composer keeps them open; one outside both '

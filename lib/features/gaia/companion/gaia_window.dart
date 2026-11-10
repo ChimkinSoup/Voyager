@@ -299,8 +299,7 @@ class GaiaWindow {
       SetForegroundWindow(back);
       if (!floater) {
         // Not after one minimised since, which sits at the bottom.
-        final above =
-            _onScreen(_windowAbove) && IsIconic(_windowAbove) == 0;
+        final above = _onScreen(_windowAbove) && IsIconic(_windowAbove) == 0;
         SetWindowPos(
           hwnd,
           above ? _windowAbove : back,

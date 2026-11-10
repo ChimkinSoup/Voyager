@@ -881,6 +881,22 @@ which the dialog says, without the cache warning; the palette names each alias's
 CLI. A name typed in full comes first in the palette, so a short alias isn't
 lost under a longer command.
 
+As built (2026-11-10): `/control-off`, `/control-ask` and `/control-auto` set
+the hand (GAIA_AUTONOMY_HLD.md §4), `/screen` toggles *can see screen*
+(§15.6), and `/window` takes the window chip off the draft or puts the last
+summon's back, even after × or a send. The control commands work like a tier
+command: from the palette anywhere in the draft, or inline once completed,
+taken out of the text. `/screen` and `/window` toggle, so they run only from
+the palette or as the whole draft: inline, pasted or restored text would flip
+them each time. The joined `/controloff`, `/controlask` and `/controlauto` work too.
+`/control-auto` shows Auto's notice the first time on a device, as the hand's
+menu does; turned down, the message isn't sent. Each change of the hand or the
+screen shows a toast. The palette no longer puts Gaia's own commands first:
+within a kind of match (exact name, prefix, substring, letters in order), the
+most recently used command comes first, kept per desktop in
+`gaia/commands.json`; ones never used keep the old order. So `/cont` picks
+`/control-off` until `/context` has been used.
+
 ### 9.3 Attachments and the "[image N]" question
 
 **Does placement matter?** Somewhat. The Messages API takes an **ordered**
