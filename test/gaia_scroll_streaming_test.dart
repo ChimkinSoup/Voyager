@@ -30,6 +30,7 @@ class _Streaming extends FakeClaudeRunner {
     GaiaAccount? account,
     String? promptId,
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   }) {
     emit = onEvent;

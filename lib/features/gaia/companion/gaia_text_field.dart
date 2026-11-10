@@ -15,6 +15,7 @@ import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
@@ -450,6 +451,12 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     final session = vim.session;
     final snippets = vim.snippetSession;
     final autocorrect = vim.autocorrectSession;
+    // A wrapped paragraph gets [SelectionHighlightLayer]'s highlight in place
+    // of Flutter's, which runs short lines out to the widest and leaves seams
+    // between rows. Vim's overlay draws it itself in Visual mode.
+    final ownSelection = widget.maxLines != 1 && !vim.overlayPaintsSelection;
+    // Resolved above the TextSelectionTheme that blanks the field's own.
+    final selectionColor = resolveSelectionColor(context);
     Widget layer(Widget child) => Positioned.fill(
       child: IgnorePointer(
         child: Padding(padding: overlay, child: child),
@@ -477,6 +484,22 @@ class _GaiaTextFieldState extends State<GaiaTextField>
               style: style,
               scrollController: _scroll,
               suppressActiveWord: vim.suppressSpellcheckActiveWord,
+            ),
+          ),
+        // Directly beneath the text: the fill is translucent.
+        if (ownSelection)
+          layer(
+            SelectionHighlightLayer(
+              controller: widget.controller,
+              focusNode: widget.focusNode,
+              style: style,
+              // The strut EditableText falls back to without one of its own.
+              strutStyle: StrutStyle.fromTextStyle(
+                style,
+                forceStrutHeight: true,
+              ),
+              color: selectionColor,
+              scrollController: _scroll,
             ),
           ),
         wrapWithSecondaryTapWordSelect(
@@ -552,11 +575,11 @@ class _GaiaTextFieldState extends State<GaiaTextField>
       // mustn't rewrite mid-restore; see [ListEditingUndoGuard].
       clipped = ListEditingUndoGuard(child: clipped);
     }
-    return session == null
+    return session == null && !ownSelection
         ? clipped
         : vimSelectionTheme(
             context: context,
-            hideNativeSelection: vim.overlayPaintsSelection,
+            hideNativeSelection: vim.overlayPaintsSelection || ownSelection,
             child: clipped,
           );
   }

@@ -1677,13 +1677,16 @@ class GaiaMessage extends SoftDeletable {
 }
 
 /// A message Gaia's search found (GAIA_HLD.md §17): [snippet] is its text
-/// around the match, each matched term between [start] and [end].
+/// around the match, each matched term between [start] and [end]. A side
+/// question's hit (GAIA_BTW_HLD.md §9) has its [btwId], no [messageId], and
+/// a [seq] of -1.
 class GaiaSearchHit {
   const GaiaSearchHit({
     required this.chatId,
     required this.messageId,
     required this.seq,
     required this.snippet,
+    this.btwId,
   });
 
   static const start = '\u0001';
@@ -1693,12 +1696,14 @@ class GaiaSearchHit {
   final String messageId;
   final int seq;
   final String snippet;
+  final String? btwId;
 
   Map<String, Object?> toJson() => {
     'chatId': chatId,
     'messageId': messageId,
     'seq': seq,
     'snippet': snippet,
+    'btwId': ?btwId,
   };
 
   factory GaiaSearchHit.fromJson(Map<String, Object?> json) => GaiaSearchHit(
@@ -1706,7 +1711,167 @@ class GaiaSearchHit {
     messageId: json['messageId']! as String,
     seq: (json['seq']! as num).toInt(),
     snippet: json['snippet']! as String,
+    btwId: json['btwId'] as String?,
   );
+}
+
+/// At most this many characters of a chat's earlier side questions go ahead
+/// of a new one (GAIA_BTW_HLD.md §4.1).
+const kGaiaBtwHistoryChars = 8000;
+
+/// A side question about a chat (GAIA_BTW_HLD.md §2): asked with `/btw`,
+/// answered with no tools, and never part of the chat itself. Its own
+/// record, so nothing that reads messages ever sees one.
+class GaiaBtw extends SoftDeletable {
+  const GaiaBtw({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.chatId,
+    required this.question,
+    this.answer = '',
+    required this.status,
+    this.error,
+    required this.anchorSeq,
+    required this.deviceId,
+    this.device = '',
+    this.tier,
+    this.model,
+    this.adapter,
+    this.account,
+    this.session,
+  });
+
+  final String chatId;
+  final String question;
+
+  /// Markdown; what's come so far while it streams.
+  final String answer;
+
+  /// Streaming, complete, error or cancelled, as a reply's.
+  final GaiaMessageStatus status;
+
+  /// Why it failed; on a complete one, a notice beside the answer: that its
+  /// native fork may not have been cut where it was asked (§5.1).
+  final String? error;
+
+  /// The chat's last message it saw as the chat's history (§5); -1 for none.
+  final int anchorSeq;
+
+  /// The device answering it, and its name as the other devices show it
+  /// ("Answering on Laptop…").
+  final String deviceId;
+  final String device;
+  final GaiaTier? tier;
+  final String? model;
+  final String? adapter;
+  final String? account;
+
+  /// Its own CLI session, which forking it carries on in (§7). Only for
+  /// [GaiaBtwSession.sessionKey]'s device, adapter and account, as
+  /// [GaiaChat.agentSessions]' are: other devices ignore it.
+  final GaiaBtwSession? session;
+
+  GaiaBtw copyWith({
+    String? answer,
+    GaiaMessageStatus? status,
+    String? error,
+    String? model,
+    String? adapter,
+    String? account,
+    GaiaBtwSession? session,
+    String? device,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+    int? version,
+  }) => GaiaBtw(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version ?? this.version + 1,
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    chatId: chatId,
+    question: question,
+    answer: answer ?? this.answer,
+    status: status ?? this.status,
+    error: error ?? this.error,
+    anchorSeq: anchorSeq,
+    deviceId: deviceId,
+    device: device ?? this.device,
+    tier: tier,
+    model: model ?? this.model,
+    adapter: adapter ?? this.adapter,
+    account: account ?? this.account,
+    session: session ?? this.session,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'chatId': chatId,
+    'question': question,
+    'answer': answer,
+    'status': status.name,
+    'error': error,
+    'anchorSeq': anchorSeq,
+    'deviceId': deviceId,
+    'device': device,
+    'tier': tier?.name,
+    'model': model,
+    'adapter': adapter,
+    'account': account,
+    'session': session?.toJson(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory GaiaBtw.fromJson(Map<String, Object?> json) {
+    final createdAt = DateTime.parse(json['createdAt']! as String);
+    return GaiaBtw(
+      id: json['id']! as String,
+      chatId: json['chatId']! as String,
+      question: json['question']! as String,
+      answer: json['answer'] as String? ?? '',
+      status: GaiaMessageStatus.values.byName(json['status']! as String),
+      error: json['error'] as String?,
+      anchorSeq: (json['anchorSeq'] as num?)?.toInt() ?? -1,
+      deviceId: json['deviceId'] as String? ?? '',
+      device: json['device'] as String? ?? '',
+      tier: gaiaTierFromName(json['tier']),
+      model: json['model'] as String?,
+      adapter: json['adapter'] as String?,
+      account: json['account'] as String?,
+      session: GaiaBtwSession.fromJson(json['session']),
+      createdAt: createdAt,
+      updatedAt: _date(json['updatedAt']) ?? createdAt,
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      deletedAt: _date(json['deletedAt']),
+    );
+  }
+}
+
+/// A side question's own CLI session (GAIA_BTW_HLD.md §2): [sessionId] on
+/// [sessionKey]'s device, adapter and account ([gaiaSessionKey]).
+class GaiaBtwSession {
+  const GaiaBtwSession({required this.sessionKey, required this.sessionId});
+
+  final String sessionKey;
+  final String sessionId;
+
+  Map<String, Object?> toJson() => {
+    'sessionKey': sessionKey,
+    'sessionId': sessionId,
+  };
+
+  /// Null for anything else.
+  static GaiaBtwSession? fromJson(Object? json) => switch (json) {
+    {'sessionKey': final String sessionKey, 'sessionId': final String id} =>
+      GaiaBtwSession(sessionKey: sessionKey, sessionId: id),
+    _ => null,
+  };
 }
 
 /// A new chapter's title until the utility model names it

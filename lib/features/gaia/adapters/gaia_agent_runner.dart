@@ -235,9 +235,11 @@ abstract interface class GaiaAgentRunner {
   /// agent's thinking level ([GaiaAgent.effort]); null for the CLI's default.
   /// [fork], with a null [sessionId], makes the new session a native fork of
   /// another chat's (§5.3), for a backend that can; one that can't make it
-  /// reports [GaiaTurnResult.sessionFound] false. [onEvent] gets each event
-  /// of the turn; the future completes with its result, or throws a
-  /// [GaiaRunException].
+  /// reports [GaiaTurnResult.sessionFound] false. [toolless] runs it with no
+  /// tools at all, the CLI's own included: a side question's
+  /// (GAIA_BTW_HLD.md §6), whose process isn't kept for a next turn.
+  /// [onEvent] gets each event of the turn; the future completes with its
+  /// result, or throws a [GaiaRunException].
   Future<GaiaTurnResult> send({
     required String chatId,
     required String? sessionId,
@@ -251,6 +253,7 @@ abstract interface class GaiaAgentRunner {
     GaiaAccount? account,
     String? promptId,
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   });
 
@@ -267,6 +270,11 @@ abstract interface class GaiaAgentRunner {
   /// Null once it's out, or when the session never got it; otherwise why
   /// not, and the session still has it.
   Future<String?> takeBack(String chatId);
+
+  /// Drops what [stop] kept of [chatId]'s turn for [takeBack], once its run
+  /// has ended: for a turn that's never taken back, such as a side
+  /// question's, whose key is never sent again.
+  void forgetStop(String chatId);
 
   /// Kills every run this runner started.
   Future<void> killAll();

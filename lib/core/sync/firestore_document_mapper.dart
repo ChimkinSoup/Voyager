@@ -4512,6 +4512,118 @@ GaiaQueueItem mergeGaiaQueueItemFromRemote(
   );
 }
 
+/// A side question (GAIA_BTW_HLD.md §2). Its answer is cut at the size a
+/// message's parts go to chunks at: one with no tools is never near it, and
+/// the device that answered keeps all of it. Its question is cut too, so
+/// both together stay under Firestore's 1 MiB document limit, as does its
+/// error.
+Map<String, dynamic> gaiaBtwToFirestore(GaiaBtw btw) => {
+  'id': btw.id,
+  'chatId': btw.chatId,
+  'question': gaiaCutToBytes(btw.question, gaiaBtwQuestionBytes),
+  'answer': gaiaCutToBytes(btw.answer, gaiaMessageChunkBytes),
+  'status': btw.status.name,
+  'error': btw.error == null
+      ? null
+      : gaiaCutToBytes(btw.error!, gaiaBtwErrorBytes),
+  'anchorSeq': btw.anchorSeq,
+  'deviceId': btw.deviceId,
+  'device': btw.device,
+  'tier': btw.tier?.name,
+  'model': btw.model,
+  'adapter': btw.adapter,
+  'account': btw.account,
+  'session': btw.session?.toJson(),
+  'createdAt': _dateToFirestoreRequired(btw.createdAt),
+  'updatedAt': _dateToFirestoreRequired(btw.updatedAt),
+  'version': btw.version,
+  'deletedAt': _dateToFirestore(btw.deletedAt),
+};
+
+/// The most of a side question's question that syncs.
+const gaiaBtwQuestionBytes = 100 * 1024;
+
+/// The most of a side question's error that syncs.
+const gaiaBtwErrorBytes = 16 * 1024;
+
+/// [text] cut to at most [bytes] UTF-8 bytes, never inside a character.
+String gaiaCutToBytes(String text, int bytes) {
+  if (text.length * 3 <= bytes || utf8.encode(text).length <= bytes) {
+    return text;
+  }
+  var used = 0;
+  var end = 0;
+  for (final rune in text.runes) {
+    used += rune < 0x80
+        ? 1
+        : rune < 0x800
+        ? 2
+        : rune < 0x10000
+        ? 3
+        : 4;
+    if (used > bytes) break;
+    end += rune < 0x10000 ? 1 : 2;
+  }
+  return text.substring(0, end);
+}
+
+/// [mergeGaiaChatFromRemote] for a side question. Its question and answer
+/// stay the local ones where those are longer: the synced copy may be cut.
+GaiaBtw mergeGaiaBtwFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaBtw? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final answer = data['answer'] as String? ?? '';
+  final localAnswer = local?.answer ?? '';
+  final question = data['question'] as String? ?? local?.question ?? '';
+  final localQuestion = local?.question ?? '';
+  return GaiaBtw(
+    id: id,
+    chatId: data['chatId'] as String? ?? local?.chatId ?? '',
+    question:
+        !isErasedPayload(data) &&
+            localQuestion.length > question.length &&
+            localQuestion.startsWith(question)
+        ? localQuestion
+        : question,
+    answer:
+        !isErasedPayload(data) &&
+            localAnswer.length > answer.length &&
+            localAnswer.startsWith(answer)
+        ? localAnswer
+        : answer,
+    status: GaiaMessageStatus.values.byName(
+      data['status'] as String? ?? local?.status.name ?? 'complete',
+    ),
+    error: data['error'] as String?,
+    anchorSeq: (data['anchorSeq'] as num?)?.toInt() ?? local?.anchorSeq ?? -1,
+    deviceId: data['deviceId'] as String? ?? local?.deviceId ?? '',
+    device: data['device'] as String? ?? local?.device ?? '',
+    tier: gaiaTierFromName(data['tier']),
+    model: data['model'] as String?,
+    adapter: data['adapter'] as String?,
+    account: data['account'] as String?,
+    session: GaiaBtwSession.fromJson(data['session']) ?? local?.session,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
 Map<String, dynamic> gaiaMessageToFirestore(GaiaMessage message) => {
   'id': message.id,
   'chatId': message.chatId,

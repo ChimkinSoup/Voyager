@@ -5,3 +5,11 @@ CREATE VIRTUAL TABLE gaia_message_search USING fts5(
   message_id UNINDEXED,
   chat_id UNINDEXED
 );
+
+-- One row per live side question (GAIA_BTW_HLD.md §9): its question and
+-- answer. Kept by DriftGaiaRepository on every write of one.
+CREATE VIRTUAL TABLE gaia_btw_search USING fts5(
+  body,
+  btw_id UNINDEXED,
+  chat_id UNINDEXED
+);

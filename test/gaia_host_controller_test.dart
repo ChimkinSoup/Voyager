@@ -70,7 +70,7 @@ void main() {
       host.attach(
         repository: DriftGaiaRepository(db),
         deviceId: 'laptop',
-        toast: (_, _, _) {},
+        toast: (_, _, _, {btwId}) {},
       );
       async.flushMicrotasks();
       body(async, host);

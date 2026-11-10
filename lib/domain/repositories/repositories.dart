@@ -895,8 +895,8 @@ abstract class GaiaRepository {
   /// Live chats with a message matching every word of [query], as a prefix.
   Future<Set<String>> searchChatIds(String query);
 
-  /// Messages of live chats matching every word of [query], as a prefix,
-  /// newest first: at most [limit].
+  /// Messages and side questions (GAIA_BTW_HLD.md §9) of live chats matching
+  /// every word of [query], as a prefix, newest first: at most [limit].
   Future<List<GaiaSearchHit>> searchMessages(String query, {int limit = 50});
 
   /// Fires after any write to the chats or messages.
@@ -947,6 +947,16 @@ abstract class GaiaRepository {
 
   /// [listQueue] as it changes.
   Stream<List<GaiaQueueItem>> watchQueue();
+
+  /// Side questions (GAIA_BTW_HLD.md §2), oldest first: [chatId]'s, or every
+  /// chat's for null; tombstones only with [includeDeleted].
+  Future<List<GaiaBtw>> listBtws({String? chatId, bool includeDeleted = false});
+  Future<GaiaBtw?> getBtw(String id);
+  Future<void> upsertBtw(GaiaBtw btw, {bool recordLocalActivity = true});
+
+  /// Fires after a write that changes a side question's version, or adds
+  /// or removes one: not a streaming save, which keeps its version.
+  Stream<void> watchBtws();
 }
 
 /// Metadata half of the media module: asset rows and the references that

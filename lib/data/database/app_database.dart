@@ -2292,6 +2292,40 @@ class GaiaMessagesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A side question about a Gaia chat (GAIA_BTW_HLD.md §2): never one of its
+/// messages. Immutable once it stops streaming, apart from soft delete.
+@TableIndex(name: 'idx_gaia_btw_chat', columns: {#chatId, #createdAt})
+class GaiaBtwTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get chatId => text()();
+  TextColumn get question => text()();
+  TextColumn get answer => text().withDefault(const Constant(''))();
+  TextColumn get status => text()();
+  TextColumn get error => text().nullable()();
+
+  /// The chat's last message it saw as the chat's history; -1 for none.
+  IntColumn get anchorSeq => integer()();
+
+  /// The device that answered it, and that device's name.
+  TextColumn get deviceId => text()();
+  TextColumn get device => text().withDefault(const Constant(''))();
+  TextColumn get tier => text().nullable()();
+  TextColumn get model => text().nullable()();
+  TextColumn get adapter => text().nullable()();
+  TextColumn get account => text().nullable()();
+
+  /// `GaiaBtwSession` as JSON: its own CLI session, for forking it; null
+  /// for none.
+  TextColumn get sessionJson => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Gaia's settings: one row, `GaiaSettings.singletonId`.
 class GaiaSettingsTable extends Table {
   TextColumn get id => text()();
@@ -2471,13 +2505,14 @@ class GaiaMemoriesTable extends Table {
     GaiaDraftsTable,
     GaiaMemoriesTable,
     GaiaQueueTable,
+    GaiaBtwTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 190;
+  int get schemaVersion => 192;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4630,6 +4665,24 @@ class AppDatabase extends _$AppDatabase {
           'gaia_messages_table',
           gaiaMessagesTable,
           gaiaMessagesTable.chapter,
+        );
+      }
+      if (from < 191) {
+        // Side questions (GAIA_BTW_HLD.md §2, §9).
+        await migrator.createTable(gaiaBtwTable);
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_gaia_btw_chat '
+          'ON gaia_btw_table (chat_id, created_at)',
+        );
+        await migrator.create(gaiaBtwSearch);
+      }
+      if (from >= 191 && from < 192) {
+        // A side question's own session (GAIA_BTW_HLD.md §7).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_btw_table',
+          gaiaBtwTable,
+          gaiaBtwTable.sessionJson,
         );
       }
     },

@@ -127,6 +127,73 @@ String gaiaHandoffPreamble({
   return buffer.toString();
 }
 
+/// A side question's prompt after the chat's transcript (GAIA_BTW_HLD.md
+/// §4.1): [earlier] side questions of the chat, those complete and not
+/// cleared, oldest first, as many of the newest as fit in
+/// [kGaiaBtwHistoryChars], each whole; then, asked mid-reply, the message
+/// [asking] being answered and the reply [answering] so far; then
+/// [question].
+String gaiaBtwPrompt(
+  String question, {
+  List<GaiaBtw> earlier = const [],
+  GaiaMessage? asking,
+  GaiaMessage? answering,
+}) {
+  final kept = <String>[];
+  var budget = kGaiaBtwHistoryChars;
+  for (final btw in earlier.reversed) {
+    if (btw.isDeleted || btw.status != GaiaMessageStatus.complete) continue;
+    final pair = 'Q: ${btw.question.trim()}\nA: ${btw.answer.trim()}';
+    if (pair.length > budget) break;
+    budget -= pair.length;
+    kept.insert(0, pair);
+  }
+  final buffer = StringBuffer();
+  if (kept.isNotEmpty) {
+    buffer
+      // Each was answered on a fork of its own, so the model doesn't
+      // remember them, and without this took them for made-up claims about
+      // its replies.
+      ..writeln(
+        'Side questions asked earlier in this chat, beside the conversation '
+        "rather than in it. You answered each in a separate side thread, so "
+        "you won't remember them, but these are your own answers, recorded "
+        'as you gave them:',
+      )
+      ..writeln(kept.join('\n\n'))
+      ..writeln();
+  }
+  if (asking != null) {
+    final sofar = answering?.text.trim() ?? '';
+    buffer
+      ..writeln(
+        sofar.isEmpty
+            ? 'The conversation is in progress: the user just sent this, and '
+                  'your reply to it has only just started, with nothing '
+                  'written yet.'
+            : 'The conversation is in progress: the user just sent this, and '
+                  'your reply to it is still being written. What it has so '
+                  'far is below.',
+      )
+      ..writeln('User:')
+      ..writeln(asking.text.trim());
+    if (sofar.isNotEmpty) {
+      buffer
+        ..writeln('Assistant (in progress):')
+        ..writeln(sofar);
+    }
+    buffer.writeln();
+  }
+  buffer
+    ..writeln(
+      'Now answer this side question briefly. You have no tools; answer from '
+      "what you know and what's in this conversation. It won't be added to "
+      'the conversation.',
+    )
+    ..write(question.trim());
+  return buffer.toString();
+}
+
 String _agent(GaiaMessage message, Map<String, String> labels) {
   final model = message.model;
   if (model == null) return '';

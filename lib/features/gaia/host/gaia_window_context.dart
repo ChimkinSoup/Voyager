@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io' show sleep;
+import 'dart:io' show Platform, sleep;
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -726,6 +727,7 @@ Future<GaiaPointedControl?> gaiaReadControl(GaiaCursorTarget target) async {
   final web = browser || gaiaHostsChromiumPage(hwnd);
   final hideUnnamed = gaiaHidesUnnamedFields(window.exe, web: web);
   _controlReading = true;
+  _noteVoyagerRead(hwnd, 'control under the cursor');
   final read = Isolate.run(() {
     final first = _readControl(
       x,
@@ -992,6 +994,7 @@ Future<T?> gaiaScreenWork<T>(int hwnd, T Function() work) async {
     );
   }
   _screenWorking.add(hwnd);
+  _noteVoyagerRead(hwnd, 'screen work');
   final run = Isolate.run(work);
   run.whenComplete(() => _screenWorking.remove(hwnd)).ignore();
   try {
@@ -1983,6 +1986,23 @@ String _controlTypeName(int id) => switch (id) {
   _ => 'Control',
 };
 
+/// Debug-only: a UI Automation read of one of Voyager's own windows (the app or
+/// Gaia's companion) turns on that window's Flutter accessibility tree, which
+/// is where the engine's `ui::AXTree` console errors come from. Printed so they
+/// can be matched to the `[a11y] ... semantics ON` line that follows.
+void _noteVoyagerRead(int hwnd, String what) {
+  if (!kDebugMode) return;
+  final window = _describeWindow(hwnd);
+  if (window.exe.toLowerCase() !=
+      p.basenameWithoutExtension(Platform.resolvedExecutable).toLowerCase()) {
+    return;
+  }
+  debugPrint(
+    '[a11y] Gaia UIA read ($what) of Voyager window "${window.title}" '
+    'pid ${window.pid} at ${DateTime.now().toIso8601String()}',
+  );
+}
+
 /// A [gaiaReadUia] isolate still running, maybe long after its budget, on
 /// a hung app's UI Automation call.
 var _uiaReading = false;
@@ -2001,6 +2021,7 @@ Future<GaiaWindowUia> gaiaReadUia(
   }
   final hwnd = window.hwnd;
   _uiaReading = true;
+  _noteVoyagerRead(hwnd, 'URL/selection');
   final read = Isolate.run(
     () => _readUia(hwnd, browser: browser, selection: selection),
   );
@@ -2023,7 +2044,7 @@ GaiaWindowUia _readUia(
   try {
     return (
       url: browser ? _addressBar(uia, hwnd) : null,
-      selection: selection ? _selectedText(uia) : null,
+      selection: selection ? _selectedText(uia, hwnd) : null,
     );
   } finally {
     _release(uia);
@@ -2150,14 +2171,47 @@ bool _inDocument(IUIAutomation uia, Pointer<COMObject> element) {
   }
 }
 
-/// The focused control's selection, through its TextPattern; null when it
-/// has none, or nothing is selected.
-String? _selectedText(IUIAutomation uia) {
+/// The selection of the focused control in [hwnd], through its TextPattern;
+/// null when it has none, nothing is selected, or the focus has left [hwnd].
+/// Searched for in [hwnd] alone: by the time this runs, a summon may have
+/// put Gaia in front, and asking Gaia's window turns on its semantics, which
+/// the Windows engine can crash on. While [hwnd] is still in front, the
+/// focus is asked for directly instead: the search walks the whole tree,
+/// slow in a large browser page or document.
+String? _selectedText(IUIAutomation uia, int hwnd) {
+  final root = calloc<COMObject>();
+  final condition = calloc<COMObject>();
   final focused = calloc<COMObject>();
   final pattern = calloc<COMObject>();
   final ranges = calloc<COMObject>();
+  final hasFocus = calloc<VARIANT>();
   try {
-    if (FAILED(uia.getFocusedElement(focused.cast())) || focused.ref.isNull) {
+    hasFocus.ref
+      ..vt = VT_BOOL
+      ..boolVal = true;
+    if (GetForegroundWindow() == hwnd) {
+      if (FAILED(uia.getFocusedElement(focused.cast())) || focused.ref.isNull) {
+        return null;
+      }
+    } else if (FAILED(uia.elementFromHandle(hwnd, root.cast())) ||
+        root.ref.isNull ||
+        FAILED(
+          uia.createPropertyCondition(
+            UIA_HasKeyboardFocusPropertyId,
+            hasFocus.ref,
+            condition.cast(),
+          ),
+        ) ||
+        condition.ref.isNull ||
+        FAILED(
+          // The condition itself, not the slot holding it.
+          _detached(IUIAutomationElement(root)).findFirst(
+            TreeScope_Subtree,
+            condition.ref.lpVtbl.cast(),
+            focused.cast(),
+          ),
+        ) ||
+        focused.ref.isNull) {
       return null;
     }
     final element = _detached(IUIAutomationElement(focused));
@@ -2192,10 +2246,13 @@ String? _selectedText(IUIAutomation uia) {
     final selected = parts.join('\n');
     return selected.trim().isEmpty ? null : selected;
   } finally {
-    [focused, pattern, ranges].forEach(_releaseFound);
+    [root, condition, focused, pattern, ranges].forEach(_releaseFound);
+    free(root);
+    free(condition);
     free(focused);
     free(pattern);
     free(ranges);
+    free(hasFocus);
   }
 }
 

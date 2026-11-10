@@ -302,6 +302,21 @@ class VimTextScope extends StatefulWidget {
     return snippets.wantsTab;
   }
 
+  /// Whether Vim, in the scope around [context], has no use for an Esc
+  /// pressed now: it's off, or in Normal mode with no command pending, no
+  /// `/` prompt and no search highlighted. Something over the field, such as
+  /// a panel, may then take it.
+  static bool escapeIsSpare(BuildContext? context) {
+    final session = context
+        ?.findAncestorStateOfType<_VimTextScopeState>()
+        ?._session;
+    return session == null ||
+        (session.mode == VimMode.normal &&
+            session.hudListenable.value.isEmpty &&
+            session.searchListenable.value == null &&
+            session.searchHighlightListenable.value.isEmpty);
+  }
+
   @override
   State<VimTextScope> createState() => _VimTextScopeState();
 }

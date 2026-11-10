@@ -367,7 +367,8 @@ void main() {
         vaultUnlocked: () => vaultUnlocked,
         repository: DriftGaiaRepository(db),
         deviceId: 'laptop',
-        toast: (chatId, title, body) => toasts.add('$chatId $title $body'),
+        toast: (chatId, title, body, {btwId}) =>
+            toasts.add('$chatId $title $body'),
         media: media,
         executor: executor,
         memories: memories,

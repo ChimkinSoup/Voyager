@@ -131,6 +131,10 @@ abstract final class FirestoreCollections {
   /// Prompts waiting their turn (§13).
   static const gaiaQueue = 'gaia_queue';
 
+  /// Side questions about a chat, apart from its messages (GAIA_BTW_HLD.md
+  /// §2).
+  static const gaiaBtw = 'gaia_btw';
+
   /// A message's parts when they're too big for its own document (§8), as
   /// pieces of their JSON at `{messageId}_{n}`. Read with the message, never
   /// pulled on their own.
@@ -248,6 +252,7 @@ abstract final class FirestoreCollections {
     gaiaDrafts,
     gaiaMemories,
     gaiaQueue,
+    gaiaBtw,
   };
 
   /// The only collections whose documents carry text two devices can edit at

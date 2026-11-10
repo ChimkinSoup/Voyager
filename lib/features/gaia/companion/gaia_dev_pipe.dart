@@ -113,6 +113,22 @@ class GaiaDevPipe extends GaiaPipe {
           for (final hit in await _store.searchMessages(p['query']! as String))
             hit.toJson(),
         ];
+      case 'btws':
+        return [
+          for (final btw in await _store.btws(p['chatId']! as String))
+            btw.toJson(),
+        ];
+      case 'putBtw':
+        return (await _store.putBtw(
+          GaiaBtw.fromJson(_map(p['btw'])),
+        ))?.toJson();
+      case 'clearBtws':
+        return await _store.clearBtws(p['chatId']! as String);
+      case 'restoreBtws':
+        await _store.restoreBtws([
+          for (final id in p['ids']! as List) id as String,
+        ]);
+        return null;
       case 'putMessage':
         final written = await _store.putMessage(
           GaiaMessage.fromJson(_map(p['message'])),

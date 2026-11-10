@@ -153,9 +153,9 @@ class _GaiaSearchState extends State<_GaiaSearch> {
   List<_Result> _resultsFor(String query, List<GaiaSearchHit> hits) {
     if (query.isEmpty) {
       return [
-        for (final chat in [...widget.controller.chats]..sort(
-          (a, b) => b.lastMessageAt.compareTo(a.lastMessageAt),
-        ))
+        for (final chat in [
+          ...widget.controller.chats,
+        ]..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt)))
           (chat: chat, hit: null),
       ];
     }
@@ -173,7 +173,9 @@ class _GaiaSearchState extends State<_GaiaSearch> {
   void _pick(_Result result) {
     Navigator.of(context).pop();
     final controller = widget.controller;
-    if (result.hit case final hit?) {
+    if (result.hit case GaiaSearchHit(:final chatId, :final btwId?)) {
+      unawaited(controller.revealBtw(chatId, btwId));
+    } else if (result.hit case final hit?) {
       unawaited(controller.revealMessage(hit.chatId, hit.messageId));
     } else {
       unawaited(controller.selectChat(result.chat.id));
@@ -494,7 +496,10 @@ class _Row extends StatelessWidget {
               spacing: 2,
               children: [
                 Text(
-                  result.chat.title,
+                  // A side question's, under its chat (GAIA_BTW_HLD.md §9).
+                  hit.btwId == null
+                      ? result.chat.title
+                      : '${result.chat.title} · btw',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

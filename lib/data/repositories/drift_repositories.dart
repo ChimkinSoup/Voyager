@@ -9892,12 +9892,22 @@ class DriftGaiaRepository implements GaiaRepository {
     if (match == null) return {};
     final rows = await _db
         .customSelect(
-          'SELECT DISTINCT s.chat_id AS chat_id '
+          'SELECT s.chat_id AS chat_id '
           'FROM gaia_message_search s '
           'JOIN gaia_chats_table c ON c.id = s.chat_id '
-          'WHERE gaia_message_search MATCH ? AND c.deleted_at IS NULL',
-          variables: [Variable.withString(match)],
-          readsFrom: {_db.gaiaMessageSearch, _db.gaiaChatsTable},
+          'WHERE gaia_message_search MATCH ? AND c.deleted_at IS NULL '
+          // Its side questions too, as searchMessages finds them.
+          'UNION '
+          'SELECT s.chat_id AS chat_id '
+          'FROM gaia_btw_search s '
+          'JOIN gaia_chats_table c ON c.id = s.chat_id '
+          'WHERE gaia_btw_search MATCH ? AND c.deleted_at IS NULL',
+          variables: [Variable.withString(match), Variable.withString(match)],
+          readsFrom: {
+            _db.gaiaMessageSearch,
+            _db.gaiaBtwSearch,
+            _db.gaiaChatsTable,
+          },
         )
         .get();
     return {for (final row in rows) row.read<String>('chat_id')};
@@ -9916,7 +9926,7 @@ class DriftGaiaRepository implements GaiaRepository {
           // a rewind's dropped messages not among them (GAIA_REWIND_HLD.md
           // §5). Search rows sit at their message's rowid.
           'SELECT s.chat_id AS chat_id, s.message_id AS message_id, '
-          'h.seq AS seq, '
+          'h.seq AS seq, h.created_at AS created_at, '
           'snippet(gaia_message_search, 0, ?, ?, ?, 16) AS snippet '
           'FROM ('
           'SELECT m.rowid AS r, m.seq AS seq, m.created_at AS created_at '
@@ -9947,15 +9957,59 @@ class DriftGaiaRepository implements GaiaRepository {
           },
         )
         .get();
-    return [
+    // Side questions too (GAIA_BTW_HLD.md §9): a cleared one has no search
+    // row.
+    final btws = await _db
+        .customSelect(
+          'SELECT s.chat_id AS chat_id, s.btw_id AS btw_id, '
+          'h.created_at AS created_at, '
+          'snippet(gaia_btw_search, 0, ?, ?, ?, 16) AS snippet '
+          'FROM ('
+          'SELECT b.rowid AS r, b.created_at AS created_at '
+          'FROM gaia_btw_search s '
+          'JOIN gaia_chats_table c ON c.id = s.chat_id '
+          'JOIN gaia_btw_table b ON b.rowid = s.rowid '
+          'WHERE gaia_btw_search MATCH ? AND c.deleted_at IS NULL '
+          'ORDER BY b.created_at DESC LIMIT ?'
+          ') h '
+          'JOIN gaia_btw_search s ON s.rowid = h.r '
+          'WHERE gaia_btw_search MATCH ? '
+          'ORDER BY h.created_at DESC',
+          variables: [
+            Variable.withString(GaiaSearchHit.start),
+            Variable.withString(GaiaSearchHit.end),
+            Variable.withString('…'),
+            Variable.withString(match),
+            Variable.withInt(limit),
+            Variable.withString(match),
+          ],
+          readsFrom: {_db.gaiaBtwSearch, _db.gaiaChatsTable, _db.gaiaBtwTable},
+        )
+        .get();
+    final hits = [
       for (final row in rows)
-        GaiaSearchHit(
-          chatId: row.read<String>('chat_id'),
-          messageId: row.read<String>('message_id'),
-          seq: row.read<int>('seq'),
-          snippet: row.read<String>('snippet'),
+        (
+          row.read<DateTime>('created_at'),
+          GaiaSearchHit(
+            chatId: row.read<String>('chat_id'),
+            messageId: row.read<String>('message_id'),
+            seq: row.read<int>('seq'),
+            snippet: row.read<String>('snippet'),
+          ),
         ),
-    ];
+      for (final row in btws)
+        (
+          row.read<DateTime>('created_at'),
+          GaiaSearchHit(
+            chatId: row.read<String>('chat_id'),
+            messageId: '',
+            seq: -1,
+            snippet: row.read<String>('snippet'),
+            btwId: row.read<String>('btw_id'),
+          ),
+        ),
+    ]..sort((a, b) => b.$1.compareTo(a.$1));
+    return [for (final (_, hit) in hits.take(limit)) hit];
   }
 
   /// [query] as an FTS5 match of every word as a prefix; null for no words.
@@ -10212,7 +10266,138 @@ class DriftGaiaRepository implements GaiaRepository {
   @override
   Stream<List<GaiaQueueItem>> watchQueue() =>
       _queue().watch().map((rows) => rows.map(_mapGaiaQueueItem).toList());
+
+  @override
+  Future<List<GaiaBtw>> listBtws({
+    String? chatId,
+    bool includeDeleted = false,
+  }) async {
+    final query = _db.select(_db.gaiaBtwTable)
+      ..where(
+        (t) =>
+            (chatId == null ? const Constant(true) : t.chatId.equals(chatId)) &
+            (includeDeleted ? const Constant(true) : t.deletedAt.isNull()),
+      )
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.createdAt),
+        (t) => OrderingTerm.asc(t.id),
+      ]);
+    return (await query.get()).map(_mapGaiaBtw).toList();
+  }
+
+  @override
+  Future<GaiaBtw?> getBtw(String id) async {
+    final row = await (_db.select(
+      _db.gaiaBtwTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaBtw(row);
+  }
+
+  @override
+  Future<void> upsertBtw(GaiaBtw btw, {bool recordLocalActivity = true}) async {
+    await _db.transaction(() async {
+      await _db
+          .into(_db.gaiaBtwTable)
+          .insertOnConflictUpdate(
+            GaiaBtwTableCompanion(
+              id: Value(btw.id),
+              chatId: Value(btw.chatId),
+              question: Value(btw.question),
+              answer: Value(btw.answer),
+              status: Value(btw.status.name),
+              error: Value(btw.error),
+              anchorSeq: Value(btw.anchorSeq),
+              deviceId: Value(btw.deviceId),
+              device: Value(btw.device),
+              tier: Value(btw.tier?.name),
+              model: Value(btw.model),
+              adapter: Value(btw.adapter),
+              account: Value(btw.account),
+              sessionJson: Value(
+                btw.session == null ? null : jsonEncode(btw.session!.toJson()),
+              ),
+              createdAt: Value(btw.createdAt),
+              updatedAt: Value(btw.updatedAt),
+              version: Value(btw.version),
+              deletedAt: Value(btw.deletedAt),
+            ),
+          );
+      // As a message's search row (upsertMessage): at the row's rowid,
+      // written once it stops streaming, gone once it's cleared.
+      if (btw.status == GaiaMessageStatus.streaming && !btw.isDeleted) return;
+      final rowId =
+          (await _db
+                  .customSelect(
+                    'SELECT rowid AS r FROM gaia_btw_table WHERE id = ?',
+                    variables: [Variable.withString(btw.id)],
+                    readsFrom: {_db.gaiaBtwTable},
+                  )
+                  .getSingle())
+              .read<int>('r');
+      await _db.customUpdate(
+        'DELETE FROM gaia_btw_search WHERE rowid = ?',
+        variables: [Variable.withInt(rowId)],
+        updates: {_db.gaiaBtwSearch},
+        updateKind: UpdateKind.delete,
+      );
+      if (btw.isDeleted) return;
+      await _db.customInsert(
+        'INSERT INTO gaia_btw_search (rowid, body, btw_id, chat_id) '
+        'VALUES (?, ?, ?, ?)',
+        variables: [
+          Variable.withInt(rowId),
+          Variable.withString('${btw.question}\n\n${btw.answer}'),
+          Variable.withString(btw.id),
+          Variable.withString(btw.chatId),
+        ],
+        updates: {_db.gaiaBtwSearch},
+      );
+    });
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaBtw, btw);
+    }
+  }
+
+  @override
+  Stream<void> watchBtws() {
+    final t = _db.gaiaBtwTable;
+    // By version, which a streaming save leaves as it was: only the writes
+    // that sync are heard, not each of those (GAIA_BTW_HLD.md §2).
+    return (_db.selectOnly(t)..addColumns([t.id, t.version]))
+        .watch()
+        .map(
+          (rows) => [
+            for (final row in rows) '${row.read(t.id)}:${row.read(t.version)}',
+          ].join(','),
+        )
+        .distinct()
+        .skip(1)
+        .map((_) {});
+  }
 }
+
+GaiaBtw _mapGaiaBtw(GaiaBtwTableData row) => GaiaBtw(
+  id: row.id,
+  chatId: row.chatId,
+  question: row.question,
+  answer: row.answer,
+  status: GaiaMessageStatus.values.byName(row.status),
+  error: row.error,
+  anchorSeq: row.anchorSeq,
+  deviceId: row.deviceId,
+  device: row.device,
+  tier: gaiaTierFromName(row.tier),
+  model: row.model,
+  adapter: row.adapter,
+  account: row.account,
+  session: row.sessionJson == null
+      ? null
+      : GaiaBtwSession.fromJson(jsonDecode(row.sessionJson!)),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
 
 GaiaQueueItem _mapGaiaQueueItem(GaiaQueueTableData row) => GaiaQueueItem(
   id: row.id,

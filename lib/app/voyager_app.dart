@@ -277,11 +277,14 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       ),
       memories: GaiaMemories(ref.read(gaiaRepositoryProvider)),
       addWord: _addWordFromGaia,
-      toast: (chatId, title, body) => unawaited(
+      toast: (chatId, title, body, {btwId}) => unawaited(
         os
             .showNow(
               PlannedReminderAlert(
-                sourceKey: '$kGaiaNotificationKeyPrefix$chatId',
+                sourceKey: btwId == null
+                    ? '$kGaiaNotificationKeyPrefix$chatId'
+                    : '$kGaiaNotificationKeyPrefix$chatId'
+                          '$kGaiaNotificationBtwSeparator$btwId',
                 title: title,
                 body: body,
                 fireAt: DateTime.now(),
@@ -315,8 +318,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   void _focusReminder(String sourceKey) {
     // A Gaia notification opens its chat in Gaia, not Voyager (§14).
     if (sourceKey.startsWith(kGaiaNotificationKeyPrefix)) {
+      final target = sourceKey
+          .substring(kGaiaNotificationKeyPrefix.length)
+          .split(kGaiaNotificationBtwSeparator);
       GaiaHost.instance.openChat(
-        sourceKey.substring(kGaiaNotificationKeyPrefix.length),
+        target.first,
+        btwId: target.length > 1 ? target[1] : null,
       );
       return;
     }

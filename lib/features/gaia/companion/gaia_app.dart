@@ -9,7 +9,7 @@ import 'package:flutter/gestures.dart'
     show computeHitSlop, kDoubleTapSlop, kDoubleTapTimeout, kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderFlex;
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart'
     show voyagerSpellCheckServiceProvider;
@@ -27,8 +27,10 @@ import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
+import 'package:voyager/features/gaia/companion/gaia_btw.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
+import 'package:voyager/features/gaia/companion/gaia_chat_body.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_composer_text.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
@@ -265,20 +267,27 @@ class _RunToasts extends StatefulWidget {
 
 class _RunToastsState extends State<_RunToasts> {
   late final StreamSubscription<GaiaRunToast> _toasts;
+  late final StreamSubscription<({GaiaRunToast toast, String btwId})>
+  _btwToasts;
 
   @override
   void initState() {
     super.initState();
     _toasts = widget.controller.toasts.listen(_show);
+    _btwToasts = widget.controller.btwToasts.listen(
+      (toast) => _show(toast.toast, btwId: toast.btwId),
+    );
   }
 
   @override
   void dispose() {
     unawaited(_toasts.cancel());
+    unawaited(_btwToasts.cancel());
     super.dispose();
   }
 
-  void _show(GaiaRunToast toast) {
+  /// With [btwId], a side question's, which a click opens.
+  void _show(GaiaRunToast toast, {String? btwId}) {
     if (!mounted) return;
     showGaiaToast(
       context,
@@ -291,6 +300,8 @@ class _RunToastsState extends State<_RunToasts> {
       body: toast.body,
       onTap: toast.chatId.isEmpty
           ? null
+          : btwId != null
+          ? () => widget.controller.revealBtw(toast.chatId, btwId)
           : () => widget.controller.selectChat(toast.chatId),
     );
     // A run's toast, not the UI's own, into Voyager's notification history.
@@ -335,23 +346,26 @@ class _GaiaShell extends StatelessWidget {
             ),
             const Divider(height: 1),
             Expanded(
-              // Also rebuilt alone as a reply's text streams in.
-              child: ValueListenableBuilder(
-                valueListenable: controller.streamed,
-                builder: (context, _, _) => _Messages(
-                  messages: controller.messages,
-                  imageFile: controller.imageFile,
-                  uploading: controller.uploadingImages,
-                  tier: controller.nextTier,
-                  running: controller.currentRunning,
-                  onEdit: (message) =>
-                      _editMessage(context, controller, message),
-                  onAttach: controller.attachMessage,
-                  controller: controller,
+              // The composer's chips float over the messages' foot.
+              child: GaiaChatBody(
+                // Also rebuilt alone as a reply's text streams in.
+                messages: ValueListenableBuilder(
+                  valueListenable: controller.streamed,
+                  builder: (context, _, _) => _Messages(
+                    messages: controller.messages,
+                    imageFile: controller.imageFile,
+                    uploading: controller.uploadingImages,
+                    tier: controller.nextTier,
+                    running: controller.currentRunning,
+                    onEdit: (message) =>
+                        _editMessage(context, controller, message),
+                    onAttach: controller.attachMessage,
+                    controller: controller,
+                  ),
                 ),
+                composer: _Composer(controller: controller),
               ),
             ),
-            _Composer(controller: controller),
           ],
         );
     return CallbackShortcuts(
@@ -495,7 +509,7 @@ class _ClickToComposerState extends State<_ClickToComposer> {
     // after the time a second click would have come in.
     _pending = Timer(kDoubleTapTimeout, () {
       if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
-      if (_inTextField()) return;
+      if (_inTextField() || _inBtwDock()) return;
       widget.controller.focusComposer();
     });
   }
@@ -1770,7 +1784,9 @@ class _MessagesState extends State<_Messages> {
             steady: true,
             controller: _scroll,
             reverse: true,
-            padding: EdgeInsets.fromLTRB(left, 16, gutter, 16),
+            padding: EdgeInsets.fromLTRB(left, 16, gutter, 4),
+            // Clear of the composer's chips, which float over the list.
+            foot: const GaiaFloatGap(),
             itemCount: messages.length,
             // A new message shifts the rest along; found by their keys,
             // they keep their views rather than each taking its neighbour's.
@@ -1919,21 +1935,24 @@ class _MessagesState extends State<_Messages> {
                   ),
                 ),
               Positioned(
-                bottom: 12,
+                bottom: 20,
                 left: 0,
                 right: 0,
-                child: Center(
-                  child: ValueListenableBuilder(
-                    valueListenable: _over,
-                    // Not clicked while it fades out.
-                    builder: (context, over, _) => IgnorePointer(
-                      ignoring: !over.scrolledUp,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 150),
-                        transitionBuilder: gaiaPinnedFade,
-                        child: over.scrolledUp
-                            ? _ToBottom(onTap: _toBottom)
-                            : const SizedBox.shrink(),
+                // Above the composer's chips under it.
+                child: GaiaAboveFloat(
+                  child: Center(
+                    child: ValueListenableBuilder(
+                      valueListenable: _over,
+                      // Not clicked while it fades out.
+                      builder: (context, over, _) => IgnorePointer(
+                        ignoring: !over.scrolledUp,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 150),
+                          transitionBuilder: gaiaPinnedFade,
+                          child: over.scrolledUp
+                              ? _ToBottom(onTap: _toBottom)
+                              : const SizedBox.shrink(),
+                        ),
                       ),
                     ),
                   ),
@@ -3283,6 +3302,9 @@ class _ComposerState extends State<_Composer> {
   final _vanish = GlobalKey<GaiaVanishState>();
   final _imagesVanish = GlobalKey<GaiaVanishState>();
 
+  /// The side questions over the field, which Up and Down move along.
+  final _btwDock = GlobalKey<GaiaBtwDockState>();
+
   /// The `/` palette's highlighted row, and whether Esc closed it for the
   /// draft as it stands.
   var _highlight = 0;
@@ -3300,6 +3322,10 @@ class _ComposerState extends State<_Composer> {
   /// The palette hovers over the chat from the overlay, above the
   /// composer, rather than pushing the chat up.
   final _portal = OverlayPortalController();
+
+  /// The side questions float over the chat too, on the field's top edge.
+  final _btwPortal = OverlayPortalController();
+  final _fieldMark = GlobalKey();
   final _link = LayerLink();
 
   @override
@@ -3468,9 +3494,16 @@ class _ComposerState extends State<_Composer> {
   /// for its arguments.
   Future<void> _pick(GaiaPaletteItem item) async {
     final controller = widget.controller;
-    if (item.builtin case GaiaBuiltin.remember || GaiaBuiltin.queue) {
-      // What else the draft held becomes what's remembered, or queued.
+    if (item.builtin
+        case GaiaBuiltin.remember || GaiaBuiltin.queue || GaiaBuiltin.btw) {
+      // What else the draft held becomes what's remembered, queued, or asked
+      // beside the chat. `/btw` with nothing else opens the panel.
       _cutToken();
+      if (item.builtin == GaiaBuiltin.btw && _text.text.trim().isEmpty) {
+        controller.openBtws();
+        _focus.requestFocus();
+        return;
+      }
       final text = '/${item.builtin!.name} ${_text.text.trim()}';
       _text.value = TextEditingValue(
         text: text,
@@ -3556,6 +3589,31 @@ class _ComposerState extends State<_Composer> {
   /// unless a snippet wants Tab, and Backspace just past a marker takes it
   /// away, as in Voyager's notes.
   KeyEventResult _listKey(FocusNode node, KeyEvent event) {
+    // The side questions' Alt keys while they're open, and Esc closes them
+    // once Vim has no use for it: from Insert, it goes to Normal first.
+    final dock = _btwDock.currentState;
+    if (dock != null &&
+        (dock.shortcut(event) ||
+            (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.escape &&
+                VimTextScope.escapeIsSpare(node.context) &&
+                dock.close()))) {
+      return KeyEventResult.handled;
+    }
+    // Up and Down move along them too, unless the draft runs over lines,
+    // wrapped or not, for the caret to move between.
+    if (event is! KeyUpEvent &&
+        (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+            event.logicalKey == LogicalKeyboardKey.arrowDown) &&
+        !HardwareKeyboard.instance.isShiftPressed &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed &&
+        !HardwareKeyboard.instance.isMetaPressed &&
+        !_draftRunsOver() &&
+        (dock?.move(event.logicalKey == LogicalKeyboardKey.arrowUp ? -1 : 1) ??
+            false)) {
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
@@ -3571,6 +3629,42 @@ class _ComposerState extends State<_Composer> {
       _ => false,
     };
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  /// Whether the draft takes more than one line on screen, a long one
+  /// wrapped as much as one broken.
+  bool _draftRunsOver() {
+    final editable = _focus.context
+        ?.findAncestorStateOfType<EditableTextState>()
+        ?.renderEditable;
+    if (editable == null) return false;
+    final end = TextPosition(offset: editable.plainText.length);
+    return editable.getLocalRectForCaret(const TextPosition(offset: 0)).top !=
+        editable.getLocalRectForCaret(end).top;
+  }
+
+  /// From the field's top up to the chat's, under its header, less a
+  /// margin: what the side questions may fill. Read at layout, with both
+  /// laid out.
+  double _roomOverField() {
+    final field = _fieldMark.currentContext?.findRenderObject() as RenderBox?;
+    final chat = context.findAncestorRenderObjectOfType<RenderFlex>();
+    if (field == null || chat == null || !field.attached) {
+      return double.infinity;
+    }
+    // The composer's place in the chat's column; the one before it, the
+    // messages, starts where the chat does.
+    RenderObject? composer = context.findRenderObject();
+    while (composer != null && composer.parent != chat) {
+      composer = composer.parent;
+    }
+    final above = composer == null
+        ? null
+        : chat.childBefore(composer as RenderBox);
+    if (above == null) return double.infinity;
+    return field.localToGlobal(Offset.zero).dy -
+        above.localToGlobal(Offset.zero).dy -
+        12;
   }
 
   void _move(int by) {
@@ -3698,6 +3792,12 @@ class _ComposerState extends State<_Composer> {
       _text.clear();
       return widget.controller.enqueue(queued);
     }
+    // And /btw (GAIA_BTW_HLD.md §3): a side question, never queued, and
+    // never the stop a send is mid-reply. The draft's attachments stay.
+    if (gaiaBtwText(_text.text) case final question?) {
+      _text.clear();
+      return widget.controller.askBtw(question);
+    }
     // A `/word` no command has stays, once, rather than going to the agent
     // as text (GAIA_NATIVE_COMMANDS.md §7). Not while the CLI's own are still
     // being read, which would turn theirs away too.
@@ -3799,6 +3899,7 @@ class _ComposerState extends State<_Composer> {
     // Here, not once in initState: the ones above take the portal out of the
     // tree, and it comes back hidden.
     if (!_portal.isShowing) _portal.show();
+    if (!_btwPortal.isShowing) _btwPortal.show();
     final running = controller.currentRunning;
     final palette = _palette;
     final send = _sendCombo(controller);
@@ -3835,267 +3936,353 @@ class _ComposerState extends State<_Composer> {
                 SingleActivator(_digits[i]): () =>
                     controller.pickCardOption(card!, i),
             },
-            child: OverlayPortal(
-              controller: _portal,
-              overlayChildBuilder: (context) => palette.isEmpty
-                  ? const SizedBox.shrink()
-                  : Align(
-                      alignment: Alignment.topLeft,
-                      child: CompositedTransformFollower(
-                        link: _link,
-                        showWhenUnlinked: false,
-                        targetAnchor: Alignment.topLeft,
-                        followerAnchor: Alignment.bottomLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: GaiaPalette(
-                            width: constraints.maxWidth - 2 * side,
-                            highlight: _highlight.clamp(0, palette.length - 1),
-                            items: [
-                              for (final item in palette)
-                                GaiaMenuItem(
-                                  label: '/${item.name}',
-                                  detail: item.description,
-                                  onPressed: () => _pick(item),
-                                ),
-                            ],
-                          ),
+            // The side questions while open (GAIA_BTW_HLD.md §8.1), floating
+            // over the chat on the field's top edge, as wide as it. Under
+            // the palette, which is the nearer portal.
+            child: OverlayPortal.overlayChildLayoutBuilder(
+              controller: _btwPortal,
+              // At layout, when where the field and chat are is known. Placed
+              // by hand, not by a follower layer: a tooltip in it can't find
+              // its place on screen through one.
+              overlayChildBuilder: (context, info) {
+                final field =
+                    _fieldMark.currentContext?.findRenderObject() as RenderBox?;
+                final overlay = Overlay.of(context).context.findRenderObject();
+                if (field == null || !field.attached) {
+                  return const SizedBox.shrink();
+                }
+                final at = field.localToGlobal(Offset.zero, ancestor: overlay);
+                return Stack(
+                  children: [
+                    Positioned(
+                      left: at.dx,
+                      bottom: info.overlaySize.height - at.dy,
+                      // The composer's full width, so nothing under it peeks
+                      // out at the sides.
+                      width: constraints.maxWidth - 2 * side,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: GaiaBtwDock(
+                          key: _btwDock,
+                          controller: controller,
+                          maxHeight: _roomOverField(),
                         ),
                       ),
                     ),
-              child: CompositedTransformTarget(
-                link: _link,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (controller.lowUsage case final low?)
-                      _LowUsageBanner(controller: controller, low: low),
-                    // The chat's queue and drain mode (§13); clicking it
-                    // loads the next prompt to review.
-                    if (controller.queueFor(controller.currentChatId).length
-                        case final queued
-                        when queued > 0 ||
-                            (controller.currentChat?.drain ?? false))
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: _ContextChip(
-                            label: [
-                              if (queued == 1)
-                                '1 queued'
-                              else if (queued > 1)
-                                '$queued queued',
-                              if (controller.currentChat?.drain ?? false)
-                                'drain on',
-                            ].join(' · '),
-                            icon: Icons.queue,
-                            onRemove: queued == 0
-                                ? null
-                                : () => controller.popQueue(send: false),
-                          ),
-                        ),
-                      ),
-                    if (controller.windowContext case final window?)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: _ContextChip(
-                            label: window.label,
-                            onRemove: controller.dropWindowContext,
-                          ),
-                        ),
-                      ),
-                    if (controller.draftControl case final control?)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: _ContextChip(
-                            label: control.label,
-                            icon: Icons.ads_click,
-                            onRemove: controller.dropDraftControl,
-                          ),
-                        ),
-                      ),
-                    if (controller.draftQuotes.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            for (final quote in controller.draftQuotes)
-                              _ContextChip(
-                                label: quote.label,
-                                icon: Icons.format_quote,
-                                onRemove: () =>
-                                    controller.removeDraftQuote(quote),
-                              ),
-                          ],
-                        ),
-                      ),
-                    // Sent, the images and files dissolve like the text, and
-                    // their row closes behind them.
-                    GaiaVanish(
-                      key: _imagesVanish,
-                      refilled:
-                          controller.draftImages.isNotEmpty ||
-                          controller.arrivingImages.isNotEmpty ||
-                          controller.draftFiles.isNotEmpty,
-                      builder: (context, _) =>
-                          controller.draftImages.isEmpty &&
-                              controller.arrivingImages.isEmpty &&
-                              controller.draftFiles.isEmpty
-                          ? const SizedBox.shrink()
-                          : Padding(
+                  ],
+                );
+              },
+              child: OverlayPortal(
+                controller: _portal,
+                overlayChildBuilder: (context) => palette.isEmpty
+                    ? const SizedBox.shrink()
+                    : Align(
+                        alignment: Alignment.topLeft,
+                        child: CompositedTransformFollower(
+                          link: _link,
+                          showWhenUnlinked: false,
+                          targetAnchor: Alignment.topLeft,
+                          followerAnchor: Alignment.bottomLeft,
+                          child: TapRegion(
+                            groupId: gaiaBtwTapGroup,
+                            child: Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final image in controller.draftImages)
-                                    GaiaImageThumb(
-                                      // The preview's path too: the thumbnail
-                                      // reads its path only once.
-                                      key: ValueKey(
-                                        image.preview ?? image.path,
-                                      ),
-                                      path: image.preview ?? image.path,
-                                      label: image.label,
-                                      height: 56,
-                                      onTap: () => _edit(image),
-                                      onRemove: () => controller
-                                          .removeDraftImage(image.label),
-                                    ),
-                                  // Synced from another device and still
-                                  // on their way: a placeholder until here.
-                                  for (final image in controller.arrivingImages)
-                                    GaiaImageThumb(
-                                      key: ValueKey(image.mediaId),
-                                      label: image.label,
-                                      height: 56,
-                                      uploading: true,
-                                      busyLabel: 'Syncing',
-                                      onRemove: () => controller
-                                          .removeDraftImage(image.label),
-                                    ),
-                                  for (final file in controller.draftFiles)
-                                    GaiaFileCard(
-                                      file: file,
-                                      height: 56,
-                                      onRemove: () =>
-                                          controller.removeDraftFile(file),
+                              child: GaiaPalette(
+                                width: constraints.maxWidth - 2 * side,
+                                highlight: _highlight.clamp(
+                                  0,
+                                  palette.length - 1,
+                                ),
+                                items: [
+                                  for (final item in palette)
+                                    GaiaMenuItem(
+                                      label: '/${item.name}',
+                                      detail: item.description,
+                                      onPressed: () => _pick(item),
                                     ),
                                 ],
                               ),
                             ),
-                    ),
-                    GaiaVanish(
-                      key: _vanish,
-                      controller: _text,
-                      builder: (context, vanishing) => GaiaTextField(
-                        controller: _text,
-                        focusNode: _focus,
-                        autofocus: true,
-                        minLines: vanishing ? null : 1,
-                        maxLines: vanishing ? null : 8,
-                        expands: vanishing,
-                        textAlignVertical: vanishing
-                            ? TextAlignVertical.top
-                            : null,
-                        hintText: vanishing
-                            ? null
-                            : switch (card?.kind) {
-                                GaiaCardKind.question => 'Type an answer',
-                                GaiaCardKind.permission =>
-                                  'Send to allow, or say why not',
-                                GaiaCardKind.proposal =>
-                                  'Send to save, or say what to change',
-                                GaiaCardKind.control =>
-                                  'Send to run, or say why not',
-                                null => 'Message Gaia',
-                              },
-                        onPaste: _paste,
-                        undoController: controller.draftUndo,
-                        lists: true,
-                        onAddWord: (word) =>
-                            unawaited(controller.addWord(word)),
-                        // The tier picker's notch, opening rightwards from the
-                        // field's left edge.
-                        leading: Padding(
-                          // Level with the send button.
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: GaiaNotch(
-                            opensRight: true,
-                            items: [
-                              GaiaNotchItem<bool?>(
-                                trigger: (color) =>
-                                    Icon(Icons.add, size: 16, color: color),
-                                options: [
-                                  GaiaNotchOption(
-                                    value: false,
-                                    label: 'Add files',
-                                    icon: (color, {required lit}) => Icon(
-                                      Icons.description_outlined,
-                                      size: 16,
-                                      color: color,
-                                    ),
-                                  ),
-                                  GaiaNotchOption(
-                                    value: true,
-                                    label: 'Add folder',
-                                    icon: (color, {required lit}) => Icon(
-                                      Icons.folder_outlined,
-                                      size: 16,
-                                      color: color,
-                                    ),
-                                  ),
-                                ],
-                                value: null,
-                                onChanged: (folder) => _attach(folder: folder!),
-                              ),
-                            ],
                           ),
                         ),
-                        trailing: running
-                            ? GaiaButton(
-                                icon: Icons.stop,
-                                size: 32,
-                                onPressed: () =>
-                                    controller.stop(controller.currentChatId!),
-                              )
-                            : GaiaButton(
-                                icon: Icons.arrow_upward,
-                                size: 32,
-                                onPressed: _send,
-                              ),
                       ),
+                child: CompositedTransformTarget(
+                  link: _link,
+                  // Clicks here keep the side questions open.
+                  child: TapRegion(
+                    groupId: gaiaBtwTapGroup,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (controller.lowUsage case final low?)
+                          _LowUsageBanner(controller: controller, low: low),
+                        // The chat's queue and drain mode (§13); clicking it
+                        // loads the next prompt to review. Beside it, its side
+                        // questions (GAIA_BTW_HLD.md §8.2).
+                        if ((
+                              controller
+                                  .queueFor(controller.currentChatId)
+                                  .length,
+                              controller
+                                  .btwsFor(controller.currentChatId)
+                                  .length,
+                            )
+                            case (final queued, final btws)
+                            when queued > 0 ||
+                                btws > 0 ||
+                                (controller.currentChat?.drain ?? false))
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  if (queued > 0 ||
+                                      (controller.currentChat?.drain ?? false))
+                                    _ContextChip(
+                                      label: [
+                                        if (queued == 1)
+                                          '1 queued'
+                                        else if (queued > 1)
+                                          '$queued queued',
+                                        if (controller.currentChat?.drain ??
+                                            false)
+                                          'drain on',
+                                      ].join(' · '),
+                                      icon: Icons.queue,
+                                      onRemove: queued == 0
+                                          ? null
+                                          : () => controller.popQueue(
+                                              send: false,
+                                            ),
+                                    ),
+                                  // Under the side questions while they're open,
+                                  // so the field doesn't move as they do.
+                                  if (btws > 0)
+                                    GaiaBtwChip(controller: controller),
+                                ],
+                              ),
+                            ),
+                          ),
+                        if (controller.windowContext case final window?)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _ContextChip(
+                                label: window.label,
+                                onRemove: controller.dropWindowContext,
+                              ),
+                            ),
+                          ),
+                        if (controller.draftControl case final control?)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _ContextChip(
+                                label: control.label,
+                                icon: Icons.ads_click,
+                                onRemove: controller.dropDraftControl,
+                              ),
+                            ),
+                          ),
+                        if (controller.draftQuotes.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                for (final quote in controller.draftQuotes)
+                                  _ContextChip(
+                                    label: quote.label,
+                                    icon: Icons.format_quote,
+                                    onRemove: () =>
+                                        controller.removeDraftQuote(quote),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        // Sent, the images and files dissolve like the text, and
+                        // their row closes behind them.
+                        GaiaVanish(
+                          key: _imagesVanish,
+                          refilled:
+                              controller.draftImages.isNotEmpty ||
+                              controller.arrivingImages.isNotEmpty ||
+                              controller.draftFiles.isNotEmpty,
+                          builder: (context, _) =>
+                              controller.draftImages.isEmpty &&
+                                  controller.arrivingImages.isEmpty &&
+                                  controller.draftFiles.isEmpty
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (final image
+                                          in controller.draftImages)
+                                        GaiaImageThumb(
+                                          // The preview's path too: the thumbnail
+                                          // reads its path only once.
+                                          key: ValueKey(
+                                            image.preview ?? image.path,
+                                          ),
+                                          path: image.preview ?? image.path,
+                                          label: image.label,
+                                          height: 56,
+                                          onTap: () => _edit(image),
+                                          onRemove: () => controller
+                                              .removeDraftImage(image.label),
+                                        ),
+                                      // Synced from another device and still
+                                      // on their way: a placeholder until here.
+                                      for (final image
+                                          in controller.arrivingImages)
+                                        GaiaImageThumb(
+                                          key: ValueKey(image.mediaId),
+                                          label: image.label,
+                                          height: 56,
+                                          uploading: true,
+                                          busyLabel: 'Syncing',
+                                          onRemove: () => controller
+                                              .removeDraftImage(image.label),
+                                        ),
+                                      for (final file in controller.draftFiles)
+                                        GaiaFileCard(
+                                          file: file,
+                                          height: 56,
+                                          onRemove: () =>
+                                              controller.removeDraftFile(file),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                        ),
+                        // The field's top edge, which the side questions sit on.
+                        // What's above it floats over the chat.
+                        GaiaFieldLine(key: _fieldMark),
+                        GaiaVanish(
+                          key: _vanish,
+                          controller: _text,
+                          builder: (context, vanishing) => GaiaTextField(
+                            controller: _text,
+                            focusNode: _focus,
+                            autofocus: true,
+                            minLines: vanishing ? null : 1,
+                            maxLines: vanishing ? null : 8,
+                            expands: vanishing,
+                            textAlignVertical: vanishing
+                                ? TextAlignVertical.top
+                                : null,
+                            hintText: vanishing
+                                ? null
+                                : switch (card?.kind) {
+                                    GaiaCardKind.question => 'Type an answer',
+                                    GaiaCardKind.permission =>
+                                      'Send to allow, or say why not',
+                                    GaiaCardKind.proposal =>
+                                      'Send to save, or say what to change',
+                                    GaiaCardKind.control =>
+                                      'Send to run, or say why not',
+                                    null => 'Message Gaia',
+                                  },
+                            onPaste: _paste,
+                            undoController: controller.draftUndo,
+                            lists: true,
+                            onAddWord: (word) =>
+                                unawaited(controller.addWord(word)),
+                            // The tier picker's notch, opening rightwards from the
+                            // field's left edge.
+                            leading: Padding(
+                              // Level with the send button.
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: GaiaNotch(
+                                opensRight: true,
+                                items: [
+                                  GaiaNotchItem<bool?>(
+                                    trigger: (color) =>
+                                        Icon(Icons.add, size: 16, color: color),
+                                    options: [
+                                      GaiaNotchOption(
+                                        value: false,
+                                        label: 'Add files',
+                                        icon: (color, {required lit}) => Icon(
+                                          Icons.description_outlined,
+                                          size: 16,
+                                          color: color,
+                                        ),
+                                      ),
+                                      GaiaNotchOption(
+                                        value: true,
+                                        label: 'Add folder',
+                                        icon: (color, {required lit}) => Icon(
+                                          Icons.folder_outlined,
+                                          size: 16,
+                                          color: color,
+                                        ),
+                                      ),
+                                    ],
+                                    value: null,
+                                    onChanged: (folder) =>
+                                        _attach(folder: folder!),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Mid-reply it's the reply's stop, except for what
+                            // [_submit] takes before that stop: a side question
+                            // (GAIA_BTW_HLD.md §3), /queue (§13) and /remember
+                            // (§11) send as Enter does.
+                            trailing:
+                                running &&
+                                    gaiaBtwText(_text.text) == null &&
+                                    gaiaQueueText(_text.text) == null &&
+                                    gaiaRememberText(_text.text) == null
+                                ? GaiaButton(
+                                    icon: Icons.stop,
+                                    size: 32,
+                                    onPressed: () => controller.stop(
+                                      controller.currentChatId!,
+                                    ),
+                                  )
+                                : GaiaButton(
+                                    icon: Icons.arrow_upward,
+                                    size: 32,
+                                    onPressed: _send,
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        _ComposerStatus(
+                          controller: controller,
+                          // In the status line, not a line of its own, so the
+                          // composer keeps its height and the chat stays put.
+                          notice: switch (_unknown) {
+                            (:final word, suggestion: null) =>
+                              'Unknown command /${_clipCommand(word)}. Send again '
+                                  'to send as typed.',
+                            (:final word, :final suggestion?) =>
+                              'Unknown command /${_clipCommand(word)}. Tab for '
+                                  '/${_clipCommand(suggestion)}, or send again to '
+                                  'send as typed.',
+                            null
+                                when _reading &&
+                                    controller.nativeCommands == null =>
+                              "Reading ${kGaiaClis[controller.agentFor(controller.nextTier)?.adapter]?.name ?? 'the CLI'}'s "
+                                  'commands. Send again in a moment.',
+                            _ => null,
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
-                    _ComposerStatus(
-                      controller: controller,
-                      // In the status line, not a line of its own, so the
-                      // composer keeps its height and the chat stays put.
-                      notice: switch (_unknown) {
-                        (:final word, suggestion: null) =>
-                          'Unknown command /${_clipCommand(word)}. Send again '
-                              'to send as typed.',
-                        (:final word, :final suggestion?) =>
-                          'Unknown command /${_clipCommand(word)}. Tab for '
-                              '/${_clipCommand(suggestion)}, or send again to '
-                              'send as typed.',
-                        null
-                            when _reading &&
-                                controller.nativeCommands == null =>
-                          "Reading ${kGaiaClis[controller.agentFor(controller.nextTier)?.adapter]?.name ?? 'the CLI'}'s "
-                              'commands. Send again in a moment.',
-                        _ => null,
-                      },
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -4125,7 +4312,9 @@ class _LowUsageBanner extends StatelessWidget {
     final other = low.switchTo;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: ConstrainedBox(
+      child: Container(
+        // Solid, as it floats over the chat's text.
+        color: theme.scaffoldBackgroundColor,
         constraints: const BoxConstraints(minHeight: _height),
         child: Row(
           children: [
@@ -4407,7 +4596,11 @@ class _ContextChip extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 420),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.15),
+        // Solid, as it floats over the chat's text.
+        color: Color.alphaBlend(
+          accent.withValues(alpha: 0.15),
+          theme.scaffoldBackgroundColor,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -5054,6 +5247,13 @@ bool _inTextField() {
       ?.findAncestorStateOfType<EditableTextState>();
   return editable != null && !editable.widget.readOnly;
 }
+
+/// The focus is in the side questions' dock, whose keys it keeps; a click
+/// outside it lets go.
+bool _inBtwDock() =>
+    FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<GaiaBtwDock>() !=
+    null;
 
 /// 1 to 9, which pick a question card's options.
 const _digits = [

@@ -425,6 +425,35 @@ void main() {
       expect(result.text, 'Blue, NONE');
     });
 
+    test("a side question's fork asks for nothing, and its turn has no "
+        'shell (GAIA_BTW_HLD.md §6)', () async {
+      final replay = _Replay('fork.jsonl');
+      unawaited(replay.client.initialize());
+      final turn = replay.client.send(
+        threadId: null,
+        model: 'gpt-6.1-sol',
+        input: _text('What colour did I choose earlier?'),
+        tools: null,
+        onEvent: (_) {},
+        clientId: 'gaia-fork-p3',
+        fork: (sessionId: source, keepAt: cut),
+        toolless: true,
+      );
+      await replay.feed();
+      expect(replay.sentFor('thread/fork')['params'], {
+        'threadId': source,
+        'lastTurnId': cut,
+        'model': 'gpt-6.1-sol',
+        'approvalPolicy': 'never',
+        'sandbox': 'read-only',
+        'excludeTurns': true,
+      });
+      final start = replay.sentFor('turn/start')['params']! as Map;
+      expect(start['threadId'], forked);
+      expect(start['environments'], isEmpty);
+      expect((await turn).isError, isFalse);
+    });
+
     test(
       'a fork Codex refuses is not found, so the chat is handed over',
       () async {

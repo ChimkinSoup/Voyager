@@ -755,6 +755,74 @@ void main() {
     expect((await repo.getMessage('m1'))!.chapter, 'Greetings');
   });
 
+  test('190→191 adds side questions and their search', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Hi',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    await seed.customStatement('DROP TABLE gaia_btw_table');
+    await seed.customStatement('DROP TABLE gaia_btw_search');
+    await seed.customStatement('PRAGMA user_version = 190');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect(await repo.listBtws(), isEmpty);
+    await repo.upsertBtw(
+      GaiaBtw(
+        id: 'b1',
+        chatId: 'c1',
+        question: 'Why lexers?',
+        answer: 'To split it up.',
+        status: GaiaMessageStatus.complete,
+        anchorSeq: -1,
+        deviceId: 'laptop',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    expect((await repo.listBtws(chatId: 'c1')).single.question, 'Why lexers?');
+    expect((await repo.searchMessages('lexers')).single.btwId, 'b1');
+  });
+
+  test("191→192 adds a side question's session, none in old rows", () async {
+    final btw = GaiaBtw(
+      id: 'b1',
+      chatId: 'c1',
+      question: 'Why lexers?',
+      status: GaiaMessageStatus.complete,
+      anchorSeq: -1,
+      deviceId: 'laptop',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertBtw(btw);
+    await seed.customStatement(
+      'ALTER TABLE gaia_btw_table DROP COLUMN session_json',
+    );
+    await seed.customStatement('PRAGMA user_version = 191');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect((await repo.getBtw('b1'))!.session, isNull);
+    await repo.upsertBtw(
+      btw.copyWith(
+        session: const GaiaBtwSession(sessionKey: 'k', sessionId: 's1'),
+      ),
+    );
+    expect((await repo.getBtw('b1'))!.session?.sessionId, 's1');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

@@ -24,6 +24,7 @@ class GaiaSteadyList extends ListView {
     super.padding,
     super.children,
     this.steady = false,
+    this.foot,
   });
 
   GaiaSteadyList.builder({
@@ -35,26 +36,35 @@ class GaiaSteadyList extends ListView {
     super.findChildIndexCallback,
     required super.itemBuilder,
     this.steady = false,
+    this.foot,
   }) : super.builder();
 
   final bool steady;
 
+  /// A sliver before the list's, past its padding: reversed, under it all.
+  final Widget? foot;
+
   @override
-  Widget build(BuildContext context) =>
-      NotificationListener<GaiaHoldInPlace>(
-        onNotification: (notification) {
-          // The message it's in, as the list's child.
-          var box = notification.context.findRenderObject();
-          while (box != null && box.parent is! _RenderSteadySliverList) {
-            box = box.parent;
-          }
-          if (box is RenderBox) {
-            (box.parent! as _RenderSteadySliverList).hold(box);
-          }
-          return true;
-        },
-        child: super.build(context),
-      );
+  List<Widget> buildSlivers(BuildContext context) => [
+    ?foot,
+    ...super.buildSlivers(context),
+  ];
+
+  @override
+  Widget build(BuildContext context) => NotificationListener<GaiaHoldInPlace>(
+    onNotification: (notification) {
+      // The message it's in, as the list's child.
+      var box = notification.context.findRenderObject();
+      while (box != null && box.parent is! _RenderSteadySliverList) {
+        box = box.parent;
+      }
+      if (box is RenderBox) {
+        (box.parent! as _RenderSteadySliverList).hold(box);
+      }
+      return true;
+    },
+    child: super.build(context),
+  );
 
   @override
   Widget buildChildLayout(BuildContext context) =>

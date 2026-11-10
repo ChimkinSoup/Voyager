@@ -440,10 +440,13 @@ class VimSession {
     if (mode == VimMode.visualLine) {
       final lo = math.min(_visualAnchor, _visualCursor);
       final hi = math.max(_visualAnchor, _visualCursor);
-      return TextSelection(
-        baseOffset: vimLineStart(text, lo),
-        extentOffset: vimLineEnd(text, hi),
-      );
+      final start = vimLineStart(text, lo);
+      final end = vimLineEnd(text, hi);
+      // The extent is the caret's end: EditableText scrolls to it, so a
+      // selection reaching up past the anchor has to run backwards.
+      return _visualCursor < _visualAnchor
+          ? TextSelection(baseOffset: end, extentOffset: start)
+          : TextSelection(baseOffset: start, extentOffset: end);
     }
     if (_visualCursor >= _visualAnchor) {
       return TextSelection(

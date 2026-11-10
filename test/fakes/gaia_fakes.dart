@@ -226,6 +226,7 @@ typedef FakeClaudeSend = ({
   Set<String> directories,
   GaiaTurnTools? tools,
   String sessionInstructions,
+  bool toolless,
 });
 
 /// A [GaiaAgentRunner] that plays scripted turns instead of running a CLI.
@@ -277,6 +278,9 @@ class FakeClaudeRunner
       >[];
   String? cutAt;
 
+  /// [forkCut]'s answer by session, where it says; else [cutAt].
+  String? Function(String sessionId)? cutFor;
+
   @override
   Future<String?> forkCut({
     required String chatId,
@@ -296,7 +300,7 @@ class FakeClaudeRunner
       awaiting: awaiting,
       endAt: endAt,
     ));
-    return cutAt;
+    return cutFor?.call(sessionId) ?? cutAt;
   }
 
   /// Every [rewound] told, in order.
@@ -355,6 +359,7 @@ class FakeClaudeRunner
     GaiaAccount? account,
     String? promptId,
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     accounts.add(account);
@@ -370,6 +375,7 @@ class FakeClaudeRunner
       directories: directories,
       tools: tools,
       sessionInstructions: sessionInstructions,
+      toolless: toolless,
     ));
     if (sendError case final error?) throw error;
     // Refused before its `init`, as the CLI exits: no turn is played.
@@ -439,6 +445,12 @@ class FakeClaudeRunner
     await takeBackGate?.future;
     return takeBackRefusal;
   }
+
+  /// Each [forgetStop]'s chat, in order.
+  final forgotten = <String>[];
+
+  @override
+  void forgetStop(String chatId) => forgotten.add(chatId);
 
   @override
   Future<void> killAll() async {

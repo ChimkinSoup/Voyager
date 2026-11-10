@@ -194,7 +194,7 @@ headless command list. Sent anyway, it replies "/btw isn't available in this env
 Codex has no equivalent request. **Build Gaia's own `/btw`**, as planned. No blocklist entry
 is needed: the CLI doesn't list it, and a Gaia built-in wins a clash anyway if a later
 version adds it. Gaia's native fork (GAIA_FORKING_HLD.md) is a natural base: fork the
-session, ask there, and throw the fork away.
+session, ask there, and throw the fork away. The design is GAIA_BTW_HLD.md.
 
 ## 9. Testing
 

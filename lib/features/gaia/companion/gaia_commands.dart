@@ -21,7 +21,11 @@ enum GaiaBuiltin {
   queuePop('queue-pop', "Load this chat's next queued prompt to review"),
   queuePopSend('queue-pop!', "Send this chat's next queued prompt now"),
   drain('drain', 'Send queued prompts one after another, on or off'),
-  thisControl('this', 'Attach the control the cursor was on when Gaia opened');
+  thisControl('this', 'Attach the control the cursor was on when Gaia opened'),
+
+  /// Takes the rest of the draft: see [gaiaBtwText] (GAIA_BTW_HLD.md §3).
+  /// Alone, it opens the side questions.
+  btw('btw', 'Ask a side question about this chat');
 
   const GaiaBuiltin(this.name, this.description, {this.aliases = const {}});
 
@@ -236,6 +240,13 @@ String? gaiaRememberText(String draft) {
 /// when the draft doesn't start with `/queue` and some text.
 String? gaiaQueueText(String draft) {
   final match = RegExp(r'^/queue\s+(\S[\s\S]*)$').firstMatch(draft.trim());
+  return match?.group(1)!.trim();
+}
+
+/// What `/btw <question>` in [draft] asks (GAIA_BTW_HLD.md §3): the text
+/// after it, or null when the draft doesn't start with `/btw` and some text.
+String? gaiaBtwText(String draft) {
+  final match = RegExp(r'^/btw\s+(\S[\s\S]*)$').firstMatch(draft.trim());
   return match?.group(1)!.trim();
 }
 

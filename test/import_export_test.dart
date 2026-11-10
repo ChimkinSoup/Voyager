@@ -1061,6 +1061,20 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertBtw(
+    GaiaBtw(
+      id: 'gaia-btw-1',
+      chatId: 'gaia-chat-1',
+      question: 'Which file was that?',
+      answer: 'notes.md',
+      status: GaiaMessageStatus.complete,
+      anchorSeq: 0,
+      deviceId: 'device-1',
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1439,6 +1453,7 @@ void main() {
         'gaia_drafts_table',
         'gaia_memories_table',
         'gaia_queue_table',
+        'gaia_btw_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };
@@ -1455,6 +1470,7 @@ void main() {
         // Gaia's message search, rebuilt from the messages as they are
         // written, a restore included.
         'gaia_message_search',
+        'gaia_btw_search',
       };
 
       expect(

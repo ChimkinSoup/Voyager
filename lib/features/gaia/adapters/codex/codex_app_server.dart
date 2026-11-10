@@ -11,7 +11,14 @@
 //   thread/start take `dynamicTools`
 //   thread/start {model, approvalPolicy: "on-request", dynamicTools,
 //     developerInstructions?} -> {thread: {id}}; a thread keeps its tools
-//     when it's resumed
+//     when it's resumed. A tool-less one (GAIA_BTW_HLD.md §6) is
+//     {model, approvalPolicy: "never", sandbox: "read-only",
+//     environments: []}: with no environment it has no shell (checked on
+//     0.166.0: asked to run a command, it says it can't). A tool-less fork
+//     (§5.1) is thread/fork with that approvalPolicy and sandbox, then
+//     turn/start with `environments: []`: no shell, and the source's
+//     context kept (checked on 0.166.0). It keeps the source's dynamicTools,
+//     which, with no turn tools, refuse every call
 //   thread/resume {threadId, model, approvalPolicy} -> an error when
 //     there's no such thread ("no rollout found for thread id …"), or a
 //     forked one's `history_base` thread is missing ("invalid paginated
@@ -266,6 +273,7 @@ class CodexAppServerClient {
     void Function(String threadId)? onThread,
     Future<void> Function(String threadId)? onNewThread,
     bool compact = false,
+    bool toolless = false,
   }) async {
     final String thread;
     if (threadId == null && fork != null) {
@@ -275,7 +283,10 @@ class CodexAppServerClient {
           'threadId': fork.sessionId,
           'lastTurnId': fork.keepAt,
           'model': model,
-          'approvalPolicy': 'on-request',
+          // A tool-less one's shell goes with its turn's environments.
+          ...toolless
+              ? {'approvalPolicy': 'never', 'sandbox': 'read-only'}
+              : {'approvalPolicy': 'on-request'},
           'excludeTurns': true,
         });
       } on _RpcError catch (error) {
@@ -291,12 +302,23 @@ class CodexAppServerClient {
     } else if (threadId == null) {
       final Map<String, Object?> started;
       try {
-        started = await _request('thread/start', {
-          'model': model,
-          'approvalPolicy': 'on-request',
-          'dynamicTools': _dynamicTools,
-          if (instructions.isNotEmpty) 'developerInstructions': instructions,
-        });
+        started = await _request(
+          'thread/start',
+          toolless
+              ? {
+                  'model': model,
+                  'approvalPolicy': 'never',
+                  'sandbox': 'read-only',
+                  'environments': const <Object?>[],
+                }
+              : {
+                  'model': model,
+                  'approvalPolicy': 'on-request',
+                  'dynamicTools': _dynamicTools,
+                  if (instructions.isNotEmpty)
+                    'developerInstructions': instructions,
+                },
+        );
       } on _RpcError catch (error) {
         throw GaiaRunException('Codex refused the thread: $error');
       }
@@ -344,6 +366,8 @@ class CodexAppServerClient {
           'effort': ?effort,
           'input': input,
           'clientUserMessageId': ?clientId,
+          // No shell, on a fork too, which keeps its source's.
+          if (toolless) 'environments': const <Object?>[],
         });
         turn.turnId ??= _string(_map(started, 'turn', ''), 'id', '');
       }
@@ -926,6 +950,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     GaiaAccount? account,
     String? promptId,
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Before anything's awaited: a stop from here on is caught.
@@ -944,6 +969,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         sessionInstructions: sessionInstructions,
         promptId: promptId,
         fork: sessionId == null ? fork : null,
+        toolless: toolless,
         onEvent: onEvent,
       );
       // Stopped while it opened, then ended there with nothing sent (a home
@@ -967,6 +993,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required String sessionInstructions,
     required String? promptId,
     required GaiaForkCut? fork,
+    required bool toolless,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // A command of Codex's own (GAIA_NATIVE_COMMANDS.md §6): `/compact` is a
@@ -1002,6 +1029,14 @@ class CodexAppServerRunner implements GaiaAgentRunner {
           sessionId: sessionId!,
           isError: true,
           text: "Codex's app-server isn't available, and only it can compact.",
+        );
+      }
+      // Nor run without its shell.
+      if (toolless) {
+        return const GaiaTurnResult(
+          sessionId: '',
+          isError: true,
+          text: "Codex's app-server isn't available to answer without tools.",
         );
       }
       // `codex exec` can't fork: the chat is handed over instead.
@@ -1079,6 +1114,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         instructions: sessionInstructions,
         clientId: promptId,
         fork: fork,
+        toolless: toolless,
         onThread: (threadId) {
           // Once the thread is up, so what Codex starts with it, such as MCP
           // servers, is never taken for a command.
@@ -1089,7 +1125,11 @@ class CodexAppServerRunner implements GaiaAgentRunner {
             process.client.stop(threadId);
           }
         },
-        onNewThread: (threadId) => _recordThread(threadId, kCodexToolsHash),
+        // A tool-less thread isn't recorded with Gaia's tools: one resumed
+        // as a chat's would be handed over instead.
+        onNewThread: (threadId) async {
+          if (!toolless) await _recordThread(threadId, kCodexToolsHash);
+        },
       );
       // A compaction has no reply of its own to show.
       if (compact && !result.isError) {
@@ -1364,6 +1404,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
 
   /// A stop's turn is only taken back straight after it: a send on another
   /// account's runner ends that here.
+  @override
   void forgetStop(String chatId) {
     _stoppedThreads.remove(chatId);
     _stoppedOpening.remove(chatId);
@@ -1536,6 +1577,7 @@ class CodexAccountRunners
     GaiaAccount? account,
     String? promptId,
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Before anything's awaited: a stop from here on is caught.
@@ -1560,6 +1602,7 @@ class CodexAccountRunners
         sessionInstructions: sessionInstructions,
         promptId: promptId,
         fork: fork,
+        toolless: toolless,
         onEvent: onEvent,
       );
     } finally {
@@ -1653,6 +1696,14 @@ class CodexAccountRunners
       if (runner.stoppedHere(chatId)) return runner.takeBack(chatId);
     }
     return 'Codex was not running it.';
+  }
+
+  @override
+  void forgetStop(String chatId) {
+    _stoppedOpening.remove(chatId);
+    for (final runner in _runners.values) {
+      runner.forgetStop(chatId);
+    }
   }
 
   @override

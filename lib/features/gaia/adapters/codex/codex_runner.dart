@@ -103,8 +103,17 @@ class CodexRunner implements GaiaAgentRunner {
     String? promptId,
     // Codex doesn't fork natively (GAIA_FORKING_HLD.md §6).
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
+    // `exec` always has its shell (GAIA_BTW_HLD.md §6).
+    if (toolless) {
+      return const GaiaTurnResult(
+        sessionId: '',
+        isError: true,
+        text: "Codex exec can't answer without its tools.",
+      );
+    }
     // Before anything's awaited: a stop from here on is caught.
     _starting.add(chatId);
     _stoppedStarting.remove(chatId);
@@ -248,6 +257,7 @@ class CodexRunner implements GaiaAgentRunner {
 
   /// A stop's turn is only taken back straight after it: a send elsewhere,
   /// such as on another account's runner, ends that.
+  @override
   void forgetStop(String chatId) {
     _stoppedStarting.remove(chatId);
     _stoppedRunning.remove(chatId);

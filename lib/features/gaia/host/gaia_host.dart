@@ -53,6 +53,9 @@ typedef GaiaRun = ({String chatId, String title});
 /// Leads a Gaia notification's source key; the chat id follows.
 const kGaiaNotificationKeyPrefix = 'gaia:';
 
+/// After the chat's id in a side question's notification key: the btw's.
+const kGaiaNotificationBtwSeparator = '#btw:';
+
 /// The main instance's half of Gaia (GAIA_HLD.md §3.2): launches the resident
 /// companion and relaunches it if it dies, owns Gaia's hotkeys and the Abort
 /// flag, and serves the companion's chats from the drift-backed
@@ -76,9 +79,9 @@ const kGaiaNotificationKeyPrefix = 'gaia:';
 /// `osStop {chatId}`, `osResume {chatId?}`, `autoConsented` (a bool),
 /// `setAuto {chatId, on, consented}`, `isAuto {chatId}` (a bool), `rearm`,
 /// and the `runs {runs}`, `runDone {chatId, title,
-/// body}`, `toasted {title, body}` and `drained` events. Main to companion: the `abort`, `stop
+/// body, btwId?}`, `toasted {title, body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
-/// {chatId}`, `split {left, top, width, height}`, `accent {argb}`, `settings
+/// {chatId, btwId?}`, `split {left, top, width, height}`, `accent {argb}`, `settings
 /// {..}` and `changed` events.
 class GaiaHost {
   /// The app uses [instance]. Tests pass a fake [pipe], their own
@@ -212,7 +215,8 @@ class GaiaHost {
   final usage = ValueNotifier<Map<String, GaiaAccountUsage>>(const {});
 
   final _attached = Completer<GaiaChatStore>();
-  void Function(String chatId, String title, String body)? _toast;
+  void Function(String chatId, String title, String body, {String? btwId})?
+  _toast;
 
   /// Where attached images go; null for none, where attaching fails.
   GaiaMedia? _media;
@@ -235,6 +239,7 @@ class GaiaHost {
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
   StreamSubscription<void>? _queueChanges;
+  StreamSubscription<void>? _btwChanges;
   StreamSubscription<void>? _chapterChanges;
   Timer? _changedSoon;
   var _settings = GaiaSettings.initial();
@@ -308,7 +313,13 @@ class GaiaHost {
   void attach({
     required GaiaRepository repository,
     required String deviceId,
-    required void Function(String chatId, String title, String body) toast,
+    required void Function(
+      String chatId,
+      String title,
+      String body, {
+      String? btwId,
+    })
+    toast,
     GaiaMedia? media,
     GaiaVoyagerReads? reads,
     GaiaExecutor? executor,
@@ -359,6 +370,11 @@ class GaiaHost {
     // The queue changes here, on the Gaia page and from other devices (§13).
     _queueChanges = repository.watchQueue().listen((_) {
       if (_pipe.connected) _pipe.notify('queue');
+    });
+    // Side questions change here and from other devices (GAIA_BTW_HLD.md
+    // §2); a streaming one's saves aren't heard.
+    _btwChanges = repository.watchBtws().listen((_) {
+      if (_pipe.connected) _pipe.notify('btws');
     });
     // Each chapter changed, by message id, null for unpinned: by sync too,
     // under a running chat the companion doesn't reload
@@ -424,6 +440,7 @@ class GaiaHost {
     unawaited(_settingsChanges?.cancel());
     unawaited(_draftChanges?.cancel());
     unawaited(_queueChanges?.cancel());
+    unawaited(_btwChanges?.cancel());
     unawaited(_chapterChanges?.cancel());
     await _power?.shutdown();
     await _beacon?.dispose();
@@ -830,7 +847,9 @@ class GaiaHost {
 
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
-  void openChat(String chatId) => _sendOrLaunch('openChat', {'chatId': chatId});
+  /// With [btwId], at that side question.
+  void openChat(String chatId, {String? btwId}) =>
+      _sendOrLaunch('openChat', {'chatId': chatId, 'btwId': ?btwId});
 
   /// Has the companion read [key]'s usage again (§6.4), if it's up: with none,
   /// there's no usage to correct.
@@ -1076,6 +1095,7 @@ class GaiaHost {
           params['chatId']! as String,
           params['title']! as String,
           params['body']! as String,
+          btwId: params['btwId'] as String?,
         );
       case 'toasted':
         final body = params['body']! as String;
@@ -1558,6 +1578,24 @@ class GaiaHost {
           params['chatId']! as String,
           params['drain']! as bool,
         );
+        return null;
+      case 'btws':
+        return [
+          for (final btw in await store.btws(params['chatId']! as String))
+            btw.toJson(),
+        ];
+      case 'putBtw':
+        final btw = GaiaBtw.fromJson(_map(params['btw']));
+        // Named as the other devices show it (GAIA_BTW_HLD.md §8.1).
+        return (await store.putBtw(
+          btw.copyWith(device: _beacon?.name ?? Platform.localHostname),
+        ))?.toJson();
+      case 'clearBtws':
+        return await store.clearBtws(params['chatId']! as String);
+      case 'restoreBtws':
+        await store.restoreBtws([
+          for (final id in params['ids']! as List) id as String,
+        ]);
         return null;
       default:
         throw GaiaPipeException('unknown method $method');

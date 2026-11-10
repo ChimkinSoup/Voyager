@@ -565,6 +565,60 @@ class GaiaChatStore {
     return written;
   });
 
+  /// [chatId]'s live side questions, oldest first (GAIA_BTW_HLD.md §2).
+  Future<List<GaiaBtw>> btws(String chatId) =>
+      _repository.listBtws(chatId: chatId);
+
+  /// A side question as the companion has it, versioned on from what's
+  /// stored; gives back what was written, or null for nothing. One cleared
+  /// meanwhile stays cleared, as does one whose chat was erased. Synced as
+  /// it starts and once it's done, not as it streams (§2).
+  Future<GaiaBtw?> putBtw(GaiaBtw btw) => _serial(() async {
+    final existing = await _repository.getBtw(btw.id);
+    if (existing != null && existing.isDeleted) return null;
+    if (isErasedAt((await _repository.getChat(btw.chatId))?.deletedAt)) {
+      return null;
+    }
+    final synced =
+        existing == null || btw.status != GaiaMessageStatus.streaming;
+    // Versioned only as it syncs: a version per streaming save would outrank
+    // a clear made meanwhile on another device, bringing the btw back.
+    final written = btw.copyWith(
+      version: (existing?.version ?? 0) + (synced ? 1 : 0),
+    );
+    await _repository.upsertBtw(written, recordLocalActivity: synced);
+    return written;
+  });
+
+  /// Every live side question of [chatId] cleared (§4.2); gives back their
+  /// ids, for [restoreBtws].
+  Future<List<String>> clearBtws(String chatId) => _serial(() async {
+    final now = utcNow();
+    final cleared = <String>[];
+    for (final btw in await _repository.listBtws(chatId: chatId)) {
+      await _repository.upsertBtw(
+        btw.copyWith(
+          deletedAt: now,
+          // One still streaming here was stopped first; elsewhere, it ends.
+          status: btw.status == GaiaMessageStatus.streaming
+              ? GaiaMessageStatus.cancelled
+              : null,
+        ),
+      );
+      cleared.add(btw.id);
+    }
+    return cleared;
+  });
+
+  /// The side questions [clearBtws] cleared, back (§4.2).
+  Future<void> restoreBtws(List<String> ids) => _serial(() async {
+    for (final id in ids) {
+      final btw = await _repository.getBtw(id);
+      if (btw == null || !btw.isDeleted || isErasedAt(btw.deletedAt)) continue;
+      await _repository.upsertBtw(btw.copyWith(clearDeletedAt: true));
+    }
+  });
+
   /// Writes that read what they change, one at a time: a tick written
   /// between a streaming reply's read and its write would be lost, as would
   /// a session [setSession] forgot under the chat [putMessage] read before.
@@ -577,7 +631,15 @@ class GaiaChatStore {
   }
 
   /// Marks messages a companion left streaming as [status]: the companion
-  /// that streamed them is gone, and their runs with it.
-  Future<void> endStreaming(GaiaMessageStatus status) =>
-      _repository.endStreaming(status);
+  /// that streamed them is gone, and their runs with it. So are this
+  /// device's side questions; another device's may still be running there.
+  Future<void> endStreaming(GaiaMessageStatus status) async {
+    await _repository.endStreaming(status);
+    for (final btw in await _repository.listBtws()) {
+      if (btw.status == GaiaMessageStatus.streaming &&
+          btw.deviceId == deviceId) {
+        await putBtw(btw.copyWith(status: status));
+      }
+    }
+  }
 }

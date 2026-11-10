@@ -428,6 +428,29 @@ class _DebugMenu extends StatelessWidget {
                   },
           ),
         ),
+        heading('Side questions'),
+        Text(
+          "The /btw panel and chip on the open chat, with made-up side "
+          'questions in place of its own: answered, with a notice, failed, '
+          'stopped, answering on another device, and one streaming here, '
+          'which Stop stops. Nothing is stored, synced or run; Clear history '
+          'clears only these, and Fork is refused. They go when the chat is '
+          'opened again.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            label: 'Show side questions',
+            onPressed: controller.currentChatId == null
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    controller.previewBtws();
+                  },
+          ),
+        ),
         heading('Screen read results'),
         Text(
           "A reply's os_* reads, with made-up results kept as this device "

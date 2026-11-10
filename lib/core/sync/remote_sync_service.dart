@@ -2320,6 +2320,8 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.gaiaBtw:
+        return pullGaiaBtw(documentIds: documentIds, documentData: documentData);
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -3284,6 +3286,24 @@ class RemoteSyncService {
           merged,
           recordLocalActivity: false,
         );
+      },
+    );
+  }
+
+  Future<bool> pullGaiaBtw({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaBtw,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getBtw(id);
+        final merged = mergeGaiaBtwFromRemote(data, id, local: local);
+        if (identical(merged, local)) return;
+        await _gaiaRepository.upsertBtw(merged, recordLocalActivity: false);
       },
     );
   }
@@ -7172,6 +7192,9 @@ class RemoteSyncService {
       case FirestoreCollections.gaiaQueue:
         if (record is! GaiaQueueItem) return null;
         return (id: record.id, payload: gaiaQueueItemToFirestore(record));
+      case FirestoreCollections.gaiaBtw:
+        if (record is! GaiaBtw) return null;
+        return (id: record.id, payload: gaiaBtwToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -8208,6 +8231,7 @@ class RemoteSyncService {
       pullGaiaDrafts(),
       pullGaiaMemories(),
       pullGaiaQueue(),
+      pullGaiaBtw(),
     ]);
   }
 
@@ -8551,6 +8575,7 @@ class LiveSyncController {
     FirestoreCollections.gaiaDrafts,
     FirestoreCollections.gaiaMemories,
     FirestoreCollections.gaiaQueue,
+    FirestoreCollections.gaiaBtw,
     FirestoreCollections.settings,
   ];
 

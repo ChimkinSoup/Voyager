@@ -6,6 +6,7 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 
 /// [SelectionHighlightLayer] only replaces Flutter's highlight on fields that
@@ -83,6 +84,19 @@ void main() {
       expect(find.byType(SelectionHighlightLayer), findsOneWidget);
       expect(fieldSelectionColor(tester), Colors.transparent);
     });
+
+    testWidgets('GaiaTextField', (tester) async {
+      await pump(
+        tester,
+        GaiaTextField(
+          controller: controller,
+          focusNode: focusNode,
+          maxLines: 8,
+        ),
+      );
+      expect(find.byType(SelectionHighlightLayer), findsOneWidget);
+      expect(fieldSelectionColor(tester), Colors.transparent);
+    });
   });
 
   group('single-line fields keep Flutter\'s selection', () {
@@ -105,6 +119,19 @@ void main() {
       await pump(
         tester,
         LabeledTextField(label: 'Name', controller: controller),
+      );
+      expect(find.byType(SelectionHighlightLayer), findsNothing);
+      expect(fieldSelectionColor(tester), isNot(Colors.transparent));
+    });
+
+    testWidgets('GaiaTextField', (tester) async {
+      await pump(
+        tester,
+        GaiaTextField(
+          controller: controller,
+          focusNode: focusNode,
+          maxLines: 1,
+        ),
       );
       expect(find.byType(SelectionHighlightLayer), findsNothing);
       expect(fieldSelectionColor(tester), isNot(Colors.transparent));

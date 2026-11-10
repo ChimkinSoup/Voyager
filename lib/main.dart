@@ -29,6 +29,7 @@ import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
+import 'package:voyager/core/dev/semantics_reparent_logger.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/gaia/companion/gaia_companion_main.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
@@ -51,6 +52,7 @@ Future<void> main([List<String> args = const []]) async {
   // Before the keyboard workaround, which wraps it and so keeps the known
   // debug-only desync out of the log.
   ErrorLogger.instance.install();
+  installSemanticsReparentLogger('voyager');
   // First, so a stall anywhere in startup is on the record too.
   unawaited(PerfStallLogger.instance.restore());
   installWindowsKeyboardWorkaround();

@@ -281,6 +281,7 @@ class ClaudeCodeRunner
     GaiaAccount? account,
     String? promptId,
     GaiaForkCut? fork,
+    bool toolless = false,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Kept from the CLI even typed past the palette (GAIA_NATIVE_COMMANDS.md
@@ -316,6 +317,7 @@ class ClaudeCodeRunner
       configDir: account?.dir ?? '',
       promptId: promptId,
       fork: fork,
+      toolless: toolless,
       onEvent: (event) {
         if (event is ClaudeTextDelta) streamed = true;
         if (event is ClaudeCompacted) compacted = event;
@@ -384,6 +386,7 @@ class ClaudeCodeRunner
     configDir: configDir,
     promptId: promptId,
     fork: null,
+    toolless: false,
     onEvent: onEvent,
   )).$1;
 
@@ -405,6 +408,7 @@ class ClaudeCodeRunner
     required String configDir,
     required String? promptId,
     required GaiaForkCut? fork,
+    required bool toolless,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     // Only a new session is made as a fork.
@@ -469,6 +473,7 @@ class ClaudeCodeRunner
         sessionId: sessionId ?? newSessionId,
         cut: cut,
         fork: forking,
+        toolless: toolless,
         sessionArgs: [
           if (instructions != null) ...[
             '--append-system-prompt-file',
@@ -554,8 +559,10 @@ class ClaudeCodeRunner
           await File(sessionFile).delete();
         } on FileSystemException catch (_) {}
       }
-      if (process.exited) {
+      // A tool-less turn's process has no next turn: it goes now.
+      if (process.exited || toolless) {
         _live.remove(chatId);
+        if (!process.exited) unawaited(process.kill());
       } else {
         process.idleAfter(_idleTimeout, () {
           if (_live[chatId] == process) _live.remove(chatId);
@@ -627,6 +634,7 @@ class ClaudeCodeRunner
         sessionId: sessionId,
         cut: null,
         fork: null,
+        toolless: false,
         sessionArgs: ['--session-id', sessionId],
       );
     } on ProcessException catch (error) {
@@ -735,6 +743,12 @@ class ClaudeCodeRunner
     await process.kill();
   }
 
+  @override
+  void forgetStop(String chatId) {
+    _stopped.remove(chatId);
+    _stoppedStarting.remove(chatId);
+  }
+
   /// Finds the stopped prompt in the session JSONL by the uuid Gaia gave it,
   /// then checks a resume cut to just before it starts cleanly: refused, or
   /// with flags it doesn't know, the CLI says so at once (checked on
@@ -775,6 +789,7 @@ class ClaudeCodeRunner
       sessionId: turn.sessionId,
       cut: cut,
       fork: null,
+      toolless: false,
       sessionArgs: ['--resume', turn.sessionId, ...cut.args],
     );
     final refused = await check.ready.timeout(
@@ -1031,6 +1046,7 @@ class _ClaudeProcess {
     required String sessionId,
     required _Rewind? cut,
     required GaiaForkCut? fork,
+    required bool toolless,
     required List<String> sessionArgs,
   }) async {
     await Directory(workingDirectory).create(recursive: true);
@@ -1054,12 +1070,19 @@ class _ClaudeProcess {
           '--verbose',
           '--include-partial-messages',
           '--safe-mode',
-          '--mcp-config',
-          mcpConfig,
-          '--permission-prompt-tool',
-          'stdio',
-          '--disallowedTools',
-          'AskUserQuestion',
+          // None of Gaia's, nor the CLI's own (GAIA_BTW_HLD.md §6): an empty
+          // list, which `init` then lists none of (checked on 2.1.319).
+          if (toolless) ...[
+            '--tools',
+            '',
+          ] else ...[
+            '--mcp-config',
+            mcpConfig,
+            '--permission-prompt-tool',
+            'stdio',
+            '--disallowedTools',
+            'AskUserQuestion',
+          ],
           '--model',
           model,
           if (effort != null) ...['--effort', effort],

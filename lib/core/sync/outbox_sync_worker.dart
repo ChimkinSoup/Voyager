@@ -907,6 +907,8 @@ class OutboxSyncWorker {
           DriftGaiaRepository(_db).getQueueItem,
           gaiaQueueItemToFirestore,
         );
+      case FirestoreCollections.gaiaBtw:
+        return byId(DriftGaiaRepository(_db).getBtw, gaiaBtwToFirestore);
       case FirestoreCollections.snippets:
         return byId(
           DriftSettingsRepository(_db).getSnippetRecord,

@@ -789,6 +789,7 @@ final _kinds = <TrashKind>[
     erasedWith: const [
       TrashChild(FirestoreCollections.gaiaMessages, ['chatId']),
       TrashChild(FirestoreCollections.gaiaQueue, ['chatId']),
+      TrashChild(FirestoreCollections.gaiaBtw, ['chatId']),
     ],
     // Attached images hang off the chat, not the message (GAIA_HLD.md §8).
     mediaOwner: FirestoreCollections.gaiaChats,
@@ -805,6 +806,13 @@ final _kinds = <TrashKind>[
     feature: TrashFeature.gaia,
     noun: 'queued prompt',
     wipe: ['text'],
+    listed: false,
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.gaiaBtw,
+    feature: TrashFeature.gaia,
+    noun: 'side question',
+    wipe: ['question', 'answer', 'error'],
     listed: false,
   ),
 ];

@@ -278,6 +278,274 @@ class GaiaMessageSearchCompanion
   }
 }
 
+class GaiaBtwSearch extends Table
+    with
+        TableInfo<GaiaBtwSearch, GaiaBtwSearchData>,
+        VirtualTableInfo<GaiaBtwSearch, GaiaBtwSearchData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  GaiaBtwSearch(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _btwIdMeta = const VerificationMeta('btwId');
+  late final GeneratedColumn<String> btwId = GeneratedColumn<String>(
+    'btw_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _chatIdMeta = const VerificationMeta('chatId');
+  late final GeneratedColumn<String> chatId = GeneratedColumn<String>(
+    'chat_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: '',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [body, btwId, chatId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_btw_search';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaBtwSearchData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('btw_id')) {
+      context.handle(
+        _btwIdMeta,
+        btwId.isAcceptableOrUnknown(data['btw_id']!, _btwIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_btwIdMeta);
+    }
+    if (data.containsKey('chat_id')) {
+      context.handle(
+        _chatIdMeta,
+        chatId.isAcceptableOrUnknown(data['chat_id']!, _chatIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chatIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => const {};
+  @override
+  GaiaBtwSearchData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaBtwSearchData(
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      btwId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}btw_id'],
+      )!,
+      chatId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chat_id'],
+      )!,
+    );
+  }
+
+  @override
+  GaiaBtwSearch createAlias(String alias) {
+    return GaiaBtwSearch(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+  @override
+  String get moduleAndArgs => 'fts5(body, btw_id UNINDEXED, chat_id UNINDEXED)';
+}
+
+class GaiaBtwSearchData extends DataClass
+    implements Insertable<GaiaBtwSearchData> {
+  final String body;
+  final String btwId;
+  final String chatId;
+  const GaiaBtwSearchData({
+    required this.body,
+    required this.btwId,
+    required this.chatId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['body'] = Variable<String>(body);
+    map['btw_id'] = Variable<String>(btwId);
+    map['chat_id'] = Variable<String>(chatId);
+    return map;
+  }
+
+  GaiaBtwSearchCompanion toCompanion(bool nullToAbsent) {
+    return GaiaBtwSearchCompanion(
+      body: Value(body),
+      btwId: Value(btwId),
+      chatId: Value(chatId),
+    );
+  }
+
+  factory GaiaBtwSearchData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaBtwSearchData(
+      body: serializer.fromJson<String>(json['body']),
+      btwId: serializer.fromJson<String>(json['btw_id']),
+      chatId: serializer.fromJson<String>(json['chat_id']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'body': serializer.toJson<String>(body),
+      'btw_id': serializer.toJson<String>(btwId),
+      'chat_id': serializer.toJson<String>(chatId),
+    };
+  }
+
+  GaiaBtwSearchData copyWith({String? body, String? btwId, String? chatId}) =>
+      GaiaBtwSearchData(
+        body: body ?? this.body,
+        btwId: btwId ?? this.btwId,
+        chatId: chatId ?? this.chatId,
+      );
+  GaiaBtwSearchData copyWithCompanion(GaiaBtwSearchCompanion data) {
+    return GaiaBtwSearchData(
+      body: data.body.present ? data.body.value : this.body,
+      btwId: data.btwId.present ? data.btwId.value : this.btwId,
+      chatId: data.chatId.present ? data.chatId.value : this.chatId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaBtwSearchData(')
+          ..write('body: $body, ')
+          ..write('btwId: $btwId, ')
+          ..write('chatId: $chatId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(body, btwId, chatId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaBtwSearchData &&
+          other.body == this.body &&
+          other.btwId == this.btwId &&
+          other.chatId == this.chatId);
+}
+
+class GaiaBtwSearchCompanion extends UpdateCompanion<GaiaBtwSearchData> {
+  final Value<String> body;
+  final Value<String> btwId;
+  final Value<String> chatId;
+  final Value<int> rowid;
+  const GaiaBtwSearchCompanion({
+    this.body = const Value.absent(),
+    this.btwId = const Value.absent(),
+    this.chatId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaBtwSearchCompanion.insert({
+    required String body,
+    required String btwId,
+    required String chatId,
+    this.rowid = const Value.absent(),
+  }) : body = Value(body),
+       btwId = Value(btwId),
+       chatId = Value(chatId);
+  static Insertable<GaiaBtwSearchData> custom({
+    Expression<String>? body,
+    Expression<String>? btwId,
+    Expression<String>? chatId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (body != null) 'body': body,
+      if (btwId != null) 'btw_id': btwId,
+      if (chatId != null) 'chat_id': chatId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaBtwSearchCompanion copyWith({
+    Value<String>? body,
+    Value<String>? btwId,
+    Value<String>? chatId,
+    Value<int>? rowid,
+  }) {
+    return GaiaBtwSearchCompanion(
+      body: body ?? this.body,
+      btwId: btwId ?? this.btwId,
+      chatId: chatId ?? this.chatId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (btwId.present) {
+      map['btw_id'] = Variable<String>(btwId.value);
+    }
+    if (chatId.present) {
+      map['chat_id'] = Variable<String>(chatId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaBtwSearchCompanion(')
+          ..write('body: $body, ')
+          ..write('btwId: $btwId, ')
+          ..write('chatId: $chatId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $JournalsTableTable extends JournalsTable
     with TableInfo<$JournalsTableTable, JournalsTableData> {
   @override
@@ -62798,10 +63066,1001 @@ class GaiaQueueTableCompanion extends UpdateCompanion<GaiaQueueTableData> {
   }
 }
 
+class $GaiaBtwTableTable extends GaiaBtwTable
+    with TableInfo<$GaiaBtwTableTable, GaiaBtwTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaBtwTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chatIdMeta = const VerificationMeta('chatId');
+  @override
+  late final GeneratedColumn<String> chatId = GeneratedColumn<String>(
+    'chat_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _questionMeta = const VerificationMeta(
+    'question',
+  );
+  @override
+  late final GeneratedColumn<String> question = GeneratedColumn<String>(
+    'question',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _answerMeta = const VerificationMeta('answer');
+  @override
+  late final GeneratedColumn<String> answer = GeneratedColumn<String>(
+    'answer',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _errorMeta = const VerificationMeta('error');
+  @override
+  late final GeneratedColumn<String> error = GeneratedColumn<String>(
+    'error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _anchorSeqMeta = const VerificationMeta(
+    'anchorSeq',
+  );
+  @override
+  late final GeneratedColumn<int> anchorSeq = GeneratedColumn<int>(
+    'anchor_seq',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceMeta = const VerificationMeta('device');
+  @override
+  late final GeneratedColumn<String> device = GeneratedColumn<String>(
+    'device',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _tierMeta = const VerificationMeta('tier');
+  @override
+  late final GeneratedColumn<String> tier = GeneratedColumn<String>(
+    'tier',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+    'model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _adapterMeta = const VerificationMeta(
+    'adapter',
+  );
+  @override
+  late final GeneratedColumn<String> adapter = GeneratedColumn<String>(
+    'adapter',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _accountMeta = const VerificationMeta(
+    'account',
+  );
+  @override
+  late final GeneratedColumn<String> account = GeneratedColumn<String>(
+    'account',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sessionJsonMeta = const VerificationMeta(
+    'sessionJson',
+  );
+  @override
+  late final GeneratedColumn<String> sessionJson = GeneratedColumn<String>(
+    'session_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    chatId,
+    question,
+    answer,
+    status,
+    error,
+    anchorSeq,
+    deviceId,
+    device,
+    tier,
+    model,
+    adapter,
+    account,
+    sessionJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_btw_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaBtwTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('chat_id')) {
+      context.handle(
+        _chatIdMeta,
+        chatId.isAcceptableOrUnknown(data['chat_id']!, _chatIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chatIdMeta);
+    }
+    if (data.containsKey('question')) {
+      context.handle(
+        _questionMeta,
+        question.isAcceptableOrUnknown(data['question']!, _questionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_questionMeta);
+    }
+    if (data.containsKey('answer')) {
+      context.handle(
+        _answerMeta,
+        answer.isAcceptableOrUnknown(data['answer']!, _answerMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('error')) {
+      context.handle(
+        _errorMeta,
+        error.isAcceptableOrUnknown(data['error']!, _errorMeta),
+      );
+    }
+    if (data.containsKey('anchor_seq')) {
+      context.handle(
+        _anchorSeqMeta,
+        anchorSeq.isAcceptableOrUnknown(data['anchor_seq']!, _anchorSeqMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_anchorSeqMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('device')) {
+      context.handle(
+        _deviceMeta,
+        device.isAcceptableOrUnknown(data['device']!, _deviceMeta),
+      );
+    }
+    if (data.containsKey('tier')) {
+      context.handle(
+        _tierMeta,
+        tier.isAcceptableOrUnknown(data['tier']!, _tierMeta),
+      );
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    }
+    if (data.containsKey('adapter')) {
+      context.handle(
+        _adapterMeta,
+        adapter.isAcceptableOrUnknown(data['adapter']!, _adapterMeta),
+      );
+    }
+    if (data.containsKey('account')) {
+      context.handle(
+        _accountMeta,
+        account.isAcceptableOrUnknown(data['account']!, _accountMeta),
+      );
+    }
+    if (data.containsKey('session_json')) {
+      context.handle(
+        _sessionJsonMeta,
+        sessionJson.isAcceptableOrUnknown(
+          data['session_json']!,
+          _sessionJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GaiaBtwTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaBtwTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      chatId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chat_id'],
+      )!,
+      question: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}question'],
+      )!,
+      answer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}answer'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      error: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error'],
+      ),
+      anchorSeq: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anchor_seq'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      device: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device'],
+      )!,
+      tier: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tier'],
+      ),
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      ),
+      adapter: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}adapter'],
+      ),
+      account: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account'],
+      ),
+      sessionJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_json'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $GaiaBtwTableTable createAlias(String alias) {
+    return $GaiaBtwTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaBtwTableData extends DataClass
+    implements Insertable<GaiaBtwTableData> {
+  final String id;
+  final String chatId;
+  final String question;
+  final String answer;
+  final String status;
+  final String? error;
+
+  /// The chat's last message it saw as the chat's history; -1 for none.
+  final int anchorSeq;
+
+  /// The device that answered it, and that device's name.
+  final String deviceId;
+  final String device;
+  final String? tier;
+  final String? model;
+  final String? adapter;
+  final String? account;
+
+  /// `GaiaBtwSession` as JSON: its own CLI session, for forking it; null
+  /// for none.
+  final String? sessionJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const GaiaBtwTableData({
+    required this.id,
+    required this.chatId,
+    required this.question,
+    required this.answer,
+    required this.status,
+    this.error,
+    required this.anchorSeq,
+    required this.deviceId,
+    required this.device,
+    this.tier,
+    this.model,
+    this.adapter,
+    this.account,
+    this.sessionJson,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['chat_id'] = Variable<String>(chatId);
+    map['question'] = Variable<String>(question);
+    map['answer'] = Variable<String>(answer);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || error != null) {
+      map['error'] = Variable<String>(error);
+    }
+    map['anchor_seq'] = Variable<int>(anchorSeq);
+    map['device_id'] = Variable<String>(deviceId);
+    map['device'] = Variable<String>(device);
+    if (!nullToAbsent || tier != null) {
+      map['tier'] = Variable<String>(tier);
+    }
+    if (!nullToAbsent || model != null) {
+      map['model'] = Variable<String>(model);
+    }
+    if (!nullToAbsent || adapter != null) {
+      map['adapter'] = Variable<String>(adapter);
+    }
+    if (!nullToAbsent || account != null) {
+      map['account'] = Variable<String>(account);
+    }
+    if (!nullToAbsent || sessionJson != null) {
+      map['session_json'] = Variable<String>(sessionJson);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  GaiaBtwTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaBtwTableCompanion(
+      id: Value(id),
+      chatId: Value(chatId),
+      question: Value(question),
+      answer: Value(answer),
+      status: Value(status),
+      error: error == null && nullToAbsent
+          ? const Value.absent()
+          : Value(error),
+      anchorSeq: Value(anchorSeq),
+      deviceId: Value(deviceId),
+      device: Value(device),
+      tier: tier == null && nullToAbsent ? const Value.absent() : Value(tier),
+      model: model == null && nullToAbsent
+          ? const Value.absent()
+          : Value(model),
+      adapter: adapter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(adapter),
+      account: account == null && nullToAbsent
+          ? const Value.absent()
+          : Value(account),
+      sessionJson: sessionJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory GaiaBtwTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaBtwTableData(
+      id: serializer.fromJson<String>(json['id']),
+      chatId: serializer.fromJson<String>(json['chatId']),
+      question: serializer.fromJson<String>(json['question']),
+      answer: serializer.fromJson<String>(json['answer']),
+      status: serializer.fromJson<String>(json['status']),
+      error: serializer.fromJson<String?>(json['error']),
+      anchorSeq: serializer.fromJson<int>(json['anchorSeq']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      device: serializer.fromJson<String>(json['device']),
+      tier: serializer.fromJson<String?>(json['tier']),
+      model: serializer.fromJson<String?>(json['model']),
+      adapter: serializer.fromJson<String?>(json['adapter']),
+      account: serializer.fromJson<String?>(json['account']),
+      sessionJson: serializer.fromJson<String?>(json['sessionJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'chatId': serializer.toJson<String>(chatId),
+      'question': serializer.toJson<String>(question),
+      'answer': serializer.toJson<String>(answer),
+      'status': serializer.toJson<String>(status),
+      'error': serializer.toJson<String?>(error),
+      'anchorSeq': serializer.toJson<int>(anchorSeq),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'device': serializer.toJson<String>(device),
+      'tier': serializer.toJson<String?>(tier),
+      'model': serializer.toJson<String?>(model),
+      'adapter': serializer.toJson<String?>(adapter),
+      'account': serializer.toJson<String?>(account),
+      'sessionJson': serializer.toJson<String?>(sessionJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  GaiaBtwTableData copyWith({
+    String? id,
+    String? chatId,
+    String? question,
+    String? answer,
+    String? status,
+    Value<String?> error = const Value.absent(),
+    int? anchorSeq,
+    String? deviceId,
+    String? device,
+    Value<String?> tier = const Value.absent(),
+    Value<String?> model = const Value.absent(),
+    Value<String?> adapter = const Value.absent(),
+    Value<String?> account = const Value.absent(),
+    Value<String?> sessionJson = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => GaiaBtwTableData(
+    id: id ?? this.id,
+    chatId: chatId ?? this.chatId,
+    question: question ?? this.question,
+    answer: answer ?? this.answer,
+    status: status ?? this.status,
+    error: error.present ? error.value : this.error,
+    anchorSeq: anchorSeq ?? this.anchorSeq,
+    deviceId: deviceId ?? this.deviceId,
+    device: device ?? this.device,
+    tier: tier.present ? tier.value : this.tier,
+    model: model.present ? model.value : this.model,
+    adapter: adapter.present ? adapter.value : this.adapter,
+    account: account.present ? account.value : this.account,
+    sessionJson: sessionJson.present ? sessionJson.value : this.sessionJson,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  GaiaBtwTableData copyWithCompanion(GaiaBtwTableCompanion data) {
+    return GaiaBtwTableData(
+      id: data.id.present ? data.id.value : this.id,
+      chatId: data.chatId.present ? data.chatId.value : this.chatId,
+      question: data.question.present ? data.question.value : this.question,
+      answer: data.answer.present ? data.answer.value : this.answer,
+      status: data.status.present ? data.status.value : this.status,
+      error: data.error.present ? data.error.value : this.error,
+      anchorSeq: data.anchorSeq.present ? data.anchorSeq.value : this.anchorSeq,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      device: data.device.present ? data.device.value : this.device,
+      tier: data.tier.present ? data.tier.value : this.tier,
+      model: data.model.present ? data.model.value : this.model,
+      adapter: data.adapter.present ? data.adapter.value : this.adapter,
+      account: data.account.present ? data.account.value : this.account,
+      sessionJson: data.sessionJson.present
+          ? data.sessionJson.value
+          : this.sessionJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaBtwTableData(')
+          ..write('id: $id, ')
+          ..write('chatId: $chatId, ')
+          ..write('question: $question, ')
+          ..write('answer: $answer, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('anchorSeq: $anchorSeq, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('device: $device, ')
+          ..write('tier: $tier, ')
+          ..write('model: $model, ')
+          ..write('adapter: $adapter, ')
+          ..write('account: $account, ')
+          ..write('sessionJson: $sessionJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    chatId,
+    question,
+    answer,
+    status,
+    error,
+    anchorSeq,
+    deviceId,
+    device,
+    tier,
+    model,
+    adapter,
+    account,
+    sessionJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaBtwTableData &&
+          other.id == this.id &&
+          other.chatId == this.chatId &&
+          other.question == this.question &&
+          other.answer == this.answer &&
+          other.status == this.status &&
+          other.error == this.error &&
+          other.anchorSeq == this.anchorSeq &&
+          other.deviceId == this.deviceId &&
+          other.device == this.device &&
+          other.tier == this.tier &&
+          other.model == this.model &&
+          other.adapter == this.adapter &&
+          other.account == this.account &&
+          other.sessionJson == this.sessionJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class GaiaBtwTableCompanion extends UpdateCompanion<GaiaBtwTableData> {
+  final Value<String> id;
+  final Value<String> chatId;
+  final Value<String> question;
+  final Value<String> answer;
+  final Value<String> status;
+  final Value<String?> error;
+  final Value<int> anchorSeq;
+  final Value<String> deviceId;
+  final Value<String> device;
+  final Value<String?> tier;
+  final Value<String?> model;
+  final Value<String?> adapter;
+  final Value<String?> account;
+  final Value<String?> sessionJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const GaiaBtwTableCompanion({
+    this.id = const Value.absent(),
+    this.chatId = const Value.absent(),
+    this.question = const Value.absent(),
+    this.answer = const Value.absent(),
+    this.status = const Value.absent(),
+    this.error = const Value.absent(),
+    this.anchorSeq = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.device = const Value.absent(),
+    this.tier = const Value.absent(),
+    this.model = const Value.absent(),
+    this.adapter = const Value.absent(),
+    this.account = const Value.absent(),
+    this.sessionJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaBtwTableCompanion.insert({
+    required String id,
+    required String chatId,
+    required String question,
+    this.answer = const Value.absent(),
+    required String status,
+    this.error = const Value.absent(),
+    required int anchorSeq,
+    required String deviceId,
+    this.device = const Value.absent(),
+    this.tier = const Value.absent(),
+    this.model = const Value.absent(),
+    this.adapter = const Value.absent(),
+    this.account = const Value.absent(),
+    this.sessionJson = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       chatId = Value(chatId),
+       question = Value(question),
+       status = Value(status),
+       anchorSeq = Value(anchorSeq),
+       deviceId = Value(deviceId),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<GaiaBtwTableData> custom({
+    Expression<String>? id,
+    Expression<String>? chatId,
+    Expression<String>? question,
+    Expression<String>? answer,
+    Expression<String>? status,
+    Expression<String>? error,
+    Expression<int>? anchorSeq,
+    Expression<String>? deviceId,
+    Expression<String>? device,
+    Expression<String>? tier,
+    Expression<String>? model,
+    Expression<String>? adapter,
+    Expression<String>? account,
+    Expression<String>? sessionJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (chatId != null) 'chat_id': chatId,
+      if (question != null) 'question': question,
+      if (answer != null) 'answer': answer,
+      if (status != null) 'status': status,
+      if (error != null) 'error': error,
+      if (anchorSeq != null) 'anchor_seq': anchorSeq,
+      if (deviceId != null) 'device_id': deviceId,
+      if (device != null) 'device': device,
+      if (tier != null) 'tier': tier,
+      if (model != null) 'model': model,
+      if (adapter != null) 'adapter': adapter,
+      if (account != null) 'account': account,
+      if (sessionJson != null) 'session_json': sessionJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaBtwTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? chatId,
+    Value<String>? question,
+    Value<String>? answer,
+    Value<String>? status,
+    Value<String?>? error,
+    Value<int>? anchorSeq,
+    Value<String>? deviceId,
+    Value<String>? device,
+    Value<String?>? tier,
+    Value<String?>? model,
+    Value<String?>? adapter,
+    Value<String?>? account,
+    Value<String?>? sessionJson,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaBtwTableCompanion(
+      id: id ?? this.id,
+      chatId: chatId ?? this.chatId,
+      question: question ?? this.question,
+      answer: answer ?? this.answer,
+      status: status ?? this.status,
+      error: error ?? this.error,
+      anchorSeq: anchorSeq ?? this.anchorSeq,
+      deviceId: deviceId ?? this.deviceId,
+      device: device ?? this.device,
+      tier: tier ?? this.tier,
+      model: model ?? this.model,
+      adapter: adapter ?? this.adapter,
+      account: account ?? this.account,
+      sessionJson: sessionJson ?? this.sessionJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (chatId.present) {
+      map['chat_id'] = Variable<String>(chatId.value);
+    }
+    if (question.present) {
+      map['question'] = Variable<String>(question.value);
+    }
+    if (answer.present) {
+      map['answer'] = Variable<String>(answer.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (error.present) {
+      map['error'] = Variable<String>(error.value);
+    }
+    if (anchorSeq.present) {
+      map['anchor_seq'] = Variable<int>(anchorSeq.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (device.present) {
+      map['device'] = Variable<String>(device.value);
+    }
+    if (tier.present) {
+      map['tier'] = Variable<String>(tier.value);
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (adapter.present) {
+      map['adapter'] = Variable<String>(adapter.value);
+    }
+    if (account.present) {
+      map['account'] = Variable<String>(account.value);
+    }
+    if (sessionJson.present) {
+      map['session_json'] = Variable<String>(sessionJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaBtwTableCompanion(')
+          ..write('id: $id, ')
+          ..write('chatId: $chatId, ')
+          ..write('question: $question, ')
+          ..write('answer: $answer, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('anchorSeq: $anchorSeq, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('device: $device, ')
+          ..write('tier: $tier, ')
+          ..write('model: $model, ')
+          ..write('adapter: $adapter, ')
+          ..write('account: $account, ')
+          ..write('sessionJson: $sessionJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final GaiaMessageSearch gaiaMessageSearch = GaiaMessageSearch(this);
+  late final GaiaBtwSearch gaiaBtwSearch = GaiaBtwSearch(this);
   late final $JournalsTableTable journalsTable = $JournalsTableTable(this);
   late final $JournalEntriesTableTable journalEntriesTable =
       $JournalEntriesTableTable(this);
@@ -62958,6 +64217,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $GaiaMemoriesTableTable gaiaMemoriesTable =
       $GaiaMemoriesTableTable(this);
   late final $GaiaQueueTableTable gaiaQueueTable = $GaiaQueueTableTable(this);
+  late final $GaiaBtwTableTable gaiaBtwTable = $GaiaBtwTableTable(this);
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -63022,12 +64282,17 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_gaia_messages_chat',
     'CREATE INDEX idx_gaia_messages_chat ON gaia_messages_table (chat_id, seq)',
   );
+  late final Index idxGaiaBtwChat = Index(
+    'idx_gaia_btw_chat',
+    'CREATE INDEX idx_gaia_btw_chat ON gaia_btw_table (chat_id, created_at)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     gaiaMessageSearch,
+    gaiaBtwSearch,
     journalsTable,
     journalEntriesTable,
     dreamEntriesTable,
@@ -63108,6 +64373,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaDraftsTable,
     gaiaMemoriesTable,
     gaiaQueueTable,
+    gaiaBtwTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -63124,6 +64390,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxLeetcodeCheatSectionsTab,
     idxLeetcodeCheatEntriesSection,
     idxGaiaMessagesChat,
+    idxGaiaBtwChat,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -63294,6 +64561,168 @@ typedef $GaiaMessageSearchProcessedTableManager =
         BaseReferences<_$AppDatabase, GaiaMessageSearch, GaiaMessageSearchData>,
       ),
       GaiaMessageSearchData,
+      PrefetchHooks Function()
+    >;
+typedef $GaiaBtwSearchCreateCompanionBuilder =
+    GaiaBtwSearchCompanion Function({
+      required String body,
+      required String btwId,
+      required String chatId,
+      Value<int> rowid,
+    });
+typedef $GaiaBtwSearchUpdateCompanionBuilder =
+    GaiaBtwSearchCompanion Function({
+      Value<String> body,
+      Value<String> btwId,
+      Value<String> chatId,
+      Value<int> rowid,
+    });
+
+class $GaiaBtwSearchFilterComposer
+    extends Composer<_$AppDatabase, GaiaBtwSearch> {
+  $GaiaBtwSearchFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get btwId => $composableBuilder(
+    column: $table.btwId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chatId => $composableBuilder(
+    column: $table.chatId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $GaiaBtwSearchOrderingComposer
+    extends Composer<_$AppDatabase, GaiaBtwSearch> {
+  $GaiaBtwSearchOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get btwId => $composableBuilder(
+    column: $table.btwId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chatId => $composableBuilder(
+    column: $table.chatId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $GaiaBtwSearchAnnotationComposer
+    extends Composer<_$AppDatabase, GaiaBtwSearch> {
+  $GaiaBtwSearchAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get btwId =>
+      $composableBuilder(column: $table.btwId, builder: (column) => column);
+
+  GeneratedColumn<String> get chatId =>
+      $composableBuilder(column: $table.chatId, builder: (column) => column);
+}
+
+class $GaiaBtwSearchTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          GaiaBtwSearch,
+          GaiaBtwSearchData,
+          $GaiaBtwSearchFilterComposer,
+          $GaiaBtwSearchOrderingComposer,
+          $GaiaBtwSearchAnnotationComposer,
+          $GaiaBtwSearchCreateCompanionBuilder,
+          $GaiaBtwSearchUpdateCompanionBuilder,
+          (
+            GaiaBtwSearchData,
+            BaseReferences<_$AppDatabase, GaiaBtwSearch, GaiaBtwSearchData>,
+          ),
+          GaiaBtwSearchData,
+          PrefetchHooks Function()
+        > {
+  $GaiaBtwSearchTableManager(_$AppDatabase db, GaiaBtwSearch table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $GaiaBtwSearchFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $GaiaBtwSearchOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $GaiaBtwSearchAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> body = const Value.absent(),
+                Value<String> btwId = const Value.absent(),
+                Value<String> chatId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaBtwSearchCompanion(
+                body: body,
+                btwId: btwId,
+                chatId: chatId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String body,
+                required String btwId,
+                required String chatId,
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaBtwSearchCompanion.insert(
+                body: body,
+                btwId: btwId,
+                chatId: chatId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $GaiaBtwSearchProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      GaiaBtwSearch,
+      GaiaBtwSearchData,
+      $GaiaBtwSearchFilterComposer,
+      $GaiaBtwSearchOrderingComposer,
+      $GaiaBtwSearchAnnotationComposer,
+      $GaiaBtwSearchCreateCompanionBuilder,
+      $GaiaBtwSearchUpdateCompanionBuilder,
+      (
+        GaiaBtwSearchData,
+        BaseReferences<_$AppDatabase, GaiaBtwSearch, GaiaBtwSearchData>,
+      ),
+      GaiaBtwSearchData,
       PrefetchHooks Function()
     >;
 typedef $$JournalsTableTableCreateCompanionBuilder =
@@ -93026,12 +94455,463 @@ typedef $$GaiaQueueTableTableProcessedTableManager =
       GaiaQueueTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaBtwTableTableCreateCompanionBuilder =
+    GaiaBtwTableCompanion Function({
+      required String id,
+      required String chatId,
+      required String question,
+      Value<String> answer,
+      required String status,
+      Value<String?> error,
+      required int anchorSeq,
+      required String deviceId,
+      Value<String> device,
+      Value<String?> tier,
+      Value<String?> model,
+      Value<String?> adapter,
+      Value<String?> account,
+      Value<String?> sessionJson,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaBtwTableTableUpdateCompanionBuilder =
+    GaiaBtwTableCompanion Function({
+      Value<String> id,
+      Value<String> chatId,
+      Value<String> question,
+      Value<String> answer,
+      Value<String> status,
+      Value<String?> error,
+      Value<int> anchorSeq,
+      Value<String> deviceId,
+      Value<String> device,
+      Value<String?> tier,
+      Value<String?> model,
+      Value<String?> adapter,
+      Value<String?> account,
+      Value<String?> sessionJson,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaBtwTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaBtwTableTable> {
+  $$GaiaBtwTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chatId => $composableBuilder(
+    column: $table.chatId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get question => $composableBuilder(
+    column: $table.question,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get answer => $composableBuilder(
+    column: $table.answer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get anchorSeq => $composableBuilder(
+    column: $table.anchorSeq,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get device => $composableBuilder(
+    column: $table.device,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tier => $composableBuilder(
+    column: $table.tier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get adapter => $composableBuilder(
+    column: $table.adapter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get account => $composableBuilder(
+    column: $table.account,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionJson => $composableBuilder(
+    column: $table.sessionJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaBtwTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaBtwTableTable> {
+  $$GaiaBtwTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chatId => $composableBuilder(
+    column: $table.chatId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get question => $composableBuilder(
+    column: $table.question,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get answer => $composableBuilder(
+    column: $table.answer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get anchorSeq => $composableBuilder(
+    column: $table.anchorSeq,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get device => $composableBuilder(
+    column: $table.device,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tier => $composableBuilder(
+    column: $table.tier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get adapter => $composableBuilder(
+    column: $table.adapter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get account => $composableBuilder(
+    column: $table.account,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionJson => $composableBuilder(
+    column: $table.sessionJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaBtwTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaBtwTableTable> {
+  $$GaiaBtwTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get chatId =>
+      $composableBuilder(column: $table.chatId, builder: (column) => column);
+
+  GeneratedColumn<String> get question =>
+      $composableBuilder(column: $table.question, builder: (column) => column);
+
+  GeneratedColumn<String> get answer =>
+      $composableBuilder(column: $table.answer, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get error =>
+      $composableBuilder(column: $table.error, builder: (column) => column);
+
+  GeneratedColumn<int> get anchorSeq =>
+      $composableBuilder(column: $table.anchorSeq, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get device =>
+      $composableBuilder(column: $table.device, builder: (column) => column);
+
+  GeneratedColumn<String> get tier =>
+      $composableBuilder(column: $table.tier, builder: (column) => column);
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<String> get adapter =>
+      $composableBuilder(column: $table.adapter, builder: (column) => column);
+
+  GeneratedColumn<String> get account =>
+      $composableBuilder(column: $table.account, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionJson => $composableBuilder(
+    column: $table.sessionJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$GaiaBtwTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaBtwTableTable,
+          GaiaBtwTableData,
+          $$GaiaBtwTableTableFilterComposer,
+          $$GaiaBtwTableTableOrderingComposer,
+          $$GaiaBtwTableTableAnnotationComposer,
+          $$GaiaBtwTableTableCreateCompanionBuilder,
+          $$GaiaBtwTableTableUpdateCompanionBuilder,
+          (
+            GaiaBtwTableData,
+            BaseReferences<_$AppDatabase, $GaiaBtwTableTable, GaiaBtwTableData>,
+          ),
+          GaiaBtwTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaBtwTableTableTableManager(_$AppDatabase db, $GaiaBtwTableTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaBtwTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GaiaBtwTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GaiaBtwTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> chatId = const Value.absent(),
+                Value<String> question = const Value.absent(),
+                Value<String> answer = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<int> anchorSeq = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<String> device = const Value.absent(),
+                Value<String?> tier = const Value.absent(),
+                Value<String?> model = const Value.absent(),
+                Value<String?> adapter = const Value.absent(),
+                Value<String?> account = const Value.absent(),
+                Value<String?> sessionJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaBtwTableCompanion(
+                id: id,
+                chatId: chatId,
+                question: question,
+                answer: answer,
+                status: status,
+                error: error,
+                anchorSeq: anchorSeq,
+                deviceId: deviceId,
+                device: device,
+                tier: tier,
+                model: model,
+                adapter: adapter,
+                account: account,
+                sessionJson: sessionJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String chatId,
+                required String question,
+                Value<String> answer = const Value.absent(),
+                required String status,
+                Value<String?> error = const Value.absent(),
+                required int anchorSeq,
+                required String deviceId,
+                Value<String> device = const Value.absent(),
+                Value<String?> tier = const Value.absent(),
+                Value<String?> model = const Value.absent(),
+                Value<String?> adapter = const Value.absent(),
+                Value<String?> account = const Value.absent(),
+                Value<String?> sessionJson = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaBtwTableCompanion.insert(
+                id: id,
+                chatId: chatId,
+                question: question,
+                answer: answer,
+                status: status,
+                error: error,
+                anchorSeq: anchorSeq,
+                deviceId: deviceId,
+                device: device,
+                tier: tier,
+                model: model,
+                adapter: adapter,
+                account: account,
+                sessionJson: sessionJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaBtwTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaBtwTableTable,
+      GaiaBtwTableData,
+      $$GaiaBtwTableTableFilterComposer,
+      $$GaiaBtwTableTableOrderingComposer,
+      $$GaiaBtwTableTableAnnotationComposer,
+      $$GaiaBtwTableTableCreateCompanionBuilder,
+      $$GaiaBtwTableTableUpdateCompanionBuilder,
+      (
+        GaiaBtwTableData,
+        BaseReferences<_$AppDatabase, $GaiaBtwTableTable, GaiaBtwTableData>,
+      ),
+      GaiaBtwTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $GaiaMessageSearchTableManager get gaiaMessageSearch =>
       $GaiaMessageSearchTableManager(_db, _db.gaiaMessageSearch);
+  $GaiaBtwSearchTableManager get gaiaBtwSearch =>
+      $GaiaBtwSearchTableManager(_db, _db.gaiaBtwSearch);
   $$JournalsTableTableTableManager get journalsTable =>
       $$JournalsTableTableTableManager(_db, _db.journalsTable);
   $$JournalEntriesTableTableTableManager get journalEntriesTable =>
@@ -93257,4 +95137,6 @@ class $AppDatabaseManager {
       $$GaiaMemoriesTableTableTableManager(_db, _db.gaiaMemoriesTable);
   $$GaiaQueueTableTableTableManager get gaiaQueueTable =>
       $$GaiaQueueTableTableTableManager(_db, _db.gaiaQueueTable);
+  $$GaiaBtwTableTableTableManager get gaiaBtwTable =>
+      $$GaiaBtwTableTableTableManager(_db, _db.gaiaBtwTable);
 }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/dev/semantics_reparent_logger.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -35,14 +36,27 @@ import 'package:window_manager/window_manager.dart';
 /// so hot reload reaches Gaia's UI. See [_registerDevHotkeys].
 Future<void> gaiaCompanionMain({bool dev = false}) async {
   WidgetsFlutterBinding.ensureInitialized();
+  installSemanticsReparentLogger('gaia');
   installWindowsKeyboardWorkaround();
   // The hotkeys that open it arrive with Ctrl and Alt still held.
   WindowsKeyboardReconciler.instance.install();
   final root = await appSupportRoot();
   // The companion's console isn't shown anywhere, so its debug output also
-  // goes to a file, started afresh by each companion.
+  // goes to a file, started afresh by each companion. The last three
+  // companions' logs are kept as `.1` (newest) to `.3`: a crashed
+  // companion is relaunched at once, and its log is the one that matters.
   final log = File(p.join(root.path, 'gaia', 'companion.log'));
   await log.parent.create(recursive: true);
+  try {
+    for (var i = 2; i >= 1; i--) {
+      final older = File('${log.path}.$i');
+      if (await older.exists()) await older.rename('${log.path}.${i + 1}');
+    }
+    if (await log.exists()) await log.rename('${log.path}.1');
+  } on FileSystemException {
+    // Still held, say by the companion this one replaces: started afresh
+    // over it instead.
+  }
   await log.writeAsString('');
   final console = debugPrint;
   debugPrint = (message, {wrapWidth}) {

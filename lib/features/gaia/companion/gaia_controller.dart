@@ -716,6 +716,8 @@ class GaiaController extends ChangeNotifier {
     draft.value = next?.text ?? TextEditingValue.empty;
     final history = _draftHistories.remove(_keyOf(chatId));
     history == null ? draftUndo.reset() : draftUndo.restoreHistory(history);
+    // For its btw chip (GAIA_BTW_HLD.md §8.2).
+    if (chatId != null) unawaited(_loadBtws(chatId));
   }
 
   /// [key]'s draft, in view or put away.
@@ -1125,6 +1127,12 @@ class GaiaController extends ChangeNotifier {
   /// own toast.
   Stream<GaiaRunToast> get toasts => _toasts.stream;
   final _toasts = StreamController<GaiaRunToast>.broadcast();
+
+  /// A side question's toast (§14), which opens it when clicked.
+  Stream<({GaiaRunToast toast, String btwId})> get btwToasts =>
+      _btwToasts.stream;
+  final _btwToasts =
+      StreamController<({GaiaRunToast toast, String btwId})>.broadcast();
 
   /// A toast Gaia showed, into Voyager's notification history.
   void toastShown(String title, String body) =>
@@ -2155,7 +2163,12 @@ class GaiaController extends ChangeNotifier {
       case 'pickUp':
         unawaited(_onPickUp(armed: params['armed'] == true));
       case 'openChat':
-        unawaited(openChat(params['chatId']! as String));
+        unawaited(
+          openChat(
+            params['chatId']! as String,
+            btwId: params['btwId'] as String?,
+          ),
+        );
       case 'accent':
         accent.value = params['argb']! as int;
       case 'text':
@@ -2170,6 +2183,9 @@ class GaiaController extends ChangeNotifier {
         unawaited(_loadDrafts());
       case 'queue':
         unawaited(_loadQueue());
+      // Written here, or synced from another device (GAIA_BTW_HLD.md §2).
+      case 'btws':
+        if (currentChatId case final chatId?) unawaited(_loadBtws(chatId));
       // Rearmed from the phone (§12.2).
       case 'rearmed':
         aborted = false;
@@ -2437,8 +2453,9 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// A notification clicked, or a chat picked on the Gaia page.
-  Future<void> openChat(String chatId) async {
+  Future<void> openChat(String chatId, {String? btwId}) async {
     await openWindow();
+    if (btwId != null) return revealBtw(chatId, btwId);
     await selectChat(chatId);
   }
 
@@ -2552,8 +2569,7 @@ class GaiaController extends ChangeNotifier {
     return [
       for (final json in list)
         if (GaiaSearchHit.fromJson((json as Map).cast<String, Object?>())
-            case final hit
-            when !(_chat(hit.chatId)?.rewound(hit.seq) ?? false))
+            case final hit when !(_chat(hit.chatId)?.rewound(hit.seq) ?? false))
           hit,
     ];
   }
@@ -2697,6 +2713,135 @@ class GaiaController extends ChangeNotifier {
       _forkingAt = null;
       notifyListeners();
     });
+  }
+
+  /// Debug menu: made-up side questions on the open chat, one of each kind
+  /// the panel shows (GAIA_BTW_HLD.md §8), in place of its own, and the
+  /// panel opened. Held here only: never stored, synced or run. The newest
+  /// streams in as a running one does, and can be stopped. They go when the
+  /// chat's side questions are next read, or are cleared; none is forked.
+  void previewBtws() {
+    final chatId = currentChatId;
+    if (chatId == null) return;
+    _btwPreviewTimer?.cancel();
+    for (final id in _btwPreviews) {
+      _liveBtws.remove(id);
+    }
+    final now = utcNow();
+    var minutes = 0;
+    GaiaBtw made(
+      String question, {
+      String answer = '',
+      GaiaMessageStatus status = GaiaMessageStatus.complete,
+      String? error,
+      String? deviceId,
+      String device = '',
+    }) {
+      final at = now.subtract(Duration(minutes: 30 - 5 * minutes++));
+      return GaiaBtw(
+        id: _uuid.v4(),
+        chatId: chatId,
+        question: question,
+        answer: answer,
+        status: status,
+        error: error,
+        anchorSeq: _messages[chatId]?.lastOrNull?.seq ?? -1,
+        deviceId: deviceId ?? _deviceId,
+        device: device,
+        createdAt: at,
+        updatedAt: at,
+      );
+    }
+
+    final previews = [
+      made(
+        'What does the `--fork-session` flag do again?',
+        answer:
+            'It makes `--resume` write a **new session** instead of adding '
+            "to the one it resumes. With `--resume-session-at`, the new "
+            "session keeps only the entries up to that one:\n\n"
+            '```\nclaude --resume <id> --fork-session \\\n'
+            '  --resume-session-at <uuid>\n```\n\n'
+            '- the source session is never touched\n'
+            '- the fork gets a new id, named in its `init`',
+      ),
+      made(
+        'Which file did it edit first?',
+        answer: '`lib/features/gaia/companion/gaia_controller.dart`.',
+        error:
+            'This answer may know more of the chat than it was asked at: '
+            "the chat's session may not have been cut where it was.",
+      ),
+      made(
+        'How long will the build take?',
+        status: GaiaMessageStatus.error,
+        error: "You've hit your usage limit. It resets at 4pm.",
+      ),
+      made(
+        'Summarise the plan so far',
+        answer: 'So far the plan is to split the parser into',
+        status: GaiaMessageStatus.cancelled,
+      ),
+      made(
+        'Is the migration safe to run twice?',
+        status: GaiaMessageStatus.streaming,
+        deviceId: 'preview-elsewhere',
+        device: 'Laptop',
+      ),
+    ];
+    var live = made(
+      'What is it doing right now?',
+      status: GaiaMessageStatus.streaming,
+    );
+    _btwPreviews
+      ..clear()
+      ..addAll([...previews.map((btw) => btw.id), live.id]);
+    _btws[chatId] = previews;
+    _liveBtws[live.id] = live;
+    notifyListeners();
+    _btwOpens.add(live.id);
+    // Word by word, as a reply streams, then done.
+    final words =
+        ('It is running the test suite for the side questions, after adding '
+                'the native fork. Of the three files left, `gaia_btw_test.dart` '
+                'is next; nothing has failed so far.')
+            .split(' ');
+    var shown = 0;
+    _btwPreviewTimer = Timer.periodic(const Duration(milliseconds: 120), (
+      timer,
+    ) {
+      if (!_liveBtws.containsKey(live.id)) return timer.cancel();
+      if (++shown < words.length) {
+        live = _liveBtws[live.id] = live.copyWith(
+          answer: words.take(shown).join(' '),
+        );
+      } else {
+        timer.cancel();
+        _liveBtws.remove(live.id);
+        _btws[chatId] = [
+          ...?_btws[chatId],
+          live.copyWith(
+            answer: words.join(' '),
+            status: GaiaMessageStatus.complete,
+          ),
+        ];
+        notifyListeners();
+      }
+      btwStreamed.value++;
+    });
+  }
+
+  /// The side questions [previewBtws] made up, by id.
+  final _btwPreviews = <String>{};
+  Timer? _btwPreviewTimer;
+
+  /// [previewBtws]' made-up side questions gone, the one streaming too.
+  void _endBtwPreviews() {
+    _btwPreviewTimer?.cancel();
+    for (final id in _btwPreviews) {
+      _liveBtws.remove(id);
+    }
+    _btwPreviews.clear();
   }
 
   Future<void> _forkChat(GaiaMessage at) async {
@@ -3088,13 +3233,15 @@ class GaiaController extends ChangeNotifier {
     return null;
   }
 
-  /// [_forkRecord] on [adapter].
+  /// [_forkRecord] on [adapter]. [quiet] doesn't show "Forking…" at [point]
+  /// while it waits: a side question's (GAIA_BTW_HLD.md §5.1).
   Future<GaiaForkRecord?> _forkRecordOn(
     String adapter,
     GaiaChat source,
     GaiaMessage point,
-    List<GaiaMessage> list,
-  ) async {
+    List<GaiaMessage> list, {
+    bool quiet = false,
+  }) async {
     final runner = _runners[adapter];
     if (runner is! GaiaSessionForker) return null;
     // What the fork's session knows: up to the message before a prompt
@@ -3173,7 +3320,7 @@ class GaiaController extends ChangeNotifier {
     final awaiting = livePrompt != null && livePrompt.seq > lastSeq
         ? livePrompt.entryId
         : null;
-    if (awaiting != null) {
+    if (awaiting != null && !quiet) {
       _forkingAt = point.id;
       notifyListeners();
     }
@@ -3220,9 +3367,22 @@ class GaiaController extends ChangeNotifier {
   ) async {
     final fork = _chat(chatId)?.fork;
     if (fork == null) return null;
+    if (_accountForKey(to.adapter, fork.sessionKey) == null) return null;
+    if (await _forkSourceOn(fork, runner, to)) return fork;
+    _dropFork(chatId);
+    return null;
+  }
+
+  /// Whether [fork]'s source session can be forked on [to], an account of
+  /// its adapter: copied there first when it's another's (§5.4).
+  Future<bool> _forkSourceOn(
+    GaiaForkRecord fork,
+    GaiaAgentRunner runner,
+    GaiaAccount to,
+  ) async {
     final from = _accountForKey(to.adapter, fork.sessionKey);
-    if (from == null) return null;
-    if (from.id == to.id) return fork;
+    if (from == null) return false;
+    if (from.id == to.id) return true;
     // A chat already followed the source session to [to]: that copy is the
     // newer one, and copying over it would lose its later turns.
     final toKey = gaiaSessionKey(
@@ -3233,7 +3393,7 @@ class GaiaController extends ChangeNotifier {
     if (chats.any(
       (chat) => chat.agentSessions[toKey]?.sessionId == fork.sourceSessionId,
     )) {
-      return fork;
+      return true;
     }
     try {
       if (runner is GaiaSessionCopier &&
@@ -3242,13 +3402,12 @@ class GaiaController extends ChangeNotifier {
             from: from,
             to: to,
           )) {
-        return fork;
+        return true;
       }
     } on FileSystemException catch (error) {
       debugPrint('[gaia] fork source not copied to ${to.label}: $error');
     }
-    _dropFork(chatId);
-    return null;
+    return false;
   }
 
   /// [adapter]'s account here whose session key is [key].
@@ -3373,7 +3532,709 @@ class GaiaController extends ChangeNotifier {
         await toggleDrain();
       case GaiaBuiltin.thisControl:
         await attachThis();
+      case GaiaBuiltin.btw:
+        openBtws();
     }
+  }
+
+  /// Each chat's side questions as last loaded (GAIA_BTW_HLD.md §2), oldest
+  /// first; a streaming one of this device's as it now stands.
+  final _btws = <String, List<GaiaBtw>>{};
+  final _liveBtws = <String, GaiaBtw>{};
+
+  /// Ticks as a side question's answer streams in: what the panel redraws
+  /// on, rather than all of Gaia.
+  final btwStreamed = ValueNotifier(0);
+
+  /// Asks the window to open the side questions at a btw's id, or at the
+  /// chat's last for null (§8.2).
+  Stream<String?> get btwOpens => _btwOpens.stream;
+  final _btwOpens = StreamController<String?>.broadcast();
+
+  /// Whether the side questions are open: the chip shows only while they're
+  /// not (§8.2).
+  bool get btwPanelOpen => _btwPanelOpen;
+  set btwPanelOpen(bool open) {
+    if (_btwPanelOpen == open) return;
+    _btwPanelOpen = open;
+    notifyListeners();
+  }
+
+  var _btwPanelOpen = false;
+
+  /// The btw the panel shows while open, so its end raises no toast.
+  String? btwShown;
+
+  /// [chatId]'s side questions, oldest first.
+  List<GaiaBtw> btwsFor(String? chatId) {
+    if (chatId == null) return const [];
+    final loaded = _btws[chatId] ?? const [];
+    return [
+      for (final btw in loaded) _liveBtws[btw.id] ?? btw,
+      for (final live in _liveBtws.values)
+        if (live.chatId == chatId && !loaded.any((btw) => btw.id == live.id))
+          live,
+    ];
+  }
+
+  /// Whether btw [id] is running here, so it can be stopped.
+  bool btwRunning(String id) => _liveBtws.containsKey(id);
+
+  Future<void> _loadBtws(String chatId) async {
+    try {
+      final listed = await _pipe.request('btws', {'chatId': chatId});
+      if (listed is! List) return;
+      // What a read changes that isn't streaming here: a streaming one's
+      // saves come back as reads, and its panel redraws on [btwStreamed].
+      List<(String, int)> settled(List<GaiaBtw>? btws) => [
+        for (final btw in btws ?? const <GaiaBtw>[])
+          if (!_liveBtws.containsKey(btw.id)) (btw.id, btw.version),
+      ];
+      final had = settled(_btws[chatId]);
+      final hadPreviews = _btwPreviews.isNotEmpty;
+      _endBtwPreviews();
+      _btws[chatId] = [
+        for (final json in listed)
+          GaiaBtw.fromJson((json as Map).cast<String, Object?>()),
+      ];
+      if (hadPreviews || !listEquals(had, settled(_btws[chatId]))) {
+        notifyListeners();
+      }
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] side questions not read: $error');
+    }
+  }
+
+  /// `/btw` alone (§8.2).
+  void openBtws() => _btwOpens.add(null);
+
+  /// A search's side question (§9): its chat opened, then the panel at it.
+  Future<void> revealBtw(String chatId, String btwId) async {
+    await selectChat(chatId);
+    await _loadBtws(chatId);
+    _btwOpens.add(btwId);
+  }
+
+  /// Asks [question] about the chat in view, beside it (§3): it runs as a
+  /// run of its own, keyed by the btw, and never enters the chat. With no
+  /// tools, on a native fork of the chat's session here where there is one
+  /// (§5.1), else by handoff (§5.2): the chat's transcript up to the btw's
+  /// anchor.
+  Future<void> askBtw(String question) async {
+    final chatId = currentChatId;
+    final chat = chatId == null ? null : _chat(chatId);
+    if (chat == null) {
+      return _note(
+        'Nothing to ask about yet',
+        'Side questions are about a chat. Send a message first.',
+        error: true,
+      );
+    }
+    if (aborted) return _note('Gaia is aborted', 'Rearm to ask.', error: true);
+    if (!_messages.containsKey(chat.id)) await _load(chat.id);
+    final messages = [
+      for (final message in _messages[chat.id] ?? const <GaiaMessage>[])
+        if (!message.isDeleted) message,
+    ];
+    // Mid-reply, the reply's prompt and its text so far go in the btw's own
+    // prompt, and its history stops before them (§5).
+    final answering = isRunning(chat.id)
+        ? messages.lastWhereOrNull(
+            (m) =>
+                m.role == GaiaMessageRole.assistant &&
+                m.status == GaiaMessageStatus.streaming,
+          )
+        : null;
+    final asking = answering == null
+        ? null
+        : messages.lastWhereOrNull(
+            (m) => m.role == GaiaMessageRole.user && m.seq < answering.seq,
+          );
+    final anchorSeq =
+        messages
+            .where((m) => asking == null || m.seq < asking.seq)
+            .lastOrNull
+            ?.seq ??
+        -1;
+    final tier = chat.tier ?? nextTier;
+    final agent = agentFor(tier);
+    final runner = agent == null ? null : _runners[agent.adapter];
+    final account = agent == null ? null : currentAccount(agent.adapter);
+    final now = utcNow();
+    final earlier = [
+      for (final btw in btwsFor(chat.id))
+        if (btw.status == GaiaMessageStatus.complete &&
+            !_btwPreviews.contains(btw.id))
+          btw,
+    ];
+    var btw = GaiaBtw(
+      id: _uuid.v4(),
+      chatId: chat.id,
+      question: question,
+      status: GaiaMessageStatus.streaming,
+      anchorSeq: anchorSeq,
+      deviceId: _deviceId,
+      tier: tier,
+      model: agent?.model,
+      adapter: agent?.adapter,
+      account: account?.id,
+      createdAt: now,
+      updatedAt: now,
+    );
+    _liveBtws[btw.id] = btw;
+    notifyListeners();
+    _btwOpens.add(btw.id);
+    var lastSave = DateTime.now();
+    Future<void> save() async {
+      lastSave = DateTime.now();
+      try {
+        await _pipe.request('putBtw', {'btw': btw.toJson()});
+      } on GaiaPipeException catch (error) {
+        debugPrint('[gaia] side question not saved: $error');
+      }
+    }
+
+    await save();
+    final key = 'btw:${btw.id}';
+    // No provider in dummy mode, as for a chat's reply: the dummy script.
+    final dummy = debug.dummyMode;
+    var builder = GaiaTurnBuilder();
+    try {
+      if (agent == null || runner == null) {
+        throw GaiaRunException(
+          agent == null
+              ? 'No agent is set for ${tier.label}. Pick one on the Gaia page.'
+              : "${agent.label} can't run on this device.",
+        );
+      }
+      // [fork] the chat's session here cut at the anchor, caught up on what
+      // it lacks (§5.1); null hands the chat over (§5.2). [chained]: it's an
+      // earlier btw's session instead, which has those as turns of its own
+      // (§4.1), so they aren't told again.
+      Future<GaiaTurnResult> ask(
+        GaiaForkRecord? fork, {
+        bool chained = false,
+      }) async {
+        final transcript = dummy
+            ? ''
+            : await _btwTranscript(
+                chat.id,
+                anchorSeq,
+                lastSeq: fork?.lastSeq ?? -1,
+              );
+        final prompt = [
+          if (transcript.isNotEmpty) transcript,
+          gaiaBtwPrompt(
+            question,
+            earlier: chained ? const [] : earlier,
+            asking: asking,
+            answering: answering,
+          ),
+        ].join('\n');
+        if (aborted || !_liveBtws.containsKey(btw.id)) {
+          throw StateError('Stopped.');
+        }
+        void onEvent(GaiaAgentEvent event) {
+          if (!_liveBtws.containsKey(btw.id) || !builder.apply(event)) {
+            return;
+          }
+          btw = _liveBtws[btw.id] = btw.copyWith(answer: _btwAnswer(builder));
+          btwStreamed.value++;
+          if (DateTime.now().difference(lastSave) > _persistEvery) {
+            unawaited(save());
+          }
+        }
+
+        if (dummy) {
+          return _scripted.send(
+            chatId: key,
+            script: gaiaDummyScript,
+            replyDelay: debug.replyDelay,
+            streamSpeed: debug.streamSpeed,
+            onEvent: onEvent,
+            tools: const _NoTools(),
+          );
+        }
+        return runner.send(
+          chatId: key,
+          sessionId: null,
+          model: agent.model,
+          effort: agent.effort,
+          prompt: prompt,
+          account: account,
+          promptId: btw.id,
+          fork: fork == null
+              ? null
+              : (sessionId: fork.sourceSessionId, keepAt: fork.keepAt),
+          toolless: true,
+          onEvent: onEvent,
+        );
+      }
+
+      final chain = account == null || dummy
+          ? null
+          : await _btwChain(chat, anchorSeq, earlier, runner, account);
+      var fork =
+          chain ??
+          (account == null || dummy
+              ? null
+              : await _btwFork(chat, anchorSeq, runner, account));
+      var result = await ask(fork, chained: chain != null);
+      // Refused, or failed with nothing to show, as a fork's first turn is
+      // (GAIA_FORKING_HLD.md §10.5): asked again, with nothing said.
+      bool refused() =>
+          fork != null &&
+          _liveBtws.containsKey(btw.id) &&
+          (!result.sessionFound ||
+              (result.isError &&
+                  builder.finished.isEmpty &&
+                  !gaiaRunLimited(result.text) &&
+                  !gaiaRunAuthFailed(result.text)));
+      // An earlier btw's session: on the chat's instead, told of them.
+      if (chain != null && refused()) {
+        fork = await _btwFork(chat, anchorSeq, runner, account!);
+        builder = GaiaTurnBuilder();
+        result = await ask(fork);
+      }
+      // The chat's: by handoff.
+      if (refused()) {
+        fork = null;
+        builder = GaiaTurnBuilder();
+        result = await ask(null);
+      }
+      // A fork that didn't hold may know later turns: said beside the
+      // answer, and forking it hands the chat over rather than carry it on.
+      final notice = fork == null ? null : result.notice;
+      // Stopped or aborted while it ran, whatever the run itself said.
+      if (aborted || !_liveBtws.containsKey(btw.id)) {
+        throw StateError('Stopped.');
+      }
+      btw = btw.copyWith(
+        answer: _btwAnswer(builder),
+        status: result.isError
+            ? GaiaMessageStatus.error
+            : GaiaMessageStatus.complete,
+        error: result.isError
+            ? gaiaRunErrorText(result.text, account)
+            : notice == null
+            ? null
+            : "This answer may know more of the chat than it was asked at: "
+                  "the chat's session may not have been cut where it was.",
+        // Only Claude Code's carries on as a chat: Codex keeps a tool-less
+        // thread out of chats, which it would have no shell in (§6).
+        session:
+            !dummy &&
+                !result.isError &&
+                notice == null &&
+                result.sessionFound &&
+                result.sessionId.isNotEmpty &&
+                account != null &&
+                agent.adapter == kGaiaClaudeCodeAdapter
+            ? GaiaBtwSession(
+                sessionKey: gaiaSessionKey(
+                  _deviceId,
+                  adapter: agent.adapter,
+                  account: account.id,
+                ),
+                sessionId: result.sessionId,
+              )
+            : null,
+      );
+    } catch (error) {
+      final failed = !aborted && _liveBtws.containsKey(btw.id);
+      btw = btw.copyWith(
+        answer: _btwAnswer(builder),
+        status: aborted
+            ? GaiaMessageStatus.aborted
+            : failed
+            ? GaiaMessageStatus.error
+            : GaiaMessageStatus.cancelled,
+        error: failed ? gaiaRunErrorText('$error', account) : null,
+      );
+    }
+    // Shown as it ended while it's saved; one cleared meanwhile isn't.
+    if (_liveBtws.containsKey(btw.id)) _liveBtws[btw.id] = btw;
+    btwStreamed.value++;
+    await save();
+    // Never taken back: what a stop kept for that goes once it's ended.
+    for (final runner in _runners.values) {
+      runner.forgetStop(key);
+    }
+    _settleBtw(btw);
+    btwStreamed.value++;
+    _reportBtw(btw);
+    await _loadBtws(chat.id);
+  }
+
+  /// A side question answered or failed raises a toast as a finished reply
+  /// does (§14), unless the panel is showing it with Gaia in front. Clicked,
+  /// it opens the btw.
+  void _reportBtw(GaiaBtw btw) {
+    if (!_notifyOnDone || draining != null) return;
+    if (_window.foreground && btwShown == btw.id) return;
+    final String title;
+    final String body;
+    switch (btw.status) {
+      case GaiaMessageStatus.complete:
+        title = 'Side question answered';
+        final line = btw.question.trim().split('\n').first;
+        body = line.length > 120 ? '${line.substring(0, 120)}…' : line;
+      case GaiaMessageStatus.error:
+        title = 'Side question failed';
+        body = btw.error ?? '';
+      default:
+        return;
+    }
+    _toast(
+      btw.chatId,
+      title,
+      body,
+      error: btw.status == GaiaMessageStatus.error,
+      btwId: btw.id,
+    );
+  }
+
+  /// Btw [btw], no longer running here, shown as it ended until the chat's
+  /// side questions are read again, rather than as last read.
+  void _settleBtw(GaiaBtw btw) {
+    _liveBtws.remove(btw.id);
+    // Only in place: one cleared meanwhile isn't put back.
+    final loaded = _btws[btw.chatId];
+    if (loaded == null) return;
+    _btws[btw.chatId] = [
+      for (final stored in loaded) stored.id == btw.id ? btw : stored,
+    ];
+  }
+
+  /// A side question's answer as it stands: its text, without the tools it
+  /// has none of.
+  static String _btwAnswer(GaiaTurnBuilder builder) => [
+    for (final part in builder.finished)
+      if (part is GaiaTextPart) part.text,
+  ].join('\n\n');
+
+  /// The native fork a side question about [chat] at [anchorSeq] runs on
+  /// (§5.1): the chat's session here on [account]'s adapter, cut where a fork
+  /// of the chat at the anchor would be, its source copied to [account] when
+  /// it's another's. Null for none, and it's asked by handoff (§5.2).
+  Future<GaiaForkRecord?> _btwFork(
+    GaiaChat chat,
+    int anchorSeq,
+    GaiaAgentRunner runner,
+    GaiaAccount account,
+  ) async {
+    final list = _messages[chat.id] ?? const <GaiaMessage>[];
+    final point = list.lastWhereOrNull(
+      (m) => m.seq <= anchorSeq && !m.isDeleted,
+    );
+    if (point == null) return null;
+    final record = await _forkRecordOn(
+      account.adapter,
+      chat,
+      point,
+      list,
+      quiet: true,
+    );
+    if (record == null || !await _forkSourceOn(record, runner, account)) {
+      return null;
+    }
+    return record;
+  }
+
+  /// The fork a side question about [chat] at [anchorSeq] carries on from an
+  /// earlier one's own session, as Claude Code's own /btw keeps its history
+  /// (§4.1): the newest of [earlier], when it was answered here on
+  /// [account] at this same anchor, after every other of them had ended.
+  /// Its session then has the chat up to the anchor and each earlier side
+  /// question as turns of its own, which the model owns and corrects,
+  /// rather than as text it's told of and doubts. Null for none.
+  Future<GaiaForkRecord?> _btwChain(
+    GaiaChat chat,
+    int anchorSeq,
+    List<GaiaBtw> earlier,
+    GaiaAgentRunner runner,
+    GaiaAccount account,
+  ) async {
+    if (earlier.isEmpty || runner is! GaiaSessionForker) return null;
+    final base = earlier.reduce(
+      (newest, btw) => btw.createdAt.isAfter(newest.createdAt) ? btw : newest,
+    );
+    final key = gaiaSessionKey(
+      _deviceId,
+      adapter: account.adapter,
+      account: account.id,
+    );
+    final session = base.session;
+    if (session == null ||
+        session.sessionKey != key ||
+        base.adapter != account.adapter ||
+        base.anchorSeq != anchorSeq) {
+      return null;
+    }
+    // Rewound since: the anchor's seq is another message now.
+    final anchor = (_messages[chat.id] ?? const <GaiaMessage>[])
+        .lastWhereOrNull((m) => m.seq == anchorSeq && !m.isDeleted);
+    if (anchor != null && anchor.createdAt.isAfter(base.createdAt)) {
+      return null;
+    }
+    // One that ended after it was asked isn't in its session.
+    if (earlier.any(
+      (btw) => btw.id != base.id && btw.updatedAt.isAfter(base.createdAt),
+    )) {
+      return null;
+    }
+    final String? keepAt;
+    try {
+      keepAt = await (runner as GaiaSessionForker).forkCut(
+        chatId: 'btw:${base.id}',
+        sessionId: session.sessionId,
+        account: account,
+        // Its prompt went with its id as its uuid.
+        after: base.id,
+        next: const [],
+      );
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] side question ${base.id} not carried on: $error');
+      return null;
+    }
+    if (keepAt == null) return null;
+    return GaiaForkRecord(
+      sessionKey: key,
+      sourceSessionId: session.sessionId,
+      keepAt: keepAt,
+      lastSeq: anchorSeq,
+    );
+  }
+
+  /// The chat as a side question sees it (§5): its turns after [lastSeq],
+  /// what its session already has, up to [anchorSeq]; handed over as a new
+  /// session's would be for -1, else as a catch-up. Empty for none.
+  Future<String> _btwTranscript(
+    String chatId,
+    int anchorSeq, {
+    required int lastSeq,
+  }) async {
+    // Read again once captioned, which writes the captions to them.
+    List<GaiaMessage> unseen() => gaiaUnseenTurns(
+      _messages[chatId] ?? const [],
+      lastSeq: lastSeq,
+      beforeSeq: anchorSeq + 1,
+    );
+    if (unseen().isEmpty) return '';
+    await _caption(unseen()).timeout(_captionWait, onTimeout: () {});
+    final (older, recent) = gaiaSplitHandoff(unseen());
+    final summary = older.isEmpty
+        ? null
+        : await _utility?.summarize(gaiaTranscriptText(older));
+    final ids = {
+      for (final message in [...older, ...recent])
+        for (final image in message.parts.whereType<GaiaImagePart>())
+          image.mediaId,
+    };
+    final paths = await Future.wait(ids.map(imageFile));
+    return gaiaHandoffPreamble(
+      recent: recent,
+      joining: lastSeq < 0,
+      summary: summary,
+      omitted: summary == null ? older.length : 0,
+      labels: {for (final a in agents) a.model: a.label},
+      older: older,
+      files: Map.fromIterables(ids, paths),
+    );
+  }
+
+  /// Stops btw [id] (§3): it's kept as it got, cancelled. The chat's own run
+  /// goes on.
+  Future<void> stopBtw(String id) async {
+    // A preview's: kept as it got, as a real one is; nothing ran.
+    if (_btwPreviews.contains(id)) {
+      _btwPreviewTimer?.cancel();
+      final live = _liveBtws.remove(id);
+      if (live == null) return;
+      _btws[live.chatId] = [
+        ...?_btws[live.chatId],
+        live.copyWith(status: GaiaMessageStatus.cancelled),
+      ];
+      btwStreamed.value++;
+      return notifyListeners();
+    }
+    final live = _liveBtws[id];
+    if (live == null) return;
+    _settleBtw(live.copyWith(status: GaiaMessageStatus.cancelled));
+    btwStreamed.value++;
+    _scripted.stop('btw:$id');
+    await Future.wait([
+      for (final runner in _runners.values) runner.stop('btw:$id'),
+    ]);
+  }
+
+  /// Clears the chat in view's side questions everywhere (§4.2), those
+  /// running here stopped first. Gives back what [restoreBtws] takes to undo
+  /// it; null when there were none.
+  Future<List<String>?> clearBtws() async {
+    final chatId = currentChatId;
+    if (chatId == null || btwsFor(chatId).isEmpty) return null;
+    // Previews only: none stored is cleared. Undo reads the chat's own back.
+    if (btwsFor(chatId).any((btw) => _btwPreviews.contains(btw.id))) {
+      _endBtwPreviews();
+      _btws[chatId] = [];
+      notifyListeners();
+      return const [];
+    }
+    for (final btw in btwsFor(chatId)) {
+      if (btwRunning(btw.id)) await stopBtw(btw.id);
+    }
+    final List<String> ids;
+    try {
+      ids = [
+        for (final id
+            in await _pipe.request('clearBtws', {'chatId': chatId}) as List)
+          id as String,
+      ];
+    } on GaiaPipeException catch (error) {
+      _note("Couldn't clear the side questions", error.message, error: true);
+      return null;
+    }
+    _btws[chatId] = [];
+    notifyListeners();
+    return ids;
+  }
+
+  Future<void> restoreBtws(String chatId, List<String> ids) async {
+    await _request('restoreBtws', {'ids': ids});
+    await _loadBtws(chatId);
+  }
+
+  /// A new chat carrying on from [btw] (§7): its chat's messages up to the
+  /// btw's anchor, copied as a fork copies them, then its question and
+  /// answer as messages. Its first send forks the btw's own session where
+  /// that's this device's; otherwise it hands the copies over. Opened.
+  Future<void> forkBtw(GaiaBtw btw) async {
+    final source = _chat(btw.chatId);
+    if (source == null || btw.status == GaiaMessageStatus.streaming) return;
+    if (_btwPreviews.contains(btw.id)) {
+      return _note(
+        "A preview isn't forked",
+        'Debug menu side questions are made up: forking one would make a '
+            'real chat of them.',
+      );
+    }
+    // A failed or stopped one's session isn't carried on: it's handed over.
+    final session = btw.status == GaiaMessageStatus.complete
+        ? btw.session
+        : null;
+    final account = session == null || btw.adapter == null
+        ? null
+        : _accountForKey(btw.adapter!, session.sessionKey);
+    final runner = btw.adapter == null ? null : _runners[btw.adapter!];
+    // A native fork of its session, made on the first send, so forking it
+    // twice doesn't give two chats one session.
+    GaiaForkRecord? record;
+    if (account != null && runner is GaiaSessionForker) {
+      try {
+        final keepAt = await (runner as GaiaSessionForker).forkCut(
+          chatId: 'btw:${btw.id}',
+          sessionId: session!.sessionId,
+          account: account,
+          // Its prompt went with its id as its uuid.
+          after: btw.id,
+          next: const [],
+        );
+        if (keepAt != null) {
+          record = GaiaForkRecord(
+            sessionKey: session.sessionKey,
+            sourceSessionId: session.sessionId,
+            keepAt: keepAt,
+            lastSeq: btw.anchorSeq + 2,
+          );
+        }
+      } on FileSystemException catch (error) {
+        debugPrint('[gaia] side question ${btw.id} not forked: $error');
+      }
+    }
+    if (!_messages.containsKey(source.id)) await _load(source.id);
+    final copied = [
+      for (final message in _messages[source.id] ?? const <GaiaMessage>[])
+        if (message.seq <= btw.anchorSeq && !message.isDeleted) message,
+    ];
+    if (copied.any(
+      (message) => message.parts.any(
+        (part) =>
+            part is GaiaImagePart && uploadingImages.contains(part.mediaId),
+      ),
+    )) {
+      return _note(
+        "Couldn't fork the side question",
+        'Its images are still being attached. Try again in a moment.',
+        error: true,
+      );
+    }
+    final now = utcNow();
+    final forkId = _uuid.v4();
+    final fork = GaiaChat(
+      id: forkId,
+      title: '${source.title} (btw)',
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+      tier: source.tier,
+      // The copies are the source's to curate; the btw's turns are its own.
+      curatedSeq: btw.anchorSeq,
+      // Its session has the copies and the btw (§7).
+      fork: record,
+      forkOf: source.forkOf ?? source.id,
+    );
+    final messages = [
+      ..._copiesInto(forkId, copied, now),
+      GaiaMessage(
+        id: _uuid.v4(),
+        chatId: forkId,
+        seq: btw.anchorSeq + 1,
+        role: GaiaMessageRole.user,
+        parts: [GaiaTextPart(btw.question)],
+        status: GaiaMessageStatus.complete,
+        createdAt: btw.createdAt,
+        updatedAt: now,
+      ),
+      GaiaMessage(
+        id: _uuid.v4(),
+        chatId: forkId,
+        seq: btw.anchorSeq + 2,
+        role: GaiaMessageRole.assistant,
+        parts: [if (btw.answer.isNotEmpty) GaiaTextPart(btw.answer)],
+        // As it ended, so a failed one reads as a failed reply.
+        status: btw.status,
+        error: btw.status == GaiaMessageStatus.complete ? null : btw.error,
+        model: btw.model,
+        adapter: btw.adapter,
+        account: btw.account,
+        createdAt: btw.updatedAt,
+        updatedAt: now,
+      ),
+    ];
+    try {
+      await _pipe.request('forkChat', {
+        'chat': fork.toJson(),
+        'messages': [for (final message in messages) message.toJson()],
+      });
+    } on GaiaPipeException catch (error) {
+      return _note(
+        "Couldn't fork the side question",
+        error.message,
+        error: true,
+      );
+    }
+    chats = [fork, ...chats]..sort(_listed);
+    _messages[forkId] = messages;
+    try {
+      await _toolResults?.copy(source.id, forkId, gaiaKeptCallIds(messages));
+    } on FileSystemException catch (error) {
+      debugPrint('[gaia] tool results not copied: $error');
+    }
+    if (sidebar.collapsed.contains(fork.forkOf)) {
+      unawaited(sidebar.setCollapsed(fork.forkOf!, false));
+    }
+    await selectChat(forkId);
   }
 
   /// Every waiting prompt (§13), in order; the global queue's have no chat.
@@ -3814,6 +4675,7 @@ class GaiaController extends ChangeNotifier {
     if (remote == null && resent == null) {
       if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
       if (gaiaRememberText(text) case final memory?) return remember(memory);
+      if (gaiaBtwText(text) case final question?) return askBtw(question);
     }
     // A command the CLI runs itself goes as typed, alone: the CLI reads one
     // only when it starts the message (GAIA_NATIVE_COMMANDS.md §5). Only the
@@ -5489,6 +6351,7 @@ class GaiaController extends ChangeNotifier {
     String body, {
     bool error = false,
     bool question = false,
+    String? btwId,
   }) {
     final front = _window.foreground;
     final floating =
@@ -5502,13 +6365,18 @@ class GaiaController extends ChangeNotifier {
       question: question,
     );
     if (front || floating) {
-      _toasts.add(toast);
+      if (btwId == null) {
+        _toasts.add(toast);
+      } else {
+        _btwToasts.add((toast: toast, btwId: btwId));
+      }
       return;
     }
     _pipe.notify('runDone', {
       'chatId': toast.chatId,
       'title': toast.title,
       'body': toast.body,
+      'btwId': ?btwId,
     });
   }
 
@@ -5870,4 +6738,21 @@ class GaiaController extends ChangeNotifier {
       debugPrint('[gaia] message not saved: $error');
     }
   }
+}
+
+/// A side question's in dummy mode: its script has no cards, which never
+/// call it.
+class _NoTools implements GaiaTurnTools {
+  const _NoTools();
+
+  @override
+  Future<GaiaToolResult> call(String name, Map<String, Object?> arguments) =>
+      throw UnimplementedError();
+
+  @override
+  Future<GaiaPermission> permit({
+    required String tool,
+    required Map<String, Object?> input,
+    required String description,
+  }) => throw UnimplementedError();
 }
