@@ -5,11 +5,26 @@ import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 /// Every usage window of an account as a bar (§6.2): the ring's tooltip on
 /// the composer, and the Gaia page's Setup tab.
 List<Widget> gaiaUsageBars(GaiaUsage usage) => [
-  GaiaUsageBar(name: '5-hour', window: usage.fiveHour),
-  GaiaUsageBar(name: 'Weekly', window: usage.weekly),
-  for (final window in usage.weeklyModels)
-    GaiaUsageBar(name: 'Weekly, ${window.model}', window: window),
+  for (final (name, window) in gaiaUsageWindows(usage))
+    GaiaUsageBar(name: name, window: window),
 ];
+
+/// Every usage window of an account, with its name: the bars, and `/usage`.
+List<(String, GaiaUsageWindow?)> gaiaUsageWindows(GaiaUsage usage) => [
+  ('5-hour', usage.fiveHour),
+  ('Weekly', usage.weekly),
+  for (final window in usage.weeklyModels) ('Weekly, ${window.model}', window),
+];
+
+/// When [window] resets, or why that isn't known.
+String gaiaUsageDetail(GaiaUsageWindow? window) {
+  final resets = window?.resetsAt;
+  if (window == null) return 'Unknown';
+  if (resets == null) return 'Not started';
+  final at = gaiaResetTime(resets);
+  // Its next reset isn't known until it's read again.
+  return resets.isAfter(DateTime.now()) ? 'Resets $at' : 'Reset at $at';
+}
 
 /// One usage window: its name and share used over a bar, and when it resets.
 class GaiaUsageBar extends StatelessWidget {
@@ -26,17 +41,7 @@ class GaiaUsageBar extends StatelessWidget {
     );
     final window = this.window;
     final used = window?.usedNow ?? 0;
-    final resets = window?.resetsAt;
-    final String detail;
-    if (window == null) {
-      detail = 'Unknown';
-    } else if (resets == null) {
-      detail = 'Not started';
-    } else {
-      final at = gaiaResetTime(resets);
-      // Its next reset isn't known until it's read again.
-      detail = resets.isAfter(DateTime.now()) ? 'Resets $at' : 'Reset at $at';
-    }
+    final detail = gaiaUsageDetail(window);
     return SizedBox(
       width: 180,
       child: Column(

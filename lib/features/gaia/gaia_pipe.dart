@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:voyager/core/platform/app_data_directory.dart';
 
 /// The main instance <-> companion named pipe (GAIA_HLD.md §3.2), and the
 /// request/response protocol on it. Both processes use it: the main instance
@@ -37,9 +40,19 @@ class GaiaPipe {
   var _nextId = 0;
 
   /// Main instance: launches the companion and listens for it. Returns its
-  /// PID, or 0 when it could not be launched.
-  Future<int> startCompanion() async =>
-      await _channel.invokeMethod<int>('startCompanion') ?? 0;
+  /// PID, or 0 when it could not be launched. The companion's stderr, where
+  /// the engine writes its own errors, goes to `gaia/companion_engine.log`;
+  /// a debug build also attaches cdb (`windows/runner/gaia_cdb.js`).
+  Future<int> startCompanion() async {
+    // No log directory is no reason not to launch: it goes without logs.
+    var logDir = '';
+    try {
+      final logs = Directory(p.join((await appSupportRoot()).path, 'gaia'));
+      await logs.create(recursive: true);
+      logDir = logs.path;
+    } catch (_) {}
+    return await _channel.invokeMethod<int>('startCompanion', logDir) ?? 0;
+  }
 
   /// Companion: connects to the main instance that launched it.
   Future<bool> connect() async =>

@@ -4963,15 +4963,16 @@ class _RingPainter extends CustomPainter {
     required this.used,
     required this.track,
     required this.fill,
+    this.stroke = 2.0,
   });
 
   final double used;
   final Color track;
   final Color fill;
+  final double stroke;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = 2.0;
     final rect = (Offset.zero & size).deflate(stroke / 2);
     final paint = Paint()
       ..style = PaintingStyle.stroke
@@ -4991,7 +4992,10 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.used != used || old.track != track || old.fill != fill;
+      old.used != used ||
+      old.track != track ||
+      old.fill != fill ||
+      old.stroke != stroke;
 }
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that
@@ -5362,8 +5366,8 @@ void _showHandMenu(
   ]);
 }
 
-/// `/usage`: every bar of the next message's accounts, as the composer's
-/// rings show them in their tooltips.
+/// `/usage`: every window of the next message's accounts, a row each led by
+/// a ring like the composer's.
 Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
   return showDialog<void>(
     context: context,
@@ -5376,43 +5380,75 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
             ? const <GaiaAccount>[]
             : controller.accountsFor(adapter);
         final theme = Theme.of(context);
-        return AlertDialog(
-          title: const Text('Usage'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (accounts.isEmpty) const Text('No agent for this tier.'),
-                for (final (index, account) in accounts.indexed) ...[
-                  if (index > 0) const SizedBox(height: 20),
-                  if (accounts.length > 1) ...[
-                    Text(account.label, style: theme.textTheme.labelMedium),
-                    const SizedBox(height: 10),
-                  ],
-                  if (controller.usageUntracked(adapter!, account)
-                      case final untracked?)
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 260),
-                      child: Text(untracked),
-                    )
-                  else if (controller.usage[account.key] case final usage?)
-                    for (final (i, bar) in gaiaUsageBars(usage).indexed) ...[
-                      if (i > 0) const SizedBox(height: 10),
-                      bar,
-                    ]
-                  else
-                    const Text('Not read yet'),
-                ],
-              ],
+        final muted = theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        );
+        Widget row(String name, GaiaUsageWindow? window) => Row(
+          children: [
+            CustomPaint(
+              size: const Size.square(20),
+              painter: _RingPainter(
+                used: window?.usedNow ?? 0,
+                track: Colors.white.withValues(alpha: 0.15),
+                fill: theme.colorScheme.primary,
+                stroke: 2.5,
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+            const SizedBox(width: 14),
+            Expanded(child: Text(name, style: theme.textTheme.bodyLarge)),
+            Text(gaiaUsageDetail(window), style: muted),
+            SizedBox(
+              width: 56,
+              child: Text(
+                window == null ? '–' : '${(window.usedNow * 100).round()}%',
+                textAlign: TextAlign.right,
+                style: theme.textTheme.bodyLarge,
+              ),
             ),
           ],
+        );
+        return Dialog(
+          child: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Usage', style: theme.textTheme.titleLarge),
+                  if (accounts.isEmpty) ...[
+                    const SizedBox(height: 20),
+                    Text('No agent for this tier.', style: muted),
+                  ],
+                  for (final account in accounts) ...[
+                    const SizedBox(height: 20),
+                    if (accounts.length > 1) ...[
+                      Text(
+                        account.label,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (controller.usageUntracked(adapter!, account)
+                        case final untracked?)
+                      Text(untracked, style: muted)
+                    else if (controller.usage[account.key] case final usage?)
+                      for (final (i, (name, window)) in gaiaUsageWindows(
+                        usage,
+                      ).indexed) ...[
+                        if (i > 0) const SizedBox(height: 12),
+                        row(name, window),
+                      ]
+                    else
+                      Text('Not read yet', style: muted),
+                  ],
+                ],
+              ),
+            ),
+          ),
         );
       },
     ),

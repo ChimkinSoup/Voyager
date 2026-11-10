@@ -39,7 +39,9 @@ class GaiaPipe {
   // waits for it to connect. Returns the companion's PID, or 0 on failure.
   // While the last launch is still running, returns its PID and reports it
   // connected again, so a Dart hot restart picks the companion back up.
-  DWORD StartCompanion();
+  // |log_dir| (UTF-8) gets the companion's stderr as companion_engine.log,
+  // and in a debug build cdb's log and crash dumps (gaia_cdb.js).
+  DWORD StartCompanion(const std::string& log_dir);
 
   // Companion: connects to the main instance's pipe.
   bool Connect();

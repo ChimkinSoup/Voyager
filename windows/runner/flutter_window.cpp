@@ -137,8 +137,9 @@ bool FlutterWindow::OnCreate() {
                  result) {
         const std::string& method = call.method_name();
         if (method == "startCompanion") {
-          result->Success(flutter::EncodableValue(
-              static_cast<int64_t>(gaia_pipe_->StartCompanion())));
+          const auto* log_dir = std::get_if<std::string>(call.arguments());
+          result->Success(flutter::EncodableValue(static_cast<int64_t>(
+              gaia_pipe_->StartCompanion(log_dir ? *log_dir : std::string()))));
         } else if (method == "connect") {
           result->Success(flutter::EncodableValue(gaia_pipe_->Connect()));
         } else if (method == "send") {

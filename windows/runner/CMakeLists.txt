@@ -32,6 +32,12 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MINOR=${FLUTT
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_PATCH=${FLUTTER_VERSION_PATCH}")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTTER_VERSION_BUILD}")
 
+# Debug builds attach cdb to Gaia's companion (gaia_pipe.cpp): its script, and
+# where the engine's symbols are.
+target_compile_definitions(${BINARY_NAME} PRIVATE
+  "GAIA_CDB_SCRIPT=\"${CMAKE_CURRENT_SOURCE_DIR}/gaia_cdb.js\""
+  "GAIA_ENGINE_SYMBOLS=\"${CMAKE_CURRENT_SOURCE_DIR}/../flutter/ephemeral\"")
+
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 

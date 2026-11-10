@@ -10,6 +10,35 @@
 #include "resource.h"
 #include "utils.h"
 
+namespace {
+
+// UiaRootObjectId, from UIAutomationCoreApi.h.
+constexpr LONG kUiaRootObjectId = -25;
+
+WNDPROC g_flutter_view_proc = nullptr;
+
+// Gaia's view, with the engine's accessibility off: an accessibility query
+// (UI Automation or MSAA) is what turns Flutter's semantics on, and the
+// Windows engine can't take the first update Gaia sends: an OverlayPortal's
+// node comes before its parent lists it, the engine roots its tree there, and
+// later crashes on it (AccessibilityBridge::CreateRemoveReparentedNodesUpdate).
+// Answered with Windows' default instead, so the engine never sees one;
+// screen readers see Gaia as a plain window.
+LRESULT CALLBACK GaiaViewProc(HWND hwnd, UINT message, WPARAM wparam,
+                              LPARAM lparam) {
+  if (message == WM_GETOBJECT) {
+    // Only the low 32 bits are valid, as the engine reads it.
+    const auto object = static_cast<DWORD>(static_cast<DWORD_PTR>(lparam));
+    if (object == static_cast<DWORD>(kUiaRootObjectId) ||
+        object == static_cast<DWORD>(OBJID_CLIENT)) {
+      return ::DefWindowProcW(hwnd, message, wparam, lparam);
+    }
+  }
+  return ::CallWindowProcW(g_flutter_view_proc, hwnd, message, wparam, lparam);
+}
+
+}  // namespace
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // One process per session: closing only hides Voyager to the tray, and a
@@ -95,8 +124,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   // Attach to console when present (e.g., 'flutter run') or create a
-  // new console when running with a debugger.
-  if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
+  // new console when running with a debugger. Not the companion's: a debug
+  // build attaches cdb to it at launch (gaia_pipe.cpp), which would pop one
+  // up, and its stderr already goes to companion_engine.log.
+  if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent() &&
+      !companion) {
     CreateAndAttachConsole();
   }
 
@@ -145,6 +177,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       instance, MAKEINTRESOURCE(IDI_GAIA_ICON), IMAGE_ICON,
                       ::GetSystemMetrics(SM_CXSMICON),
                       ::GetSystemMetrics(SM_CYSMICON), 0)));
+    HWND view = ::FindWindowExW(window.GetHandle(), nullptr, L"FLUTTERVIEW",
+                                nullptr);
+    if (view) {
+      g_flutter_view_proc = reinterpret_cast<WNDPROC>(::SetWindowLongPtrW(
+          view, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(GaiaViewProc)));
+    }
   }
   window.SetQuitOnClose(true);
 

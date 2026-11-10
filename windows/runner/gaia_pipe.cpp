@@ -2,6 +2,8 @@
 
 #include <sddl.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <utility>
 #include <vector>
@@ -70,6 +72,91 @@ DWORD ParentPidFromEnvironment() {
   return static_cast<DWORD>(std::wcstoul(value, nullptr, 10));
 }
 
+std::wstring Utf16FromUtf8(const std::string& utf8) {
+  if (utf8.empty()) return std::wstring();
+  const int size = static_cast<int>(utf8.size());
+  const int length =
+      ::MultiByteToWideChar(CP_UTF8, 0, utf8.data(), size, nullptr, 0);
+  std::wstring utf16(length, L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, utf8.data(), size, utf16.data(), length);
+  return utf16;
+}
+
+// Keeps the last three: <path>.1 is the newest, <path>.3 the oldest.
+void RotateLog(const std::wstring& path) {
+  for (int i = 2; i >= 1; i--) {
+    ::MoveFileExW((path + L"." + std::to_wstring(i)).c_str(),
+                  (path + L"." + std::to_wstring(i + 1)).c_str(),
+                  MOVEFILE_REPLACE_EXISTING);
+  }
+  ::MoveFileExW(path.c_str(), (path + L".1").c_str(),
+                MOVEFILE_REPLACE_EXISTING);
+}
+
+// The companion's stdout and stderr, which is where the engine writes its own errors
+// (`Failed to update ui::AXTree`, ...): no Dart handler ever sees them, and
+// the companion has no console. Inheritable, and readable while written.
+HANDLE OpenEngineLog(const std::wstring& log_dir) {
+  if (log_dir.empty()) return INVALID_HANDLE_VALUE;
+  const std::wstring path = log_dir + L"\\companion_engine.log";
+  RotateLog(path);
+  SECURITY_ATTRIBUTES inheritable{sizeof(inheritable), nullptr, TRUE};
+  return ::CreateFileW(path.c_str(), GENERIC_WRITE,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       &inheritable, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                       nullptr);
+}
+
+#ifndef NDEBUG
+// A full dump is over a gigabyte: the two newest are kept, so with the next
+// crash's there are three.
+void PruneDumps(const std::wstring& log_dir) {
+  std::vector<std::pair<uint64_t, std::wstring>> dumps;
+  WIN32_FIND_DATAW found;
+  HANDLE find =
+      ::FindFirstFileW((log_dir + L"\\companion*.dmp").c_str(), &found);
+  if (find == INVALID_HANDLE_VALUE) return;
+  do {
+    dumps.emplace_back((static_cast<uint64_t>(found.ftLastWriteTime.dwHighDateTime)
+                        << 32) |
+                           found.ftLastWriteTime.dwLowDateTime,
+                       found.cFileName);
+  } while (::FindNextFileW(find, &found));
+  ::FindClose(find);
+  std::sort(dumps.rbegin(), dumps.rend());
+  for (size_t i = 2; i < dumps.size(); i++) {
+    ::DeleteFileW((log_dir + L"\\" + dumps[i].second).c_str());
+  }
+}
+
+// Debug builds, with the Windows SDK's Debugging Tools installed: cdb attached
+// to the companion for as long as it runs, with gaia_cdb.js. Its log and any
+// crash dump go to |log_dir|. -pd: should cdb itself go, the companion stays.
+void AttachDebugger(DWORD pid, const std::wstring& log_dir) {
+  const std::wstring cdb = EnvironmentVariable(L"ProgramFiles(x86)") +
+                           L"\\Windows Kits\\10\\Debuggers\\x64\\cdb.exe";
+  if (log_dir.empty() ||
+      ::GetFileAttributesW(cdb.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    return;
+  }
+  const std::wstring log = log_dir + L"\\companion_cdb.log";
+  RotateLog(log);
+  PruneDumps(log_dir);
+  std::wstring command_line =
+      L"\"" + cdb + L"\" -p " + std::to_wstring(pid) + L" -pd -G -logo \"" +
+      log + L"\" -y \"" GAIA_ENGINE_SYMBOLS L"\" -c \".scriptrun \\\"" +
+      GAIA_CDB_SCRIPT L"\\\"; g\"";
+  STARTUPINFOW startup{sizeof(startup)};
+  PROCESS_INFORMATION process{};
+  if (::CreateProcessW(cdb.c_str(), command_line.data(), nullptr, nullptr,
+                       FALSE, CREATE_NO_WINDOW, nullptr, log_dir.c_str(),
+                       &startup, &process)) {
+    ::CloseHandle(process.hThread);
+    ::CloseHandle(process.hProcess);
+  }
+}
+#endif
+
 }  // namespace
 
 std::wstring GaiaPipeName() {
@@ -86,7 +173,7 @@ GaiaPipe::~GaiaPipe() {
   if (companion_) ::CloseHandle(companion_);
 }
 
-DWORD GaiaPipe::StartCompanion() {
+DWORD GaiaPipe::StartCompanion(const std::string& log_dir_utf8) {
   if (companion_ && ::WaitForSingleObject(companion_, 0) == WAIT_TIMEOUT &&
       stop_) {
     if (connected_) Push(Event::Kind::kConnected);
@@ -132,11 +219,39 @@ DWORD GaiaPipe::StartCompanion() {
                               (L"vm-service-port=" + qa_port).c_str());
   }
 #endif
-  STARTUPINFOW startup{sizeof(startup)};
+  const std::wstring log_dir = Utf16FromUtf8(log_dir_utf8);
+  HANDLE engine_log = OpenEngineLog(log_dir);
+  STARTUPINFOEXW startup{};
+  startup.StartupInfo.cb = sizeof(startup);
+  // The log is the only handle the companion inherits.
+  std::vector<BYTE> attribute_list;
+  if (engine_log != INVALID_HANDLE_VALUE) {
+    SIZE_T size = 0;
+    ::InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+    attribute_list.resize(size);
+    auto* list =
+        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attribute_list.data());
+    if (::InitializeProcThreadAttributeList(list, 1, 0, &size)) {
+      if (::UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                      &engine_log, sizeof(engine_log), nullptr,
+                                      nullptr)) {
+        startup.lpAttributeList = list;
+        startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        startup.StartupInfo.hStdOutput = engine_log;
+        startup.StartupInfo.hStdError = engine_log;
+      } else {
+        ::DeleteProcThreadAttributeList(list);
+      }
+    }
+  }
+  const bool redirected = startup.lpAttributeList != nullptr;
   PROCESS_INFORMATION process{};
-  const BOOL launched =
-      ::CreateProcessW(exe.c_str(), command_line.data(), nullptr, nullptr,
-                       FALSE, 0, nullptr, nullptr, &startup, &process);
+  const BOOL launched = ::CreateProcessW(
+      exe.c_str(), command_line.data(), nullptr, nullptr, redirected,
+      redirected ? EXTENDED_STARTUPINFO_PRESENT : 0, nullptr, nullptr,
+      &startup.StartupInfo, &process);
+  if (redirected) ::DeleteProcThreadAttributeList(startup.lpAttributeList);
+  if (engine_log != INVALID_HANDLE_VALUE) ::CloseHandle(engine_log);
   ::SetEnvironmentVariableW(kGaiaParentEnv, nullptr);
 #ifndef NDEBUG
   if (!qa_port.empty()) {
@@ -151,6 +266,9 @@ DWORD GaiaPipe::StartCompanion() {
   ::CloseHandle(process.hThread);
   companion_ = process.hProcess;
   companion_pid_ = process.dwProcessId;
+#ifndef NDEBUG
+  AttachDebugger(companion_pid_, log_dir);
+#endif
 
   if (!Open(pipe)) return 0;
   reader_ = std::thread(&GaiaPipe::Run, this, true, companion_pid_);
