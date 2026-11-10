@@ -3534,8 +3534,14 @@ class GaiaController extends ChangeNotifier {
         await attachThis();
       case GaiaBuiltin.btw:
         openBtws();
+      case GaiaBuiltin.usage:
+        _usageOpens.add(null);
     }
   }
+
+  /// Asks the window to show the usage bars (`/usage`).
+  Stream<void> get usageOpens => _usageOpens.stream;
+  final _usageOpens = StreamController<void>.broadcast();
 
   /// Each chat's side questions as last loaded (GAIA_BTW_HLD.md §2), oldest
   /// first; a streaming one of this device's as it now stands.

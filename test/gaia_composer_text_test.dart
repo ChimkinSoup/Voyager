@@ -7,6 +7,8 @@ import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/snippet.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
+import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_composer_text.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -128,7 +130,11 @@ void main() {
     late FakeGaiaWindow window;
     final requests = <String>[];
 
-    Future<void> start(WidgetTester tester, GaiaTextSettings text) async {
+    Future<void> start(
+      WidgetTester tester,
+      GaiaTextSettings text, {
+      FakeClaudeRunner? runner,
+    }) async {
       requests.clear();
       main = FakeGaiaPipe.main();
       main
@@ -153,7 +159,7 @@ void main() {
       controller = GaiaController(
         pipe: companion,
         window: window = FakeGaiaWindow(),
-        runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
+        runners: {kGaiaClaudeCodeAdapter: runner ?? FakeClaudeRunner()},
         cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
         exit: (_) {},
       );
@@ -743,5 +749,124 @@ void main() {
       expect(requests, contains('addWord Voyager'));
       await settle(tester);
     });
+
+    // GAIA_NATIVE_COMMANDS.md §5.
+    group("Enter on a CLI's command", () {
+      Future<_NativeRunner> startNative(WidgetTester tester) async {
+        final runner = _NativeRunner()..sendError = StateError('not run');
+        await start(tester, GaiaTextSettings.off, runner: runner);
+        // The CLI's list is read on the palette's first look.
+        controller.nativeCommands;
+        await tester.pump();
+        return runner;
+      }
+
+      testWidgets('sends one that takes no arguments', (tester) async {
+        final runner = await startNative(tester);
+        await type(tester, '/cont');
+        expect(find.byKey(const ValueKey('/context')), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(runner.sent.single.prompt, '/context');
+        await settle(tester);
+      });
+
+      testWidgets('waits for the arguments of one that takes them', (
+        tester,
+      ) async {
+        final runner = await startNative(tester);
+        await type(tester, '/compa');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(controller.draft.text, '/compact ');
+        expect(runner.sent, isEmpty);
+        await settle(tester);
+      });
+
+      testWidgets("a standalone command of the user's sends too", (
+        tester,
+      ) async {
+        final runner = await startNative(tester);
+        controller.commands = const [
+          GaiaCommand(name: 'tidy', template: 'Tidy it', standalone: true),
+        ];
+        await type(tester, '/tid');
+        expect(find.byKey(const ValueKey('/tidy')), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(seconds: 1));
+        expect(runner.sent.single.prompt, contains('Tidy it'));
+        await settle(tester);
+      });
+
+      testWidgets('mid-reply, picking one waits rather than stopping it', (
+        tester,
+      ) async {
+        final runner = await startNative(tester);
+        runner
+          ..sendError = null
+          ..turns.add([const ClaudeTextStart()]);
+        controller.send('hi');
+        await tester.pump();
+        expect(controller.currentRunning, isTrue);
+        await type(tester, '/cont');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(seconds: 1));
+        expect(runner.stopped, isEmpty);
+        expect(controller.draft.text, '/context');
+        await controller.stop(controller.currentChatId!);
+        await settle(tester);
+      });
+
+      testWidgets('beside attachments, picking one gives them back unsent', (
+        tester,
+      ) async {
+        final runner = await startNative(tester);
+        await controller.attachPaths(['C:/notes.txt']);
+        await type(tester, '/cont');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(seconds: 1));
+        expect(runner.sent, isEmpty);
+        expect(controller.draft.text, '/context');
+        expect(controller.draftFiles, hasLength(1));
+        await settle(tester);
+      });
+
+      testWidgets('Tab only completes it', (tester) async {
+        final runner = await startNative(tester);
+        await type(tester, '/cont');
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(controller.draft.text, '/context ');
+        expect(runner.sent, isEmpty);
+        await settle(tester);
+      });
+
+      testWidgets("/usage is Gaia's, and shows the usage bars", (tester) async {
+        final runner = await startNative(tester);
+        await type(tester, '/usage');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(find.text('Usage'), findsOneWidget);
+        expect(runner.sent, isEmpty);
+        expect(controller.draft.text, isEmpty);
+        await settle(tester);
+      });
+    });
   });
+}
+
+/// A Claude runner whose CLI has commands of its own.
+class _NativeRunner extends FakeClaudeRunner implements GaiaNativeCommander {
+  @override
+  Future<List<GaiaNativeCommand>> nativeCommands(GaiaAccount? account) async =>
+      const [
+        (name: 'context', description: 'Show context usage', argumentHint: ''),
+        (
+          name: 'compact',
+          description: 'Free up context',
+          argumentHint: '<instructions>',
+        ),
+        (name: 'usage', description: "The CLI's usage", argumentHint: ''),
+      ];
 }

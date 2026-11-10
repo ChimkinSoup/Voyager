@@ -174,7 +174,15 @@ String? claudeBlockedCommandIn(String prompt) {
 /// streamed (GAIA_NATIVE_COMMANDS.md §5): its output, or for `/compact`,
 /// how far the session shrank.
 String claudeCommandOutput(String result, ClaudeCompacted? compacted) {
-  if (result.trim().isNotEmpty) return result.trim();
+  // Laid out for a terminal, so kept monospace with its line breaks, in a
+  // fence longer than any backtick run inside it.
+  if (result.trim().isNotEmpty) {
+    final runs = RegExp('`+').allMatches(result).map((m) => m[0]!.length);
+    final fence = '`' * (runs.fold(2, (a, b) => a > b ? a : b) + 1);
+    // Blank lines go from the ends, but the first line keeps its indent.
+    final body = result.replaceFirst(RegExp(r'^\s*\n'), '').trimRight();
+    return '$fence\n$body\n$fence';
+  }
   if (compacted == null) return '';
   String tokens(int n) => n < 1000 ? '$n' : '${(n / 1000).toStringAsFixed(1)}k';
   return switch (compacted) {

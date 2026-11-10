@@ -10,6 +10,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderFlex;
+import 'package:intl/intl.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart'
     show voyagerSpellCheckServiceProvider;
@@ -23,6 +24,7 @@ import 'package:voyager/core/spellcheck/dictionary_loader.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
@@ -2565,6 +2567,7 @@ class _MessageView extends StatelessWidget {
         inset: 0,
         copy: message.text,
         actions: _actions,
+        at: message.createdAt,
         controller: controller,
         child: GaiaAppear(
           play: appear,
@@ -2795,6 +2798,7 @@ class _MessageView extends StatelessWidget {
       copy: message.text,
       actions: streaming ? null : _actions,
       label: controller.replyLabel(message),
+      at: message.createdAt,
       controller: controller,
       child: Stack(
         clipBehavior: Clip.none,
@@ -2990,6 +2994,22 @@ class _MessageView extends StatelessWidget {
   }
 }
 
+/// "3:42 PM" today, "Yesterday", "Mon" within the week, "Sep 20" this year,
+/// "Sep 20, 2025" before: when a message was sent, rounded to its day.
+String gaiaWhenLabel(DateTime at, DateTime now) {
+  final local = at.toLocal();
+  final days = DateTime.utc(
+    now.year,
+    now.month,
+    now.day,
+  ).difference(DateTime.utc(local.year, local.month, local.day)).inDays;
+  if (days <= 0) return formatTime12Hour(local);
+  if (days == 1) return 'Yesterday';
+  if (days < 7) return DateFormat.E().format(local);
+  if (local.year == now.year) return DateFormat.MMMd().format(local);
+  return DateFormat.yMMMd().format(local);
+}
+
 /// A message, with a bar of faint icons under it while the cursor's anywhere
 /// across its row, as in Claude's desktop app: Copy, then [actions]. The bar's
 /// room is always kept, so nothing moves as it shows.
@@ -3003,6 +3023,7 @@ class _HoverActions extends StatefulWidget {
     required this.child,
     this.above = _above,
     this.label,
+    this.at,
   });
 
   /// The bar's side: the message's own.
@@ -3027,6 +3048,10 @@ class _HoverActions extends StatefulWidget {
 
   /// Muted text after the icons, as which model wrote a reply.
   final String? label;
+
+  /// When the message was sent, as a muted "Yesterday" with the exact time
+  /// on hover: past the icons on the left, before them on the right.
+  final DateTime? at;
 
   /// Between the message and the icons' hover boxes, and below them, as in
   /// Claude's desktop app.
@@ -3100,6 +3125,22 @@ class _HoverActionsState extends State<_HoverActions>
   Widget build(BuildContext context) {
     final actions = widget.actions;
     final shown = (_hovered || _focused) && actions != null;
+    final muted = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final right = widget.alignment == Alignment.centerRight;
+    final at = widget.at?.toLocal();
+    final when = at == null
+        ? null
+        : Padding(
+            padding: right
+                ? const EdgeInsets.only(right: 6)
+                : const EdgeInsets.only(left: 6),
+            child: Tooltip(
+              message: DateFormat.yMMMMEEEEd().add_jm().format(at),
+              child: Text(gaiaWhenLabel(at, DateTime.now()), style: muted),
+            ),
+          );
     return Focus(
       onFocusChange: _focus,
       child: MouseRegion(
@@ -3133,6 +3174,7 @@ class _HoverActionsState extends State<_HoverActions>
                               builder: (context, _) => Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (right && when != null) when,
                                   if (widget.copy case final text?
                                       when text.isNotEmpty)
                                     GaiaActionIcon(
@@ -3149,18 +3191,9 @@ class _HoverActionsState extends State<_HoverActions>
                                   if (widget.label case final label?)
                                     Padding(
                                       padding: const EdgeInsets.only(left: 6),
-                                      child: Text(
-                                        label,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
-                                            ),
-                                      ),
+                                      child: Text(label, style: muted),
                                     ),
+                                  if (!right && when != null) when,
                                 ],
                               ),
                             ),
@@ -3299,6 +3332,7 @@ class _ComposerState extends State<_Composer> {
   /// anything above it, Vim included, sees them.
   late final _focus = FocusNode(onKeyEvent: _paletteKey);
   late final StreamSubscription<void> _summoned;
+  late final StreamSubscription<void> _usageOpened;
   final _vanish = GlobalKey<GaiaVanishState>();
   final _imagesVanish = GlobalKey<GaiaVanishState>();
 
@@ -3333,6 +3367,9 @@ class _ComposerState extends State<_Composer> {
     super.initState();
     _text.addListener(_onDraft);
     _summoned = widget.controller.summoned.listen((_) => _focus.requestFocus());
+    _usageOpened = widget.controller.usageOpens.listen((_) {
+      if (mounted) unawaited(_showGaiaUsage(context, widget.controller));
+    });
     widget.controller.focused.addListener(_onWindowFocus);
     _composers[widget.controller] = this;
   }
@@ -3491,8 +3528,9 @@ class _ComposerState extends State<_Composer> {
 
   /// A palette row picked (§9.2): a built-in runs, a tier or an account
   /// switches, a standalone command sends, and any other command, or `/remember`, waits
-  /// for its arguments.
-  Future<void> _pick(GaiaPaletteItem item) async {
+  /// for its arguments. A CLI's command that takes none sends too, unless
+  /// [complete] (Tab) asks only for its name.
+  Future<void> _pick(GaiaPaletteItem item, {bool complete = false}) async {
     final controller = widget.controller;
     if (item.builtin
         case GaiaBuiltin.remember || GaiaBuiltin.queue || GaiaBuiltin.btw) {
@@ -3520,11 +3558,15 @@ class _ComposerState extends State<_Composer> {
       await switchGaiaAccount(context, controller, account.adapter, account);
     } else if (item.native case final native?) {
       // Its arguments, if any, go after it (GAIA_NATIVE_COMMANDS.md §5).
-      final text = '/${native.name} ';
+      // One that takes none sends, closed over as a standalone command is.
+      final send = native.argumentHint.isEmpty && !complete;
+      final text = send ? '/${native.name}' : '/${native.name} ';
+      if (send) _paletteClosedFor = text;
       _text.value = TextEditingValue(
         text: text,
         selection: TextSelection.collapsed(offset: text.length),
       );
+      if (send) await _submitPicked();
     } else if (item.command case final command?) {
       // Closed over a standalone command left unsent mid-reply, so it
       // waits like any other draft.
@@ -3537,9 +3579,19 @@ class _ComposerState extends State<_Composer> {
       );
       // Straight to sending: the palette still matches `/name`, and
       // through [_send] it picked the row again instead (BUG-316).
-      if (command.standalone) await _submit();
+      if (command.standalone) await _submitPicked();
     }
     _focus.requestFocus();
+  }
+
+  /// [_submit] for a row [_pick] just put in the draft: changing the draft set
+  /// off its own check for commands, which would have the send turned away.
+  /// Mid-reply it waits in the draft: [_submit] there is the stop button's.
+  Future<void> _submitPicked() async {
+    while (_takingCommands) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (mounted && !widget.controller.currentRunning) await _submit();
   }
 
   /// While the palette shows: Enter picks from it, whatever sends, as does
@@ -3572,7 +3624,12 @@ class _ComposerState extends State<_Composer> {
       case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
         unawaited(_send());
       case LogicalKeyboardKey.tab:
-        unawaited(_pick(palette[_highlight.clamp(0, palette.length - 1)]));
+        unawaited(
+          _pick(
+            palette[_highlight.clamp(0, palette.length - 1)],
+            complete: true,
+          ),
+        );
       case LogicalKeyboardKey.arrowDown:
         _move(1);
       case LogicalKeyboardKey.arrowUp:
@@ -3677,6 +3734,7 @@ class _ComposerState extends State<_Composer> {
   void dispose() {
     _text.removeListener(_onDraft);
     unawaited(_summoned.cancel());
+    unawaited(_usageOpened.cancel());
     widget.controller.focused.removeListener(_onWindowFocus);
     if (_composers[widget.controller] == this) {
       _composers[widget.controller] = null;
@@ -5302,6 +5360,63 @@ void _showHandMenu(
       onPressed: () => unawaited(_chooseAuto(context, controller)),
     ),
   ]);
+}
+
+/// `/usage`: every bar of the next message's accounts, as the composer's
+/// rings show them in their tooltips.
+Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
+  return showDialog<void>(
+    context: context,
+    // Rebuilt as usage reads land, which may be after it opens.
+    builder: (context) => ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final adapter = controller.agentFor(controller.nextTier)?.adapter;
+        final accounts = adapter == null
+            ? const <GaiaAccount>[]
+            : controller.accountsFor(adapter);
+        final theme = Theme.of(context);
+        return AlertDialog(
+          title: const Text('Usage'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (accounts.isEmpty) const Text('No agent for this tier.'),
+                for (final (index, account) in accounts.indexed) ...[
+                  if (index > 0) const SizedBox(height: 20),
+                  if (accounts.length > 1) ...[
+                    Text(account.label, style: theme.textTheme.labelMedium),
+                    const SizedBox(height: 10),
+                  ],
+                  if (controller.usageUntracked(adapter!, account)
+                      case final untracked?)
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 260),
+                      child: Text(untracked),
+                    )
+                  else if (controller.usage[account.key] case final usage?)
+                    for (final (i, bar) in gaiaUsageBars(usage).indexed) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      bar,
+                    ]
+                  else
+                    const Text('Not read yet'),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 /// Auto, once the user has read its notice on this device (§4).

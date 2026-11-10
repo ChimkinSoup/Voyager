@@ -141,6 +141,15 @@ alias) stays Gaia's, as in the palette. Then:
   ordinary tools-only turn that auto-compacted from showing a "Compacted" reply. For `/compact`, which has an empty result, it
   shows the `compact_boundary` token counts. The messages `/compact` replays after compacting
   are whole messages, so Gaia already ignores them.
+- **Picking one from the palette.** Enter or a click sends a command whose argument hint is
+  empty, as a standalone user command does. One with a hint gets `/name ` to type them
+  after, and Tab always does that. Codex skills carry the hint `[request]`, so they wait for
+  one.
+- **Output keeps its terminal layout.** The result text goes in a code block, in a fence
+  longer than any backtick run inside it, since Markdown would merge its lines and columns.
+- **`/usage` is Gaia's.** It opens Gaia's own usage bars for the next message's accounts
+  (the rings' tooltips) instead of sending Claude Code's text. `/cost` and `/stats`, its
+  aliases there, still go to the CLI.
 - **The stored message is the typed text.** A user command is stored as its expansion
   (§9.2), but here the expansion happens in the CLI, so the chat shows `/usage`.
 

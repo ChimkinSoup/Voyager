@@ -150,6 +150,7 @@ void main() {
       'drain',
       'this',
       'btw',
+      'usage',
       'quick',
       'std',
       'deep',
@@ -162,6 +163,7 @@ void main() {
       'std',
       'swap',
       'this',
+      'usage',
     ]);
     expect(filterGaiaPalette(items, 'ee').map((i) => i.name), [
       'deep',

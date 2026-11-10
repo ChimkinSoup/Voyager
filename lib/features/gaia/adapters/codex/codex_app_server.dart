@@ -1178,7 +1178,9 @@ class CodexAppServerRunner implements GaiaAgentRunner {
             (
               name: skill.name,
               description: skill.description,
-              argumentHint: '',
+              // A skill takes the request after it, so picking one waits
+              // for it rather than sending.
+              argumentHint: '[request]',
             ),
       ];
     } on GaiaRunException catch (error) {

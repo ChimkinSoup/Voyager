@@ -384,7 +384,18 @@ void main() {
       final result = turn.whereType<ClaudeResult>().single;
       expect(
         claudeCommandOutput(result.text, null),
-        startsWith('Reloaded skills:'),
+        startsWith('```\nReloaded skills:'),
+      );
+    });
+
+    test('command output keeps its layout in a fence longer than its own', () {
+      expect(
+        claudeCommandOutput('\n  Plan   12%\n  Week    3%\n\n', null),
+        '```\n  Plan   12%\n  Week    3%\n```',
+      );
+      expect(
+        claudeCommandOutput('a ```` b', null),
+        '`````\na ```` b\n`````',
       );
     });
 

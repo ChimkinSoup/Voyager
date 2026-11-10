@@ -25,7 +25,11 @@ enum GaiaBuiltin {
 
   /// Takes the rest of the draft: see [gaiaBtwText] (GAIA_BTW_HLD.md §3).
   /// Alone, it opens the side questions.
-  btw('btw', 'Ask a side question about this chat');
+  btw('btw', 'Ask a side question about this chat'),
+
+  /// Gaia's usage bars rather than the CLI's own text, which is laid out
+  /// for a terminal (GAIA_NATIVE_COMMANDS.md §5).
+  usage('usage', 'Show plan usage for the next message\'s accounts');
 
   const GaiaBuiltin(this.name, this.description, {this.aliases = const {}});
 
