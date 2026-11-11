@@ -1,7 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
@@ -17,6 +23,67 @@ import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 final gaiaChatsProvider = StreamProvider<List<GaiaChat>>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchChats(),
 );
+
+/// Live projects (GAIA_PROJECTS_HLD.md §1), oldest first.
+final gaiaProjectsProvider = StreamProvider<List<GaiaProject>>(
+  (ref) => ref.watch(gaiaRepositoryProvider).watchProjects(),
+);
+
+/// The projects folded shut on the Gaia page's Chats tab
+/// (GAIA_PROJECTS_HLD.md §7.3), as they were left. This device's own, like
+/// the sidebar's, so never synced: kept in a JSON file beside the database.
+final gaiaClosedProjectsProvider =
+    StateNotifierProvider<GaiaClosedProjects, Set<String>>(
+      (ref) => GaiaClosedProjects(
+        () async =>
+            File(p.join((await appDataDirectory()).path, 'gaia_page.json')),
+      ),
+    );
+
+class GaiaClosedProjects extends StateNotifier<Set<String>> {
+  GaiaClosedProjects(this._file) : super(const {}) {
+    unawaited(_load());
+  }
+
+  final Future<File> Function() _file;
+
+  /// Set once one is folded, so a slow first read can't undo it.
+  var _touched = false;
+  var _saved = Future<void>.value();
+
+  Future<void> _load() async {
+    try {
+      final file = await _file();
+      if (!await file.exists()) return;
+      final json = jsonDecode(await file.readAsString()) as Map;
+      if (_touched || !mounted) return;
+      state = {
+        for (final id in json['closedProjects'] as List? ?? const [])
+          id as String,
+      };
+    } catch (error) {
+      debugPrint('[gaia] page prefs unreadable, using defaults: $error');
+    }
+  }
+
+  void toggle(String projectId) {
+    _touched = true;
+    state = state.contains(projectId)
+        ? ({...state}..remove(projectId))
+        : {...state, projectId};
+    final closed = state.toList();
+    // In turn, so an older write never lands after a newer one.
+    _saved = _saved.then((_) async {
+      try {
+        final file = await _file();
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode({'closedProjects': closed}));
+      } catch (error) {
+        debugPrint('[gaia] page prefs not saved: $error');
+      }
+    });
+  }
+}
 
 /// Live memories (§11), oldest first.
 final gaiaMemoriesProvider = StreamProvider<List<GaiaMemory>>(
@@ -94,6 +161,18 @@ final gaiaRunsProvider = Provider.autoDispose<List<GaiaRun>>((ref) {
   ref.onDispose(() => runs.removeListener(ref.invalidateSelf));
   return runs.value;
 });
+
+/// The chats running now: this desktop's, or on the phone, what every
+/// desktop says it's running (§12.2).
+final gaiaRunningChatsProvider = Provider.autoDispose<Set<String>>(
+  (ref) => isWindows
+      ? {for (final run in ref.watch(gaiaRunsProvider)) run.chatId}
+      : {
+          for (final beacon
+              in ref.watch(gaiaBeaconsProvider).valueOrNull ?? const [])
+            for (final run in beacon.runs) run.chatId,
+        },
+);
 
 /// Each adapter's usage on this desktop (§6.4), as the companion reports it.
 final gaiaUsageProvider = Provider.autoDispose<Map<String, GaiaAccountUsage>>((

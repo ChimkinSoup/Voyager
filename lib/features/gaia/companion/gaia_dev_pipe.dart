@@ -93,6 +93,33 @@ class GaiaDevPipe extends GaiaPipe {
       case 'setPinned':
         await _store.setPinned(p['chatId']! as String, p['pinned']! as bool);
         return null;
+      case 'projects':
+        return [
+          for (final project in await _store.projects()) project.toJson(),
+        ];
+      case 'putProject':
+        await _store.createProject(GaiaProject.fromJson(_map(p['project'])));
+        return null;
+      case 'renameProject':
+        await _store.renameProject(
+          p['projectId']! as String,
+          p['name']! as String,
+        );
+        return null;
+      case 'setProject':
+        await _store.setProject(
+          p['chatId']! as String,
+          p['projectId'] as String?,
+        );
+        return null;
+      case 'deleteProject':
+        for (final chat in await _store.deleteProject(
+          p['projectId']! as String,
+          withChats: p['withChats'] == true,
+        )) {
+          await _store.deleteDraft(chat.id);
+        }
+        return null;
       case 'deleteChat':
         await _store.deleteChat(p['chatId']! as String);
         await _store.deleteDraft(p['chatId']! as String);

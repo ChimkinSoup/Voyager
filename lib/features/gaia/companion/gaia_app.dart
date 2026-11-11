@@ -788,8 +788,9 @@ class _SidebarState extends State<_Sidebar> {
         ({GaiaChat chat, bool selected, bool running, bool? open, Widget tile})
       >{};
 
-  /// The chat being renamed in its tile, and its field.
+  /// The chat or project being renamed in its row, and its field.
   String? _renaming;
+  var _renamingProject = false;
   final _rename = TextEditingController();
   final _renameFocus = FocusNode();
 
@@ -807,27 +808,339 @@ class _SidebarState extends State<_Sidebar> {
     super.dispose();
   }
 
-  void _startRename(GaiaChat chat) {
+  /// Renames chat or [project] [id], from [name], in its row.
+  void _startRename(String id, String name, {bool project = false}) {
     _rename.value = TextEditingValue(
-      text: chat.title,
-      selection: TextSelection(baseOffset: 0, extentOffset: chat.title.length),
+      text: name,
+      selection: TextSelection(baseOffset: 0, extentOffset: name.length),
     );
-    setState(() => _renaming = chat.id);
+    setState(() {
+      _renaming = id;
+      _renamingProject = project;
+    });
     // Asked for, not autofocused: the composer, or the menu's giving it
     // back, has the scope's focus already.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _renaming == chat.id) _renameFocus.requestFocus();
+      if (mounted && _renaming == id) _renameFocus.requestFocus();
     });
   }
 
   /// Enter or a click away keeps the new name; Esc doesn't.
   void _endRename({required bool keep}) {
-    final chatId = _renaming;
-    if (chatId == null) return;
+    final id = _renaming;
+    if (id == null) return;
     setState(() => _renaming = null);
-    if (keep) {
-      unawaited(widget.controller.renameChat(chatId, _rename.text.trim()));
+    if (!keep) return;
+    final name = _rename.text.trim();
+    unawaited(
+      _renamingProject
+          ? widget.controller.renameProject(id, name)
+          : widget.controller.renameChat(id, name),
+    );
+  }
+
+  /// The name being typed, in its row's own text style, as its name was,
+  /// in Gaia's field: its fill, and its edge lit in the accent. Out past
+  /// the name on both sides by its padding, and the text collapsed and
+  /// centred as the name is, so the text stays put.
+  Widget _renameField() => LayoutBuilder(
+    builder: (context, constraints) => OverflowBox(
+      maxWidth: constraints.maxWidth + 8,
+      child: Container(
+        height: 30,
+        // With the 1 of the edge, the 4 it's out by.
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: gaiaFieldFill,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+          ),
+        ),
+        child: TextField(
+          controller: _rename,
+          focusNode: _renameFocus,
+          autofocus: true,
+          // Not merged over the theme's text style, whose line height and
+          // spacing would move the text.
+          style: DefaultTextStyle.of(context).style.copyWith(
+            inherit: false,
+            textBaseline: TextBaseline.alphabetic,
+          ),
+          decoration: const InputDecoration(
+            isCollapsed: true,
+            // The box above is the fill: the theme's would show as a faint
+            // one round the text.
+            filled: false,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+          ),
+          contextMenuBuilder: gaiaTextMenu,
+          onSubmitted: (_) => _endRename(keep: true),
+          onTapOutside: (_) => _endRename(keep: true),
+        ),
+      ),
+    ),
+  );
+
+  /// [row] while it's being renamed: Esc keeps its old name.
+  Widget _escapable(Key key, Widget row) => CallbackShortcuts(
+    key: key,
+    bindings: {
+      const SingleActivator(LogicalKeyboardKey.escape): () =>
+          _endRename(keep: false),
+    },
+    child: row,
+  );
+
+  /// The chat lists' groups (GAIA_PROJECTS_HLD.md §7.1): each chat's tile,
+  /// its forks bracketed under it unless folded away.
+  List<Widget> _groups(List<GaiaForkGroup> groups) => [
+    for (final (:chat, :forks) in groups)
+      if (forks.isEmpty)
+        _tile(chat)
+      else if (widget.controller.sidebar.collapsed.contains(chat.id))
+        _tile(chat, open: false)
+      else ...[
+        _tile(chat, open: true),
+        _ForkBracket(
+          key: ValueKey('forks of ${chat.id}'),
+          children: [for (final fork in forks) _tile(fork)],
+        ),
+      ],
+  ];
+
+  /// A project made, open and named "New project" in its row, ready to be
+  /// renamed; with [moving], that chat moved into it.
+  Future<void> _newProject({GaiaChat? moving}) async {
+    final controller = widget.controller;
+    final project = await controller.createProject('New project');
+    unawaited(controller.sidebar.setProjectOpen(project.id, true));
+    if (moving != null) await controller.moveChat(moving.id, project.id);
+    if (mounted) _startRename(project.id, project.name, project: true);
+  }
+
+  /// Move to project's list (GAIA_PROJECTS_HLD.md §3.2): the projects it
+  /// isn't in, a new one, and out of the one it is in.
+  void _moveMenu(GaiaChat chat, Offset position) {
+    final controller = widget.controller;
+    final inProject = controller.project(chat.projectId);
+    showGaiaMenu(context, position, [
+      for (final project in controller.projects)
+        if (project.id != inProject?.id)
+          GaiaMenuItem(
+            label: project.name,
+            icon: Icons.folder_outlined,
+            onPressed: () => controller.moveChat(chat.id, project.id),
+          ),
+      GaiaMenuItem(
+        label: 'New project…',
+        icon: Icons.create_new_folder_outlined,
+        onPressed: () => _newProject(moving: chat),
+      ),
+      if (inProject != null)
+        GaiaMenuItem(
+          label: 'Remove from project',
+          icon: Icons.folder_off_outlined,
+          onPressed: () => controller.moveChat(chat.id, null),
+        ),
+    ]);
+  }
+
+  void _projectMenu(GaiaProject project, Offset position) {
+    showGaiaMenu(context, position, [
+      GaiaMenuItem(
+        label: 'New chat',
+        icon: Icons.add,
+        onPressed: () => _newChatIn(project),
+      ),
+      GaiaMenuItem(
+        label: 'Rename',
+        icon: Icons.edit_outlined,
+        onPressed: () => _startRename(project.id, project.name, project: true),
+      ),
+      GaiaMenuItem(
+        label: 'Delete project…',
+        icon: Icons.delete_outline,
+        destructive: true,
+        onPressed: () => _deleteProject(project),
+      ),
+    ]);
+  }
+
+  void _newChatIn(GaiaProject project) {
+    widget.controller.newChatIn(project.id);
+    widget.controller.focusComposer();
+  }
+
+  /// The delete dialog (GAIA_PROJECTS_HLD.md §3.3): its chats stay, as
+  /// chats with no project, unless the box is ticked. Not while one of them
+  /// is running, which the run would write back.
+  Future<void> _deleteProject(GaiaProject project) async {
+    final controller = widget.controller;
+    final chats = [
+      for (final chat in controller.chats)
+        if (chat.projectId == project.id) chat,
+    ];
+    final running = chats.any((chat) => controller.isRunning(chat.id));
+    final its = chats.length == 1 ? 'its chat' : 'its ${chats.length} chats';
+    var withChats = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Delete "${project.name}"?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                chats.isEmpty
+                    ? 'It has no chats.'
+                    : withChats
+                    ? '${its[0].toUpperCase()}${its.substring(1)} will go '
+                          'to the trash with it.'
+                    : '${its[0].toUpperCase()}${its.substring(1)} will stay, '
+                          'as ${chats.length == 1 ? 'a chat' : 'chats'} with '
+                          'no project.',
+              ),
+              if (chats.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: running
+                      ? null
+                      : () => setState(() => withChats = !withChats),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IgnorePointer(
+                          child: Checkbox(
+                            value: withChats,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            onChanged: running ? null : (_) {},
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            running
+                                ? 'Also delete $its (stop the one running '
+                                      'first)'
+                                : 'Also delete $its',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            GaiaButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            GaiaButton(
+              label: 'Delete',
+              onPressed: () => Navigator.of(context).pop(true),
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    // One may have started while the dialog was open.
+    if (withChats && chats.any((chat) => controller.isRunning(chat.id))) {
+      showGaiaToast(
+        context,
+        mark: GaiaToastMark.error,
+        title: "Didn't delete ${project.name}",
+        body: 'One of its chats started running',
+      );
+      return;
     }
+    await controller.deleteProject(project.id, withChats: withChats);
+    if (!mounted) return;
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: 'Deleted ${project.name}',
+      body: 'It can be restored from the trash',
+    );
+  }
+
+  /// A project's row (GAIA_PROJECTS_HLD.md §7.1): it folds open to its
+  /// chats, with a + for a new chat in it, and how many it has while
+  /// folded.
+  Widget _projectRow(GaiaProjectSection section) {
+    final controller = widget.controller;
+    final project = section.project;
+    final open = controller.sidebar.openProjects.contains(project.id);
+    final renaming = project.id == _renaming && _renamingProject;
+    final row = GestureDetector(
+      key: ValueKey('project ${project.id}'),
+      onSecondaryTapUp: (details) =>
+          _projectMenu(project, details.globalPosition),
+      child: _ChatTile(
+        selected: false,
+        title: Row(
+          children: [
+            AnimatedRotation(
+              turns: open ? 0 : -0.25,
+              duration: const Duration(milliseconds: 150),
+              child: Icon(
+                Icons.expand_more,
+                size: 16,
+                color: DefaultTextStyle.of(context).style.color,
+                semanticLabel: open ? 'Close project' : 'Open project',
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: renaming
+                  ? _renameField()
+                  : Text(project.name, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 4,
+          children: [
+            if (!open && section.count > 0)
+              Text(
+                section.count == 1 ? '1 chat' : '${section.count} chats',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF737373)),
+              ),
+            Tooltip(
+              message: 'New chat in ${project.name}',
+              child: GaiaButton(
+                icon: Icons.add,
+                size: 24,
+                padding: 0,
+                onPressed: () => _newChatIn(project),
+              ),
+            ),
+          ],
+        ),
+        onTap: renaming
+            ? null
+            : () {
+                unawaited(controller.sidebar.setProjectOpen(project.id, !open));
+                setState(() {});
+              },
+      ),
+    );
+    return renaming ? _escapable(ValueKey('project ${project.id}'), row) : row;
   }
 
   /// Off the list at once; the toast, once it's deleted, undoes it.
@@ -864,12 +1177,17 @@ class _SidebarState extends State<_Sidebar> {
       GaiaMenuItem(
         label: 'Rename',
         icon: Icons.edit_outlined,
-        onPressed: () => _startRename(chat),
+        onPressed: () => _startRename(chat.id, chat.title),
       ),
       GaiaMenuItem(
         label: chat.pinned ? 'Unpin' : 'Pin',
         icon: chat.pinned ? Icons.push_pin : Icons.push_pin_outlined,
         onPressed: () => controller.setPinned(chat.id, !chat.pinned),
+      ),
+      GaiaMenuItem(
+        label: 'Move to project',
+        icon: Icons.drive_file_move_outlined,
+        onPressed: () => _moveMenu(chat, position),
       ),
       GaiaMenuItem(
         label: 'Copy title',
@@ -898,7 +1216,7 @@ class _SidebarState extends State<_Sidebar> {
     final controller = widget.controller;
     final selected = chat.id == controller.currentChatId;
     final running = controller.isRunning(chat.id);
-    final renaming = chat.id == _renaming;
+    final renaming = chat.id == _renaming && !_renamingProject;
     if (_tiles[chat.id] case final last?
         when !renaming &&
             identical(last.chat, chat) &&
@@ -913,53 +1231,7 @@ class _SidebarState extends State<_Sidebar> {
       child: _ChatTile(
         selected: selected,
         title: renaming
-            // In the tile's own text style, as its title was, in Gaia's
-            // field: its fill, and its edge lit in the accent. Out past the
-            // title on both sides by its padding, and the text collapsed and
-            // centred as the title is, so the text stays put.
-            ? LayoutBuilder(
-                builder: (context, constraints) => OverflowBox(
-                  maxWidth: constraints.maxWidth + 8,
-                  child: Container(
-                    height: 30,
-                    // With the 1 of the edge, the 4 it's out by.
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: gaiaFieldFill,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    child: TextField(
-                      controller: _rename,
-                      focusNode: _renameFocus,
-                      autofocus: true,
-                      // Not merged over the theme's text style, whose line
-                      // height and spacing would move the text.
-                      style: DefaultTextStyle.of(context).style.copyWith(
-                        inherit: false,
-                        textBaseline: TextBaseline.alphabetic,
-                      ),
-                      decoration: const InputDecoration(
-                        isCollapsed: true,
-                        // The box above is the fill: the theme's would show
-                        // as a faint one round the text.
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                      ),
-                      contextMenuBuilder: gaiaTextMenu,
-                      onSubmitted: (_) => _endRename(keep: true),
-                      onTapOutside: (_) => _endRename(keep: true),
-                    ),
-                  ),
-                ),
-              )
+            ? _renameField()
             : Text(chat.title, overflow: TextOverflow.ellipsis),
         chevron: open == null
             ? null
@@ -996,14 +1268,7 @@ class _SidebarState extends State<_Sidebar> {
     if (renaming) {
       // Not kept: the field's tile is built afresh as it's typed in.
       _tiles.remove(chat.id);
-      return CallbackShortcuts(
-        key: ValueKey(chat.id),
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              _endRename(keep: false),
-        },
-        child: tile,
-      );
+      return _escapable(ValueKey(chat.id), tile);
     }
     _tiles[chat.id] = (
       chat: chat,
@@ -1021,6 +1286,7 @@ class _SidebarState extends State<_Sidebar> {
     final theme = Theme.of(context);
     final ids = {for (final chat in controller.chats) chat.id};
     _tiles.removeWhere((id, _) => !ids.contains(id));
+    final sections = gaiaChatSections(controller.chats, controller.projects);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1069,18 +1335,40 @@ class _SidebarState extends State<_Sidebar> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               children: [
-                for (final (:chat, :forks) in gaiaForkGroups(controller.chats))
-                  if (forks.isEmpty)
-                    _tile(chat)
-                  else if (controller.sidebar.collapsed.contains(chat.id))
-                    _tile(chat, open: false)
-                  else ...[
-                    _tile(chat, open: true),
-                    _ForkBracket(
-                      key: ValueKey('forks of ${chat.id}'),
-                      children: [for (final fork in forks) _tile(fork)],
+                if (sections.pinned.isNotEmpty) ...[
+                  const _SidebarLabel('Pinned'),
+                  ..._groups(sections.pinned),
+                ],
+                _SidebarLabel(
+                  'Projects',
+                  trailing: Tooltip(
+                    message: 'New project',
+                    child: GaiaButton(
+                      icon: Icons.add,
+                      size: 24,
+                      padding: 0,
+                      onPressed: _newProject,
                     ),
-                  ],
+                  ),
+                ),
+                for (final section in sections.projects) ...[
+                  _projectRow(section),
+                  if (controller.sidebar.openProjects.contains(
+                    section.project.id,
+                  ))
+                    Padding(
+                      key: ValueKey('chats of ${section.project.id}'),
+                      padding: const EdgeInsets.only(left: _projectIndent),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _groups(section.groups),
+                      ),
+                    ),
+                ],
+                if (sections.chats.isNotEmpty) ...[
+                  const _SidebarLabel('Chats'),
+                  ..._groups(sections.chats),
+                ],
               ],
             ),
           ),
@@ -1197,6 +1485,41 @@ class _ChatTileState extends State<_ChatTile> {
       ),
     );
   }
+}
+
+/// How far a project's chats sit in from its row.
+const _projectIndent = 14.0;
+
+/// A heading in the sidebar's list (GAIA_PROJECTS_HLD.md §7.1), with
+/// [trailing] at its right, such as Projects' +.
+class _SidebarLabel extends StatelessWidget {
+  const _SidebarLabel(this.text, {this.trailing});
+
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+    child: SizedBox(
+      height: 24,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF737373),
+              ),
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    ),
+  );
 }
 
 /// Folds a chat's forks away under it, or shows them.
@@ -2786,6 +3109,7 @@ class _MessageView extends StatelessWidget {
       ),
     );
     final tier = orbTier;
+    final replyLabel = controller.replyLabel(message);
     // Just off the text, however wide the gutter, and level with
     // the newest line: the bubble's margin and padding below it, then half a
     // line. A Stack with or without the orb, so the bubble isn't built
@@ -2797,7 +3121,8 @@ class _MessageView extends StatelessWidget {
       above: _HoverActions._above - _replyPadding.bottom,
       copy: message.text,
       actions: streaming ? null : _actions,
-      label: controller.replyLabel(message),
+      label: replyLabel?.model,
+      labelTip: replyLabel?.account,
       at: message.createdAt,
       controller: controller,
       child: Stack(
@@ -3023,6 +3348,7 @@ class _HoverActions extends StatefulWidget {
     required this.child,
     this.above = _above,
     this.label,
+    this.labelTip,
     this.at,
   });
 
@@ -3046,8 +3372,10 @@ class _HoverActions extends StatefulWidget {
   /// Between the message and the icons' hover boxes.
   final double above;
 
-  /// Muted text after the icons, as which model wrote a reply.
+  /// Muted text after the icons, as which model wrote a reply, with
+  /// [labelTip] (its account) on hover.
   final String? label;
+  final String? labelTip;
 
   /// When the message was sent, as a muted "Yesterday" with the exact time
   /// on hover: past the icons on the left, before them on the right.
@@ -3057,6 +3385,10 @@ class _HoverActions extends StatefulWidget {
   /// Claude's desktop app.
   static const _above = 4.0;
   static const _below = 8.0;
+
+  /// From the time's or model's middle to the top of its tooltip: just under
+  /// the text, not as far down as the icons' (sized for their 32px boxes).
+  static const _tipOffset = 17.0;
 
   @override
   State<_HoverActions> createState() => _HoverActionsState();
@@ -3138,6 +3470,7 @@ class _HoverActionsState extends State<_HoverActions>
                 : const EdgeInsets.only(left: 6),
             child: Tooltip(
               message: DateFormat.yMMMMEEEEd().add_jm().format(at),
+              verticalOffset: _HoverActions._tipOffset,
               child: Text(gaiaWhenLabel(at, DateTime.now()), style: muted),
             ),
           );
@@ -3191,7 +3524,22 @@ class _HoverActionsState extends State<_HoverActions>
                                   if (widget.label case final label?)
                                     Padding(
                                       padding: const EdgeInsets.only(left: 6),
-                                      child: Text(label, style: muted),
+                                      child: switch (widget.labelTip) {
+                                        final tip? => Tooltip(
+                                          message: tip,
+                                          verticalOffset:
+                                              _HoverActions._tipOffset,
+                                          child: Text(label, style: muted),
+                                        ),
+                                        null => Text(label, style: muted),
+                                      },
+                                    ),
+                                  if (!right &&
+                                      when != null &&
+                                      widget.label != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6),
+                                      child: Text('·', style: muted),
                                     ),
                                   if (!right && when != null) when,
                                 ],
@@ -4966,6 +5314,13 @@ class _ComposerStatus extends StatelessWidget {
           const SizedBox(width: 8 - 2 * _UsageRing.margin),
         ],
         const SizedBox(width: _UsageRing.margin),
+        // A new chat's project, changeable until its first send
+        // (GAIA_PROJECTS_HLD.md §3.2).
+        if (controller.currentChatId == null &&
+            controller.projects.isNotEmpty) ...[
+          _ProjectPicker(controller: controller),
+          const SizedBox(width: 8),
+        ],
         // The notch opens up and to the left, so it ends the row.
         _TierPicker(controller: controller),
       ],
@@ -5084,6 +5439,33 @@ class _RingPainter extends CustomPainter {
       old.track != track ||
       old.fill != fill ||
       old.stroke != stroke;
+}
+
+/// The project a new chat goes in, or none.
+class _ProjectPicker extends StatelessWidget {
+  const _ProjectPicker({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) => GaiaNotch(
+    items: [
+      GaiaNotchItem<String?>(
+        options: [
+          const GaiaNotchOption(value: null, label: 'No project'),
+          for (final project in controller.projects)
+            GaiaNotchOption(
+              value: project.id,
+              label: project.name,
+              icon: (color, {required lit}) =>
+                  Icon(Icons.folder_outlined, size: 14, color: color),
+            ),
+        ],
+        value: controller.project(controller.newChatProject)?.id,
+        onChanged: controller.pickNewChatProject,
+      ),
+    ],
+  );
 }
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that

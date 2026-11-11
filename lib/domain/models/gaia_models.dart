@@ -506,9 +506,14 @@ class GaiaChat extends SoftDeletable {
     this.fork,
     this.forkOf,
     this.rewinds = const [],
+    this.projectId,
   });
 
   final String title;
+
+  /// The project it's in (GAIA_PROJECTS_HLD.md §2); null for none. One that
+  /// points at no live project means none too.
+  final String? projectId;
 
   /// The messages rewinds dropped (GAIA_REWIND_HLD.md §5): never shown here,
   /// and their seqs never used again.
@@ -583,12 +588,15 @@ class GaiaChat extends SoftDeletable {
     GaiaForkRecord? fork,
     bool clearFork = false,
     List<GaiaRewind>? rewinds,
+    String? projectId,
+    bool clearProjectId = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
     bool bumpVersion = true,
     bool touch = true,
   }) => GaiaChat(
+    projectId: clearProjectId ? null : (projectId ?? this.projectId),
     drain: drain ?? this.drain,
     grants: grants ?? this.grants,
     fork: clearFork ? null : (fork ?? this.fork),
@@ -629,6 +637,7 @@ class GaiaChat extends SoftDeletable {
     'fork': fork?.toJson(),
     'forkOf': forkOf,
     'rewinds': [for (final rewind in rewinds) rewind.toJson()],
+    'projectId': projectId,
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -650,6 +659,7 @@ class GaiaChat extends SoftDeletable {
       fork: GaiaForkRecord.fromJson(json['fork']),
       forkOf: json['forkOf'] as String?,
       rewinds: gaiaRewindsFromJson(json['rewinds']),
+      projectId: json['projectId'] as String?,
     );
   }
 }
@@ -658,9 +668,7 @@ class GaiaChat extends SoftDeletable {
 /// taken out to sit under its original chat, in the order they came.
 /// A fork that's pinned, or whose original isn't in [ordered], stays where
 /// it was, on its own.
-List<({GaiaChat chat, List<GaiaChat> forks})> gaiaForkGroups(
-  List<GaiaChat> ordered,
-) {
+List<GaiaForkGroup> gaiaForkGroups(List<GaiaChat> ordered) {
   final ids = {for (final chat in ordered) chat.id};
   bool under(GaiaChat chat) =>
       !chat.pinned && chat.forkOf != chat.id && ids.contains(chat.forkOf);
@@ -672,6 +680,120 @@ List<({GaiaChat chat, List<GaiaChat> forks})> gaiaForkGroups(
     for (final chat in ordered)
       if (!under(chat)) (chat: chat, forks: forks[chat.id] ?? const []),
   ];
+}
+
+/// A chat with its forks under it, as [gaiaForkGroups] lists them.
+typedef GaiaForkGroup = ({GaiaChat chat, List<GaiaChat> forks});
+
+/// A named group of chats (GAIA_PROJECTS_HLD.md §1). Its chats name it by
+/// [GaiaChat.projectId].
+class GaiaProject extends SoftDeletable {
+  const GaiaProject({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.name,
+  });
+
+  final String name;
+
+  GaiaProject copyWith({
+    String? name,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+    int? version,
+  }) => GaiaProject(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version ?? this.version + 1,
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    name: name ?? this.name,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory GaiaProject.fromJson(Map<String, Object?> json) {
+    final createdAt = DateTime.parse(json['createdAt']! as String);
+    return GaiaProject(
+      id: json['id']! as String,
+      name: json['name']! as String,
+      createdAt: createdAt,
+      updatedAt: _date(json['updatedAt']) ?? createdAt,
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      deletedAt: _date(json['deletedAt']),
+    );
+  }
+}
+
+/// A project as the chat lists show it (GAIA_PROJECTS_HLD.md §7.1): its
+/// chats in [groups], pinned first, and how many there are.
+typedef GaiaProjectSection = ({
+  GaiaProject project,
+  List<GaiaForkGroup> groups,
+  int count,
+});
+
+/// [ordered] (pinned first, then most recent) split as the chat lists show
+/// it (GAIA_PROJECTS_HLD.md §7.1): [pinned] and [chats] hold the chats in no
+/// live project, and each of [projects] its own, with forks grouped as
+/// [gaiaForkGroups] does. A chat whose project isn't in [projects] is in
+/// none. Projects go by their most recent chat, an empty one by when it was
+/// made.
+({
+  List<GaiaForkGroup> pinned,
+  List<GaiaProjectSection> projects,
+  List<GaiaForkGroup> chats,
+})
+gaiaChatSections(List<GaiaChat> ordered, List<GaiaProject> projects) {
+  final live = {for (final project in projects) project.id};
+  final loose = <GaiaChat>[];
+  final byProject = <String, List<GaiaChat>>{};
+  for (final chat in ordered) {
+    if (chat.projectId case final id? when live.contains(id)) {
+      (byProject[id] ??= []).add(chat);
+    } else {
+      loose.add(chat);
+    }
+  }
+  final latest = {
+    for (final project in projects)
+      project.id:
+          byProject[project.id]
+              ?.map((chat) => chat.lastMessageAt)
+              .reduce((a, b) => a.isAfter(b) ? a : b) ??
+          project.createdAt,
+  };
+  final looseGroups = gaiaForkGroups(loose);
+  return (
+    pinned: [
+      for (final group in looseGroups)
+        if (group.chat.pinned) group,
+    ],
+    projects: [
+      for (final project in [
+        ...projects,
+      ]..sort((a, b) => latest[b.id]!.compareTo(latest[a.id]!)))
+        (
+          project: project,
+          groups: gaiaForkGroups(byProject[project.id] ?? const []),
+          count: byProject[project.id]?.length ?? 0,
+        ),
+    ],
+    chats: [
+      for (final group in looseGroups)
+        if (!group.chat.pinned) group,
+    ],
+  );
 }
 
 /// A prompt waiting its turn (§13): in [chatId]'s queue, or the global one

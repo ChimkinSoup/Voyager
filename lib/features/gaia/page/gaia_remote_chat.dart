@@ -43,12 +43,20 @@ class _Sent {
 /// whose messages run on a desktop beacon. [chatId] may be a chat not yet
 /// made: the beacon makes it with the first message.
 class GaiaRemoteChatPage extends ConsumerStatefulWidget {
-  const GaiaRemoteChatPage({super.key, required this.chatId, this.title});
+  const GaiaRemoteChatPage({
+    super.key,
+    required this.chatId,
+    this.title,
+    this.projectId,
+  });
 
   final String chatId;
 
   /// For a chat not yet made.
   final String? title;
+
+  /// The project a chat not yet made goes in (GAIA_PROJECTS_HLD.md §3.2).
+  final String? projectId;
 
   @override
   ConsumerState<GaiaRemoteChatPage> createState() => _GaiaRemoteChatPageState();
@@ -196,7 +204,12 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
       beacon,
       GaiaRemoteCommandType.prompt,
       text: text,
-      payload: {'text': text, 'tier': _tier?.name, 'isNew': isNew},
+      payload: {
+        'text': text,
+        'tier': _tier?.name,
+        'isNew': isNew,
+        if (isNew) 'projectId': widget.projectId,
+      },
     );
     _tier = null;
   }

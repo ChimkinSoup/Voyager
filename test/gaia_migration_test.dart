@@ -823,6 +823,37 @@ void main() {
     expect((await repo.getBtw('b1'))!.session?.sessionId, 's1');
   });
 
+  test('192→193 adds projects, and no chat is in one', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Plans',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    await seed.customStatement('DROP TABLE gaia_projects_table');
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN project_id',
+    );
+    await seed.customStatement('PRAGMA user_version = 192');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.projectId, isNull);
+    await repo.upsertProject(
+      GaiaProject(id: 'p1', name: 'Trip', createdAt: now, updatedAt: now),
+    );
+    await repo.upsertChat(chat.copyWith(projectId: 'p1'));
+    expect((await repo.getChat('c1'))!.projectId, 'p1');
+    expect((await repo.listProjects()).single.name, 'Trip');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

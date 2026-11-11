@@ -30,6 +30,48 @@ Future<GaiaMessage?> gaiaToggleCheck(
   return written;
 }
 
+/// Deletes project [projectId] (GAIA_PROJECTS_HLD.md §3.3). With
+/// [withChats] its chats go to the trash with it, at the same instant, so
+/// restoring it brings them back; without, they're let go, to no project.
+/// Gives back the chats it deleted.
+Future<List<GaiaChat>> gaiaDeleteProject(
+  GaiaRepository repository,
+  String projectId, {
+  required bool withChats,
+}) async {
+  final project = await repository.getProject(projectId);
+  if (project == null || project.isDeleted) return const [];
+  final at = utcNow();
+  final chats = [
+    for (final chat in await repository.listChats())
+      if (chat.projectId == projectId) chat,
+  ];
+  await repository.upsertProjectWithChats(project.copyWith(deletedAt: at), [
+    for (final chat in chats)
+      withChats
+          ? chat.copyWith(deletedAt: at)
+          : chat.copyWith(clearProjectId: true),
+  ]);
+  return withChats ? chats : const [];
+}
+
+/// [chatId] moved into project [projectId], or out of its project for null
+/// (GAIA_PROJECTS_HLD.md §3.2). Where there's no [GaiaChatStore], as on the
+/// phone.
+Future<void> gaiaMoveChat(
+  GaiaRepository repository,
+  String chatId,
+  String? projectId,
+) async {
+  final chat = await repository.getChat(chatId);
+  if (chat == null || chat.projectId == projectId) return;
+  await repository.upsertChat(
+    projectId == null
+        ? chat.copyWith(clearProjectId: true)
+        : chat.copyWith(projectId: projectId),
+  );
+}
+
 /// The companion's chat reads and writes, as the main instance serves them
 /// over the pipe (GAIA_HLD.md §3.2), on top of [GaiaRepository].
 ///
@@ -183,6 +225,34 @@ class GaiaChatStore {
     if (chat == null || chat.pinned == pinned) return;
     await _repository.upsertChat(chat.copyWith(pinned: pinned));
   });
+
+  /// Moved into a project or out of one (GAIA_PROJECTS_HLD.md §3.2).
+  Future<void> setProject(String chatId, String? projectId) =>
+      _serial(() => gaiaMoveChat(_repository, chatId, projectId));
+
+  Future<List<GaiaProject>> projects() => _repository.listProjects();
+
+  /// Saves a project the companion just made. One already stored is left
+  /// as it is.
+  Future<void> createProject(GaiaProject project) => _serial(() async {
+    if (await _repository.getProject(project.id) != null) return;
+    await _repository.upsertProject(project.copyWith(version: 1));
+  });
+
+  Future<void> renameProject(String projectId, String name) =>
+      _serial(() async {
+        final project = await _repository.getProject(projectId);
+        if (project == null || project.name == name) return;
+        await _repository.upsertProject(project.copyWith(name: name));
+      });
+
+  /// [gaiaDeleteProject]: the chats it deleted.
+  Future<List<GaiaChat>> deleteProject(
+    String projectId, {
+    required bool withChats,
+  }) => _serial(
+    () => gaiaDeleteProject(_repository, projectId, withChats: withChats),
+  );
 
   /// Drain mode on or off for [chatId] (§13).
   Future<void> setDrain(String chatId, bool drain) => _serial(() async {

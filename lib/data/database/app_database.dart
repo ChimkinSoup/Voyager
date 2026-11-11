@@ -2223,6 +2223,22 @@ class GaiaChatsTable extends Table {
   /// `[{from, to, forkId, by}]`, the messages rewinds dropped
   /// (GAIA_REWIND_HLD.md §5).
   TextColumn get rewindsJson => text().withDefault(const Constant('[]'))();
+
+  /// The project it's in (GAIA_PROJECTS_HLD.md §2); null for none.
+  TextColumn get projectId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A named group of Gaia chats (GAIA_PROJECTS_HLD.md §2).
+class GaiaProjectsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2506,13 +2522,14 @@ class GaiaMemoriesTable extends Table {
     GaiaMemoriesTable,
     GaiaQueueTable,
     GaiaBtwTable,
+    GaiaProjectsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 192;
+  int get schemaVersion => 193;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4683,6 +4700,18 @@ class AppDatabase extends _$AppDatabase {
           'gaia_btw_table',
           gaiaBtwTable,
           gaiaBtwTable.sessionJson,
+        );
+      }
+      if (from < 193) {
+        // Projects (GAIA_PROJECTS_HLD.md §2).
+        await migrator.createTable(gaiaProjectsTable);
+      }
+      if (from >= 169 && from < 193) {
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.projectId,
         );
       }
     },

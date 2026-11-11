@@ -1075,6 +1075,15 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertProject(
+    GaiaProject(
+      id: 'gaia-project-1',
+      name: 'Trip to Japan',
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1454,6 +1463,7 @@ void main() {
         'gaia_memories_table',
         'gaia_queue_table',
         'gaia_btw_table',
+        'gaia_projects_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -193,7 +194,7 @@ void main() {
 
     expect(queries, ['needle']);
     expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Chats'), findsNothing);
+    expect(searchChats, findsNothing);
     final hit = rows();
     expect(hit, findsOneWidget);
     expect(
@@ -231,7 +232,7 @@ void main() {
     final controller = await pump(tester);
     await open(tester);
     await search(tester, 'chat');
-    expect(find.text('Chats'), findsOneWidget);
+    expect(searchChats, findsOneWidget);
     expect(rows(), findsNWidgets(2));
 
     // Newest first. Down past the last comes round to the first, and Up
@@ -314,3 +315,9 @@ void main() {
     expect(find.text('No matches'), findsOneWidget);
   });
 }
+
+/// The search's Chats heading, not the sidebar's.
+final searchChats = find.descendant(
+  of: find.byType(GaiaPanel),
+  matching: find.text('Chats'),
+);

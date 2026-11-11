@@ -1178,6 +1178,17 @@ class GaiaController extends ChangeNotifier {
   var aborted = false;
   var chats = <GaiaChat>[];
 
+  /// Live projects (GAIA_PROJECTS_HLD.md §1), oldest first.
+  var projects = <GaiaProject>[];
+
+  /// The live project [id] names; null for none, or one that's gone.
+  GaiaProject? project(String? id) =>
+      projects.firstWhereOrNull((project) => project.id == id);
+
+  /// The project a new chat goes in, from its composer's chip
+  /// (GAIA_PROJECTS_HLD.md §3.2); null for none.
+  String? newChatProject;
+
   /// Voyager's accent, as ARGB: the theme follows it.
   final accent = ValueNotifier(0xFF7C9EFF);
 
@@ -2103,7 +2114,7 @@ class GaiaController extends ChangeNotifier {
 
   /// The model that wrote [reply], and its account when there's more than
   /// one, for its hover bar; null for a message no model wrote.
-  String? replyLabel(GaiaMessage reply) {
+  ({String model, String? account})? replyLabel(GaiaMessage reply) {
     final model = reply.model;
     if (model == null) return null;
     final adapter = reply.adapter;
@@ -2116,12 +2127,14 @@ class GaiaController extends ChangeNotifier {
             )
             ?.label ??
         model;
-    if (adapter == null || accountsFor(adapter).length < 2) return name;
+    if (adapter == null || accountsFor(adapter).length < 2) {
+      return (model: name, account: null);
+    }
     final id = reply.account ?? kGaiaDefaultAccountId;
-    return switch (accountsFor(adapter).firstWhereOrNull((a) => a.id == id)) {
-      final account? => '$name · ${account.label}',
-      null => name,
-    };
+    return (
+      model: name,
+      account: accountsFor(adapter).firstWhereOrNull((a) => a.id == id)?.label,
+    );
   }
 
   /// The tier the next message in the current chat goes to (§7.2).
@@ -2263,6 +2276,13 @@ class GaiaController extends ChangeNotifier {
       ..forEach(_imageFiles.remove)
       ..clear();
     final list = (await _pipe.request('chats'))! as List;
+    final projectList = await _pipe.request('projects') as List? ?? const [];
+    final wereProjects = jsonEncode(projects);
+    projects = [
+      for (final json in projectList)
+        GaiaProject.fromJson((json as Map).cast<String, Object?>()),
+    ];
+    if (jsonEncode(projects) != wereProjects) changed = true;
     final saved = [
       for (final chat in list)
         _fetchedChat((chat as Map).cast<String, Object?>()),
@@ -2527,6 +2547,7 @@ class GaiaController extends ChangeNotifier {
   void newChat() {
     _viewChat(null);
     pickedTier = null;
+    newChatProject = null;
     if (!debug.dummyMode) _utility?.warm();
     notifyListeners();
   }
@@ -2579,7 +2600,10 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> selectChat(String chatId) async {
     revealing = null;
-    if (chatId != currentChatId) pickedTier = null;
+    if (chatId != currentChatId) {
+      pickedTier = null;
+      newChatProject = null;
+    }
     _viewChat(chatId);
     notifyListeners();
     if (_messages.containsKey(chatId)) return;
@@ -2911,6 +2935,7 @@ class GaiaController extends ChangeNotifier {
       curatedSeq: point.seq,
       fork: record,
       forkOf: source.forkOf ?? source.id,
+      projectId: source.projectId,
     );
     final copies = _copiesInto(forkId, copied, now);
     try {
@@ -3084,6 +3109,7 @@ class GaiaController extends ChangeNotifier {
       fork: source.fork,
       forkOf: source.forkOf ?? source.id,
       rewinds: source.rewinds,
+      projectId: source.projectId,
     );
     final copies = _copiesInto(forkId, copied, now);
     final dropped = [
@@ -3464,6 +3490,96 @@ class GaiaController extends ChangeNotifier {
     ]..sort(_listed);
     notifyListeners();
     await _request('setPinned', {'chatId': chatId, 'pinned': pinned});
+  }
+
+  /// A new chat started in [projectId] (GAIA_PROJECTS_HLD.md §3.2): its
+  /// composer's chip shows the project, which can be changed before the
+  /// first send.
+  void newChatIn(String? projectId) {
+    newChat();
+    newChatProject = projectId;
+    notifyListeners();
+  }
+
+  /// The new chat's project chip changed, before its first send.
+  void pickNewChatProject(String? projectId) {
+    newChatProject = projectId;
+    notifyListeners();
+  }
+
+  /// A project named [name], made at once; gives it back.
+  Future<GaiaProject> createProject(String name) async {
+    final now = utcNow();
+    final made = GaiaProject(
+      id: _uuid.v4(),
+      name: name,
+      createdAt: now,
+      updatedAt: now,
+    );
+    projects = [...projects, made];
+    notifyListeners();
+    await _request('putProject', {'project': made.toJson()});
+    return made;
+  }
+
+  Future<void> renameProject(String projectId, String name) async {
+    final from = project(projectId);
+    if (from == null || name.isEmpty || name == from.name) return;
+    projects = [
+      for (final p in projects) p.id == projectId ? p.copyWith(name: name) : p,
+    ];
+    notifyListeners();
+    await _request('renameProject', {'projectId': projectId, 'name': name});
+  }
+
+  /// [chatId] moved into [projectId], or out of its project for null
+  /// (GAIA_PROJECTS_HLD.md §3.2). One replying picks it up on its next
+  /// turn.
+  Future<void> moveChat(String chatId, String? projectId) async {
+    chats = [
+      for (final c in chats)
+        c.id != chatId
+            ? c
+            : projectId == null
+            ? c.copyWith(clearProjectId: true)
+            : c.copyWith(projectId: projectId),
+    ];
+    notifyListeners();
+    await _request('setProject', {'chatId': chatId, 'projectId': projectId});
+  }
+
+  /// Deletes [projectId] (GAIA_PROJECTS_HLD.md §3.3): its chats let go to
+  /// no project, or with [withChats], deleted with it.
+  Future<void> deleteProject(
+    String projectId, {
+    required bool withChats,
+  }) async {
+    projects = [
+      for (final p in projects)
+        if (p.id != projectId) p,
+    ];
+    final gone = {
+      if (withChats)
+        for (final chat in chats)
+          if (chat.projectId == projectId) chat.id,
+    };
+    chats = [
+      for (final c in chats)
+        if (!gone.contains(c.id)) c,
+    ];
+    for (final chatId in gone) {
+      _messages.remove(chatId);
+    }
+    if (newChatProject == projectId) newChatProject = null;
+    if (gone.contains(currentChatId)) {
+      newChat();
+    } else {
+      notifyListeners();
+    }
+    await _request('deleteProject', {
+      'projectId': projectId,
+      'withChats': withChats,
+    });
   }
 
   /// Takes [chatId] off the list at once and deletes it in the main
@@ -4254,6 +4370,7 @@ class GaiaController extends ChangeNotifier {
       // Its session has the copies and the btw (§7).
       fork: record,
       forkOf: source.forkOf ?? source.id,
+      projectId: source.projectId,
     );
     final messages = [
       ..._copiesInto(forkId, copied, now),
@@ -4573,6 +4690,7 @@ class GaiaController extends ChangeNotifier {
     String text, {
     required String chatId,
     GaiaTier? tier,
+    String? projectId,
     bool fromQueue = false,
     void Function()? onQueued,
   }) {
@@ -4580,7 +4698,7 @@ class GaiaController extends ChangeNotifier {
     unawaited(
       send(
         text,
-        remote: (chatId: chatId, tier: tier),
+        remote: (chatId: chatId, tier: tier, projectId: projectId),
         started: started,
         fromQueue: fromQueue,
         onQueued: onQueued,
@@ -4728,7 +4846,7 @@ class GaiaController extends ChangeNotifier {
     String text, {
     List<GaiaDraftImage> images = const [],
     List<GaiaFilePart> files = const [],
-    ({String chatId, GaiaTier? tier})? remote,
+    ({String chatId, GaiaTier? tier, String? projectId})? remote,
     Completer<String?>? started,
     void Function()? onQueued,
     bool fromQueue = false,
@@ -4878,6 +4996,9 @@ class GaiaController extends ChangeNotifier {
     if (chat == null) {
       chat = GaiaChat(
         id: chatId,
+        projectId: remote == null
+            ? project(newChatProject)?.id
+            : remote.projectId,
         title: _firstLineTitle(prompt, files, quotes),
         createdAt: sentAt,
         updatedAt: sentAt,
@@ -4897,6 +5018,7 @@ class GaiaController extends ChangeNotifier {
             : const {},
       );
       if (remote == null) {
+        newChatProject = null;
         newAutoConsented = _newChatAuto ?? false;
         _newChatSeesScreen = false;
         _newChatCanControl = false;
@@ -4989,6 +5111,7 @@ class GaiaController extends ChangeNotifier {
       draftControl = control;
       // A new chat's choices go back with its draft, if that's in view.
       if (isNew && currentChatId == null && !aborted) {
+        newChatProject = project(chat?.projectId)?.id;
         if (chat?.grants[_deviceId] case final grant?) {
           _newChatSeesScreen = grant.seeScreen;
           _newChatCanControl = grant.canControl;
@@ -6223,6 +6346,7 @@ class GaiaController extends ChangeNotifier {
           text,
           chatId: chatId,
           tier: gaiaTierFromName(payload['tier']),
+          projectId: payload['projectId'] as String?,
           onQueued: () => queued = true,
         );
         if (why != null && !queued) throw GaiaPipeException(why);

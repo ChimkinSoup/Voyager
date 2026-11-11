@@ -135,6 +135,9 @@ abstract final class FirestoreCollections {
   /// §2).
   static const gaiaBtw = 'gaia_btw';
 
+  /// Named groups of chats (GAIA_PROJECTS_HLD.md §2).
+  static const gaiaProjects = 'gaia_projects';
+
   /// A message's parts when they're too big for its own document (§8), as
   /// pieces of their JSON at `{messageId}_{n}`. Read with the message, never
   /// pulled on their own.
@@ -253,6 +256,7 @@ abstract final class FirestoreCollections {
     gaiaMemories,
     gaiaQueue,
     gaiaBtw,
+    gaiaProjects,
   };
 
   /// The only collections whose documents carry text two devices can edit at

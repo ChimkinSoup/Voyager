@@ -92,6 +92,27 @@ class _Main {
         };
       case 'chats':
         return [for (final chat in await store.chats()) chat.toJson()];
+      case 'projects':
+        return [for (final project in await store.projects()) project.toJson()];
+      case 'putProject':
+        await store.createProject(
+          GaiaProject.fromJson(
+            (params['project']! as Map).cast<String, Object?>(),
+          ),
+        );
+        return null;
+      case 'setProject':
+        await store.setProject(
+          params['chatId']! as String,
+          params['projectId'] as String?,
+        );
+        return null;
+      case 'deleteProject':
+        await store.deleteProject(
+          params['projectId']! as String,
+          withChats: params['withChats'] == true,
+        );
+        return null;
       case 'putChat':
         await holdPutChat?.future;
         await store.createChat(
@@ -2480,10 +2501,10 @@ void main() {
       controller.pickTier(GaiaTier.deep);
       expect(controller.lastReplyTier, GaiaTier.standard);
       // One account: no account named.
-      expect(
-        controller.replyLabel(controller.messages.last),
-        controller.agentFor(GaiaTier.standard)!.label,
-      );
+      expect(controller.replyLabel(controller.messages.last), (
+        model: controller.agentFor(GaiaTier.standard)!.label,
+        account: null,
+      ));
       expect(controller.replyLabel(controller.messages.first), isNull);
     });
 
@@ -4849,10 +4870,10 @@ void main() {
       await start();
       await turn('Hi');
       controller.switchAccount(kGaiaClaudeCodeAdapter, b);
-      expect(
-        controller.replyLabel(controller.messages.last),
-        '${controller.agentFor(controller.nextTier)!.label} · A',
-      );
+      expect(controller.replyLabel(controller.messages.last), (
+        model: controller.agentFor(controller.nextTier)!.label,
+        account: 'A',
+      ));
     });
 
     test('a switch copies the session over and resumes it', () async {
@@ -5473,6 +5494,145 @@ void main() {
       main.aborted = true;
       await start();
       expect(source.reads, isEmpty);
+    });
+  });
+
+  group('projects (GAIA_PROJECTS_HLD.md §12)', () {
+    final at = DateTime.utc(2026, 11, 10);
+    final trip = GaiaProject(
+      id: 'p1',
+      name: 'Trip',
+      createdAt: at,
+      updatedAt: at,
+    );
+
+    Future<void> turn(String prompt) async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(prompt);
+      await settle();
+    }
+
+    Future<GaiaChat> stored(String chatId) async =>
+        (await main.store.chats()).firstWhere((chat) => chat.id == chatId);
+
+    test('a new chat started in a project is saved in it, and the next new '
+        'chat is in none', () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      expect(controller.projects.map((p) => p.name), ['Trip']);
+
+      controller.newChatIn('p1');
+      expect(controller.newChatProject, 'p1');
+      await turn('Hi');
+      expect((await stored(controller.currentChatId!)).projectId, 'p1');
+
+      controller.newChat();
+      expect(controller.newChatProject, isNull);
+      await turn('Again');
+      expect((await stored(controller.currentChatId!)).projectId, isNull);
+    });
+
+    test("a new chat's first send that fails keeps its project", () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      final answer = main.pipe.onRequest!;
+      main.pipe.onRequest = (method, params) async {
+        if (method == 'putChat') throw StateError('going away');
+        return answer(method, params);
+      };
+      controller.newChatIn('p1');
+      await controller.send('Hi');
+      await settle();
+      expect(controller.currentChatId, isNull);
+      expect(controller.newChatProject, 'p1');
+    });
+
+    test("opening a chat lets go of the new chat's project", () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      await turn('Hi');
+      final chatId = controller.currentChatId!;
+      controller.newChatIn('p1');
+      await controller.selectChat(chatId);
+      expect(controller.newChatProject, isNull);
+    });
+
+    test("a fork is in its chat's project", () async {
+      await main.store.createProject(trip);
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plans',
+          createdAt: at,
+          updatedAt: at,
+          lastMessageAt: at,
+          projectId: 'p1',
+        ),
+      );
+      for (var seq = 0; seq < 2; seq++) {
+        await main.store.putMessage(
+          GaiaMessage(
+            id: 'm$seq',
+            chatId: 'c1',
+            seq: seq,
+            role: seq.isEven ? GaiaMessageRole.user : GaiaMessageRole.assistant,
+            parts: [GaiaTextPart('message $seq')],
+            status: GaiaMessageStatus.complete,
+            createdAt: at,
+            updatedAt: at,
+          ),
+        );
+      }
+      await startCompanion();
+      await controller.selectChat('c1');
+      await settle();
+
+      await controller.forkChat(controller.messages.last);
+      await settle();
+      final fork = controller.currentChatId!;
+      expect(fork, isNot('c1'));
+      expect((await stored(fork)).projectId, 'p1');
+    });
+
+    test('a chat moves into a project and out of it', () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      await turn('Hi');
+      final chatId = controller.currentChatId!;
+
+      await controller.moveChat(chatId, 'p1');
+      expect(controller.currentChat!.projectId, 'p1');
+      expect((await stored(chatId)).projectId, 'p1');
+
+      await controller.moveChat(chatId, null);
+      expect((await stored(chatId)).projectId, isNull);
+    });
+
+    test('a project deleted with its chats takes them off the list; without, '
+        'they stay, in no project', () async {
+      await main.store.createProject(trip);
+      await main.store.createProject(
+        GaiaProject(id: 'p2', name: 'Work', createdAt: at, updatedAt: at),
+      );
+      await startCompanion();
+      await turn('One');
+      final one = controller.currentChatId!;
+      await controller.moveChat(one, 'p1');
+      controller.newChat();
+      await turn('Two');
+      final two = controller.currentChatId!;
+      await controller.moveChat(two, 'p2');
+
+      await controller.deleteProject('p1', withChats: true);
+      await settle();
+      expect(controller.chats.map((c) => c.id), [two]);
+      expect(controller.projects.map((p) => p.id), ['p2']);
+
+      await controller.deleteProject('p2', withChats: false);
+      await settle();
+      expect(controller.projects, isEmpty);
+      expect(controller.chats.single.id, two);
+      expect((await stored(two)).projectId, isNull);
     });
   });
 

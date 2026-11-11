@@ -10027,6 +10027,7 @@ class DriftGaiaRepository implements GaiaRepository {
         TableUpdateQuery.onAllTables([
           _db.gaiaChatsTable,
           _db.gaiaMessagesTable,
+          _db.gaiaProjectsTable,
         ]),
       )
       .map((_) {});
@@ -10159,6 +10160,64 @@ class DriftGaiaRepository implements GaiaRepository {
   Stream<void> watchDrafts() => _db
       .tableUpdates(TableUpdateQuery.onTable(_db.gaiaDraftsTable))
       .map((_) {});
+
+  SimpleSelectStatement<$GaiaProjectsTableTable, GaiaProjectsTableData>
+  _projects({bool includeDeleted = false}) => _db.select(_db.gaiaProjectsTable)
+    ..where((t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull())
+    ..orderBy([
+      (t) => OrderingTerm.asc(t.createdAt),
+      (t) => OrderingTerm.asc(t.id),
+    ]);
+
+  @override
+  Future<List<GaiaProject>> listProjects({bool includeDeleted = false}) async =>
+      (await _projects(
+        includeDeleted: includeDeleted,
+      ).get()).map(_mapGaiaProject).toList();
+
+  @override
+  Future<GaiaProject?> getProject(String id) async {
+    final row = await (_db.select(
+      _db.gaiaProjectsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaProject(row);
+  }
+
+  @override
+  Future<void> upsertProject(
+    GaiaProject project, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaProjectsTable)
+        .insertOnConflictUpdate(_gaiaProjectCompanion(project));
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaProjects, project);
+    }
+  }
+
+  @override
+  Future<void> upsertProjectWithChats(
+    GaiaProject project,
+    List<GaiaChat> chats,
+  ) async {
+    await _db.transaction(() async {
+      for (final chat in chats) {
+        await _db
+            .into(_db.gaiaChatsTable)
+            .insertOnConflictUpdate(_gaiaChatCompanion(chat));
+      }
+      await _db
+          .into(_db.gaiaProjectsTable)
+          .insertOnConflictUpdate(_gaiaProjectCompanion(project));
+    });
+    _syncedWrites?.notify(FirestoreCollections.gaiaChats, chats);
+    _syncedWrites?.notifyOne(FirestoreCollections.gaiaProjects, project);
+  }
+
+  @override
+  Stream<List<GaiaProject>> watchProjects() =>
+      _projects().watch().map((rows) => rows.map(_mapGaiaProject).toList());
 
   SimpleSelectStatement<$GaiaMemoriesTableTable, GaiaMemoriesTableData>
   _memories({bool includeDeleted = false}) => _db.select(_db.gaiaMemoriesTable)
@@ -10411,6 +10470,15 @@ GaiaQueueItem _mapGaiaQueueItem(GaiaQueueTableData row) => GaiaQueueItem(
   deletedAt: row.deletedAt,
 );
 
+GaiaProject _mapGaiaProject(GaiaProjectsTableData row) => GaiaProject(
+  id: row.id,
+  name: row.name,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
 GaiaMemory _mapGaiaMemory(GaiaMemoriesTableData row) => GaiaMemory(
   id: row.id,
   text: row.body,
@@ -10450,11 +10518,22 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
       : GaiaForkRecord.fromJson(jsonDecode(row.forkJson!)),
   forkOf: row.forkOf,
   rewinds: gaiaRewindsFromJson(jsonDecode(row.rewindsJson)),
+  projectId: row.projectId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
   deletedAt: row.deletedAt,
 );
+
+GaiaProjectsTableCompanion _gaiaProjectCompanion(GaiaProject project) =>
+    GaiaProjectsTableCompanion(
+      id: Value(project.id),
+      name: Value(project.name),
+      createdAt: Value(project.createdAt),
+      updatedAt: Value(project.updatedAt),
+      version: Value(project.version),
+      deletedAt: Value(project.deletedAt),
+    );
 
 GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
     GaiaChatsTableCompanion(
@@ -10472,6 +10551,7 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       ),
       forkOf: Value(chat.forkOf),
       rewindsJson: Value(jsonEncode(chat.toJson()['rewinds'])),
+      projectId: Value(chat.projectId),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),

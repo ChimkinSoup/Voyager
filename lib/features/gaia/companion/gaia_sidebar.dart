@@ -16,8 +16,8 @@ const _squeezedChatRoom = 300.0;
 /// How far past [kGaiaSidebarMinWidth] a drag goes to close the sidebar.
 const _closeDrag = 48.0;
 
-/// The Gaia window's sidebar: whether the user has it open, how wide, and
-/// which chats have their forks folded away.
+/// The Gaia window's sidebar: whether the user has it open, how wide,
+/// which chats have their forks folded away, and which projects are open.
 /// Local to this desktop and never synced, like `GaiaDebug`: kept in a JSON
 /// [file] beside Gaia's other files. Null in tests, which keep nothing.
 class GaiaSidebar extends ChangeNotifier {
@@ -30,6 +30,9 @@ class GaiaSidebar extends ChangeNotifier {
 
   /// The chats whose forks are hidden under them.
   var collapsed = <String>{};
+
+  /// The projects folded open to their chats (GAIA_PROJECTS_HLD.md §7.1).
+  var openProjects = <String>{};
 
   Future<void> load() async {
     final file = this.file;
@@ -45,6 +48,9 @@ class GaiaSidebar extends ChangeNotifier {
       }
       if (json['collapsed'] case final List ids) {
         collapsed = {for (final id in ids) id as String};
+      }
+      if (json['openProjects'] case final List ids) {
+        openProjects = {for (final id in ids) id as String};
       }
     } catch (error) {
       debugPrint('[gaia] sidebar unreadable, using defaults: $error');
@@ -63,6 +69,12 @@ class GaiaSidebar extends ChangeNotifier {
     () => collapsed = {...collapsed}
       ..remove(chatId)
       ..addAll([if (value) chatId]),
+  );
+
+  Future<void> setProjectOpen(String projectId, bool value) => _set(
+    () => openProjects = {...openProjects}
+      ..remove(projectId)
+      ..addAll([if (value) projectId]),
   );
 
   Future<void> _set(void Function() change, {bool save = true}) {
@@ -85,6 +97,7 @@ class GaiaSidebar extends ChangeNotifier {
           'open': open,
           'width': width,
           'collapsed': collapsed.toList(),
+          'openProjects': openProjects.toList(),
         }),
       );
     } catch (error) {

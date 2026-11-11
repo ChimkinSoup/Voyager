@@ -899,7 +899,7 @@ abstract class GaiaRepository {
   /// every word of [query], as a prefix, newest first: at most [limit].
   Future<List<GaiaSearchHit>> searchMessages(String query, {int limit = 50});
 
-  /// Fires after any write to the chats or messages.
+  /// Fires after any write to the chats, messages or projects.
   Stream<void> watchChanges();
 
   /// Every live message's chapter, by message id, for those with one
@@ -924,6 +924,25 @@ abstract class GaiaRepository {
 
   /// Fires after any write to the drafts.
   Stream<void> watchDrafts();
+
+  /// Projects (GAIA_PROJECTS_HLD.md §2), oldest first; tombstones only with
+  /// [includeDeleted].
+  Future<List<GaiaProject>> listProjects({bool includeDeleted = false});
+  Future<GaiaProject?> getProject(String id);
+  Future<void> upsertProject(
+    GaiaProject project, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Writes [chats] and then [project] in one transaction, all or none, and
+  /// tells sync once it's done: a project delete (GAIA_PROJECTS_HLD.md §3.3).
+  Future<void> upsertProjectWithChats(
+    GaiaProject project,
+    List<GaiaChat> chats,
+  );
+
+  /// [listProjects] as it changes.
+  Stream<List<GaiaProject>> watchProjects();
 
   /// Memories (§11), oldest first; tombstones only with [includeDeleted].
   Future<List<GaiaMemory>> listMemories({bool includeDeleted = false});

@@ -4385,6 +4385,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'grants': chat.toJson()['grants'],
   'forkOf': chat.forkOf,
   'rewinds': chat.toJson()['rewinds'],
+  'projectId': chat.projectId,
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4452,6 +4453,10 @@ GaiaChat mergeGaiaChatFromRemote(
             local?.rewinds ?? const [],
             gaiaRewindsFromJson(data['rewinds']),
           ),
+    // Present but null when taken out of its project.
+    projectId: data.containsKey('projectId')
+        ? data['projectId'] as String?
+        : local?.projectId,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -4891,6 +4896,42 @@ GaiaDraft mergeGaiaDraftFromRemote(
     caret: (data['caret'] as num?)?.toInt() ?? -1,
     images: gaiaDraftImagesFromJson(data['images']),
     files: gaiaDraftFilesFromJson(data['files']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> gaiaProjectToFirestore(GaiaProject project) => {
+  'id': project.id,
+  'name': project.name,
+  'createdAt': _dateToFirestoreRequired(project.createdAt),
+  'updatedAt': _dateToFirestoreRequired(project.updatedAt),
+  'version': project.version,
+  'deletedAt': _dateToFirestore(project.deletedAt),
+};
+
+GaiaProject mergeGaiaProjectFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaProject? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaProject(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

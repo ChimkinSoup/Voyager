@@ -12,6 +12,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -22,6 +23,7 @@ import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
+import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -173,14 +175,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
     final theme = Theme.of(context);
     final chats = ref.watch(gaiaChatsProvider).valueOrNull ?? const [];
     final runs = isWindows ? ref.watch(gaiaRunsProvider) : const <GaiaRun>[];
-    // On the phone, what every desktop says it's running (§12.2).
-    final running = isWindows
-        ? {for (final run in runs) run.chatId}
-        : {
-            for (final beacon
-                in ref.watch(gaiaBeaconsProvider).valueOrNull ?? const [])
-              for (final run in beacon.runs) run.chatId,
-          };
+    final running = ref.watch(gaiaRunningChatsProvider);
     // A new fork shows its group again (GAIA_FORKING_HLD.md §7).
     final forks = {
       for (final chat in chats)
@@ -205,22 +200,22 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
             chat.title.toLowerCase().contains(query.toLowerCase()))
           chat,
     ];
-    // A search lists what it found on its own, forks or not.
-    final groups = query.isEmpty
-        ? gaiaForkGroups(shown)
-        : [for (final chat in shown) (chat: chat, forks: const <GaiaChat>[])];
-    final pinned = [
-      for (final group in groups)
-        if (group.chat.pinned) group,
+    final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
+    final closedProjects = ref.watch(gaiaClosedProjectsProvider);
+    // Grouped by project (GAIA_PROJECTS_HLD.md §7.3). A search lists what it
+    // found on its own, forks or projects or not.
+    final sections = gaiaChatSections(shown, query.isEmpty ? projects : []);
+    List<GaiaForkGroup> found(bool pinned) => [
+      for (final chat in shown)
+        if (chat.pinned == pinned) (chat: chat, forks: const <GaiaChat>[]),
     ];
-    final recent = [
-      for (final group in groups)
-        if (!group.chat.pinned) group,
-    ];
-    List<Widget> rows(List<({GaiaChat chat, List<GaiaChat> forks})> groups) => [
+    final pinned = query.isEmpty ? sections.pinned : found(true);
+    final recent = query.isEmpty ? sections.chats : found(false);
+    List<Widget> rows(List<GaiaForkGroup> groups) => [
       for (final (:chat, :forks) in groups) ...[
         _ChatRow(
           chat: chat,
+          projects: projects,
           running: running.contains(chat.id),
           open: forks.isEmpty ? null : !_collapsed.contains(chat.id),
           onFold: () => setState(() {
@@ -231,7 +226,11 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
           for (final (i, fork) in forks.indexed)
             _ForkLine(
               last: i == forks.length - 1,
-              child: _ChatRow(chat: fork, running: running.contains(fork.id)),
+              child: _ChatRow(
+                chat: fork,
+                projects: projects,
+                running: running.contains(fork.id),
+              ),
             ),
       ],
     ];
@@ -280,6 +279,13 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
                 onChanged: (text) => setState(() => _query = text),
               ),
             ),
+            const SizedBox(width: 8),
+            GlassButton(
+              dense: true,
+              label: 'New project',
+              icon: const Icon(PhosphorIconsRegular.folderPlus, size: 13),
+              onPressed: () => _newProject(context),
+            ),
             // On the phone a chat starts here and runs on a desktop.
             if (!isWindows) ...[
               const SizedBox(width: 8),
@@ -318,11 +324,247 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
           ...rows(pinned),
           const SizedBox(height: 12),
         ],
+        if (sections.projects.isNotEmpty) ...[
+          const _SectionLabel('Projects'),
+          for (final section in sections.projects) ...[
+            _ProjectRow(
+              section: section,
+              open: !closedProjects.contains(section.project.id),
+              onFold: () => ref
+                  .read(gaiaClosedProjectsProvider.notifier)
+                  .toggle(section.project.id),
+              running: section.groups.any(
+                (group) => [
+                  group.chat,
+                  ...group.forks,
+                ].any((chat) => running.contains(chat.id)),
+              ),
+            ),
+            if (!closedProjects.contains(section.project.id))
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: rows(section.groups),
+                ),
+              ),
+          ],
+          const SizedBox(height: 12),
+        ],
         if (recent.isNotEmpty) ...[
-          if (pinned.isNotEmpty) const _SectionLabel('Recent'),
+          if (pinned.isNotEmpty || sections.projects.isNotEmpty)
+            const _SectionLabel('Chats'),
           ...rows(recent),
         ],
       ],
+    );
+  }
+}
+
+/// Asks for a project's name, [from] the one it has; null when cancelled.
+Future<String?> _askProjectName(
+  BuildContext context, {
+  required String title,
+  String from = '',
+}) async => (await showPromptNameDialog(
+  context,
+  title: title,
+  initial: from,
+  contentWidth: 360,
+  validate: (name) => name.trim().isEmpty ? 'It needs a name.' : null,
+))?.trim();
+
+/// A project made from the name asked for; gives back its id, or null when
+/// cancelled.
+Future<String?> _newProject(BuildContext context) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final name = await _askProjectName(context, title: 'New project');
+  if (name == null) return null;
+  final now = utcNow();
+  final project = GaiaProject(
+    id: const Uuid().v4(),
+    name: name,
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  );
+  await container.read(gaiaRepositoryProvider).upsertProject(project);
+  return project.id;
+}
+
+/// A project's row (GAIA_PROJECTS_HLD.md §7.3): it folds open to its chats,
+/// with its menu: a new chat in it on the phone, Rename and Delete.
+class _ProjectRow extends ConsumerWidget {
+  const _ProjectRow({
+    required this.section,
+    required this.open,
+    required this.onFold,
+    required this.running,
+  });
+
+  final GaiaProjectSection section;
+  final bool open;
+  final VoidCallback onFold;
+
+  /// One of its chats is running, so they can't be deleted with it.
+  final bool running;
+
+  Future<void> _rename(BuildContext context) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final project = section.project;
+    final name = await _askProjectName(
+      context,
+      title: 'Rename project',
+      from: project.name,
+    );
+    if (name == null || name == project.name) return;
+    final repository = container.read(gaiaRepositoryProvider);
+    final current = await repository.getProject(project.id);
+    if (current == null || current.isDeleted) return;
+    await repository.upsertProject(current.copyWith(name: name));
+  }
+
+  /// The delete dialog (GAIA_PROJECTS_HLD.md §3.3): its chats stay, as
+  /// chats with no project, unless the box is ticked.
+  Future<void> _delete(BuildContext context) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final project = section.project;
+    final count = section.count;
+    final its = count == 1 ? 'its chat' : 'its $count chats';
+    final itsCap = 'I${its.substring(1)}';
+    var withChats = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Delete "${project.name}"?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                count == 0
+                    ? 'It has no chats.'
+                    : withChats
+                    ? '$itsCap will go to the trash with it.'
+                    : '$itsCap will stay, as '
+                          '${count == 1 ? 'a chat' : 'chats'} with no project.',
+              ),
+              if (count > 0)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: withChats,
+                  title: Text('Also delete $its'),
+                  subtitle: running
+                      ? const Text('Stop the one running first.')
+                      : null,
+                  onChanged: running
+                      ? null
+                      : (value) => setState(() => withChats = value ?? false),
+                ),
+            ],
+          ),
+          actions: [
+            GlassButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              label: 'Cancel',
+              dense: true,
+            ),
+            GlassButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              label: 'Delete',
+              dense: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    // One may have started while the dialog was open.
+    if (withChats) {
+      final running = container.read(gaiaRunningChatsProvider);
+      if (section.groups.any(
+        (group) => [
+          group.chat,
+          ...group.forks,
+        ].any((chat) => running.contains(chat.id)),
+      )) {
+        if (context.mounted) {
+          showVoyagerToast(
+            context,
+            message:
+                "Didn't delete ${project.name}: one of its chats "
+                'started running',
+          );
+        }
+        return;
+      }
+    }
+    final deleted = await gaiaDeleteProject(
+      container.read(gaiaRepositoryProvider),
+      project.id,
+      withChats: withChats,
+    );
+    // Their images go onto the chats' 30-day clock with them (GAIA_HLD.md
+    // §8), and a restore from the trash brings them back.
+    final media = container.read(mediaServiceProvider);
+    for (final chat in deleted) {
+      await media.removeReferencesForOwner(
+        FirestoreCollections.gaiaChats,
+        chat.id,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final count = section.count;
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        open ? PhosphorIconsRegular.caretDown : PhosphorIconsRegular.caretRight,
+        size: 14,
+      ),
+      minLeadingWidth: 14,
+      title: Text(section.project.name, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        count == 1 ? '1 chat' : '$count chats',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      trailing: PopupMenuButton<VoidCallback>(
+        tooltip: 'Project',
+        icon: const Icon(PhosphorIconsRegular.dotsThree, size: 16),
+        onSelected: (action) => action(),
+        itemBuilder: (_) => [
+          // On the phone a chat starts here and runs on a desktop.
+          if (!isWindows)
+            PopupMenuItem(
+              value: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => GaiaRemoteChatPage(
+                    chatId: const Uuid().v4(),
+                    projectId: section.project.id,
+                  ),
+                ),
+              ),
+              child: const Text('New chat'),
+            ),
+          PopupMenuItem(
+            value: () => _rename(context),
+            child: const Text('Rename'),
+          ),
+          PopupMenuItem(
+            value: () => _delete(context),
+            child: const Text('Delete project…'),
+          ),
+        ],
+      ),
+      onTap: onFold,
     );
   }
 }
@@ -772,12 +1014,16 @@ class _ForkLinePainter extends CustomPainter {
 class _ChatRow extends ConsumerWidget {
   const _ChatRow({
     required this.chat,
+    required this.projects,
     required this.running,
     this.open,
     this.onFold,
   });
 
   final GaiaChat chat;
+
+  /// The live projects, to move it to (GAIA_PROJECTS_HLD.md §3.2).
+  final List<GaiaProject> projects;
   final bool running;
 
   /// Whether the chat's forks show under it; null when it has none.
@@ -883,6 +1129,38 @@ class _ChatRow extends ConsumerWidget {
               await repository.upsertChat(
                 current.copyWith(pinned: !chat.pinned),
               );
+            },
+          ),
+          PopupMenuButton<VoidCallback>(
+            tooltip: 'Move to project',
+            icon: const Icon(PhosphorIconsRegular.folderSimple, size: 16),
+            onSelected: (action) => action(),
+            itemBuilder: (_) {
+              final repository = ref.read(gaiaRepositoryProvider);
+              final inProject = projects.any((p) => p.id == chat.projectId);
+              return [
+                for (final project in projects)
+                  if (project.id != chat.projectId)
+                    PopupMenuItem(
+                      value: () =>
+                          gaiaMoveChat(repository, chat.id, project.id),
+                      child: Text(project.name),
+                    ),
+                PopupMenuItem(
+                  value: () async {
+                    final projectId = await _newProject(context);
+                    if (projectId != null) {
+                      await gaiaMoveChat(repository, chat.id, projectId);
+                    }
+                  },
+                  child: const Text('New project…'),
+                ),
+                if (inProject)
+                  PopupMenuItem(
+                    value: () => gaiaMoveChat(repository, chat.id, null),
+                    child: const Text('Remove from project'),
+                  ),
+              ];
             },
           ),
           IconButton(

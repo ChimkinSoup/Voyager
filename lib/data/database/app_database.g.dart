@@ -58219,6 +58219,17 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58278,6 +58289,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     forkJson,
     forkOf,
     rewindsJson,
+    projectId,
     createdAt,
     updatedAt,
     version,
@@ -58379,6 +58391,12 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         ),
       );
     }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58464,6 +58482,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.string,
         data['${effectivePrefix}rewinds_json'],
       )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58522,6 +58544,9 @@ class GaiaChatsTableData extends DataClass
   /// `[{from, to, forkId, by}]`, the messages rewinds dropped
   /// (GAIA_REWIND_HLD.md §5).
   final String rewindsJson;
+
+  /// The project it's in (GAIA_PROJECTS_HLD.md §2); null for none.
+  final String? projectId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58539,6 +58564,7 @@ class GaiaChatsTableData extends DataClass
     this.forkJson,
     this.forkOf,
     required this.rewindsJson,
+    this.projectId,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58565,6 +58591,9 @@ class GaiaChatsTableData extends DataClass
       map['fork_of'] = Variable<String>(forkOf);
     }
     map['rewinds_json'] = Variable<String>(rewindsJson);
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58592,6 +58621,9 @@ class GaiaChatsTableData extends DataClass
           ? const Value.absent()
           : Value(forkOf),
       rewindsJson: Value(rewindsJson),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58619,6 +58651,7 @@ class GaiaChatsTableData extends DataClass
       forkJson: serializer.fromJson<String?>(json['forkJson']),
       forkOf: serializer.fromJson<String?>(json['forkOf']),
       rewindsJson: serializer.fromJson<String>(json['rewindsJson']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58641,6 +58674,7 @@ class GaiaChatsTableData extends DataClass
       'forkJson': serializer.toJson<String?>(forkJson),
       'forkOf': serializer.toJson<String?>(forkOf),
       'rewindsJson': serializer.toJson<String>(rewindsJson),
+      'projectId': serializer.toJson<String?>(projectId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58661,6 +58695,7 @@ class GaiaChatsTableData extends DataClass
     Value<String?> forkJson = const Value.absent(),
     Value<String?> forkOf = const Value.absent(),
     String? rewindsJson,
+    Value<String?> projectId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58678,6 +58713,7 @@ class GaiaChatsTableData extends DataClass
     forkJson: forkJson.present ? forkJson.value : this.forkJson,
     forkOf: forkOf.present ? forkOf.value : this.forkOf,
     rewindsJson: rewindsJson ?? this.rewindsJson,
+    projectId: projectId.present ? projectId.value : this.projectId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58707,6 +58743,7 @@ class GaiaChatsTableData extends DataClass
       rewindsJson: data.rewindsJson.present
           ? data.rewindsJson.value
           : this.rewindsJson,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58729,6 +58766,7 @@ class GaiaChatsTableData extends DataClass
           ..write('forkJson: $forkJson, ')
           ..write('forkOf: $forkOf, ')
           ..write('rewindsJson: $rewindsJson, ')
+          ..write('projectId: $projectId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58751,6 +58789,7 @@ class GaiaChatsTableData extends DataClass
     forkJson,
     forkOf,
     rewindsJson,
+    projectId,
     createdAt,
     updatedAt,
     version,
@@ -58772,6 +58811,7 @@ class GaiaChatsTableData extends DataClass
           other.forkJson == this.forkJson &&
           other.forkOf == this.forkOf &&
           other.rewindsJson == this.rewindsJson &&
+          other.projectId == this.projectId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58791,6 +58831,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<String?> forkJson;
   final Value<String?> forkOf;
   final Value<String> rewindsJson;
+  final Value<String?> projectId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58809,6 +58850,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.forkJson = const Value.absent(),
     this.forkOf = const Value.absent(),
     this.rewindsJson = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58828,6 +58870,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.forkJson = const Value.absent(),
     this.forkOf = const Value.absent(),
     this.rewindsJson = const Value.absent(),
+    this.projectId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58851,6 +58894,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<String>? forkJson,
     Expression<String>? forkOf,
     Expression<String>? rewindsJson,
+    Expression<String>? projectId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -58870,6 +58914,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (forkJson != null) 'fork_json': forkJson,
       if (forkOf != null) 'fork_of': forkOf,
       if (rewindsJson != null) 'rewinds_json': rewindsJson,
+      if (projectId != null) 'project_id': projectId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -58891,6 +58936,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<String?>? forkJson,
     Value<String?>? forkOf,
     Value<String>? rewindsJson,
+    Value<String?>? projectId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -58910,6 +58956,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       forkJson: forkJson ?? this.forkJson,
       forkOf: forkOf ?? this.forkOf,
       rewindsJson: rewindsJson ?? this.rewindsJson,
+      projectId: projectId ?? this.projectId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -58957,6 +59004,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (rewindsJson.present) {
       map['rewinds_json'] = Variable<String>(rewindsJson.value);
     }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -58990,6 +59040,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('forkJson: $forkJson, ')
           ..write('forkOf: $forkOf, ')
           ..write('rewindsJson: $rewindsJson, ')
+          ..write('projectId: $projectId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -64056,6 +64107,415 @@ class GaiaBtwTableCompanion extends UpdateCompanion<GaiaBtwTableData> {
   }
 }
 
+class $GaiaProjectsTableTable extends GaiaProjectsTable
+    with TableInfo<$GaiaProjectsTableTable, GaiaProjectsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaProjectsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_projects_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaProjectsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GaiaProjectsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaProjectsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $GaiaProjectsTableTable createAlias(String alias) {
+    return $GaiaProjectsTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaProjectsTableData extends DataClass
+    implements Insertable<GaiaProjectsTableData> {
+  final String id;
+  final String name;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const GaiaProjectsTableData({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  GaiaProjectsTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaProjectsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory GaiaProjectsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaProjectsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  GaiaProjectsTableData copyWith({
+    String? id,
+    String? name,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => GaiaProjectsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  GaiaProjectsTableData copyWithCompanion(GaiaProjectsTableCompanion data) {
+    return GaiaProjectsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaProjectsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, createdAt, updatedAt, version, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaProjectsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class GaiaProjectsTableCompanion
+    extends UpdateCompanion<GaiaProjectsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const GaiaProjectsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaProjectsTableCompanion.insert({
+    required String id,
+    required String name,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<GaiaProjectsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaProjectsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaProjectsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaProjectsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -64218,6 +64678,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $GaiaMemoriesTableTable(this);
   late final $GaiaQueueTableTable gaiaQueueTable = $GaiaQueueTableTable(this);
   late final $GaiaBtwTableTable gaiaBtwTable = $GaiaBtwTableTable(this);
+  late final $GaiaProjectsTableTable gaiaProjectsTable =
+      $GaiaProjectsTableTable(this);
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -64374,6 +64836,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaMemoriesTable,
     gaiaQueueTable,
     gaiaBtwTable,
+    gaiaProjectsTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -92113,6 +92576,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<String?> forkJson,
       Value<String?> forkOf,
       Value<String> rewindsJson,
+      Value<String?> projectId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -92133,6 +92597,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<String?> forkJson,
       Value<String?> forkOf,
       Value<String> rewindsJson,
+      Value<String?> projectId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -92206,6 +92671,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<String> get rewindsJson => $composableBuilder(
     column: $table.rewindsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -92299,6 +92769,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -92375,6 +92850,9 @@ class $$GaiaChatsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -92437,6 +92915,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<String?> forkJson = const Value.absent(),
                 Value<String?> forkOf = const Value.absent(),
                 Value<String> rewindsJson = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -92455,6 +92934,7 @@ class $$GaiaChatsTableTableTableManager
                 forkJson: forkJson,
                 forkOf: forkOf,
                 rewindsJson: rewindsJson,
+                projectId: projectId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -92475,6 +92955,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<String?> forkJson = const Value.absent(),
                 Value<String?> forkOf = const Value.absent(),
                 Value<String> rewindsJson = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -92493,6 +92974,7 @@ class $$GaiaChatsTableTableTableManager
                 forkJson: forkJson,
                 forkOf: forkOf,
                 rewindsJson: rewindsJson,
+                projectId: projectId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -94904,6 +95386,238 @@ typedef $$GaiaBtwTableTableProcessedTableManager =
       GaiaBtwTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaProjectsTableTableCreateCompanionBuilder =
+    GaiaProjectsTableCompanion Function({
+      required String id,
+      required String name,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaProjectsTableTableUpdateCompanionBuilder =
+    GaiaProjectsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaProjectsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaProjectsTableTable> {
+  $$GaiaProjectsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaProjectsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaProjectsTableTable> {
+  $$GaiaProjectsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaProjectsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaProjectsTableTable> {
+  $$GaiaProjectsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$GaiaProjectsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaProjectsTableTable,
+          GaiaProjectsTableData,
+          $$GaiaProjectsTableTableFilterComposer,
+          $$GaiaProjectsTableTableOrderingComposer,
+          $$GaiaProjectsTableTableAnnotationComposer,
+          $$GaiaProjectsTableTableCreateCompanionBuilder,
+          $$GaiaProjectsTableTableUpdateCompanionBuilder,
+          (
+            GaiaProjectsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaProjectsTableTable,
+              GaiaProjectsTableData
+            >,
+          ),
+          GaiaProjectsTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaProjectsTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaProjectsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaProjectsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GaiaProjectsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GaiaProjectsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaProjectsTableCompanion(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaProjectsTableCompanion.insert(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaProjectsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaProjectsTableTable,
+      GaiaProjectsTableData,
+      $$GaiaProjectsTableTableFilterComposer,
+      $$GaiaProjectsTableTableOrderingComposer,
+      $$GaiaProjectsTableTableAnnotationComposer,
+      $$GaiaProjectsTableTableCreateCompanionBuilder,
+      $$GaiaProjectsTableTableUpdateCompanionBuilder,
+      (
+        GaiaProjectsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaProjectsTableTable,
+          GaiaProjectsTableData
+        >,
+      ),
+      GaiaProjectsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -95139,4 +95853,6 @@ class $AppDatabaseManager {
       $$GaiaQueueTableTableTableManager(_db, _db.gaiaQueueTable);
   $$GaiaBtwTableTableTableManager get gaiaBtwTable =>
       $$GaiaBtwTableTableTableManager(_db, _db.gaiaBtwTable);
+  $$GaiaProjectsTableTableTableManager get gaiaProjectsTable =>
+      $$GaiaProjectsTableTableTableManager(_db, _db.gaiaProjectsTable);
 }

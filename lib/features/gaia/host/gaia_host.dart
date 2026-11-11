@@ -65,7 +65,9 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, account, sessionId, lastSeq}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
-/// pinned}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
+/// pinned}`, `projects`, `putProject {project}`, `renameProject {projectId,
+/// name}`, `setProject {chatId, projectId}`, `deleteProject {projectId,
+/// withChats}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
 /// {chatId, mediaDeletedAt}`, `messages {chatId}`, `searchMessages {query}`
 /// (`[GaiaSearchHit]`), `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
@@ -1114,6 +1116,20 @@ class GaiaHost {
     }
   }
 
+  /// [chatId]'s draft and images taken off with it, once it's deleted.
+  /// Gives back when its images were, for a restore; null if they weren't.
+  Future<DateTime?> _chatDeleted(GaiaChatStore store, String chatId) async {
+    await store.deleteDraft(chatId);
+    // Deleted either way: its images just don't follow it if this fails.
+    try {
+      await _media?.keepDraft(chatId, const {});
+      return await _media?.removeChat(chatId);
+    } catch (error) {
+      debugPrint('[gaia] images of $chatId not taken off: $error');
+      return null;
+    }
+  }
+
   Future<Object?> _onRequest(String method, Map<String, Object?> params) async {
     final store = await _attached.future;
     switch (method) {
@@ -1219,21 +1235,46 @@ class GaiaHost {
           params['pinned']! as bool,
         );
         return null;
+      case 'projects':
+        return [for (final project in await store.projects()) project.toJson()];
+      case 'putProject':
+        await store.createProject(
+          GaiaProject.fromJson(_map(params['project'])),
+        );
+        return null;
+      case 'renameProject':
+        await store.renameProject(
+          params['projectId']! as String,
+          params['name']! as String,
+        );
+        return null;
+      case 'setProject':
+        await store.setProject(
+          params['chatId']! as String,
+          params['projectId'] as String?,
+        );
+        return null;
+      case 'deleteProject':
+        final deleted = await store.deleteProject(
+          params['projectId']! as String,
+          withChats: params['withChats'] == true,
+        );
+        for (final chat in deleted) {
+          _osControl.stop('The chat was deleted.', chatId: chat.id);
+          _osControl.endTurn(chat.id);
+        }
+        if (deleted.isNotEmpty) await _syncBorder(store);
+        for (final chat in deleted) {
+          await _chatDeleted(store, chat.id);
+        }
+        return null;
       case 'deleteChat':
         final chatId = params['chatId']! as String;
         _osControl.stop('The chat was deleted.', chatId: chatId);
         _osControl.endTurn(chatId);
         await store.deleteChat(chatId);
         await _syncBorder(store);
-        await store.deleteDraft(chatId);
-        // Deleted either way: its images just don't follow it if this fails.
-        DateTime? at;
-        try {
-          await _media?.keepDraft(chatId, const {});
-          at = await _media?.removeChat(chatId);
-        } catch (error) {
-          debugPrint('[gaia] images of $chatId not taken off: $error');
-        }
+        final at = await _chatDeleted(store, chatId);
         return {'mediaDeletedAt': at?.toIso8601String()};
       case 'takeBack':
         final chat = params['chat'] == true;
