@@ -8,6 +8,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
@@ -61,6 +62,7 @@ import 'package:voyager/data/remote/cloud_function_weather_client.dart';
 import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/data/remote/firebase_media_storage.dart';
+import 'package:voyager/data/remote/firebase_rest_media_storage.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
 import 'package:voyager/data/remote/geoapify_client.dart';
 import 'package:voyager/data/remote/http_callable_client.dart';
@@ -273,9 +275,15 @@ final mediaFileStoreProvider = Provider<MediaFileStore>((ref) {
 
 final mediaStorageProvider = Provider<MediaStorage>((ref) {
   // The admitted account, for the reason [syncRepositoryProvider] gives.
-  return FirebaseMediaStorage(
-    currentUid: () => ref.read(authNotifierProvider).userId,
-  );
+  String? currentUid() => ref.read(authNotifierProvider).userId;
+  // Windows's firebase_storage runs on the C++ SDK, which deadlocks when
+  // two transfers finish at once (see FirebaseRestMediaStorage).
+  if (isWindows) {
+    final client = http.Client();
+    ref.onDispose(client.close);
+    return FirebaseRestMediaStorage(httpClient: client, currentUid: currentUid);
+  }
+  return FirebaseMediaStorage(currentUid: currentUid);
 });
 
 /// The media module's front door — see [MediaService].
@@ -349,7 +357,9 @@ final mediaOwnersWithImagesProvider =
       // `select` skip the rebuild: every transfer and attach anywhere
       // notifies the service, and the pages are large.
       final previous = ref.state.valueOrNull;
-      return previous != null && setEquals(previous, owners) ? previous : owners;
+      return previous != null && setEquals(previous, owners)
+          ? previous
+          : owners;
     });
 
 /// How much disk the image cache is using, for the settings readout.
@@ -2899,9 +2909,7 @@ final devGeometricWavePanelOpenProvider = StateProvider<bool>((ref) => false);
 final devLeafGalleryPanelOpenProvider = StateProvider<bool>((ref) => false);
 
 /// Whether the dev-menu confetti animation gallery is expanded.
-final devConfettiGalleryPanelOpenProvider = StateProvider<bool>(
-  (ref) => false,
-);
+final devConfettiGalleryPanelOpenProvider = StateProvider<bool>((ref) => false);
 
 /// Whether the dev-menu sound gallery is expanded.
 final devSoundGalleryPanelOpenProvider = StateProvider<bool>((ref) => false);
