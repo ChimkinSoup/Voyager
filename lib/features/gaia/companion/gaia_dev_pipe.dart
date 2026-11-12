@@ -8,16 +8,17 @@ import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/host/gaia_capture.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/host/gaia_project_reads.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 
 /// `--gaia-dev` only: stands in for the main instance, so the companion runs
 /// on its own under `flutter run` and its UI hot reloads. Answers the
 /// companion's requests as `GaiaHost` does, from an in-memory database, and
 /// sends the main instance's `hotkey` events and `abort` request on cue.
 class GaiaDevPipe extends GaiaPipe {
-  final _store = GaiaChatStore(
-    DriftGaiaRepository(AppDatabase.inMemory()),
-    deviceId: 'gaia-dev',
-  );
+  final _repository = DriftGaiaRepository(AppDatabase.inMemory());
+  late final _store = GaiaChatStore(_repository, deviceId: 'gaia-dev');
+  late final _projectReads = GaiaProjectReads(_repository);
   var _aborted = false;
 
   @override
@@ -88,8 +89,27 @@ class GaiaDevPipe extends GaiaPipe {
           p['sessionId'] as String?,
           p['lastSeq']! as int,
           adapter: p['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
+          project: p['project'] as String?,
+          folder: p['folder'] as String?,
         );
         return null;
+      case 'setSummary':
+        await _store.setSummary(
+          p['chatId']! as String,
+          p['summary']! as String,
+          p['seq']! as int,
+        );
+        return null;
+      case 'projectTool':
+        try {
+          return await _projectReads.tool(
+            p['chatId']! as String,
+            p['tool']! as String,
+            _map(p['arguments']),
+          );
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
       case 'setPinned':
         await _store.setPinned(p['chatId']! as String, p['pinned']! as bool);
         return null;
@@ -110,6 +130,12 @@ class GaiaDevPipe extends GaiaPipe {
         await _store.setProject(
           p['chatId']! as String,
           p['projectId'] as String?,
+        );
+        return null;
+      case 'setProjectFolder':
+        await _store.setProjectFolder(
+          p['projectId']! as String,
+          p['path'] as String?,
         );
         return null;
       case 'deleteProject':

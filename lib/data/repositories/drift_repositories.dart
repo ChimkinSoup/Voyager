@@ -9791,6 +9791,41 @@ class DriftGaiaRepository implements GaiaRepository {
   Future<List<GaiaMessage>> listMessages(String chatId) async =>
       (await _messages(chatId).get()).map(_mapGaiaMessage).toList();
 
+  /// [chatId]'s live messages a rewind didn't drop, as `m`.
+  static const _shownMessages =
+      'FROM gaia_messages_table m '
+      'JOIN gaia_chats_table c ON c.id = m.chat_id '
+      'WHERE m.chat_id = ? AND m.deleted_at IS NULL '
+      'AND NOT EXISTS (SELECT 1 FROM json_each(c.rewinds_json) w '
+      "WHERE m.seq BETWEEN json_extract(w.value, '\$.from') "
+      "AND json_extract(w.value, '\$.to')) ";
+
+  @override
+  Future<int> countShownMessages(String chatId) async =>
+      (await _db
+              .customSelect(
+                'SELECT COUNT(*) AS n $_shownMessages',
+                variables: [Variable.withString(chatId)],
+                readsFrom: {_db.gaiaMessagesTable, _db.gaiaChatsTable},
+              )
+              .getSingle())
+          .read<int>('n');
+
+  @override
+  Future<List<GaiaMessage>> firstShownMessages(String chatId, int limit) async {
+    final rows = await _db
+        .customSelect(
+          'SELECT m.* $_shownMessages ORDER BY m.seq LIMIT ?',
+          variables: [Variable.withString(chatId), Variable.withInt(limit)],
+          readsFrom: {_db.gaiaMessagesTable, _db.gaiaChatsTable},
+        )
+        .get();
+    return [
+      for (final row in rows)
+        _mapGaiaMessage(_db.gaiaMessagesTable.map(row.data)),
+    ];
+  }
+
   @override
   Future<GaiaMessage?> getMessage(String id) async {
     final row = await (_db.select(
@@ -9917,9 +9952,16 @@ class DriftGaiaRepository implements GaiaRepository {
   Future<List<GaiaSearchHit>> searchMessages(
     String query, {
     int limit = 50,
+    Set<String>? chatIds,
   }) async {
     final match = _gaiaMatch(query);
-    if (match == null) return const [];
+    if (match == null || (chatIds != null && chatIds.isEmpty)) return const [];
+    // A project's search skips one streaming before the limit, not after
+    // (GAIA_PROJECTS_HLD.md §5.3).
+    final inChats = chatIds == null
+        ? ''
+        : 'AND s.chat_id IN (${List.filled(chatIds.length, '?').join(', ')}) '
+              "AND m.status != 'streaming' ";
     final rows = await _db
         .customSelect(
           // The newest [limit] picked first, so only theirs are snippeted;
@@ -9937,6 +9979,7 @@ class DriftGaiaRepository implements GaiaRepository {
           'AND NOT EXISTS (SELECT 1 FROM json_each(c.rewinds_json) w '
           "WHERE m.seq BETWEEN json_extract(w.value, '\$.from') "
           "AND json_extract(w.value, '\$.to')) "
+          '$inChats'
           'ORDER BY m.created_at DESC LIMIT ?'
           ') h '
           'JOIN gaia_message_search s ON s.rowid = h.r '
@@ -9947,6 +9990,8 @@ class DriftGaiaRepository implements GaiaRepository {
             Variable.withString(GaiaSearchHit.end),
             Variable.withString('…'),
             Variable.withString(match),
+            for (final id in chatIds ?? const <String>{})
+              Variable.withString(id),
             Variable.withInt(limit),
             Variable.withString(match),
           ],
@@ -9958,34 +10003,40 @@ class DriftGaiaRepository implements GaiaRepository {
         )
         .get();
     // Side questions too (GAIA_BTW_HLD.md §9): a cleared one has no search
-    // row.
-    final btws = await _db
-        .customSelect(
-          'SELECT s.chat_id AS chat_id, s.btw_id AS btw_id, '
-          'h.created_at AS created_at, '
-          'snippet(gaia_btw_search, 0, ?, ?, ?, 16) AS snippet '
-          'FROM ('
-          'SELECT b.rowid AS r, b.created_at AS created_at '
-          'FROM gaia_btw_search s '
-          'JOIN gaia_chats_table c ON c.id = s.chat_id '
-          'JOIN gaia_btw_table b ON b.rowid = s.rowid '
-          'WHERE gaia_btw_search MATCH ? AND c.deleted_at IS NULL '
-          'ORDER BY b.created_at DESC LIMIT ?'
-          ') h '
-          'JOIN gaia_btw_search s ON s.rowid = h.r '
-          'WHERE gaia_btw_search MATCH ? '
-          'ORDER BY h.created_at DESC',
-          variables: [
-            Variable.withString(GaiaSearchHit.start),
-            Variable.withString(GaiaSearchHit.end),
-            Variable.withString('…'),
-            Variable.withString(match),
-            Variable.withInt(limit),
-            Variable.withString(match),
-          ],
-          readsFrom: {_db.gaiaBtwSearch, _db.gaiaChatsTable, _db.gaiaBtwTable},
-        )
-        .get();
+    // row. Never in a project's search (GAIA_PROJECTS_HLD.md §5.3).
+    final btws = chatIds != null
+        ? const <QueryRow>[]
+        : await _db
+              .customSelect(
+                'SELECT s.chat_id AS chat_id, s.btw_id AS btw_id, '
+                'h.created_at AS created_at, '
+                'snippet(gaia_btw_search, 0, ?, ?, ?, 16) AS snippet '
+                'FROM ('
+                'SELECT b.rowid AS r, b.created_at AS created_at '
+                'FROM gaia_btw_search s '
+                'JOIN gaia_chats_table c ON c.id = s.chat_id '
+                'JOIN gaia_btw_table b ON b.rowid = s.rowid '
+                'WHERE gaia_btw_search MATCH ? AND c.deleted_at IS NULL '
+                'ORDER BY b.created_at DESC LIMIT ?'
+                ') h '
+                'JOIN gaia_btw_search s ON s.rowid = h.r '
+                'WHERE gaia_btw_search MATCH ? '
+                'ORDER BY h.created_at DESC',
+                variables: [
+                  Variable.withString(GaiaSearchHit.start),
+                  Variable.withString(GaiaSearchHit.end),
+                  Variable.withString('…'),
+                  Variable.withString(match),
+                  Variable.withInt(limit),
+                  Variable.withString(match),
+                ],
+                readsFrom: {
+                  _db.gaiaBtwSearch,
+                  _db.gaiaChatsTable,
+                  _db.gaiaBtwTable,
+                },
+              )
+              .get();
     final hits = [
       for (final row in rows)
         (
@@ -9997,17 +10048,18 @@ class DriftGaiaRepository implements GaiaRepository {
             snippet: row.read<String>('snippet'),
           ),
         ),
-      for (final row in btws)
-        (
-          row.read<DateTime>('created_at'),
-          GaiaSearchHit(
-            chatId: row.read<String>('chat_id'),
-            messageId: '',
-            seq: -1,
-            snippet: row.read<String>('snippet'),
-            btwId: row.read<String>('btw_id'),
+      if (chatIds == null)
+        for (final row in btws)
+          (
+            row.read<DateTime>('created_at'),
+            GaiaSearchHit(
+              chatId: row.read<String>('chat_id'),
+              messageId: '',
+              seq: -1,
+              snippet: row.read<String>('snippet'),
+              btwId: row.read<String>('btw_id'),
+            ),
           ),
-        ),
     ]..sort((a, b) => b.$1.compareTo(a.$1));
     return [for (final (_, hit) in hits.take(limit)) hit];
   }
@@ -10473,6 +10525,7 @@ GaiaQueueItem _mapGaiaQueueItem(GaiaQueueTableData row) => GaiaQueueItem(
 GaiaProject _mapGaiaProject(GaiaProjectsTableData row) => GaiaProject(
   id: row.id,
   name: row.name,
+  folders: gaiaFoldersFromJson(jsonDecode(row.foldersJson)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10519,6 +10572,8 @@ GaiaChat _mapGaiaChat(GaiaChatsTableData row) => GaiaChat(
   forkOf: row.forkOf,
   rewinds: gaiaRewindsFromJson(jsonDecode(row.rewindsJson)),
   projectId: row.projectId,
+  summary: row.summary,
+  summarizedSeq: row.summarizedSeq,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
@@ -10529,6 +10584,7 @@ GaiaProjectsTableCompanion _gaiaProjectCompanion(GaiaProject project) =>
     GaiaProjectsTableCompanion(
       id: Value(project.id),
       name: Value(project.name),
+      foldersJson: Value(jsonEncode(project.folders)),
       createdAt: Value(project.createdAt),
       updatedAt: Value(project.updatedAt),
       version: Value(project.version),
@@ -10552,6 +10608,8 @@ GaiaChatsTableCompanion _gaiaChatCompanion(GaiaChat chat) =>
       forkOf: Value(chat.forkOf),
       rewindsJson: Value(jsonEncode(chat.toJson()['rewinds'])),
       projectId: Value(chat.projectId),
+      summary: Value(chat.summary),
+      summarizedSeq: Value(chat.summarizedSeq),
       createdAt: Value(chat.createdAt),
       updatedAt: Value(chat.updatedAt),
       version: Value(chat.version),

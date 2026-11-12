@@ -269,5 +269,94 @@ void main() {
       expect(merged.name, 'Trip');
       expect(merged.version, project.version);
     });
+
+    test("a project's folders round-trip, and a stale copy doesn't take this "
+        "device's away (§4)", () {
+      final local = _project(
+        'p1',
+      ).copyWith(folders: {'desk': 'D:/Japan', 'laptop': 'C:/Japan'});
+      expect(
+        mergeGaiaProjectFromRemote(gaiaProjectToFirestore(local), 'p1').folders,
+        {'desk': 'D:/Japan', 'laptop': 'C:/Japan'},
+      );
+      final stale = gaiaProjectToFirestore(
+        _project(
+          'p1',
+        ).copyWith(name: 'Trip', folders: {'laptop': 'E:/Japan'}, version: 9),
+      );
+      final merged = mergeGaiaProjectFromRemote(stale, 'p1', local: local);
+      expect(merged.name, 'Trip');
+      expect(merged.folders, {'desk': 'D:/Japan', 'laptop': 'E:/Japan'});
+    });
+
+    test("a stale copy doesn't undo this device's own folder (§4)", () {
+      final local = _project('p1').copyWith(folders: {'desk': ''});
+      final stale = gaiaProjectToFirestore(
+        _project('p1').copyWith(
+          name: 'Trip',
+          folders: {'desk': 'D:/Old', 'laptop': 'C:/Japan'},
+          version: 9,
+        ),
+      );
+      final merged = mergeGaiaProjectFromRemote(
+        stale,
+        'p1',
+        local: local,
+        deviceId: 'desk',
+      );
+      expect(merged.name, 'Trip');
+      expect(merged.folders, {'desk': '', 'laptop': 'C:/Japan'});
+    });
+  });
+
+  group('folders (§4)', () {
+    test("setting one on a device keeps the other devices'", () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final repository = DriftGaiaRepository(db);
+      await repository.upsertProject(
+        _project('p1').copyWith(folders: {'laptop': 'C:/Japan'}),
+      );
+      final store = GaiaChatStore(repository, deviceId: 'desk');
+      await store.setProjectFolder('p1', 'D:/Japan');
+      expect((await repository.getProject('p1'))!.folders, {
+        'laptop': 'C:/Japan',
+        'desk': 'D:/Japan',
+      });
+      await store.setProjectFolder('p1', 'D:/Trip');
+      expect((await repository.getProject('p1'))!.folders['desk'], 'D:/Trip');
+    });
+
+    test('removing one keeps it as an empty path, so the removal syncs, and '
+        'no reader sees it', () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final repository = DriftGaiaRepository(db);
+      await repository.upsertProject(
+        _project('p1').copyWith(folders: {'desk': 'D:/Japan'}),
+      );
+      await GaiaChatStore(
+        repository,
+        deviceId: 'desk',
+      ).setProjectFolder('p1', null);
+      final removed = (await repository.getProject('p1'))!;
+      expect(removed.folders, {'desk': ''});
+      expect(removed.folderPaths, isEmpty);
+      expect(gaiaProjectFolder(removed, 'desk'), isNull);
+
+      // Another device still holding the path takes the removal.
+      final elsewhere = _project('p1').copyWith(
+        folders: {'desk': 'D:/Japan', 'laptop': 'C:/Japan'},
+        version: 1,
+      );
+      expect(
+        mergeGaiaProjectFromRemote(
+          gaiaProjectToFirestore(removed),
+          'p1',
+          local: elsewhere,
+        ).folderPaths,
+        {'laptop': 'C:/Japan'},
+      );
+    });
   });
 }

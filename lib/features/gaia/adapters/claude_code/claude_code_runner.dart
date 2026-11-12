@@ -363,6 +363,7 @@ class ClaudeCodeRunner
       contextWindow: result.contextWindowOf(sessionModel),
       sessionFound: started,
       notice: notice,
+      compacted: compacted != null,
     );
   }
 
@@ -439,7 +440,8 @@ class ClaudeCodeRunner
     String? sessionFile;
     // One that never started a session (a resume that found none) is on
     // its way out. Directories are fixed per process too: one that can't
-    // read a newly attached file restarts, resuming the session. A
+    // read a newly attached file, or still reads a project folder that was
+    // removed (GAIA_PROJECTS_HLD.md §4), restarts, resuming the session. A
     // session's own instructions aren't: a resume keeps those it started
     // with, whatever file it's given (checked on 2.1.314). The account is
     // fixed too: a chat that moved to another resumes its copy of the session
@@ -453,7 +455,7 @@ class ClaudeCodeRunner
             process.configDir != configDir ||
             !process.started ||
             (cut != null && process.cut != cut) ||
-            !process.directories.containsAll(directories))) {
+            !setEquals(process.directories, directories))) {
       // Gone before another resumes its session.
       await process.kill();
       process = null;

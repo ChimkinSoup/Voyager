@@ -179,7 +179,8 @@ class GaiaChatStore {
   });
 
   /// Records the native session [chatId] resumes on this device with
-  /// [adapter] and [account], and the last message it took part in; a null
+  /// [adapter] and [account], the last message it took part in, and the
+  /// project it was last told it's in (GAIA_PROJECTS_HLD.md §5.2); a null
   /// [sessionId] forgets it.
   Future<void> setSession(
     String chatId,
@@ -187,6 +188,8 @@ class GaiaChatStore {
     int lastSeq, {
     String adapter = kGaiaClaudeCodeAdapter,
     String account = kGaiaDefaultAccountId,
+    String? project,
+    String? folder,
   }) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
@@ -197,7 +200,12 @@ class GaiaChatStore {
             ? ({...chat.agentSessions}..remove(key))
             : {
                 ...chat.agentSessions,
-                key: GaiaAgentSession(sessionId: sessionId, lastSeq: lastSeq),
+                key: GaiaAgentSession(
+                  sessionId: sessionId,
+                  lastSeq: lastSeq,
+                  project: project,
+                  folder: folder,
+                ),
               },
       ),
     );
@@ -226,6 +234,17 @@ class GaiaChatStore {
     await _repository.upsertChat(chat.copyWith(pinned: pinned));
   });
 
+  /// [chatId]'s [summary] up to [seq] (GAIA_PROJECTS_HLD.md §5.5); one that
+  /// covers less than the stored one is dropped.
+  Future<void> setSummary(String chatId, String summary, int seq) =>
+      _serial(() async {
+        final chat = await _repository.getChat(chatId);
+        if (chat == null || chat.summarizedSeq >= seq) return;
+        await _repository.upsertChat(
+          chat.copyWith(summary: summary, summarizedSeq: seq),
+        );
+      });
+
   /// Moved into a project or out of one (GAIA_PROJECTS_HLD.md §3.2).
   Future<void> setProject(String chatId, String? projectId) =>
       _serial(() => gaiaMoveChat(_repository, chatId, projectId));
@@ -244,6 +263,17 @@ class GaiaChatStore {
         final project = await _repository.getProject(projectId);
         if (project == null || project.name == name) return;
         await _repository.upsertProject(project.copyWith(name: name));
+      });
+
+  /// [projectId]'s folder on this device is [path], or none for null
+  /// (GAIA_PROJECTS_HLD.md §4); other devices' stay as they are.
+  Future<void> setProjectFolder(String projectId, String? path) =>
+      _serial(() async {
+        final project = await _repository.getProject(projectId);
+        if (project == null || project.folderPaths[deviceId] == path) return;
+        await _repository.upsertProject(
+          project.copyWith(folders: {...project.folders, deviceId: path ?? ''}),
+        );
       });
 
   /// [gaiaDeleteProject]: the chats it deleted.

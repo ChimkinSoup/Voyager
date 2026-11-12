@@ -25,13 +25,17 @@ abstract interface class GaiaTurnTools {
 }
 
 /// The tools whose results the device that ran them keeps for the user to see
-/// (§15.6): the `os_*` reads. Never synced.
+/// (§15.6): the `os_*` reads, and the project reads (GAIA_PROJECTS_HLD.md
+/// §5.4). Never synced.
 const kGaiaKeptResultTools = {
   'os_focused_window',
   'os_read_screen',
   'os_screenshot',
   'os_windows',
   'os_clipboard',
+  'project_chats',
+  'project_search',
+  'project_read',
 };
 
 /// [GaiaTurnTools] that keep what a kept-result tool answered, by the
@@ -381,6 +385,57 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         },
       },
       'required': ['text'],
+    },
+  },
+  {
+    'name': 'project_chats',
+    'description':
+        "List the other chats in this chat's project: each one's id, title, "
+        'when it was last active, how many messages it has, and what it is '
+        'about. Only for a chat in a project.',
+    'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
+  },
+  {
+    'name': 'project_search',
+    'description':
+        "Search the messages of the chats in this chat's project, newest "
+        "first: each match's chat, seq, who wrote it and a snippet. Read "
+        'around a match with project_read. Only for a chat in a project.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'query': {
+          'type': 'string',
+          'description': 'Words to look for; a match has every one.',
+        },
+        'limit': {
+          'type': 'integer',
+          'minimum': 1,
+          'maximum': 30,
+          'description': 'At most this many matches. 10 if left out.',
+        },
+      },
+      'required': ['query'],
+    },
+  },
+  {
+    'name': 'project_read',
+    'description':
+        "Read a chat in this chat's project as the user sees it: its "
+        'messages from one seq to another, or its last 30 with neither. '
+        'Tool calls show by name only. A long range is cut short, and the '
+        'result says the seq to go on from. Only for a chat in a project.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'chatId': {
+          'type': 'string',
+          'description': 'From project_chats or project_search.',
+        },
+        'from': {'type': 'integer', 'description': 'The first seq, inclusive.'},
+        'to': {'type': 'integer', 'description': 'The last seq, inclusive.'},
+      },
+      'required': ['chatId'],
     },
   },
   {
@@ -751,6 +806,10 @@ bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
 
 /// The `memory_*` tools (§11): the main instance answers them too.
 bool isGaiaMemoryTool(String name) => name.startsWith('memory_');
+
+/// The `project_*` reads (GAIA_PROJECTS_HLD.md §5.1): the main instance
+/// answers them too.
+bool isGaiaProjectTool(String name) => name.startsWith('project_');
 
 /// The `os_*` read tools (§15.6): the main instance answers them too. An
 /// `os_clipboard` read is one.

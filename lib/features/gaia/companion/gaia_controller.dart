@@ -3532,6 +3532,26 @@ class GaiaController extends ChangeNotifier {
     await _request('renameProject', {'projectId': projectId, 'name': name});
   }
 
+  /// [projectId]'s folder on this device (GAIA_PROJECTS_HLD.md §4); null
+  /// when it has none here.
+  String? projectFolder(String? projectId) =>
+      project(projectId)?.folderPaths[_deviceId];
+
+  /// [projectId]'s folder on this device is [path], or none for null
+  /// (GAIA_PROJECTS_HLD.md §4). Its chats get it from their next turn.
+  Future<void> setProjectFolder(String projectId, String? path) async {
+    final from = project(projectId);
+    if (from == null || from.folderPaths[_deviceId] == path) return;
+    projects = [
+      for (final p in projects)
+        p.id == projectId
+            ? p.copyWith(folders: {...p.folders, _deviceId: path ?? ''})
+            : p,
+    ];
+    notifyListeners();
+    await _request('setProjectFolder', {'projectId': projectId, 'path': path});
+  }
+
   /// [chatId] moved into [projectId], or out of its project for null
   /// (GAIA_PROJECTS_HLD.md §3.2). One replying picks it up on its next
   /// turn.
@@ -3546,6 +3566,17 @@ class GaiaController extends ChangeNotifier {
     ];
     notifyListeners();
     await _request('setProject', {'chatId': chatId, 'projectId': projectId});
+    // Summarized here, the device that moved it (GAIA_PROJECTS_HLD.md §5.5).
+    if (projectId != null &&
+        _chat(chatId)?.currentSummary == null &&
+        !debug.dummyMode) {
+      unawaited(
+        _shownMessages(chatId).then(
+          (shown) =>
+              shown == null ? null : _summarize(chatId, shown, moved: true),
+        ),
+      );
+    }
   }
 
   /// Deletes [projectId] (GAIA_PROJECTS_HLD.md §3.3): its chats let go to
@@ -5436,6 +5467,10 @@ class GaiaController extends ChangeNotifier {
     // chat's, which knows the chat up to the record's lastSeq
     // (GAIA_FORKING_HLD.md §5.3).
     GaiaForkRecord? fork;
+    // The project the session now knows it's in (GAIA_PROJECTS_HLD.md §5.2):
+    // what it was told before, or this turn's block, and its folder then.
+    String? toldProject;
+    String? toldFolder;
     // Here at once, so a next message straight away resumes it; the main
     // instance's copy follows. A null [sessionId] drops the chat's.
     void recordSession(String adapter, String? sessionId) {
@@ -5453,6 +5488,8 @@ class GaiaController extends ChangeNotifier {
                   key: GaiaAgentSession(
                     sessionId: sessionId,
                     lastSeq: reply.seq,
+                    project: toldProject,
+                    folder: toldFolder,
                   ),
                 },
         );
@@ -5465,6 +5502,8 @@ class GaiaController extends ChangeNotifier {
           'account': account.id,
           'sessionId': sessionId,
           'lastSeq': reply.seq,
+          'project': toldProject,
+          'folder': toldFolder,
         }),
       );
     }
@@ -5481,7 +5520,7 @@ class GaiaController extends ChangeNotifier {
     // The window it was asked from goes ahead of it (§15.4), and the
     // messages attached to it (§9.3).
     // Its files' paths after it (§9.3).
-    final asked = [
+    final askedText = [
       ?context?.preamble,
       ?control?.preamble,
       for (final quote in quotes) quote.preamble,
@@ -5490,7 +5529,29 @@ class GaiaController extends ChangeNotifier {
       if (files.isNotEmpty) gaiaFilesPreamble(files),
     ].join('\n\n');
     Future<String> handedOver() async {
-      if (script != null || agent == null || runner == null) return asked;
+      if (script != null || agent == null || runner == null) return askedText;
+      // The chat's project, on a session's first turn and the first after a
+      // move (GAIA_PROJECTS_HLD.md §5.2); never ahead of a command of the
+      // CLI's own, which it would read as text.
+      // Told again when its folder here changed.
+      toldProject = session?.project;
+      toldFolder = session?.folder;
+      final project = this.project(_chat(chatId)?.projectId);
+      final folder = gaiaProjectFolder(project, _deviceId);
+      final told = native != null
+          ? null
+          : gaiaProjectPreamble(
+              told: toldProject,
+              toldFolder: toldFolder,
+              project: project,
+              folder: folder,
+              chats: chats.where((c) => c.projectId == project?.id).length,
+            );
+      if (told != null) {
+        toldProject = project?.id;
+        toldFolder = folder;
+      }
+      final asked = told == null ? askedText : '$told\n\n$askedText';
       List<GaiaMessage> unseen() => gaiaUnseenTurns(
         _messages[chatId] ?? list,
         lastSeq: session?.lastSeq ?? fork?.lastSeq ?? -1,
@@ -5618,7 +5679,11 @@ class GaiaController extends ChangeNotifier {
       read: (tool, arguments) async {
         try {
           return await _pipe.request(
-                isGaiaMemoryTool(tool) ? 'memoryTool' : 'voyagerRead',
+                isGaiaMemoryTool(tool)
+                    ? 'memoryTool'
+                    : isGaiaProjectTool(tool)
+                    ? 'projectTool'
+                    : 'voyagerRead',
                 {'tool': tool, 'arguments': arguments, 'chatId': chatId},
               )
               as String;
@@ -5768,11 +5833,14 @@ class GaiaController extends ChangeNotifier {
       // Where every file the chat has attached is, not just this message's:
       // the agent may go back to one. Those from another device aren't here.
       // Checked off the UI thread: an offline drive can take seconds to say.
+      // The project's folder on this device too, never as the cwd
+      // (GAIA_PROJECTS_HLD.md §4).
       final directories = {
         for (final directory in {
           for (final message in _messages[chatId] ?? list)
             for (final file in message.parts.whereType<GaiaFilePart>())
               file.folder ? file.path : p.dirname(file.path),
+          ?projectFolder(_chat(chatId)?.projectId),
         })
           if (await Directory(directory).exists()) directory,
       };
@@ -5875,6 +5943,9 @@ class GaiaController extends ChangeNotifier {
           error: true,
         );
       }
+      // A compaction may have dropped the project block: the next turn tells
+      // it again (GAIA_PROJECTS_HLD.md §8).
+      if (result.compacted) toldProject = toldFolder = null;
       // A scripted reply, or one no agent ran, has no session to resume. A failed turn's is kept when it was already
       // the chat's, or the agent got as far as replying or a tool; a
       // new one that failed straight away, like "Not logged in", exists
@@ -6126,7 +6197,7 @@ class GaiaController extends ChangeNotifier {
     late final Timer timer;
     timer = Timer(wait, () {
       if (_curateSoon[chatId] == timer) _curateSoon.remove(chatId);
-      unawaited(_curate(chatId));
+      unawaited(_idle(chatId));
     });
     _curateSoon[chatId] = timer;
   }
@@ -6156,7 +6227,12 @@ class GaiaController extends ChangeNotifier {
         continue;
       }
       final mine = _ranLast(chat);
-      if (mine == null || mine <= chat.curatedSeq) continue;
+      if (mine == null ||
+          (mine <= chat.curatedSeq &&
+              (project(chat.projectId) == null ||
+                  mine <= chat.summarizedSeq))) {
+        continue;
+      }
       if (idle < _curateAfter) {
         _curateLater(chat.id, _curateAfter - idle);
       } else {
@@ -6164,8 +6240,98 @@ class GaiaController extends ChangeNotifier {
       }
     }
     for (final chatId in due) {
-      await _curate(chatId);
+      await _idle(chatId);
     }
+  }
+
+  /// [chatId] has sat idle: the curator reads it, and a project chat's
+  /// summary is brought up to date (GAIA_PROJECTS_HLD.md §5.5).
+  Future<void> _idle(String chatId) async {
+    final chat = _chat(chatId);
+    // Neither reads a chat another device went on with.
+    if (_utility == null || chat == null || _ranLast(chat) == null) return;
+    final shown = await _shownMessages(chatId);
+    if (shown == null) return;
+    await _curate(chatId, shown);
+    await _summarize(chatId, shown);
+  }
+
+  /// [chatId]'s messages as the user sees them, for the utility model: none
+  /// still streaming, none a rewind dropped. Null when the main instance
+  /// can't say.
+  Future<List<GaiaMessage>?> _shownMessages(String chatId) async {
+    final chat = _chat(chatId);
+    if (chat == null) return null;
+    try {
+      final listed =
+          (await _pipe.request('messages', {'chatId': chatId}))! as List;
+      return [
+        for (final json in listed)
+          if (GaiaMessage.fromJson((json as Map).cast<String, Object?>())
+              case final message
+              when message.status != GaiaMessageStatus.streaming &&
+                  !chat.rewound(message.seq))
+            message,
+      ];
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] messages for the utility model: $error');
+      return null;
+    }
+  }
+
+  /// A project chat's summary (GAIA_PROJECTS_HLD.md §5.5): the utility model
+  /// reads its [shown] turns since the last one and writes it again. Only
+  /// the device that ran the chat's last turn does, as with the curator,
+  /// unless it was [moved] here into a project. A chat in no project is
+  /// never summarized.
+  Future<void> _summarize(
+    String chatId,
+    List<GaiaMessage> shown, {
+    bool moved = false,
+  }) async {
+    final utility = _utility;
+    final chat = _chat(chatId);
+    if (utility == null ||
+        chat == null ||
+        project(chat.projectId) == null ||
+        (!moved && _ranLast(chat) == null) ||
+        aborted ||
+        _running.contains(chatId)) {
+      return;
+    }
+    // One a rewind cut into is written again from the start.
+    final previous = chat.currentSummary;
+    final from = previous == null ? -1 : chat.summarizedSeq;
+    final turns = [
+      for (final message in shown)
+        if (message.seq > from) message,
+    ];
+    // Until a turn past the rewind, a new one couldn't take the old one's
+    // place: the later summary wins, here and in sync.
+    if (turns.isEmpty || turns.last.seq <= chat.summarizedSeq) return;
+    final summary = await utility.chatSummary(
+      previous,
+      gaiaTranscriptText(turns),
+    );
+    // Sent again meanwhile: its next idle reads these turns too.
+    if (summary == null || _running.contains(chatId)) return;
+    final seq = turns.last.seq;
+    try {
+      await _pipe.request('setSummary', {
+        'chatId': chatId,
+        'summary': summary,
+        'seq': seq,
+      });
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] chat summary: $error');
+      return;
+    }
+    chats = [
+      for (final c in chats)
+        c.id == chatId && c.summarizedSeq < seq
+            ? c.copyWith(summary: summary, summarizedSeq: seq)
+            : c,
+    ];
   }
 
   /// The memory index for a new session (§11): the active memories as
@@ -6186,7 +6352,7 @@ class GaiaController extends ChangeNotifier {
   /// with auto-accept on. Only the device that ran the chat's last turn
   /// curates it, so two never propose the same. A failure leaves the turns
   /// for next time.
-  Future<void> _curate(String chatId) async {
+  Future<void> _curate(String chatId, List<GaiaMessage> shown) async {
     final utility = _utility;
     // A chat deleted while it waited is left alone, and one another device
     // went on with is its to curate.
@@ -6199,23 +6365,15 @@ class GaiaController extends ChangeNotifier {
       return;
     }
     final from = chat.curatedSeq;
-    final List<GaiaMessage> turns;
+    final turns = [
+      for (final message in shown)
+        if (message.seq > from) message,
+    ];
+    // Only copies: a rewind's auto-fork not carried on, whose dropped turns
+    // aren't learned from until it is (GAIA_REWIND_HLD.md §9).
+    if (turns.every((message) => message.origin != null)) return;
     final String index;
     try {
-      final listed =
-          (await _pipe.request('messages', {'chatId': chatId}))! as List;
-      turns = [
-        for (final json in listed)
-          if (GaiaMessage.fromJson((json as Map).cast<String, Object?>())
-              case final message
-              when message.seq > from &&
-                  message.status != GaiaMessageStatus.streaming &&
-                  !chat.rewound(message.seq))
-            message,
-      ];
-      // Only copies: a rewind's auto-fork not carried on, whose dropped turns
-      // aren't learned from until it is (GAIA_REWIND_HLD.md §9).
-      if (turns.every((message) => message.origin != null)) return;
       index = await _pipe.request('memoryIndex') as String? ?? '';
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] curator: $error');

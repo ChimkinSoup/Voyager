@@ -18,6 +18,7 @@ import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_flash.dart';
 import 'package:voyager/features/gaia/host/gaia_media.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
+import 'package:voyager/features/gaia/host/gaia_project_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_os_control.dart';
 import 'package:voyager/features/gaia/host/gaia_os_reads.dart';
 import 'package:voyager/features/gaia/host/gaia_selection.dart';
@@ -63,10 +64,11 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 ///
 /// The pipe protocol, companion to main: `hello` (returns `{aborted, accent,
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
-/// {chatId, adapter, account, sessionId, lastSeq}`, `setTier {chatId, tier}`,
+/// {chatId, adapter, account, sessionId, lastSeq, project}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
 /// pinned}`, `projects`, `putProject {project}`, `renameProject {projectId,
-/// name}`, `setProject {chatId, projectId}`, `deleteProject {projectId,
+/// name}`, `setProject {chatId, projectId}`, `setProjectFolder {projectId,
+/// path}` (this device's, null to remove it), `deleteProject {projectId,
 /// withChats}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
 /// {chatId, mediaDeletedAt}`, `messages {chatId}`, `searchMessages {query}`
 /// (`[GaiaSearchHit]`), `putMessage {message}`,
@@ -74,6 +76,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `memoryIndex` (§11),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
+/// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
+/// `setSummary {chatId, summary, seq}`,
 /// `remember {chatId, text}`, `curated {chatId, seq, memories}`, `setSeeScreen
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
@@ -232,6 +236,9 @@ class GaiaHost {
   /// Gaia's memories (§11); null for none, where their tools fail.
   GaiaMemories? _memories;
 
+  /// The `project_*` reads (GAIA_PROJECTS_HLD.md §5); null until [attach].
+  GaiaProjectReads? _projectReads;
+
   /// Remote use (§12.2): the heartbeat, commands, live text and leases;
   /// null for none, where every run is local.
   GaiaBeaconService? _beacon;
@@ -347,6 +354,7 @@ class GaiaHost {
     _reads = reads;
     _executor = executor;
     _memories = memories;
+    _projectReads = GaiaProjectReads(repository);
     final store = GaiaChatStore(repository, deviceId: deviceId);
     _attached.complete(store);
     // The notch says when a turn is acting, and when it waits
@@ -1209,6 +1217,15 @@ class GaiaHost {
           params['lastSeq']! as int,
           adapter: params['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
           account: params['account'] as String? ?? kGaiaDefaultAccountId,
+          project: params['project'] as String?,
+          folder: params['folder'] as String?,
+        );
+        return null;
+      case 'setSummary':
+        await store.setSummary(
+          params['chatId']! as String,
+          params['summary']! as String,
+          params['seq']! as int,
         );
         return null;
       case 'setCurrentAccount':
@@ -1252,6 +1269,12 @@ class GaiaHost {
         await store.setProject(
           params['chatId']! as String,
           params['projectId'] as String?,
+        );
+        return null;
+      case 'setProjectFolder':
+        await store.setProjectFolder(
+          params['projectId']! as String,
+          params['path'] as String?,
         );
         return null;
       case 'deleteProject':
@@ -1516,6 +1539,18 @@ class GaiaHost {
       case 'memoryTool':
         try {
           return await _memoriesOrThrow().tool(
+            params['chatId']! as String,
+            params['tool']! as String,
+            _map(params['arguments']),
+          );
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'projectTool':
+        final reads = _projectReads;
+        if (reads == null) throw GaiaPipeException('Voyager data is not ready');
+        try {
+          return await reads.tool(
             params['chatId']! as String,
             params['tool']! as String,
             _map(params['arguments']),

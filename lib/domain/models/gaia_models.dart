@@ -303,20 +303,38 @@ Map<GaiaTier, String> gaiaTiersFromJson(Object? json) => {
       if (json[tier.name] case final String agentId) tier: agentId,
 };
 
-/// One native CLI session of a chat: its id, and the seq of the last message
-/// it took part in.
+/// One native CLI session of a chat: its id, the seq of the last message it
+/// took part in, and the project it was last told it's in
+/// (GAIA_PROJECTS_HLD.md §5.2), null for none, with that project's [folder]
+/// as it was told ([gaiaProjectFolder]).
 class GaiaAgentSession {
-  const GaiaAgentSession({required this.sessionId, required this.lastSeq});
+  const GaiaAgentSession({
+    required this.sessionId,
+    required this.lastSeq,
+    this.project,
+    this.folder,
+  });
 
   final String sessionId;
   final int lastSeq;
+  final String? project;
+  final String? folder;
 
-  Map<String, Object?> toJson() => {'sessionId': sessionId, 'lastSeq': lastSeq};
+  // [project] and [folder] go even when null: the upload merges into the
+  // stored document, which would otherwise keep the old ones (BUG-376).
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'lastSeq': lastSeq,
+    'project': project,
+    'folder': folder,
+  };
 
   factory GaiaAgentSession.fromJson(Map<String, Object?> json) =>
       GaiaAgentSession(
         sessionId: json['sessionId']! as String,
         lastSeq: (json['lastSeq'] as num?)?.toInt() ?? 0,
+        project: json['project'] as String?,
+        folder: json['folder'] as String?,
       );
 }
 
@@ -507,9 +525,18 @@ class GaiaChat extends SoftDeletable {
     this.forkOf,
     this.rewinds = const [],
     this.projectId,
+    this.summary,
+    this.summarizedSeq = -1,
   });
 
   final String title;
+
+  /// What the chat is about, in a sentence or two, for `project_chats`
+  /// (GAIA_PROJECTS_HLD.md §5.5); null before one is written.
+  final String? summary;
+
+  /// The last message [summary] covers; -1 for none.
+  final int summarizedSeq;
 
   /// The project it's in (GAIA_PROJECTS_HLD.md §2); null for none. One that
   /// points at no live project means none too.
@@ -522,6 +549,11 @@ class GaiaChat extends SoftDeletable {
   /// Whether a rewind dropped [seq]: a message there isn't shown, and a
   /// session that last took part there is stale (§5).
   bool rewound(int seq) => rewinds.any((rewind) => rewind.covers(seq));
+
+  /// [summary], unless a rewind dropped the turn it was written up to: it
+  /// then tells of turns the user no longer sees, and the chat is summarized
+  /// again from the start (GAIA_PROJECTS_HLD.md §5.5).
+  String? get currentSummary => rewound(summarizedSeq) ? null : summary;
 
   /// The seq a new message takes after [last]'s: past every dropped one
   /// too (§5).
@@ -590,6 +622,8 @@ class GaiaChat extends SoftDeletable {
     List<GaiaRewind>? rewinds,
     String? projectId,
     bool clearProjectId = false,
+    String? summary,
+    int? summarizedSeq,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -597,6 +631,8 @@ class GaiaChat extends SoftDeletable {
     bool touch = true,
   }) => GaiaChat(
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
+    summary: summary ?? this.summary,
+    summarizedSeq: summarizedSeq ?? this.summarizedSeq,
     drain: drain ?? this.drain,
     grants: grants ?? this.grants,
     fork: clearFork ? null : (fork ?? this.fork),
@@ -638,6 +674,8 @@ class GaiaChat extends SoftDeletable {
     'forkOf': forkOf,
     'rewinds': [for (final rewind in rewinds) rewind.toJson()],
     'projectId': projectId,
+    'summary': summary,
+    'summarizedSeq': summarizedSeq,
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -660,6 +698,8 @@ class GaiaChat extends SoftDeletable {
       forkOf: json['forkOf'] as String?,
       rewinds: gaiaRewindsFromJson(json['rewinds']),
       projectId: json['projectId'] as String?,
+      summary: json['summary'] as String?,
+      summarizedSeq: (json['summarizedSeq'] as num?)?.toInt() ?? -1,
     );
   }
 }
@@ -695,12 +735,26 @@ class GaiaProject extends SoftDeletable {
     super.version,
     super.deletedAt,
     required this.name,
+    this.folders = const {},
   });
 
   final String name;
 
+  /// Its folder on each device that has one, by device id
+  /// (GAIA_PROJECTS_HLD.md §4): paths differ between machines. A removed
+  /// one stays as an empty path, so the removal syncs; [folderPaths] leaves
+  /// those out.
+  final Map<String, String> folders;
+
+  /// [folders] without the removed ones.
+  Map<String, String> get folderPaths => {
+    for (final MapEntry(:key, :value) in folders.entries)
+      if (value.isNotEmpty) key: value,
+  };
+
   GaiaProject copyWith({
     String? name,
+    Map<String, String>? folders,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -711,11 +765,13 @@ class GaiaProject extends SoftDeletable {
     version: version ?? this.version + 1,
     deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     name: name ?? this.name,
+    folders: folders ?? this.folders,
   );
 
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
+    'folders': folders,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'version': version,
@@ -727,6 +783,7 @@ class GaiaProject extends SoftDeletable {
     return GaiaProject(
       id: json['id']! as String,
       name: json['name']! as String,
+      folders: gaiaFoldersFromJson(json['folders']),
       createdAt: createdAt,
       updatedAt: _date(json['updatedAt']) ?? createdAt,
       version: (json['version'] as num?)?.toInt() ?? 0,
@@ -734,6 +791,14 @@ class GaiaProject extends SoftDeletable {
     );
   }
 }
+
+/// A project's [GaiaProject.folders] from JSON; entries that aren't paths
+/// are dropped.
+Map<String, String> gaiaFoldersFromJson(Object? json) => {
+  if (json is Map)
+    for (final MapEntry(:key, :value) in json.entries)
+      if (key is String && value is String) key: value,
+};
 
 /// A project as the chat lists show it (GAIA_PROJECTS_HLD.md §7.1): its
 /// chats in [groups], pinned first, and how many there are.
@@ -1281,6 +1346,53 @@ String gaiaFilesPreamble(Iterable<GaiaFilePart> files) => [
   for (final file in files) '- ${file.reference}',
   '</attached_files>',
 ].join('\n');
+
+/// Where [project]'s folder is as a turn on [deviceId] tells it
+/// (GAIA_PROJECTS_HLD.md §5.2): its path, "not on this device" when only
+/// other devices have one, null when it has none.
+String? gaiaProjectFolder(GaiaProject? project, String deviceId) =>
+    project == null || project.folderPaths.isEmpty
+    ? null
+    : project.folderPaths[deviceId] ?? _notHere;
+
+const _notHere = 'not on this device';
+
+/// What a turn tells its session of the chat's [project] (GAIA_PROJECTS_HLD.md
+/// §5.2), which holds [chats] chats and has [folder] ([gaiaProjectFolder]):
+/// null when the session was last [told] of this one already, with
+/// [toldFolder]. Taken out of the project it was told of, it's told that
+/// instead.
+String? gaiaProjectPreamble({
+  required String? told,
+  required String? toldFolder,
+  required GaiaProject? project,
+  required String? folder,
+  required int chats,
+}) {
+  if (project?.id == told && (project == null || folder == toldFolder)) {
+    return null;
+  }
+  if (project == null) return '<gaia_project removed/>';
+  String attribute(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+  final name = attribute(project.name);
+  return [
+    '<gaia_project name="$name" chats="$chats"'
+        '${folder == null ? '' : ' folder="${attribute(folder)}"'}>',
+    "This chat is in the user's project \"$name\". Other chats in this "
+        'project can be read with project_chats, project_search and '
+        'project_read.',
+    if (folder == _notHere)
+      "The project has a folder on the user's other devices, but not on this "
+          'one.'
+    else if (folder != null)
+      "The project's folder is $folder. You can read and edit files in it.",
+    '</gaia_project>',
+  ].join('\n');
+}
 
 /// The code in [text]'s ``` fenced blocks, without the fences, a blank line
 /// between blocks; null when it has none. One still open, as mid-stream,

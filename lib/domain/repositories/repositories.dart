@@ -876,6 +876,12 @@ abstract class GaiaRepository {
   Future<List<GaiaMessage>> listMessages(String chatId);
   Future<GaiaMessage?> getMessage(String id);
 
+  /// How many of [chatId]'s live messages a rewind didn't drop, and the
+  /// first [limit] of them in `seq` order: the chat as the user sees it
+  /// (GAIA_PROJECTS_HLD.md §5.1), without reading the rest.
+  Future<int> countShownMessages(String chatId);
+  Future<List<GaiaMessage>> firstShownMessages(String chatId, int limit);
+
   /// Tombstones included — the backup registry wants them.
   Future<List<GaiaMessage>> getAllMessages();
 
@@ -896,8 +902,14 @@ abstract class GaiaRepository {
   Future<Set<String>> searchChatIds(String query);
 
   /// Messages and side questions (GAIA_BTW_HLD.md §9) of live chats matching
-  /// every word of [query], as a prefix, newest first: at most [limit].
-  Future<List<GaiaSearchHit>> searchMessages(String query, {int limit = 50});
+  /// every word of [query], as a prefix, newest first: at most [limit]. With
+  /// [chatIds], only those chats' messages, and no side questions
+  /// (GAIA_PROJECTS_HLD.md §5.1).
+  Future<List<GaiaSearchHit>> searchMessages(
+    String query, {
+    int limit = 50,
+    Set<String>? chatIds,
+  });
 
   /// Fires after any write to the chats, messages or projects.
   Stream<void> watchChanges();

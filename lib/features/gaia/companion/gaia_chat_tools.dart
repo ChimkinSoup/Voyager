@@ -102,8 +102,9 @@ typedef GaiaControlHost = ({
 
 /// One turn's Gaia tools (§5.3), bound to its chat: `ask_user`, the CLI's
 /// permission prompts, the `propose_*` tools and the `os_*` actions raise cards
-/// in the reply through [onCard] and wait in [cards]; the `voyager_*` reads and
-/// the `memory_*` tools (§11) go to the main instance through [read], the
+/// in the reply through [onCard] and wait in [cards]; the `voyager_*` reads,
+/// the `memory_*` tools (§11) and the `project_*` reads (GAIA_PROJECTS_HLD.md
+/// §5.1) go to the main instance through [read], the
 /// `os_*` reads through [screen], proposals through [proposals], and step lists
 /// through [control]. While [aborted], every tool refuses (§15.7).
 ///
@@ -248,7 +249,9 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
         return GaiaToolResult(text: '$error', isError: true);
       }
     }
-    if (isGaiaVoyagerRead(name) || isGaiaMemoryTool(name)) {
+    if (isGaiaVoyagerRead(name) ||
+        isGaiaMemoryTool(name) ||
+        isGaiaProjectTool(name)) {
       try {
         return GaiaToolResult(
           text: await read(name, arguments),

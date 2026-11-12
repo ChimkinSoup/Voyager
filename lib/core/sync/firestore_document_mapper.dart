@@ -4386,6 +4386,8 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'forkOf': chat.forkOf,
   'rewinds': chat.toJson()['rewinds'],
   'projectId': chat.projectId,
+  'summary': chat.summary,
+  'summarizedSeq': chat.summarizedSeq,
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4406,9 +4408,21 @@ GaiaChat mergeGaiaChatFromRemote(
     return local!;
   }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  // The summary covering more of the chat, so a concurrent write that lost a
+  // device's newer one doesn't take it back (GAIA_PROJECTS_HLD.md §5.5); an
+  // erase takes the remote's.
+  final remoteSummarized = (data['summarizedSeq'] as num?)?.toInt();
+  final summaryIsRemote =
+      remoteSummarized != null &&
+      (isErasedPayload(data) ||
+          remoteSummarized >= (local?.summarizedSeq ?? -1));
   return GaiaChat(
     id: id,
     title: data['title'] as String? ?? local?.title ?? '',
+    summary: summaryIsRemote ? data['summary'] as String? : local?.summary,
+    summarizedSeq: summaryIsRemote
+        ? remoteSummarized
+        : local?.summarizedSeq ?? -1,
     lastMessageAt:
         parseFirestoreDate(data['lastMessageAt']) ??
         local?.lastMessageAt ??
@@ -4909,6 +4923,7 @@ GaiaDraft mergeGaiaDraftFromRemote(
 Map<String, dynamic> gaiaProjectToFirestore(GaiaProject project) => {
   'id': project.id,
   'name': project.name,
+  'folders': project.folders,
   'createdAt': _dateToFirestoreRequired(project.createdAt),
   'updatedAt': _dateToFirestoreRequired(project.updatedAt),
   'version': project.version,
@@ -4919,6 +4934,7 @@ GaiaProject mergeGaiaProjectFromRemote(
   Map<String, dynamic> data,
   String id, {
   GaiaProject? local,
+  String? deviceId,
 }) {
   if (!_remoteRecordWins(
     data,
@@ -4929,9 +4945,20 @@ GaiaProject mergeGaiaProjectFromRemote(
     return local!;
   }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final mine = local?.folders[deviceId];
   return GaiaProject(
     id: id,
     name: data['name'] as String? ?? local?.name ?? '',
+    // Each device sets only its own, so a concurrent write that lost one
+    // device's doesn't take it back, and [deviceId]'s stays local
+    // (GAIA_PROJECTS_HLD.md §4); an erase takes the remote's.
+    folders: isErasedPayload(data)
+        ? gaiaFoldersFromJson(data['folders'])
+        : {
+            ...?local?.folders,
+            ...gaiaFoldersFromJson(data['folders']),
+            if (mine != null) deviceId!: mine,
+          },
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

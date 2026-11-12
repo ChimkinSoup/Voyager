@@ -196,6 +196,9 @@ class _Turn {
   String? turnId;
   int? contextTokens;
   int? contextWindow;
+
+  /// The thread compacted its context during the turn.
+  var compacted = false;
   String? error;
   var lastText = '';
 
@@ -578,6 +581,7 @@ class CodexAppServerClient {
         _changes.remove(item['id']);
         _commands[threadId]?.remove(item['id']);
         if (turn == null) return;
+        if (type == 'contextCompaction') turn.compacted = true;
         if (type == 'agentMessage') {
           turn.lastText = _string(item, 'text', line).trimRight();
         } else if (!_notTools.contains(type)) {
@@ -636,6 +640,7 @@ class CodexAppServerClient {
                 text: turn.lastText,
                 contextTokens: turn.contextTokens,
                 contextWindow: turn.contextWindow,
+                compacted: turn.compacted,
               ),
             );
           case 'interrupted':

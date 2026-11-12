@@ -2226,6 +2226,12 @@ class GaiaChatsTable extends Table {
 
   /// The project it's in (GAIA_PROJECTS_HLD.md §2); null for none.
   TextColumn get projectId => text().nullable()();
+
+  /// What it's about, for `project_chats` (GAIA_PROJECTS_HLD.md §5.5).
+  TextColumn get summary => text().nullable()();
+
+  /// The last message [summary] covers.
+  IntColumn get summarizedSeq => integer().withDefault(const Constant(-1))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2239,6 +2245,9 @@ class GaiaChatsTable extends Table {
 class GaiaProjectsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
+
+  /// `{deviceId: path}`, its folder on each device (GAIA_PROJECTS_HLD.md §4).
+  TextColumn get foldersJson => text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2529,7 +2538,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 193;
+  int get schemaVersion => 195;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4712,6 +4721,30 @@ class AppDatabase extends _$AppDatabase {
           'gaia_chats_table',
           gaiaChatsTable,
           gaiaChatsTable.projectId,
+        );
+      }
+      if (from >= 169 && from < 194) {
+        // Chat summaries (GAIA_PROJECTS_HLD.md §5.5).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.summary,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.summarizedSeq,
+        );
+      }
+      if (from >= 193 && from < 195) {
+        // Project folders (GAIA_PROJECTS_HLD.md §4).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_projects_table',
+          gaiaProjectsTable,
+          gaiaProjectsTable.foldersJson,
         );
       }
     },

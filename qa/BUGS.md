@@ -12,7 +12,7 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 
 **MD-18 (2026-10-20, Photos on two devices) added BUG-305 … BUG-313, not yet in the table below:** 9 Minor (BUG-305 … BUG-313). On 2026-10-20 all nine were fixed in the working tree (uncommitted) and verified in the running app on two devices (TEST_PLAN.md FV-51, qa-107); BUG-312 only partly (the receiver still rebuilds the series once per arrival).
 
-Updated 2026-10-10 after the closing re-check (TEST_PLAN.md FV-41, qa-064), which ran every fix that had been checked only by unit tests in the app, and again 2026-10-15 for BUG-229 … BUG-283 (FV-42 … FV-48). **Every entry is fixed, closed without a code change, or skipped; none is open. BUG-283's fix hasn't been checked in the app yet.**
+Updated 2026-10-10 after the closing re-check (TEST_PLAN.md FV-41, qa-064), which ran every fix that had been checked only by unit tests in the app, and again 2026-10-15 for BUG-229 … BUG-283 (FV-42 … FV-48). **Every entry is fixed, closed without a code change, or skipped; none is open. BUG-283's fix was checked in the app on 2026-11-12.**
 
 | Severity | Logged | Fixed + verified in the app | Fixed, not verifiable in the app | Fixed, not yet checked in the app | Closed, no code change | Skipped | Open |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -3168,6 +3168,7 @@ Entry format:
 - **Not fixed (1), resurrection:** if A's pending upload reaches the server after B's purge, it creates the entry again there (`set` with merge on a missing document), with A's copy of it and a log holding only A's operations from then on. The purge is undone for that entry on every device, and B's view (purged, re-seeded from its own text) and A's (its own text) can differ until the two merge. A delete racing an edit: no detection on A prevents it.
 - **Not fixed (2), late keystrokes:** characters A uploads after `waitForPendingWrites` returns but before the re-seed reads the log land in the log without A's new session knowing about them, still anchored to purged operations. The window is about one round-trip.
 - Notes (2026-10-15, status): the fix noted above as uncommitted is in commit `a3f36f9`.
+- Notes (2026-11-12, verified in the running app): qa-128 on `gaiaqa` (A) and a fresh profile `q283` (B), debug build of the working tree. On A, journal entry "B283 purge test" ("ONE alpha bravo charlie delta.") open in the editor, session #770594895. A's Firestore taken offline (`disableNetwork` by evalc) and " TWO echo foxtrot." typed, so its upload was pending; B ran `permanentlyDeleteFromRemote` (3 operations deleted). A's session was unchanged while offline; 12 s after `enableNetwork` it was a new one (#1072559511) holding the whole text, and A typed " THREE golf hotel." on it. B decoded the server log: 66 character operations, all live, spelling A's text exactly. B's row matched. The entry came back on B after the purge, which is "Not fixed (1)" above. `q283` ended with `session_end.ps1` → `SIGNED-OUT`.
 
 ### BUG-284 [P28A] The New / Edit photo series dialog drops keyboard focus from Name after a rejected Enter or Create, so the next keys go nowhere
 - Severity: Minor
@@ -3535,6 +3536,7 @@ Entry format:
 - Actual: the box is eight lines tall with the command on the first (`qa/shots/p4a-08-perm.png`, `p4a-13-stopped.png`). `GaiaCardView` shows the detail in a `SelectableText` with `maxLines: 8` and no `minLines`, which, like a TextField, sizes to `maxLines` whatever the text.
 - Notes: the card otherwise works (allow, typed deny, Deny button; see the pass notes in PROGRESS.md).
 - Notes (2026-10-28, fixed in the working tree, uncommitted): the `SelectableText` now has `minLines: 1`, so the box grows with the command up to eight lines. Not yet checked in the app.
+- Notes (2026-11-12, verified in the running app): `gaiaqa` (qa-128, Haiku), the steps above: the box is one line tall around `echo gaia-perm-one` (`qa/shots/b320-card-oneline.png`); Allow ran it. The eight-line cap with a long command wasn't seen: the companion window showed an empty "New chat" while that turn's card was pending in the controller, so the grab never showed the card (not investigated; the turn was stopped).
 
 ### BUG-321 [GAIA-P7] With two desktops online, drain loops: one queued prompt becomes hundreds of queue rows and repeated real sends
 - Severity: Critical
@@ -3983,4 +3985,22 @@ Entry format:
 - Notes: 1 of 11 turns. Possibly specific to an exe run from a copied folder (its toast registration), but an uncaught WinRT error in the plugin ends the process wherever it happens. The stacks were captured with dbghelp from the paused process (session scratchpad, not kept).
 - Notes (fixed 2026-11-08): the plugin is vendored at `third_party/flutter_local_notifications_windows-3.1.1` (a `dependency_overrides` entry). Its `init` and `showNotification` catch `winrt::hresult_error` and return false (`VOYAGER PATCH` in `src/ffi_api.cpp`). Dart then throws "could not show notification", which `ReminderOsNotifier.showNow` already catches and reports. The cause of the original failure isn't known, and it couldn't be produced on demand: oversized, malformed and unregistered-app toasts all showed or were dropped without an error. For the live check, a scratch DLL loaded into the qa main instance pointed `IToastNotifier::Show`'s vtable slot at a stub returning `E_FAIL`. The new build: `show` threw "Exception: Flutter Local Notifications could not show notification", and the app ran on. The previous build with the same injection: "Debug Error! ... abort() has been called", as reported.
 
-<!-- Last ID: BUG-375. -->
+### BUG-376 [GAIA-PROJECTS] A chat taken out of its project is told "removed" on every turn after
+- Severity: Minor
+- Found: 2026-11-12, GAIA_PROJECTS_HLD.md Phase 2 live pass (`gaiaqa`, qa-128, debug build of the working tree, Haiku)
+- Steps: in a Claude Code chat, send a turn, move the chat into a project and send a turn (it gets the `<gaia_project>` block), take it out of the project and send a turn, then send another.
+- Actual: both of the last two prompts start with `<gaia_project removed/>` (Claude Code session file), and so does every turn after. The chat's session entry keeps `"project": "<old project id>"` in `agent_sessions_json`, in the companion and in Firestore.
+- Expected: `removed` once, on the first turn after the move (§5.2), and the session's `project` null from then on.
+- Notes: the controller records `project: null` correctly; sync puts the old value back. `GaiaAgentSession.toJson` left `project` out when null (`'project': ?project`), and the outbox uploads with `set(merge: true)`, which merges nested maps field by field, so Firestore kept `agentSessions.<key>.project`. The snapshot then merged that back into the local row. Seen directly: a local `setSession(..., project: null)` read back without `project`, and 0.7 s later it was the old id again. The controller unit test (§5.2 block after removal) passes because it has no sync.
+- Notes (fixed 2026-11-12): `GaiaAgentSession.toJson` always writes `project`, null included, so the merge clears it. Unit test in `gaia_chat_store_test.dart` ("a session's project cleared here is cleared by the merge upload"), which merges the upload into the stored document the way Firestore does (fails on the old code). Live on a rebuilt `gaiaqa`, same chat: in, out, then one more turn. The out turn got `removed` once and the next turn no block, and `project` stayed null locally and in Firestore (`lastSeq` 13).
+
+### BUG-377 [GAIA-PROJECTS] Remove folder doesn't drop the `--add-dir` from a running Claude Code process
+- Severity: Minor
+- Found: 2026-11-12, GAIA_PROJECTS_HLD.md Phase 3 live pass (`gaiaqa`, qa-128, debug build of the working tree, Haiku)
+- Steps: in a project with a folder on this device, send a Claude Code turn (the process starts with `--add-dir <folder>`), then Remove folder (project menu or header chip) and send another turn within the idle timeout.
+- Actual: the turn runs on the same process, still started with `--add-dir <folder>` (Win32_Process command line, same PID before and after). The `<gaia_project>` block is sent again correctly, with no `folder`, and the agent says there's no folder, but the CLI still treats the folder as a working directory, so edits there stay in-workspace (no card under the CLI's auto mode).
+- Expected: the next turn drops the `--add-dir` (§4: "The chat's next turn drops the `--add-dir`"), i.e. the process restarts and resumes the session, as it does when a folder is set or changed.
+- Notes: `ClaudeCodeRunner` restarts only when `!process.directories.containsAll(directories)` (`claude_code_runner.dart:457`), which suits attached files (they're never taken away) but not a removed folder. Changing the folder (A → B) does restart, checked live: new PID, `--add-dir B --resume <same session>`, block resent, the agent read B's file. The controller unit test ("leaves them once removed") checks the `directories` set passed in, not the runner's restart.
+- Notes (fixed 2026-11-12, uncommitted): the runner restarts when the process's directories differ from the turn's at all (`setEquals`), not only when some are missing. No unit test: the runner's restart can't be reached without the real CLI. Live on a rebuilt `gaiaqa` (qa-128, Haiku), new chat in "P3 Folder QA" with a scratch folder holding OBSIDIAN-77: turn 1 ran on PID 10932 with `--add-dir <folder>` and read the codeword; after Remove folder, turn 2 ran on a new PID 23988 with no `--add-dir` and `--resume` of the same session (both prompts in one session file, turn 2's block without `folder`), PID 10932 gone, and the agent said it no longer had the folder.
+
+<!-- Last ID: BUG-377. -->

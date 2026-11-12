@@ -3267,7 +3267,12 @@ class RemoteSyncService {
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _gaiaRepository.getProject(id);
-        final merged = mergeGaiaProjectFromRemote(data, id, local: local);
+        final merged = mergeGaiaProjectFromRemote(
+          data,
+          id,
+          local: local,
+          deviceId: deviceId,
+        );
         if (identical(merged, local)) return;
         await _gaiaRepository.upsertProject(merged, recordLocalActivity: false);
       },

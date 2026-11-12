@@ -490,6 +490,46 @@ void main() {
       expect(back.toJson(), chat.toJson());
     });
 
+    test("a session's project cleared here is cleared by the merge upload "
+        '(BUG-376)', () {
+      Map<String, Object?> mergeInto(
+        Map<String, Object?> stored,
+        Map<String, Object?> upload,
+      ) => {
+        ...stored,
+        for (final MapEntry(:key, :value) in upload.entries)
+          key: value is Map && stored[key] is Map
+              ? mergeInto(
+                  (stored[key]! as Map).cast<String, Object?>(),
+                  value.cast<String, Object?>(),
+                )
+              : value,
+      };
+      final key = gaiaSessionKey('laptop');
+      final told = _chat('c1').copyWith(
+        agentSessions: {
+          key: const GaiaAgentSession(
+            sessionId: 's',
+            lastSeq: 4,
+            project: 'p1',
+          ),
+        },
+      );
+      final removed = told.copyWith(
+        agentSessions: {
+          key: const GaiaAgentSession(sessionId: 's', lastSeq: 6),
+        },
+      );
+      // Firestore's set(merge: true) merges nested maps field by field.
+      final stored = mergeInto(
+        gaiaChatToFirestore(told),
+        gaiaChatToFirestore(removed),
+      );
+      final back = mergeGaiaChatFromRemote(stored, 'c1', local: removed);
+      expect(back.agentSessions[key]!.project, isNull);
+      expect(back.agentSessions[key]!.lastSeq, 6);
+    });
+
     test('a winning copy keeps the sessions it lacks', () {
       const mine = GaiaAgentSession(sessionId: 'mine', lastSeq: 2);
       const theirs = GaiaAgentSession(sessionId: 'theirs', lastSeq: 3);

@@ -89,6 +89,13 @@ until it's moved.
 - **Set per device**, like a workspace binding (GAIA_HLD.md §5.2), since paths differ
   between machines: **Set folder…** in the project's menu opens the folder picker and
   stores `folders[thisDevice]`. The phone shows which desktops have one, but can't set one.
+- **Remove folder** (added 2026-11-12) shows in the same menus when this device has a
+  folder, and unbinds it here only; the folder on disk and other devices' paths stay. The
+  entry is kept as an empty path, not deleted: `folders` merges key by key in sync, so a
+  missing key would come back from another device's copy, while an empty one replaces the
+  path everywhere. Every reader skips empty paths (`GaiaProject.folderPaths`). The chat's
+  next turn drops the `--add-dir` and sends the block again, with "not on this device" or
+  no `folder` (§5.2).
 - **Always `--add-dir`, never the cwd** (decided 2026-11-10). The chat keeps Gaia's own
   working directory, so no project instruction file (CLAUDE.md, AGENTS.md) or project
   settings in the folder are loaded.
@@ -99,8 +106,14 @@ until it's moved.
   a newly attached file's folder already does.
 - **Agents can write in the folder** (decided 2026-11-10), not just read it. Claude Code's
   `--add-dir` already allows edits there.
-- **Codex** reads anywhere already. Writes need the folder as a writable root on its
-  sandbox. *Verify on app-server* that a thread can take extra writable roots, and how.
+- **Codex needs nothing** (checked on app-server 0.166.0, 2026-11-12). Gaia's threads
+  start read-only (`thread/start` answers `sandbox: readOnly`, profile `:read-only`)
+  with `approvalPolicy: on-request`, so every write anywhere already asks, through
+  `item/fileChange/requestApproval` and the permission card. Extra roots
+  (`runtimeWorkspaceRoots`, or `sandboxPolicy.writableRoots` on `turn/start`) only
+  matter under `workspaceWrite`, and that would let edits in the folder skip the card,
+  against the last bullet below. So Codex gets no `--add-dir` equivalent. Seen live
+  2026-11-12: a Codex project chat's write in the folder raised the card.
 - **A device with no path for the folder still runs the chat** (decided 2026-11-10). The
   agent is told the folder isn't on this device (§5.2), and the chat header's project chip
   shows "no folder here". This differs from workspace chats, which refuse to run.
@@ -145,7 +158,9 @@ Project memories:
 </gaia_project>
 ```
 
-- `folder="not on this device"` when this device has no path for it.
+- `folder="not on this device"` when this device has no path for it, and no `folder`
+  when the project has none anywhere. The session entry also keeps the `folder` it was
+  told of, so setting or changing the folder on this device sends the block again.
 - Taken out of a project, the next turn gets `<gaia_project removed/>` instead, so the
   agent knows the tools and folder are gone.
 - It's per-turn context, not system prompt, because resumed sessions keep their first
@@ -188,6 +203,10 @@ Another device, the phone included, shows the call and its arguments, but not th
 - Chats with no project are never summarized, so projects cost nothing for chats outside
   them.
 - With no utility model, the summary falls back to the first line of the first message.
+- A rewind that drops the turn `summarizedSeq` names sets the summary aside (decided
+  2026-11-12): readers fall back as if there were none, and the chat's next idle after a
+  turn past the rewind writes it again from the start. Nothing is written at the rewind,
+  so sync's "the summary covering more wins" can't bring the old one back.
 
 ### 5.6 Risk
 
@@ -244,14 +263,17 @@ showing every call on the activity card, are what bounds it.
   forks nested and foldable as now. Which projects are open is kept in the sidebar's local
   file (`GaiaSidebar`), next to `collapsed`, and isn't synced.
 - **Chats**: chats with no project, as today.
-- A project's right-click menu: New chat, Rename, Set folder…, Delete project….
+- A project's right-click menu: New chat, Rename, Set folder…, Remove folder (when this
+  device has one), Delete project….
 - Search (`gaia_search.dart`) shows each result's project, and gets a "This project" filter
   when the chat in view is in one.
 
 ### 7.2 Chat header
 
-A chat in a project shows a project chip in its header. Clicking it opens the project's
-menu. It shows "no folder here" when the project has a folder but not on this device.
+A chat in a project shows a project chip in its header. Clicking it opens New chat,
+Set folder… and Remove folder (Rename and Delete stay in the sidebar's menu, which renames
+in place).
+It shows "no folder here" when the project has a folder but not on this device.
 
 ### 7.3 Gaia page (desktop)
 
@@ -313,8 +335,8 @@ Built in order. Each phase ends with something usable.
 
 ## 11. Decisions (2026-11-10)
 
-1. **Agents can write in the project folder**, under the CLI's permission cards (§4). Still
-   to verify: how Codex's app-server takes the folder as a writable root.
+1. **Agents can write in the project folder**, under the CLI's permission cards (§4).
+   Codex already does, since its threads are read-only and ask for every write (§4).
 2. **A device with no path for the folder runs the chat anyway**, and the agent is told the
    folder isn't there (§4, §5.2).
 3. **Project memories follow the delete dialog's checkbox:** global when it's unchecked,
@@ -332,7 +354,8 @@ Built in order. Each phase ends with something usable.
   the project. The block sent on the first turn, after a move, after removal and after a
   compaction, and not otherwise.
 - **Controller:** the project folder joins `directories` only when it exists on this
-  device.
+  device, and leaves them once removed.
+- **Sync:** a removed folder stays removed on a device that still had its path.
 - **Sync:** delete on one device while another moves a chat in.
 - **Live (qa profile):** a Claude Code and a Codex chat in one project, each searching and
   reading the other. The activity card detail. The folder on one device and not the other.

@@ -179,6 +179,7 @@ class GaiaTurnResult {
     this.contextWindow,
     this.sessionFound = true,
     this.notice,
+    this.compacted = false,
   });
 
   /// The native session to resume next time.
@@ -200,6 +201,10 @@ class GaiaTurnResult {
   /// Something the user should hear about the session, beside the reply:
   /// a take-back ([GaiaAgentRunner.takeBack]) that didn't hold.
   final String? notice;
+
+  /// The session compacted its context during the turn, so what it was told
+  /// on earlier turns may be gone (GAIA_PROJECTS_HLD.md §8).
+  final bool compacted;
 }
 
 /// A turn that ended without a result: the process died, or its output

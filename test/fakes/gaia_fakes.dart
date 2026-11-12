@@ -393,11 +393,13 @@ class FakeClaudeRunner
     final events = turns.removeAt(0);
     final turn = _active[chatId] = Completer<GaiaTurnResult>();
     String? sessionModel;
+    var compacted = false;
     for (final event in events) {
       await Future<void>.microtask(() {});
       if (turn.isCompleted) break;
       if (gaiaEventOf(event) case final event?) onEvent(event);
       if (event is ClaudeInit) sessionModel = event.model;
+      if (event is ClaudeCompacted) compacted = true;
       if (event is ClaudeResult) {
         turn.complete(
           GaiaTurnResult(
@@ -408,6 +410,7 @@ class FakeClaudeRunner
             contextWindow: event.contextWindowOf(sessionModel),
             sessionFound: !missingSessions.contains(sessionId),
             notice: notice,
+            compacted: compacted,
           ),
         );
         notice = null;

@@ -569,6 +569,32 @@ class _PickUpPill extends StatelessWidget {
   }
 }
 
+/// A project menu's Set folder… (GAIA_PROJECTS_HLD.md §4): picks its folder
+/// on this device, the one it has here as the detail.
+GaiaMenuItem _setFolderItem(GaiaController controller, GaiaProject project) =>
+    GaiaMenuItem(
+      label: 'Set folder…',
+      icon: Icons.folder_open_outlined,
+      detail: controller.projectFolder(project.id),
+      onPressed: () async {
+        final path = await pickFolder(title: 'Folder for ${project.name}');
+        if (path != null) await controller.setProjectFolder(project.id, path);
+      },
+    );
+
+/// A project menu's Remove folder (GAIA_PROJECTS_HLD.md §4): unbinds its
+/// folder on this device, leaving the folder on disk; null with none here.
+GaiaMenuItem? _removeFolderItem(
+  GaiaController controller,
+  GaiaProject project,
+) => controller.projectFolder(project.id) == null
+    ? null
+    : GaiaMenuItem(
+        label: 'Remove folder',
+        icon: Icons.folder_off_outlined,
+        onPressed: () => controller.setProjectFolder(project.id, null),
+      );
+
 /// New chat's buttons: with Shift held, the draft goes with it.
 void _newChat(GaiaController controller) =>
     HardwareKeyboard.instance.isShiftPressed
@@ -647,6 +673,11 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
+            if (controller.project(controller.currentChat?.projectId)
+                case final project?) ...[
+              _ProjectChip(controller: controller, project: project),
+              const SizedBox(width: 8),
+            ],
             // The sidebar's New chat, when there's no sidebar.
             if (!sidebarShown) ...[
               GaiaButton(
@@ -673,6 +704,47 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 12),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The chat's project in its header (GAIA_PROJECTS_HLD.md §7.2), saying "no
+/// folder here" when the project's folder is on other devices only. A click
+/// opens its New chat and Set folder…; the sidebar's menu has the rest.
+class _ProjectChip extends StatelessWidget {
+  const _ProjectChip({required this.controller, required this.project});
+
+  final GaiaController controller;
+  final GaiaProject project;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final noFolder =
+        project.folderPaths.isNotEmpty &&
+        controller.projectFolder(project.id) == null;
+    return GestureDetector(
+      onTapUp: (details) => showGaiaMenu(context, details.globalPosition, [
+        GaiaMenuItem(
+          label: 'New chat',
+          icon: Icons.add,
+          onPressed: () {
+            controller.newChatIn(project.id);
+            controller.focusComposer();
+          },
+        ),
+        _setFolderItem(controller, project),
+        ?_removeFolderItem(controller, project),
+      ]),
+      child: Chip(
+        avatar: const Icon(Icons.folder_outlined, size: 14),
+        label: Text(
+          noFolder ? '${project.name} · no folder here' : project.name,
+          overflow: TextOverflow.ellipsis,
+        ),
+        visualDensity: VisualDensity.compact,
+        labelStyle: theme.textTheme.labelSmall,
       ),
     );
   }
@@ -961,6 +1033,8 @@ class _SidebarState extends State<_Sidebar> {
         icon: Icons.edit_outlined,
         onPressed: () => _startRename(project.id, project.name, project: true),
       ),
+      _setFolderItem(widget.controller, project),
+      ?_removeFolderItem(widget.controller, project),
       GaiaMenuItem(
         label: 'Delete project…',
         icon: Icons.delete_outline,

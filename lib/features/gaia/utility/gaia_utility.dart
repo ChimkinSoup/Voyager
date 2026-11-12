@@ -171,6 +171,34 @@ class GaiaUtility {
     }
   }
 
+  /// What a project chat is about, in a sentence or two, for the other chats
+  /// in its project (GAIA_PROJECTS_HLD.md §5.5): [previous], its summary so
+  /// far, brought up to date with [transcript], its turns since. Null when
+  /// it failed, so the turns are read again next time.
+  Future<String?> chatSummary(String? previous, String transcript) async {
+    // The newest kept: the summary covers up to the last turn.
+    final turns = transcript.length <= 100000
+        ? transcript
+        : transcript.substring(transcript.length - 100000);
+    try {
+      final answer = await _runner
+          .generate(
+            'Write one or two sentences, under 60 words, saying what the chat '
+            'in <input> is about and where it stands, for an assistant '
+            'deciding whether to read it. Reply with the summary only.',
+            previous == null
+                ? 'Chat:\n$turns'
+                : 'Summary so far: $previous\n\nNew turns:\n$turns',
+          )
+          .timeout(_summaryTimeout);
+      final summary = answer.trim();
+      return summary.isEmpty ? null : _clip(summary, 500);
+    } catch (error) {
+      debugPrint('[gaia] chat summary: $error');
+      return null;
+    }
+  }
+
   /// A description of [image] for an agent that can't see it (§7.4), or
   /// null to go without one.
   Future<String?> caption(GaiaImageInput image) async {

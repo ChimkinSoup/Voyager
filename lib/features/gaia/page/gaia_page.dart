@@ -521,6 +521,19 @@ class _ProjectRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final count = section.count;
+    // Which desktops have its folder (GAIA_PROJECTS_HLD.md §4); one with no
+    // heartbeat here goes unnamed.
+    final beacons = {
+      for (final beacon in ref.watch(gaiaBeaconsProvider).valueOrNull ?? [])
+        beacon.deviceId: beacon.name,
+    };
+    final folders = section.project.folderPaths.keys;
+    final on = [for (final device in folders) ?beacons[device]];
+    final folder = folders.isEmpty
+        ? ''
+        : on.length == folders.length
+        ? ' · folder on ${on.join(', ')}'
+        : ' · folder on ${folders.length == 1 ? 'a desktop' : '${folders.length} desktops'}';
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
@@ -531,7 +544,7 @@ class _ProjectRow extends ConsumerWidget {
       minLeadingWidth: 14,
       title: Text(section.project.name, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        count == 1 ? '1 chat' : '$count chats',
+        '${count == 1 ? '1 chat' : '$count chats'}$folder',
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),

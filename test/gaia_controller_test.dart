@@ -107,6 +107,12 @@ class _Main {
           params['projectId'] as String?,
         );
         return null;
+      case 'setProjectFolder':
+        await store.setProjectFolder(
+          params['projectId']! as String,
+          params['path']! as String,
+        );
+        return null;
       case 'deleteProject':
         await store.deleteProject(
           params['projectId']! as String,
@@ -164,6 +170,15 @@ class _Main {
           params['lastSeq']! as int,
           adapter: params['adapter']! as String,
           account: params['account']! as String,
+          project: params['project'] as String?,
+          folder: params['folder'] as String?,
+        );
+        return null;
+      case 'setSummary':
+        await store.setSummary(
+          params['chatId']! as String,
+          params['summary']! as String,
+          params['seq']! as int,
         );
         return null;
       case 'setCurrentAccount':
@@ -5633,6 +5648,228 @@ void main() {
       expect(controller.projects, isEmpty);
       expect(controller.chats.single.id, two);
       expect((await stored(two)).projectId, isNull);
+    });
+
+    test('the project block goes on the first turn after a move into a '
+        'project or out of one, and not otherwise (§5.2)', () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      await turn('One');
+      final chatId = controller.currentChatId!;
+      expect(runner.sent.last.prompt, isNot(contains('<gaia_project')));
+
+      await controller.moveChat(chatId, 'p1');
+      await turn('Two');
+      expect(runner.sent.last.sessionId, isNotNull);
+      expect(
+        runner.sent.last.prompt,
+        startsWith('<gaia_project name="Trip" chats="1">'),
+      );
+      expect(runner.sent.last.prompt, endsWith('Two'));
+      expect((await stored(chatId)).agentSessions.values.single.project, 'p1');
+
+      await turn('Three');
+      expect(runner.sent.last.prompt, 'Three');
+
+      await controller.moveChat(chatId, null);
+      await turn('Four');
+      expect(runner.sent.last.prompt, '<gaia_project removed/>\n\nFour');
+      expect(
+        (await stored(chatId)).agentSessions.values.single.project,
+        isNull,
+      );
+
+      await turn('Five');
+      expect(runner.sent.last.prompt, 'Five');
+    });
+
+    test(
+      "a new chat in a project is told on its session's first turn",
+      () async {
+        await main.store.createProject(trip);
+        await startCompanion();
+        controller.newChatIn('p1');
+        await turn('Hi');
+        expect(runner.sent.single.sessionId, isNull);
+        expect(
+          runner.sent.single.prompt,
+          startsWith('<gaia_project name="Trip"'),
+        );
+      },
+    );
+
+    test('after a compaction the next turn is told again (§8)', () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      controller.newChatIn('p1');
+      await turn('One');
+      expect(runner.sent.last.prompt, contains('<gaia_project'));
+
+      final compacting = claudeFixtureTurns('single_turn.jsonl').single;
+      runner.turns.add([
+        for (final event in compacting) ...[
+          if (event is ClaudeResult) const ClaudeCompacted(),
+          event,
+        ],
+      ]);
+      await controller.send('Two');
+      await settle();
+      expect(runner.sent.last.prompt, 'Two');
+
+      await turn('Three');
+      expect(runner.sent.last.prompt, contains('<gaia_project'));
+    });
+
+    test("the project's folder joins the turn's directories only where this "
+        'device has it, and setting it here tells the session again '
+        '(§4)', () async {
+      final dir = await Directory.systemTemp.createTemp('gaia_project');
+      addTearDown(() => dir.delete(recursive: true));
+      await main.store.createProject(
+        trip.copyWith(folders: {'desk': p.join(dir.path, 'elsewhere')}),
+      );
+      await startCompanion();
+      controller.newChatIn('p1');
+      await turn('One');
+      expect(runner.sent.last.directories, isEmpty);
+      expect(
+        runner.sent.last.prompt,
+        startsWith(
+          '<gaia_project name="Trip" chats="1" folder="not on this device">',
+        ),
+      );
+      final chatId = controller.currentChatId!;
+
+      await controller.setProjectFolder('p1', dir.path);
+      expect((await main.store.projects()).single.folders, {
+        'desk': p.join(dir.path, 'elsewhere'),
+        'laptop': dir.path,
+      });
+      await turn('Two');
+      expect(runner.sent.last.directories, {dir.path});
+      expect(
+        runner.sent.last.prompt,
+        startsWith('<gaia_project name="Trip" chats="1" folder="${dir.path}">'),
+      );
+      expect(
+        (await stored(chatId)).agentSessions.values.single.folder,
+        dir.path,
+      );
+
+      await turn('Three');
+      expect(runner.sent.last.prompt, 'Three');
+      expect(runner.sent.last.directories, {dir.path});
+
+      // Gone from disk: not handed to the CLI.
+      await dir.delete(recursive: true);
+      await turn('Four');
+      expect(runner.sent.last.directories, isEmpty);
+      await dir.create();
+
+      // Removed here: gone from the turn, and the session is told again.
+      await controller.setProjectFolder('p1', null);
+      expect(controller.projectFolder('p1'), isNull);
+      await turn('Five');
+      expect(runner.sent.last.directories, isEmpty);
+      expect(
+        runner.sent.last.prompt,
+        startsWith(
+          '<gaia_project name="Trip" chats="1" folder="not on this device">',
+        ),
+      );
+    });
+
+    test('a project chat gone quiet is summarized; one in no project never '
+        'is (§5.5)', () async {
+      final utility = FakeUtilityRunner(
+        (job) => job.startsWith('Write one or two')
+            ? 'Planning the Japan trip.'
+            : job.startsWith('You keep')
+            ? '[]'
+            : 'Title',
+      );
+      await main.store.createProject(trip);
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      await turn('Loose');
+      final loose = controller.currentChatId!;
+      controller.newChatIn('p1');
+      await turn('Flights');
+      final inProject = controller.currentChatId!;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+
+      final summarized = await stored(inProject);
+      expect(summarized.summary, 'Planning the Japan trip.');
+      expect(summarized.summarizedSeq, 1);
+      expect((await stored(loose)).summary, isNull);
+      expect(
+        utility.jobs.where((job) => job.startsWith('Write one or two')),
+        hasLength(1),
+      );
+    });
+
+    test("a rewind into a chat's summary sets it aside, and the next one is "
+        'written from the start without the dropped turns (§5.5)', () async {
+      var about = 'About flights and hotels.';
+      final utility = FakeUtilityRunner(
+        (job) => job.startsWith('Write one or two')
+            ? about
+            : job.startsWith('You keep')
+            ? '[]'
+            : 'Title',
+      );
+      await main.store.createProject(trip);
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      controller.newChatIn('p1');
+      await turn('Flights');
+      await turn('Hotels');
+      final chatId = controller.currentChatId!;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      expect((await stored(chatId)).summarizedSeq, 3);
+
+      // Back to before the second prompt: the summary told of it.
+      await controller.rewindChat(
+        controller.messages.firstWhere((m) => m.seq == 2),
+      );
+      await settle();
+      final rewound = await stored(chatId);
+      expect(rewound.summary, about);
+      expect(rewound.currentSummary, isNull);
+
+      about = 'About flights and trains.';
+      await turn('Trains');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      final rewritten = await stored(chatId);
+      expect(rewritten.currentSummary, 'About flights and trains.');
+      expect(rewritten.summarizedSeq, greaterThan(3));
+      final input = utility.inputs.last;
+      expect(input, startsWith('Chat:'));
+      expect(input, contains('Flights'));
+      expect(input, contains('Trains'));
+      expect(input, isNot(contains('Hotels')));
+    });
+
+    test('a chat moved into a project with no summary is summarized by the '
+        'device that moved it (§5.5)', () async {
+      final utility = FakeUtilityRunner(
+        (job) =>
+            job.startsWith('Write one or two') ? 'About flights.' : 'Title',
+      );
+      await main.store.createProject(trip);
+      await startCompanion(utility: GaiaUtility(utility));
+      await turn('Flights');
+      final chatId = controller.currentChatId!;
+      await controller.moveChat(chatId, 'p1');
+      await settle();
+      expect((await stored(chatId)).summary, 'About flights.');
     });
   });
 

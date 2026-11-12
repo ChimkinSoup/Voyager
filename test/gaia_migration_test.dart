@@ -854,6 +854,60 @@ void main() {
     expect((await repo.listProjects()).single.name, 'Trip');
   });
 
+  test('193→194 adds chat summaries, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Plans',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN summary',
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN summarized_seq',
+    );
+    await seed.customStatement('PRAGMA user_version = 193');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.summary, isNull);
+    expect(chat.summarizedSeq, -1);
+    await repo.upsertChat(
+      chat.copyWith(summary: 'Planning a trip.', summarizedSeq: 3),
+    );
+    final saved = (await repo.getChat('c1'))!;
+    expect(saved.summary, 'Planning a trip.');
+    expect(saved.summarizedSeq, 3);
+  });
+
+  test('194→195 adds project folders, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertProject(
+      GaiaProject(id: 'p1', name: 'Trip', createdAt: now, updatedAt: now),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_projects_table DROP COLUMN folders_json',
+    );
+    await seed.customStatement('PRAGMA user_version = 194');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final project = (await repo.getProject('p1'))!;
+    expect(project.folders, isEmpty);
+    await repo.upsertProject(project.copyWith(folders: {'desk': 'D:/Trip'}));
+    expect((await repo.getProject('p1'))!.folders, {'desk': 'D:/Trip'});
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(
