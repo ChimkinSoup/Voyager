@@ -946,12 +946,14 @@ abstract class GaiaRepository {
     bool recordLocalActivity = true,
   });
 
-  /// Writes [chats] and then [project] in one transaction, all or none, and
-  /// tells sync once it's done: a project delete (GAIA_PROJECTS_HLD.md §3.3).
+  /// Writes [chats], [memories] and then [project] in one transaction, all
+  /// or none, and tells sync once it's done: a project delete
+  /// (GAIA_PROJECTS_HLD.md §3.3).
   Future<void> upsertProjectWithChats(
     GaiaProject project,
-    List<GaiaChat> chats,
-  );
+    List<GaiaChat> chats, {
+    List<GaiaMemory> memories,
+  });
 
   /// [listProjects] as it changes.
   Stream<List<GaiaProject>> watchProjects();

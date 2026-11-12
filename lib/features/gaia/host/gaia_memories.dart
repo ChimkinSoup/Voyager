@@ -23,9 +23,38 @@ class GaiaMemories {
 
   final GaiaRepository _repository;
 
-  /// The index of the active memories, for a new session (§11); empty when
-  /// there are none.
-  Future<String> index() async => gaiaMemoryIndex(await _active());
+  /// The index of the active global memories, for a new session (§11);
+  /// empty when there are none. With [chatId], as the curator reads it, the
+  /// chat's project's memories follow (GAIA_PROJECTS_HLD.md §6).
+  Future<String> index({String? chatId}) async {
+    final project = chatId == null ? null : await _projectOf(chatId);
+    final active = await _active();
+    final global = gaiaMemoryIndex([
+      for (final (memory, scope) in active)
+        if (scope == null) memory,
+    ]);
+    final own = project == null
+        ? const <String>[]
+        : _projectLines(active, project);
+    if (own.isEmpty) return global;
+    return [
+      if (global.isNotEmpty) global,
+      '# Project memories\n\n${own.join('\n')}',
+    ].join('\n\n');
+  }
+
+  /// Index lines of [projectId]'s active memories, for its `<gaia_project>`
+  /// block (GAIA_PROJECTS_HLD.md §5.2, §6).
+  Future<List<String>> projectIndex(String projectId) async =>
+      _projectLines(await _active(), projectId);
+
+  List<String> _projectLines(
+    List<(GaiaMemory, String?)> active,
+    String projectId,
+  ) => [
+    for (final (memory, scope) in active)
+      if (scope == projectId) '- ${_indexLine(memory)}',
+  ];
 
   /// A memory tool's call from [chatId]: its text for the agent. Throws a
   /// [GaiaReadException] the agent is shown.
@@ -41,23 +70,35 @@ class GaiaMemories {
         if (query.trim().isEmpty && tags.isEmpty) {
           throw GaiaReadException('memory_search needs a query or tags.');
         }
-        final active = await _active();
+        // Global ones and the chat's project's, never another project's
+        // (GAIA_PROJECTS_HLD.md §6).
+        final project = await _projectOf(chatId);
+        final active = [
+          for (final (memory, scope) in await _active())
+            if (scope == null || scope == project) memory,
+        ];
         return gaiaMemorySearchText(
           gaiaSearchMemories(active, query, tags: tags),
           total: active.length,
         );
       case 'memory_propose':
+        // The chat's project unless asked for global (GAIA_PROJECTS_HLD.md §6).
+        final project = arguments['scope'] == 'global'
+            ? null
+            : await _projectOf(chatId);
         final saved = await save(
           arguments['text'] as String? ?? '',
           tags: gaiaMemoryTags(arguments['tags']),
           chatId: chatId,
           status: GaiaMemoryStatus.proposed,
+          projectId: project,
         );
         return saved == null
             ? 'Already remembered, waiting in the inbox, or set aside by the '
                   'user: nothing new was proposed.'
-            : "Proposed. It waits in the memory inbox on the Gaia page until "
-                  "the user approves it, so it isn't remembered yet.";
+            : "Proposed${project == null ? '' : ' for this project'}. It "
+                  'waits in the memory inbox on the Gaia page until the user '
+                  "approves it, so it isn't remembered yet.";
       default:
         throw GaiaReadException('Unknown tool: $name');
     }
@@ -67,13 +108,15 @@ class GaiaMemories {
   /// active or proposed memory already says the same. Unless it's [byUser]
   /// (`/remember`), an archived, dismissed or deleted one counts too, so
   /// what the user set aside isn't offered again. Throws a
-  /// [GaiaReadException] for an empty or overlong one.
+  /// [GaiaReadException] for an empty or overlong one. It belongs to
+  /// [projectId], or is global for null.
   Future<GaiaMemory?> save(
     String text, {
     List<String> tags = const [],
     String? chatId,
     required GaiaMemoryStatus status,
     bool byUser = false,
+    String? projectId,
   }) async {
     final body = text.trim();
     if (body.isEmpty) throw GaiaReadException('A memory needs text.');
@@ -84,10 +127,21 @@ class GaiaMemories {
       );
     }
     final same = gaiaMemoryKey(body);
+    final live = {
+      for (final project in await _repository.listProjects()) project.id,
+    };
     for (final memory in await _repository.listMemories(
       includeDeleted: !byUser,
     )) {
-      if ((!byUser || memory.status != GaiaMemoryStatus.archived) &&
+      // Only a global one or [projectId]'s own says it already: another
+      // project's isn't seen here, and a deleted one whose project is gone
+      // went with it (GAIA_PROJECTS_HLD.md §6).
+      final scope = live.contains(memory.projectId) ? memory.projectId : null;
+      if (scope == null && memory.projectId != null && memory.isDeleted) {
+        continue;
+      }
+      if ((scope == null || scope == projectId) &&
+          (!byUser || memory.status != GaiaMemoryStatus.archived) &&
           gaiaMemoryKey(memory.text) == same) {
         return null;
       }
@@ -99,6 +153,7 @@ class GaiaMemories {
       tags: tags,
       sourceChatId: chatId,
       status: status,
+      projectId: projectId,
       createdAt: now,
       updatedAt: now,
       version: 1,
@@ -109,13 +164,15 @@ class GaiaMemories {
 
   /// The curator read [chatId] up to [seq] and found [found] (§11): they go
   /// in the inbox, or straight in with auto-accept on, and the chat is
-  /// marked read up to [seq]. An overlong one is dropped.
+  /// marked read up to [seq]. An overlong one is dropped. In a project
+  /// chat they belong to the project (GAIA_PROJECTS_HLD.md §6).
   Future<void> curated(
     String chatId,
     int seq,
     List<({String text, List<String> tags})> found,
   ) async {
     final settings = await _repository.getSettings();
+    final project = await _projectOf(chatId);
     for (final memory in found) {
       if (memory.text.trim().length > kGaiaMemoryMaxLength) continue;
       await save(
@@ -125,6 +182,7 @@ class GaiaMemories {
         status: settings.autoAcceptCurator
             ? GaiaMemoryStatus.active
             : GaiaMemoryStatus.proposed,
+        projectId: project,
       );
     }
     final chat = await _repository.getChat(chatId);
@@ -132,10 +190,33 @@ class GaiaMemories {
     await _repository.upsertChat(chat.copyWith(curatedSeq: seq));
   }
 
-  Future<List<GaiaMemory>> _active() async => [
-    for (final memory in await _repository.listMemories())
-      if (memory.status == GaiaMemoryStatus.active) memory,
-  ];
+  /// The project [chatId] is in, or with no chat yet the [newChat] one
+  /// picked for it; null for none, or one that points nowhere
+  /// (GAIA_PROJECTS_HLD.md §2).
+  Future<String?> projectOf(String? chatId, {String? newChat}) =>
+      chatId == null ? _live(newChat) : _projectOf(chatId);
+
+  Future<String?> _projectOf(String chatId) async =>
+      _live((await _repository.getChat(chatId))?.projectId);
+
+  Future<String?> _live(String? id) async {
+    if (id == null) return null;
+    final project = await _repository.getProject(id);
+    return project == null || project.isDeleted ? null : id;
+  }
+
+  /// The active memories, each with the live project it belongs to, or null
+  /// for a global one: one whose project points nowhere counts as global.
+  Future<List<(GaiaMemory, String?)>> _active() async {
+    final live = {
+      for (final project in await _repository.listProjects()) project.id,
+    };
+    return [
+      for (final memory in await _repository.listMemories())
+        if (memory.status == GaiaMemoryStatus.active)
+          (memory, live.contains(memory.projectId) ? memory.projectId : null),
+    ];
+  }
 }
 
 /// What two memories that say the same thing share: case and spacing aside.

@@ -808,8 +808,9 @@ final _kinds = <TrashKind>[
     wipe: ['text'],
     listed: false,
   ),
-  // A project's delete takes its chats only when asked to; otherwise it lets
-  // them go, and a restore brings it back empty (GAIA_PROJECTS_HLD.md §3.3).
+  // A project's delete takes its chats and memories only when asked to;
+  // otherwise it lets them go, and a restore brings it back empty
+  // (GAIA_PROJECTS_HLD.md §3.3).
   TrashKind(
     collection: FirestoreCollections.gaiaProjects,
     feature: TrashFeature.gaia,
@@ -822,7 +823,16 @@ final _kinds = <TrashKind>[
         ['projectId'],
         counted: ('chat', 'chats'),
       ),
+      TrashChild(FirestoreCollections.gaiaMemories, ['projectId']),
     ],
+  ),
+  // Only ever deleted with a project: one deleted on its own has its undo.
+  const TrashKind(
+    collection: FirestoreCollections.gaiaMemories,
+    feature: TrashFeature.gaia,
+    noun: 'memory',
+    wipe: ['text', 'tags'],
+    listed: false,
   ),
   const TrashKind(
     collection: FirestoreCollections.gaiaBtw,

@@ -153,12 +153,38 @@ void main() {
       await repository.upsertChat(
         _chat('earlier', projectId: 'p1').copyWith(deletedAt: _at),
       );
+      await repository.upsertMemory(
+        GaiaMemory(
+          id: 'm1',
+          text: 'Flights booked',
+          projectId: 'p1',
+          status: GaiaMemoryStatus.active,
+          createdAt: _at,
+          updatedAt: _at,
+          version: 1,
+        ),
+      );
+      await repository.upsertMemory(
+        GaiaMemory(
+          id: 'g1',
+          text: 'Likes tea',
+          status: GaiaMemoryStatus.active,
+          createdAt: _at,
+          updatedAt: _at,
+          version: 1,
+        ),
+      );
     });
 
     tearDown(() => db.close());
 
     Future<Map<String, String?>> live() async => {
       for (final chat in await repository.listChats()) chat.id: chat.projectId,
+    };
+
+    Future<Map<String, String?>> liveMemories() async => {
+      for (final memory in await repository.listMemories())
+        memory.id: memory.projectId,
     };
 
     test('unchecked, its chats stay in no project, and a restore brings it '
@@ -171,6 +197,8 @@ void main() {
       expect(deleted, isEmpty);
       expect(await repository.listProjects(), isEmpty);
       expect(await live(), {'one': null, 'two': null, 'other': null});
+      // Its memories become global (§3.3).
+      expect(await liveMemories(), {'m1': null, 'g1': null});
 
       final item = (await trash.list()).firstWhere((i) => i.id == 'p1');
       expect(item.title, 'p1');
@@ -178,6 +206,7 @@ void main() {
       await trash.restore(item);
       expect((await repository.listProjects()).single.id, 'p1');
       expect(await live(), {'one': null, 'two': null, 'other': null});
+      expect(await liveMemories(), {'m1': null, 'g1': null});
     });
 
     test('checked, its chats go to the trash with it and come back with it, '
@@ -189,6 +218,8 @@ void main() {
       );
       expect(deleted.map((c) => c.id), unorderedEquals(['one', 'two']));
       expect(await live(), {'other': null});
+      // Its memories go to the trash with it (§3.3).
+      expect(await liveMemories(), {'g1': null});
 
       final items = await trash.list();
       final item = items.firstWhere((i) => i.id == 'p1');
@@ -199,12 +230,13 @@ void main() {
       await trash.restore(item);
       expect((await repository.listProjects()).single.id, 'p1');
       expect(await live(), {'one': 'p1', 'two': 'p1', 'other': null});
+      expect(await liveMemories(), {'m1': 'p1', 'g1': null});
       // The one deleted before it stays deleted.
       expect((await repository.getChat('earlier'))!.isDeleted, isTrue);
     });
 
     test(
-      'its chats and the project reach sync once, after one write',
+      'its chats, memories and the project reach sync once, after one write',
       () async {
         final writes = <String>[];
         final notifier = SyncedWriteNotifier()
@@ -222,6 +254,7 @@ void main() {
         await watching.cancel();
         expect(writes, [
           '${FirestoreCollections.gaiaChats}: one two',
+          '${FirestoreCollections.gaiaMemories}: m1',
           '${FirestoreCollections.gaiaProjects}: p1',
         ]);
         expect(changes, hasLength(1));

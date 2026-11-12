@@ -1493,6 +1493,22 @@ List<BackupCollection> buildBackupCollections({
         return settings;
       },
     ),
+    // Ahead of the chats and memories it holds, so a restore uploads it
+    // first (GAIA_PROJECTS_HLD.md §3.3).
+    BackupCollection(
+      name: FirestoreCollections.gaiaProjects,
+      read: () async => [
+        for (final project in await gaiaRepository.listProjects(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: project.id, data: gaiaProjectToFirestore(project)),
+      ],
+      restore: (id, data) async {
+        final project = mergeGaiaProjectFromRemote(data, id);
+        await gaiaRepository.upsertProject(project, recordLocalActivity: false);
+        return project;
+      },
+    ),
     BackupCollection(
       name: FirestoreCollections.gaiaChats,
       read: () async => [
@@ -1571,20 +1587,6 @@ List<BackupCollection> buildBackupCollections({
         final item = mergeGaiaQueueItemFromRemote(data, id);
         await gaiaRepository.upsertQueueItem(item, recordLocalActivity: false);
         return item;
-      },
-    ),
-    BackupCollection(
-      name: FirestoreCollections.gaiaProjects,
-      read: () async => [
-        for (final project in await gaiaRepository.listProjects(
-          includeDeleted: true,
-        ))
-          BackupRecord(id: project.id, data: gaiaProjectToFirestore(project)),
-      ],
-      restore: (id, data) async {
-        final project = mergeGaiaProjectFromRemote(data, id);
-        await gaiaRepository.upsertProject(project, recordLocalActivity: false);
-        return project;
       },
     ),
     BackupCollection(

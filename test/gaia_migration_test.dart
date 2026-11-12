@@ -908,6 +908,27 @@ void main() {
     expect((await repo.getProject('p1'))!.folders, {'desk': 'D:/Trip'});
   });
 
+  test('195→196 adds project memories, every old one global', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertMemory(
+      GaiaMemory(id: 'm1', text: 'Likes tea', createdAt: now, updatedAt: now),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_memories_table DROP COLUMN project_id',
+    );
+    await seed.customStatement('PRAGMA user_version = 195');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final memory = (await repo.getMemory('m1'))!;
+    expect(memory.text, 'Likes tea');
+    expect(memory.projectId, isNull);
+    await repo.upsertMemory(memory.copyWith(projectId: 'p1'));
+    expect((await repo.getMemory('m1'))!.projectId, 'p1');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

@@ -1,6 +1,7 @@
 # Gaia — Projects (HLD)
 
-Status: **Designed 2026-11-10, not built.** Decided with the user the same day: projects
+Status: **Built.** Designed 2026-11-10; all four phases (§10) built, Phase 4 passed live
+2026-11-12. Decided with the user the same day as the design: projects
 group chats, give them a shared folder and shared memories, and let each chat read the
 others through tools. There are no shared project instructions. The open questions were
 settled the same day (§11), and pinning was changed to pin a chat inside its project (§7.1).
@@ -218,7 +219,7 @@ showing every call on the activity card, are what bounds it.
 ## 6. Project memories
 
 - **A memory with a `projectId` belongs to that project.** Global memories (null) work as
-  today.
+  today. One whose project is missing or deleted counts as global, by §2's rule.
 - **Recall:** the system-prompt index stays global only. A project's memory index goes in
   the `<gaia_project>` block (§5.2), so it's right even for a chat moved in mid-session.
   `memory_search` searches global memories plus the chat's project's memories, never

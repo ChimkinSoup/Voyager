@@ -4975,6 +4975,7 @@ Map<String, dynamic> gaiaMemoryToFirestore(GaiaMemory memory) => {
   'tags': memory.tags,
   'sourceChatId': memory.sourceChatId,
   'status': memory.status.name,
+  'projectId': memory.projectId,
   'createdAt': _dateToFirestoreRequired(memory.createdAt),
   'updatedAt': _dateToFirestoreRequired(memory.updatedAt),
   'version': memory.version,
@@ -5005,6 +5006,9 @@ GaiaMemory mergeGaiaMemoryFromRemote(
     status: data.containsKey('status')
         ? gaiaMemoryStatusFromName(data['status'])
         : local?.status ?? GaiaMemoryStatus.proposed,
+    projectId: data.containsKey('projectId')
+        ? data['projectId'] as String?
+        : local?.projectId,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

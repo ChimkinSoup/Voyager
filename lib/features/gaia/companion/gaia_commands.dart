@@ -286,6 +286,13 @@ String? gaiaRememberText(String draft) {
   return match?.group(1)!.trim();
 }
 
+/// The rest of `/remember`'s [text] after a leading `--global`
+/// (GAIA_PROJECTS_HLD.md §6), possibly empty; null when it doesn't start so.
+String? gaiaRememberGlobal(String text) {
+  final match = RegExp(r'^--global(?:\s+([\s\S]*))?$').firstMatch(text.trim());
+  return match == null ? null : (match.group(1) ?? '').trim();
+}
+
 /// What `/queue <text>` in [draft] queues (§13): the text after it, or null
 /// when the draft doesn't start with `/queue` and some text.
 String? gaiaQueueText(String draft) {

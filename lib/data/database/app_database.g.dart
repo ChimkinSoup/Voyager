@@ -62152,6 +62152,17 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -62204,6 +62215,7 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
     tagsJson,
     sourceChatId,
     status,
+    projectId,
     createdAt,
     updatedAt,
     version,
@@ -62256,6 +62268,12 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
       );
     } else if (isInserting) {
       context.missing(_statusMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -62314,6 +62332,10 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -62350,6 +62372,9 @@ class GaiaMemoriesTableData extends DataClass
 
   /// `GaiaMemoryStatus.name`.
   final String status;
+
+  /// The project it belongs to (GAIA_PROJECTS_HLD.md §6); null for global.
+  final String? projectId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -62360,6 +62385,7 @@ class GaiaMemoriesTableData extends DataClass
     required this.tagsJson,
     this.sourceChatId,
     required this.status,
+    this.projectId,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -62375,6 +62401,9 @@ class GaiaMemoriesTableData extends DataClass
       map['source_chat_id'] = Variable<String>(sourceChatId);
     }
     map['status'] = Variable<String>(status);
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -62393,6 +62422,9 @@ class GaiaMemoriesTableData extends DataClass
           ? const Value.absent()
           : Value(sourceChatId),
       status: Value(status),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -62413,6 +62445,7 @@ class GaiaMemoriesTableData extends DataClass
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       sourceChatId: serializer.fromJson<String?>(json['sourceChatId']),
       status: serializer.fromJson<String>(json['status']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -62428,6 +62461,7 @@ class GaiaMemoriesTableData extends DataClass
       'tagsJson': serializer.toJson<String>(tagsJson),
       'sourceChatId': serializer.toJson<String?>(sourceChatId),
       'status': serializer.toJson<String>(status),
+      'projectId': serializer.toJson<String?>(projectId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -62441,6 +62475,7 @@ class GaiaMemoriesTableData extends DataClass
     String? tagsJson,
     Value<String?> sourceChatId = const Value.absent(),
     String? status,
+    Value<String?> projectId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -62451,6 +62486,7 @@ class GaiaMemoriesTableData extends DataClass
     tagsJson: tagsJson ?? this.tagsJson,
     sourceChatId: sourceChatId.present ? sourceChatId.value : this.sourceChatId,
     status: status ?? this.status,
+    projectId: projectId.present ? projectId.value : this.projectId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -62465,6 +62501,7 @@ class GaiaMemoriesTableData extends DataClass
           ? data.sourceChatId.value
           : this.sourceChatId,
       status: data.status.present ? data.status.value : this.status,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -62480,6 +62517,7 @@ class GaiaMemoriesTableData extends DataClass
           ..write('tagsJson: $tagsJson, ')
           ..write('sourceChatId: $sourceChatId, ')
           ..write('status: $status, ')
+          ..write('projectId: $projectId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -62495,6 +62533,7 @@ class GaiaMemoriesTableData extends DataClass
     tagsJson,
     sourceChatId,
     status,
+    projectId,
     createdAt,
     updatedAt,
     version,
@@ -62509,6 +62548,7 @@ class GaiaMemoriesTableData extends DataClass
           other.tagsJson == this.tagsJson &&
           other.sourceChatId == this.sourceChatId &&
           other.status == this.status &&
+          other.projectId == this.projectId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -62522,6 +62562,7 @@ class GaiaMemoriesTableCompanion
   final Value<String> tagsJson;
   final Value<String?> sourceChatId;
   final Value<String> status;
+  final Value<String?> projectId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -62533,6 +62574,7 @@ class GaiaMemoriesTableCompanion
     this.tagsJson = const Value.absent(),
     this.sourceChatId = const Value.absent(),
     this.status = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -62545,6 +62587,7 @@ class GaiaMemoriesTableCompanion
     this.tagsJson = const Value.absent(),
     this.sourceChatId = const Value.absent(),
     required String status,
+    this.projectId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -62561,6 +62604,7 @@ class GaiaMemoriesTableCompanion
     Expression<String>? tagsJson,
     Expression<String>? sourceChatId,
     Expression<String>? status,
+    Expression<String>? projectId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -62573,6 +62617,7 @@ class GaiaMemoriesTableCompanion
       if (tagsJson != null) 'tags_json': tagsJson,
       if (sourceChatId != null) 'source_chat_id': sourceChatId,
       if (status != null) 'status': status,
+      if (projectId != null) 'project_id': projectId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -62587,6 +62632,7 @@ class GaiaMemoriesTableCompanion
     Value<String>? tagsJson,
     Value<String?>? sourceChatId,
     Value<String>? status,
+    Value<String?>? projectId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -62599,6 +62645,7 @@ class GaiaMemoriesTableCompanion
       tagsJson: tagsJson ?? this.tagsJson,
       sourceChatId: sourceChatId ?? this.sourceChatId,
       status: status ?? this.status,
+      projectId: projectId ?? this.projectId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -62624,6 +62671,9 @@ class GaiaMemoriesTableCompanion
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -62651,6 +62701,7 @@ class GaiaMemoriesTableCompanion
           ..write('tagsJson: $tagsJson, ')
           ..write('sourceChatId: $sourceChatId, ')
           ..write('status: $status, ')
+          ..write('projectId: $projectId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -94572,6 +94623,7 @@ typedef $$GaiaMemoriesTableTableCreateCompanionBuilder =
       Value<String> tagsJson,
       Value<String?> sourceChatId,
       required String status,
+      Value<String?> projectId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -94585,6 +94637,7 @@ typedef $$GaiaMemoriesTableTableUpdateCompanionBuilder =
       Value<String> tagsJson,
       Value<String?> sourceChatId,
       Value<String> status,
+      Value<String?> projectId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -94623,6 +94676,11 @@ class $$GaiaMemoriesTableTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -94681,6 +94739,11 @@ class $$GaiaMemoriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -94727,6 +94790,9 @@ class $$GaiaMemoriesTableTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -94786,6 +94852,7 @@ class $$GaiaMemoriesTableTableTableManager
                 Value<String> tagsJson = const Value.absent(),
                 Value<String?> sourceChatId = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -94797,6 +94864,7 @@ class $$GaiaMemoriesTableTableTableManager
                 tagsJson: tagsJson,
                 sourceChatId: sourceChatId,
                 status: status,
+                projectId: projectId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -94810,6 +94878,7 @@ class $$GaiaMemoriesTableTableTableManager
                 Value<String> tagsJson = const Value.absent(),
                 Value<String?> sourceChatId = const Value.absent(),
                 required String status,
+                Value<String?> projectId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -94821,6 +94890,7 @@ class $$GaiaMemoriesTableTableTableManager
                 tagsJson: tagsJson,
                 sourceChatId: sourceChatId,
                 status: status,
+                projectId: projectId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

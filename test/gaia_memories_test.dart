@@ -20,11 +20,13 @@ GaiaMemory _memory(
   List<String> tags = const [],
   GaiaMemoryStatus status = GaiaMemoryStatus.active,
   DateTime? at,
+  String? projectId,
 }) => GaiaMemory(
   id: id,
   text: text,
   tags: tags,
   status: status,
+  projectId: projectId,
   createdAt: at ?? _at,
   updatedAt: at ?? _at,
   version: 1,
@@ -247,5 +249,153 @@ void main() {
     expect(back.tags, memory.tags);
     expect(back.status, GaiaMemoryStatus.archived);
     expect(back.version, memory.version);
+    expect(back.projectId, isNull);
+    final moved = mergeGaiaMemoryFromRemote(
+      gaiaMemoryToFirestore(memory.copyWith(projectId: 'p1')),
+      'a',
+    );
+    expect(moved.projectId, 'p1');
+  });
+
+  group('project memories (GAIA_PROJECTS_HLD.md §6)', () {
+    GaiaChat chat(String id, String? projectId) => GaiaChat(
+      id: id,
+      title: id,
+      createdAt: _at,
+      updatedAt: _at,
+      lastMessageAt: _at,
+      projectId: projectId,
+    );
+
+    setUp(() async {
+      for (final id in ['p1', 'p2']) {
+        await repository.upsertProject(
+          GaiaProject(id: id, name: id, createdAt: _at, updatedAt: _at),
+        );
+      }
+      await repository.upsertChat(chat('in1', 'p1'));
+      await repository.upsertChat(chat('loose', null));
+      await repository.upsertChat(chat('lost', 'gone'));
+      await repository.upsertMemory(_memory('g', 'Likes green tea'));
+      await repository.upsertMemory(
+        _memory('m1', 'Trip tea house booked', projectId: 'p1'),
+      );
+      await repository.upsertMemory(
+        _memory('m2', 'Other project tea notes', projectId: 'p2'),
+      );
+      // Its project isn't here: it counts as global (§2).
+      await repository.upsertMemory(
+        _memory('m3', 'Orphan tea fact', projectId: 'gone'),
+      );
+    });
+
+    Future<String> search(String chatId) =>
+        memories.tool(chatId, 'memory_search', {'query': 'tea'});
+
+    test("the session index is global only; the project's go in its block "
+        'and, for the curator, after the global ones', () async {
+      final index = await memories.index();
+      expect(index, contains('Likes green tea'));
+      expect(index, contains('Orphan tea fact'));
+      expect(index, isNot(contains('Trip tea house')));
+      expect(index, isNot(contains('Other project')));
+
+      expect(await memories.projectIndex('p1'), ['- Trip tea house booked']);
+
+      final curator = await memories.index(chatId: 'in1');
+      expect(curator, contains('Likes green tea'));
+      expect(
+        curator,
+        contains('# Project memories\n\n- Trip tea house booked'),
+      );
+      expect(curator, isNot(contains('Other project')));
+      expect(await memories.index(chatId: 'loose'), index);
+    });
+
+    test("search finds global ones and the chat's project's, never another "
+        "project's", () async {
+      final inProject = await search('in1');
+      expect(inProject, contains('Trip tea house'));
+      expect(inProject, contains('Likes green tea'));
+      expect(inProject, contains('Orphan tea fact'));
+      expect(inProject, isNot(contains('Other project')));
+
+      for (final id in ['loose', 'lost']) {
+        final outside = await search(id);
+        expect(outside, contains('Likes green tea'));
+        expect(outside, isNot(contains('Trip tea house')));
+        expect(outside, isNot(contains('Other project')));
+      }
+    });
+
+    test('memory_propose keeps it for the project unless scope is global, '
+        'and outside a project it is global', () async {
+      final reply = await memories.tool('in1', 'memory_propose', {
+        'text': 'Rail pass bought',
+      });
+      expect(reply, contains('for this project'));
+      await memories.tool('in1', 'memory_propose', {
+        'text': 'Hates early flights',
+        'scope': 'global',
+      });
+      await memories.tool('loose', 'memory_propose', {
+        'text': 'Reads on trains',
+        'scope': 'project',
+      });
+      await memories.tool('lost', 'memory_propose', {'text': 'Packs light'});
+      final saved = {
+        for (final memory in await repository.listMemories())
+          memory.text: memory.projectId,
+      };
+      expect(saved['Rail pass bought'], 'p1');
+      expect(saved['Hates early flights'], isNull);
+      expect(saved['Reads on trains'], isNull);
+      expect(saved['Packs light'], isNull);
+    });
+
+    test("another project's memory, or one gone with its project, doesn't "
+        'block a save; a global one or its own does', () async {
+      await repository.upsertMemory(
+        _memory('d', 'Uses pnpm', projectId: 'gone').copyWith(deletedAt: _at),
+      );
+      Future<GaiaMemory?> save(String text, String? projectId) => memories.save(
+        text,
+        status: GaiaMemoryStatus.proposed,
+        projectId: projectId,
+      );
+      expect(await save('Other project tea notes', 'p1'), isNotNull);
+      expect(await save('Uses pnpm', 'p1'), isNotNull);
+      expect(await save('Likes green tea', 'p1'), isNull);
+      expect(await save('Orphan tea fact', 'p2'), isNull);
+      expect(await save('Trip tea house booked', 'p1'), isNull);
+    });
+
+    test("the curator saves to the chat's project", () async {
+      await memories.curated('in1', 3, [
+        (text: 'Ryokan in Kyoto', tags: const []),
+      ]);
+      await memories.curated('loose', 3, [
+        (text: 'Walks daily', tags: const []),
+      ]);
+      final saved = {
+        for (final memory in await repository.listMemories())
+          memory.text: memory.projectId,
+      };
+      expect(saved['Ryokan in Kyoto'], 'p1');
+      expect(saved['Walks daily'], isNull);
+    });
+
+    test("projectOf is the chat's live project", () async {
+      expect(await memories.projectOf('in1'), 'p1');
+      expect(await memories.projectOf('loose'), isNull);
+      expect(await memories.projectOf('lost'), isNull);
+      expect(await memories.projectOf(null), isNull);
+    });
+
+    test('with no chat yet, projectOf is the live project picked', () async {
+      expect(await memories.projectOf(null, newChat: 'p1'), 'p1');
+      expect(await memories.projectOf(null, newChat: 'nowhere'), isNull);
+      expect(await memories.projectOf('loose', newChat: 'p1'), isNull);
+    });
   });
 }

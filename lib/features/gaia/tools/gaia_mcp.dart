@@ -341,7 +341,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         'preferences, people, projects, facts about their life. Returns '
         'each matching memory in full. Your instructions list the memories '
         'saved when this chat started; search for the full text of one, '
-        'or for any saved since.',
+        "or for any saved since. In a project chat, the project's memories "
+        'are searched too.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -382,6 +383,13 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           'type': 'array',
           'items': {'type': 'string'},
           'description': 'A few one-word topics, such as "food" or "work".',
+        },
+        'scope': {
+          'type': 'string',
+          'enum': ['project', 'global'],
+          'description':
+              "In a project chat, whether it's kept for this project's "
+              'chats (the default) or for every chat. Leave out elsewhere.',
         },
       },
       'required': ['text'],

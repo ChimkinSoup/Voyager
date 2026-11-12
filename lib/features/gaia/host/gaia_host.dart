@@ -74,11 +74,14 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// (`[GaiaSearchHit]`), `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
-/// arguments}` (a `voyager_*` tool's text), `memoryIndex` (§11),
+/// arguments}` (a `voyager_*` tool's text), `memoryIndex {chatId?}` (§11;
+/// with the chat's project's memories after, for the curator),
+/// `projectMemories {projectId}` (its memory index lines,
+/// GAIA_PROJECTS_HLD.md §6),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
 /// `setSummary {chatId, summary, seq}`,
-/// `remember {chatId, text}`, `curated {chatId, seq, memories}`, `setSeeScreen
+/// `remember {chatId, projectId?, text, global?}` (returns `{saved, project}`), `curated {chatId, seq, memories}`, `setSeeScreen
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
@@ -1535,7 +1538,12 @@ class GaiaHost {
         );
         return null;
       case 'memoryIndex':
-        return await _memories?.index() ?? '';
+        return await _memories?.index(chatId: params['chatId'] as String?) ??
+            '';
+      case 'projectMemories':
+        return await _memoriesOrThrow().projectIndex(
+          params['projectId']! as String,
+        );
       case 'memoryTool':
         try {
           return await _memoriesOrThrow().tool(
@@ -1566,13 +1574,23 @@ class GaiaHost {
           throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
         }
         try {
-          final saved = await _memoriesOrThrow().save(
+          final memories = _memoriesOrThrow();
+          // The chat's project, or a new chat's picked one, unless
+          // `--global` (GAIA_PROJECTS_HLD.md §6).
+          final project = params['global'] == true
+              ? null
+              : await memories.projectOf(
+                  params['chatId'] as String?,
+                  newChat: params['projectId'] as String?,
+                );
+          final saved = await memories.save(
             params['text']! as String,
             chatId: params['chatId'] as String?,
             status: GaiaMemoryStatus.active,
             byUser: true,
+            projectId: project,
           );
-          return {'saved': saved != null};
+          return {'saved': saved != null, 'project': project != null};
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }

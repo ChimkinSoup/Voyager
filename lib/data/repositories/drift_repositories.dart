@@ -10251,19 +10251,24 @@ class DriftGaiaRepository implements GaiaRepository {
   @override
   Future<void> upsertProjectWithChats(
     GaiaProject project,
-    List<GaiaChat> chats,
-  ) async {
+    List<GaiaChat> chats, {
+    List<GaiaMemory> memories = const [],
+  }) async {
     await _db.transaction(() async {
       for (final chat in chats) {
         await _db
             .into(_db.gaiaChatsTable)
             .insertOnConflictUpdate(_gaiaChatCompanion(chat));
       }
+      for (final memory in memories) {
+        await upsertMemory(memory, recordLocalActivity: false);
+      }
       await _db
           .into(_db.gaiaProjectsTable)
           .insertOnConflictUpdate(_gaiaProjectCompanion(project));
     });
     _syncedWrites?.notify(FirestoreCollections.gaiaChats, chats);
+    _syncedWrites?.notify(FirestoreCollections.gaiaMemories, memories);
     _syncedWrites?.notifyOne(FirestoreCollections.gaiaProjects, project);
   }
 
@@ -10307,6 +10312,7 @@ class DriftGaiaRepository implements GaiaRepository {
             tagsJson: Value(jsonEncode(memory.tags)),
             sourceChatId: Value(memory.sourceChatId),
             status: Value(memory.status.name),
+            projectId: Value(memory.projectId),
             createdAt: Value(memory.createdAt),
             updatedAt: Value(memory.updatedAt),
             version: Value(memory.version),
@@ -10538,6 +10544,7 @@ GaiaMemory _mapGaiaMemory(GaiaMemoriesTableData row) => GaiaMemory(
   tags: gaiaMemoryTags(jsonDecode(row.tagsJson)),
   sourceChatId: row.sourceChatId,
   status: gaiaMemoryStatusFromName(row.status),
+  projectId: row.projectId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

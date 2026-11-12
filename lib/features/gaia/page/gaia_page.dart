@@ -711,22 +711,41 @@ class _ActionRowState extends State<_ActionRow> {
 
 /// Gaia's memories (§11, §17): the inbox of proposed ones to approve, edit
 /// or dismiss, the active ones every new chat's index lists, and the
-/// archived ones kept out of it.
-class _MemoriesTab extends ConsumerWidget {
+/// archived ones kept out of it. Filtered by project (GAIA_PROJECTS_HLD.md
+/// §6).
+class _MemoriesTab extends ConsumerStatefulWidget {
   const _MemoriesTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MemoriesTab> createState() => _MemoriesTabState();
+}
+
+class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
+  /// The project shown: null for every memory, '' for global ones only.
+  String? _filter;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final memories = ref.watch(gaiaMemoriesProvider).valueOrNull;
     final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
+    final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
     if (memories == null || settings == null) return const SizedBox.shrink();
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    final byId = {for (final project in projects) project.id: project};
+    // A project deleted meanwhile shows everything again.
+    final filter = _filter == null || _filter == '' || byId.containsKey(_filter)
+        ? _filter
+        : null;
     List<GaiaMemory> withStatus(GaiaMemoryStatus status) => [
       for (final memory in memories.reversed)
-        if (memory.status == status) memory,
+        if (memory.status == status &&
+            (filter == null ||
+                // One whose project points nowhere is global (§2).
+                (byId[memory.projectId]?.id ?? '') == filter))
+          memory,
     ];
     final inbox = withStatus(GaiaMemoryStatus.proposed);
     final active = withStatus(GaiaMemoryStatus.active);
@@ -736,8 +755,9 @@ class _MemoriesTab extends ConsumerWidget {
       children: [
         Text(
           'Every new chat starts with a list of these, whichever agent '
-          'answers. Save one yourself with /remember in Gaia. What Gaia '
-          'offers, or notices once a chat goes quiet, waits in the inbox.',
+          "answers, and a project's chats with its own too. Save one "
+          'yourself with /remember in Gaia. What Gaia offers, or notices '
+          'once a chat goes quiet, waits in the inbox.',
           style: muted,
         ),
         SwitchListTile(
@@ -752,6 +772,25 @@ class _MemoriesTab extends ConsumerWidget {
               .read(gaiaRepositoryProvider)
               .upsertSettings(settings.copyWith(autoAcceptCurator: value)),
         ),
+        if (projects.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: DropdownButton<String?>(
+              value: filter,
+              // A null value shows the hint, not its item.
+              hint: const Text('All memories'),
+              onChanged: (value) => setState(() => _filter = value),
+              items: [
+                const DropdownMenuItem(child: Text('All memories')),
+                const DropdownMenuItem(value: '', child: Text('Global')),
+                for (final project in projects)
+                  DropdownMenuItem(
+                    value: project.id,
+                    child: Text(project.name, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+            ),
+          ),
         const SizedBox(height: 8),
         if (inbox.isNotEmpty) ...[
           _SectionLabel('Inbox (${inbox.length})'),
@@ -817,6 +856,11 @@ class _MemoryRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
+    // One whose project points nowhere is global (GAIA_PROJECTS_HLD.md §2).
+    final project = projects
+        .where((project) => project.id == memory.projectId)
+        .firstOrNull;
     final source = memory.sourceChatId == null
         ? null
         : (ref.watch(gaiaChatsProvider).valueOrNull ?? const [])
@@ -855,6 +899,43 @@ class _MemoryRow extends ConsumerWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Its scope, which can be changed (GAIA_PROJECTS_HLD.md §6).
+          if (projects.isNotEmpty)
+            PopupMenuButton<String>(
+              tooltip: 'Move to',
+              onSelected: (id) => _save(
+                ref,
+                id.isEmpty
+                    ? memory.copyWith(clearProjectId: true)
+                    : memory.copyWith(projectId: id),
+              ),
+              itemBuilder: (_) => [
+                CheckedPopupMenuItem(
+                  value: '',
+                  checked: project == null,
+                  child: const Text('Global'),
+                ),
+                for (final other in projects)
+                  CheckedPopupMenuItem(
+                    value: other.id,
+                    checked: other.id == project?.id,
+                    child: Text(other.name, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 140),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Text(
+                  project?.name ?? 'Global',
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall,
+                ),
+              ),
+            ),
           IconButton(
             tooltip: label,
             icon: Icon(icon, size: 16),

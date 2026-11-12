@@ -4801,7 +4801,9 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// `/remember <text>` (§11): [text] saved as a memory, active at once,
-  /// since the user wrote it. Not saved, it goes back in the draft.
+  /// since the user wrote it. Not saved, it goes back in the draft. In a
+  /// project chat, or a new chat with a project picked, it's the project's,
+  /// unless it starts `--global` (GAIA_PROJECTS_HLD.md §6).
   Future<void> remember(String text) async {
     void toast(String title, String body, {bool error = false}) => _toasts.add((
       chatId: '',
@@ -4810,19 +4812,28 @@ class GaiaController extends ChangeNotifier {
       error: error,
       question: false,
     ));
-    if (text.trim().isEmpty) {
+    final global = gaiaRememberGlobal(text);
+    final body = global == null ? text.trim() : global;
+    if (body.isEmpty) {
       return toast('Nothing to remember', 'Type it after /remember.');
     }
     try {
       final reply =
           (await _pipe.request('remember', {
                 'chatId': currentChatId,
-                'text': text.trim(),
+                if (currentChatId == null) 'projectId': newChatProject,
+                'text': body,
+                'global': global != null,
               }))!
               as Map;
       reply['saved'] == true
-          ? toast('Remembered', text.trim())
-          : toast('Already remembered', text.trim());
+          ? toast(
+              reply['project'] == true
+                  ? 'Remembered for this project'
+                  : 'Remembered',
+              body,
+            )
+          : toast('Already remembered', body);
     } on GaiaPipeException catch (error) {
       if (draft.text.isEmpty) draft.text = '/remember $text';
       toast("Couldn't remember that", error.message, error: true);
@@ -5539,15 +5550,19 @@ class GaiaController extends ChangeNotifier {
       toldFolder = session?.folder;
       final project = this.project(_chat(chatId)?.projectId);
       final folder = gaiaProjectFolder(project, _deviceId);
-      final told = native != null
-          ? null
-          : gaiaProjectPreamble(
-              told: toldProject,
-              toldFolder: toldFolder,
-              project: project,
-              folder: folder,
-              chats: chats.where((c) => c.projectId == project?.id).length,
-            );
+      String? tell({List<String> memories = const []}) => gaiaProjectPreamble(
+        told: toldProject,
+        toldFolder: toldFolder,
+        project: project,
+        folder: folder,
+        chats: chats.where((c) => c.projectId == project?.id).length,
+        memories: memories,
+      );
+      var told = native != null ? null : tell();
+      // With its memories when it's told of one (GAIA_PROJECTS_HLD.md §6).
+      if (told != null && project != null) {
+        told = tell(memories: await _projectMemories(project.id));
+      }
       if (told != null) {
         toldProject = project?.id;
         toldFolder = folder;
@@ -6348,6 +6363,23 @@ class GaiaController extends ChangeNotifier {
     }
   }
 
+  /// [projectId]'s memory index lines (GAIA_PROJECTS_HLD.md §6); none when
+  /// the main instance can't say.
+  Future<List<String>> _projectMemories(String projectId) async {
+    try {
+      return [
+        for (final line
+            in await _pipe.request('projectMemories', {'projectId': projectId})
+                    as List? ??
+                const [])
+          line as String,
+      ];
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] project memories: $error');
+      return const [];
+    }
+  }
+
   /// The memory curator (§11): the utility model reads [chatId]'s turns
   /// since it last did, and what it finds goes to the inbox, or straight in
   /// with auto-accept on. Only the device that ran the chat's last turn
@@ -6375,7 +6407,11 @@ class GaiaController extends ChangeNotifier {
     if (turns.every((message) => message.origin != null)) return;
     final String index;
     try {
-      index = await _pipe.request('memoryIndex') as String? ?? '';
+      // With the chat's project's memories, so they aren't offered again
+      // (GAIA_PROJECTS_HLD.md §6).
+      index =
+          await _pipe.request('memoryIndex', {'chatId': chatId}) as String? ??
+          '';
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] curator: $error');
       return;

@@ -2435,6 +2435,9 @@ class GaiaMemoriesTable extends Table {
 
   /// `GaiaMemoryStatus.name`.
   TextColumn get status => text()();
+
+  /// The project it belongs to (GAIA_PROJECTS_HLD.md §6); null for global.
+  TextColumn get projectId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2538,7 +2541,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 195;
+  int get schemaVersion => 196;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4745,6 +4748,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_projects_table',
           gaiaProjectsTable,
           gaiaProjectsTable.foldersJson,
+        );
+      }
+      if (from >= 181 && from < 196) {
+        // Project memories (GAIA_PROJECTS_HLD.md §6).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_memories_table',
+          gaiaMemoriesTable,
+          gaiaMemoriesTable.projectId,
         );
       }
     },

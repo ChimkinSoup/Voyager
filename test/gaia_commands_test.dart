@@ -86,6 +86,11 @@ void main() {
     expect(gaiaRememberText('/remember'), isNull);
     expect(gaiaRememberText('/remembered that'), isNull);
     expect(gaiaRememberText('please /remember this'), isNull);
+    // `--global` saves outside the project (GAIA_PROJECTS_HLD.md §6).
+    expect(gaiaRememberGlobal('--global I like tea'), 'I like tea');
+    expect(gaiaRememberGlobal('--global'), '');
+    expect(gaiaRememberGlobal('I like tea'), isNull);
+    expect(gaiaRememberGlobal('--globally fine'), isNull);
     expect(gaiaBuiltinIn('/remember'), GaiaBuiltin.remember);
   });
 

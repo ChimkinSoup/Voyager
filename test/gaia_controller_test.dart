@@ -290,15 +290,24 @@ class _Main {
         reads.add(params['tool']! as String);
         return 'read ${params['tool']}';
       case 'memoryIndex':
-        return memories.index();
+        return memories.index(chatId: params['chatId'] as String?);
+      case 'projectMemories':
+        return memories.projectIndex(params['projectId']! as String);
       case 'remember':
+        final project = params['global'] == true
+            ? null
+            : await memories.projectOf(
+                params['chatId'] as String?,
+                newChat: params['projectId'] as String?,
+              );
         final saved = await memories.save(
           params['text']! as String,
           chatId: params['chatId'] as String?,
           status: GaiaMemoryStatus.active,
           byUser: true,
+          projectId: project,
         );
-        return {'saved': saved != null};
+        return {'saved': saved != null, 'project': project != null};
       case 'curated':
         await memories
             .curated(params['chatId']! as String, params['seq']! as int, [
@@ -5648,6 +5657,62 @@ void main() {
       expect(controller.projects, isEmpty);
       expect(controller.chats.single.id, two);
       expect((await stored(two)).projectId, isNull);
+    });
+
+    test("the project block carries the project's memories, and /remember "
+        'saves to the project unless --global (§6)', () async {
+      await main.store.createProject(trip);
+      await main.repository.upsertMemory(
+        GaiaMemory(
+          id: 'm1',
+          text: 'Flights land at Haneda',
+          projectId: 'p1',
+          status: GaiaMemoryStatus.active,
+          createdAt: at,
+          updatedAt: at,
+          version: 1,
+        ),
+      );
+      await startCompanion();
+      await turn('One');
+      final chatId = controller.currentChatId!;
+      await controller.moveChat(chatId, 'p1');
+      await turn('Two');
+      expect(runner.sent.last.prompt, contains('- Flights land at Haneda'));
+      expect(
+        runner.sent.last.prompt.indexOf('Haneda'),
+        lessThan(runner.sent.last.prompt.indexOf('</gaia_project>')),
+      );
+
+      await controller.remember('Rail pass bought');
+      await controller.remember('--global Prefers aisle seats');
+      final saved = {
+        for (final memory in await main.repository.listMemories())
+          memory.text: memory.projectId,
+      };
+      expect(saved['Rail pass bought'], 'p1');
+      expect(saved.containsKey('Prefers aisle seats'), isTrue);
+      expect(saved['Prefers aisle seats'], isNull);
+    });
+
+    test('/remember in a new chat saves to the project picked for it, '
+        'unless --global (§6)', () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      controller.newChat();
+      await controller.remember('Before any chat');
+      controller.newChatProject = 'p1';
+      await controller.remember('Hotel is booked');
+      await controller.remember('--global Likes window seats');
+      final saved = {
+        for (final memory in await main.repository.listMemories())
+          memory.text: memory.projectId,
+      };
+      expect(saved.containsKey('Before any chat'), isTrue);
+      expect(saved['Before any chat'], isNull);
+      expect(saved['Hotel is booked'], 'p1');
+      expect(saved.containsKey('Likes window seats'), isTrue);
+      expect(saved['Likes window seats'], isNull);
     });
 
     test('the project block goes on the first turn after a move into a '
