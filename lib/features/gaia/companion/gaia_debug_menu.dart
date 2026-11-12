@@ -369,10 +369,10 @@ class _DebugMenu extends StatelessWidget {
         const _OfflinePreview(),
         heading('Usage limits'),
         Text(
-          'Each case of the low banner and the exhausted card, shown in the '
+          'Each case of the low warning and the exhausted card, shown in the '
           'real composer with made-up accounts. Its buttons, Ctrl+Enter and '
           'Esc only close it: no account switches and nothing is resent. Real '
-          'usage and the rings stay as they are.',
+          'usage stays as it is; a low case turns the current ring rose.',
           style: muted,
         ),
         for (final MapEntry(key: group, value: previews)

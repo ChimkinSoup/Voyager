@@ -4580,8 +4580,6 @@ class _ComposerState extends State<_Composer> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (controller.lowUsage case final low?)
-                          _LowUsageBanner(controller: controller, low: low),
                         // The chat's queue and drain mode (§13); clicking it
                         // loads the next prompt to review. Beside it, its side
                         // questions (GAIA_BTW_HLD.md §8.2).
@@ -4859,57 +4857,6 @@ class _ComposerState extends State<_Composer> {
       },
     );
     return MediaPasteOwnerScope(pasteImage: _pasteImage, child: composer);
-  }
-}
-
-/// The next message's account is low (§6.5). Never in the way: the composer
-/// stays, and the button only offers.
-class _LowUsageBanner extends StatelessWidget {
-  const _LowUsageBanner({required this.controller, required this.low});
-
-  /// Its button's height, kept without one so the text doesn't move when the
-  /// button comes or goes.
-  static const _height = 28.0;
-
-  final GaiaController controller;
-  final GaiaLowUsage low;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final other = low.switchTo;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        // Solid, as it floats over the chat's text.
-        color: theme.scaffoldBackgroundColor,
-        constraints: const BoxConstraints(minHeight: _height),
-        child: Row(
-          children: [
-            const Icon(Icons.warning_amber, size: 16, color: kGaiaStatusRose),
-            const SizedBox(width: 8),
-            Expanded(child: Text(low.text, style: theme.textTheme.bodySmall)),
-            if (other != null) ...[
-              const SizedBox(width: 8),
-              GaiaButton(
-                label: 'Switch to ${other.label}',
-                size: _height,
-                padding: 10,
-                still: true,
-                onPressed: () => controller.limitPreview != null
-                    ? controller.previewLimit(null)
-                    : switchGaiaAccount(
-                        context,
-                        controller,
-                        low.adapter,
-                        other,
-                      ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -5225,6 +5172,32 @@ class _ComposerStatus extends StatelessWidget {
     VoidCallback? switchTo(GaiaAccount account) => account == current
         ? null
         : () => switchGaiaAccount(context, controller, adapter!, account);
+    final low = controller.lowUsage;
+    // A debug preview's made-up accounts aren't the rings' real ones, so it
+    // turns the current ring rose but offers none of them.
+    final ringLow = controller.limitPreview == null ? low : null;
+    final lowTip = low == null
+        ? null
+        : ringLow?.switchTo == null
+        ? low.text
+        : '${low.text} Click ${ringLow!.switchTo!.label}\'s ring to switch to it.';
+    final contextCount = Tooltip(
+      enableTapToDismiss: false,
+      message: tokens == null
+          ? ''
+          : switch (controller.contextWindow) {
+              final window? when window > 0 =>
+                '${_tokensK(tokens)} of ${_tokensK(window)} tokens '
+                    '(${(tokens * 100 / window).round()}%)',
+              _ => '',
+            },
+      child: Text(
+        tokens == null ? '' : '${_tokensK(tokens)} context',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
     return Row(
       children: [
         const SizedBox(width: 4),
@@ -5232,8 +5205,12 @@ class _ComposerStatus extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: notice != null
+                // Clicking the notice, the low warning or the context count
+                // does nothing, so a click leaves its tooltip open while the
+                // pointer is still over it.
                 ? Tooltip(
                     message: notice!,
+                    enableTapToDismiss: false,
                     child: Row(
                       children: [
                         const Icon(
@@ -5258,28 +5235,86 @@ class _ComposerStatus extends StatelessWidget {
                       ],
                     ),
                   )
-                : Tooltip(
-                    message: controller.seeScreenWarning || tokens == null
-                        ? ''
-                        : switch (controller.contextWindow) {
-                            final window? when window > 0 =>
-                              '${_tokensK(tokens)} of ${_tokensK(window)} tokens '
-                                  '(${(tokens * 100 / window).round()}%)',
-                            _ => '',
-                          },
-                    child: Text(
-                      controller.seeScreenWarning
-                          ? 'Agent tools could leak or obey screen text.'
-                          : tokens == null
-                          ? ''
-                          : '${_tokensK(tokens)} context',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: controller.seeScreenWarning
-                            ? kGaiaStatusRose
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
+                : controller.seeScreenWarning
+                // Goes at the next send. Meanwhile the low ring's tooltip
+                // carries the low warning (§6.5).
+                ? Text(
+                    'Agent tools could leak or obey screen text.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: kGaiaStatusRose,
                     ),
-                  ),
+                  )
+                : low != null
+                // The warning, then the context count when both fit whole;
+                // a small window keeps the warning alone.
+                ? LayoutBuilder(
+                    builder: (context, box) {
+                      double width(String text) {
+                        final painter = TextPainter(
+                          text: TextSpan(
+                            text: text,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          textDirection: Directionality.of(context),
+                          textScaler: MediaQuery.textScalerOf(context),
+                        )..layout();
+                        final width = painter.width;
+                        painter.dispose();
+                        return width;
+                      }
+
+                      // Each Text below measured on its own, as each is laid
+                      // out on its own, so the sum matches the Row's.
+                      final both =
+                          tokens != null &&
+                          20 +
+                                  width(low.short) +
+                                  width('  ·  ') +
+                                  width('${_tokensK(tokens)} context') <=
+                              box.maxWidth;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Tooltip(
+                              enableTapToDismiss: false,
+                              message: lowTip,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber,
+                                    size: 14,
+                                    color: kGaiaStatusRose,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      low.short,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: kGaiaStatusRose),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (both) ...[
+                            Text(
+                              '  ·  ',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            contextCount,
+                          ],
+                        ],
+                      );
+                    },
+                  )
+                : contextCount,
           ),
         ),
         const SizedBox(width: 4),
@@ -5367,6 +5402,7 @@ class _ComposerStatus extends StatelessWidget {
             else
               _UsageRing(
                 dull: true,
+                offered: ringLow?.switchTo == account,
                 label: account.label,
                 message: untracked,
                 onTap: switchTo(account),
@@ -5375,12 +5411,18 @@ class _ComposerStatus extends StatelessWidget {
             _UsageRing(
               usage: usage,
               dull: account != current,
+              low: low != null && account == current,
+              offered: ringLow?.switchTo == account,
               label: accounts.length > 1 ? account.label : null,
+              // Says why it's rose, and stays when the screen warning hides
+              // the status line's.
+              message: low != null && account == current ? lowTip : null,
               onTap: switchTo(account),
             )
           else if (account != current)
             _UsageRing(
               dull: true,
+              offered: ringLow?.switchTo == account,
               label: account.label,
               message: 'Not read yet',
               onTap: switchTo(account),
@@ -5408,11 +5450,14 @@ class _ComposerStatus extends StatelessWidget {
 /// [dull] for an account the next message doesn't run on, and [onTap] switches
 /// to it, as the tier picker's account item does (§6.5). [label] names the
 /// account when there are several; [message] stands in for numbers it doesn't
-/// have.
+/// have, or says why a [low] one is rose. [low] fills it rose; [offered] dulls
+/// it less, as the one to switch to.
 class _UsageRing extends StatelessWidget {
   const _UsageRing({
     this.usage,
     this.dull = false,
+    this.low = false,
+    this.offered = false,
     this.label,
     this.message,
     this.onTap,
@@ -5423,6 +5468,8 @@ class _UsageRing extends StatelessWidget {
 
   final GaiaUsage? usage;
   final bool dull;
+  final bool low;
+  final bool offered;
   final String? label;
   final String? message;
   final VoidCallback? onTap;
@@ -5436,7 +5483,7 @@ class _UsageRing extends StatelessWidget {
         // A plan with no 5-hour window has only its weekly one to show.
         used: (usage?.fiveHour ?? usage?.weekly)?.usedNow ?? 0,
         track: Colors.white.withValues(alpha: 0.15),
-        fill: Theme.of(context).colorScheme.primary,
+        fill: low ? kGaiaStatusRose : Theme.of(context).colorScheme.primary,
       ),
     );
     return Tooltip(
@@ -5449,11 +5496,13 @@ class _UsageRing extends StatelessWidget {
               Text(label, style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 10),
             ],
-            if (message case final message?)
+            if (message case final message?) ...[
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 260),
                 child: Text(message),
               ),
+              if (usage != null) const SizedBox(height: 10),
+            ],
             if (usage != null)
               for (final (index, bar) in gaiaUsageBars(usage).indexed) ...[
                 if (index > 0) const SizedBox(height: 10),
@@ -5468,7 +5517,9 @@ class _UsageRing extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(margin),
-          child: dull ? Opacity(opacity: 0.4, child: ring) : ring,
+          child: dull
+              ? Opacity(opacity: offered ? 0.75 : 0.4, child: ring)
+              : ring,
         ),
       ),
     );

@@ -55,12 +55,20 @@ String gaiaResetTime(DateTime at) => DateUtils.isSameDay(at, DateTime.now())
     ? DateFormat.jm().format(at)
     : DateFormat.E().add_jm().format(at);
 
-/// The low banner's sentence for [name]'s [window].
+/// The low warning's sentence for [name]'s [window], in its tooltip.
 String gaiaLowText(String name, GaiaUsageWindow window) {
   final left = ((1 - window.usedNow) * 100).round();
   final resets = window.resetsAt;
   return '$name is low: $left% of the ${gaiaLimitName(window)} limit left'
       '${resets == null ? '' : ', resets ${gaiaResetTime(resets)}'}.';
+}
+
+/// The low warning in the status line, short enough for a small window:
+/// "5-hour limit: 7% left". The ring beside it says whose.
+String gaiaLowShort(GaiaUsageWindow window) {
+  final name = gaiaLimitName(window);
+  return '${name[0].toUpperCase()}${name.substring(1)} limit: '
+      '${((1 - window.usedNow) * 100).round()}% left';
 }
 
 // FRAGILE(usage): the words a CLI's failed turn uses for a used-up limit are
@@ -79,15 +87,17 @@ final _limitFailure = RegExp(
 /// Whether a failed turn's [text] says a usage limit stopped it (§6.5).
 bool gaiaRunLimited(String text) => _limitFailure.hasMatch(text);
 
-/// The non-blocking warning over the composer (§6.5).
+/// The non-blocking warning in the composer's status line (§6.5).
 class GaiaLowUsage {
   const GaiaLowUsage({
     required this.text,
+    required this.short,
     required this.adapter,
     this.switchTo,
   });
 
   final String text;
+  final String short;
   final String adapter;
 
   /// The agent's other account that isn't low, if it has one.

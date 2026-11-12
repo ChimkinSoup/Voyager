@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout;
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/media/media_clipboard.dart';
@@ -12,6 +13,8 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
+import 'package:voyager/features/gaia/host/gaia_window_context.dart'
+    show kGaiaMinimumWidth;
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
@@ -21,24 +24,26 @@ import 'narrow_window_harness.dart' show loadRealFonts;
 class _Source implements GaiaUsageSource {
   _Source(this.used);
 
-  /// Each account's five-hour share used, by id.
+  /// Each account's five-hour share used, by id; below 0, none can be read.
   final Map<String, double> used;
 
   @override
   Future<GaiaUsageRead> read({
     required GaiaRunAuth runs,
     required GaiaAccount account,
-  }) async => GaiaUsageRead(
-    GaiaUsageHealth.ok,
-    usage: GaiaUsage([
-      GaiaUsageWindow(
-        kind: GaiaUsageKind.session,
-        used: used[account.id] ?? 0.2,
-        resetsAt: DateTime.now().add(const Duration(hours: 2)),
-        observedAt: DateTime.now(),
-      ),
-    ]),
-  );
+  }) async => (used[account.id] ?? 0) < 0
+      ? const GaiaUsageRead(GaiaUsageHealth.offline)
+      : GaiaUsageRead(
+          GaiaUsageHealth.ok,
+          usage: GaiaUsage([
+            GaiaUsageWindow(
+              kind: GaiaUsageKind.session,
+              used: used[account.id] ?? 0.2,
+              resetsAt: DateTime.now().add(const Duration(hours: 2)),
+              observedAt: DateTime.now(),
+            ),
+          ]),
+        );
 }
 
 class _SignedOutSource implements GaiaUsageSource {
@@ -68,8 +73,8 @@ const _sol = GaiaAgent(
   adapter: kGaiaCodexAdapter,
 );
 
-/// The low banner and the exhausted decision card over the composer
-/// (GAIA_HLD.md §6.5).
+/// The low warning in the status line and the exhausted decision card over
+/// the composer (GAIA_HLD.md §6.5).
 void main() {
   final at = DateTime.utc(2026, 11, 1);
 
@@ -169,6 +174,20 @@ void main() {
 
   Finder composer() => find.widgetWithText(TextField, 'Message Gaia');
 
+  Finder lowTip() => find.byWidgetPredicate(
+    (widget) =>
+        widget is Tooltip && (widget.message ?? '').contains(' is low: '),
+  );
+
+  Finder rings() => find.byWidgetPredicate(
+    (widget) => widget.runtimeType.toString() == '_UsageRing',
+  );
+
+  ({bool low, bool offered}) ring(int index) {
+    final widget = rings().evaluate().elementAt(index).widget as dynamic;
+    return (low: widget.low as bool, offered: widget.offered as bool);
+  }
+
   GaiaMessage interrupted(String text) => GaiaMessage(
     id: 'm1',
     chatId: 'c1',
@@ -193,31 +212,152 @@ void main() {
     updatedAt: at,
   );
 
-  testWidgets('a low account warns over the composer, which stays', (
+  testWidgets('a low account warns in the status line; its ring is rose', (
     tester,
   ) async {
     final (controller, _) = await pump(
       tester,
       used: {kGaiaDefaultAccountId: 0.93},
     );
-    expect(find.textContaining('is low: 7% of the 5-hour'), findsOneWidget);
-    expect(find.textContaining('(Alpha)'), findsOneWidget);
-    expect(find.text('Switch to Beta'), findsOneWidget);
+    expect(find.text('5-hour limit: 7% left'), findsOneWidget);
+    final tip = lowTip().evaluate().single.widget as Tooltip;
+    expect(tip.message, contains('(Alpha) is low: 7% of the 5-hour'));
+    expect(tip.message, contains("Click Beta's ring"));
     expect(composer(), findsOneWidget);
+    // Nothing floats over the chat for it.
+    expect(find.textContaining('Switch to'), findsNothing);
+    expect(ring(0), (low: true, offered: false));
+    expect(ring(1), (low: false, offered: true));
 
-    await tester.tap(find.text('Switch to Beta'));
+    await tester.tap(rings().last);
     await tester.pump(const Duration(seconds: 1));
     expect(controller.currentAccount(kGaiaClaudeCodeAdapter), _b);
-    expect(find.textContaining('is low'), findsNothing);
+    expect(find.text('5-hour limit: 7% left'), findsNothing);
+    expect(ring(0), (low: false, offered: false));
+    expect(ring(1), (low: false, offered: false));
     await finish(tester);
   });
 
-  testWidgets('with no account that is not low, the banner offers none', (
+  testWidgets('a click on the warning leaves its hint open', (tester) async {
+    await pump(tester, used: {kGaiaDefaultAccountId: 0.93});
+    final text = find.text('5-hour limit: 7% left');
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(text));
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(text));
+    await tester.pump(const Duration(seconds: 2));
+    final hint = find.textContaining('(Alpha) is low: 7%');
+    expect(hint, findsOneWidget);
+
+    await mouse.down(tester.getCenter(text));
+    await mouse.up();
+    await tester.pump(const Duration(seconds: 1));
+    expect(hint, findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('with no account that is not low, none is offered', (
     tester,
   ) async {
     await pump(tester, used: {kGaiaDefaultAccountId: 0.93, 'b': 0.95});
-    expect(find.textContaining('is low'), findsOneWidget);
-    expect(find.textContaining('Switch to'), findsNothing);
+    expect(find.text('5-hour limit: 7% left'), findsOneWidget);
+    final tip = lowTip().evaluate().single.widget as Tooltip;
+    expect(tip.message, isNot(contains('Click')));
+    expect(ring(1).offered, isFalse);
+    await finish(tester);
+  });
+
+  testWidgets('an offered account with no numbers is still marked', (
+    tester,
+  ) async {
+    await pump(tester, used: {kGaiaDefaultAccountId: 0.93, 'b': -1});
+    final tip = lowTip().evaluate().single.widget as Tooltip;
+    expect(tip.message, contains("Click Beta's ring"));
+    expect(ring(1).offered, isTrue);
+    await finish(tester);
+  });
+
+  testWidgets('the context count stays beside the warning', (tester) async {
+    await loadRealFonts(tester);
+    await pump(
+      tester,
+      used: {kGaiaDefaultAccountId: 0.93},
+      messages: [
+        GaiaMessage(
+          id: 'm1',
+          chatId: 'c1',
+          seq: 1,
+          role: GaiaMessageRole.assistant,
+          parts: const [GaiaTextPart('Hi')],
+          status: GaiaMessageStatus.complete,
+          createdAt: at,
+          updatedAt: at,
+          contextTokens: 84000,
+          contextWindow: 200000,
+        ),
+      ],
+    );
+    expect(find.text('5-hour limit: 7% left'), findsOneWidget);
+    expect(find.text('84k context'), findsOneWidget);
+    final text = find.text('5-hour limit: 7% left');
+    expect(
+      tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
+      isFalse,
+    );
+
+    // At the window's narrowest there's no room for both: the warning stays
+    // whole, alone.
+    tester.view.physicalSize = const Size(kGaiaMinimumWidth, 640);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('84k context'), findsNothing);
+    expect(
+      tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
+      isFalse,
+    );
+    await finish(tester);
+  });
+
+  testWidgets('the screen warning shows over it until the next send', (
+    tester,
+  ) async {
+    final (controller, _) = await pump(
+      tester,
+      used: {kGaiaDefaultAccountId: 0.93},
+    );
+    await tester.runAsync(controller.toggleSeeScreen);
+    await tester.pump();
+    expect(find.textContaining('could leak'), findsOneWidget);
+    expect(find.text('5-hour limit: 7% left'), findsNothing);
+    // The ring keeps it in sight meanwhile, and its tooltip says why.
+    expect(ring(0).low, isTrue);
+    expect(
+      (rings().evaluate().first.widget as dynamic).message as String?,
+      contains('(Alpha) is low: 7%'),
+    );
+
+    await tester.runAsync(controller.toggleSeeScreen);
+    await tester.pump();
+    expect(find.text('5-hour limit: 7% left'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('a small window keeps the short warning on one line', (
+    tester,
+  ) async {
+    await loadRealFonts(tester);
+    await pump(tester, used: {kGaiaDefaultAccountId: 0.93});
+    // After pump, which sizes the window itself.
+    tester.view.physicalSize = const Size(kGaiaMinimumWidth, 640);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    final text = find.text('5-hour limit: 7% left');
+    expect(text, findsOneWidget);
+    // Shown whole, not cut to an ellipsis.
+    expect(
+      tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
+      isFalse,
+    );
     await finish(tester);
   });
 
@@ -676,6 +816,16 @@ void main() {
       .expand((previews) => previews)
       .singleWhere((preview) => preview.label == label);
 
+  test('the short warning names its limit, then what is left', () {
+    GaiaUsageWindow window(GaiaUsageKind kind, {String? model}) =>
+        GaiaUsageWindow(kind: kind, used: 0.97, observedAt: at, model: model);
+    expect(gaiaLowShort(window(GaiaUsageKind.weekly)), 'Weekly limit: 3% left');
+    expect(
+      gaiaLowShort(window(GaiaUsageKind.weeklyModel, model: 'Sonnet')),
+      'Weekly Sonnet limit: 3% left',
+    );
+  });
+
   test('every preview has a label of its own', () {
     final labels = [
       for (final previews in gaiaLimitPreviews().values)
@@ -699,7 +849,7 @@ void main() {
           reason: preview.label,
         );
         expect(
-          find.textContaining(' is low: '),
+          lowTip(),
           preview.low == null ? findsNothing : findsOneWidget,
           reason: preview.label,
         );
@@ -777,24 +927,19 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('the banner text stays put when its button comes and goes', (
+  testWidgets('a low preview turns the current ring rose and offers none', (
     tester,
   ) async {
-    // The test font is wide enough to wrap the text, which would move it.
-    await loadRealFonts(tester);
     final (controller, _) = await pump(tester, used: const {});
-    Future<double> textY(String label) async {
-      controller.previewLimit(previewNamed(label));
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
-      return tester.getCenter(find.textContaining(' is low: ')).dy;
-    }
+    controller.previewLimit(previewNamed('Low: another account free'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(lowTip(), findsOneWidget);
+    expect(ring(0), (low: true, offered: false));
+    expect(ring(1), (low: false, offered: false));
 
-    final without = await textY('Low: every account low');
-    expect(find.textContaining('Switch to'), findsNothing);
-    final withButton = await textY('Low: another account free');
-    expect(find.textContaining('Switch to'), findsOneWidget);
-    expect(withButton, without);
+    controller.previewLimit(null);
+    await tester.pump(const Duration(seconds: 1));
+    expect(ring(0), (low: false, offered: false));
     await finish(tester);
   });
 
@@ -942,11 +1087,6 @@ void main() {
       expect(controller.nextTier, tier);
       expect(runner.sent, isEmpty);
     }
-
-    controller.previewLimit(previewNamed('Low: another account free'));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.tap(find.text('Switch to Account B'));
-    await expectClosed();
 
     controller.previewLimit(previewNamed('1: one account, interrupted'));
     await tester.pump(const Duration(seconds: 1));

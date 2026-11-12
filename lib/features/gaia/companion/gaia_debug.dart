@@ -165,7 +165,7 @@ class GaiaDebug extends ChangeNotifier {
   }
 }
 
-/// One case of the low banner or the exhausted card (GAIA_HLD.md §6.5), made
+/// One case of the low warning or the exhausted card (GAIA_HLD.md §6.5), made
 /// up for the debug menu to show in the live composer. What the card would
 /// otherwise read from the open chat comes with it, so each looks the same in
 /// any chat.
@@ -243,23 +243,24 @@ Map<String, List<GaiaLimitPreview>> gaiaLimitPreviews() {
     DateTime? resetsAt,
     String? model,
     GaiaAccount? switchTo,
-  }) => GaiaLimitPreview(
-    label,
-    low: GaiaLowUsage(
-      adapter: kGaiaClaudeCodeAdapter,
-      switchTo: switchTo,
-      text: gaiaLowText(
-        name,
-        GaiaUsageWindow(
-          kind: kind,
-          used: used,
-          observedAt: now,
-          resetsAt: resetsAt,
-          model: model,
-        ),
+  }) {
+    final window = GaiaUsageWindow(
+      kind: kind,
+      used: used,
+      observedAt: now,
+      resetsAt: resetsAt,
+      model: model,
+    );
+    return GaiaLimitPreview(
+      label,
+      low: GaiaLowUsage(
+        adapter: kGaiaClaudeCodeAdapter,
+        switchTo: switchTo,
+        text: gaiaLowText(name, window),
+        short: gaiaLowShort(window),
       ),
-    ),
-  );
+    );
+  }
 
   GaiaLimitPreview card(
     String label, {
@@ -287,7 +288,7 @@ Map<String, List<GaiaLimitPreview>> gaiaLimitPreviews() {
   );
 
   return {
-    'Low banner': [
+    'Low warning': [
       low(
         'Low: one account',
         name: 'Sonnet 5.5',

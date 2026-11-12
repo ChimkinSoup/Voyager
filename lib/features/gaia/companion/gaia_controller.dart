@@ -1941,7 +1941,7 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The warning over the composer, when the next message's account is low
+  /// The warning in the status line, when the next message's account is low
   /// but not out (§6.5).
   GaiaLowUsage? get lowUsage {
     if (limitPreview case final preview?) return preview.low;
@@ -1958,6 +1958,7 @@ class GaiaController extends ChangeNotifier {
     return GaiaLowUsage(
       adapter: agent.adapter,
       text: gaiaLowText(name, window),
+      short: gaiaLowShort(window),
       switchTo: _withHeadroom(
         account,
         agent.model,

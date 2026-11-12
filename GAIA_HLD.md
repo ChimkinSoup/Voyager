@@ -546,10 +546,13 @@ An account is **low** when any window crosses its floor:
 It is **exhausted** when a window reads 100%, or a run fails with the
 provider's rate-limit error.
 
-**Low:** a non-blocking banner in every chat using that agent: "Sonnet 5.5
-(account A) is low: 7% of the 5-hour limit left, resets 4:10 PM." If the
-agent has another account that isn't low, the banner has a **Switch to
-account B** button.
+**Low:** a non-blocking warning in the composer's status line in every chat
+using that agent: "5-hour limit: 7% left" in rose, with the full sentence in its
+tooltip ("Sonnet 5.5 (account A) is low: 7% of the 5-hour limit left, resets
+4:10 PM."), and the account's ring filled rose. Nothing floats over the chat.
+The unknown-command notice and the screen warning take the slot first; the
+ring stays rose meanwhile. If the agent has another account that isn't low,
+its ring is less dulled and the tooltip says to click it to switch.
 
 **Exhausted:** the composer is replaced by a decision card. The partial
 answer of an interrupted run is kept and marked. The card offers the first
@@ -2209,8 +2212,8 @@ Phase 8C as built (2026-11-01):
   drain, which stops at an unclean reply, carry on as for any error, and the
   resend finds its prompt from the saved reply.
 - **Case 1** lists every other account that isn't out or signed out: those
-  known to have headroom, then those with no numbers, then the low. The banner's
-  button skips the low. **Case 2** goes by each tier's current account, so a
+  known to have headroom, then those with no numbers, then the low. The low
+  warning's offered ring skips the low. **Case 2** goes by each tier's current account, so a
   provider whose other account has headroom isn't offered while its current one
   is out.
 - **Resend** adds the prompt as a new message with its images, files, quotes and
