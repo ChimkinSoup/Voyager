@@ -167,6 +167,45 @@ void main() {
     expect(find.byType(Table), findsOneWidget);
   });
 
+  testWidgets('a table sizes its columns to the math in its cells', (
+    tester,
+  ) async {
+    // From a reply that left its chat blank: `\binom` and `\sqrt` typeset
+    // with a LayoutBuilder, which throws when the table asks its width.
+    await pump(
+      tester,
+      r'| $x$ | $\binom{8}{x}\binom{6}{3-x}$ | $\sqrt{x}$ |'
+      '\n|---|---|---|\n'
+      r'| 0 | $\frac{20}{364}$ | $-3$ |',
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    // Each shown whole, not scrolled within a column too narrow for it.
+    for (final math in find.byType(Math).evaluate()) {
+      final scroll = find.ancestor(
+        of: find.byWidget(math.widget),
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(
+        tester.getSize(scroll.first).width,
+        moreOrLessEquals(tester.getSize(find.byWidget(math.widget)).width),
+      );
+    }
+  });
+
+  testWidgets('math in a bold header or bold text keeps its weight', (
+    tester,
+  ) async {
+    // Math.tex turns a weight into upright bold glyphs that spill out of
+    // their box, so a header's fraction was cut off at the bottom.
+    await pump(tester, '| \$\\frac{a}{364}\$ |\n|---|\n| 1 |\n\n**Bold \$x\$**');
+    final maths = tester.widgetList<Math>(find.byType(Math));
+    expect(maths, hasLength(2));
+    for (final math in maths) {
+      expect(math.textStyle?.fontWeight, FontWeight.normal);
+    }
+  });
+
   /// Every span that's a link.
   List<TextSpan> links(WidgetTester tester) {
     final found = <TextSpan>[];

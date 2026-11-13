@@ -5,8 +5,6 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart'
-    show TextEditingController, TextEditingValue, TextSelection;
 import 'package:path/path.dart' as p;
 import 'package:super_clipboard/super_clipboard.dart'
     show DataWriterItem, Formats, SystemClipboard;
@@ -200,7 +198,14 @@ class GaiaController extends ChangeNotifier {
   /// The composer's text for the chat in view. Here rather than in the
   /// composer, so it outlives a mode change and a capture can add to it
   /// (§15.1).
-  final draft = TextEditingController();
+  late final draft = GaiaDraftController(
+    (text) => gaiaDraftCommand(
+      text,
+      commands: commands,
+      accounts: accounts,
+      natives: () => nativeCommands,
+    ),
+  );
 
   /// [draft]'s undo history. One controller holds every chat's draft, so each
   /// chat's history is swapped in with its draft, or undo would put the last
@@ -1360,6 +1365,13 @@ class GaiaController extends ChangeNotifier {
   final _retrying = <String, GaiaRetry>{};
 
   GaiaRetry? retryingOf(String messageId) => _retrying[messageId];
+
+  /// Replies whose streamed text the backend took back as it asks again
+  /// ([GaiaBlocksAbandoned]): noted under the reply until the new try shows
+  /// something. Not saved.
+  final _cutOff = <String>{};
+
+  bool cutOff(String messageId) => _cutOff.contains(messageId);
 
   /// Chats this device ran a turn in, each curated once it's been idle for
   /// [kGaiaCurateAfter] (§11).
@@ -5653,6 +5665,12 @@ class GaiaController extends ChangeNotifier {
         reply.copyWith(parts: _keepChecks(reply, builder.parts)),
         textOnly: event is GaiaTextDelta,
       );
+      if (event is GaiaBlocksAbandoned) {
+        _cutOff.add(reply.id);
+        notifyListeners();
+      } else if (_cutOff.remove(reply.id)) {
+        notifyListeners();
+      }
       final last = _lastPersist[reply.id];
       // A card at once: it's what the Gaia page and other devices wait on.
       if ((event is GaiaCardUpdate && event.saveNow) ||
@@ -6105,6 +6123,7 @@ class GaiaController extends ChangeNotifier {
       persistSoon?.cancel();
       _lastPersist.remove(reply.id);
       _retrying.remove(reply.id);
+      _cutOff.remove(reply.id);
       _reportRuns();
       notifyListeners();
     }

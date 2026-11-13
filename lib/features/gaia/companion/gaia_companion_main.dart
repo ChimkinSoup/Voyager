@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/dev/semantics_reparent_logger.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
@@ -37,6 +38,10 @@ import 'package:window_manager/window_manager.dart';
 /// so hot reload reaches Gaia's UI. See [_registerDevHotkeys].
 Future<void> gaiaCompanionMain({bool dev = false}) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before the keyboard workaround, as in the main instance. In debug the
+  // inspector takes Flutter's errors off the console, so this is the only
+  // record of them.
+  ErrorLogger.instance.install(process: 'gaia');
   installSemanticsReparentLogger('gaia');
   installWindowsKeyboardWorkaround();
   // The hotkeys that open it arrive with Ctrl and Alt still held.

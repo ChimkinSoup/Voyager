@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:flutter_highlight/themes/atom-one-light.dart';
@@ -437,20 +438,28 @@ class _BlockState extends State<_Block> {
     bool scrolls = false,
   }) {
     final source = math.attributes['source']!;
+    final display = math.attributes['display'] == 'true';
+    // Not bold in a table's header or bold text, as KaTeX resets the weight:
+    // Math.tex swaps any weight for upright bold glyphs, laid out by the
+    // regular ones' metrics, so they spilled out of its box and were cut.
+    // Its source, should it not parse, keeps the weight as any text.
+    final upright = style.copyWith(fontWeight: FontWeight.normal);
     final typeset = Math.tex(
       math.textContent,
-      mathStyle: math.attributes['display'] == 'true'
-          ? MathStyle.display
-          : MathStyle.text,
-      textStyle: style,
+      mathStyle: display ? MathStyle.display : MathStyle.text,
+      textStyle: upright,
       onErrorFallback: (_) => Text(source, style: style),
+    );
+    final measured = _MeasuredMath(
+      id: (math.textContent, display, style),
+      child: typeset,
     );
     final shown = scrolls
         ? SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: typeset,
+            child: measured,
           )
-        : typeset;
+        : measured;
     return typeset.parseError == null
         ? _SelectableMath(source: source, child: shown)
         : shown;
@@ -1001,6 +1010,73 @@ class _DisplayMathSyntax extends md.BlockSyntax {
 }
 
 final _displayMathOpen = RegExp(r'^ {0,3}(\$\$|\\\[)');
+
+/// Typeset math that answers a table's width question with the size it
+/// last laid out at. flutter_math_fork typesets `\binom`, `\sqrt` and
+/// `\left…\right` with a LayoutBuilder, which throws when asked in debug,
+/// failing the whole chat's layout, and answers 0 in release. Math not
+/// laid out yet answers 0, then has what asked measure again.
+class _MeasuredMath extends SingleChildRenderObjectWidget {
+  const _MeasuredMath({required this.id, required super.child});
+
+  /// The TeX, whether it's display math, and its style: what its size
+  /// depends on.
+  final Object id;
+
+  /// Kept past the render object, so math built again, as when a chat
+  /// scrolls back to it, sizes its table right on the first frame.
+  static final _sizes = <Object, Size>{};
+
+  @override
+  _RenderMeasuredMath createRenderObject(BuildContext context) =>
+      _RenderMeasuredMath(id);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMeasuredMath renderObject,
+  ) => renderObject.id = id;
+}
+
+class _RenderMeasuredMath extends RenderProxyBox {
+  _RenderMeasuredMath(this.id);
+
+  Object id;
+
+  /// Whether something asked its size: math in prose never is.
+  var _asked = false;
+
+  Size get _size {
+    _asked = true;
+    return _MeasuredMath._sizes[id] ?? Size.zero;
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) => _size.width;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => _size.width;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _size.height;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _size.height;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final answered = _MeasuredMath._sizes[id];
+    _MeasuredMath._sizes[id] = size;
+    if (!_asked || answered == size) return;
+    // Not now, mid-layout, and not after this frame, when selection reads
+    // the text around it: just before the next frame lays out. This clears
+    // the old answer from every ancestor that cached it, up to what asked.
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      if (attached) markNeedsLayout();
+    });
+  }
+}
 
 /// An equation selected whole, copying its [source]: the typeset glyphs
 /// aren't text a selection can take. A task's circle copies the same way. After Flutter's [SelectableRegion]

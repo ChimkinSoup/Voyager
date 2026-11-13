@@ -949,6 +949,34 @@ void main() {
       expect(_text(reply), endsWith('A closing paragraph after a rule.'));
     });
 
+    test(
+      'a cut-off reply is noted until the new try streams, then the note goes',
+      () async {
+        // Whether the reply was noted, as each change came: with no text
+        // while it was, and gone by the end.
+        final seen = <(bool, String)>[];
+        void record() {
+          final reply = controller.messages.lastOrNull;
+          if (reply == null || reply.role != GaiaMessageRole.assistant) return;
+          final noted = controller.cutOff(reply.id);
+          if (seen.lastOrNull?.$1 != noted) seen.add((noted, _text(reply)));
+        }
+
+        controller.addListener(record);
+        await controller.send('/cut2');
+        await settle();
+        controller.removeListener(record);
+
+        expect(seen.where((s) => s.$1), hasLength(1));
+        expect(seen.firstWhere((s) => s.$1).$2, isEmpty);
+        expect(seen.last.$1, isFalse);
+        final reply = (await main.messages()).last;
+        expect(controller.cutOff(reply.id), isFalse);
+        expect(_text(reply), endsWith('means and variances.'));
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
     test('tool steps come out as activity between text blocks', () async {
       await controller.send('/msg4');
       await settle();

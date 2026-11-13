@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
@@ -320,6 +320,96 @@ GaiaBuiltin? gaiaBuiltinIn(String draft) {
   return GaiaBuiltin.values
       .where((b) => b.names.any((n) => '/$n' == text))
       .firstOrNull;
+}
+
+/// Where the `/word` starting [draft] is, when it's a command that stays in
+/// the draft until it's sent: a built-in that doesn't fire inline, a user's
+/// command, or one of the CLI's own. Not a tier or an account's alias, which
+/// fire as soon as they're typed. [natives] is only asked when Gaia's own
+/// don't name the word, as asking may start reading the CLI's.
+TextRange? gaiaDraftCommand(
+  String draft, {
+  required List<GaiaCommand> commands,
+  required List<GaiaAccount> accounts,
+  required List<GaiaNativeCommand>? Function() natives,
+}) {
+  final match = RegExp(r'^\s*/([\w-]+)(?=\s|$)').firstMatch(draft);
+  if (match == null) return null;
+  final word = match.group(1)!;
+  final range = TextRange(start: match.end - word.length - 1, end: match.end);
+  if (GaiaTier.values.any((tier) => tier.command == '/$word') ||
+      accounts.any((account) => account.alias == word)) {
+    return null;
+  }
+  if (GaiaBuiltin.values.any(
+        (builtin) =>
+            !gaiaInlineBuiltins.contains(builtin) &&
+            builtin.names.contains(word),
+      ) ||
+      commands.any((command) => command.name == word) ||
+      (natives() ?? const []).any((native) => native.name == word)) {
+    return range;
+  }
+  return null;
+}
+
+/// The composer's draft, drawing the command [command] finds starting it in
+/// the accent. Only its colour: anything that changed the width would move
+/// the caret off the text.
+class GaiaDraftController extends TextEditingController {
+  GaiaDraftController(this.command);
+
+  final TextRange? Function(String text) command;
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final range = command(text);
+    if (range == null) {
+      return super.buildTextSpan(
+        context: context,
+        style: style,
+        withComposing: withComposing,
+      );
+    }
+    // The IME's underline, as the default draws it.
+    final composing =
+        withComposing &&
+            value.isComposingRangeValid &&
+            !value.composing.isCollapsed
+        ? value.composing
+        : TextRange.empty;
+    final accent = TextStyle(color: Theme.of(context).colorScheme.primary);
+    const underline = TextStyle(decoration: TextDecoration.underline);
+    final cuts = {
+      0,
+      range.start,
+      range.end,
+      if (composing.isValid) ...[composing.start, composing.end],
+      text.length,
+    }.toList()..sort();
+    return TextSpan(
+      style: style,
+      children: [
+        for (var i = 0; i + 1 < cuts.length; i++)
+          TextSpan(
+            text: text.substring(cuts[i], cuts[i + 1]),
+            style:
+                (cuts[i] >= range.start && cuts[i] < range.end
+                        ? accent
+                        : const TextStyle())
+                    .merge(
+                      cuts[i] >= composing.start && cuts[i] < composing.end
+                          ? underline
+                          : null,
+                    ),
+          ),
+      ],
+    );
+  }
 }
 
 /// The CLI command (GAIA_NATIVE_COMMANDS.md) [draft] starts with: `/name`,

@@ -34,6 +34,22 @@ class GaiaPinnedPrompt extends StatelessWidget {
   final String? chapter;
   final VoidCallback? onChapterTap;
 
+  /// Shared with [heightOf], which reckons the box's height from them.
+  static const _padding = EdgeInsets.fromLTRB(6, 6, 10, 6);
+  static const _railHeight = 18.0;
+
+  /// Its height: one line of text, or the rail if taller, in its padding.
+  static double heightOf(BuildContext context) {
+    final line = TextPainter(
+      text: TextSpan(text: ' ', style: Theme.of(context).textTheme.bodySmall),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final height = line.height;
+    line.dispose();
+    return _padding.vertical + (height > _railHeight ? height : _railHeight);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -61,12 +77,12 @@ class GaiaPinnedPrompt extends StatelessWidget {
         borderRadius: shape,
         onTap: onTap ?? onChapterTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+          padding: _padding,
           child: Row(
             children: [
               Container(
                 width: 3,
-                height: 18,
+                height: _railHeight,
                 decoration: BoxDecoration(
                   color: accent,
                   borderRadius: BorderRadius.circular(2),

@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
@@ -349,5 +349,80 @@ void main() {
     final rows = filterGaiaPalette(items, 'screen', recent: ['screen']);
     expect(rows[0].builtin, GaiaBuiltin.screen);
     expect(rows[1].command?.template, 'mine');
+  });
+
+  group('gaiaDraftCommand', () {
+    const account = GaiaAccount(
+      id: 'a',
+      label: 'Work',
+      adapter: 'claude_code',
+      dir: '',
+      alias: 'work',
+    );
+    var nativesAsked = 0;
+    TextRange? find(String draft) => gaiaDraftCommand(
+      draft,
+      commands: commands,
+      accounts: const [account],
+      natives: () {
+        nativesAsked++;
+        return const [(name: 'compact', description: '', argumentHint: '')];
+      },
+    );
+
+    test('finds a command that stays in the draft', () {
+      expect(find('/btw why?'), const TextRange(start: 0, end: 4));
+      expect(find('/btw'), const TextRange(start: 0, end: 4));
+      expect(find('  /queue later'), const TextRange(start: 2, end: 8));
+      expect(find('/clear'), const TextRange(start: 0, end: 6));
+      expect(find('/explain this'), const TextRange(start: 0, end: 8));
+      expect(find('/compact now'), const TextRange(start: 0, end: 8));
+    });
+
+    test('not a word Gaia lacks, half-typed, or mid-draft', () {
+      expect(find('/bt'), isNull);
+      expect(find('/btwx'), isNull);
+      expect(find('/usr/bin'), isNull);
+      expect(find('hi /btw'), isNull);
+      expect(find('/nope'), isNull);
+    });
+
+    test('not one that fires inline', () {
+      expect(find('/control-ask'), isNull);
+      expect(find('${GaiaTier.values.first.command} hi'), isNull);
+      expect(find('/work hi'), isNull);
+    });
+
+    test("asks for the CLI's own only when Gaia's don't name it", () {
+      nativesAsked = 0;
+      find('/btw why?');
+      expect(nativesAsked, 0);
+      find('/compact');
+      expect(nativesAsked, 1);
+    });
+  });
+
+  testWidgets('the draft draws its command in the accent', (tester) async {
+    const accent = Color(0xFF00AAFF);
+    final draft = GaiaDraftController(
+      (text) =>
+          text.startsWith('/btw') ? const TextRange(start: 0, end: 4) : null,
+    )..text = '/btw why?';
+    late TextSpan span;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(colorScheme: const ColorScheme.dark(primary: accent)),
+        home: Builder(
+          builder: (context) {
+            span = draft.buildTextSpan(context: context, withComposing: false);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    final children = span.children!.cast<TextSpan>();
+    expect([for (final c in children) c.text], ['/btw', ' why?']);
+    expect(children[0].style?.color, accent);
+    expect(children[1].style?.color, isNull);
   });
 }

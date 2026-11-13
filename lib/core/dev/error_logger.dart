@@ -36,12 +36,18 @@ class ErrorLogger {
   /// [record] writes nothing, rather than into the real Documents folder.
   var _installed = false;
 
+  /// Tags this process's lines, as the Gaia companion shares the main
+  /// instance's log.
+  var _tag = '';
+
   Future<void> _writeChain = Future<void>.value();
 
   /// Hooks both error channels. Called once from `main`, before anything that
-  /// wraps [FlutterError.onError] to filter known noise.
-  void install() {
+  /// wraps [FlutterError.onError] to filter known noise. [process] names a
+  /// process other than the main instance.
+  void install({String? process}) {
     _installed = true;
+    _tag = process == null ? '' : ' [$process]';
     final previousFlutter = FlutterError.onError;
     FlutterError.onError = (details) {
       record(
@@ -69,7 +75,7 @@ class ErrorLogger {
     _enqueue(
       (file) => file.writeAsString(
         '\n=== APP START ${_stamp(DateTime.now())}  build $buildLabel '
-        '(${_buildMode()}) ===\n',
+        '(${_buildMode()})$_tag ===\n',
         mode: FileMode.append,
         flush: true,
       ),
@@ -101,7 +107,9 @@ class ErrorLogger {
 
     text
       ..writeln(_recordRule)
-      ..writeln('${_stamp(now)}  ERROR  build $buildLabel (${_buildMode()})')
+      ..writeln(
+        '${_stamp(now)}  ERROR  build $buildLabel (${_buildMode()})$_tag',
+      )
       ..writeln(context.isEmpty ? '  $error' : '  $context: $error')
       ..writeln(stack?.toString().trimRight() ?? '  (no stack trace)');
     final entry = text.toString();

@@ -219,6 +219,13 @@ dependency_overrides:
   # app on an uncaught WinRT error (VOYAGER PATCH in src/ffi_api.cpp, BUG-375).
   flutter_local_notifications_windows:
     path: third_party/flutter_local_notifications_windows-3.1.1
+  # Patched: a delimiter is drawn at the style it was measured at (tiny
+  # brackets on `\binom` in a fraction), and matrix and cases rows keep a
+  # gap (`\dfrac` rows overlapped). VOYAGER PATCH in lib/src/ast/nodes/
+  # left_right.dart, matrix.dart, equation_array.dart and
+  # lib/src/render/layout/eqn_array.dart.
+  flutter_math_fork:
+    path: third_party/flutter_math_fork-0.7.4
 
 flutter:
   uses-material-design: true

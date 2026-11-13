@@ -69,6 +69,15 @@ void main() {
     },
   );
 
+  test('another process tags its lines', () async {
+    logger.install(process: 'gaia');
+    logger.record(StateError('from the companion'), null);
+
+    final log = await logger.readLog();
+    expect(log, contains('(debug) [gaia] ==='));
+    expect(log, contains('ERROR  build $buildLabel (debug) [gaia]\n'));
+  });
+
   test('install logs both channels and keeps the previous handlers', () async {
     final forwarded = <Object>[];
     FlutterError.onError = (details) => forwarded.add(details.exception);

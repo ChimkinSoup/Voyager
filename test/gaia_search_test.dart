@@ -5,6 +5,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 
 import 'fakes/gaia_fakes.dart';
@@ -94,15 +95,21 @@ void main() {
           case 'searchMessages':
             final query = params['query']! as String;
             queries.add(query);
-            if (query != 'needle') return <Object?>[];
+            // A prompt's, or, for 'reply', a reply's.
+            final seq = switch (query) {
+              'needle' => 6,
+              'reply' => 7,
+              _ => null,
+            };
+            if (seq == null) return <Object?>[];
             return [
-              const GaiaSearchHit(
+              GaiaSearchHit(
                 chatId: 'c1',
-                messageId: 'c1-m6',
-                seq: 6,
+                messageId: 'c1-m$seq',
+                seq: seq,
                 snippet:
-                    'Message 6 of c1 '
-                    '${GaiaSearchHit.start}needle${GaiaSearchHit.end} '
+                    'Message $seq of c1 '
+                    '${GaiaSearchHit.start}$query${GaiaSearchHit.end} '
                     'in the hay…',
               ).toJson(),
             ];
@@ -224,6 +231,24 @@ void main() {
           widget.controller.text.startsWith('Message 6 of c1'),
     );
     expect(tester.getTopLeft(message).dy, lessThan(200));
+  });
+
+  testWidgets("a reply's hit opens with its top below the pinned prompt", (
+    tester,
+  ) async {
+    await pump(tester);
+    await open(tester);
+    await search(tester, 'reply');
+    await tester.tap(rows());
+    await settle(tester);
+
+    final pinned = find.byType(GaiaPinnedPrompt);
+    expect(pinned, findsOneWidget);
+    final reply = find.textContaining('Message 7 of c1', findRichText: true);
+    expect(
+      tester.getTopLeft(reply.first).dy,
+      greaterThan(tester.getBottomLeft(pinned).dy),
+    );
   });
 
   testWidgets('chats match by title; Up and Down move, Enter picks', (

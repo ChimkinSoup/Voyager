@@ -1877,6 +1877,10 @@ class _MessagesState extends State<_Messages> {
   /// gave last time in place, so the old widget's list can't tell.
   GaiaMessage? _reply;
 
+  /// The chat as last built, so switching to one running here isn't taken
+  /// for a message sent in it.
+  String? _chatId;
+
   /// Each message's view as last built. Every change to Gaia rebuilds the
   /// list, and a message's view is costly to build: one whose message and
   /// placing haven't changed is given back as it was, which Flutter skips.
@@ -1911,6 +1915,7 @@ class _MessagesState extends State<_Messages> {
     super.initState();
     _seen = {for (final message in widget.messages) message.id};
     _reply = _latestReply(widget.messages);
+    _chatId = widget.messages.firstOrNull?.chatId;
     // The chapter being read, for the rail, before any scroll.
     _place();
     _takeReveal();
@@ -1986,26 +1991,33 @@ class _MessagesState extends State<_Messages> {
     final question = widget.messages
         .where((message) => message.role == GaiaMessageRole.user)
         .lastOrNull;
-    if (question != null && widget.running && !_seen.contains(question.id)) {
-      _appearing.add(question.id);
-    }
+    final sent =
+        question != null && widget.running && !_seen.contains(question.id);
+    if (sent) _appearing.add(question.id);
     _seen.addAll(widget.messages.map((message) => message.id));
+    final chatId = widget.messages.firstOrNull?.chatId;
+    final sameChat = chatId == _chatId;
+    _chatId = chatId;
     final was = _reply;
     final now = _reply = _latestReply(widget.messages);
     // A new reply in the same chat, running here: a message was sent from
     // this window, so down to it. One synced in from elsewhere leaves the
     // chat where it is.
-    if (!widget.running ||
-        was == null ||
-        now == null ||
-        was.id == now.id ||
-        was.chatId != now.chatId ||
+    final replied =
+        widget.running &&
+        was != null &&
+        now != null &&
+        was.id != now.id &&
+        was.chatId == now.chatId;
+    // Down at once on sending too, not once its images are attached and its
+    // reply starts. Not on switching to a chat running here.
+    if ((!(sent && sameChat) && !replied) ||
         !_scroll.hasClients ||
         _scroll.offset == 0) {
       return;
     }
     final reduced = MediaQuery.disableAnimationsOf(context);
-    final held = _held = reduced ? null : was.id;
+    final held = _held = reduced || !replied ? null : was.id;
     // Not mid-build, as scrolling notifies.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -2143,9 +2155,30 @@ class _MessagesState extends State<_Messages> {
     }
     final box = _placed[id]?.findRenderObject();
     if (!mounted || box is! RenderBox) return;
-    // Reversed, so its top to the list's.
-    double offsetOf(RenderBox box) =>
-        RenderAbstractViewport.of(box).getOffsetToReveal(box, 1).offset;
+    // With its top at the list's, the pinned prompt shows over it when its
+    // turn's prompt or chapter's divider is above it ([_cutOff]): it's put
+    // below that box instead, so the box doesn't cover its top.
+    final messages = widget.messages;
+    final prompt = messages.lastIndexWhere(
+      (message) => message.role == GaiaMessageRole.user,
+      i,
+    );
+    final chapter = messages.lastIndexWhere(
+      (message) => message.chapter != null,
+      i,
+    );
+    final pinned =
+        (prompt >= 0 &&
+            prompt != i &&
+            _pinnedLabel(messages[prompt]).isNotEmpty) ||
+        (chapter >= 0 && chapter < i);
+    // The box's top, its height, and a gap under it.
+    final room = pinned ? 8 + GaiaPinnedPrompt.heightOf(context) + 8 : 0.0;
+    // Reversed, so its top to the list's, less [room].
+    double offsetOf(RenderBox box) => min(
+      RenderAbstractViewport.of(box).getOffsetToReveal(box, 1).offset + room,
+      _scroll.position.maxScrollExtent,
+    );
     var target = offsetOf(box);
     if (MediaQuery.disableAnimationsOf(context)) {
       _scroll.jumpTo(target);
@@ -2624,8 +2657,10 @@ class _FlashState extends State<_Flash> with SingleTickerProviderStateMixin {
                   )
             : 0.0;
         // Unlit, nothing painted; kept in the tree, so the message isn't
-        // rebuilt afresh as it lights.
+        // rebuilt afresh as it lights. In front, as a bubble painted in the
+        // chat's background would hide it behind.
         return DecoratedBox(
+          position: DecorationPosition.foreground,
           decoration: t == 0
               ? const BoxDecoration()
               : BoxDecoration(
@@ -3287,22 +3322,32 @@ class _MessageView extends StatelessWidget {
               GaiaQuotePart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },
-          // Rebuilt with the controller: a retry isn't on the message.
+          // Rebuilt with the controller: a retry isn't on the message. The
+          // CLI's own retry line, with its countdown, over a cut-off note.
           if (streaming)
             ListenableBuilder(
               listenable: controller,
-              builder: (context, _) =>
-                  switch (controller.retryingOf(message.id)) {
-                    null => const SizedBox.shrink(),
-                    final retry => Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: _RetryLine(
-                        key: ValueKey(retry),
-                        retry: retry,
-                        style: muted?.copyWith(color: kGaiaStatusRose),
-                      ),
-                    ),
-                  },
+              builder: (context, _) => switch ((
+                controller.retryingOf(message.id),
+                controller.cutOff(message.id),
+              )) {
+                (null, false) => const SizedBox.shrink(),
+                (final retry?, _) => Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: _RetryLine(
+                    key: ValueKey(retry),
+                    retry: retry,
+                    style: muted?.copyWith(color: kGaiaStatusRose),
+                  ),
+                ),
+                (null, true) => Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Connection dropped, retrying…',
+                    style: muted?.copyWith(color: kGaiaStatusRose),
+                  ),
+                ),
+              },
             ),
           if (status != null)
             Padding(

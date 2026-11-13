@@ -1371,6 +1371,23 @@ const _scripts = {
       ),
     ],
   ),
+  '/cut2': GaiaDebugScript(
+    'Cut off with no retry events, as the CLI asks again at once: the text '
+    'goes, "Connection dropped, retrying", then the whole reply',
+    [
+      GaiaDebugText(
+        'Your list covers the core, but a few more will likely come up. '
+        'The derivatives of the geometric series give',
+      ),
+      GaiaDebugPause(Duration(seconds: 1)),
+      GaiaDebugCut(),
+      GaiaDebugPause(Duration(seconds: 4)),
+      GaiaDebugText(
+        'Your list covers the core, but a few more will likely come up. '
+        'The derivatives of the geometric series give means and variances.',
+      ),
+    ],
+  ),
   '/incomplete': GaiaDebugScript(
     'Cut off mid-reply with no retry: "the response may be incomplete"',
     [
