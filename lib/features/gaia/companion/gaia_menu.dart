@@ -6,6 +6,7 @@ class GaiaMenuItem {
     required this.label,
     required this.onPressed,
     this.icon,
+    this.accented,
     this.detail,
     this.shortcut,
     this.destructive = false,
@@ -14,6 +15,9 @@ class GaiaMenuItem {
   final String label;
   final VoidCallback onPressed;
   final IconData? icon;
+
+  /// In the accent right after the label, such as a project's name.
+  final String? accented;
 
   /// Muted text after the label, such as what a command does.
   final String? detail;
@@ -26,8 +30,9 @@ class GaiaMenuItem {
 }
 
 /// Opens a [GaiaMenu] of [items] at [position], in global coordinates, as a
-/// right-click does. Any other context menu open closes.
-void showGaiaMenu(
+/// right-click does. Any other context menu open closes. Its controller
+/// says whether it's still open.
+ContextMenuController showGaiaMenu(
   BuildContext context,
   Offset position,
   List<GaiaMenuItem> items,
@@ -42,6 +47,7 @@ void showGaiaMenu(
       autofocus: true,
     ),
   );
+  return menu;
 }
 
 /// An [EditableText.contextMenuBuilder] for Gaia: [first], the field's own
@@ -559,6 +565,14 @@ Widget _menuRow(BuildContext context, GaiaMenuItem item, bool lit) {
             TextSpan(
               children: [
                 TextSpan(text: item.label),
+                if (item.accented case final accented?)
+                  TextSpan(
+                    text: accented,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 if (item.detail case final detail?)
                   TextSpan(
                     text: '  $detail',

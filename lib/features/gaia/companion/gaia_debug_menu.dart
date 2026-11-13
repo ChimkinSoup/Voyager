@@ -477,6 +477,26 @@ class _DebugMenu extends StatelessWidget {
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          title: const Text('FPS drop alert'),
+          subtitle: const Text(
+            'Records the frame rate hidden, and shows the counter once a '
+            'reading falls below the threshold, until it is closed.',
+          ),
+          value: debug.fpsAlert,
+          onChanged: debug.setFpsAlert,
+        ),
+        _SliderRow(
+          label: 'Alert below',
+          value: debug.fpsAlertThreshold.toDouble(),
+          min: 10,
+          max: 240,
+          divisions: 46,
+          display: '${debug.fpsAlertThreshold} FPS',
+          onChanged: (fps, {required save}) =>
+              debug.setFpsAlertThreshold(fps.round(), save: save),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('Slow animations'),
           subtitle: const Text('Every animation at a tenth of its speed.'),
           value: debug.slowAnimations,

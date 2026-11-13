@@ -3494,15 +3494,15 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// A new chat started in [projectId] (GAIA_PROJECTS_HLD.md §3.2): its
-  /// composer's chip shows the project, which can be changed before the
-  /// first send.
+  /// header shows the project, which can be changed before the first send
+  /// as after it.
   void newChatIn(String? projectId) {
     newChat();
     newChatProject = projectId;
     notifyListeners();
   }
 
-  /// The new chat's project chip changed, before its first send.
+  /// The new chat's project changed in its header, before its first send.
   void pickNewChatProject(String? projectId) {
     newChatProject = projectId;
     notifyListeners();

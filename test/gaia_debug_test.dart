@@ -91,6 +91,66 @@ void main() {
     expect(timeDilation, 10);
   });
 
+  test('the FPS alert and its threshold survive a restart', () async {
+    final before = GaiaDebug(file: file);
+    await before.setFpsAlert(true);
+    await before.setFpsAlertThreshold(45);
+    expect(before.fps.isRunning, isTrue);
+    before.dispose();
+
+    final after = GaiaDebug(file: file);
+    await after.load();
+    expect(after.fpsAlert, isTrue);
+    expect(after.fpsAlertThreshold, 45);
+    expect(after.fpsAlertShown, isFalse);
+    expect(after.fps.isRunning, isTrue);
+    await after.setFpsAlert(false);
+    expect(after.fps.isRunning, isFalse);
+    after.dispose();
+  });
+
+  test('a closed FPS alert stays closed, and none comes while shown', () async {
+    // 50 ms frames, read out once half a second has passed.
+    Future<void> slowFrames() async {
+      await Future<void>.delayed(const Duration(milliseconds: 550));
+      SchedulerBinding.instance.platformDispatcher.onReportTimings!([
+        FrameTiming(
+          vsyncStart: 0,
+          buildStart: 0,
+          buildFinish: 0,
+          rasterStart: 0,
+          rasterFinish: 50000,
+          rasterFinishWallTime: 50000,
+        ),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final debug = GaiaDebug(file: file);
+    await debug.setShowFps(true);
+    await debug.setFpsAlert(true);
+    await slowFrames();
+    expect(debug.fpsAlertShown, isFalse);
+    await debug.setShowFps(false);
+    expect(debug.fpsAlertShown, isFalse);
+
+    await slowFrames();
+    expect(debug.fpsAlertShown, isTrue);
+    debug.closeFpsAlert();
+    await slowFrames();
+    expect(debug.fpsAlertShown, isFalse);
+    await debug.setFpsAlert(false);
+    debug.dispose();
+  });
+
+  test('a threshold out of the slider is brought into it', () async {
+    await file.parent.create(recursive: true);
+    await file.writeAsString('{"fpsAlertThreshold": 5}');
+    final debug = GaiaDebug(file: file);
+    await debug.load();
+    expect(debug.fpsAlertThreshold, 10);
+  });
+
   test("a slider's drag is saved only once it's let go", () async {
     final debug = GaiaDebug(file: file);
     await debug.setStreamSpeed(50, save: false);

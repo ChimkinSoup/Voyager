@@ -59,9 +59,13 @@ until it's moved.
 
 - **Right-click a chat → Move to project ▸** lists the projects and **New project…**, and,
   for a chat already in a project, **Remove from project**. The same menu is on the phone.
+- **From the chat's header** (changed 2026-11-12): the project crumb before the title
+  (§7.2) moves the chat at any time, before or after its first send. This replaced the
+  new-chat composer's project chip, which went away on the first send and left no way to
+  move a chat from the chat itself.
 - **New chat in a project:** the **+** on a project's sidebar row, or its right-click menu.
-  The new-chat composer shows a project chip (like the tier chip) that can be changed
-  before the first send. Ctrl+N still starts a chat with no project.
+  The new chat's header shows the project, and its crumb changes it before the first send
+  as after. Ctrl+N still starts a chat with no project.
 - **Forks inherit the project** of the chat they're forked from. Moving a fork later moves
   only that fork.
 - A chat can be moved while it's replying. The next turn picks the change up (§5.2).
@@ -116,7 +120,7 @@ until it's moved.
   against the last bullet below. So Codex gets no `--add-dir` equivalent. Seen live
   2026-11-12: a Codex project chat's write in the folder raised the card.
 - **A device with no path for the folder still runs the chat** (decided 2026-11-10). The
-  agent is told the folder isn't on this device (§5.2), and the chat header's project chip
+  agent is told the folder isn't on this device (§5.2), and the chat header's project crumb
   shows "no folder here". This differs from workspace chats, which refuse to run.
 - **Permissions are the CLI's own.** Edits in the folder go through the same permission
   cards as any other edit, and through Auto where the chat is in Auto.
@@ -271,10 +275,32 @@ showing every call on the activity card, are what bounds it.
 
 ### 7.2 Chat header
 
-A chat in a project shows a project chip in its header. Clicking it opens New chat,
-Set folder… and Remove folder (Rename and Delete stay in the sidebar's menu, which renames
-in place).
-It shows "no folder here" when the project has a folder but not on this device.
+The header's title starts with the chat's project as a breadcrumb crumb: "📁 Trip › Hotel
+options" (changed 2026-11-12, from a chip on the right that only chats in a project had).
+
+- **In a project:** the crumb is the project's name, with "· no folder here" when the
+  project has a folder but not on this device. The folder icon and the name are in the
+  accent, and the name is bold; the "no folder here" and the › stay muted.
+- **Project names in move menus** are bold and in the accent, so they stand out from the menu's
+  other text: "Move to **Trip**" here, and the project list in the sidebar's Move to
+  project menu. The Gaia page does the same in a chat row's move menu and on the
+  Memories tab: a memory's scope chip when it's a project's ("Global" stays plain), the
+  menu that chip opens, and the project filter.
+- **No project:** a dimmed folder icon, "Add to project" on hover. It shows only once
+  some project exists.
+- **Narrow** (under 240 px for the title, as in the floaters): the folder icon alone,
+  with the name in its tooltip.
+- **New chats** show the project their first send goes in.
+- **The menu** opens under the crumb. The chat's own actions come first, then the
+  project's:
+  - **Move to <project>** for each project it isn't in.
+  - **Remove from project**.
+  - **New chat in project** (not on a chat not yet sent, which is already one).
+  - **Set folder…** and **Remove folder**.
+
+  On a chat not yet sent, the moves change the project its first send goes in. Rename and
+  Delete stay in the sidebar's menu, which renames in place. **New project…** stays in the
+  sidebar's Move to project menu for the same reason: the header has no place to name one.
 
 ### 7.3 Gaia page (desktop)
 
@@ -284,6 +310,9 @@ The Chats tab groups by project the same way. The Memories tab gets the project 
 ### 7.4 Android and remote
 
 - The phone's chat list is grouped the same way, with create, rename, delete and move.
+- The phone's chat page shows the same crumb in its app bar (§7.2), with Move to and
+  Remove from project. On a chat not yet made, it sets the project the first message
+  creates it in.
 - A prompt sent from the phone runs on the beacon as today. The beacon uses its own folder
   path, or tells the agent there's none (§5.2). The cross-chat tools read the beacon's
   synced copy, so they work the same.

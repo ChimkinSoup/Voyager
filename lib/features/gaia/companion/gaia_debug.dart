@@ -45,6 +45,18 @@ class GaiaDebug extends ChangeNotifier {
 
   var showFps = false;
 
+  /// [fps] runs hidden, and the counter pops up, to stay until closed, the
+  /// first time a reading falls below [fpsAlertThreshold].
+  var fpsAlert = false;
+
+  var fpsAlertThreshold = 60;
+
+  /// The alert's counter is up. Not kept: closed on every start.
+  var fpsAlertShown = false;
+
+  /// The alert has popped up since it was turned on, so closing it sticks.
+  var _fpsAlertFired = false;
+
   /// Every animation at a tenth of its speed ([timeDilation]).
   var slowAnimations = false;
 
@@ -52,8 +64,8 @@ class GaiaDebug extends ChangeNotifier {
   /// otherwise excluded from (GAIA_HLD.md §3.2).
   var allowScreenshots = false;
 
-  /// Runs while [showFps] is on.
-  final fps = FpsMonitorController();
+  /// Runs while [showFps] or [fpsAlert] is on.
+  late final fps = FpsMonitorController()..addListener(_checkFps);
 
   Future<void> load() async {
     final file = this.file;
@@ -64,6 +76,11 @@ class GaiaDebug extends ChangeNotifier {
       final delayMs =
           (json['replyDelayMs'] as int?) ?? replyDelay.inMilliseconds;
       final attachMs = (json['attachDelayMs'] as int?) ?? 0;
+      final alertThreshold =
+          ((json['fpsAlertThreshold'] as int?) ?? fpsAlertThreshold).clamp(
+            10,
+            240,
+          );
       scriptedReplies = json['scriptedReplies'] == true;
       dummyMode = json['dummyMode'] == true;
       replyDelay = Duration(milliseconds: delayMs);
@@ -73,6 +90,8 @@ class GaiaDebug extends ChangeNotifier {
         streamSpeed = speed;
       }
       showFps = json['showFps'] == true;
+      fpsAlert = json['fpsAlert'] == true;
+      fpsAlertThreshold = alertThreshold;
       slowAnimations = json['slowAnimations'] == true;
       allowScreenshots = json['allowScreenshots'] == true;
     } catch (error) {
@@ -100,6 +119,29 @@ class GaiaDebug extends ChangeNotifier {
       _set(() => streamSpeed = value, save: save);
 
   Future<void> setShowFps(bool value) => _set(() => showFps = value);
+
+  Future<void> setFpsAlert(bool value) => _set(() {
+    fpsAlert = value;
+    fpsAlertShown = false;
+    _fpsAlertFired = false;
+  });
+
+  Future<void> setFpsAlertThreshold(int value, {bool save = true}) =>
+      _set(() => fpsAlertThreshold = value, save: save);
+
+  void closeFpsAlert() {
+    fpsAlertShown = false;
+    notifyListeners();
+  }
+
+  void _checkFps() {
+    final current = fps.currentFps;
+    // The counter shown already says it, and nothing is kept for later.
+    if (!fpsAlert || showFps || _fpsAlertFired || current == null) return;
+    if (current >= fpsAlertThreshold) return;
+    _fpsAlertFired = fpsAlertShown = true;
+    notifyListeners();
+  }
 
   Future<void> setSlowAnimations(bool value) =>
       _set(() => slowAnimations = value);
@@ -129,7 +171,7 @@ class GaiaDebug extends ChangeNotifier {
 
   void _apply() {
     timeDilation = slowAnimations ? 10 : 1;
-    if (showFps) {
+    if (showFps || fpsAlert) {
       fps.start();
     } else {
       fps.stop();
@@ -149,6 +191,8 @@ class GaiaDebug extends ChangeNotifier {
           'attachDelayMs': attachDelay.inMilliseconds,
           'streamSpeed': streamSpeed,
           'showFps': showFps,
+          'fpsAlert': fpsAlert,
+          'fpsAlertThreshold': fpsAlertThreshold,
           'slowAnimations': slowAnimations,
           'allowScreenshots': allowScreenshots,
         }),

@@ -16,6 +16,7 @@ import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
+import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
@@ -75,6 +76,9 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
   /// The beacon the user picked, over the one [gaiaBeaconFor] would.
   String? _target;
   GaiaTier? _tier;
+
+  /// The project a chat not yet made goes in, changed from the header.
+  late String? _newProjectId = widget.projectId;
 
   @override
   void initState() {
@@ -208,7 +212,7 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
         'text': text,
         'tier': _tier?.name,
         'isNew': isNew,
-        if (isNew) 'projectId': widget.projectId,
+        if (isNew) 'projectId': _newProjectId,
       },
     );
     _tier = null;
@@ -362,11 +366,36 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
         me != null &&
         !me.revoked &&
         me.trustedBy.isNotEmpty;
+    final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
+    final projectId = chat == null ? _newProjectId : chat.projectId;
+    final project = projects.where((p) => p.id == projectId).firstOrNull;
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          chat?.title ?? widget.title ?? 'New chat',
-          overflow: TextOverflow.ellipsis,
+        title: Row(
+          children: [
+            if (project != null || projects.isNotEmpty)
+              _ProjectCrumb(
+                project: project,
+                projects: projects,
+                onMove: (id) async {
+                  if (chat == null) {
+                    setState(() => _newProjectId = id);
+                  } else {
+                    await gaiaMoveChat(
+                      ref.read(gaiaRepositoryProvider),
+                      chat.id,
+                      id,
+                    );
+                  }
+                },
+              ),
+            Flexible(
+              child: Text(
+                chat?.title ?? widget.title ?? 'New chat',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         actions: [
           if (online.length > 1 && !running)
@@ -889,4 +918,85 @@ String gaiaWhen(DateTime at) {
   return at.year == now.year
       ? DateFormat.MMMd().format(at)
       : DateFormat.yMMMd().format(at);
+}
+
+/// The chat's project before its title (GAIA_PROJECTS_HLD.md §7.4), as on
+/// the desktop's header: "Trip ›", or a dimmed folder with none. Its menu
+/// moves the chat, or for a chat not yet made, where its first send goes.
+class _ProjectCrumb extends StatelessWidget {
+  const _ProjectCrumb({
+    required this.project,
+    required this.projects,
+    required this.onMove,
+  });
+
+  final GaiaProject? project;
+  final List<GaiaProject> projects;
+  final ValueChanged<String?> onMove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final accent = theme.colorScheme.primary;
+    final project = this.project;
+    return PopupMenuButton<VoidCallback>(
+      tooltip: project?.name ?? 'Add to project',
+      onSelected: (action) => action(),
+      itemBuilder: (_) => [
+        for (final other in projects)
+          if (other.id != project?.id)
+            PopupMenuItem(
+              value: () => onMove(other.id),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(text: 'Move to '),
+                    TextSpan(
+                      text: other.name,
+                      style: TextStyle(
+                        color: accent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        if (project != null)
+          PopupMenuItem(
+            value: () => onMove(null),
+            child: const Text('Remove from project'),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              PhosphorIconsRegular.folderSimple,
+              size: 18,
+              color: project == null ? muted.withAlpha(110) : accent,
+            ),
+            if (project != null) ...[
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 120),
+                child: Text(
+                  project.name,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(PhosphorIconsRegular.caretRight, size: 16, color: muted),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

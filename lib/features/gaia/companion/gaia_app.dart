@@ -440,6 +440,31 @@ class _GaiaShell extends StatelessWidget {
                     child: IgnorePointer(
                       child: FpsCounterCard(monitor: controller.debug.fps),
                     ),
+                  )
+                else if (controller.debug.fpsAlertShown)
+                  Positioned(
+                    bottom: 102,
+                    right: 12,
+                    child: Stack(
+                      children: [
+                        FpsCounterCard(monitor: controller.debug.fps),
+                        Positioned(
+                          top: 2,
+                          right: 2,
+                          child: IconButton(
+                            icon: const Icon(Icons.close),
+                            iconSize: 14,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 22,
+                              height: 22,
+                            ),
+                            tooltip: 'Close',
+                            onPressed: controller.debug.closeFpsAlert,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),
@@ -629,6 +654,11 @@ class _Header extends StatelessWidget {
         ? null
         : 'Untested ${cli.name} ${version.$1}.${version.$2}.${version.$3}';
     final floater = controller.layout != GaiaMode.window;
+    final project = controller.project(
+      controller.currentChatId == null
+          ? controller.newChatProject
+          : controller.currentChat?.projectId,
+    );
     return _DragArea(
       floater: floater,
       fullScreen: controller.fullScreen,
@@ -648,10 +678,25 @@ class _Header extends StatelessWidget {
             ] else
               const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                controller.currentChat?.title ?? 'New chat',
-                style: theme.textTheme.titleSmall,
-                overflow: TextOverflow.ellipsis,
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    if (project != null || controller.projects.isNotEmpty)
+                      _ProjectCrumb(
+                        controller: controller,
+                        project: project,
+                        // Narrow, as in the floaters: the icon alone.
+                        compact: constraints.maxWidth < 240,
+                      ),
+                    Flexible(
+                      child: Text(
+                        controller.currentChat?.title ?? 'New chat',
+                        style: theme.textTheme.titleSmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             if (controller.connectivity case final connectivity?)
@@ -672,11 +717,6 @@ class _Header extends StatelessWidget {
                 labelStyle: theme.textTheme.labelSmall,
               ),
               const SizedBox(width: 4),
-            ],
-            if (controller.project(controller.currentChat?.projectId)
-                case final project?) ...[
-              _ProjectChip(controller: controller, project: project),
-              const SizedBox(width: 8),
             ],
             // The sidebar's New chat, when there's no sidebar.
             if (!sidebarShown) ...[
@@ -709,42 +749,145 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// The chat's project in its header (GAIA_PROJECTS_HLD.md §7.2), saying "no
-/// folder here" when the project's folder is on other devices only. A click
-/// opens its New chat and Set folder…; the sidebar's menu has the rest.
-class _ProjectChip extends StatelessWidget {
-  const _ProjectChip({required this.controller, required this.project});
+/// The chat's project before its title in the header (GAIA_PROJECTS_HLD.md
+/// §7.2), "Trip › title" with the folder and name in the accent, saying "no
+/// folder here" when the project's folder is on other devices only; with no
+/// project, a dimmed folder. A click opens
+/// the move, then the project's New chat and Set folder…; the sidebar's menu
+/// has the rest. A new chat's moves change the project its first send goes
+/// in. [compact] shows the folder alone. A click while the menu is open just
+/// closes it.
+class _ProjectCrumb extends StatefulWidget {
+  const _ProjectCrumb({
+    required this.controller,
+    required this.project,
+    required this.compact,
+  });
 
   final GaiaController controller;
-  final GaiaProject project;
+  final GaiaProject? project;
+  final bool compact;
+
+  @override
+  State<_ProjectCrumb> createState() => _ProjectCrumbState();
+}
+
+class _ProjectCrumbState extends State<_ProjectCrumb> {
+  ContextMenuController? _menu;
+
+  /// Whether the menu was open as the click went down, before the click
+  /// outside it closed it.
+  var _wasOpen = false;
 
   @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final project = widget.project;
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final accent = theme.colorScheme.primary;
     final noFolder =
+        project != null &&
         project.folderPaths.isNotEmpty &&
         controller.projectFolder(project.id) == null;
-    return GestureDetector(
-      onTapUp: (details) => showGaiaMenu(context, details.globalPosition, [
-        GaiaMenuItem(
-          label: 'New chat',
-          icon: Icons.add,
-          onPressed: () {
-            controller.newChatIn(project.id);
-            controller.focusComposer();
+    final name = project == null
+        ? null
+        : noFolder
+        ? '${project.name} · no folder here'
+        : project.name;
+    final chatId = controller.currentChatId;
+    void move(String? projectId) => chatId == null
+        ? controller.pickNewChatProject(projectId)
+        : unawaited(controller.moveChat(chatId, projectId));
+    return Tooltip(
+      message: name ?? 'Add to project',
+      child: Listener(
+        onPointerDown: (_) => _wasOpen = _menu?.isShown ?? false,
+        child: GestureDetector(
+          onTapUp: (details) {
+            if (_wasOpen) return;
+            // Under the crumb, not over it.
+            final crumb = context.findRenderObject()! as RenderBox;
+            _menu = showGaiaMenu(
+              context,
+              crumb.localToGlobal(
+                Offset(details.localPosition.dx, crumb.size.height),
+              ),
+              [
+                for (final other in controller.projects)
+                  if (other.id != project?.id)
+                    GaiaMenuItem(
+                      label: 'Move to ',
+                      accented: other.name,
+                      icon: Icons.folder_outlined,
+                      onPressed: () => move(other.id),
+                    ),
+                if (project != null) ...[
+                  GaiaMenuItem(
+                    label: 'Remove from project',
+                    icon: Icons.folder_off_outlined,
+                    onPressed: () => move(null),
+                  ),
+                  if (chatId != null)
+                    GaiaMenuItem(
+                      label: 'New chat in project',
+                      icon: Icons.add,
+                      onPressed: () {
+                        controller.newChatIn(project.id);
+                        controller.focusComposer();
+                      },
+                    ),
+                  _setFolderItem(controller, project),
+                  ?_removeFolderItem(controller, project),
+                ],
+              ],
+            );
           },
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.folder_outlined,
+                    size: 16,
+                    color: project == null ? muted.withAlpha(110) : accent,
+                  ),
+                  if (project != null && !widget.compact) ...[
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: project.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (noFolder)
+                              TextSpan(
+                                text: ' · no folder here',
+                                style: TextStyle(color: muted),
+                              ),
+                          ],
+                        ),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: accent,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, size: 16, color: muted),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
-        _setFolderItem(controller, project),
-        ?_removeFolderItem(controller, project),
-      ]),
-      child: Chip(
-        avatar: const Icon(Icons.folder_outlined, size: 14),
-        label: Text(
-          noFolder ? '${project.name} · no folder here' : project.name,
-          overflow: TextOverflow.ellipsis,
-        ),
-        visualDensity: VisualDensity.compact,
-        labelStyle: theme.textTheme.labelSmall,
       ),
     );
   }
@@ -1003,7 +1146,8 @@ class _SidebarState extends State<_Sidebar> {
       for (final project in controller.projects)
         if (project.id != inProject?.id)
           GaiaMenuItem(
-            label: project.name,
+            label: '',
+            accented: project.name,
             icon: Icons.folder_outlined,
             onPressed: () => controller.moveChat(chat.id, project.id),
           ),
@@ -1195,14 +1339,11 @@ class _SidebarState extends State<_Sidebar> {
                 section.count == 1 ? '1 chat' : '${section.count} chats',
                 style: const TextStyle(fontSize: 12, color: Color(0xFF737373)),
               ),
-            Tooltip(
-              message: 'New chat in ${project.name}',
-              child: GaiaButton(
-                icon: Icons.add,
-                size: 24,
-                padding: 0,
-                onPressed: () => _newChatIn(project),
-              ),
+            GaiaButton(
+              icon: Icons.add,
+              size: 24,
+              padding: 0,
+              onPressed: () => _newChatIn(project),
             ),
           ],
         ),
@@ -1415,14 +1556,11 @@ class _SidebarState extends State<_Sidebar> {
                 ],
                 _SidebarLabel(
                   'Projects',
-                  trailing: Tooltip(
-                    message: 'New project',
-                    child: GaiaButton(
-                      icon: Icons.add,
-                      size: 24,
-                      padding: 0,
-                      onPressed: _newProject,
-                    ),
+                  trailing: GaiaButton(
+                    icon: Icons.add,
+                    size: 24,
+                    padding: 0,
+                    onPressed: _newProject,
                   ),
                 ),
                 for (final section in sections.projects) ...[
@@ -5238,11 +5376,33 @@ class _ComposerStatus extends StatelessWidget {
                 : controller.seeScreenWarning
                 // Goes at the next send. Meanwhile the low ring's tooltip
                 // carries the low warning (§6.5).
-                ? Text(
-                    'Agent tools could leak or obey screen text.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: kGaiaStatusRose,
-                    ),
+                ? LayoutBuilder(
+                    builder: (context, box) {
+                      const warning =
+                          'Agent tools could leak or obey screen text.';
+                      final style = theme.textTheme.bodySmall?.copyWith(
+                        color: kGaiaStatusRose,
+                      );
+                      // The tooltip only when the ellipsis hides some of it.
+                      final painter = TextPainter(
+                        text: TextSpan(text: warning, style: style),
+                        maxLines: 1,
+                        textDirection: Directionality.of(context),
+                        textScaler: MediaQuery.textScalerOf(context),
+                      )..layout(maxWidth: box.maxWidth);
+                      final cut = painter.didExceedMaxLines;
+                      painter.dispose();
+                      return Tooltip(
+                        message: cut ? warning : '',
+                        enableTapToDismiss: false,
+                        child: Text(
+                          warning,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: style,
+                        ),
+                      );
+                    },
                   )
                 : low != null
                 // The warning, then the context count when both fit whole;
@@ -5430,13 +5590,6 @@ class _ComposerStatus extends StatelessWidget {
           const SizedBox(width: 8 - 2 * _UsageRing.margin),
         ],
         const SizedBox(width: _UsageRing.margin),
-        // A new chat's project, changeable until its first send
-        // (GAIA_PROJECTS_HLD.md §3.2).
-        if (controller.currentChatId == null &&
-            controller.projects.isNotEmpty) ...[
-          _ProjectPicker(controller: controller),
-          const SizedBox(width: 8),
-        ],
         // The notch opens up and to the left, so it ends the row.
         _TierPicker(controller: controller),
       ],
@@ -5564,33 +5717,6 @@ class _RingPainter extends CustomPainter {
       old.track != track ||
       old.fill != fill ||
       old.stroke != stroke;
-}
-
-/// The project a new chat goes in, or none.
-class _ProjectPicker extends StatelessWidget {
-  const _ProjectPicker({required this.controller});
-
-  final GaiaController controller;
-
-  @override
-  Widget build(BuildContext context) => GaiaNotch(
-    items: [
-      GaiaNotchItem<String?>(
-        options: [
-          const GaiaNotchOption(value: null, label: 'No project'),
-          for (final project in controller.projects)
-            GaiaNotchOption(
-              value: project.id,
-              label: project.name,
-              icon: (color, {required lit}) =>
-                  Icon(Icons.folder_outlined, size: 14, color: color),
-            ),
-        ],
-        value: controller.project(controller.newChatProject)?.id,
-        onChanged: controller.pickNewChatProject,
-      ),
-    ],
-  );
 }
 
 /// The tier the next message goes to (§7.2) and its agent, a notch that

@@ -55,7 +55,7 @@ void main() {
               updatedAt: at,
             ).toJson(),
           ],
-          'drafts' => <Object?>[],
+          'drafts' || 'messages' => <Object?>[],
           _ => null,
         };
       };
@@ -134,6 +134,103 @@ void main() {
     expect(writes.last.$2, {'projectId': 'p1', 'withChats': true});
     expect(find.text('Loose'), findsNothing);
     expect(find.text('Planned'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets("the header's project crumb picks a new chat's project and "
+      'moves a chat in and out', (tester) async {
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final at = DateTime.utc(2026, 11, 10);
+    final writes = <Map<String, Object?>>[];
+    late FakeGaiaPipe companion;
+    final main = FakeGaiaPipe.main();
+    main
+      ..onLaunch = (end, _) {
+        companion = end;
+      }
+      ..onRequest = (method, params) async {
+        if (method == 'setProject') writes.add(params);
+        return switch (method) {
+          'hello' => {
+            'aborted': false,
+            'accent': 0xFF7C9EFF,
+            'deviceId': 'laptop',
+            'settings': GaiaSettings.initial().toJson(),
+          },
+          'chats' => [
+            GaiaChat(
+              id: 'Loose',
+              title: 'Loose',
+              createdAt: at,
+              updatedAt: at,
+              lastMessageAt: at,
+            ).toJson(),
+          ],
+          'projects' => [
+            GaiaProject(
+              id: 'p1',
+              name: 'Trip',
+              createdAt: at,
+              updatedAt: at,
+            ).toJson(),
+          ],
+          'drafts' || 'messages' => <Object?>[],
+          _ => null,
+        };
+      };
+    await main.startCompanion();
+    final controller = GaiaController(
+      pipe: companion,
+      window: FakeGaiaWindow(),
+      runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
+      cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
+      exit: (_) {},
+    );
+    await controller.start();
+    await controller.openWindow();
+    await tester.pumpWidget(GaiaApp(controller: controller));
+    await tester.pump(const Duration(seconds: 1));
+
+    Future<void> settle() async {
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    // The header's taps wait out its double click (which maximises), so
+    // the menu opens a frame late and needs its own second to grow.
+    Future<void> openCrumb(String tooltip) async {
+      await tester.tap(find.byTooltip(tooltip));
+      await settle();
+      await settle();
+    }
+
+    // A new chat: no project yet, then Trip for its first send.
+    expect(find.text('No project'), findsNothing);
+    await openCrumb('Add to project');
+    await tester.tap(find.text('Move to Trip'));
+    await settle();
+    expect(controller.newChatProject, 'p1');
+    expect(find.byTooltip('Trip'), findsOneWidget);
+    expect(writes, isEmpty);
+
+    // A sent chat moves in from its header, and back out.
+    await tester.tap(find.text('Loose'));
+    await settle();
+    expect(controller.currentChatId, 'Loose');
+    await openCrumb('Add to project');
+    await tester.tap(find.text('Move to Trip'));
+    await settle();
+    expect(writes.last, {'chatId': 'Loose', 'projectId': 'p1'});
+    await openCrumb('Trip');
+    expect(find.text('New chat in project'), findsOneWidget);
+    await tester.tap(find.text('Remove from project'));
+    await settle();
+    expect(writes.last, {'chatId': 'Loose', 'projectId': null});
+    expect(find.byTooltip('Add to project'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 6));

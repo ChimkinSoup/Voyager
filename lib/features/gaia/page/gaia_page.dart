@@ -786,7 +786,14 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
                 for (final project in projects)
                   DropdownMenuItem(
                     value: project.id,
-                    child: Text(project.name, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      project.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -919,7 +926,14 @@ class _MemoryRow extends ConsumerWidget {
                   CheckedPopupMenuItem(
                     value: other.id,
                     checked: other.id == project?.id,
-                    child: Text(other.name, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      other.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
               ],
               child: Container(
@@ -932,7 +946,12 @@ class _MemoryRow extends ConsumerWidget {
                 child: Text(
                   project?.name ?? 'Global',
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall,
+                  style: project == null
+                      ? theme.textTheme.labelSmall
+                      : theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
                 ),
               ),
             ),
@@ -1238,7 +1257,13 @@ class _ChatRow extends ConsumerWidget {
                     PopupMenuItem(
                       value: () =>
                           gaiaMoveChat(repository, chat.id, project.id),
-                      child: Text(project.name),
+                      child: Text(
+                        project.name,
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                 PopupMenuItem(
                   value: () async {
