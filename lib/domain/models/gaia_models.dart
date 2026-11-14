@@ -932,7 +932,8 @@ class GaiaQueueItem extends SoftDeletable {
 
 /// What a chat's composer holds until it's sent (GAIA_HLD.md §9.3), kept
 /// and synced so it survives a restart and follows the user to another
-/// device. [id] is its chat's, or [newChatId] for a new chat's.
+/// device. [id] is its chat's, [newChatId] for a new chat's, or [stashId]
+/// for the one `/stash` put aside.
 class GaiaDraft extends SoftDeletable {
   const GaiaDraft({
     required super.id,
@@ -947,6 +948,7 @@ class GaiaDraft extends SoftDeletable {
   });
 
   static const newChatId = 'new';
+  static const stashId = 'stash';
 
   final String text;
 

@@ -357,11 +357,15 @@ class _Main {
       case 'mediaFile':
         return 'stored-file';
       case 'drafts':
-        return [for (final draft in await store.drafts()) draft.toJson()];
+        final listed = nextDrafts ?? store.drafts();
+        nextDrafts = null;
+        return [for (final draft in await listed) draft.toJson()];
       case 'putDraft':
-        await store.putDraft(
-          GaiaDraft.fromJson((params['draft']! as Map).cast<String, Object?>()),
+        final draft = GaiaDraft.fromJson(
+          (params['draft']! as Map).cast<String, Object?>(),
         );
+        await store.putDraft(draft);
+        await onPutDraft?.call(draft);
         return null;
       case 'ingestImage':
         final mediaId = 'draft-media-${media.length + 1}';
@@ -417,6 +421,12 @@ class _Main {
 
   /// Each `draftImageFile` waits on it while it's set: a download.
   Completer<void>? holdMedia;
+
+  /// Called after each `putDraft` is stored.
+  FutureOr<void> Function(GaiaDraft draft)? onPutDraft;
+
+  /// The next `drafts` answers with this in place of the store's.
+  Future<List<GaiaDraft>>? nextDrafts;
 
   Future<GaiaChat> chat() async => (await store.chats()).single;
 
@@ -1741,6 +1751,49 @@ void main() {
       await settle();
       await drafts.delete(recursive: true);
       await main.mediaDir.delete(recursive: true);
+    });
+
+    test(
+      'a stashed draft never comes back from a list read mid-save',
+      () async {
+        controller.draft.text = 'Aside';
+        await saved();
+        final putEmpty = Completer<void>();
+        main.onPutDraft = (draft) {
+          if (draft.id == GaiaDraft.stashId) {
+            // Read before the chat's emptied draft lands, answered after.
+            main.nextDrafts = main.store.drafts().then((list) async {
+              await putEmpty.future;
+              return list;
+            });
+            main.pipe.notify('drafts');
+          } else if (!putEmpty.isCompleted) {
+            putEmpty.complete();
+          }
+        };
+        final seen = <String>[];
+        controller.draft.addListener(() => seen.add(controller.draft.text));
+        controller.stashDraft();
+        await saved();
+        await saved();
+        expect(seen, isNot(contains('Aside')));
+        expect(controller.draft.text, isEmpty);
+      },
+    );
+
+    test("another device's save landing mid-save isn't passed over", () async {
+      controller.draft.text = 'Mine';
+      await saved();
+      main.onPutDraft = (draft) async {
+        main.onPutDraft = null;
+        // Synced in before this save is answered: its list is read and
+        // answered while the save is still on its way.
+        await fromElsewhere(GaiaDraft.newChatId, 'Theirs');
+      };
+      controller.draft.text = 'Mine again';
+      await saved();
+      await settle();
+      expect(controller.draft.text, 'Theirs');
     });
 
     test(
@@ -3144,6 +3197,73 @@ void main() {
         expect(controller.draft.text, isEmpty);
         expect(controller.draftImages, isEmpty);
         expect(controller.draftFiles, isEmpty);
+      },
+    );
+
+    test(
+      '/stash puts drafts aside and /stash-pop brings them into another chat',
+      () async {
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        final first = controller.currentChatId!;
+        await controller.attachImage(Uint8List.fromList([1]));
+        controller.draft.text = '${controller.draft.text}first';
+        controller.draftFiles.add(const GaiaFilePart(path: r'C:\a.txt'));
+
+        await controller.send('/stash');
+        expect(controller.draft.text, isEmpty);
+        expect(controller.draftImages, isEmpty);
+        expect(controller.draftFiles, isEmpty);
+
+        // Stashing again adds to it.
+        await controller.attachImage(Uint8List.fromList([2]));
+        controller.draft.text = '${controller.draft.text}second';
+        await controller.send('/stash');
+
+        controller.newChat();
+        await controller.attachImage(Uint8List.fromList([3]));
+        await controller.send('/stash-pop');
+        expect(
+          controller.draft.text,
+          '[image 1]\n\n[image 2] first\n\n[image 3] second',
+        );
+        expect(controller.draftImages.map((image) => image.label), [1, 2, 3]);
+        expect(controller.draftFiles.map((file) => file.path), [r'C:\a.txt']);
+
+        // Taken: a second pop finds nothing.
+        await controller.send('/stash-pop');
+        expect(controller.draftImages, hasLength(3));
+        await controller.selectChat(first);
+        expect(controller.draft.text, isEmpty);
+      },
+    );
+
+    test(
+      '/stash with only a quote stashes nothing, and the quote stays',
+      () async {
+        final at = DateTime.utc(2026, 10, 28);
+        controller.attachMessage(
+          GaiaMessage(
+            id: 'm0',
+            chatId: 'elsewhere',
+            seq: 1,
+            role: GaiaMessageRole.assistant,
+            parts: const [GaiaTextPart('Use a mutex.')],
+            status: GaiaMessageStatus.complete,
+            createdAt: at,
+            updatedAt: at,
+          ),
+        );
+        final toasts = <GaiaRunToast>[];
+        controller.toasts.listen(toasts.add);
+        controller.stashDraft();
+        await settle();
+        expect(toasts.single.title, 'Nothing to stash');
+        expect(controller.draftQuotes, hasLength(1));
+        controller.popStash();
+        await settle();
+        expect(toasts.last.title, 'Nothing stashed');
       },
     );
 

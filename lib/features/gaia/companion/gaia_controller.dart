@@ -23,6 +23,7 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_zoom.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -96,6 +97,7 @@ class GaiaController extends ChangeNotifier {
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
+    GaiaZoomLevel? zoom,
     GaiaCommandUses? commandUses,
     this._utility,
     Future<String> Function()? clipboard,
@@ -119,6 +121,7 @@ class GaiaController extends ChangeNotifier {
            },
        debug = debug ?? GaiaDebug(),
        sidebar = sidebar ?? GaiaSidebar(),
+       zoom = zoom ?? GaiaZoomLevel(),
        commandUses = commandUses ?? GaiaCommandUses();
 
   final GaiaPipe _pipe;
@@ -133,6 +136,9 @@ class GaiaController extends ChangeNotifier {
 
   /// The Gaia window's sidebar: open or not, and its width.
   final GaiaSidebar sidebar;
+
+  /// How far the chat is zoomed, with Ctrl+Plus and Ctrl+Minus.
+  final GaiaZoomLevel zoom;
 
   /// The palette's commands by when they were last used.
   final GaiaCommandUses commandUses;
@@ -776,6 +782,33 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// [moving] after [into], its images numbered on from [label], and a
+  /// file [into] already has not twice: `/new`, `/stash` and `/stash-pop`.
+  static _Draft _joinDrafts(_Draft into, _Draft moving, int label) {
+    final (text, images) = gaiaRelabelDraft(
+      moving.text.text,
+      moving.images,
+      label,
+    );
+    final joined = [
+      if (into.text.text.trim().isNotEmpty) into.text.text.trimRight(),
+      // The space it ends with stays: more is typed after it.
+      if (text.trim().isNotEmpty) text.trimLeft(),
+    ].join('\n\n');
+    return (
+      text: TextEditingValue(
+        text: joined,
+        selection: TextSelection.collapsed(offset: joined.length),
+      ),
+      images: [...into.images, ...images],
+      files: [
+        ...into.files,
+        for (final file in moving.files)
+          if (!into.files.any((held) => p.equals(held.path, file.path))) file,
+      ],
+    );
+  }
+
   /// The drafts are kept by the main instance and synced (§9.3). Each
   /// draft's content as last saved or loaded, by key, so a save sends only
   /// what changed; and its `updatedAt`, so a draft that comes back with it
@@ -785,6 +818,24 @@ class GaiaController extends ChangeNotifier {
 
   /// Until the kept drafts are in, nothing is saved over them.
   var _draftsLoaded = false;
+
+  /// Each draft's saves still on their way, by key, and the turn its last
+  /// one landed on: a list asked for before then may hold what it replaced.
+  final _draftsSaving = <String, int>{};
+  final _draftSavedOn = <String, int>{};
+  var _draftTurn = 0;
+
+  /// A list's draft passed over for this one's save: the list is asked for
+  /// again once the saves have landed, so another device's change in it,
+  /// whose notice has come and gone, isn't lost.
+  var _draftsRecheck = false;
+
+  void _recheckDrafts() {
+    if (!_draftsRecheck || _draftsSaving.isNotEmpty) return;
+    _draftsRecheck = false;
+    unawaited(_loadDrafts());
+  }
+
   Timer? _saveSoon;
 
   /// A kept draft's images still on their way to this device, by key: its
@@ -890,12 +941,19 @@ class GaiaController extends ChangeNotifier {
       final kept = _keptDraft(key, utcNow());
       _savedDrafts[key] = _contentOf(kept);
       _draftStamps[key] = kept.updatedAt;
+      _draftsSaving.update(key, (n) => n + 1, ifAbsent: () => 1);
       try {
         await _pipe.request('putDraft', {'draft': kept.toJson()});
       } on GaiaPipeException catch (error) {
         // Tried again with the next change.
         debugPrint('[gaia] draft not saved: $error');
         _savedDrafts.remove(key);
+      } finally {
+        if (_draftsSaving.update(key, (n) => n - 1) == 0) {
+          _draftsSaving.remove(key);
+        }
+        _draftSavedOn[key] = ++_draftTurn;
+        _recheckDrafts();
       }
     }
   }
@@ -914,11 +972,19 @@ class GaiaController extends ChangeNotifier {
   /// and is about to be saved over it.
   Future<void> _loadDraftsNow() async {
     try {
+      final asked = _draftTurn;
       final list = (await _pipe.request('drafts'))! as List;
       for (final json in list) {
         var kept = GaiaDraft.fromJson((json as Map).cast<String, Object?>());
         final key = kept.id;
         if (_draftStamps[key] == kept.updatedAt || _unsaved(key)) continue;
+        // Read before this one's save may have landed (as `/stash` saves
+        // two at once): that save's own notice brings it.
+        if (_draftsSaving.containsKey(key) ||
+            (_draftSavedOn[key] ?? 0) > asked) {
+          _draftsRecheck = true;
+          continue;
+        }
         if (kept.deletedAt != null) {
           // Its chat deleted elsewhere while in view: [_refresh] moves what's
           // here to a new chat.
@@ -934,6 +1000,7 @@ class GaiaController extends ChangeNotifier {
         // As it stands here, its caret placed: taking it isn't a change.
         _savedDrafts[key] = _contentOf(_keptDraft(key, kept.updatedAt));
       }
+      _recheckDrafts();
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] drafts not loaded: $error');
     } finally {
@@ -2596,7 +2663,7 @@ class GaiaController extends ChangeNotifier {
       return;
     }
     final moving = (
-      text: draft.text,
+      text: draft.value,
       images: [...draftImages],
       files: [...draftFiles],
     );
@@ -2607,27 +2674,88 @@ class GaiaController extends ChangeNotifier {
     newChat();
     // Its undo steps hold the text that just left, without its images.
     _draftHistories.remove(from);
-    final (text, images) = gaiaRelabelDraft(
-      moving.text,
-      moving.images,
-      _nextDraftLabel(),
-    );
-    final joined = [
-      if (draft.text.trim().isNotEmpty) draft.text.trimRight(),
-      // The space it ends with stays: more is typed after it.
-      if (text.trim().isNotEmpty) text.trimLeft(),
-    ].join('\n\n');
-    draft.value = TextEditingValue(
-      text: joined,
-      selection: TextSelection.collapsed(offset: joined.length),
-    );
+    final to = _keyOf(currentChatId);
+    _setDraftAt(to, _joinDrafts(_draftAt(to), moving, _nextDraftLabel()));
     draftUndo.reset();
-    draftImages.addAll(images);
-    for (final file in moving.files) {
-      if (draftFiles.any((held) => p.equals(held.path, file.path))) continue;
-      draftFiles.add(file);
+  }
+
+  /// `/stash`: the draft in view, images and files too, put aside after
+  /// what's already stashed, for [popStash] in any chat. Kept and synced
+  /// under [GaiaDraft.stashId] as any draft is. Not while any of its images
+  /// are still syncing, which a toast says.
+  void stashDraft() {
+    // Quotes aren't kept with a draft, so they stay in view.
+    if (!readyToSend() ||
+        draft.text.trim().isEmpty &&
+            draftImages.isEmpty &&
+            draftFiles.isEmpty) {
+      if (arrivingImages.isEmpty) {
+        _note('Nothing to stash', 'Type something first.');
+      }
+      return;
     }
+    const key = GaiaDraft.stashId;
+    _setDraftAt(
+      key,
+      _joinDrafts(
+        _draftAt(key),
+        _draftAt(_keyOf(currentChatId)),
+        _nextStashLabel(),
+      ),
+    );
+    // Emptied, not deleted: the images are the stash's now.
+    draftImages.clear();
+    draftFiles.clear();
+    draft.clear();
+    // Its undo steps hold the text that just left, without its images.
+    draftUndo.reset();
+    _note('Draft stashed', 'Bring it back in any chat with /stash-pop.');
     notifyListeners();
+  }
+
+  /// The label the next image stashed gets, on from the stash's own.
+  int _nextStashLabel() => [
+    1,
+    for (final image in _draftAt(GaiaDraft.stashId).images) image.label + 1,
+    for (final image in [
+      ...?_arriving[GaiaDraft.stashId],
+      ...?_unfetched[GaiaDraft.stashId],
+    ])
+      image.label + 1,
+  ].reduce(max);
+
+  /// `/stash-pop`: the stash after the draft in view, its images numbered
+  /// on from the chat's, and the stash emptied. Not while any of its images
+  /// are still syncing, which a toast says.
+  void popStash() {
+    const key = GaiaDraft.stashId;
+    if (_arriving[key]?.isNotEmpty ?? false) {
+      return _note(
+        'Images still syncing',
+        "The stash's images haven't arrived from your other device yet.",
+      );
+    }
+    final stashed = _drafts.remove(key);
+    // Ones that never came lose their tokens, which would name the chat's.
+    var stashedText = stashed?.text.text ?? '';
+    for (final lost in _unfetched.remove(key) ?? const []) {
+      stashedText = stashedText.replaceAll(gaiaImageToken(lost.label), '');
+    }
+    if (stashed == null) {
+      notifyListeners();
+      return _note('Nothing stashed', 'Put a draft aside with /stash first.');
+    }
+    final to = _keyOf(currentChatId);
+    _setDraftAt(
+      to,
+      _joinDrafts(_draftAt(to), (
+        text: TextEditingValue(text: stashedText),
+        images: stashed.images,
+        files: stashed.files,
+      ), _nextDraftLabel()),
+    );
+    // Undone, the text would go without its images.
+    draftUndo.reset();
   }
 
   Future<void> selectChat(String chatId) async {
@@ -3734,6 +3862,10 @@ class GaiaController extends ChangeNotifier {
         await popQueue(send: true);
       case GaiaBuiltin.drain:
         await toggleDrain();
+      case GaiaBuiltin.stash:
+        stashDraft();
+      case GaiaBuiltin.stashPop:
+        popStash();
       case GaiaBuiltin.thisControl:
         await attachThis();
       case GaiaBuiltin.btw:

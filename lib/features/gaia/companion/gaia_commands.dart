@@ -21,6 +21,11 @@ enum GaiaBuiltin {
   queuePop('queue-pop', "Load this chat's next queued prompt to review"),
   queuePopSend('queue-pop!', "Send this chat's next queued prompt now"),
   drain('drain', 'Send queued prompts one after another, on or off'),
+
+  /// One stash for every chat, kept and synced as drafts are: stashing
+  /// again adds to it.
+  stash('stash', 'Put the draft aside, to bring back in any chat'),
+  stashPop('stash-pop', 'Bring the stashed draft into this chat'),
   thisControl('this', 'Attach the control the cursor was on when Gaia opened'),
 
   /// Takes the rest of the draft: see [gaiaBtwText] (GAIA_BTW_HLD.md §3).
@@ -311,6 +316,13 @@ String? gaiaBtwText(String draft) {
 /// send with the control attached; null when it doesn't start that way.
 String? gaiaThisRest(String draft) {
   final match = RegExp(r'^/this\s+(\S[\s\S]*)$').firstMatch(draft.trim());
+  return match?.group(1)!.trim();
+}
+
+/// What's left of [draft] after a leading `/stash` and some text, to stash;
+/// null when it doesn't start that way.
+String? gaiaStashRest(String draft) {
+  final match = RegExp(r'^/stash\s+(\S[\s\S]*)$').firstMatch(draft.trim());
   return match?.group(1)!.trim();
 }
 

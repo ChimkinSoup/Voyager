@@ -155,6 +155,8 @@ void main() {
       'queue-pop',
       'queue-pop!',
       'drain',
+      'stash',
+      'stash-pop',
       'this',
       'btw',
       'usage',
@@ -172,6 +174,8 @@ void main() {
     ]);
     expect(filterGaiaPalette(items, 's').map((i) => i.name), [
       'stop',
+      'stash',
+      'stash-pop',
       'screen',
       'std',
       'swap',

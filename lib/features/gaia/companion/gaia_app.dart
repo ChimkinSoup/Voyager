@@ -67,6 +67,7 @@ import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
+import 'package:voyager/features/gaia/companion/gaia_zoom.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -167,6 +168,10 @@ class _GaiaAppState extends State<GaiaApp> {
       debugShowCheckedModeBanner: false,
       theme: _onGaiaSurface(Color(accent)),
       navigatorObservers: [_popups],
+      // Above the Navigator, so dialogs and menus zoom with the chat, and
+      // the keys work while one has focus.
+      builder: (context, child) =>
+          GaiaZoom(level: controller.zoom, child: child!),
       home: _RunToasts(
         controller: controller,
         child: ListenableBuilder(
@@ -4507,6 +4512,15 @@ class _ComposerState extends State<_Composer> {
         await Future<void>.delayed(Duration.zero);
       }
       if (!mounted) return;
+    }
+    // `/stash` with the draft after it: the same as picking it first.
+    if (gaiaStashRest(_text.text) case final rest?) {
+      final typed = _text.value;
+      _text.text = rest;
+      if (await _runBuiltin(GaiaBuiltin.stash)) _used(GaiaBuiltin.stash.name);
+      // Not stashed, as while its images sync: back as it was typed.
+      if (mounted && _text.text.isNotEmpty) _text.value = typed;
+      return;
     }
     // A built-in runs even mid-reply: /stop is for exactly then.
     if (gaiaBuiltinIn(_text.text) case final builtin?) {

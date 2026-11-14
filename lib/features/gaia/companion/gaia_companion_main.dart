@@ -20,9 +20,11 @@ import 'package:voyager/features/gaia/usage/sources/claude_oauth_usage.dart';
 import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
+import 'package:voyager/features/gaia/companion/gaia_no_ding.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
+import 'package:voyager/features/gaia/companion/gaia_zoom.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
@@ -37,7 +39,7 @@ import 'package:window_manager/window_manager.dart';
 /// companion alone, talking to a [GaiaDevPipe] instead of the main instance,
 /// so hot reload reaches Gaia's UI. See [_registerDevHotkeys].
 Future<void> gaiaCompanionMain({bool dev = false}) async {
-  WidgetsFlutterBinding.ensureInitialized();
+  GaiaNoDingBinding();
   // Before the keyboard workaround, as in the main instance. In debug the
   // inspector takes Flutter's errors off the console, so this is the only
   // record of them.
@@ -87,6 +89,10 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     file: File(p.join(root.path, 'gaia', 'sidebar.json')),
   );
   await sidebar.load();
+  final zoom = GaiaZoomLevel(
+    file: File(p.join(root.path, 'gaia', 'zoom.json')),
+  );
+  await zoom.load();
   final commandUses = GaiaCommandUses(
     file: File(p.join(root.path, 'gaia', 'commands.json')),
   );
@@ -100,6 +106,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   final controller = GaiaController(
     debug: debug,
     sidebar: sidebar,
+    zoom: zoom,
     commandUses: commandUses,
     pipe: pipe,
     window: window,
