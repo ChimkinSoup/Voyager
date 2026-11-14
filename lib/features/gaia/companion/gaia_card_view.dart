@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_proposal_card.dart';
 import 'package:voyager/features/gaia/host/gaia_flash.dart';
@@ -355,48 +356,61 @@ class _ControlCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            for (final (i, step) in steps.indexed)
-              MouseRegion(
-                onEnter: markerOf(i) == null
-                    ? null
-                    : (_) => gaiaFlash(markerOf(i)!, argb),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 16,
-                        margin: const EdgeInsets.only(left: 4, right: 14),
-                        alignment: Alignment.topCenter,
-                        child: i < ran
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 1),
-                                child: Icon(
-                                  Icons.check,
-                                  size: 14,
-                                  color: accent,
-                                ),
-                              )
-                            : Text(
-                                '${i + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+            GaiaSelectableLines(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final (i, step) in steps.indexed)
+                    MouseRegion(
+                      onEnter: markerOf(i) == null
+                          ? null
+                          : (_) => gaiaFlash(markerOf(i)!, argb),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 16,
+                              margin: const EdgeInsets.only(left: 4, right: 14),
+                              alignment: Alignment.topCenter,
+                              child: i < ran
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(top: 1),
+                                      child: Icon(
+                                        Icons.check,
+                                        size: 14,
+                                        color: accent,
+                                      ),
+                                    )
+                                  // Not copied with the steps.
+                                  : SelectionContainer.disabled(
+                                      child: Text(
+                                        '${i + 1}',
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '${step['label'] ?? ''}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontFamily: AppFonts.monoFamily,
                                 ),
                               ),
-                      ),
-                      Expanded(
-                        child: SelectableText(
-                          '${step['label'] ?? ''}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: AppFonts.monoFamily,
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                ],
               ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -456,6 +470,14 @@ class _ControlCard extends StatelessWidget {
 /// Whether control [card] is an Auto turn's activity row
 /// (GAIA_AUTONOMY_HLD.md §7) rather than a step list.
 bool gaiaIsActivity(GaiaCardPart card) => card.input['activity'] == true;
+
+/// Whether [card] is an activity card that still lists every action the turn
+/// ran: past its cap, it drops the first ones, which only their chips show.
+bool gaiaListsEveryAction(GaiaCardPart card) {
+  if (!gaiaIsActivity(card)) return false;
+  final steps = (card.input['steps'] as List? ?? const []).length;
+  return ((card.input['total'] as num?)?.toInt() ?? steps) <= steps;
+}
 
 /// What an Auto turn ran with no cards (§7): "12 actions in Gmail", opening to
 /// each one, newest last.
@@ -528,30 +550,34 @@ class _ActivityCardState extends State<_ActivityCard> {
           if (_open)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (total > steps.length)
-                    Text(
-                      'The first ${total - steps.length} are not kept.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  for (final label in steps)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: SelectableText(
-                        label,
+              child: GaiaSelectableLines(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (total > steps.length)
+                      Text(
+                        'The first ${total - steps.length} are not kept.',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: AppFonts.monoFamily,
-                          color: label.startsWith('Stopped: ')
-                              ? kGaiaStatusRose
-                              : null,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ),
-                ],
+                    for (final label in steps)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          label,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: AppFonts.monoFamily,
+                            color:
+                                label.startsWith('Stopped: ') ||
+                                    label.startsWith('Failed: ')
+                                ? kGaiaStatusRose
+                                : null,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
         ],

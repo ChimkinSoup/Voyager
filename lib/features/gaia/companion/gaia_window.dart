@@ -211,15 +211,20 @@ class GaiaWindow {
     _applyCapturable();
     // SetWindowPos doesn't bring a window out of minimised or maximised; a
     // window minimised from maximised restores to maximised first.
-    // SetWindowPlacement does, so a placement skips this.
+    // SetWindowPlacement does, so a placement skips this. Nor out of snapped:
+    // a floater left snapped goes back to the size before the snap on the
+    // user's first drag of it.
     for (
       var i = 0;
       placement == null &&
           i < 2 &&
-          (IsIconic(hwnd) != 0 || IsZoomed(hwnd) != 0);
+          (IsIconic(hwnd) != 0 ||
+              IsZoomed(hwnd) != 0 ||
+              _isWindowArranged(hwnd) != 0);
       i++
     ) {
-      ShowWindow(hwnd, SW_RESTORE);
+      // SW_RESTORE would activate it.
+      ShowWindow(hwnd, focusless ? SW_SHOWNOACTIVATE : SW_RESTORE);
     }
     // The shell only notices a tool-window style change on a window that is
     // shown again after it. A floater is layered, at full opacity, so that the
@@ -799,3 +804,17 @@ final _flashWindowEx = DynamicLibrary.open('user32.dll')
       Int32 Function(Pointer<_FlashInfo>),
       int Function(Pointer<_FlashInfo>)
     >('FlashWindowEx');
+
+/// Whether the window is snapped (Windows 10 1903 and later); never, on a
+/// Windows without it.
+final int Function(int) _isWindowArranged = () {
+  try {
+    return DynamicLibrary.open(
+      'user32.dll',
+    ).lookupFunction<Int32 Function(IntPtr), int Function(int)>(
+      'IsWindowArranged',
+    );
+  } on ArgumentError {
+    return (int _) => 0;
+  }
+}();

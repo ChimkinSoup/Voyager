@@ -493,10 +493,22 @@ GaiaAgentEvent? gaiaEventOf(ClaudeEvent event) => switch (event) {
     id: id,
     block: block,
   ),
-  ClaudeToolInputs(:final inputs) => GaiaToolDetails({
-    for (final MapEntry(key: id, value: (:name, :input)) in inputs.entries)
-      id: ?gaiaToolDetail(input, _detailKeys[name] ?? const []),
-  }),
+  ClaudeToolInputs(:final inputs) => GaiaToolDetails(
+    {
+      for (final MapEntry(key: id, value: (:name, :input)) in inputs.entries)
+        id: ?gaiaToolDetail(input, _detailKeys[name] ?? const []),
+    },
+    actions: {
+      for (final MapEntry(key: id, value: (:name, :input)) in inputs.entries)
+        if (name.startsWith(_gaiaToolPrefix) &&
+            input is Map &&
+            isGaiaOsControl(
+              name.substring(_gaiaToolPrefix.length),
+              input.cast<String, Object?>(),
+            ))
+          id,
+    },
+  ),
   ClaudeToolErrors(:final errors) => GaiaToolFailures(errors),
   ClaudeRateLimit(:final usage) => GaiaUsageUpdate(usage),
   ClaudeInit() ||

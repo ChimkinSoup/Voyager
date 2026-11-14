@@ -177,7 +177,24 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
   String? _activityApp;
   static const _maxActivity = 200;
 
+  /// Actions that failed before any card came up, which the card lists first
+  /// once it does: their chips leave them out then.
+  final _failedBefore = <String>[];
+
+  /// An action that failed before it ran: on the card, the only place a reply
+  /// with one lists its actions (§7).
+  void _logFailed(String tool, Object error) {
+    final label = 'Failed: $tool: $error';
+    if (_activityId == null) {
+      _failedBefore.add(label);
+    } else {
+      _logActivity([label]);
+    }
+  }
+
   void _logActivity(Iterable<String> labels, {String? window, String? app}) {
+    labels = [..._failedBefore, ...labels];
+    _failedBefore.clear();
     for (var label in labels) {
       // The stop can come from the session and from the step it ended:
       // one row, after whatever ran. The step's may say more, as a drag's
@@ -415,6 +432,7 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     try {
       plan = await control.plan(id, tool, arguments);
     } catch (error) {
+      _logFailed(tool, error);
       return GaiaToolResult(text: '$error', isError: true);
     }
     // In Auto the main instance runs it with no card (GAIA_AUTONOMY_HLD.md §5).

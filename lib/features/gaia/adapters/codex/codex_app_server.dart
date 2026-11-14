@@ -560,11 +560,19 @@ class CodexAppServerClient {
         if (turn != null && !_notTools.contains(type)) {
           if (item['id'] case final String id) {
             turn.started.add(id);
+            final name = _toolName(type, item, line);
             turn.onEvent(
               GaiaToolUse(
-                _toolName(type, item, line),
+                name,
                 id: id,
                 detail: _toolDetail(type, item),
+                action:
+                    type == 'dynamicToolCall' &&
+                    item['arguments'] is Map &&
+                    isGaiaOsControl(
+                      name,
+                      (item['arguments']! as Map).cast<String, Object?>(),
+                    ),
               ),
             );
           }

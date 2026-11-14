@@ -2177,6 +2177,7 @@ class GaiaController extends ChangeNotifier {
           onHotkey(
             params['key']! as String,
             pressed: params['pressed'] == true,
+            controlling: params['controlling'] == true,
           ),
         );
       case 'split':
@@ -2428,12 +2429,30 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// The hotkey table in §15.1. [pressed] is the hotkey itself, not the
-  /// tray or a button opening the window.
-  Future<void> onHotkey(String key, {bool pressed = false}) async {
+  /// tray or a button opening the window. [controlling] while an Auto turn
+  /// holds the screen.
+  Future<void> onHotkey(
+    String key, {
+    bool pressed = false,
+    bool controlling = false,
+  }) async {
     // Mid-crop, any of them cancels it.
     if (cropping != null) return finishCrop(null);
     _dropPickUp();
     final shown = _window.shown;
+    // Mid-turn, a floater's hotkey hides it whether in front or not, for the
+    // user to watch Gaia work, and brings it back without the focus, which
+    // would pause the turn (§5.2).
+    final floater = switch (key) {
+      'small' => GaiaMode.small,
+      'large' => GaiaMode.large,
+      _ => null,
+    };
+    if (controlling && floater != null) {
+      if (shown == floater) return dismiss();
+      await _openWaitingChat();
+      return _show(floater, activate: false);
+    }
     // Pressed again, each closes, but only when in front: up without the
     // focus, as a floater raised for a card is, or behind another app, it's
     // brought to the front instead. Before going to a waiting chat, so

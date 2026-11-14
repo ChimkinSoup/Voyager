@@ -62,7 +62,9 @@ class GaiaTextDelta extends GaiaAgentEvent {
 /// The agent called a tool. [detail] is what it was called with, and
 /// [failure] why it failed, when those are known already; otherwise a
 /// [GaiaToolDetails] or [GaiaToolFailures] naming [id] brings them later.
-/// [block] is as [GaiaTextStart.block].
+/// [block] is as [GaiaTextStart.block]. [action] is known already to be an
+/// `os_*` action, not a read, by what it was called with: nothing of it is
+/// kept.
 class GaiaToolUse extends GaiaAgentEvent {
   const GaiaToolUse(
     this.name, {
@@ -70,6 +72,7 @@ class GaiaToolUse extends GaiaAgentEvent {
     this.detail,
     this.failure,
     this.block,
+    this.action = false,
   });
 
   final String name;
@@ -77,6 +80,7 @@ class GaiaToolUse extends GaiaAgentEvent {
   final int? block;
   final String? detail;
   final String? failure;
+  final bool action;
 }
 
 /// Tools already reported by a [GaiaToolUse] that failed, by their ids, with
@@ -106,11 +110,14 @@ String gaiaToolFailure(Object? text, [String orElse = 'Failed']) {
 }
 
 /// What tools already reported by a [GaiaToolUse] were called with, by their
-/// ids, once their input has come in whole.
+/// ids, once their input has come in whole. [actions] are the ids of those
+/// that turned out `os_*` actions, not reads, by that input: nothing of them
+/// is kept, as an `os_clipboard` write's isn't.
 class GaiaToolDetails extends GaiaAgentEvent {
-  const GaiaToolDetails(this.details);
+  const GaiaToolDetails(this.details, {this.actions = const {}});
 
   final Map<String, String> details;
+  final Set<String> actions;
 }
 
 /// At most this many characters of a tool call's detail are kept: it's
@@ -427,6 +434,7 @@ class GaiaTurnBuilder {
         :final detail,
         :final failure,
         :final block,
+        :final action,
       ):
         _mark(block);
         if (_parts.lastOrNull is! GaiaActivityPart) {
@@ -438,14 +446,24 @@ class GaiaTurnBuilder {
           name,
           detail: detail,
           failure: failure,
-          id: kGaiaKeptResultTools.contains(name) ? id : null,
+          id: kGaiaKeptResultTools.contains(name) && !action ? id : null,
         );
-      case GaiaToolDetails(:final details):
-        return _update(
+      case GaiaToolDetails(:final details, :final actions):
+        var unkept = false;
+        for (final id in actions) {
+          final (index, call) = _calls[id] ?? (-1, -1);
+          if (index < 0) continue;
+          final part = _parts[index] as GaiaActivityPart;
+          if (part.idAt(call) == null) continue;
+          _parts[index] = part.withoutId(call);
+          unkept = true;
+        }
+        final detailed = _update(
           details,
           (part, call) => part.detailAt(call),
           (part, call, detail) => part.withCall(call, detail: detail),
         );
+        return detailed || unkept;
       case GaiaToolFailures(:final failures):
         return _update(
           failures,

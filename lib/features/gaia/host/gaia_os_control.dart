@@ -3173,6 +3173,23 @@ class GaiaKeyChord {
   }
 }
 
+/// Tells the runner's count of the user's presses (gaia_user_input.cpp) the
+/// global hotkeys Gaia holds, each [GaiaCombo.win32]: Windows keeps them from
+/// the app in front, so pressing one isn't the user taking it over.
+void gaiaSetOwnHotkeys(List<int> hotkeys) {
+  final set = _Win32InputBackend._setOwnHotkeys;
+  if (set == null) return;
+  final codes = calloc<Uint32>(hotkeys.length + 1);
+  try {
+    for (final (i, hotkey) in hotkeys.indexed) {
+      codes[i] = hotkey;
+    }
+    set(codes, hotkeys.length);
+  } finally {
+    free(codes);
+  }
+}
+
 class _Win32InputBackend implements GaiaInputBackend {
   @override
   GaiaForegroundWindow? target(int gaiaPid) => gaiaOsTarget(gaiaPid);
@@ -3360,6 +3377,13 @@ class _Win32InputBackend implements GaiaInputBackend {
     (runner) => runner.lookupFunction<Uint32 Function(), int Function()>(
       'GaiaUserSwitchAge',
     ),
+  );
+  static final _setOwnHotkeys = _runnerExport(
+    (runner) =>
+        runner.lookupFunction<
+          Void Function(Pointer<Uint32>, Int32),
+          void Function(Pointer<Uint32>, int)
+        >('GaiaSetOwnHotkeys'),
   );
   var _counting = false;
 

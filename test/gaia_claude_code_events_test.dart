@@ -5,6 +5,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// Contract tests for the Claude Code adapter (GAIA_HLD.md §5.1): every
 /// fixture is real `stream-json` output recorded from the CLI version named
@@ -274,6 +275,27 @@ void main() {
     );
   });
 
+  test("Gaia's os_* calls that their input makes actions are named", () {
+    expect(
+      (gaiaEventOf(
+                ClaudeToolInputs({
+                  'w': (
+                    name: 'mcp__${kGaiaMcpServer}__os_clipboard',
+                    input: {'action': 'write', 'text': 'x'},
+                  ),
+                  'r': (
+                    name: 'mcp__${kGaiaMcpServer}__os_clipboard',
+                    input: {'action': 'read'},
+                  ),
+                  'b': (name: 'Bash', input: {'command': 'ls'}),
+                }),
+              )!
+              as GaiaToolDetails)
+          .actions,
+      {'w'},
+    );
+  });
+
   test('each tool shows the input that says what it did', () {
     String? detail(String name, Map<String, Object?> input) =>
         (gaiaEventOf(ClaudeToolInputs({'t': (name: name, input: input)}))!
@@ -393,10 +415,7 @@ void main() {
         claudeCommandOutput('\n  Plan   12%\n  Week    3%\n\n', null),
         '```\n  Plan   12%\n  Week    3%\n```',
       );
-      expect(
-        claudeCommandOutput('a ```` b', null),
-        '`````\na ```` b\n`````',
-      );
+      expect(claudeCommandOutput('a ```` b', null), '`````\na ```` b\n`````');
     });
 
     test('/compact shows how far the session shrank', () {

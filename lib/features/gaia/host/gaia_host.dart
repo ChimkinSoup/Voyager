@@ -442,6 +442,9 @@ class GaiaHost {
         debugPrint('[gaia] hotkey $combo not registered: $error');
       }
     }
+    gaiaSetOwnHotkeys([
+      for (final combo in _registered.values) parseGaiaCombo(combo)!.win32,
+    ]);
   }
 
   /// Lets the companion go: it exits once the pipe closes.
@@ -571,7 +574,13 @@ class GaiaHost {
           GaiaHotkey.large ||
           GaiaHotkey.window ||
           GaiaHotkey.fullScreen:
-        _sendOrLaunch('hotkey', {'key': hotkey.name, 'pressed': pressed});
+        _sendOrLaunch('hotkey', {
+          'key': hotkey.name,
+          'pressed': pressed,
+          if (_osControl.sessionChat != null &&
+              _osControl.sessionStopped == null)
+            'controlling': true,
+        });
       case GaiaHotkey.abort:
         break;
     }

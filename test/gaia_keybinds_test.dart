@@ -72,6 +72,17 @@ void main() {
     expect('${parseGaiaCombo('Alt+7')}', 'Alt+7');
   });
 
+  test("a combo as RegisterHotKey's MAKELONG(vk, mods)", () {
+    expect(parseGaiaCombo('Ctrl+Alt+Space')!.win32, 0x30020);
+    expect(parseGaiaCombo('Ctrl+Alt+Shift+Space')!.win32, 0x70020);
+    expect(parseGaiaCombo('Ctrl+Alt+Backspace')!.win32, 0x30008);
+    expect(parseGaiaCombo('Ctrl+Alt+Enter')!.win32, 0x3000D);
+    expect(parseGaiaCombo('Ctrl+Alt+S')!.win32, 0x30053);
+    expect(parseGaiaCombo('Win+F5')!.win32, 0x80074);
+    expect(parseGaiaCombo('Alt+7')!.win32, 0x10037);
+    expect(parseGaiaCombo('Ctrl+F')!.win32, 0x20046);
+  });
+
   test('unbound or unreadable is null', () {
     expect(parseGaiaCombo(''), isNull);
     expect(parseGaiaCombo('Ctrl+'), isNull);

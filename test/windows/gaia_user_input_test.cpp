@@ -43,6 +43,22 @@ int main() {
          "an injected click doesn't");
 
   {
+    const std::vector<DWORD> hotkeys = {
+        MAKELONG(VK_SPACE, MOD_CONTROL | MOD_ALT)};
+    Expect(GaiaKeyCounts('A', 0, hotkeys), "typing counts");
+    Expect(GaiaKeyCounts('C', MOD_CONTROL, hotkeys), "Ctrl+C counts");
+    Expect(GaiaKeyCounts(VK_SPACE, MOD_CONTROL, hotkeys),
+           "a near miss of a hotkey counts");
+    Expect(!GaiaKeyCounts(VK_SPACE, MOD_CONTROL | MOD_ALT, hotkeys),
+           "Gaia's own hotkey doesn't");
+    Expect(!GaiaKeyCounts(VK_LCONTROL, 0, hotkeys) &&
+               !GaiaKeyCounts(VK_LMENU, MOD_CONTROL, hotkeys) &&
+               !GaiaKeyCounts(VK_RSHIFT, 0, hotkeys) &&
+               !GaiaKeyCounts(VK_LWIN, 0, hotkeys),
+           "a modifier alone doesn't");
+  }
+
+  {
     GaiaSwitchKeys keys;
     Expect(!GaiaEndsSwitch(keys, WM_SYSKEYDOWN, VK_LMENU, LLKHF_ALTDOWN),
            "Alt down isn't a switch");
@@ -69,6 +85,38 @@ int main() {
                    LLKHF_ALTDOWN | LLKHF_INJECTED);
     Expect(!GaiaEndsSwitch(injected, WM_KEYUP, VK_LMENU, 0),
            "an injected Alt+Tab isn't the user's");
+  }
+
+  {
+    GaiaModifierTap tap;
+    Expect(!GaiaEndsModifierTap(tap, WM_SYSKEYDOWN, VK_LMENU, 0) &&
+               !GaiaEndsModifierTap(tap, WM_SYSKEYDOWN, VK_LMENU, 0),
+           "Alt down, and repeating, isn't yet");
+    Expect(GaiaEndsModifierTap(tap, WM_KEYUP, VK_LMENU, 0),
+           "Alt let go alone is");
+    Expect(!GaiaEndsModifierTap(tap, WM_KEYDOWN, VK_LCONTROL, 0) &&
+               !GaiaEndsModifierTap(tap, WM_SYSKEYDOWN, VK_LMENU, 0) &&
+               !GaiaEndsModifierTap(tap, WM_SYSKEYDOWN, VK_SPACE, 0) &&
+               !GaiaEndsModifierTap(tap, WM_SYSKEYUP, VK_SPACE, 0) &&
+               !GaiaEndsModifierTap(tap, WM_SYSKEYUP, VK_LMENU, 0) &&
+               !GaiaEndsModifierTap(tap, WM_KEYUP, VK_LCONTROL, 0),
+           "a hotkey's modifiers aren't");
+    Expect(!GaiaEndsModifierTap(tap, WM_KEYDOWN, VK_LCONTROL, 0) &&
+               !GaiaEndsModifierTap(tap, WM_KEYDOWN, 'C', 0) &&
+               !GaiaEndsModifierTap(tap, WM_KEYUP, 'C', 0) &&
+               !GaiaEndsModifierTap(tap, WM_KEYUP, VK_LCONTROL, 0),
+           "Ctrl+C's Ctrl isn't");
+    Expect(GaiaEndsModifierTap(tap, WM_KEYDOWN, VK_LWIN, 0) == false &&
+               GaiaEndsModifierTap(tap, WM_KEYUP, VK_LWIN, 0),
+           "after it, Win alone is");
+    Expect(!GaiaEndsModifierTap(tap, WM_KEYDOWN, 'A', 0) &&
+               !GaiaEndsModifierTap(tap, WM_KEYUP, 'A', 0),
+           "typing isn't");
+    GaiaModifierTap injected;
+    GaiaEndsModifierTap(injected, WM_SYSKEYDOWN, VK_LMENU, LLKHF_INJECTED);
+    Expect(!GaiaEndsModifierTap(injected, WM_SYSKEYUP, VK_LMENU,
+                                LLKHF_INJECTED | LLKHF_UP),
+           "an injected Alt isn't the user's");
   }
 
   for (int round = 0; round < 2; ++round) {

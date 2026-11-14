@@ -1249,6 +1249,14 @@ class GaiaActivityPart extends GaiaPart {
     );
   }
 
+  /// With call [index] keeping no result: an action, not a read.
+  GaiaActivityPart withoutId(int index) => GaiaActivityPart(
+    tools,
+    details: details,
+    failures: failures,
+    ids: [for (var i = 0; i < ids.length; i++) i == index ? null : idAt(i)],
+  );
+
   /// With [tool] called after the others, as [id] for one in [ids].
   GaiaActivityPart adding(
     String tool, {

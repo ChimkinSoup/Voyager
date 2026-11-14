@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <future>
+#include <mutex>
 #include <thread>
 #include <utility>
 
@@ -13,13 +14,54 @@ std::atomic<DWORD> g_switch_tick{0};
 std::atomic<bool> g_switched{false};
 // Only the hook thread touches it.
 GaiaSwitchKeys g_switch_keys;
+// GaiaSetOwnHotkeys's, read on the hook thread.
+std::mutex g_hotkeys_lock;
+std::vector<DWORD> g_hotkeys;
 std::thread g_thread;
 DWORD g_thread_id = 0;
+
+// Only the hook thread touches it.
+GaiaModifierTap g_modifier_tap;
+
+bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+bool IsModifier(DWORD vk) {
+  switch (vk) {
+    case VK_SHIFT:
+    case VK_LSHIFT:
+    case VK_RSHIFT:
+    case VK_CONTROL:
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+    case VK_MENU:
+    case VK_LMENU:
+    case VK_RMENU:
+    case VK_LWIN:
+    case VK_RWIN:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// GaiaKeyCounts with the modifiers held now.
+bool CountsHeld(DWORD vk) {
+  UINT mods = 0;
+  if (Down(VK_MENU)) mods |= MOD_ALT;
+  if (Down(VK_CONTROL)) mods |= MOD_CONTROL;
+  if (Down(VK_SHIFT)) mods |= MOD_SHIFT;
+  if (Down(VK_LWIN) || Down(VK_RWIN)) mods |= MOD_WIN;
+  std::lock_guard<std::mutex> lock(g_hotkeys_lock);
+  return GaiaKeyCounts(vk, mods, g_hotkeys);
+}
 
 LRESULT CALLBACK KeyboardProc(int code, WPARAM wparam, LPARAM lparam) {
   if (code == HC_ACTION) {
     const auto* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(lparam);
-    if (GaiaIsUserPress(true, wparam, key->flags)) {
+    if ((GaiaIsUserPress(true, wparam, key->flags) &&
+         CountsHeld(key->vkCode)) ||
+        GaiaEndsModifierTap(g_modifier_tap, wparam, key->vkCode,
+                            key->flags)) {
       g_count.fetch_add(1, std::memory_order_relaxed);
     }
     // Win+L's Win key goes up on the lock screen, where no hook sees it.
@@ -80,6 +122,15 @@ bool GaiaIsUserPress(bool keyboard, WPARAM message, DWORD flags) {
   }
 }
 
+bool GaiaKeyCounts(DWORD vk, UINT mods, const std::vector<DWORD>& hotkeys) {
+  if (IsModifier(vk)) return false;
+  const DWORD combo = MAKELONG(vk, mods);
+  for (const DWORD hotkey : hotkeys) {
+    if (hotkey == combo) return false;
+  }
+  return true;
+}
+
 bool GaiaEndsSwitch(GaiaSwitchKeys& state, WPARAM message, DWORD vk,
                     DWORD flags) {
   if (flags & LLKHF_INJECTED) return false;
@@ -107,6 +158,26 @@ bool GaiaEndsSwitch(GaiaSwitchKeys& state, WPARAM message, DWORD vk,
   }
 }
 
+bool GaiaEndsModifierTap(GaiaModifierTap& state, WPARAM message, DWORD vk,
+                         DWORD flags) {
+  if (flags & LLKHF_INJECTED) return false;
+  if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) {
+    if (state.vk == 0) {
+      if (IsModifier(vk)) state = {vk, false};
+    } else if (vk != state.vk) {
+      // Held, it repeats; any other key makes it a combination.
+      state.other = true;
+    }
+    return false;
+  }
+  if ((message != WM_KEYUP && message != WM_SYSKEYUP) || vk != state.vk) {
+    return false;
+  }
+  const bool tap = !state.other;
+  state = {};
+  return tap;
+}
+
 int GaiaWatchUserInput(int on) {
   if (g_thread.joinable()) {
     PostThreadMessage(g_thread_id, WM_QUIT, 0, 0);
@@ -114,6 +185,7 @@ int GaiaWatchUserInput(int on) {
   }
   if (!on) return 1;
   g_switch_keys = {};
+  g_modifier_tap = {};
   g_switched.store(false, std::memory_order_relaxed);
   std::promise<bool> ready;
   auto hooked = ready.get_future();
@@ -125,6 +197,11 @@ int GaiaWatchUserInput(int on) {
 
 unsigned int GaiaUserInputCount() {
   return g_count.load(std::memory_order_relaxed);
+}
+
+void GaiaSetOwnHotkeys(const unsigned int* hotkeys, int count) {
+  std::lock_guard<std::mutex> lock(g_hotkeys_lock);
+  g_hotkeys.assign(hotkeys, hotkeys + count);
 }
 
 unsigned int GaiaUserSwitchAge() {

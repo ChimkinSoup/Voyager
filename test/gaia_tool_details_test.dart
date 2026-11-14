@@ -166,4 +166,21 @@ void main() {
     expect(part.detailAt(0), 'short');
     expect(part.withCall(fit, detail: big).detailAt(fit), big);
   });
+
+  test("an os_clipboard write keeps no result, as its chip isn't a read's", () {
+    final builder = GaiaTurnBuilder()
+      ..apply(const GaiaToolUse('os_clipboard', id: 'read'))
+      ..apply(const GaiaToolUse('os_clipboard', id: 'write'))
+      ..apply(const GaiaToolUse('os_clipboard', id: 'codex', action: true));
+    expect(
+      builder.apply(const GaiaToolDetails({}, actions: {'write'})),
+      isTrue,
+    );
+    expect(
+      builder.apply(const GaiaToolDetails({}, actions: {'write'})),
+      isFalse,
+    );
+    final part = builder.finished.single as GaiaActivityPart;
+    expect([for (var i = 0; i < 3; i++) part.idAt(i)], ['read', null, null]);
+  });
 }

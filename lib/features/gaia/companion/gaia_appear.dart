@@ -123,7 +123,13 @@ class _GaiaAppearState extends State<GaiaAppear>
     }
 
     context.visitChildElements(visit);
-    return _Gathering(box.size, recorder.endRecording());
+    // Particles only where the window shows it: a long prompt's bubble runs
+    // far past the window, and its unseen pixels would cost every frame.
+    final visible =
+        (box.globalToLocal(Offset.zero) & MediaQuery.sizeOf(context)).intersect(
+          Offset.zero & box.size,
+        );
+    return _Gathering(box.size, recorder.endRecording(), visible);
   }
 
   void _tick(Duration elapsed) {
@@ -214,9 +220,13 @@ class _GaiaAppearPartState extends State<GaiaAppearPart> {
 /// for a lifetime like a vanished particle's, growing as it comes. Kept in
 /// flat typed arrays and drawn in a single [Canvas.drawRawAtlas] call.
 class _Gathering extends ChangeNotifier {
-  _Gathering(this.size, this.picture);
+  _Gathering(this.size, this.picture, this.visible);
 
   final Size size;
+
+  /// The part of [size] on screen when captured, the only part sampled.
+  /// The picture still shows all of it behind the sweep.
+  final Rect visible;
 
   /// The parts as captured, drawn left of the sweep once it's passed.
   final ui.Picture picture;
@@ -265,11 +275,21 @@ class _Gathering extends ChangeNotifier {
 
   bool get inked => _count > 0;
 
-  /// Reads the picture back as pixels and lines them up to land.
+  /// Reads the [visible] part of the picture back as pixels and lines them
+  /// up to land.
   Future<void> sample() async {
-    final width = size.width.ceil();
-    final height = size.height.ceil();
-    final image = picture.toImageSync(width, height);
+    final fromX = visible.left.floor();
+    final fromY = visible.top.floor();
+    final width = visible.right.ceil() - fromX;
+    final height = visible.bottom.ceil() - fromY;
+    if (width <= 0 || height <= 0) return;
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder)
+      ..translate(-fromX.toDouble(), -fromY.toDouble())
+      ..drawPicture(picture);
+    final shifted = recorder.endRecording();
+    final image = shifted.toImageSync(width, height);
+    shifted.dispose();
     final data = await image.toByteData(
       format: ui.ImageByteFormat.rawStraightRgba,
     );
@@ -290,8 +310,8 @@ class _Gathering extends ChangeNotifier {
         final i = (y * width + x) * 4;
         final alpha = bytes[i + 3];
         if (alpha < _minAlpha) continue;
-        _sourceX[_count] = x.toDouble();
-        _sourceY[_count] = y.toDouble();
+        _sourceX[_count] = (fromX + x).toDouble();
+        _sourceY[_count] = (fromY + y).toDouble();
         _sourceAlpha[_count] = alpha / 255;
         _sourceRgb[_count] = bytes[i] << 16 | bytes[i + 1] << 8 | bytes[i + 2];
         _count++;

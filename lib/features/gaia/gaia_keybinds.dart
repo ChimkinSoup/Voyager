@@ -87,13 +87,35 @@ class GaiaCombo {
     scope: HotKeyScope.system,
   );
 
+  /// As `RegisterHotKey` takes it, `MAKELONG(vk, mods)`.
+  int get win32 {
+    final name = _keyName;
+    final vk = switch (name) {
+      'Space' => 0x20,
+      'Enter' => 0x0D,
+      'Backspace' => 0x08,
+      _ when name.length > 1 => 0x6F + int.parse(name.substring(1)),
+      // A letter or digit is its own code.
+      _ => name.codeUnitAt(0),
+    };
+    final mods =
+        (alt ? 0x1 : 0) |
+        (control ? 0x2 : 0) |
+        (shift ? 0x4 : 0) |
+        (meta ? 0x8 : 0);
+    return mods << 16 | vk;
+  }
+
+  String get _keyName =>
+      _keys.entries.firstWhere((entry) => entry.value.$1 == logical).key;
+
   @override
   String toString() => [
     if (control) 'Ctrl',
     if (alt) 'Alt',
     if (shift) 'Shift',
     if (meta) 'Win',
-    _keys.entries.firstWhere((entry) => entry.value.$1 == logical).key,
+    _keyName,
   ].join('+');
 }
 

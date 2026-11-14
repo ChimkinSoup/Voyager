@@ -670,6 +670,31 @@ void main() {
           expect(activity.last.input['total'], 2);
         });
 
+        test('an action that fails before it runs gets a row, which waits '
+            'for the card when there is none yet', () async {
+          final turn = tools();
+          planError = GaiaToolException('There is no window to act on.');
+          await turn.call('os_click', const {});
+          expect(activity, isEmpty);
+          planError = null;
+          planAuto = true;
+          runAnswer = (_) => {'ran': 1, 'steps': steps};
+          await turn.call('os_steps', const {});
+          planError = GaiaToolException('Gaia can\'t tell what app that is.');
+          await turn.call('os_key', const {});
+          expect(
+            [
+              for (final step in activity.last.input['steps']! as List)
+                step['label'],
+            ],
+            [
+              'Failed: os_click: There is no window to act on.',
+              'Press A',
+              "Failed: os_key: Gaia can't tell what app that is.",
+            ],
+          );
+        });
+
         test('os_clipboard: a read is a screen read, a write an action that '
             "leaves the card's window as it was (GAIA_AUTONOMY_HLD.md "
             '§8.5)', () async {

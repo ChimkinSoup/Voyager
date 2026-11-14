@@ -902,10 +902,9 @@ Future<Map<String, Object?>?> gaiaMcpAnswer(
       } else if (tools == null) {
         answer = GaiaToolResult(text: 'No Gaia run is active.', isError: true);
       } else {
-        answer = await tools.call(
-          name,
-          (params['arguments'] as Map?)?.cast<String, Object?>() ?? {},
-        );
+        final arguments =
+            (params['arguments'] as Map?)?.cast<String, Object?>() ?? {};
+        answer = await tools.call(name, arguments);
         final id =
             callId ??
             switch (params['_meta']) {
@@ -915,7 +914,8 @@ Future<Map<String, Object?>?> gaiaMcpAnswer(
         if (tools is GaiaResultKeeper &&
             id != null &&
             !answer.isError &&
-            kGaiaKeptResultTools.contains(name)) {
+            kGaiaKeptResultTools.contains(name) &&
+            !isGaiaOsControl(name, arguments)) {
           (tools as GaiaResultKeeper).keep(id, name, answer);
         }
       }

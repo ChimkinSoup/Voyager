@@ -115,6 +115,33 @@ class _GaiaMarkdownState extends State<GaiaMarkdown> {
   }
 }
 
+/// [child]'s texts selectable as one, a drag running from row to row, copied
+/// a line each as [GaiaMarkdown]'s are: for a card's rows, which a
+/// [SelectableText] each would keep a selection to one of.
+class GaiaSelectableLines extends StatefulWidget {
+  const GaiaSelectableLines({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<GaiaSelectableLines> createState() => _GaiaSelectableLinesState();
+}
+
+class _GaiaSelectableLinesState extends State<GaiaSelectableLines> {
+  final _selection = _LineSelection();
+
+  @override
+  void dispose() {
+    _selection.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SelectionArea(
+    child: SelectionContainer(delegate: _selection, child: widget.child),
+  );
+}
+
 /// Whether [block] shows the same [checks] as it was built with, among the
 /// [count] tasks it has; all after its first, for the last block's null.
 bool _sameChecks(_Block block, Set<int> checks, int? count) {
@@ -249,7 +276,10 @@ class _LineSelection extends StaticSelectionContainerDelegate {
   SelectedContent? getSelectedContent() {
     final parts = [
       for (final selectable in selectables)
-        if (selectable.getSelectedContent() case final content?)
+        // A text the selection only touches the edge of has nothing in it,
+        // and no line of its own.
+        if (selectable.getSelectedContent() case final content?
+            when content.plainText.isNotEmpty)
           content.plainText,
     ];
     // Without the line break a triple click takes with its line, which a

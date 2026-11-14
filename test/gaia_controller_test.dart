@@ -1540,6 +1540,23 @@ void main() {
       expect(summons, 2);
     });
 
+    test('mid Auto turn, a floater hotkey hides its floater even when not '
+        'in front, and brings it back without the focus', () async {
+      // Up without the focus over the app Gaia is working in.
+      await controller.onHotkey('small', controlling: true);
+      expect(window.shown, GaiaMode.small);
+      expect(window.foreground, isFalse);
+
+      await controller.onHotkey('small', pressed: true, controlling: true);
+      expect(window.shown, isNull);
+
+      await controller.onHotkey('large', pressed: true, controlling: true);
+      expect(window.shown, GaiaMode.large);
+      expect(window.foreground, isFalse);
+      await controller.onHotkey('large', pressed: true, controlling: true);
+      expect(window.shown, isNull);
+    });
+
     test('a cancelled C over a Gaia window behind other apps puts it back '
         'there, not in front', () async {
       await controller.onHotkey('window');

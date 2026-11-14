@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
@@ -122,51 +123,82 @@ class _GaiaActivityChipState extends State<GaiaActivityChip> {
                 color: scheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (i, tool) in part.tools.indexed) ...[
-                  if (i > 0)
-                    Divider(
-                      height: 13,
-                      thickness: 1,
-                      color: scheme.onSurface.withValues(alpha: 0.08),
-                    ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_iconOf(tool), size: 13, color: muted),
-                      const SizedBox(width: 6),
-                      Text(tool, style: nameStyle),
-                      if (part.failureAt(i) case final failure?) ...[
-                        const SizedBox(width: 8),
-                        Icon(Icons.close, size: 12, color: error),
-                        const SizedBox(width: 2),
-                        Flexible(child: Text(failure, style: failedStyle)),
-                      ],
-                    ],
-                  ),
-                  if (part.detailAt(i) case final detail?)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 19, top: 3),
-                      child: SelectableText(detail, style: codeStyle),
-                    ),
-                  if (_kept(i) case final id?)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 19, top: 3),
-                      child: _KeptResult(
-                        result: _results[id] ??= widget.result!(id),
-                        style: codeStyle,
+            // One selection across the calls, not one per input or result.
+            child: GaiaSelectableLines(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (i, tool) in part.tools.indexed) ...[
+                    if (i > 0)
+                      Divider(
+                        height: 13,
+                        thickness: 1,
+                        color: scheme.onSurface.withValues(alpha: 0.08),
                       ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_iconOf(tool), size: 13, color: muted),
+                        const SizedBox(width: 6),
+                        Text(tool, style: nameStyle),
+                        if (part.failureAt(i) case final failure?) ...[
+                          const SizedBox(width: 8),
+                          Icon(Icons.close, size: 12, color: error),
+                          const SizedBox(width: 2),
+                          Flexible(child: Text(failure, style: failedStyle)),
+                        ],
+                      ],
                     ),
+                    if (part.detailAt(i) case final detail?)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 19, top: 3),
+                        child: Text(detail, style: codeStyle),
+                      ),
+                    if (_kept(i) case final id?)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 19, top: 3),
+                        child: _KeptResult(
+                          result: _results[id] ??= widget.result!(id),
+                          style: codeStyle,
+                        ),
+                      ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
       ],
     );
   }
+}
+
+/// "Used Bash ×3, Edit".
+String gaiaActivityLabel(List<String> tools) {
+  final counts = <String, int>{};
+  for (final tool in tools) {
+    counts[tool] = (counts[tool] ?? 0) + 1;
+  }
+  return 'Used ${[for (final MapEntry(:key, :value) in counts.entries) value > 1 ? '$key ×$value' : key].join(', ')}';
+}
+
+/// [part] without its `os_*` actions, for a reply whose activity card already
+/// lists them (GAIA_AUTONOMY_HLD.md §7): the reads stay, with what they kept.
+/// A read is told by its kept id, as an `os_clipboard` read is named like a
+/// write. Null when nothing is left.
+GaiaActivityPart? gaiaWithoutControls(GaiaActivityPart part) {
+  final kept = [
+    for (var i = 0; i < part.tools.length; i++)
+      if (!isGaiaOsControl(part.tools[i]) || part.idAt(i) != null) i,
+  ];
+  if (kept.isEmpty) return null;
+  if (kept.length == part.tools.length) return part;
+  return GaiaActivityPart(
+    [for (final i in kept) part.tools[i]],
+    details: [for (final i in kept) part.detailAt(i)],
+    failures: [for (final i in kept) part.failureAt(i)],
+    ids: [for (final i in kept) part.idAt(i)],
+  );
 }
 
 /// A kept result as its tool answered it: the image first, as the agent was
@@ -262,22 +294,25 @@ class _KeptResultState extends State<_KeptResult> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: SingleChildScrollView(
-                child: SelectableText(text, style: widget.style),
+                child: Text(text, style: widget.style),
               ),
             ),
             if (long)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: GaiaButton(
-                  size: 28,
-                  padding: 12,
-                  label: _all
-                      ? 'Show less'
-                      : 'Show all (${_count(read.text.length)} characters)',
-                  onPressed: () {
-                    GaiaHoldInPlace(context).dispatch(context);
-                    setState(() => _all = !_all);
-                  },
+                // Its label isn't part of what's selected and copied.
+                child: SelectionContainer.disabled(
+                  child: GaiaButton(
+                    size: 28,
+                    padding: 12,
+                    label: _all
+                        ? 'Show less'
+                        : 'Show all (${_count(read.text.length)} characters)',
+                    onPressed: () {
+                      GaiaHoldInPlace(context).dispatch(context);
+                      setState(() => _all = !_all);
+                    },
+                  ),
                 ),
               ),
           ],

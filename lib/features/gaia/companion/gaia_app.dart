@@ -3254,6 +3254,9 @@ class _MessageView extends StatelessWidget {
       0.0,
       _orbMargin + kGaiaOrbSize + _orbGap - gutter - _bubblePadding.left,
     );
+    final cardListsActions = message.parts.any(
+      (part) => part is GaiaCardPart && gaiaListsEveryAction(part),
+    );
     // The chat's own background, so Gaia's bubble shows only as the stars
     // fading behind it.
     final bubble = _bubble(
@@ -3273,21 +3276,28 @@ class _MessageView extends StatelessWidget {
                 checks: checks,
                 onCheck: (task) => controller.toggleCheck(message, index, task),
               ),
-              GaiaActivityPart(:final tools) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                // Rebuilt with the controller too: a result is kept after its
-                // call shows.
-                child: ListenableBuilder(
-                  listenable: controller,
-                  builder: (context, _) => GaiaActivityChip(
-                    label: _activity(tools),
-                    part: part,
-                    hasResult: (id) =>
-                        controller.hasToolResult(message.chatId, id),
-                    result: (id) => controller.toolResult(message.chatId, id),
+              // Its actions are on the activity card already: only the
+              // reads show here, and nothing when there were none.
+              GaiaActivityPart() => switch (cardListsActions
+                  ? gaiaWithoutControls(part)
+                  : part) {
+                null => const SizedBox.shrink(),
+                final part => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  // Rebuilt with the controller too: a result is kept after its
+                  // call shows.
+                  child: ListenableBuilder(
+                    listenable: controller,
+                    builder: (context, _) => GaiaActivityChip(
+                      label: gaiaActivityLabel(part.tools),
+                      part: part,
+                      hasResult: (id) =>
+                          controller.hasToolResult(message.chatId, id),
+                      result: (id) => controller.toolResult(message.chatId, id),
+                    ),
                   ),
                 ),
-              ),
+              },
               // Rebuilt with the controller, not the message: whether it's
               // waiting and what's picked aren't on the message.
               GaiaCardPart() => ListenableBuilder(
@@ -3565,15 +3575,6 @@ class _MessageView extends StatelessWidget {
   );
 
   static String _detail(String? error) => error == null ? '' : ': $error';
-
-  /// "Used Bash ×3, Edit".
-  static String _activity(List<String> tools) {
-    final counts = <String, int>{};
-    for (final tool in tools) {
-      counts[tool] = (counts[tool] ?? 0) + 1;
-    }
-    return 'Used ${[for (final MapEntry(:key, :value) in counts.entries) value > 1 ? '$key ×$value' : key].join(', ')}';
-  }
 }
 
 /// "3:42 PM" today, "Yesterday", "Mon" within the week, "Sep 20" this year,

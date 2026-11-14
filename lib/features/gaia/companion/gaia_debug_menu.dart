@@ -11,6 +11,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
@@ -462,6 +463,15 @@ class _DebugMenu extends StatelessWidget {
           style: muted,
         ),
         const _ToolResultsPreview(),
+        heading('Actions beside tool chips'),
+        Text(
+          'A reply that worked Chrome: its activity card and its tool chips. '
+          'Before, the chips listed every os_* action the card already shows. '
+          "Now they keep only the reads, and a chip of actions alone isn't "
+          'shown.',
+          style: muted,
+        ),
+        const _ActivityDedupePreview(),
         heading('Taking control of the screen'),
         GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
         heading('Display'),
@@ -1416,6 +1426,123 @@ class _ToolResultsPreviewState extends State<_ToolResultsPreview> {
             icon: Icons.replay,
             label: 'Close it again',
             onPressed: () => setState(() => _shows++),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A Chrome reply's parts as the chat lays them out, before and after
+/// [gaiaWithoutControls] leaves the card's actions out of its chips.
+class _ActivityDedupePreview extends StatefulWidget {
+  const _ActivityDedupePreview();
+
+  @override
+  State<_ActivityDedupePreview> createState() => _ActivityDedupePreviewState();
+}
+
+class _ActivityDedupePreviewState extends State<_ActivityDedupePreview> {
+  static const _parts = <GaiaPart>[
+    GaiaActivityPart(['os_focus'], details: ['Google Chrome']),
+    GaiaCardPart(
+      id: 'dedupe-activity',
+      kind: GaiaCardKind.control,
+      state: GaiaCardState.accepted,
+      tool: 'activity',
+      input: {
+        'activity': true,
+        'app': 'Google Chrome',
+        'total': 8,
+        'steps': [
+          {'label': 'Focused Google Chrome', 'resolved': true},
+          {'label': 'Pressed Ctrl+L', 'resolved': true},
+          {'label': 'Typed "flights to tokyo"', 'resolved': true},
+          {'label': 'Pressed Enter', 'resolved': true},
+          {'label': 'Pressed Ctrl+F', 'resolved': true},
+          {'label': 'Typed "nonstop"', 'resolved': true},
+          {'label': 'Pressed Escape', 'resolved': true},
+          {'label': r'Typed "under $900"', 'resolved': true},
+        ],
+      },
+    ),
+    GaiaActivityPart(
+      [
+        'os_key',
+        'os_type',
+        'os_key',
+        'os_screenshot',
+        'os_key',
+        'os_type',
+        'os_key',
+        'os_type',
+        'os_screenshot',
+      ],
+      details: [
+        'ctrl+l',
+        'flights to tokyo',
+        'enter',
+        null,
+        'ctrl+f',
+        'nonstop',
+        'escape',
+        r'under $900',
+        null,
+      ],
+      ids: [null, null, null, 'shot-1', null, null, null, null, 'shot-2'],
+    ),
+  ];
+
+  var _after = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final part in _parts)
+                switch (part) {
+                  GaiaActivityPart() => switch (_after
+                      ? gaiaWithoutControls(part)
+                      : part) {
+                    null => const SizedBox.shrink(),
+                    final part => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: GaiaActivityChip(
+                        key: ValueKey((_after, part.tools.length)),
+                        label: gaiaActivityLabel(part.tools),
+                        part: part,
+                      ),
+                    ),
+                  },
+                  GaiaCardPart() => GaiaCardView(card: part),
+                  _ => const SizedBox.shrink(),
+                },
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('Before')),
+              ButtonSegment(value: true, label: Text('After')),
+            ],
+            selected: {_after},
+            onSelectionChanged: (picked) =>
+                setState(() => _after = picked.single),
           ),
         ),
       ],

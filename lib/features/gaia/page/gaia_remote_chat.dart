@@ -790,6 +790,9 @@ class GaiaTranscriptMessage extends ConsumerWidget {
         ),
       );
     }
+    final cardListsActions = message.parts.any(
+      (part) => part is GaiaCardPart && gaiaListsEveryAction(part),
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -808,13 +811,20 @@ class GaiaTranscriptMessage extends ConsumerWidget {
                   !checks.contains(task),
                 ),
               ),
-              GaiaActivityPart(:final tools) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: GaiaActivityChip(
-                  label: 'Used ${tools.toSet().join(', ')}',
-                  part: part,
+              // Its actions are on the activity card already: only the
+              // reads show here, and nothing when there were none.
+              GaiaActivityPart() => switch (cardListsActions
+                  ? gaiaWithoutControls(part)
+                  : part) {
+                null => const SizedBox.shrink(),
+                final part => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: GaiaActivityChip(
+                    label: gaiaActivityLabel(part.tools),
+                    part: part,
+                  ),
                 ),
-              ),
+              },
               GaiaCardPart() when part.id == openCard?.id => GaiaCardView(
                 card: part,
                 waiting: true,
