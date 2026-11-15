@@ -7006,7 +7006,7 @@ class GaiaController extends ChangeNotifier {
     switch (reply.status) {
       case GaiaMessageStatus.complete:
         title = reply.needsInput ? 'Gaia has a question' : 'Gaia is done';
-        final line = reply.text.trim().split('\n').first;
+        final line = gaiaPlainLine(reply.text.trim().split('\n').first);
         body = line.length > 120 ? '${line.substring(0, 120)}…' : line;
       case GaiaMessageStatus.error:
         title = 'Gaia ran into an error';
@@ -7471,6 +7471,19 @@ class GaiaController extends ChangeNotifier {
     }
   }
 }
+
+/// [line] of a reply's markdown as a toast shows it, which draws plain text:
+/// without its heading, quote or list marker, its emphasis and code marks,
+/// and a link as its text alone.
+String gaiaPlainLine(String line) => line
+    .replaceFirst(RegExp(r'^\s*(#{1,6}\s+|>\s?|[-*+]\s+)'), '')
+    .replaceAllMapped(RegExp(r'!?\[([^\]]*)\]\([^)]*\)'), (m) => m[1]!)
+    .replaceAllMapped(RegExp(r'(\*\*|__|~~|`)(.+?)\1'), (m) => m[2]!)
+    .replaceAllMapped(
+      RegExp(r'(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])'),
+      (m) => m[1]!,
+    )
+    .trim();
 
 /// A side question's in dummy mode: its script has no cards, which never
 /// call it.
