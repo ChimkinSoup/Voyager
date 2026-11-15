@@ -1456,6 +1456,10 @@ class GaiaController extends ChangeNotifier {
   List<GaiaMessage> get messages =>
       currentChatId == null ? const [] : _messages[currentChatId] ?? const [];
 
+  /// Whether [messages] is the current chat's, not empty while it loads.
+  bool get messagesLoaded =>
+      currentChatId == null || _messages.containsKey(currentChatId);
+
   bool isRunning(String chatId) => _running.contains(chatId);
 
   bool get currentRunning =>
@@ -2248,7 +2252,9 @@ class GaiaController extends ChangeNotifier {
   var _resending = false;
 
   Future<void> _resend(GaiaMessage? question) async {
-    if (question == null || _resending) return;
+    // Running: a second press while the first's send has the chat, its
+    // question not in it yet.
+    if (question == null || _resending || currentRunning) return;
     final images = <GaiaDraftImage>[];
     _resending = true;
     try {

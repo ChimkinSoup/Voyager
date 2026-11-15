@@ -2033,7 +2033,11 @@ class _ChatTileState extends State<_ChatTile> {
                   child: AnimatedOpacity(
                     duration: GaiaMotion.quick,
                     opacity: hovered || _actionFocused ? 1 : 0,
-                    child: action,
+                    // Unseen, it isn't clicked: a row being renamed.
+                    child: IgnorePointer(
+                      ignoring: !hovered && !_actionFocused,
+                      child: action,
+                    ),
                   ),
                 ),
               ],
@@ -2927,7 +2931,9 @@ class _MessagesState extends State<_Messages> {
                 ),
                 // A new chat says what the composer takes, rather than
                 // nothing at all: only where there's room for it.
-                if (messages.isEmpty && constraints.maxHeight >= 200)
+                if (messages.isEmpty &&
+                    widget.controller.messagesLoaded &&
+                    constraints.maxHeight >= 200)
                   Positioned.fill(
                     child: _EmptyChat(
                       sendKey: '${_sendCombo(widget.controller)}',

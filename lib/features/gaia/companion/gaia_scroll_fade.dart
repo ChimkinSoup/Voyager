@@ -40,9 +40,11 @@ class _GaiaScrollFadeState extends State<GaiaScrollFade> {
   @override
   Widget build(BuildContext context) =>
       NotificationListener<ScrollMetricsNotification>(
-        onNotification: (notification) => _onScroll(notification.metrics),
+        onNotification: (notification) =>
+            notification.depth == 0 && _onScroll(notification.metrics),
         child: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notification) => _onScroll(notification.metrics),
+          onNotification: (notification) =>
+              notification.depth == 0 && _onScroll(notification.metrics),
           child: ShaderMask(
             blendMode: BlendMode.dstIn,
             shaderCallback: (bounds) {
