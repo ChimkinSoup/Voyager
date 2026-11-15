@@ -62,7 +62,11 @@ class GaiaUsageBar extends StatelessWidget {
             value: used,
             minHeight: 4,
             borderRadius: BorderRadius.circular(2),
-            backgroundColor: Colors.white.withValues(alpha: 0.15),
+            // The text's colour, not white: the Setup tab shows these on
+            // the light theme's paper too, where a white track is invisible.
+            backgroundColor: theme.colorScheme.onSurface.withValues(
+              alpha: 0.15,
+            ),
             color: theme.colorScheme.primary,
           ),
           const SizedBox(height: 4),
