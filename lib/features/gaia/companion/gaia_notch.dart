@@ -6,6 +6,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_scroll_fade.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 part 'gaia_menu.dart';

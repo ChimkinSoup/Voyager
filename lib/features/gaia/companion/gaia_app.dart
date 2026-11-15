@@ -5008,9 +5008,7 @@ class _ComposerState extends State<_Composer> {
         ?.findAncestorStateOfType<EditableTextState>()
         ?.renderEditable;
     if (editable == null || !_text.selection.isValid) return true;
-    final edge = TextPosition(
-      offset: by < 0 ? 0 : editable.plainText.length,
-    );
+    final edge = TextPosition(offset: by < 0 ? 0 : editable.plainText.length);
     return editable.getLocalRectForCaret(_text.selection.extent).top ==
         editable.getLocalRectForCaret(edge).top;
   }

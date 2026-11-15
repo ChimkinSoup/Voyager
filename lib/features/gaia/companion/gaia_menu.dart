@@ -303,6 +303,39 @@ class _GaiaPaletteState extends State<GaiaPalette>
     value: widget.animate ? 0 : 1,
   )..forward();
 
+  /// Each row's, by its label, to bring the highlighted one into view.
+  final _rows = <String, GlobalKey>{};
+
+  @override
+  void didUpdateWidget(GaiaPalette old) {
+    super.didUpdateWidget(old);
+    if (old.highlight == widget.highlight) return;
+    final up = widget.highlight < old.highlight;
+    // Once its row is laid out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.highlight >= widget.items.length) return;
+      final row = _rows[widget.items[widget.highlight].label]?.currentContext;
+      final box = row?.findRenderObject();
+      if (row == null || box == null) return;
+      final position = Scrollable.of(row).position;
+      // Clear of the edge's fade too, not just inside the edge.
+      final target = RenderAbstractViewport.of(box)
+          .getOffsetToReveal(
+            box,
+            up ? 0 : 1,
+            rect: box.paintBounds.inflate(kGaiaScrollFade),
+          )
+          .offset
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if (up ? target >= position.pixels : target <= position.pixels) return;
+      position.animateTo(
+        target,
+        duration: GaiaMotion.quick,
+        curve: GaiaMotion.curve,
+      );
+    });
+  }
+
   @override
   void dispose() {
     _entrance.dispose();
@@ -311,6 +344,9 @@ class _GaiaPaletteState extends State<GaiaPalette>
 
   @override
   Widget build(BuildContext context) {
+    _rows.removeWhere(
+      (label, _) => !widget.items.any((item) => item.label == label),
+    );
     return _MenuShell(
       growFrom: Alignment.bottomLeft,
       animate: widget.animate,
@@ -319,43 +355,45 @@ class _GaiaPaletteState extends State<GaiaPalette>
         width: widget.width - 2,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 240),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final (index, item) in widget.items.indexed) ...[
-                  if (index > 0) const SizedBox(height: 2),
-                  // Keyed, so a row's hover stays with it as the query
-                  // filters the rows above it.
-                  KeyedSubtree(
-                    key: ValueKey(item.label),
-                    child: _Entering(
-                      entrance: _entrance,
-                      delay:
-                          _optionsDelay +
-                          _optionsStagger * index.clamp(0, _rowsAtOpen - 1),
-                      leaving: null,
-                      leaveDelay: Duration.zero,
-                      child: _Pressable(
-                        onPressed: item.onPressed,
-                        builder: (lit) => _menuRow(
-                          context,
-                          item,
-                          lit || index == widget.highlight,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          child: GaiaScrollFade(child: _rowsList(context)),
         ),
       ),
     );
   }
+
+  Widget _rowsList(BuildContext context) => SingleChildScrollView(
+    padding: const EdgeInsets.all(6),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, item) in widget.items.indexed) ...[
+          if (index > 0) const SizedBox(height: 2),
+          // Keyed, so a row's hover stays with it as the query
+          // filters the rows above it.
+          KeyedSubtree(
+            key: ValueKey(item.label),
+            child: _Entering(
+              entrance: _entrance,
+              delay:
+                  _optionsDelay +
+                  _optionsStagger * index.clamp(0, _rowsAtOpen - 1),
+              leaving: null,
+              leaveDelay: Duration.zero,
+              child: KeyedSubtree(
+                key: _rows.putIfAbsent(item.label, GlobalKey.new),
+                child: _Pressable(
+                  onPressed: item.onPressed,
+                  builder: (lit) =>
+                      _menuRow(context, item, lit || index == widget.highlight),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 /// [child] in [decoration], coming in as the palette does: growing on the
