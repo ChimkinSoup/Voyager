@@ -400,6 +400,11 @@ void main() {
       await repository.upsertProject(
         _project('p1').copyWith(folders: {'desk': 'D:/Japan'}),
       );
+      // Another device still holding the path, from before the removal.
+      final elsewhere = _project('p1').copyWith(
+        folders: {'desk': 'D:/Japan', 'laptop': 'C:/Japan'},
+        version: 1,
+      );
       await GaiaChatStore(
         repository,
         deviceId: 'desk',
@@ -409,11 +414,7 @@ void main() {
       expect(removed.folderPaths, isEmpty);
       expect(gaiaProjectFolder(removed, 'desk'), isNull);
 
-      // Another device still holding the path takes the removal.
-      final elsewhere = _project('p1').copyWith(
-        folders: {'desk': 'D:/Japan', 'laptop': 'C:/Japan'},
-        version: 1,
-      );
+      // It takes the removal.
       expect(
         mergeGaiaProjectFromRemote(
           gaiaProjectToFirestore(removed),

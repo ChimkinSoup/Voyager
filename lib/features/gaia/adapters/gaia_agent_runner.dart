@@ -168,6 +168,13 @@ class GaiaCardUpdate extends GaiaAgentEvent {
   final bool saveNow;
 }
 
+/// The agent offered a memory (§11): its card goes after the reply so far.
+class GaiaMemoryOffered extends GaiaAgentEvent {
+  const GaiaMemoryOffered(this.memory);
+
+  final GaiaMemoryPart memory;
+}
+
 /// The account's usage, as the backend reported it mid-turn.
 class GaiaUsageUpdate extends GaiaAgentEvent {
   const GaiaUsageUpdate(this.usage);
@@ -479,6 +486,8 @@ class GaiaTurnBuilder {
         } else {
           _parts[index] = card;
         }
+      case GaiaMemoryOffered(:final memory):
+        _parts.add(memory);
       case GaiaUsageUpdate() || GaiaRetrying():
         return false;
     }

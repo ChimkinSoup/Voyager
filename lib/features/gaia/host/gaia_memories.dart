@@ -82,26 +82,116 @@ class GaiaMemories {
           total: active.length,
         );
       case 'memory_propose':
-        // The chat's project unless asked for global (GAIA_PROJECTS_HLD.md §6).
-        final project = arguments['scope'] == 'global'
-            ? null
-            : await _projectOf(chatId);
-        final saved = await save(
-          arguments['text'] as String? ?? '',
-          tags: gaiaMemoryTags(arguments['tags']),
-          chatId: chatId,
-          status: GaiaMemoryStatus.proposed,
-          projectId: project,
-        );
-        return saved == null
-            ? 'Already remembered, waiting in the inbox, or set aside by the '
-                  'user: nothing new was proposed.'
-            : "Proposed${project == null ? '' : ' for this project'}. It "
-                  'waits in the memory inbox on the Gaia page until the user '
-                  "approves it, so it isn't remembered yet.";
+        return (await propose(chatId, arguments)).text;
       default:
         throw GaiaReadException('Unknown tool: $name');
     }
+  }
+
+  /// A `memory_propose` call from [chatId]: the memory saved in the inbox,
+  /// null when nothing new was, and the agent's text. Throws a
+  /// [GaiaReadException] the agent is shown.
+  Future<({GaiaMemory? memory, String text})> propose(
+    String chatId,
+    Map<String, Object?> arguments,
+  ) async {
+    // The chat's project unless asked for global (GAIA_PROJECTS_HLD.md §6).
+    final project = arguments['scope'] == 'global'
+        ? null
+        : await _projectOf(chatId);
+    final saved = await save(
+      arguments['text'] as String? ?? '',
+      tags: gaiaMemoryTags(arguments['tags']),
+      chatId: chatId,
+      status: GaiaMemoryStatus.proposed,
+      projectId: project,
+    );
+    return (
+      memory: saved,
+      text: saved == null
+          ? 'Already remembered, waiting in the inbox, or set aside by the '
+                'user: nothing new was proposed.'
+          : "Proposed${project == null ? '' : ' for this project'}. A card "
+                'in the chat lets the user edit and accept it, as does the '
+                "memory inbox on the Gaia page; it isn't remembered until "
+                'they do.',
+    );
+  }
+
+  /// The user decided proposed memory [id] from its card in a chat (§11):
+  /// [accept]ed as [text] says it, or dismissed, as the inbox does. One the
+  /// inbox decided first stays as it was decided there. What it is now:
+  /// accepted with the text it has, or rejected. Throws a
+  /// [GaiaReadException] for empty or overlong [text].
+  Future<({GaiaCardState state, String text})> decide(
+    String id, {
+    required bool accept,
+    required String text,
+  }) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) {
+      return (state: GaiaCardState.rejected, text: memory?.text ?? text);
+    }
+    if (memory.status != GaiaMemoryStatus.proposed) {
+      return (state: GaiaCardState.accepted, text: memory.text);
+    }
+    if (!accept) {
+      await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
+      return (state: GaiaCardState.rejected, text: memory.text);
+    }
+    final body = text.trim();
+    if (body.isEmpty) throw GaiaReadException('A memory needs text.');
+    if (body.length > kGaiaMemoryMaxLength) {
+      throw GaiaReadException(
+        'A memory is one short fact, at most $kGaiaMemoryMaxLength '
+        'characters.',
+      );
+    }
+    // Edited to say what an active one in its reach already does: that one
+    // stands, and the proposal is spent rather than kept as a second copy.
+    if (await sameActive(body, projectId: memory.projectId, except: id)
+        case final other?) {
+      await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
+      return (state: GaiaCardState.accepted, text: other.text);
+    }
+    await _repository.upsertMemory(
+      memory.copyWith(text: body, status: GaiaMemoryStatus.active),
+    );
+    return (state: GaiaCardState.accepted, text: body);
+  }
+
+  /// Proposed memory [id] back in the inbox, its dismissal undone; its text
+  /// then, or null when it's not a dismissed proposal any more.
+  Future<String?> restore(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null ||
+        !memory.isDeleted ||
+        memory.status != GaiaMemoryStatus.proposed) {
+      return null;
+    }
+    await _repository.upsertMemory(memory.copyWith(clearDeletedAt: true));
+    return memory.text;
+  }
+
+  /// The active memory, other than [except], that says what [text] does
+  /// where a memory of [projectId] would be read: a global one, or one of
+  /// that project while it's live. A global one is read in every chat, so
+  /// for no project (or one gone) any project's counts too. Null for none.
+  Future<GaiaMemory?> sameActive(
+    String text, {
+    String? projectId,
+    String? except,
+  }) async {
+    final project = await _live(projectId);
+    final same = gaiaMemoryKey(text);
+    for (final (other, scope) in await _active()) {
+      if (other.id != except &&
+          (scope == null || project == null || scope == project) &&
+          gaiaMemoryKey(other.text) == same) {
+        return other;
+      }
+    }
+    return null;
   }
 
   /// Saves [text] as a memory from [chatId], [status] as given; null when an

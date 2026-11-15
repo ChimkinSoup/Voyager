@@ -16,6 +16,7 @@ import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
@@ -836,8 +837,102 @@ class _MemoryRow extends ConsumerWidget {
       context: context,
       builder: (_) => _MemoryDialog(memory: memory),
     );
-    if (edited == null) return;
+    if (edited == null || !context.mounted) return;
+    // An active one edited to say what another does would be a second copy
+    // in every chat's index. A proposal is checked as it's remembered.
+    if (memory.status == GaiaMemoryStatus.active &&
+        await _alreadyRemembered(
+          context,
+          ref,
+          edited.text,
+          memory.projectId,
+        )) {
+      return;
+    }
     await _save(ref, memory.copyWith(text: edited.text, tags: edited.tags));
+    // An open card in its chat offers it as it now says.
+    if (memory.status == GaiaMemoryStatus.proposed &&
+        edited.text != memory.text) {
+      await _setCards(
+        ref.read(gaiaRepositoryProvider),
+        GaiaCardState.open,
+        edited.text,
+      );
+    }
+  }
+
+  /// Moved to project [id], or global for empty. An active one isn't moved
+  /// where another already says it.
+  Future<void> _move(BuildContext context, WidgetRef ref, String id) async {
+    final projectId = id.isEmpty ? null : id;
+    if (memory.status == GaiaMemoryStatus.active &&
+        await _alreadyRemembered(context, ref, memory.text, projectId)) {
+      return;
+    }
+    await _save(
+      ref,
+      projectId == null
+          ? memory.copyWith(clearProjectId: true)
+          : memory.copyWith(projectId: projectId),
+    );
+  }
+
+  /// Whether an active memory other than this one says [text] where a
+  /// memory of [projectId] (global for null) is read, said in a toast when
+  /// it does.
+  Future<bool> _alreadyRemembered(
+    BuildContext context,
+    WidgetRef ref,
+    String text,
+    String? projectId,
+  ) async {
+    final same = await GaiaMemories(
+      ref.read(gaiaRepositoryProvider),
+    ).sameActive(text, projectId: projectId, except: memory.id);
+    if (same == null) return false;
+    if (context.mounted) {
+      showVoyagerToast(context, message: 'Already remembered: ${same.text}');
+    }
+    return true;
+  }
+
+  /// Remembered from the inbox: the proposal's card in its chat says so too.
+  /// One an active memory already says is spent instead, that one standing.
+  Future<void> _remember(BuildContext context, WidgetRef ref) async {
+    final repository = ref.read(gaiaRepositoryProvider);
+    final same = await GaiaMemories(
+      repository,
+    ).sameActive(memory.text, projectId: memory.projectId, except: memory.id);
+    if (same == null) {
+      await _save(ref, memory.copyWith(status: GaiaMemoryStatus.active));
+    } else {
+      await _save(ref, memory.copyWith(deletedAt: utcNow()));
+      if (context.mounted) {
+        showVoyagerToast(context, message: 'Already remembered: ${same.text}');
+      }
+    }
+    await _setCards(
+      repository,
+      GaiaCardState.accepted,
+      same?.text ?? memory.text,
+    );
+  }
+
+  /// This memory's card in the chat that proposed it set to [state].
+  Future<void> _setCards(
+    GaiaRepository repository,
+    GaiaCardState state,
+    String text,
+  ) async {
+    final chatId = memory.sourceChatId;
+    if (chatId == null) return;
+    await GaiaHost.instance.setMemoryCards(
+      repository,
+      chatId,
+      memory.id,
+      state,
+      text,
+    );
   }
 
   Future<void> _delete(BuildContext context) async {
@@ -850,12 +945,20 @@ class _MemoryRow extends ConsumerWidget {
       message: proposed
           ? 'Dismissed'
           : deletedMessage(memory.text, fallback: 'memory'),
-      delete: () =>
-          repository.upsertMemory(memory.copyWith(deletedAt: utcNow())),
+      delete: () async {
+        await repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
+        // A proposal's card says it was dismissed, until that's undone.
+        if (proposed) {
+          await _setCards(repository, GaiaCardState.rejected, memory.text);
+        }
+      },
       restore: () async {
         final current = await repository.getMemory(memory.id);
         if (current == null) return;
         await repository.upsertMemory(current.copyWith(clearDeletedAt: true));
+        if (proposed && current.status == GaiaMemoryStatus.proposed) {
+          await _setCards(repository, GaiaCardState.open, current.text);
+        }
       },
     );
   }
@@ -877,7 +980,7 @@ class _MemoryRow extends ConsumerWidget {
       GaiaMemoryStatus.proposed => (
         PhosphorIconsRegular.check,
         'Remember',
-        () => _save(ref, memory.copyWith(status: GaiaMemoryStatus.active)),
+        () => _remember(context, ref),
       ),
       GaiaMemoryStatus.active => (
         PhosphorIconsRegular.archive,
@@ -887,7 +990,17 @@ class _MemoryRow extends ConsumerWidget {
       GaiaMemoryStatus.archived => (
         PhosphorIconsRegular.arrowCounterClockwise,
         'Remember again',
-        () => _save(ref, memory.copyWith(status: GaiaMemoryStatus.active)),
+        () async {
+          if (await _alreadyRemembered(
+            context,
+            ref,
+            memory.text,
+            memory.projectId,
+          )) {
+            return;
+          }
+          await _save(ref, memory.copyWith(status: GaiaMemoryStatus.active));
+        },
       ),
     };
     return ListTile(
@@ -910,12 +1023,7 @@ class _MemoryRow extends ConsumerWidget {
           if (projects.isNotEmpty)
             PopupMenuButton<String>(
               tooltip: 'Move to',
-              onSelected: (id) => _save(
-                ref,
-                id.isEmpty
-                    ? memory.copyWith(clearProjectId: true)
-                    : memory.copyWith(projectId: id),
-              ),
+              onSelected: (id) => _move(context, ref, id),
               itemBuilder: (_) => [
                 CheckedPopupMenuItem(
                   value: '',

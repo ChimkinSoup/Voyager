@@ -1636,6 +1636,104 @@ class GaiaController extends ChangeNotifier {
     return accepted;
   }
 
+  /// The user's edits to each open memory card's text, by memory id.
+  final _memoryEdits = <String, String>{};
+
+  /// The memory cards whose answer is on its way to the host, by memory id.
+  final _decidingMemories = <String>{};
+
+  /// What memory card [memory]'s editor holds.
+  String memoryText(GaiaMemoryPart memory) =>
+      _memoryEdits[memory.memoryId] ?? memory.text;
+
+  void editMemory(GaiaMemoryPart memory, String text) {
+    if (!memory.isOpen || memoryText(memory) == text) return;
+    _memoryEdits[memory.memoryId] = text;
+  }
+
+  /// Remembers memory card [memory] as its editor holds it ([accept]), or
+  /// dismisses it; the main instance writes the outcome to its card in
+  /// [message]'s chat: no tool call waits on it (§11). One the inbox decided
+  /// first shows as it was decided there. True when this dismissed it, which
+  /// [restoreMemory] undoes.
+  Future<bool> decideMemory(
+    GaiaMessage message,
+    GaiaMemoryPart memory, {
+    required bool accept,
+  }) async {
+    // A second press before the first is answered is dropped.
+    if (!_decidingMemories.add(memory.memoryId)) return false;
+    final Map<Object?, Object?> decided;
+    try {
+      decided =
+          (await _pipe.request('decideMemory', {
+                'memoryId': memory.memoryId,
+                'chatId': message.chatId,
+                'accept': accept,
+                'text': memoryText(memory),
+              }))!
+              as Map;
+    } on GaiaPipeException catch (error) {
+      _toasts.add((
+        chatId: '',
+        title: "Couldn't save that memory",
+        body: error.message,
+        error: true,
+        question: false,
+      ));
+      return false;
+    } finally {
+      _decidingMemories.remove(memory.memoryId);
+    }
+    _memoryEdits.remove(memory.memoryId);
+    final state = GaiaCardState.values.byName(decided['state']! as String);
+    _showMemoryCard(message, memory, state, decided['text']! as String);
+    return !accept && state == GaiaCardState.rejected;
+  }
+
+  /// Memory card [memory], dismissed from its card, open again in [message]
+  /// and the memory inbox. Nothing when it's been decided otherwise since.
+  Future<void> restoreMemory(GaiaMessage message, GaiaMemoryPart memory) async {
+    final Object? restored;
+    try {
+      restored = await _pipe.request('restoreMemory', {
+        'memoryId': memory.memoryId,
+        'chatId': message.chatId,
+      });
+    } on GaiaPipeException catch (error) {
+      _note("Couldn't undo that", error.message, error: true);
+      return;
+    }
+    if (restored case {'text': final String text}) {
+      _showMemoryCard(message, memory, GaiaCardState.open, text);
+    }
+  }
+
+  /// Memory card [memory] in [message] shown as [state] with [text], as the
+  /// main instance stored it: a streaming reply's run keeps it so
+  /// ([_keepChecks]), and its writes don't change what's stored.
+  void _showMemoryCard(
+    GaiaMessage message,
+    GaiaMemoryPart memory,
+    GaiaCardState state,
+    String text,
+  ) {
+    final shown = _shown(message);
+    if (shown == null) return;
+    final part = memory.decided(state, text: text);
+    _replace(
+      shown,
+      shown.copyWith(
+        parts: [
+          for (final p in shown.parts)
+            p is GaiaMemoryPart && p.memoryId == memory.memoryId ? part : p,
+        ],
+        bumpVersion: false,
+        touch: false,
+      ),
+    );
+  }
+
   /// [card] decided with no tool call waiting: written to its message.
   Future<void> _decideStored(GaiaCardPart card) async {
     for (final list in _messages.values) {
@@ -5869,6 +5967,7 @@ class GaiaController extends ChangeNotifier {
       final last = _lastPersist[reply.id];
       // A card at once: it's what the Gaia page and other devices wait on.
       if ((event is GaiaCardUpdate && event.saveNow) ||
+          event is GaiaMemoryOffered ||
           last == null ||
           DateTime.now().difference(last) > _persistEvery) {
         persistSoon?.cancel();
@@ -5907,6 +6006,29 @@ class GaiaController extends ChangeNotifier {
       },
       read: (tool, arguments) async {
         try {
+          // Saved in the inbox, with a card in the reply that takes the
+          // user's edit and answer without holding up the turn (§11).
+          if (tool == 'memory_propose') {
+            final proposed =
+                ((await _pipe.request('proposeMemory', {
+                          'arguments': arguments,
+                          'chatId': chatId,
+                        }))!
+                        as Map)
+                    .cast<String, Object?>();
+            if (proposed['memoryId'] case final String memoryId) {
+              onEvent(
+                GaiaMemoryOffered(
+                  GaiaMemoryPart(
+                    memoryId: memoryId,
+                    text: proposed['memoryText']! as String,
+                    project: proposed['project'] == true,
+                  ),
+                ),
+              );
+            }
+            return proposed['text']! as String;
+          }
           return await _pipe.request(
                 isGaiaMemoryTool(tool)
                     ? 'memoryTool'
@@ -7098,9 +7220,15 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// A streaming reply's [parts] as its run rebuilt them, with the ticks
-  /// the user has made on it meanwhile ([toggleCheck]), part by part.
-  List<GaiaPart> _keepChecks(GaiaMessage reply, List<GaiaPart> parts) =>
-      gaiaKeepChecks(parts, gaiaChecksOf(_shown(reply)?.parts ?? const []));
+  /// the user has made on it meanwhile ([toggleCheck]), part by part, and
+  /// the memory cards they decided ([decideMemory]).
+  List<GaiaPart> _keepChecks(GaiaMessage reply, List<GaiaPart> parts) {
+    final shown = _shown(reply)?.parts ?? const <GaiaPart>[];
+    return gaiaKeepMemoryDecisions(
+      gaiaKeepChecks(parts, gaiaChecksOf(shown)),
+      shown,
+    );
+  }
 
   /// [message] as it's shown now.
   /// [chapters] changed as stored, by message id, null for unpinned: shown

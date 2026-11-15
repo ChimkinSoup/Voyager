@@ -867,6 +867,24 @@ class GaiaHost {
         )
       : await gaiaToggleCheck(repository, messageId, part, task, flipped);
 
+  /// A memory decided in the memory inbox on the Gaia page, or its
+  /// dismissal undone: its cards in [chatId] say so ([gaiaSetMemoryCards]),
+  /// through the store where it's attached, as [toggleCheck] goes.
+  Future<void> setMemoryCards(
+    GaiaRepository repository,
+    String chatId,
+    String memoryId,
+    GaiaCardState state,
+    String text,
+  ) async => _attached.isCompleted
+      ? await (await _attached.future).setMemoryCards(
+          chatId,
+          memoryId,
+          state,
+          text,
+        )
+      : await gaiaSetMemoryCards(repository, chatId, memoryId, state, text);
+
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
   /// With [btwId], at that side question.
@@ -1577,6 +1595,59 @@ class GaiaHost {
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }
+      case 'proposeMemory':
+        try {
+          final proposed = await _memoriesOrThrow().propose(
+            params['chatId']! as String,
+            _map(params['arguments']),
+          );
+          return {
+            'text': proposed.text,
+            if (proposed.memory case final memory?) ...{
+              'memoryId': memory.id,
+              'memoryText': memory.text,
+              'project': memory.projectId != null,
+            },
+          };
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'decideMemory':
+        // Remembered, it steers every chat after it: refused while aborted,
+        // as `remember` is (§15.7).
+        final accept = params['accept'] == true;
+        if (accept && _aborted) {
+          throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
+        }
+        try {
+          final memoryId = params['memoryId']! as String;
+          final decided = await _memoriesOrThrow().decide(
+            memoryId,
+            accept: accept,
+            text: params['text'] as String? ?? '',
+          );
+          await store.setMemoryCards(
+            params['chatId']! as String,
+            memoryId,
+            decided.state,
+            decided.text,
+          );
+          return {'state': decided.state.name, 'text': decided.text};
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'restoreMemory':
+        // A dismissal from the card, undone: open again, card and inbox.
+        final memoryId = params['memoryId']! as String;
+        final text = await _memoriesOrThrow().restore(memoryId);
+        if (text == null) return null;
+        await store.setMemoryCards(
+          params['chatId']! as String,
+          memoryId,
+          GaiaCardState.open,
+          text,
+        );
+        return {'text': text};
       case 'projectTool':
         final reads = _projectReads;
         if (reads == null) throw GaiaPipeException('Voyager data is not ready');

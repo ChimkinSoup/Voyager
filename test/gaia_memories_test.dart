@@ -136,6 +136,123 @@ void main() {
     expect(await repository.listMemories(), hasLength(1));
   });
 
+  test(
+    "propose gives the card the memory saved, none when it's not new",
+    () async {
+      final first = await memories.propose('c1', {'text': 'Prefers tea'});
+      expect(first.memory?.text, 'Prefers tea');
+      expect(first.text, contains('card'));
+      final again = await memories.propose('c1', {'text': 'prefers tea'});
+      expect(again.memory, isNull);
+    },
+  );
+
+  test("a memory card remembers the user's edit, or dismisses as the inbox "
+      'does', () async {
+    final tea = (await memories.propose('c1', {'text': 'Prefers tea'})).memory!;
+    final jazz = (await memories.propose('c1', {'text': 'Likes jazz'})).memory!;
+    expect(
+      await memories.decide(tea.id, accept: true, text: ' Prefers green tea '),
+      (state: GaiaCardState.accepted, text: 'Prefers green tea'),
+    );
+    final kept = await repository.getMemory(tea.id);
+    expect(kept!.status, GaiaMemoryStatus.active);
+    expect(kept.text, 'Prefers green tea');
+    expect(await memories.index(), contains('Prefers green tea'));
+
+    expect(
+      (await memories.decide(jazz.id, accept: false, text: 'Likes jazz')).state,
+      GaiaCardState.rejected,
+    );
+    expect((await repository.getMemory(jazz.id))!.isDeleted, isTrue);
+    // Dismissed, it isn't offered again.
+    expect(
+      (await memories.propose('c1', {'text': 'Likes jazz'})).memory,
+      isNull,
+    );
+  });
+
+  test('a memory card edited to say what an active one does keeps that one, '
+      'not a second copy', () async {
+    await repository.upsertMemory(_memory('m1', 'Prefers green tea'));
+    final tea = (await memories.propose('c1', {'text': 'Prefers tea'})).memory!;
+    expect(
+      await memories.decide(tea.id, accept: true, text: 'prefers  GREEN tea'),
+      (state: GaiaCardState.accepted, text: 'Prefers green tea'),
+    );
+    expect((await repository.getMemory(tea.id))!.isDeleted, isTrue);
+    final active = (await repository.listMemories()).where(
+      (memory) => memory.status == GaiaMemoryStatus.active,
+    );
+    expect(active.map((memory) => memory.id), ['m1']);
+  });
+
+  test("a card's dismissal undone puts it back in the inbox, not one decided "
+      'since', () async {
+    final tea = (await memories.propose('c1', {'text': 'Prefers tea'})).memory!;
+    await memories.decide(tea.id, accept: false, text: 'Prefers tea');
+    expect(await memories.restore(tea.id), 'Prefers tea');
+    final back = (await repository.getMemory(tea.id))!;
+    expect((back.isDeleted, back.status), (false, GaiaMemoryStatus.proposed));
+    expect(await memories.restore(tea.id), isNull, reason: 'not dismissed');
+    await memories.decide(tea.id, accept: true, text: 'Prefers tea');
+    expect(await memories.restore(tea.id), isNull);
+  });
+
+  test("sameActive sees global ones and the project's own, not another "
+      "project's, an archived one, or the one asked about; for global, any "
+      "project's", () async {
+    for (final id in ['p1', 'p2']) {
+      await repository.upsertProject(
+        GaiaProject(id: id, name: id, createdAt: _at, updatedAt: _at),
+      );
+    }
+    await repository.upsertMemory(_memory('g', 'Likes jazz'));
+    await repository.upsertMemory(_memory('a', 'Uses vim', projectId: 'p1'));
+    await repository.upsertMemory(
+      _memory('z', 'Runs daily', status: GaiaMemoryStatus.archived),
+    );
+    expect((await memories.sameActive('likes  JAZZ'))?.id, 'g');
+    expect((await memories.sameActive('Likes jazz', projectId: 'p2'))?.id, 'g');
+    expect((await memories.sameActive('Uses vim', projectId: 'p1'))?.id, 'a');
+    expect(await memories.sameActive('Uses vim', projectId: 'p2'), isNull);
+    expect((await memories.sameActive('Uses vim'))?.id, 'a');
+    expect(await memories.sameActive('Runs daily'), isNull);
+    expect(await memories.sameActive('Likes jazz', except: 'g'), isNull);
+  });
+
+  test('a memory card shows what the inbox decided first, and refuses empty '
+      'or overlong text', () async {
+    final tea = (await memories.propose('c1', {'text': 'Prefers tea'})).memory!;
+    await repository.upsertMemory(
+      tea.copyWith(text: 'Prefers oolong', status: GaiaMemoryStatus.active),
+    );
+    expect(await memories.decide(tea.id, accept: false, text: 'Prefers tea'), (
+      state: GaiaCardState.accepted,
+      text: 'Prefers oolong',
+    ));
+    expect((await repository.getMemory(tea.id))!.isDeleted, isFalse);
+
+    final jazz = (await memories.propose('c1', {'text': 'Likes jazz'})).memory!;
+    await repository.upsertMemory(jazz.copyWith(deletedAt: _at));
+    expect(
+      (await memories.decide(jazz.id, accept: true, text: 'Likes jazz')).state,
+      GaiaCardState.rejected,
+    );
+
+    final walks = (await memories.propose('c1', {'text': 'Walks'})).memory!;
+    for (final text in ['  ', 'x' * (kGaiaMemoryMaxLength + 1)]) {
+      await expectLater(
+        memories.decide(walks.id, accept: true, text: text),
+        throwsA(isA<GaiaReadException>()),
+      );
+    }
+    expect(
+      (await repository.getMemory(walks.id))!.status,
+      GaiaMemoryStatus.proposed,
+    );
+  });
+
   test('tags are kept lower case, without #, spaces inside as -, once', () {
     expect(
       gaiaMemoryTags(['#Tea Time', ' drinks ', 'DRINKS', '#', '', 'a  b', 3]),

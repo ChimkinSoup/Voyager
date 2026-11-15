@@ -310,6 +310,42 @@ class _Main {
           projectId: project,
         );
         return {'saved': saved != null, 'project': project != null};
+      case 'proposeMemory':
+        final proposed = await memories.propose(
+          params['chatId']! as String,
+          (params['arguments']! as Map).cast(),
+        );
+        return {
+          'text': proposed.text,
+          if (proposed.memory case final memory?) ...{
+            'memoryId': memory.id,
+            'memoryText': memory.text,
+            'project': memory.projectId != null,
+          },
+        };
+      case 'decideMemory':
+        final decided = await memories.decide(
+          params['memoryId']! as String,
+          accept: params['accept'] == true,
+          text: params['text'] as String? ?? '',
+        );
+        await store.setMemoryCards(
+          params['chatId']! as String,
+          params['memoryId']! as String,
+          decided.state,
+          decided.text,
+        );
+        return {'state': decided.state.name, 'text': decided.text};
+      case 'restoreMemory':
+        final text = await memories.restore(params['memoryId']! as String);
+        if (text == null) return null;
+        await store.setMemoryCards(
+          params['chatId']! as String,
+          params['memoryId']! as String,
+          GaiaCardState.open,
+          text,
+        );
+        return {'text': text};
       case 'curated':
         await memories
             .curated(params['chatId']! as String, params['seq']! as int, [
@@ -3964,6 +4000,99 @@ void main() {
         'text': 'darker',
       });
       expect(reply.needsInput, isFalse);
+    });
+
+    test("memory_propose's card holds nothing up: decided mid-turn or after, "
+        'with the edit, and never voided as the turn ends', () async {
+      final tools = await hanging();
+      final result = await tools.call('memory_propose', {
+        'text': 'Prefers tea',
+      });
+      expect(result.text, contains('card'), reason: 'answered at once');
+      await settle();
+      GaiaMemoryPart memory(GaiaMessage message, int i) =>
+          message.parts.whereType<GaiaMemoryPart>().elementAt(i);
+      final tea = memory(controller.messages.last, 0);
+      expect(tea.isOpen, isTrue);
+      expect(controller.openCard, isNull, reason: 'the composer sends');
+      expect(
+        memory((await main.messages()).last, 0).isOpen,
+        isTrue,
+        reason: 'saved at once',
+      );
+
+      controller.editMemory(tea, 'Prefers green tea');
+      await controller.decideMemory(
+        controller.messages.last,
+        tea,
+        accept: true,
+      );
+      // The run writes the reply again: the decision stays.
+      await tools.call('memory_propose', {'text': 'Likes jazz'});
+      await settle();
+      expect(memory(controller.messages.last, 0).state, GaiaCardState.accepted);
+
+      runner.finish(controller.currentChatId!);
+      await settle();
+      var reply = (await main.messages()).last;
+      expect(memory(reply, 0).state, GaiaCardState.accepted);
+      expect(memory(reply, 0).text, 'Prefers green tea');
+      expect(memory(reply, 1).isOpen, isTrue, reason: 'not voided');
+      final kept = await main.repository.getMemory(tea.memoryId);
+      expect(
+        (kept!.status, kept.text),
+        (GaiaMemoryStatus.active, 'Prefers green tea'),
+      );
+
+      final jazz = memory(controller.messages.last, 1);
+      expect(
+        await controller.decideMemory(
+          controller.messages.last,
+          jazz,
+          accept: false,
+        ),
+        isTrue,
+        reason: 'dismissed, so undoable',
+      );
+      reply = (await main.messages()).last;
+      expect(memory(reply, 1).state, GaiaCardState.rejected);
+      expect(
+        (await main.repository.getMemory(jazz.memoryId))!.isDeleted,
+        isTrue,
+      );
+
+      await controller.restoreMemory(controller.messages.last, jazz);
+      expect(memory(controller.messages.last, 1).isOpen, isTrue);
+      expect(memory((await main.messages()).last, 1).isOpen, isTrue);
+      expect(
+        (await main.repository.getMemory(jazz.memoryId))!.isDeleted,
+        isFalse,
+      );
+    });
+
+    test("a memory card decided in the inbox stays so through the run's "
+        'later writes', () async {
+      final tools = await hanging();
+      await tools.call('memory_propose', {'text': 'Prefers tea'});
+      await settle();
+      final tea = controller.messages.last.parts
+          .whereType<GaiaMemoryPart>()
+          .single;
+      // As the Gaia page's Remember writes it.
+      await main.store.setMemoryCards(
+        controller.currentChatId!,
+        tea.memoryId,
+        GaiaCardState.accepted,
+        'Prefers tea',
+      );
+      await tools.call('memory_propose', {'text': 'Likes jazz'});
+      await settle();
+      runner.finish(controller.currentChatId!);
+      await settle();
+      final stored = (await main.messages()).last.parts
+          .whereType<GaiaMemoryPart>();
+      expect(stored.first.state, GaiaCardState.accepted);
+      expect(stored.last.isOpen, isTrue);
     });
 
     group('a card while the user is in another app', () {

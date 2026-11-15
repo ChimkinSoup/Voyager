@@ -30,6 +30,36 @@ Future<GaiaMessage?> gaiaToggleCheck(
   return written;
 }
 
+/// Memory [memoryId]'s cards in [chatId]'s messages set to [state] with
+/// [text] in [repository] (GAIA_HLD.md §11): what came of it, decided on
+/// its card or in the memory inbox, or open again once a dismissal is
+/// undone. Where there's no [GaiaChatStore], as on the phone.
+Future<void> gaiaSetMemoryCards(
+  GaiaRepository repository,
+  String chatId,
+  String memoryId,
+  GaiaCardState state,
+  String text,
+) async {
+  bool stale(GaiaPart part) =>
+      part is GaiaMemoryPart &&
+      part.memoryId == memoryId &&
+      (part.state != state || part.text != text);
+  for (final message in await repository.listMessages(chatId)) {
+    if (message.isDeleted || !message.parts.any(stale)) continue;
+    await repository.upsertMessage(
+      message.copyWith(
+        parts: [
+          for (final part in message.parts)
+            stale(part)
+                ? (part as GaiaMemoryPart).decided(state, text: text)
+                : part,
+        ],
+      ),
+    );
+  }
+}
+
 /// Deletes project [projectId] (GAIA_PROJECTS_HLD.md §3.3). With
 /// [withChats] its chats and memories go to the trash with it, at the same
 /// instant, so restoring it brings them back; without, they're let go, to
@@ -654,6 +684,7 @@ class GaiaChatStore {
   /// erased meanwhile: the run's later writes are dropped, or they'd bring the
   /// erased text back. Its task ticks stay as stored: only [toggleCheck]
   /// changes them, from the companion or the Gaia page, as it streams too.
+  /// So do its memory cards, once stored: only [setMemoryCards] changes them.
   /// Its chapter stays as stored too: only [setChapter] changes it.
   Future<GaiaMessage?> putMessage(GaiaMessage message) => _serial(() async {
     final existing = await _repository.getMessage(message.id);
@@ -664,7 +695,10 @@ class GaiaChatStore {
     final written = message.copyWith(
       parts: existing == null
           ? null
-          : gaiaKeepChecks(message.parts, gaiaChecksOf(existing.parts)),
+          : gaiaKeepMemoryCards(
+              gaiaKeepChecks(message.parts, gaiaChecksOf(existing.parts)),
+              existing.parts,
+            ),
       // A first write keeps its own: one pinned before it was stored.
       chapter: existing == null ? message.chapter : existing.chapter,
       clearChapter: existing != null && existing.chapter == null,
@@ -690,6 +724,16 @@ class GaiaChatStore {
     bool flipped,
   ) => _serial(
     () => gaiaToggleCheck(_repository, messageId, part, task, flipped),
+  );
+
+  /// [gaiaSetMemoryCards], one write at a time with the companion's.
+  Future<void> setMemoryCards(
+    String chatId,
+    String memoryId,
+    GaiaCardState state,
+    String text,
+  ) => _serial(
+    () => gaiaSetMemoryCards(_repository, chatId, memoryId, state, text),
   );
 
   /// Message [messageId]'s chapter set to [chapter], or unpinned for null

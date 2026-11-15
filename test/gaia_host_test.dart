@@ -788,7 +788,7 @@ void main() {
         request(async, 'rearm');
         expect(
           request(async, 'remember', {'chatId': null, 'text': 'I like tea'}),
-          {'saved': true},
+          {'saved': true, 'project': false},
         );
       });
     });

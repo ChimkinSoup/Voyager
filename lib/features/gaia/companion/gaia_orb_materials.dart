@@ -41,8 +41,8 @@ enum GaiaOrbThinking {
   final double pace;
 
   /// Added to the orbits' clock rate while fully thinking. Focus's orbits
-  /// turn at the classic pace while its motes keep their own.
-  double get orbitPace => this == focus ? classic.pace : pace;
+  /// turn briskly while its motes keep their own pace.
+  double get orbitPace => this == focus ? 1.1 : pace;
 }
 
 /// How the orb shows its reply streaming in. Outpour is the live chat's.
@@ -76,6 +76,10 @@ enum GaiaOrbReplying {
 
   /// Added to the clock's rate while fully replying.
   final double pace;
+
+  /// Added to the orbits' clock rate while fully replying. Outpour's orbits
+  /// spin faster than its streams and motes.
+  double get orbitPace => this == outpour ? 0.85 : pace;
 
   /// How much faster the orbits spin and tumble while fully replying: the
   /// classic reply's, which outpour borrows.
@@ -126,7 +130,7 @@ class GaiaOrbClock {
     final orbitRate =
         0.55 +
         thinking * thinkingStyle.orbitPace +
-        replying * replyingStyle.pace;
+        replying * replyingStyle.orbitPace;
     time += dt * rate;
     // The spin holds while gathering: each orbit turns the short way round
     // to its place in the glyph, and a spin carrying on could flip which way

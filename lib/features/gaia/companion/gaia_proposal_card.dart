@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_date_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
@@ -281,16 +282,11 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
   }
 
   Widget _textInput(String key, {required String label, int lines = 1}) =>
-      TextField(
+      GaiaCardTextField(
         controller: _controller(key),
-        minLines: 1,
+        labelText: label,
         maxLines: lines,
         style: Theme.of(context).textTheme.bodyMedium,
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
-        ),
       );
 
   Widget _choice(String key, String label, Map<String, Object?> fields) =>

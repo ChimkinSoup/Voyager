@@ -1221,6 +1221,16 @@ sealed class GaiaPart {
           text: json['text']! as String,
         ),
         'card' => GaiaCardPart.fromJson(json),
+        'memory' => GaiaMemoryPart(
+          memoryId: json['memoryId']! as String,
+          text: json['text']! as String,
+          project: json['project'] == true,
+          state:
+              GaiaCardState.values
+                  .where((state) => state.name == json['state'])
+                  .firstOrNull ??
+              GaiaCardState.open,
+        ),
         _ => GaiaUnknownPart(json),
       };
 }
@@ -1869,6 +1879,79 @@ class GaiaCardPart extends GaiaPart {
     },
     answer: (json['answer'] as Map?)?.cast<String, Object?>(),
   );
+}
+
+/// A memory the agent offered through `memory_propose` (§11), shown in its
+/// reply. No tool call waits on it, so the chat goes on while it's open: the
+/// user edits its [text] and remembers it, or dismisses it, there or in the
+/// memory inbox. [GaiaCardState.open] until then, [GaiaCardState.accepted]
+/// once remembered, as [text] says, or [GaiaCardState.rejected] once
+/// dismissed. [project] when it's for the chat's project.
+class GaiaMemoryPart extends GaiaPart {
+  const GaiaMemoryPart({
+    required this.memoryId,
+    required this.text,
+    this.project = false,
+    this.state = GaiaCardState.open,
+  });
+
+  final String memoryId;
+  final String text;
+  final bool project;
+  final GaiaCardState state;
+
+  bool get isOpen => state == GaiaCardState.open;
+
+  GaiaMemoryPart decided(GaiaCardState state, {String? text}) => GaiaMemoryPart(
+    memoryId: memoryId,
+    text: text ?? this.text,
+    project: project,
+    state: state,
+  );
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'memory',
+    'memoryId': memoryId,
+    'text': text,
+    if (project) 'project': true,
+    'state': state.name,
+  };
+}
+
+/// [parts] with each memory card the user decided in [shown] as they did: a
+/// streaming reply's run still holds it open.
+List<GaiaPart> gaiaKeepMemoryDecisions(
+  List<GaiaPart> parts,
+  List<GaiaPart> shown,
+) {
+  final decided = {
+    for (final part in shown)
+      if (part is GaiaMemoryPart && !part.isOpen) part.memoryId: part,
+  };
+  if (decided.isEmpty) return parts;
+  return [
+    for (final part in parts)
+      part is GaiaMemoryPart ? decided[part.memoryId] ?? part : part,
+  ];
+}
+
+/// [parts] with each memory card [stored] already has as [stored] has it:
+/// what came of a card is written only by deciding it, from the card or the
+/// memory inbox, so a streaming reply's run never writes it back open.
+List<GaiaPart> gaiaKeepMemoryCards(
+  List<GaiaPart> parts,
+  List<GaiaPart> stored,
+) {
+  final kept = {
+    for (final part in stored)
+      if (part is GaiaMemoryPart) part.memoryId: part,
+  };
+  if (kept.isEmpty) return parts;
+  return [
+    for (final part in parts)
+      part is GaiaMemoryPart ? kept[part.memoryId] ?? part : part,
+  ];
 }
 
 /// The `[image N]` token an attachment is referred to by (§9.3).

@@ -498,6 +498,26 @@ void main() {
     expect(controller.draft.text, '');
   });
 
+  testWidgets('/btw typed again, while they show, closes them', (
+    tester,
+  ) async {
+    final controller = await pump(tester);
+    Future<void> typeBtw() async {
+      await tester.enterText(find.byType(GaiaTextField), '/btw');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+    }
+
+    await typeBtw();
+    expect(controller.btwPanelOpen, isTrue);
+    await typeBtw();
+    expect(controller.btwPanelOpen, isFalse);
+    expect(controller.draft.text, '');
+    await typeBtw();
+    expect(controller.btwPanelOpen, isTrue);
+  });
+
   testWidgets('the palette stands in for them while it shows', (tester) async {
     final controller = await pump(tester);
     await tester.tap(find.text('2 btws'));

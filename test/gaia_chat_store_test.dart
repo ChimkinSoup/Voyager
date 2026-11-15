@@ -130,6 +130,38 @@ void main() {
     expect(await store.toggleCheck('missing', 0, 0, true), isNull);
   });
 
+  test("a memory card stays as decided through the run's writes, and opens "
+      'again when set so', () async {
+    await store.createChat(_chat('c1'));
+    GaiaMessage reply(GaiaMemoryPart card) => _message(
+      'b',
+      1,
+      status: GaiaMessageStatus.streaming,
+    ).copyWith(parts: [const GaiaTextPart('Noted.'), card]);
+    GaiaMemoryPart card(GaiaMessage? message) =>
+        message!.parts.whereType<GaiaMemoryPart>().single;
+    const open = GaiaMemoryPart(memoryId: 'm1', text: 'Prefers tea');
+    expect(card(await store.putMessage(reply(open))).isOpen, isTrue);
+
+    await store.setMemoryCards(
+      'c1',
+      'm1',
+      GaiaCardState.accepted,
+      'Prefers green tea',
+    );
+    final written = card(await store.putMessage(reply(open)));
+    expect((written.state, written.text), (
+      GaiaCardState.accepted,
+      'Prefers green tea',
+    ));
+
+    await store.setMemoryCards('c1', 'm1', GaiaCardState.open, 'Prefers tea');
+    final reopened = card(
+      await store.putMessage(reply(open.decided(GaiaCardState.rejected))),
+    );
+    expect(reopened.isOpen, isTrue, reason: 'only setMemoryCards decides');
+  });
+
   test('a later message moves its chat to the top', () async {
     await store.createChat(_chat('c1'));
     await store.createChat(

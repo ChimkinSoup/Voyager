@@ -51,6 +51,7 @@ import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
+import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_search.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
@@ -694,11 +695,13 @@ class _Header extends StatelessWidget {
                         compact: constraints.maxWidth < 240,
                       ),
                     Flexible(
-                      child: Text(
-                        controller.currentChat?.title ?? 'New chat',
-                        style: theme.textTheme.titleSmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: floater
+                          ? _ChatSwitcher(controller: controller)
+                          : Text(
+                              controller.currentChat?.title ?? 'New chat',
+                              style: theme.textTheme.titleSmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                     ),
                   ],
                 ),
@@ -891,6 +894,92 @@ class _ProjectCrumbState extends State<_ProjectCrumb> {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The chat's title in a floater's header, which has no sidebar: a click
+/// opens the most recent other chats to switch to, then Search. A click
+/// while the menu is open just closes it.
+class _ChatSwitcher extends StatefulWidget {
+  const _ChatSwitcher({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  State<_ChatSwitcher> createState() => _ChatSwitcherState();
+}
+
+class _ChatSwitcherState extends State<_ChatSwitcher> {
+  /// How many chats the menu lists; Search finds the rest.
+  static const _shown = 8;
+
+  ContextMenuController? _menu;
+
+  /// Whether the menu was open as the click went down, before the click
+  /// outside it closed it.
+  var _wasOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final theme = Theme.of(context);
+    return Listener(
+      onPointerDown: (_) => _wasOpen = _menu?.isShown ?? false,
+      child: GestureDetector(
+        onTapUp: (details) {
+          if (_wasOpen) return;
+          final recent = [
+            for (final chat in controller.chats)
+              if (chat.id != controller.currentChatId) chat,
+          ]..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+          // Under the title, not over it.
+          final title = context.findRenderObject()! as RenderBox;
+          _menu = showGaiaMenu(
+            context,
+            title.localToGlobal(
+              Offset(details.localPosition.dx, title.size.height),
+            ),
+            [
+              for (final chat in recent.take(_shown))
+                GaiaMenuItem(
+                  label: chat.title,
+                  icon: Icons.chat_bubble_outline,
+                  onPressed: () {
+                    unawaited(controller.selectChat(chat.id));
+                    controller.focusComposer();
+                  },
+                ),
+              GaiaMenuItem(
+                label: 'Search chats',
+                icon: Icons.search,
+                shortcut: 'Ctrl+F',
+                onPressed: () => showGaiaSearch(context, controller),
+              ),
+            ],
+          );
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  controller.currentChat?.title ?? 'New chat',
+                  style: theme.textTheme.titleSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(
+                Icons.expand_more,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
           ),
         ),
       ),
@@ -3607,6 +3696,32 @@ class _MessageView extends StatelessWidget {
                   onRunNext: () => controller.approveControl(part, once: false),
                 ),
               ),
+              GaiaMemoryPart() => GaiaMemoryCard(
+                key: ValueKey(part.memoryId),
+                memory: part,
+                text: controller.memoryText(part),
+                onEdit: (text) => controller.editMemory(part, text),
+                onRemember: () =>
+                    controller.decideMemory(message, part, accept: true),
+                onDismiss: () async {
+                  // Undoable, as the memory inbox's Dismiss is.
+                  if (!await controller.decideMemory(
+                        message,
+                        part,
+                        accept: false,
+                      ) ||
+                      !context.mounted) {
+                    return;
+                  }
+                  showGaiaToast(
+                    context,
+                    mark: GaiaToastMark.done,
+                    title: 'Dismissed',
+                    body: 'Click to undo',
+                    onTap: () => controller.restoreMemory(message, part),
+                  );
+                },
+              ),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
               GaiaFilePart() ||
@@ -4449,7 +4564,7 @@ class _ComposerState extends State<_Composer> {
       _cutToken();
       if (item.builtin == GaiaBuiltin.btw && _text.text.trim().isEmpty) {
         _used(item.name);
-        controller.openBtws();
+        await _runBuiltin(GaiaBuiltin.btw);
         _focus.requestFocus();
         return;
       }
@@ -4716,6 +4831,11 @@ class _ComposerState extends State<_Composer> {
   /// turned down.
   Future<bool> _runBuiltin(GaiaBuiltin builtin) async {
     final controller = widget.controller;
+    // `/btw` again, with the side questions open, closes them.
+    if (builtin == GaiaBuiltin.btw &&
+        (_btwDock.currentState?.close() ?? false)) {
+      return true;
+    }
     if (builtin != GaiaBuiltin.controlAuto) {
       await controller.runBuiltin(builtin);
       return true;

@@ -13,6 +13,7 @@ import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
+import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
@@ -476,6 +477,14 @@ class _DebugMenu extends StatelessWidget {
           style: muted,
         ),
         const _ActivityDedupePreview(),
+        heading('Memory card'),
+        Text(
+          'The card memory_propose puts in a reply: edit the text, then '
+          'Remember or Dismiss. Here they only change the card; nothing is '
+          'saved.',
+          style: muted,
+        ),
+        const GaiaMemoryCardPreview(),
         heading('Taking control of the screen'),
         GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
         heading('Display'),
@@ -1549,6 +1558,68 @@ class _ActivityDedupePreviewState extends State<_ActivityDedupePreview> {
             selected: {_after},
             onSelectionChanged: (picked) =>
                 setState(() => _after = picked.single),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A memory card as a reply shows it, decided here only.
+class GaiaMemoryCardPreview extends StatefulWidget {
+  const GaiaMemoryCardPreview({super.key});
+
+  @override
+  State<GaiaMemoryCardPreview> createState() => _GaiaMemoryCardPreviewState();
+}
+
+class _GaiaMemoryCardPreviewState extends State<GaiaMemoryCardPreview> {
+  static const _offered = GaiaMemoryPart(
+    memoryId: 'preview-memory',
+    text: 'Prefers green tea with no sugar',
+  );
+
+  var _memory = _offered;
+  var _text = _offered.text;
+
+  // A new key on reset, so the editor starts over.
+  var _shows = 0;
+
+  void _decide(GaiaCardState state) =>
+      setState(() => _memory = _memory.decided(state, text: _text.trim()));
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.centerLeft,
+          child: GaiaMemoryCard(
+            key: ValueKey(_shows),
+            memory: _memory,
+            onEdit: (text) => _text = text,
+            onRemember: () => _decide(GaiaCardState.accepted),
+            onDismiss: () => _decide(GaiaCardState.rejected),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            icon: Icons.replay,
+            label: 'Offer it again',
+            onPressed: () => setState(() {
+              _memory = _offered;
+              _text = _offered.text;
+              _shows++;
+            }),
           ),
         ),
       ],

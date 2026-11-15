@@ -244,6 +244,14 @@ String gaiaProjectMessageText(GaiaMessage message) {
         lines.add('(Pointed at: ${part.label})');
       case GaiaCardPart():
         lines.add('(${gaiaCardLine(part)})');
+      case GaiaMemoryPart(:final text, :final state):
+        lines.add(
+          "(Memory offered: '$text', ${switch (state) {
+            GaiaCardState.open => 'waiting',
+            GaiaCardState.accepted => 'remembered',
+            _ => 'dismissed',
+          }})",
+        );
       default:
         break;
     }

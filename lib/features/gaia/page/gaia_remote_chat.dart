@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
+import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
@@ -834,6 +835,7 @@ class GaiaTranscriptMessage extends ConsumerWidget {
                 onReject: onReject == null ? null : () => onReject!(part),
               ),
               GaiaCardPart() => GaiaCardView(card: part),
+              GaiaMemoryPart() => GaiaMemoryCard(memory: part),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
               GaiaFilePart() ||
