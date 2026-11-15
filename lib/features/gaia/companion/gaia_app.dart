@@ -63,6 +63,7 @@ import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
@@ -632,6 +633,9 @@ void _newChat(GaiaController controller) =>
     ? controller.moveDraftToNewChat()
     : controller.newChat();
 
+/// What [_newChat]'s buttons say on hover.
+const _newChatTip = 'New chat (Ctrl+N)\nShift+click takes the draft with it';
+
 class _Header extends StatelessWidget {
   const _Header({
     required this.controller,
@@ -668,7 +672,10 @@ class _Header extends StatelessWidget {
     return _DragArea(
       floater: floater,
       fullScreen: controller.fullScreen,
-      child: SizedBox(
+      // Over the stars, as the sidebar is: one drifting behind the title
+      // reads as a stray full stop in it.
+      child: Container(
+        color: theme.scaffoldBackgroundColor,
         // Room for the round buttons' shadows.
         height: 52,
         child: Row(
@@ -678,6 +685,7 @@ class _Header extends StatelessWidget {
               GaiaButton(
                 icon: Icons.view_sidebar_outlined,
                 size: 32,
+                tooltip: sidebarShown ? 'Hide sidebar' : 'Show sidebar',
                 onPressed: toggle,
               ),
               const SizedBox(width: 10),
@@ -719,18 +727,40 @@ class _Header extends StatelessWidget {
                       ),
               ),
             if (chip != null) ...[
-              Chip(
-                label: Text(chip),
-                visualDensity: VisualDensity.compact,
-                labelStyle: theme.textTheme.labelSmall,
+              // A warning, in the status lines' rose, in a context chip's
+              // shape.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: kGaiaStatusRose.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(GaiaRadius.chip),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.warning_amber,
+                      size: 12,
+                      color: kGaiaStatusRose,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      chip,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: kGaiaStatusRose,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 10),
             ],
             // The sidebar's New chat, when there's no sidebar.
             if (!sidebarShown) ...[
               GaiaButton(
                 icon: Icons.add,
                 size: 32,
+                tooltip: _newChatTip,
                 onPressed: () => _newChat(controller),
               ),
               const SizedBox(width: 10),
@@ -739,6 +769,7 @@ class _Header extends StatelessWidget {
               GaiaButton(
                 icon: Icons.open_in_full,
                 size: 32,
+                tooltip: 'Open in the Gaia window',
                 onPressed: controller.openWindow,
               ),
               const SizedBox(width: 10),
@@ -747,6 +778,7 @@ class _Header extends StatelessWidget {
             GaiaButton(
               icon: Icons.close,
               size: 32,
+              tooltip: floater ? 'Close (Esc)' : 'Close',
               onPressed: controller.dismiss,
             ),
             const SizedBox(width: 12),
@@ -1057,6 +1089,7 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
         GaiaButton(
           icon: Icons.remove,
           size: 32,
+          tooltip: 'Minimize',
           onPressed: windowManager.minimize,
         ),
         const SizedBox(width: 10),
@@ -1065,6 +1098,11 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
               ? Icons.filter_none
               : Icons.crop_square,
           size: 32,
+          tooltip: fullScreen
+              ? 'Leave full screen'
+              : _maximized
+              ? 'Restore'
+              : 'Maximize',
           onPressed: fullScreen
               ? widget.controller.leaveFullScreen
               : _maximized
