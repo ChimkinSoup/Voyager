@@ -34,6 +34,16 @@ class GaiaSidebar extends ChangeNotifier {
   /// The projects folded open to their chats (GAIA_PROJECTS_HLD.md §7.1).
   var openProjects = <String>{};
 
+  /// Where the sidebar, as laid out, ends (0 when hidden), so the stars
+  /// behind it can fade out at its edge.
+  final edge = ValueNotifier(0.0);
+
+  @override
+  void dispose() {
+    edge.dispose();
+    super.dispose();
+  }
+
   Future<void> load() async {
     final file = this.file;
     if (file == null || !await file.exists()) return;
@@ -160,6 +170,8 @@ class _GaiaSidebarLayoutState extends State<GaiaSidebarLayout> {
             ),
           );
           final width = sidebar.width.clamp(kGaiaSidebarMinWidth, maxWidth);
+          // Past its divider.
+          sidebar.edge.value = shown ? width + 1 : 0;
           void toggle() {
             setState(() => _squeezed = !shown && !fits);
             sidebar.setOpen(!shown);

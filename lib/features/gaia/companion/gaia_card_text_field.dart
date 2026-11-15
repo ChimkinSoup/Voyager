@@ -61,9 +61,7 @@ class _GaiaCardTextFieldState extends State<GaiaCardTextField> {
       if (!selection.isValid || selection.isCollapsed) return;
       final selected = selection.textInside(controller.text);
       if (selected.trim().isEmpty && selected.contains('\n')) {
-        controller.selection = TextSelection.collapsed(
-          offset: selection.start,
-        );
+        controller.selection = TextSelection.collapsed(offset: selection.start);
       }
     });
   }

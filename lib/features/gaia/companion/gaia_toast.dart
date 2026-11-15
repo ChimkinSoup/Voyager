@@ -6,11 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The light's pace around the ring, as [GaiaButton]'s: a turn every 16s.
 const _spin = math.pi / 8;
 
-const _radius = 8.0;
+const _radius = GaiaRadius.row;
 
 /// How long a toast stays up while the cursor isn't on it: longer for a
 /// longer body, at about 200 words a minute, up to 15s.
@@ -191,7 +192,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
   Widget _ring(ColorScheme colors) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: GaiaInk.hairline,
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: [
           BoxShadow(

@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// Gaia's surface colour: near black, tinted a little toward [accent].
 Color gaiaSurface(Color accent) =>
@@ -44,7 +45,6 @@ class GaiaButton extends StatefulWidget {
     this.padding = 16,
     this.still = false,
     this.radius,
-    this.tooltip,
   }) : assert(label != null || icon != null);
 
   /// Null disables the button.
@@ -67,9 +67,6 @@ class GaiaButton extends StatefulWidget {
 
   /// The corner radius; when null, 6 squared off, or half [size] round.
   final double? radius;
-
-  /// What it does, shown on hover: for a button that's only an icon.
-  final String? tooltip;
 
   @override
   State<GaiaButton> createState() => _GaiaButtonState();
@@ -134,7 +131,7 @@ class _GaiaButtonState extends State<GaiaButton> {
       final accent = widget.color ?? colors.primary;
       // The moving ring's colours, idle and lit, round the whole edge.
       ring = AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: GaiaMotion.quick,
         padding: const EdgeInsets.all(1),
         decoration: BoxDecoration(
           color: lit
@@ -159,7 +156,7 @@ class _GaiaButtonState extends State<GaiaButton> {
         child: inner,
       );
     }
-    final button = FocusableActionDetector(
+    return FocusableActionDetector(
       enabled: enabled,
       mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       actions: {
@@ -197,8 +194,6 @@ class _GaiaButtonState extends State<GaiaButton> {
         ),
       ),
     );
-    final tooltip = widget.tooltip;
-    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
   }
 }
 
@@ -336,7 +331,7 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
     final accent = widget.color ?? colors.primary;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: GaiaInk.hairline,
         borderRadius: BorderRadius.circular(outer),
       ),
       child: Stack(

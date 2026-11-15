@@ -4,6 +4,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// A small mark for one of Gaia's tiers, [level] 0 (quick) to 2 (deep), told
 /// apart by its shape rather than its colour: a dot in no, one or two rings,
@@ -67,7 +68,7 @@ class _GaiaTierGlyphState extends State<GaiaTierGlyph>
 
   late final _lit = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 250),
+    duration: GaiaMotion.move,
     value: widget.lit ? 1 : 0,
   );
 

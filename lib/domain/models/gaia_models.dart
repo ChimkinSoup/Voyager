@@ -2125,7 +2125,7 @@ class GaiaMessage extends SoftDeletable {
 /// A message Gaia's search found (GAIA_HLD.md §17): [snippet] is its text
 /// around the match, each matched term between [start] and [end]. A side
 /// question's hit (GAIA_BTW_HLD.md §9) has its [btwId], no [messageId], and
-/// a [seq] of -1.
+/// a [seq] of -1. [inCode] when [snippet] starts inside a fenced code block.
 class GaiaSearchHit {
   const GaiaSearchHit({
     required this.chatId,
@@ -2133,6 +2133,7 @@ class GaiaSearchHit {
     required this.seq,
     required this.snippet,
     this.btwId,
+    this.inCode = false,
   });
 
   static const start = '\u0001';
@@ -2143,6 +2144,7 @@ class GaiaSearchHit {
   final int seq;
   final String snippet;
   final String? btwId;
+  final bool inCode;
 
   Map<String, Object?> toJson() => {
     'chatId': chatId,
@@ -2150,6 +2152,7 @@ class GaiaSearchHit {
     'seq': seq,
     'snippet': snippet,
     'btwId': ?btwId,
+    if (inCode) 'inCode': true,
   };
 
   factory GaiaSearchHit.fromJson(Map<String, Object?> json) => GaiaSearchHit(
@@ -2158,6 +2161,7 @@ class GaiaSearchHit {
     seq: (json['seq']! as num).toInt(),
     snippet: json['snippet']! as String,
     btwId: json['btwId'] as String?,
+    inCode: json['inCode'] == true,
   );
 }
 

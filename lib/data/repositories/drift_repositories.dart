@@ -9968,7 +9968,7 @@ class DriftGaiaRepository implements GaiaRepository {
           // a rewind's dropped messages not among them (GAIA_REWIND_HLD.md
           // §5). Search rows sit at their message's rowid.
           'SELECT s.chat_id AS chat_id, s.message_id AS message_id, '
-          'h.seq AS seq, h.created_at AS created_at, '
+          'h.seq AS seq, h.created_at AS created_at, s.body AS body, '
           'snippet(gaia_message_search, 0, ?, ?, ?, 16) AS snippet '
           'FROM ('
           'SELECT m.rowid AS r, m.seq AS seq, m.created_at AS created_at '
@@ -10009,7 +10009,7 @@ class DriftGaiaRepository implements GaiaRepository {
         : await _db
               .customSelect(
                 'SELECT s.chat_id AS chat_id, s.btw_id AS btw_id, '
-                'h.created_at AS created_at, '
+                'h.created_at AS created_at, s.body AS body, '
                 'snippet(gaia_btw_search, 0, ?, ?, ?, 16) AS snippet '
                 'FROM ('
                 'SELECT b.rowid AS r, b.created_at AS created_at '
@@ -10039,29 +10039,62 @@ class DriftGaiaRepository implements GaiaRepository {
               .get();
     final hits = [
       for (final row in rows)
-        (
-          row.read<DateTime>('created_at'),
-          GaiaSearchHit(
-            chatId: row.read<String>('chat_id'),
-            messageId: row.read<String>('message_id'),
-            seq: row.read<int>('seq'),
-            snippet: row.read<String>('snippet'),
-          ),
-        ),
-      if (chatIds == null)
-        for (final row in btws)
+        if (_gaiaSnippetCode(row.read('snippet'), row.read('body')) case (
+          final snippet,
+          final inCode,
+        ))
           (
             row.read<DateTime>('created_at'),
             GaiaSearchHit(
               chatId: row.read<String>('chat_id'),
-              messageId: '',
-              seq: -1,
-              snippet: row.read<String>('snippet'),
-              btwId: row.read<String>('btw_id'),
+              messageId: row.read<String>('message_id'),
+              seq: row.read<int>('seq'),
+              snippet: snippet,
+              inCode: inCode,
             ),
           ),
+      if (chatIds == null)
+        for (final row in btws)
+          if (_gaiaSnippetCode(row.read('snippet'), row.read('body')) case (
+            final snippet,
+            final inCode,
+          ))
+            (
+              row.read<DateTime>('created_at'),
+              GaiaSearchHit(
+                chatId: row.read<String>('chat_id'),
+                messageId: '',
+                seq: -1,
+                snippet: snippet,
+                btwId: row.read<String>('btw_id'),
+                inCode: inCode,
+              ),
+            ),
     ]..sort((a, b) => b.$1.compareTo(a.$1));
     return [for (final (_, hit) in hits.take(limit)) hit];
+  }
+
+  /// [snippet], cut from [body], and whether it starts inside a fenced code
+  /// block. One that starts partway along a fence's line gets the rest of
+  /// that line, so it still reads as a fence.
+  static (String, bool) _gaiaSnippetCode(String snippet, String body) {
+    final cut = snippet.startsWith('…') ? snippet.substring(1) : snippet;
+    var text = cut
+        .replaceAll(GaiaSearchHit.start, '')
+        .replaceAll(GaiaSearchHit.end, '');
+    if (text.endsWith('…')) text = text.substring(0, text.length - 1);
+    final at = body.indexOf(text);
+    if (at < 0) return (snippet, false);
+    final lineStart = at == 0 ? 0 : body.lastIndexOf('\n', at - 1) + 1;
+    var inCode = false;
+    for (final line in body.substring(0, lineStart).split('\n')) {
+      if (line.trimLeft().startsWith('```')) inCode = !inCode;
+    }
+    final lineEnd = body.indexOf('\n', lineStart);
+    final line = body.substring(lineStart, lineEnd < 0 ? body.length : lineEnd);
+    return at > lineStart && line.trimLeft().startsWith('```')
+        ? (body.substring(lineStart, at) + cut, inCode)
+        : (snippet, inCode);
   }
 
   /// [query] as an FTS5 match of every word as a prefix; null for no words.

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The region capture's crop (GAIA_HLD.md §3.2, §15.1 C): the frozen frame
 /// of the monitor at 1:1, dimmed outside the region being dragged out.
@@ -116,7 +117,7 @@ class _Hint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(GaiaRadius.row),
       ),
       child: const Text(
         'Drag to capture a region · Enter for the whole screen · Esc to cancel',

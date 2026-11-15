@@ -1114,7 +1114,7 @@ class _OptionsState extends State<_Options>
         color: active
             ? accent.withValues(alpha: 0.85)
             : Colors.white.withValues(alpha: lit ? 0.05 : 0),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(GaiaRadius.chip),
         border: Border.all(
           color: active
               ? Color.lerp(accent, Colors.white, lit ? 0.6 : 0.2)!

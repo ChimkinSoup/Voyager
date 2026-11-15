@@ -32,16 +32,15 @@ class GaiaMemoryCard extends StatefulWidget {
 
 class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   late String _last = widget.text ?? widget.memory.text;
-  late final TextEditingController _text =
-      TextEditingController(text: _last)
-        ..addListener(() {
-          // Caret and selection moves notify too.
-          if (_text.text == _last) return;
-          _last = _text.text;
-          widget.onEdit?.call(_text.text);
-          // The Remember button follows whether there's text.
-          setState(() {});
-        });
+  late final TextEditingController _text = TextEditingController(text: _last)
+    ..addListener(() {
+      // Caret and selection moves notify too.
+      if (_text.text == _last) return;
+      _last = _text.text;
+      widget.onEdit?.call(_text.text);
+      // The Remember button follows whether there's text.
+      setState(() {});
+    });
 
   @override
   void didUpdateWidget(GaiaMemoryCard oldWidget) {

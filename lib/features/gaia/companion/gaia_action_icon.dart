@@ -19,10 +19,14 @@ class GaiaActionIcon extends StatefulWidget {
     required this.icon,
     required this.onPressed,
     this.compact = false,
+    this.tooltip = true,
   });
 
-  /// Its tooltip.
+  /// Its tooltip, or with no [tooltip] its name to a screen reader alone.
   final String label;
+
+  /// Whether hovering it shows [label].
+  final bool tooltip;
   final IconData icon;
   final VoidCallback onPressed;
 
@@ -42,42 +46,42 @@ class _GaiaActionIconState extends State<GaiaActionIcon> {
   @override
   Widget build(BuildContext context) {
     final lit = _hovered || _focused;
-    return Tooltip(
-      message: widget.label,
-      child: FocusableActionDetector(
-        mouseCursor: SystemMouseCursors.click,
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) => widget.onPressed(),
+    final button = FocusableActionDetector(
+      mouseCursor: SystemMouseCursors.click,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) => widget.onPressed(),
+        ),
+      },
+      onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
+      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: GaiaMotion.quick,
+          // Less its edge's pixel.
+          padding: EdgeInsets.all(
+            (widget.compact ? 4 : kGaiaActionIconPadding) - 1,
           ),
-        },
-        onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
-        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: GaiaMotion.quick,
-            // Less its edge's pixel.
-            padding: EdgeInsets.all(
-              (widget.compact ? 4 : kGaiaActionIconPadding) - 1,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: lit ? 0.06 : 0),
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
+            // Tabbed to, it's edged too: the fill alone is easy to miss.
+            border: Border.all(
+              color: Colors.white.withValues(alpha: _focused ? 0.3 : 0),
             ),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: lit ? 0.06 : 0),
-              borderRadius: BorderRadius.circular(GaiaRadius.chip),
-              // Tabbed to, it's edged too: the fill alone is easy to miss.
-              border: Border.all(
-                color: Colors.white.withValues(alpha: _focused ? 0.3 : 0),
-              ),
-            ),
-            child: Icon(
-              widget.icon,
-              size: _iconSize,
-              color: lit ? GaiaInk.bright : GaiaInk.faint,
-            ),
+          ),
+          child: Icon(
+            widget.icon,
+            size: _iconSize,
+            color: lit ? GaiaInk.bright : GaiaInk.faint,
           ),
         ),
       ),
     );
+    return widget.tooltip
+        ? Tooltip(message: widget.label, child: button)
+        : Semantics(button: true, label: widget.label, child: button);
   }
 }

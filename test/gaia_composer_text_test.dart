@@ -373,6 +373,22 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('an emptied draft forgets an Esc on the palette', (
+      tester,
+    ) async {
+      await start(tester, GaiaTextSettings.off);
+      await type(tester, '/');
+      expect(find.byKey(const ValueKey('/new')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('/new')), findsNothing);
+      controller.draft.clear();
+      await tester.pump();
+      await type(tester, '/');
+      expect(find.byKey(const ValueKey('/new')), findsOneWidget);
+      await settle(tester);
+    });
+
     testWidgets('the palette still opens once a drain has given the field back', (
       tester,
     ) async {

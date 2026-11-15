@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// An attached image as a thumbnail [height] tall, its `[image N]` over its
 /// corner (GAIA_HLD.md §9.3): the file at [path], or the one [file]
@@ -114,7 +115,7 @@ class GaiaImageThumb extends StatelessWidget {
               child: Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(GaiaRadius.row),
                     child: AnimatedOpacity(
                       opacity: uploading ? 0.45 : 1,
                       duration: const Duration(milliseconds: 200),

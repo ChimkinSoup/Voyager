@@ -88,7 +88,10 @@ void main() {
     await repository.upsertChat(
       expired.copyWith(deletedAt: DateTime.utc(2020)),
     );
-    expect(await store.restorableChatIds(), unorderedEquals(['live', 'trashed']));
+    expect(
+      await store.restorableChatIds(),
+      unorderedEquals(['live', 'trashed']),
+    );
   });
 
   test('messages come back in seq order, and a put replaces by id', () async {
@@ -150,10 +153,10 @@ void main() {
       'Prefers green tea',
     );
     final written = card(await store.putMessage(reply(open)));
-    expect((written.state, written.text), (
-      GaiaCardState.accepted,
-      'Prefers green tea',
-    ));
+    expect(
+      (written.state, written.text),
+      (GaiaCardState.accepted, 'Prefers green tea'),
+    );
 
     await store.setMemoryCards('c1', 'm1', GaiaCardState.open, 'Prefers tea');
     final reopened = card(
@@ -497,6 +500,29 @@ void main() {
         (back.chatId, back.messageId, back.seq, back.snippet),
         (hit.chatId, hit.messageId, hit.seq, hit.snippet),
       );
+    });
+
+    test('a hit says whether it starts inside a code block', () async {
+      final prose = List.filled(20, 'word').join(' ');
+      final code = [for (var i = 0; i < 20; i++) '# step $i'].join('\n');
+      await store.putMessage(
+        _message('k', 1, text: '$prose\n```bash\n$code\ncat a > zebra\n```'),
+      );
+      // Cut by the search partway along its fence's line, as '…bash'.
+      final xs = List.filled(14, 'x').join(' ');
+      await store.putMessage(
+        _message('f', 2, text: '$prose\n```bash\n$xs\nemu\n```'),
+      );
+      const s = GaiaSearchHit.start, e = GaiaSearchHit.end;
+
+      final [inBlock] = await store.searchMessages('zebra');
+      expect(inBlock.snippet, startsWith('…13\n# step 14'));
+      expect(inBlock.inCode, isTrue);
+      expect(GaiaSearchHit.fromJson(inBlock.toJson()).inCode, isTrue);
+
+      final [fence] = await store.searchMessages('emu');
+      expect(fence.snippet, '```bash\n$xs\n${s}emu$e\n```');
+      expect(fence.inCode, isFalse);
     });
 
     test('an account wipe empties it', () async {

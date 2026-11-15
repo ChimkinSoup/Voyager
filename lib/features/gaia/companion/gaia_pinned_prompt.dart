@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The user's messages' bubbles and their prompt pinned over the chat:
 /// Gaia's accent through the raised surface, to stand off the starfield.
@@ -54,7 +55,7 @@ class GaiaPinnedPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final shape = BorderRadius.circular(6);
+    final shape = BorderRadius.circular(GaiaRadius.chip);
     final style = theme.textTheme.bodySmall;
     final prompt = text == null
         ? null
@@ -130,7 +131,7 @@ class _Text extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedSwitcher(
-    duration: const Duration(milliseconds: 150),
+    duration: GaiaMotion.quick,
     transitionBuilder: gaiaPinnedFade,
     layoutBuilder: (current, previous) => Stack(
       alignment: Alignment.centerLeft,

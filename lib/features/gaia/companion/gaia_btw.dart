@@ -284,7 +284,7 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
               // Opaque, as the field it sits on.
               color: gaiaFieldFill,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(8),
+                top: Radius.circular(GaiaRadius.row),
               ),
               border: Border(top: BorderSide(color: accent, width: 2)),
             ),
@@ -443,7 +443,7 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
     padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
     decoration: BoxDecoration(
       color: _tray,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(GaiaRadius.row),
       border: Border.all(color: _cardEdge),
     ),
     child: Column(
@@ -550,7 +550,7 @@ class _RowState extends State<_Row> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: GaiaMotion.quick,
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
@@ -558,7 +558,7 @@ class _RowState extends State<_Row> {
             color: lit
                 ? accent.withValues(alpha: 0.16)
                 : Colors.white.withValues(alpha: _hovered ? 0.06 : 0),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
           ),
           child: Row(
             spacing: 8,
@@ -601,7 +601,7 @@ class GaiaBtwChip extends StatelessWidget {
           !controller.btwPanelOpen &&
           btws.any((btw) => btw.status == GaiaMessageStatus.streaming);
       return InkWell(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(GaiaRadius.chip),
         onTap: controller.openBtws,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -611,7 +611,7 @@ class GaiaBtwChip extends StatelessWidget {
               accent.withValues(alpha: 0.15),
               theme.scaffoldBackgroundColor,
             ),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

@@ -590,7 +590,7 @@ Widget _menuRow(BuildContext context, GaiaMenuItem item, bool lit) {
       color: item.destructive
           ? error.withValues(alpha: lit ? 0.12 : 0)
           : Colors.white.withValues(alpha: lit ? 0.05 : 0),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(GaiaRadius.chip),
     ),
     child: Row(
       children: [

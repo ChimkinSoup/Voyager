@@ -2212,44 +2212,66 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The prompt of the run a limit stopped, when that's the current chat's
-  /// last reply.
-  GaiaMessage? get _interruptedQuestion {
+  /// The prompt of the run that failed, when that's the current chat's last
+  /// reply; [limited] for one a limit stopped, otherwise any other error.
+  GaiaMessage? _failedQuestion({required bool limited}) {
     final list = messages;
     if (list.length < 2) return null;
     final reply = list.last;
     final question = list[list.length - 2];
     return reply.role == GaiaMessageRole.assistant &&
             reply.status == GaiaMessageStatus.error &&
-            gaiaRunLimited(reply.error ?? '') &&
+            gaiaRunLimited(reply.error ?? '') == limited &&
             question.role == GaiaMessageRole.user
         ? question
         : null;
   }
 
+  GaiaMessage? get _interruptedQuestion => _failedQuestion(limited: true);
+
+  /// Whether [reply] is the current chat's last reply, failed with an error
+  /// other than a limit's, so its prompt can be sent again ([retryFailed]).
+  bool canRetry(GaiaMessage reply) =>
+      messages.lastOrNull?.id == reply.id &&
+      _failedQuestion(limited: false) != null;
+
   /// Sends the prompt the interrupted run was answering again, as it went
   /// (§6.5), leaving the draft alone.
-  Future<void> resendInterrupted() async {
-    final question = _interruptedQuestion;
-    if (question == null) return;
+  Future<void> resendInterrupted() => _resend(_interruptedQuestion);
+
+  /// An error reply's Retry: its prompt sent again, as [resendInterrupted]
+  /// sends a limit-stopped one.
+  Future<void> retryFailed() => _resend(_failedQuestion(limited: false));
+
+  /// Whether [_resend] is copying a prompt's images: the question isn't in
+  /// the chat yet, so a second press would find the reply still failed.
+  var _resending = false;
+
+  Future<void> _resend(GaiaMessage? question) async {
+    if (question == null || _resending) return;
     final images = <GaiaDraftImage>[];
-    for (final image in question.parts.whereType<GaiaImagePart>()) {
-      final path = await imageFile(image.mediaId);
-      if (path == null) {
-        for (final copied in images) {
-          unawaited(_deleteQuietly(copied.path));
+    _resending = true;
+    try {
+      for (final image in question.parts.whereType<GaiaImagePart>()) {
+        final path = await imageFile(image.mediaId);
+        if (path == null) {
+          for (final copied in images) {
+            unawaited(_deleteQuietly(copied.path));
+          }
+          return _note(
+            "Couldn't send it again",
+            'An image in it is not on this device.',
+            error: true,
+          );
         }
-        return _note(
-          "Couldn't send it again",
-          'An image in it is not on this device.',
-          error: true,
-        );
+        // A send deletes its images' files once it's done.
+        final copy = p.join(_draftDirectory, '${_uuid.v4()}.img');
+        await Directory(_draftDirectory).create(recursive: true);
+        await File(path).copy(copy);
+        images.add(GaiaDraftImage(label: image.label, path: copy));
       }
-      // A send deletes its images' files once it's done.
-      final copy = p.join(_draftDirectory, '${_uuid.v4()}.img');
-      await Directory(_draftDirectory).create(recursive: true);
-      await File(path).copy(copy);
-      images.add(GaiaDraftImage(label: image.label, path: copy));
+    } finally {
+      _resending = false;
     }
     await send(
       question.text,
@@ -7484,6 +7506,32 @@ String gaiaPlainLine(String line) => line
       (m) => m[1]!,
     )
     .trim();
+
+/// A search hit's [snippet] on one line as plain text: each of its prose
+/// lines as [gaiaPlainLine] makes it, less the bold, strike and code marks
+/// its cut left unpaired; a code block's lines as they are, its fences
+/// dropped. [inCode] when it starts inside a block. The match marks
+/// ([GaiaSearchHit.start], [GaiaSearchHit.end]) are kept; when the match was
+/// only in what's stripped (a link's URL, a fence's line), [snippet] as it
+/// is, so the row still shows it.
+String gaiaPlainSnippet(String snippet, {bool inCode = false}) {
+  var code = inCode;
+  final lines = <String>[];
+  for (final line in snippet.split('\n')) {
+    if (line.trimLeft().startsWith('```')) {
+      code = !code;
+    } else {
+      lines.add(
+        code ? line : gaiaPlainLine(line).replaceAll(RegExp(r'\*\*|~~|`'), ''),
+      );
+    }
+  }
+  final plain = lines.join(' ');
+  final kept =
+      plain.contains(GaiaSearchHit.start) ||
+      !snippet.contains(GaiaSearchHit.start);
+  return (kept ? plain : snippet).replaceAll(RegExp(r'\s+'), ' ').trim();
+}
 
 /// A side question's in dummy mode: its script has no cards, which never
 /// call it.

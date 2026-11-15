@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// [file]'s type, as its card shows it: "Folder", "PDF", or "File" without
 /// an extension.
@@ -51,7 +52,7 @@ class GaiaFileCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(GaiaRadius.row),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -61,7 +62,7 @@ class GaiaFileCard extends StatelessWidget {
                     height: height - 16,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(GaiaRadius.chip),
                     ),
                     child: Icon(icon, size: 20, color: accent),
                   ),

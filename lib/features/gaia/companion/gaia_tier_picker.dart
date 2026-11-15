@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_glyph.dart';
 
 /// The tier picker's item (§7.2): the three tiers, each with its [agent],
@@ -108,7 +109,7 @@ class _GaiaRouteFlashState extends State<GaiaRouteFlash>
         // and goes.
         return DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(GaiaRadius.panel),
             boxShadow: [
               if (glow > 0)
                 BoxShadow(

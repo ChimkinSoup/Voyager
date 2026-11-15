@@ -16,6 +16,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// A message's text rendered as Markdown (§9.5): the one renderer for the
 /// companion, the Gaia page and the phone. Selectable across its blocks,
@@ -1566,7 +1567,7 @@ class _GaiaCodeBlockState extends State<GaiaCodeBlock> {
         border: Border.all(
           color: theme.colorScheme.onSurface.withValues(alpha: 0.14),
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(GaiaRadius.row),
       ),
       // Without a language there's no header line: the copy button sits
       // beside the code instead.

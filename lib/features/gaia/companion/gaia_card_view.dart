@@ -8,6 +8,7 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_proposal_card.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/host/gaia_flash.dart';
 
 /// A card in a reply (GAIA_HLD.md §10): a question the agent asked through
@@ -144,7 +145,7 @@ class GaiaCardView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(GaiaRadius.chip),
                 ),
                 child: SelectableText(
                   detail,
@@ -675,12 +676,12 @@ class _Option extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(GaiaRadius.row),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(GaiaRadius.row),
           color: picked ? accent.withValues(alpha: 0.22) : null,
           border: Border.all(
             color: picked

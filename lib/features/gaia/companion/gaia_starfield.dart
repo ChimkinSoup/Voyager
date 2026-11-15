@@ -9,9 +9,24 @@ import 'package:flutter/scheduler.dart';
 /// screen and in front — with the cursor over it, so a window left alone
 /// costs nothing; otherwise, and under reduced motion, it's still.
 class GaiaStarfield extends StatefulWidget {
-  const GaiaStarfield({super.key, required this.active, required this.child});
+  const GaiaStarfield({
+    super.key,
+    required this.active,
+    this.top = 0,
+    this.left,
+    required this.child,
+  });
 
   final ValueListenable<bool> active;
+
+  /// The stars keep below this, fading at it as at the other edges, so one
+  /// can't sit half cut off under an opaque header.
+  final double top;
+
+  /// The edge of an opaque sidebar over the stars' left. They stay put as it
+  /// moves, so it covers them, but fade out at it.
+  final ValueListenable<double>? left;
+
   final Widget child;
 
   @override
@@ -96,7 +111,7 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
     return MouseRegion(
       opaque: false,
       onHover: (event) {
-        _stars.cursor = event.localPosition;
+        _stars.cursor = event.localPosition - Offset(0, widget.top);
         _hover(true);
       },
       onExit: (_) {
@@ -107,7 +122,7 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
       // the chat in front of them, nor the window around them.
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: _StarPainter(_stars),
+          painter: _StarPainter(_stars, widget.top, widget.left),
           child: RepaintBoundary(child: widget.child),
         ),
       ),
@@ -178,25 +193,31 @@ class _Stars extends ChangeNotifier {
 }
 
 class _StarPainter extends CustomPainter {
-  _StarPainter(this.stars) : super(repaint: stars);
+  _StarPainter(this.stars, this.top, this.left)
+    : super(repaint: Listenable.merge([stars, left]));
 
   final _Stars stars;
+  final double top;
+  final ValueListenable<double>? left;
 
   /// Stars fade out over this distance from the edges, so wrapping round
   /// doesn't pop.
   static const _edge = 20.0;
 
   @override
-  void paint(Canvas canvas, Size size) {
+  void paint(Canvas canvas, Size whole) {
+    final size = Size(whole.width, max(0, whole.height - top));
+    canvas.translate(0, top);
     stars.size = size;
     final count = min(_pool, (size.width * size.height / _areaPerStar).ceil());
     final paint = Paint();
+    final from = max(0.0, left?.value ?? 0);
     for (var i = 0; i < count; i++) {
       final px = stars.x[i] * size.width + stars.leanX[i];
       final py = stars.y[i] * size.height + stars.leanY[i];
       final r = stars.radius[i];
       final nearest = min(
-        min(px - r, size.width - px - r),
+        min(px - from - r, size.width - px - r),
         min(py - r, size.height - py - r),
       );
       if (nearest <= 0) continue;
@@ -207,5 +228,8 @@ class _StarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_StarPainter oldDelegate) => oldDelegate.stars != stars;
+  bool shouldRepaint(_StarPainter oldDelegate) =>
+      oldDelegate.stars != stars ||
+      oldDelegate.top != top ||
+      oldDelegate.left != left;
 }

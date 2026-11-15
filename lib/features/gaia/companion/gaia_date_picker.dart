@@ -5,6 +5,7 @@ import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// Voyager's date picker in Gaia's look: a dialog in a [GaiaGlowRing], as
 /// Gaia's menus are. A day alone unless [timed]; with [optionalTime], the
@@ -78,7 +79,7 @@ Future<DateTimePick?> showGaiaDatePicker(
   ),
 );
 
-const _radius = 12.0;
+const _radius = GaiaRadius.panel;
 
 /// Today, Tomorrow and Next Week as Gaia's buttons, narrower than the
 /// card's so the three fit the calendar's width; the picked day's in the

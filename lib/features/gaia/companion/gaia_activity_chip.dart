@@ -9,6 +9,7 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// The tools a reply used between its text blocks, in the orb's gold so it
@@ -118,7 +119,7 @@ class _GaiaActivityChipState extends State<GaiaActivityChip> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: scheme.onSurface.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(GaiaRadius.row),
               border: Border.all(
                 color: scheme.onSurface.withValues(alpha: 0.12),
               ),
@@ -291,7 +292,7 @@ class _KeptResultState extends State<_KeptResult> {
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: scheme.onSurface.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(GaiaRadius.chip),
               ),
               child: SingleChildScrollView(
                 child: Text(text, style: widget.style),

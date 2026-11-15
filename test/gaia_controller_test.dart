@@ -5419,6 +5419,28 @@ void main() {
         expect(controller.limitCard, isNull);
       });
 
+      test('an error reply retries its prompt; a limit one does not', () async {
+        await start();
+        runner.turns.add(const [
+          ClaudeResult(sessionId: 's1', isError: true, text: 'Overloaded'),
+        ]);
+        await controller.send('Hi');
+        await settle();
+        final failed = controller.messages.last;
+        expect(controller.canRetry(failed), isTrue);
+
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.retryFailed();
+        await settle();
+        expect(runner.sent.last.prompt, endsWith('Hi'));
+        expect(controller.messages, hasLength(4));
+        expect(controller.messages.last.status, GaiaMessageStatus.complete);
+        expect(controller.canRetry(failed), isFalse);
+
+        await limited('Write the plan');
+        expect(controller.canRetry(controller.messages.last), isFalse);
+      });
+
       test('a stale reader still leaves the run error in charge', () async {
         final source = _FakeUsageSource()
           ..reply = const GaiaUsageRead(GaiaUsageHealth.stale);

@@ -422,6 +422,9 @@ class _GaiaShell extends StatelessWidget {
                 Positioned.fill(
                   child: GaiaStarfield(
                     active: controller.focused,
+                    // Below the header and its divider.
+                    top: _headerHeight + 1,
+                    left: floater ? null : controller.sidebar.edge,
                     child: floater
                         ? chat()
                         : GaiaSidebarLayout(
@@ -633,8 +636,8 @@ void _newChat(GaiaController controller) =>
     ? controller.moveDraftToNewChat()
     : controller.newChat();
 
-/// What [_newChat]'s buttons say on hover.
-const _newChatTip = 'New chat (Ctrl+N)\nShift+click takes the draft with it';
+/// Room for the round buttons' shadows.
+const _headerHeight = 52.0;
 
 class _Header extends StatelessWidget {
   const _Header({
@@ -676,8 +679,7 @@ class _Header extends StatelessWidget {
       // reads as a stray full stop in it.
       child: Container(
         color: theme.scaffoldBackgroundColor,
-        // Room for the round buttons' shadows.
-        height: 52,
+        height: _headerHeight,
         child: Row(
           children: [
             if (toggleSidebar case final toggle?) ...[
@@ -685,7 +687,6 @@ class _Header extends StatelessWidget {
               GaiaButton(
                 icon: Icons.view_sidebar_outlined,
                 size: 32,
-                tooltip: sidebarShown ? 'Hide sidebar' : 'Show sidebar',
                 onPressed: toggle,
               ),
               const SizedBox(width: 10),
@@ -760,7 +761,6 @@ class _Header extends StatelessWidget {
               GaiaButton(
                 icon: Icons.add,
                 size: 32,
-                tooltip: _newChatTip,
                 onPressed: () => _newChat(controller),
               ),
               const SizedBox(width: 10),
@@ -769,7 +769,6 @@ class _Header extends StatelessWidget {
               GaiaButton(
                 icon: Icons.open_in_full,
                 size: 32,
-                tooltip: 'Open in the Gaia window',
                 onPressed: controller.openWindow,
               ),
               const SizedBox(width: 10),
@@ -778,7 +777,6 @@ class _Header extends StatelessWidget {
             GaiaButton(
               icon: Icons.close,
               size: 32,
-              tooltip: floater ? 'Close (Esc)' : 'Close',
               onPressed: controller.dismiss,
             ),
             const SizedBox(width: 12),
@@ -1089,7 +1087,6 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
         GaiaButton(
           icon: Icons.remove,
           size: 32,
-          tooltip: 'Minimize',
           onPressed: windowManager.minimize,
         ),
         const SizedBox(width: 10),
@@ -1098,11 +1095,6 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
               ? Icons.filter_none
               : Icons.crop_square,
           size: 32,
-          tooltip: fullScreen
-              ? 'Leave full screen'
-              : _maximized
-              ? 'Restore'
-              : 'Maximize',
           onPressed: fullScreen
               ? widget.controller.leaveFullScreen
               : _maximized
@@ -1214,7 +1206,7 @@ class _SidebarState extends State<_Sidebar> {
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: gaiaFieldFill,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(GaiaRadius.chip),
           border: Border.all(
             color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
           ),
@@ -1381,7 +1373,7 @@ class _SidebarState extends State<_Sidebar> {
   Widget _lifted(Widget child, int index, Animation<double> animation) =>
       Material(
         color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(GaiaRadius.row),
         child: child,
       );
 
@@ -1485,7 +1477,7 @@ class _SidebarState extends State<_Sidebar> {
               if (chats.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 InkWell(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(GaiaRadius.chip),
                   onTap: running
                       ? null
                       : () => setState(() => withChats = !withChats),
@@ -1572,7 +1564,7 @@ class _SidebarState extends State<_Sidebar> {
           children: [
             AnimatedRotation(
               turns: open ? 0 : -0.25,
-              duration: const Duration(milliseconds: 150),
+              duration: GaiaMotion.quick,
               child: Icon(
                 Icons.expand_more,
                 size: 16,
@@ -1603,6 +1595,7 @@ class _SidebarState extends State<_Sidebar> {
           label: 'New chat in ${project.name}',
           icon: Icons.add,
           compact: true,
+          tooltip: false,
           onPressed: () => _newChatIn(project),
         ),
         onTap: renaming
@@ -1790,7 +1783,6 @@ class _SidebarState extends State<_Sidebar> {
                 child: GaiaButton(
                   icon: Icons.search,
                   size: 32,
-                  tooltip: 'Search chats (Ctrl+F)',
                   onPressed: () => showGaiaSearch(context, controller),
                 ),
               ),
@@ -1802,7 +1794,6 @@ class _SidebarState extends State<_Sidebar> {
           child: GaiaButton(
             icon: Icons.add,
             label: 'New chat',
-            tooltip: _newChatTip,
             onPressed: () => _newChat(controller),
           ),
         ),
@@ -1834,6 +1825,7 @@ class _SidebarState extends State<_Sidebar> {
                             label: 'New project',
                             icon: Icons.add,
                             compact: true,
+                            tooltip: false,
                             onPressed: _newProject,
                           ),
                         ),
@@ -2060,7 +2052,7 @@ class _ForksChevron extends StatelessWidget {
         padding: const EdgeInsets.all(4),
         child: AnimatedRotation(
           turns: open ? 0 : -0.25,
-          duration: const Duration(milliseconds: 150),
+          duration: GaiaMotion.quick,
           child: Icon(
             Icons.expand_more,
             size: 16,
@@ -2931,7 +2923,7 @@ class _MessagesState extends State<_Messages> {
                         // Afresh as it's shown or not, so from one chat to
                         // another nothing fades.
                         key: ValueKey(shown),
-                        duration: const Duration(milliseconds: 150),
+                        duration: GaiaMotion.quick,
                         transitionBuilder: gaiaPinnedFade,
                         child: pinned == null && chapter == null
                             ? const SizedBox.shrink()
@@ -2991,7 +2983,7 @@ class _MessagesState extends State<_Messages> {
                             child: AnimatedSwitcher(
                               // As over the top.
                               key: ValueKey(shown),
-                              duration: const Duration(milliseconds: 150),
+                              duration: GaiaMotion.quick,
                               transitionBuilder: gaiaPinnedFade,
                               child: shown && over.scrolledUp
                                   ? _ToBottom(onTap: _toBottom)
@@ -3139,26 +3131,18 @@ class _ToBottom extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Tooltip(
-      message: 'Jump to latest',
-      child: DecoratedBox(
-        decoration: gaiaFloating(theme.colorScheme, radius: 17),
-        child: Material(
-          type: MaterialType.transparency,
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            hoverColor: GaiaInk.hover,
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Icon(
-                Icons.keyboard_double_arrow_down_rounded,
-                size: 18,
-                color: theme.colorScheme.primary,
-              ),
-            ),
+    return Material(
+      color: gaiaPromptColor(theme),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            Icons.keyboard_double_arrow_down_rounded,
+            size: 18,
+            color: theme.colorScheme.primary,
           ),
         ),
       ),
@@ -3265,7 +3249,7 @@ class _FlashState extends State<_Flash> with SingleTickerProviderStateMixin {
               ? const BoxDecoration()
               : BoxDecoration(
                   color: accent.withValues(alpha: 0.1 * t),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(GaiaRadius.panel),
                   border: Border.all(color: accent.withValues(alpha: 0.4 * t)),
                 ),
           child: child,
@@ -3542,12 +3526,10 @@ class _ChapterRail extends StatefulWidget {
 class _ChapterRailState extends State<_ChapterRail> {
   bool _open = false;
 
-  static const _ease = Duration(milliseconds: 250);
-
   /// A chapter's dash, in the rail and the list alike.
   Widget _dash(bool current, ThemeData theme, {double long = 18}) =>
       AnimatedContainer(
-        duration: _ease,
+        duration: GaiaMotion.move,
         curve: Curves.easeOutCubic,
         width: current ? long : 10,
         height: 2,
@@ -3646,7 +3628,7 @@ class _ChapterRailState extends State<_ChapterRail> {
       onEnter: (_) => setState(() => _open = true),
       onExit: (_) => setState(() => _open = false),
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 150),
+        duration: GaiaMotion.quick,
         transitionBuilder: (child, animation) => FadeTransition(
           opacity: animation,
           child: ScaleTransition(
@@ -3992,6 +3974,24 @@ class _MessageView extends StatelessWidget {
                 ),
               ),
             ),
+          // Rebuilt with the controller: whether it's still the last reply
+          // isn't on the message.
+          if (message.status == GaiaMessageStatus.error)
+            ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) => controller.canRetry(message)
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: GaiaButton(
+                        label: 'Retry',
+                        size: 28,
+                        padding: 12,
+                        still: true,
+                        onPressed: () => unawaited(controller.retryFailed()),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           _forking(muted),
         ],
       ),
@@ -4059,7 +4059,7 @@ class _MessageView extends StatelessWidget {
           padding: padding,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(GaiaRadius.panel),
           ),
           child: child,
         ),
@@ -4284,7 +4284,7 @@ class _HoverActionsState extends State<_HoverActions>
   /// The bar's opacity; it's built only while not dismissed.
   late final _fade = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 150),
+    duration: GaiaMotion.quick,
   )..addStatusListener((_) => setState(() {}));
 
   /// Copy's icon a tick for a moment after copying.
@@ -4661,9 +4661,10 @@ class _ComposerState extends State<_Composer> {
     }
     unawaited(_takeCommands());
     // The palette follows the draft, and the unknown command's line goes
-    // once it changes.
+    // once it changes. An emptied draft forgets an Esc, so `/` opens it again.
     setState(() {
       _highlight = 0;
+      if (_text.text.isEmpty) _paletteClosedFor = null;
       if (_text.text != _unknownFor) _unknown = _unknownFor = null;
       _reading = false;
     });
@@ -5976,7 +5977,7 @@ class _LimitDecisionState extends State<_LimitDecision> {
               if (card.resend && options.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 InkWell(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(GaiaRadius.chip),
                   onTap: () => setState(() => _resend = !_resend),
                   child: Padding(
                     padding: const EdgeInsets.only(right: 7),
@@ -6060,7 +6061,7 @@ class _ContextChip extends StatelessWidget {
           accent.withValues(alpha: 0.15),
           theme.scaffoldBackgroundColor,
         ),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(GaiaRadius.chip),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -6076,7 +6077,7 @@ class _ContextChip extends StatelessWidget {
     if (onRemove == null) return chip;
     // Clicking it removes it.
     return InkWell(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(GaiaRadius.chip),
       onTap: onRemove,
       child: chip,
     );

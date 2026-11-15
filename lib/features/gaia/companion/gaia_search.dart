@@ -26,7 +26,7 @@ Future<void> showGaiaSearch(BuildContext context, GaiaController controller) =>
       barrierDismissible: true,
       barrierLabel: 'Close search',
       barrierColor: Colors.black.withValues(alpha: 0.4),
-      transitionDuration: const Duration(milliseconds: 150),
+      transitionDuration: GaiaMotion.quick,
       // In, it grows as a menu does, whole, the barrier fading in behind;
       // faded, its fill would come before its faint ring. Out, it fades.
       transitionBuilder: (context, animation, _, child) =>
@@ -435,13 +435,12 @@ class _Row extends StatelessWidget {
   final _Result result;
   final bool lit;
 
-  /// [snippet] on one line, its marked terms in [style].
-  static List<TextSpan> _spans(String snippet, TextStyle style) => [
-    for (final (i, piece)
-        in snippet
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .split(GaiaSearchHit.start)
-            .indexed)
+  /// [hit]'s snippet on one line as plain text, its marked terms in [style].
+  static List<TextSpan> _spans(GaiaSearchHit hit, TextStyle style) => [
+    for (final (i, piece) in gaiaPlainSnippet(
+      hit.snippet,
+      inCode: hit.inCode,
+    ).split(GaiaSearchHit.start).indexed)
       if (i == 0)
         TextSpan(text: piece)
       else if (piece.split(GaiaSearchHit.end) case [
@@ -459,12 +458,12 @@ class _Row extends StatelessWidget {
     final color = lit ? Colors.white : _dim;
     final hit = result.hit;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
+      duration: GaiaMotion.quick,
       margin: const EdgeInsets.only(bottom: 2),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: lit ? 0.05 : 0),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(GaiaRadius.chip),
       ),
       child: hit == null
           ? Row(
@@ -509,7 +508,7 @@ class _Row extends StatelessWidget {
                 Text.rich(
                   TextSpan(
                     children: _spans(
-                      hit.snippet,
+                      hit,
                       TextStyle(color: accent, fontWeight: FontWeight.w600),
                     ),
                   ),

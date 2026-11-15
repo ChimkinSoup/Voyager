@@ -64,97 +64,97 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
     ].length;
     return Material(
       type: MaterialType.transparency,
-      // A column of at most [_pageWidth] at the left, on a wide window: a
-      // row's actions stay within reach of its title rather than a screen
-      // away from it. The rest still scrolls the list.
+      // A centred column of at most [_pageWidth], on a wide window: a row's
+      // actions stay within reach of its title rather than a screen away
+      // from it. The rest still scrolls the list.
       child: LayoutBuilder(
-        builder: (context, constraints) => ListView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            20,
-            max(24, constraints.maxWidth - 24 - _pageWidth),
-            24,
-          ),
-          children: [
-            Row(
-              children: [
-                Text('Gaia', style: theme.textTheme.headlineSmall),
-                const Spacer(),
-                if (isWindows)
-                  GlassButton(
-                    onPressed: () =>
-                        GaiaHost.instance.onHotkey(GaiaHotkey.window),
-                    icon: const Icon(PhosphorIconsRegular.planet, size: 13),
-                    label: 'Open Gaia',
-                    dense: true,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SegmentedButton<_GaiaTab>(
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-                segments: [
-                  const ButtonSegment(
-                    value: _GaiaTab.chats,
-                    icon: Icon(PhosphorIconsRegular.chatsCircle, size: 15),
-                    label: Text('Chats'),
-                  ),
-                  const ButtonSegment(
-                    value: _GaiaTab.actions,
-                    icon: Icon(PhosphorIconsRegular.listChecks, size: 15),
-                    label: Text('Actions'),
-                  ),
-                  ButtonSegment(
-                    value: _GaiaTab.memories,
-                    icon: const Icon(PhosphorIconsRegular.brain, size: 15),
-                    label: Text(inbox == 0 ? 'Memories' : 'Memories ($inbox)'),
-                  ),
-                  const ButtonSegment(
-                    value: _GaiaTab.queue,
-                    icon: Icon(PhosphorIconsRegular.queue, size: 15),
-                    label: Text('Queue'),
-                  ),
-                  const ButtonSegment(
-                    value: _GaiaTab.status,
-                    icon: Icon(PhosphorIconsRegular.broadcast, size: 15),
-                    label: Text('Status'),
-                  ),
-                  // The CLIs run on the desktop only.
+        builder: (context, constraints) {
+          final side = max(24.0, (constraints.maxWidth - _pageWidth) / 2);
+          return ListView(
+            padding: EdgeInsets.fromLTRB(side, 20, side, 24),
+            children: [
+              Row(
+                children: [
+                  Text('Gaia', style: theme.textTheme.headlineSmall),
+                  const Spacer(),
                   if (isWindows)
-                    const ButtonSegment(
-                      value: _GaiaTab.setup,
-                      icon: Icon(PhosphorIconsRegular.wrench, size: 15),
-                      label: Text('Setup'),
+                    GlassButton(
+                      onPressed: () =>
+                          GaiaHost.instance.onHotkey(GaiaHotkey.window),
+                      icon: const Icon(PhosphorIconsRegular.planet, size: 13),
+                      label: 'Open Gaia',
+                      dense: true,
                     ),
-                  const ButtonSegment(
-                    value: _GaiaTab.settings,
-                    icon: Icon(PhosphorIconsRegular.gear, size: 15),
-                    label: Text('Settings'),
-                  ),
                 ],
-                selected: {_tab},
-                onSelectionChanged: (set) => setState(() => _tab = set.first),
               ),
-            ),
-            const SizedBox(height: 16),
-            switch (_tab) {
-              _GaiaTab.chats => const _ChatsTab(),
-              _GaiaTab.actions => const _ActionsTab(),
-              _GaiaTab.memories => const _MemoriesTab(),
-              _GaiaTab.queue => const GaiaQueueTab(),
-              _GaiaTab.status => const GaiaStatusTab(),
-              _GaiaTab.setup => const _SetupTab(),
-              _GaiaTab.settings => const _SettingsTab(),
-            },
-          ],
-        ),
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<_GaiaTab>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  segments: [
+                    const ButtonSegment(
+                      value: _GaiaTab.chats,
+                      icon: Icon(PhosphorIconsRegular.chatsCircle, size: 15),
+                      label: Text('Chats'),
+                    ),
+                    const ButtonSegment(
+                      value: _GaiaTab.actions,
+                      icon: Icon(PhosphorIconsRegular.listChecks, size: 15),
+                      label: Text('Actions'),
+                    ),
+                    ButtonSegment(
+                      value: _GaiaTab.memories,
+                      icon: const Icon(PhosphorIconsRegular.brain, size: 15),
+                      label: Text(
+                        inbox == 0 ? 'Memories' : 'Memories ($inbox)',
+                      ),
+                    ),
+                    const ButtonSegment(
+                      value: _GaiaTab.queue,
+                      icon: Icon(PhosphorIconsRegular.queue, size: 15),
+                      label: Text('Queue'),
+                    ),
+                    const ButtonSegment(
+                      value: _GaiaTab.status,
+                      icon: Icon(PhosphorIconsRegular.broadcast, size: 15),
+                      label: Text('Status'),
+                    ),
+                    // The CLIs run on the desktop only.
+                    if (isWindows)
+                      const ButtonSegment(
+                        value: _GaiaTab.setup,
+                        icon: Icon(PhosphorIconsRegular.wrench, size: 15),
+                        label: Text('Setup'),
+                      ),
+                    const ButtonSegment(
+                      value: _GaiaTab.settings,
+                      icon: Icon(PhosphorIconsRegular.gear, size: 15),
+                      label: Text('Settings'),
+                    ),
+                  ],
+                  selected: {_tab},
+                  onSelectionChanged: (set) => setState(() => _tab = set.first),
+                ),
+              ),
+              const SizedBox(height: 16),
+              switch (_tab) {
+                _GaiaTab.chats => const _ChatsTab(),
+                _GaiaTab.actions => const _ActionsTab(),
+                _GaiaTab.memories => const _MemoriesTab(),
+                _GaiaTab.queue => const GaiaQueueTab(),
+                _GaiaTab.status => const GaiaStatusTab(),
+                _GaiaTab.setup => const _SetupTab(),
+                _GaiaTab.settings => const _SettingsTab(),
+              },
+            ],
+          );
+        },
       ),
     );
   }

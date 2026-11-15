@@ -19,6 +19,7 @@ import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 
 /// Gaia's text field (after Aceternity UI's signup form input): a dark field
@@ -113,13 +114,10 @@ class _GaiaTextFieldState extends State<GaiaTextField>
   /// it out and the new one in.
   (Offset, double)? _outgoing;
   late final _swap =
-      AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 150),
-        value: 1,
-      )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) _outgoing = null;
-      });
+      AnimationController(vsync: this, duration: GaiaMotion.quick, value: 1)
+        ..addStatusListener((status) {
+          if (status == AnimationStatus.completed) _outgoing = null;
+        });
 
   /// Whether the caret is hidden while sent text vanishes, as of the last
   /// build, and it fading back in once the text has gone.
@@ -636,7 +634,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
             duration: const Duration(milliseconds: 400),
             decoration: BoxDecoration(
               color: gaiaFieldFill,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(GaiaRadius.chip),
               // The light takes over from the edge under the cursor.
               boxShadow: [
                 if (!_hovered)
@@ -716,7 +714,10 @@ class _LightPainter extends CustomPainter {
     final radius = _radius * Curves.easeOut.transform(shown.value);
     if (radius == 0) return;
     canvas.clipRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(8)),
+      RRect.fromRectAndRadius(
+        Offset.zero & size,
+        const Radius.circular(GaiaRadius.row),
+      ),
     );
     if (outgoing() case (final at, final from)?) {
       _glow(canvas, at, radius, from * (1 - swap.value));
