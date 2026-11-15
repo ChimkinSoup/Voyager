@@ -1588,22 +1588,22 @@ class _SidebarState extends State<_Sidebar> {
             ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 4,
-          children: [
-            if (!open && section.count > 0)
-              Text(
+        trailing: !open && section.count > 0
+            ? Text(
                 section.count == 1 ? '1 chat' : '${section.count} chats',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF737373)),
-              ),
-            GaiaButton(
-              icon: Icons.add,
-              size: 24,
-              padding: 0,
-              onPressed: () => _newChatIn(project),
-            ),
-          ],
+                style: GaiaType.label.copyWith(
+                  color: GaiaInk.faint,
+                  fontWeight: FontWeight.w400,
+                ),
+              )
+            : null,
+        // One on every project would be a column of buttons: the row under
+        // the cursor shows its own.
+        action: GaiaActionIcon(
+          label: 'New chat in ${project.name}',
+          icon: Icons.add,
+          compact: true,
+          onPressed: () => _newChatIn(project),
         ),
         onTap: renaming
             ? null
@@ -1790,6 +1790,7 @@ class _SidebarState extends State<_Sidebar> {
                 child: GaiaButton(
                   icon: Icons.search,
                   size: 32,
+                  tooltip: 'Search chats (Ctrl+F)',
                   onPressed: () => showGaiaSearch(context, controller),
                 ),
               ),
@@ -1801,6 +1802,7 @@ class _SidebarState extends State<_Sidebar> {
           child: GaiaButton(
             icon: Icons.add,
             label: 'New chat',
+            tooltip: _newChatTip,
             onPressed: () => _newChat(controller),
           ),
         ),
@@ -1828,10 +1830,10 @@ class _SidebarState extends State<_Sidebar> {
                       SliverToBoxAdapter(
                         child: _SidebarLabel(
                           'Projects',
-                          trailing: GaiaButton(
+                          trailing: GaiaActionIcon(
+                            label: 'New project',
                             icon: Icons.add,
-                            size: 24,
-                            padding: 0,
+                            compact: true,
                             onPressed: _newProject,
                           ),
                         ),
@@ -1907,6 +1909,7 @@ class _ChatTile extends StatefulWidget {
     required this.title,
     this.chevron,
     required this.trailing,
+    this.action,
     required this.onTap,
   });
 
@@ -1917,6 +1920,10 @@ class _ChatTile extends StatefulWidget {
   final Widget? chevron;
   final Widget? trailing;
 
+  /// After [trailing], shown only while the cursor's over the row, or it has
+  /// the focus. Its room is always kept, so the title doesn't move.
+  final Widget? action;
+
   /// Null while it's being renamed.
   final VoidCallback? onTap;
 
@@ -1926,6 +1933,9 @@ class _ChatTile extends StatefulWidget {
 
 class _ChatTileState extends State<_ChatTile> {
   var _hovered = false;
+
+  /// The focus is on [_ChatTile.action], tabbed to: it shows as on hover.
+  var _actionFocused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1943,33 +1953,33 @@ class _ChatTileState extends State<_ChatTile> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: GaiaMotion.quick,
           height: 36,
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(
-              alpha: selected
-                  ? 0.08
-                  : hovered
-                  ? 0.05
-                  : 0,
-            ),
-            borderRadius: BorderRadius.circular(8),
+            color: selected
+                ? GaiaInk.selected
+                : hovered
+                ? GaiaInk.hover
+                : GaiaInk.hover.withValues(alpha: 0),
+            borderRadius: BorderRadius.circular(GaiaRadius.row),
             border: Border.all(
-              color: Colors.white.withValues(alpha: selected ? 0.1 : 0),
+              color: selected
+                  ? GaiaInk.hairline
+                  : GaiaInk.hairline.withValues(alpha: 0),
             ),
           ),
           child: Row(
             children: [
               Expanded(
                 child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 150),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: lit ? Colors.white : const Color(0xFFA3A3A3),
-                  ),
+                  duration: GaiaMotion.quick,
+                  // Over the text style around it, for its typeface: on its
+                  // own, the row falls back to the system's.
+                  style: DefaultTextStyle.of(context).style
+                      .merge(GaiaType.row)
+                      .copyWith(color: lit ? Colors.white : GaiaInk.muted),
                   child: widget.chevron == null
                       ? widget.title
                       : Row(
@@ -1984,6 +1994,20 @@ class _ChatTileState extends State<_ChatTile> {
               if (widget.trailing case final trailing?) ...[
                 const SizedBox(width: 8),
                 trailing,
+              ],
+              if (widget.action case final action?) ...[
+                const SizedBox(width: 4),
+                Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onFocusChange: (focused) =>
+                      setState(() => _actionFocused = focused),
+                  child: AnimatedOpacity(
+                    duration: GaiaMotion.quick,
+                    opacity: hovered || _actionFocused ? 1 : 0,
+                    child: action,
+                  ),
+                ),
               ],
             ],
           ),
@@ -2011,16 +2035,7 @@ class _SidebarLabel extends StatelessWidget {
       height: 24,
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
+          Expanded(child: Text(text, style: GaiaType.heading)),
           ?trailing,
         ],
       ),
