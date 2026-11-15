@@ -14,6 +14,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.da
 import 'package:voyager/features/gaia/adapters/codex/codex_app_server.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
+import 'package:voyager/features/gaia/companion/gaia_command_history.dart';
 import 'package:voyager/features/gaia/companion/gaia_command_uses.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/usage/sources/claude_oauth_usage.dart';
@@ -97,6 +98,10 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     file: File(p.join(root.path, 'gaia', 'commands.json')),
   );
   await commandUses.load();
+  final history = GaiaCommandHistory(
+    file: File(p.join(root.path, 'gaia', 'history.json')),
+  );
+  await history.load();
   final window = GaiaWindow();
   final codex = CodexAccountRunners(
     workingDirectory: p.join(root.path, 'gaia', 'ws'),
@@ -108,6 +113,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     sidebar: sidebar,
     zoom: zoom,
     commandUses: commandUses,
+    history: history,
     pipe: pipe,
     window: window,
     draftDirectory: drafts.path,

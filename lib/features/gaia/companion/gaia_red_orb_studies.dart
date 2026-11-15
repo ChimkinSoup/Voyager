@@ -233,6 +233,7 @@ class _Clock extends ChangeNotifier {
 enum _Centre {
   none('None'),
   core('Red core'),
+  orbit('Orbiting light'),
   mark('Tier mark');
 
   const _Centre(this.label);
@@ -364,7 +365,7 @@ enum _Style {
   instrument(
     'Instrument',
     'Denser and more technical: a fine and a coarse dial with red marks, a '
-        'segmented outer track and red inner arcs. Crosshairs frame it awake.',
+        'segmented outer track and red inner arcs. The centre stays clean.',
     layers: [
       _Layer(
         1.3,
@@ -416,7 +417,88 @@ enum _Style {
         spin: 0.5,
       ),
     ],
-    crosshair: true,
+    crosshair: false,
+  ),
+  ember(
+    'Ember',
+    'A quieter silhouette: broad, soft arcs hold a single bright center, '
+        'with no tick marks or quarter dashes.',
+    pose: (pitch: -0.08, yaw: 0.58, roll: -0.18),
+    spread: 0.62,
+    brackets: false,
+    layers: [
+      _Layer(1.22, depth: 1.0, width: 0.8, sweep: 0.72, spin: -0.12),
+      _Layer(0.98, depth: 0.35, color: _redDim, width: 1.5, sweep: 0.7),
+      _Layer(0.78, color: _red, width: 2.8, glow: true),
+      _Layer(0.58, depth: -0.35, width: 1.4, sweep: 0.68, spin: 0.18),
+      _Layer(1.08, depth: -0.9, color: _slate, width: 0.8, sweep: 0.52),
+    ],
+  ),
+  orbit(
+    'Orbit',
+    'A compact core with two tilted paths circling it; the paths counter-turn '
+        'as the separated layers settle.',
+    pose: (pitch: -0.28, yaw: 0.72, roll: -0.3),
+    spread: 0.72,
+    twist: 0.35,
+    brackets: false,
+    layers: [
+      _Layer(1.22, depth: 0.85, width: 1.1, sweep: 0.78, spin: 0.22),
+      _Layer(
+        1.06,
+        depth: -0.8,
+        color: _redDim,
+        width: 1.0,
+        sweep: 0.72,
+        spin: -0.28,
+      ),
+      _Layer(0.8, color: _red, width: 2.4, glow: true),
+      _Layer(0.62, depth: 0.28, width: 0.9, sweep: 0.62, spin: -0.42),
+    ],
+  ),
+  aperture(
+    'Aperture',
+    'Nested open crescents slide across one another to reveal a dark center '
+        'and a red inner edge.',
+    pose: (pitch: -0.18, yaw: 0.46, roll: -0.12),
+    spread: 0.68,
+    brackets: false,
+    layers: [
+      _Layer(
+        1.3,
+        depth: 0.95,
+        color: _slate,
+        width: 0.85,
+        sweep: 0.62,
+        spin: 0.08,
+        fine: true,
+      ),
+      _Layer(
+        1.05,
+        depth: 0.55,
+        color: _white,
+        width: 1.1,
+        sweep: 0.42,
+        spin: -0.22,
+      ),
+      _Layer(
+        0.88,
+        color: _red,
+        width: 2.4,
+        sweep: 0.74,
+        spin: 0.16,
+        glow: true,
+      ),
+      _Layer(
+        0.72,
+        depth: -0.45,
+        color: _redDim,
+        width: 1.5,
+        sweep: 0.56,
+        spin: -0.24,
+      ),
+      _Layer(1.1, depth: -0.95, width: 0.85, sweep: 0.34, spin: 0.14),
+    ],
   ),
   twin(
     'Twin dial',
@@ -867,6 +949,38 @@ class _OrbPainter extends CustomPainter {
                 ],
                 stops: const [0, 0.3, 0.65, 1],
               ).createShader(Rect.fromCircle(center: c, radius: radius)),
+          );
+        case _Centre.orbit:
+          final orbit = r * 0.25;
+          final angle = t * 0.8;
+          canvas.save();
+          canvas.translate(c.dx, c.dy);
+          canvas.rotate(-0.42);
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset.zero,
+              width: orbit * 2.8,
+              height: orbit * 1.4,
+            ),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.2 * unit
+              ..color = style.ink.withValues(alpha: shown * 0.72),
+          );
+          // On the ellipse just drawn, in its rotated frame.
+          canvas.drawCircle(
+            Offset(
+              1.4 * orbit * math.cos(angle),
+              0.7 * orbit * math.sin(angle),
+            ),
+            0.055 * r,
+            Paint()..color = _white.withValues(alpha: shown),
+          );
+          canvas.restore();
+          canvas.drawCircle(
+            c,
+            0.11 * r,
+            Paint()..color = _red.withValues(alpha: shown * 0.9),
           );
         case _Centre.mark when detail:
           paintGaiaTierGlyph(

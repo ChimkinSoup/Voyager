@@ -4348,6 +4348,13 @@ class _ComposerState extends State<_Composer> {
   var _highlight = 0;
   String? _paletteClosedFor;
 
+  /// A browse of what was sent (GAIA_HISTORY_HLD.md §4): the entry in view,
+  /// the text it put in the draft, and the chat it started on. Null [_browseAt]
+  /// while there's none.
+  int? _browseAt;
+  String? _browseText;
+  String? _browseChat;
+
   /// A `/word` no command has, turned away once for the draft as it stood
   /// then (GAIA_NATIVE_COMMANDS.md §7): sent again unchanged, it goes.
   ({String word, String? suggestion})? _unknown;
@@ -4423,6 +4430,12 @@ class _ComposerState extends State<_Composer> {
   }
 
   void _onDraft() {
+    // Emptied, or another chat's draft in view: the browse is over (§4.5).
+    if (_browseAt != null &&
+        (_text.text.isEmpty ||
+            widget.controller.currentChatId != _browseChat)) {
+      _endBrowse();
+    }
     unawaited(_takeCommands());
     // The palette follows the draft, and the unknown command's line goes
     // once it changes.
@@ -4564,6 +4577,7 @@ class _ComposerState extends State<_Composer> {
       _cutToken();
       if (item.builtin == GaiaBuiltin.btw && _text.text.trim().isEmpty) {
         _used(item.name);
+        _record('/${item.name}');
         await _runBuiltin(GaiaBuiltin.btw);
         _focus.requestFocus();
         return;
@@ -4575,10 +4589,16 @@ class _ComposerState extends State<_Composer> {
       );
     } else if (item.builtin case final builtin?) {
       _cutToken();
-      if (await _runBuiltin(builtin)) _used(item.name);
+      if (await _runBuiltin(builtin)) {
+        _used(item.name);
+        _record('/${item.name}');
+      }
     } else if (item.tier case final tier?) {
       _cutToken();
-      if (await switchGaiaTier(context, controller, tier)) _used(item.name);
+      if (await switchGaiaTier(context, controller, tier)) {
+        _used(item.name);
+        _record('/${item.name}');
+      }
     } else if (item.account case final account?) {
       _cutToken();
       if (await switchGaiaAccount(
@@ -4588,6 +4608,7 @@ class _ComposerState extends State<_Composer> {
         account,
       )) {
         _used(item.name);
+        _record('/${item.name}');
       }
     } else if (item.native case final native?) {
       // Its arguments, if any, go after it (GAIA_NATIVE_COMMANDS.md §5).
@@ -4632,6 +4653,14 @@ class _ComposerState extends State<_Composer> {
   /// stands. Otherwise the keys go to list editing ([_listKey]).
   KeyEventResult _paletteKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
+    // An entry recalled and untouched steps first: a recalled `/new` would
+    // have the palette's highlight move instead (GAIA_HISTORY_HLD.md §4.4).
+    if (_browseAt != null && _text.text == _browseText) {
+      if (_historyArrow(event) case final by?) {
+        _step(by);
+        return KeyEventResult.handled;
+      }
+    }
     if (_palette.isEmpty) {
       // Tab takes the unknown command's suggestion.
       if (event is KeyDownEvent &&
@@ -4704,6 +4733,15 @@ class _ComposerState extends State<_Composer> {
             false)) {
       return KeyEventResult.handled;
     }
+    // What was sent: Up from an empty draft starts a browse, and an edited
+    // entry steps from its top or bottom line, the caret moving until then.
+    if (_historyArrow(event) case final by?
+        when _browseAt == null
+            ? by < 0 && _text.text.isEmpty
+            : _caretOnEdge(by)) {
+      _step(by);
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
@@ -4719,6 +4757,82 @@ class _ComposerState extends State<_Composer> {
       _ => false,
     };
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  /// -1 for Up and 1 for Down, unmodified, while history can have them: not
+  /// with the side questions open, whose keys they are (§4.4). Null otherwise.
+  int? _historyArrow(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (event is KeyUpEvent ||
+        widget.controller.btwPanelOpen ||
+        keyboard.isShiftPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed) {
+      return null;
+    }
+    return switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowUp => -1,
+      LogicalKeyboardKey.arrowDown => 1,
+      _ => null,
+    };
+  }
+
+  /// Whether the caret is on the draft's first visual line, for [by] -1, or
+  /// its last, for 1; wrapped lines count.
+  bool _caretOnEdge(int by) {
+    final editable = _focus.context
+        ?.findAncestorStateOfType<EditableTextState>()
+        ?.renderEditable;
+    if (editable == null || !_text.selection.isValid) return true;
+    final edge = TextPosition(
+      offset: by < 0 ? 0 : editable.plainText.length,
+    );
+    return editable.getLocalRectForCaret(_text.selection.extent).top ==
+        editable.getLocalRectForCaret(edge).top;
+  }
+
+  /// One entry older for [by] -1, or newer for 1, as it was recorded, the
+  /// caret at its end. Past the newest, the empty draft, and the browse ends;
+  /// at the oldest, nothing (§4.2).
+  void _step(int by) {
+    final entries = widget.controller.history.entries;
+    final at = (_browseAt ?? entries.length) + by;
+    if (at < 0) return;
+    if (at >= entries.length) {
+      _endBrowse();
+      _text.clear();
+      widget.controller.draftUndo.reset();
+      return;
+    }
+    final text = entries[at].text;
+    _browseAt = at;
+    _browseText = text;
+    _browseChat = widget.controller.currentChatId;
+    // Its palette stays shut while it's untouched, and Enter sends it as
+    // typed (§4.4).
+    _paletteClosedFor = text;
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    // Undo goes back to the entry as recalled, not through those passed.
+    widget.controller.draftUndo.reset();
+  }
+
+  void _endBrowse() {
+    // The recalled entry's shut palette goes with it: typed again by hand,
+    // the text opens it.
+    if (_browseText != null && _paletteClosedFor == _browseText) {
+      _paletteClosedFor = null;
+    }
+    _browseAt = _browseText = _browseChat = null;
+  }
+
+  /// [text] sent: it goes in the history, and any browse ends (§3, §4.5).
+  void _record(String text) {
+    widget.controller.history.add(text);
+    _endBrowse();
   }
 
   /// Whether the draft takes more than one line on screen, a long one
@@ -4891,6 +5005,9 @@ class _ComposerState extends State<_Composer> {
 
   /// [_send] without the palette.
   Future<void> _submit() async {
+    // For the history, as Enter found it: inline commands come out below
+    // (GAIA_HISTORY_HLD.md §3).
+    final asTyped = _text.text;
     // Counted once it runs, as [gaiaNativeIn] and [expandGaiaCommand] read
     // it; a built-in by its own name below.
     final typed = RegExp(
@@ -4917,25 +5034,33 @@ class _ComposerState extends State<_Composer> {
       _text.text = rest;
       if (await _runBuiltin(GaiaBuiltin.stash)) _used(GaiaBuiltin.stash.name);
       // Not stashed, as while its images sync: back as it was typed.
-      if (mounted && _text.text.isNotEmpty) _text.value = typed;
+      if (mounted && _text.text.isNotEmpty) {
+        _text.value = typed;
+      } else if (_text.text.isEmpty) {
+        _record(asTyped);
+      }
       return;
     }
     // A built-in runs even mid-reply: /stop is for exactly then.
     if (gaiaBuiltinIn(_text.text) case final builtin?) {
       _text.clear();
+      // Recorded even turned down, for Up to bring back.
       if (await _runBuiltin(builtin)) _used(builtin.name);
+      _record(asTyped);
       return;
     }
     // So is /remember (§11), which never goes to the agent.
     if (gaiaRememberText(_text.text) case final memory?) {
       _text.clear();
       _used(GaiaBuiltin.remember.name);
+      _record(asTyped);
       return widget.controller.remember(memory);
     }
     // And /queue (§13), which waits its turn.
     if (gaiaQueueText(_text.text) case final queued?) {
       _text.clear();
       _used(GaiaBuiltin.queue.name);
+      _record(asTyped);
       return widget.controller.enqueue(queued);
     }
     // And /btw (GAIA_BTW_HLD.md §3): a side question, never queued, and
@@ -4943,6 +5068,7 @@ class _ComposerState extends State<_Composer> {
     if (gaiaBtwText(_text.text) case final question?) {
       _text.clear();
       _used(GaiaBuiltin.btw.name);
+      _record(asTyped);
       return widget.controller.askBtw(question);
     }
     // A `/word` no command has stays, once, rather than going to the agent
@@ -4992,6 +5118,7 @@ class _ComposerState extends State<_Composer> {
     // Its undo steps hold the text just sent, whose images have gone with it.
     controller.draftUndo.reset();
     if (typed != null) _used(typed);
+    _record(asTyped);
     controller.send(
       text,
       images: controller.takeDraftImages(),
@@ -6373,13 +6500,17 @@ Future<bool> _submitCard(GaiaController controller) async {
   final text = draft.text;
   switch (card.kind) {
     case GaiaCardKind.question:
-      if (await controller.answerCard(card, text: text)) draft.clear();
+      if (await controller.answerCard(card, text: text)) {
+        draft.clear();
+        controller.history.add(text);
+      }
     case GaiaCardKind.permission:
       if (text.trim().isEmpty) {
         controller.allowCard(card);
       } else {
         controller.rejectCard(card, message: text);
         draft.clear();
+        controller.history.add(text);
       }
     case GaiaCardKind.proposal:
       if (text.trim().isEmpty) {
@@ -6387,6 +6518,7 @@ Future<bool> _submitCard(GaiaController controller) async {
       } else {
         controller.rejectCard(card, message: text);
         draft.clear();
+        controller.history.add(text);
       }
     case GaiaCardKind.control:
       if (text.trim().isEmpty) {
@@ -6394,6 +6526,7 @@ Future<bool> _submitCard(GaiaController controller) async {
       } else {
         controller.rejectCard(card, message: text);
         draft.clear();
+        controller.history.add(text);
       }
   }
   return true;

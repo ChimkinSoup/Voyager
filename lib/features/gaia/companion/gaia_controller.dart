@@ -17,6 +17,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_attachments.dart';
 import 'package:voyager/features/gaia/companion/gaia_chat_tools.dart';
+import 'package:voyager/features/gaia/companion/gaia_command_history.dart';
 import 'package:voyager/features/gaia/companion/gaia_command_uses.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
@@ -99,6 +100,7 @@ class GaiaController extends ChangeNotifier {
     GaiaSidebar? sidebar,
     GaiaZoomLevel? zoom,
     GaiaCommandUses? commandUses,
+    GaiaCommandHistory? history,
     this._utility,
     Future<String> Function()? clipboard,
     Future<void> Function(Uint8List png)? copyPng,
@@ -122,7 +124,8 @@ class GaiaController extends ChangeNotifier {
        debug = debug ?? GaiaDebug(),
        sidebar = sidebar ?? GaiaSidebar(),
        zoom = zoom ?? GaiaZoomLevel(),
-       commandUses = commandUses ?? GaiaCommandUses();
+       commandUses = commandUses ?? GaiaCommandUses(),
+       history = history ?? GaiaCommandHistory();
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
@@ -142,6 +145,9 @@ class GaiaController extends ChangeNotifier {
 
   /// The palette's commands by when they were last used.
   final GaiaCommandUses commandUses;
+
+  /// What the composer sent, for Up and Down (GAIA_HISTORY_HLD.md).
+  final GaiaCommandHistory history;
 
   /// The router and chat titles (§5.1); null for none.
   final GaiaUtility? _utility;
