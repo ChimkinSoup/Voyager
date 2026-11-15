@@ -44,6 +44,7 @@ class GaiaButton extends StatefulWidget {
     this.padding = 16,
     this.still = false,
     this.radius,
+    this.tooltip,
   }) : assert(label != null || icon != null);
 
   /// Null disables the button.
@@ -67,6 +68,9 @@ class GaiaButton extends StatefulWidget {
   /// The corner radius; when null, 6 squared off, or half [size] round.
   final double? radius;
 
+  /// What it does, shown on hover: for a button that's only an icon.
+  final String? tooltip;
+
   @override
   State<GaiaButton> createState() => _GaiaButtonState();
 }
@@ -89,9 +93,13 @@ class _GaiaButtonState extends State<GaiaButton> {
   var _hovered = false;
   var _pressed = false;
 
+  /// Reached with Tab, and pressed with Enter or Space: lit as hovered.
+  var _focused = false;
+
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
+    final lit = _hovered || (_focused && enabled);
     final round = widget.label == null;
     final outer = widget.radius ?? (round ? widget.size / 2 : 6.0);
     final iconSize = widget.size * 0.45;
@@ -129,7 +137,7 @@ class _GaiaButtonState extends State<GaiaButton> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.all(1),
         decoration: BoxDecoration(
-          color: _hovered
+          color: lit
               ? HSLColor.fromColor(accent).withSaturation(1).toColor()
               : Color.lerp(accent, Colors.white, 0.5)!.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(outer),
@@ -146,18 +154,24 @@ class _GaiaButtonState extends State<GaiaButton> {
     } else {
       ring = GaiaGlowRing(
         radius: outer,
-        hovered: _hovered,
+        hovered: lit,
         color: widget.color,
         child: inner,
       );
     }
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
+    final button = FocusableActionDetector(
+      enabled: enabled,
+      mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) => widget.onPressed?.call(),
+        ),
+      },
+      onShowHoverHighlight: (hovered) => setState(() {
+        _hovered = hovered;
+        if (!hovered) _pressed = false;
       }),
+      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
       child: GestureDetector(
         onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
         onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
@@ -167,7 +181,12 @@ class _GaiaButtonState extends State<GaiaButton> {
           opacity: enabled ? 1 : 0.5,
           child: AnimatedScale(
             duration: const Duration(milliseconds: 100),
-            scale: _pressed ? 0.98 : 1,
+            // A round one is small: the same press would hardly show.
+            scale: !_pressed
+                ? 1
+                : round
+                ? 0.94
+                : 0.98,
             child: SizedBox(
               height: widget.size,
               width: round ? widget.size : null,
@@ -178,6 +197,8 @@ class _GaiaButtonState extends State<GaiaButton> {
         ),
       ),
     );
+    final tooltip = widget.tooltip;
+    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
   }
 }
 

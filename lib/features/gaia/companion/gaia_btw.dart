@@ -9,12 +9,13 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 
-const _dim = Color(0xFFD4D4D4);
-const _muted = Color(0xFFA3A3A3);
-const _faint = Color(0xFF737373);
+const _dim = GaiaInk.dim;
+const _muted = GaiaInk.muted;
+const _faint = GaiaInk.faint;
 
 /// The answer's card: darker than the field fill the panel is.
 const _tray = Color(0xFF1C1C1F);

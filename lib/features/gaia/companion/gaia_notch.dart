@@ -6,6 +6,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 part 'gaia_menu.dart';
 
@@ -121,7 +122,7 @@ const _optionSpring = SpringDescription(mass: 1, stiffness: 420, damping: 30);
 
 /// Long enough for either spring to settle.
 const _springTime = Duration(milliseconds: 400);
-const _fade = Duration(milliseconds: 150);
+const _fade = GaiaMotion.quick;
 
 /// When the first option starts in, and how far behind it each next one is.
 const _optionsDelay = Duration(milliseconds: 80);
@@ -132,10 +133,10 @@ const _optionsStagger = Duration(milliseconds: 45);
 const _leaveStagger = Duration(milliseconds: 30);
 const _leaveSpeed = 1.5;
 
-const _bright = Color(0xFFF5F5F5);
-const _muted = Color(0xFFA3A3A3);
-const _dim = Color(0xFFD4D4D4);
-const _textStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+const _bright = GaiaInk.bright;
+const _muted = GaiaInk.muted;
+const _dim = GaiaInk.dim;
+const _textStyle = GaiaType.row;
 
 /// Whether item [item] of [items] shows as tabs, which have no selected dot.
 /// Only two: three or more can run wider than the window.
@@ -143,8 +144,8 @@ bool _isTabs(List<GaiaNotchItem<Object?>> items, int item) =>
     items.length > 1 && item == 0 && items[0].options.length <= 2;
 
 /// The closed bar's, smaller than the open options'.
-const _triggerStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w500);
-const _radius = 12.0;
+const _triggerStyle = GaiaType.label;
+const _radius = GaiaRadius.panel;
 
 /// An option on its way between item [item]'s trigger and its row: up
 /// into the row as the notch opens, or down into the trigger as it closes.
