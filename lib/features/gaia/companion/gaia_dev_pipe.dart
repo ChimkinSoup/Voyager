@@ -111,7 +111,23 @@ class GaiaDevPipe extends GaiaPipe {
           throw GaiaPipeException(error.message);
         }
       case 'setPinned':
-        await _store.setPinned(p['chatId']! as String, p['pinned']! as bool);
+        await _store.setPinned(
+          p['chatId']! as String,
+          p['pinned']! as bool,
+          order: (p['order'] as num?)?.toDouble(),
+        );
+        return null;
+      case 'reorderChat':
+        await _store.reorderChat(
+          p['chatId']! as String,
+          (p['order']! as num).toDouble(),
+        );
+        return null;
+      case 'reorderProject':
+        await _store.reorderProject(
+          p['projectId']! as String,
+          (p['order']! as num).toDouble(),
+        );
         return null;
       case 'projects':
         return [
@@ -130,6 +146,7 @@ class GaiaDevPipe extends GaiaPipe {
         await _store.setProject(
           p['chatId']! as String,
           p['projectId'] as String?,
+          order: (p['order'] as num?)?.toDouble(),
         );
         return null;
       case 'setProjectFolder':

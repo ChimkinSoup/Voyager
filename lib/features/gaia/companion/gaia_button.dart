@@ -43,6 +43,7 @@ class GaiaButton extends StatefulWidget {
     this.color,
     this.padding = 16,
     this.still = false,
+    this.radius,
   }) : assert(label != null || icon != null);
 
   /// Null disables the button.
@@ -62,6 +63,9 @@ class GaiaButton extends StatefulWidget {
   /// The ring without its moving light, which lights up whole on hover:
   /// for small buttons there can be many of, as on each attachment.
   final bool still;
+
+  /// The corner radius; when null, 6 squared off, or half [size] round.
+  final double? radius;
 
   @override
   State<GaiaButton> createState() => _GaiaButtonState();
@@ -89,7 +93,7 @@ class _GaiaButtonState extends State<GaiaButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final round = widget.label == null;
-    final outer = round ? widget.size / 2 : 6.0;
+    final outer = widget.radius ?? (round ? widget.size / 2 : 6.0);
     final iconSize = widget.size * 0.45;
     final foreground = widget.color ?? Colors.white;
     final content = round

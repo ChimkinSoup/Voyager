@@ -264,7 +264,13 @@ showing every call on the activity card, are what bounds it.
   chat shows depends only on its project: moved out of a project, it shows in the top-level
   Pinned section; moved into one, it shows at the top of that project. A project folded
   shut hides its pinned chats with the rest.
-- **Projects**, sorted by their most recent chat. Each row folds open to its chats, with
+- **Drag to reorder** (added 2026-11-14): projects, and chats within their own list, drag up
+  and down in the companion's sidebar. A drag stores `order` + `orderedAt` on the chat or
+  project (synced); a message newer than `orderedAt` puts it back where its recency does.
+  Pinned chats move only by dragging, and a chat newly pinned goes to the bottom of the
+  pinned ones it's listed with; unpinning clears its `order`. A chat can't be dragged across
+  the pinned/unpinned line, or out of its list.
+- **Projects**, sorted by their most recent chat, or where they were dragged since. Each row folds open to its chats, with
   forks nested and foldable as now. Which projects are open is kept in the sidebar's local
   file (`GaiaSidebar`), next to `collapsed`, and isn't synced.
 - **Chats**: chats with no project, as today.

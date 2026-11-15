@@ -21,6 +21,7 @@ import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_red_orb_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
@@ -82,6 +83,8 @@ class _DebugMenu extends StatelessWidget {
           ],
         ),
         Text('Kept on this desktop, never synced.', style: muted),
+        heading('Red layered orb studies'),
+        const GaiaRedOrbStudies(),
         heading('Orb studio'),
         const GaiaOrbStudio(),
         heading('Thinking and replying studies'),
@@ -198,8 +201,9 @@ class _DebugMenu extends StatelessWidget {
         heading('Attachments vanishing'),
         Text(
           "Sent, a draft's images, files and folders dissolve from right to "
-          'left like its text, and their row closes behind them. Pick a count '
-          'to draft that many images again.',
+          'left like its text, and their row closes behind them; the caret '
+          'comes back once the text has gone. Pick a count to draft that many '
+          'images again.',
           style: muted,
         ),
         const _ImageVanishPreview(),
@@ -995,6 +999,8 @@ class _ImageVanishPreviewState extends State<_ImageVanishPreview> {
       if (_text.text.isNotEmpty) _textVanish.currentState!,
     ]);
     _text.clear();
+    // Focused, as the composer is after a send, to show the caret.
+    _focus.requestFocus();
     setState(() => _drafted = false);
   }
 

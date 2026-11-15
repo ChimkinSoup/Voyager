@@ -929,6 +929,46 @@ void main() {
     expect((await repo.getMemory('m1'))!.projectId, 'p1');
   });
 
+  test(
+    '196→197 adds sidebar order to chats and projects, none at first',
+    () async {
+      final seed = AppDatabase(NativeDatabase(file));
+      final seedRepo = DriftGaiaRepository(seed);
+      await seedRepo.upsertChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Plans',
+          createdAt: now,
+          updatedAt: now,
+          lastMessageAt: now,
+        ),
+      );
+      await seedRepo.upsertProject(
+        GaiaProject(id: 'p1', name: 'Trip', createdAt: now, updatedAt: now),
+      );
+      for (final table in ['gaia_chats_table', 'gaia_projects_table']) {
+        for (final column in ['list_order', 'ordered_at']) {
+          await seed.customStatement('ALTER TABLE $table DROP COLUMN $column');
+        }
+      }
+      await seed.customStatement('PRAGMA user_version = 196');
+      await seed.close();
+
+      final upgraded = AppDatabase(NativeDatabase(file));
+      addTearDown(upgraded.close);
+      final repo = DriftGaiaRepository(upgraded);
+      final chat = (await repo.getChat('c1'))!;
+      final project = (await repo.getProject('p1'))!;
+      expect(chat.order, isNull);
+      expect(project.order, isNull);
+      await repo.upsertChat(chat.copyWith(order: 5, orderedAt: now));
+      await repo.upsertProject(project.copyWith(order: 7, orderedAt: now));
+      expect((await repo.getChat('c1'))!.order, 5);
+      expect((await repo.getChat('c1'))!.orderedAt, now);
+      expect((await repo.getProject('p1'))!.order, 7);
+    },
+  );
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

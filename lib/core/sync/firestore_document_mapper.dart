@@ -4388,6 +4388,8 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'projectId': chat.projectId,
   'summary': chat.summary,
   'summarizedSeq': chat.summarizedSeq,
+  'order': chat.order,
+  'orderedAt': _dateToFirestore(chat.orderedAt),
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4471,6 +4473,13 @@ GaiaChat mergeGaiaChatFromRemote(
     projectId: data.containsKey('projectId')
         ? data['projectId'] as String?
         : local?.projectId,
+    // Present but null when unpinned.
+    order: data.containsKey('order')
+        ? (data['order'] as num?)?.toDouble()
+        : local?.order,
+    orderedAt: data.containsKey('orderedAt')
+        ? parseFirestoreDate(data['orderedAt'])
+        : local?.orderedAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -4924,6 +4933,8 @@ Map<String, dynamic> gaiaProjectToFirestore(GaiaProject project) => {
   'id': project.id,
   'name': project.name,
   'folders': project.folders,
+  'order': project.order,
+  'orderedAt': _dateToFirestore(project.orderedAt),
   'createdAt': _dateToFirestoreRequired(project.createdAt),
   'updatedAt': _dateToFirestoreRequired(project.updatedAt),
   'version': project.version,
@@ -4959,6 +4970,8 @@ GaiaProject mergeGaiaProjectFromRemote(
             ...gaiaFoldersFromJson(data['folders']),
             if (mine != null) deviceId!: mine,
           },
+    order: (data['order'] as num?)?.toDouble() ?? local?.order,
+    orderedAt: parseFirestoreDate(data['orderedAt']) ?? local?.orderedAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

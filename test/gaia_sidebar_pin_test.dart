@@ -80,7 +80,12 @@ void main() {
     );
 
     await pick('Older', 'Pin');
-    expect(writes.single, {'chatId': 'Older', 'pinned': true});
+    // With the rank it shows at, so the stored order matches.
+    expect(writes.single, {
+      'chatId': 'Older',
+      'pinned': true,
+      'order': controller.chats.firstWhere((c) => c.title == 'Older').order,
+    });
     expect(pin, findsOneWidget);
     expect(
       tester.getCenter(pin).dy,

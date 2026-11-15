@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 
 import 'narrow_window_harness.dart';
@@ -185,6 +186,92 @@ void main() {
 
       await sampleAndRun(tester);
       expect(differing(blank, await snapshot(tester)), 0);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    "Gaia's field hides its caret until the sent text has gone, or typing",
+    (tester) async {
+      await loadRealFonts(tester);
+      text = TextEditingController();
+      final focus = FocusNode();
+      addTearDown(text.dispose);
+      addTearDown(focus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: VoyagerTheme.dark(),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 360,
+                child: GaiaVanish(
+                  key: vanish,
+                  controller: text,
+                  builder: (context, vanishing) => GaiaTextField(
+                    controller: text,
+                    focusNode: focus,
+                    autofocus: true,
+                    minLines: vanishing ? null : 1,
+                    maxLines: vanishing ? null : 8,
+                    expands: vanishing,
+                    textAlignVertical: vanishing ? TextAlignVertical.top : null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      bool showsCursor() =>
+          tester.widget<EditableText>(find.byType(EditableText)).showCursor;
+      double caretAlpha() =>
+          tester.widget<EditableText>(find.byType(EditableText)).cursorColor.a;
+
+      text.text =
+          'Summarise the open pull requests and flag any that touch '
+          'the sync worker';
+      await tester.pump();
+      expect(showsCursor(), isTrue);
+
+      send();
+      await tester.pump();
+      expect(showsCursor(), isFalse);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      // The effect's own overlay: Gaia's field has ignoring layers too.
+      Finder effect() => find.descendant(
+        of: find.byType(GaiaVanish),
+        matching: find.byWidgetPredicate(
+          (w) => w is IgnorePointer && w.child is AnimatedOpacity,
+        ),
+      );
+      expect(effect(), findsOneWidget);
+      while (effect().evaluate().isNotEmpty) {
+        expect(showsCursor(), isFalse);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      // Back once the text has gone, fading in.
+      expect(showsCursor(), isTrue);
+      expect(caretAlpha(), lessThan(0.5));
+      await tester.pump(const Duration(milliseconds: 100));
+      final midway = caretAlpha();
+      expect(midway, greaterThan(0));
+      expect(midway, lessThan(1));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(caretAlpha(), 1);
+
+      text.text = 'Second prompt';
+      await tester.pump();
+      send();
+      await tester.pump();
+      expect(showsCursor(), isFalse);
+      text.text = 'n';
+      await tester.pump();
+      // Typed over the effect, at once.
+      expect(showsCursor(), isTrue);
+      expect(caretAlpha(), 1);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

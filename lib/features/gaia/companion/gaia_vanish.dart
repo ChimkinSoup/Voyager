@@ -138,6 +138,12 @@ class GaiaVanishState extends State<GaiaVanish>
     return vanishing.left + vanishing.sweep;
   }
 
+  /// Whether the field's caret stays hidden: from the send until the text
+  /// has gone and the field has closed, or typing fades the effect early.
+  /// Otherwise it waits at the start of text that hasn't gone yet, and
+  /// drifts down as a taller field closes.
+  bool get hidesCaret => _vanishing != null && !_fading;
+
   _Vanishing? _capture() {
     if (MediaQuery.disableAnimationsOf(context)) return null;
     final box = context.findRenderObject()! as RenderBox;

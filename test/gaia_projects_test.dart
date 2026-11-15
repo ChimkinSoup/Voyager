@@ -267,6 +267,38 @@ void main() {
       await gaiaMoveChat(repository, 'one', null);
       expect((await repository.getChat('one'))!.projectId, isNull);
     });
+
+    Future<void> pin(String id, double order) async => repository.upsertChat(
+      (await repository.getChat(id))!.copyWith(pinned: true, order: order),
+    );
+
+    Future<List<String>> loosePinned() async =>
+        _ids(gaiaChatSections(await repository.listChats(), const []).pinned);
+
+    test('a pinned chat moved goes to the bottom of the pinned chats there, '
+        'or to the order given', () async {
+      await pin('one', 1e15);
+      await pin('other', 2000);
+      await repository.upsertChat(_chat('loose', pinned: true));
+      await pin('loose', 1000);
+
+      await gaiaMoveChat(repository, 'one', null);
+      expect(await loosePinned(), ['other', 'loose', 'one']);
+      expect((await repository.getChat('one'))!.order, 0);
+
+      await gaiaMoveChat(repository, 'loose', 'p1', order: 42);
+      expect((await repository.getChat('loose'))!.order, 42);
+    });
+
+    test('unchecked, its pinned chats go to the bottom of the pinned chats in '
+        'none, in their order', () async {
+      await pin('one', 2e15);
+      await pin('two', 1e15);
+      await pin('other', 0);
+
+      await gaiaDeleteProject(repository, 'p1', withChats: false);
+      expect(await loosePinned(), ['other', 'one', 'two']);
+    });
   });
 
   group('sync (§2)', () {

@@ -105,6 +105,7 @@ class _Main {
         await store.setProject(
           params['chatId']! as String,
           params['projectId'] as String?,
+          order: (params['order'] as num?)?.toDouble(),
         );
         return null;
       case 'setProjectFolder':
@@ -204,6 +205,7 @@ class _Main {
         await store.setPinned(
           params['chatId']! as String,
           params['pinned']! as bool,
+          order: (params['order'] as num?)?.toDouble(),
         );
         return null;
       case 'deleteChat':
@@ -5795,6 +5797,34 @@ void main() {
 
       await controller.moveChat(chatId, null);
       expect((await stored(chatId)).projectId, isNull);
+    });
+
+    test('a pinned chat moved goes to the bottom of the pinned chats there, '
+        'stored where it shows', () async {
+      await main.store.createProject(trip);
+      await startCompanion();
+      await turn('One');
+      final one = controller.currentChatId!;
+      await controller.moveChat(one, 'p1');
+      await controller.setPinned(one, true);
+      controller.newChat();
+      await turn('Two');
+      final two = controller.currentChatId!;
+      await controller.setPinned(two, true);
+      await settle();
+      // Ranked first among the pinned chats in no project.
+      final shown = controller.currentChat!.order;
+      expect((await stored(two)).order, shown);
+
+      await controller.moveChat(two, 'p1');
+      final moved = controller.currentChat!.order!;
+      expect(
+        moved,
+        lessThan(controller.chats.firstWhere((c) => c.id == one).listRank),
+      );
+      expect((await stored(two)).order, moved);
+      await settle();
+      expect(controller.currentChat!.order, moved);
     });
 
     test('a project deleted with its chats takes them off the list; without, '

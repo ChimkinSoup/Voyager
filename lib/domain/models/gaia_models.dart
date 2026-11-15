@@ -527,9 +527,34 @@ class GaiaChat extends SoftDeletable {
     this.projectId,
     this.summary,
     this.summarizedSeq = -1,
+    this.order,
+    this.orderedAt,
   });
 
   final String title;
+
+  /// Where it was dragged to in the sidebar, as a [listRank]; null for
+  /// none.
+  final double? order;
+
+  /// When [order] was set. A message after that puts an unpinned chat back
+  /// where its recency does; a pinned one stays put.
+  final DateTime? orderedAt;
+
+  /// Where it's listed among its kind (pinned or not), highest first, in
+  /// milliseconds since the epoch: an unpinned chat by its last message, or
+  /// by where it was dragged since; a pinned one by where it was pinned or
+  /// dragged to, or for one pinned before that, when it was made.
+  double get listRank {
+    if (pinned) return order ?? createdAt.millisecondsSinceEpoch.toDouble();
+    if ((order, orderedAt) case (
+      final order?,
+      final at?,
+    ) when !at.isBefore(lastMessageAt)) {
+      return order;
+    }
+    return lastMessageAt.millisecondsSinceEpoch.toDouble();
+  }
 
   /// What the chat is about, in a sentence or two, for `project_chats`
   /// (GAIA_PROJECTS_HLD.md §5.5); null before one is written.
@@ -624,12 +649,17 @@ class GaiaChat extends SoftDeletable {
     bool clearProjectId = false,
     String? summary,
     int? summarizedSeq,
+    double? order,
+    DateTime? orderedAt,
+    bool clearOrder = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
     bool bumpVersion = true,
     bool touch = true,
   }) => GaiaChat(
+    order: clearOrder ? null : (order ?? this.order),
+    orderedAt: clearOrder ? null : (orderedAt ?? this.orderedAt),
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
     summary: summary ?? this.summary,
     summarizedSeq: summarizedSeq ?? this.summarizedSeq,
@@ -676,6 +706,8 @@ class GaiaChat extends SoftDeletable {
     'projectId': projectId,
     'summary': summary,
     'summarizedSeq': summarizedSeq,
+    'order': order,
+    'orderedAt': orderedAt?.toIso8601String(),
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -700,9 +732,49 @@ class GaiaChat extends SoftDeletable {
       projectId: json['projectId'] as String?,
       summary: json['summary'] as String?,
       summarizedSeq: (json['summarizedSeq'] as num?)?.toInt() ?? -1,
+      order: (json['order'] as num?)?.toDouble(),
+      orderedAt: _date(json['orderedAt']),
     );
   }
 }
+
+/// The sidebar's order: pinned first, then by [GaiaChat.listRank].
+int gaiaChatListed(GaiaChat a, GaiaChat b) {
+  if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+  final rank = b.listRank.compareTo(a.listRank);
+  return rank != 0 ? rank : a.id.compareTo(b.id);
+}
+
+/// [chat] pinned, at the bottom of the pinned chats it's listed with (its
+/// project's, or those in none), or unpinned, back where its recency puts
+/// it. [chats]: the chats there are.
+GaiaChat gaiaPinned(GaiaChat chat, bool pinned, Iterable<GaiaChat> chats) {
+  if (!pinned) return chat.copyWith(pinned: false, clearOrder: true);
+  final ranks = [
+    for (final other in chats)
+      if (other.pinned &&
+          other.id != chat.id &&
+          !other.isDeleted &&
+          other.projectId == chat.projectId)
+        other.listRank,
+  ];
+  return chat.copyWith(
+    pinned: true,
+    order: ranks.isEmpty
+        ? chat.lastMessageAt.millisecondsSinceEpoch.toDouble()
+        : ranks.reduce(min) - 1000,
+    orderedAt: utcNow(),
+  );
+}
+
+/// The rank for a chat or project dragged between ranks [above] and
+/// [below], either null at an end of its list; null when it's alone.
+double? gaiaDropRank(double? above, double? below) => switch ((above, below)) {
+  (final above?, final below?) => (above + below) / 2,
+  (null, final below?) => below + 1000,
+  (final above?, null) => above - 1000,
+  (null, null) => null,
+};
 
 /// [ordered] as listed (pinned first, then most recent), with each fork
 /// taken out to sit under its original chat, in the order they came.
@@ -736,9 +808,32 @@ class GaiaProject extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.folders = const {},
+    this.order,
+    this.orderedAt,
   });
 
   final String name;
+
+  /// Where it was dragged to in the sidebar, as a [listRank]; null for
+  /// none.
+  final double? order;
+
+  /// When [order] was set: a message in one of its chats after that puts
+  /// it back where its recency does.
+  final DateTime? orderedAt;
+
+  /// Where it's listed, highest first, in milliseconds since the epoch: by
+  /// [latest], its most recent chat's last message, or where it was dragged
+  /// since.
+  double listRank(DateTime latest) {
+    if ((order, orderedAt) case (
+      final order?,
+      final at?,
+    ) when !at.isBefore(latest)) {
+      return order;
+    }
+    return latest.millisecondsSinceEpoch.toDouble();
+  }
 
   /// Its folder on each device that has one, by device id
   /// (GAIA_PROJECTS_HLD.md §4): paths differ between machines. A removed
@@ -755,6 +850,8 @@ class GaiaProject extends SoftDeletable {
   GaiaProject copyWith({
     String? name,
     Map<String, String>? folders,
+    double? order,
+    DateTime? orderedAt,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -766,12 +863,16 @@ class GaiaProject extends SoftDeletable {
     deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     name: name ?? this.name,
     folders: folders ?? this.folders,
+    order: order ?? this.order,
+    orderedAt: orderedAt ?? this.orderedAt,
   );
 
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
     'folders': folders,
+    'order': order,
+    'orderedAt': orderedAt?.toIso8601String(),
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'version': version,
@@ -784,6 +885,8 @@ class GaiaProject extends SoftDeletable {
       id: json['id']! as String,
       name: json['name']! as String,
       folders: gaiaFoldersFromJson(json['folders']),
+      order: (json['order'] as num?)?.toDouble(),
+      orderedAt: _date(json['orderedAt']),
       createdAt: createdAt,
       updatedAt: _date(json['updatedAt']) ?? createdAt,
       version: (json['version'] as num?)?.toInt() ?? 0,
@@ -801,25 +904,28 @@ Map<String, String> gaiaFoldersFromJson(Object? json) => {
 };
 
 /// A project as the chat lists show it (GAIA_PROJECTS_HLD.md §7.1): its
-/// chats in [groups], pinned first, and how many there are.
+/// chats in [groups], pinned first, how many there are, and its
+/// [GaiaProject.listRank].
 typedef GaiaProjectSection = ({
   GaiaProject project,
   List<GaiaForkGroup> groups,
   int count,
+  double rank,
 });
 
-/// [ordered] (pinned first, then most recent) split as the chat lists show
-/// it (GAIA_PROJECTS_HLD.md §7.1): [pinned] and [chats] hold the chats in no
+/// [chats] in [gaiaChatListed]'s order, split as the chat lists show it
+/// (GAIA_PROJECTS_HLD.md §7.1): [pinned] and [chats] hold the chats in no
 /// live project, and each of [projects] its own, with forks grouped as
 /// [gaiaForkGroups] does. A chat whose project isn't in [projects] is in
-/// none. Projects go by their most recent chat, an empty one by when it was
-/// made.
+/// none. Projects go by [GaiaProject.listRank], from their most recent
+/// chat, an empty one's from when it was made.
 ({
   List<GaiaForkGroup> pinned,
   List<GaiaProjectSection> projects,
   List<GaiaForkGroup> chats,
 })
-gaiaChatSections(List<GaiaChat> ordered, List<GaiaProject> projects) {
+gaiaChatSections(List<GaiaChat> chats, List<GaiaProject> projects) {
+  final ordered = [...chats]..sort(gaiaChatListed);
   final live = {for (final project in projects) project.id};
   final loose = <GaiaChat>[];
   final byProject = <String, List<GaiaChat>>{};
@@ -830,13 +936,14 @@ gaiaChatSections(List<GaiaChat> ordered, List<GaiaProject> projects) {
       loose.add(chat);
     }
   }
-  final latest = {
+  final rank = {
     for (final project in projects)
-      project.id:
-          byProject[project.id]
-              ?.map((chat) => chat.lastMessageAt)
-              .reduce((a, b) => a.isAfter(b) ? a : b) ??
-          project.createdAt,
+      project.id: project.listRank(
+        byProject[project.id]
+                ?.map((chat) => chat.lastMessageAt)
+                .reduce((a, b) => a.isAfter(b) ? a : b) ??
+            project.createdAt,
+      ),
   };
   final looseGroups = gaiaForkGroups(loose);
   return (
@@ -847,11 +954,12 @@ gaiaChatSections(List<GaiaChat> ordered, List<GaiaProject> projects) {
     projects: [
       for (final project in [
         ...projects,
-      ]..sort((a, b) => latest[b.id]!.compareTo(latest[a.id]!)))
+      ]..sort((a, b) => rank[b.id]!.compareTo(rank[a.id]!)))
         (
           project: project,
           groups: gaiaForkGroups(byProject[project.id] ?? const []),
           count: byProject[project.id]?.length ?? 0,
+          rank: rank[project.id]!,
         ),
     ],
     chats: [

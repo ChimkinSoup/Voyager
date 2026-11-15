@@ -1008,6 +1008,19 @@ class _SidebarState extends State<_Sidebar> {
         ({GaiaChat chat, bool selected, bool running, bool? open, Widget tile})
       >{};
 
+  /// Each chat's and project's row, by `chat <id>` or `project <id>`: a
+  /// row dragged is taken out of its list and put back on the drop, and
+  /// keeps its hover through it rather than lighting up again.
+  final _rowKeys = <String, GlobalKey>{};
+  GlobalKey _rowKey(String key) => _rowKeys[key] ??= GlobalKey();
+
+  /// A project's chat dragged: its list doesn't scroll, so the sidebar's
+  /// scrolled as the chat nears its top or bottom, as the other lists do
+  /// themselves. [_nestedRow]: its row, from the pointer.
+  EdgeDraggingAutoScroller? _nestedScroll;
+  Rect? _nestedRow;
+  Offset? _nestedDown;
+
   /// The chat or project being renamed in its row, and its field.
   String? _renaming;
   var _renamingProject = false;
@@ -1025,6 +1038,7 @@ class _SidebarState extends State<_Sidebar> {
   void dispose() {
     _rename.dispose();
     _renameFocus.dispose();
+    _nestedScroll?.stopAutoScroll();
     super.dispose();
   }
 
@@ -1115,22 +1129,134 @@ class _SidebarState extends State<_Sidebar> {
     child: row,
   );
 
-  /// The chat lists' groups (GAIA_PROJECTS_HLD.md §7.1): each chat's tile,
-  /// its forks bracketed under it unless folded away.
-  List<Widget> _groups(List<GaiaForkGroup> groups) => [
-    for (final (:chat, :forks) in groups)
-      if (forks.isEmpty)
-        _tile(chat)
-      else if (widget.controller.sidebar.collapsed.contains(chat.id))
-        _tile(chat, open: false)
-      else ...[
+  /// A chat list's group (GAIA_PROJECTS_HLD.md §7.1): the chat's tile, its
+  /// forks bracketed under it unless folded away.
+  Widget _group(GaiaForkGroup group) {
+    final (:chat, :forks) = group;
+    if (forks.isEmpty) return _tile(chat);
+    if (widget.controller.sidebar.collapsed.contains(chat.id)) {
+      return _tile(chat, open: false);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         _tile(chat, open: true),
         _ForkBracket(
           key: ValueKey('forks of ${chat.id}'),
           children: [for (final fork in forks) _tile(fork)],
         ),
       ],
-  ];
+    );
+  }
+
+  /// [groups] as a list whose chats drag up and down, forks and all;
+  /// [nested] in a project's row, which is itself in a list.
+  Widget _chatList(List<GaiaForkGroup> groups, {bool nested = false}) {
+    Widget item(BuildContext context, int index) {
+      final group = groups[index];
+      return ReorderableDragStartListener(
+        key: ValueKey('group ${group.chat.id}'),
+        index: index,
+        enabled: _renaming == null,
+        child: _group(group),
+      );
+    }
+
+    void drop(int from, int to) => _dropChat(groups, from, to);
+    return nested
+        ? Builder(
+            builder: (context) => Listener(
+              onPointerDown: (event) => _nestedDown = event.position,
+              onPointerMove: (event) {
+                final row = _nestedRow;
+                if (row == null) return;
+                _nestedScroll?.startAutoScrollIfNecessary(
+                  row.shift(event.position),
+                );
+              },
+              child: ReorderableList(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: groups.length,
+                itemBuilder: item,
+                onReorderItem: drop,
+                onReorderStart: (index) {
+                  final box = _rowKeys['chat ${groups[index].chat.id}']
+                      ?.currentContext
+                      ?.findRenderObject();
+                  final down = _nestedDown;
+                  if (box is! RenderBox || down == null) return;
+                  _nestedRow = (box.localToGlobal(Offset.zero) & box.size)
+                      .shift(-down);
+                  _nestedScroll = EdgeDraggingAutoScroller(
+                    Scrollable.of(context),
+                    velocityScalar: 50,
+                  );
+                },
+                onReorderEnd: (_) {
+                  _nestedScroll?.stopAutoScroll();
+                  _nestedScroll = null;
+                  _nestedRow = null;
+                },
+                proxyDecorator: _lifted,
+              ),
+            ),
+          )
+        : SliverReorderableList(
+            itemCount: groups.length,
+            itemBuilder: item,
+            onReorderItem: drop,
+            proxyDecorator: _lifted,
+          );
+  }
+
+  /// [groups]' chat at [from] dropped at [to], counted without it: among
+  /// its own kind, so a chat dragged past the pinned/unpinned line stops at
+  /// it.
+  void _dropChat(List<GaiaForkGroup> groups, int from, int to) {
+    if (to == from) return;
+    final moved = groups[from].chat;
+    final rest = [
+      for (final (i, group) in groups.indexed)
+        if (i != from) group.chat,
+    ];
+    final kind = [
+      for (final chat in rest)
+        if (chat.pinned == moved.pinned) chat,
+    ];
+    final at = rest.take(to).where((c) => c.pinned == moved.pinned).length;
+    final order = gaiaDropRank(
+      at > 0 ? kind[at - 1].listRank : null,
+      at < kind.length ? kind[at].listRank : null,
+    );
+    if (order != null) {
+      unawaited(widget.controller.reorderChat(moved.id, order));
+    }
+  }
+
+  /// [sections]' project at [from] dropped at [to], counted without it.
+  void _dropProject(List<GaiaProjectSection> sections, int from, int to) {
+    if (to == from) return;
+    final rest = [...sections]..removeAt(from);
+    final order = gaiaDropRank(
+      to > 0 ? rest[to - 1].rank : null,
+      to < rest.length ? rest[to].rank : null,
+    );
+    if (order != null) {
+      unawaited(
+        widget.controller.reorderProject(sections[from].project.id, order),
+      );
+    }
+  }
+
+  /// A row as it's dragged: on the sidebar's own fill, so the rows it
+  /// passes over don't show through.
+  Widget _lifted(Widget child, int index, Animation<double> animation) =>
+      Material(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(8),
+        child: child,
+      );
 
   /// A project made, open and named "New project" in its row, ready to be
   /// renamed; with [moving], that chat moved into it.
@@ -1310,7 +1436,7 @@ class _SidebarState extends State<_Sidebar> {
     final open = controller.sidebar.openProjects.contains(project.id);
     final renaming = project.id == _renaming && _renamingProject;
     final row = GestureDetector(
-      key: ValueKey('project ${project.id}'),
+      key: _rowKey('project ${project.id}'),
       onSecondaryTapUp: (details) =>
           _projectMenu(project, details.globalPosition),
       child: _ChatTile(
@@ -1446,7 +1572,7 @@ class _SidebarState extends State<_Sidebar> {
       return last.tile;
     }
     final tile = GestureDetector(
-      key: ValueKey(chat.id),
+      key: _rowKey('chat ${chat.id}'),
       onSecondaryTapUp: (details) => _menu(chat, details.globalPosition),
       child: _ChatTile(
         selected: selected,
@@ -1506,6 +1632,11 @@ class _SidebarState extends State<_Sidebar> {
     final theme = Theme.of(context);
     final ids = {for (final chat in controller.chats) chat.id};
     _tiles.removeWhere((id, _) => !ids.contains(id));
+    final rows = {
+      for (final id in ids) 'chat $id',
+      for (final project in controller.projects) 'project ${project.id}',
+    };
+    _rowKeys.removeWhere((key, _) => !rows.contains(key));
     final sections = gaiaChatSections(controller.chats, controller.projects);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1552,40 +1683,71 @@ class _SidebarState extends State<_Sidebar> {
             behavior: ScrollConfiguration.of(
               context,
             ).copyWith(scrollbars: false),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              children: [
-                if (sections.pinned.isNotEmpty) ...[
-                  const _SidebarLabel('Pinned'),
-                  ..._groups(sections.pinned),
-                ],
-                _SidebarLabel(
-                  'Projects',
-                  trailing: GaiaButton(
-                    icon: Icons.add,
-                    size: 24,
-                    padding: 0,
-                    onPressed: _newProject,
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      if (sections.pinned.isNotEmpty) ...[
+                        const SliverToBoxAdapter(
+                          child: _SidebarLabel('Pinned'),
+                        ),
+                        _chatList(sections.pinned),
+                      ],
+                      SliverToBoxAdapter(
+                        child: _SidebarLabel(
+                          'Projects',
+                          trailing: GaiaButton(
+                            icon: Icons.add,
+                            size: 24,
+                            padding: 0,
+                            onPressed: _newProject,
+                          ),
+                        ),
+                      ),
+                      SliverReorderableList(
+                        itemCount: sections.projects.length,
+                        itemBuilder: (context, index) {
+                          final section = sections.projects[index];
+                          final id = section.project.id;
+                          return Column(
+                            key: ValueKey('section $id'),
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ReorderableDragStartListener(
+                                index: index,
+                                enabled: _renaming == null,
+                                child: _projectRow(section),
+                              ),
+                              if (controller.sidebar.openProjects.contains(id))
+                                Padding(
+                                  key: ValueKey('chats of $id'),
+                                  padding: const EdgeInsets.only(
+                                    left: _projectIndent,
+                                  ),
+                                  child: _chatList(
+                                    section.groups,
+                                    nested: true,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                        onReorderItem: (from, to) =>
+                            _dropProject(sections.projects, from, to),
+                        proxyDecorator: _lifted,
+                      ),
+                      if (sections.chats.isNotEmpty) ...[
+                        const SliverToBoxAdapter(child: _SidebarLabel('Chats')),
+                        _chatList(sections.chats),
+                      ],
+                    ],
                   ),
                 ),
-                for (final section in sections.projects) ...[
-                  _projectRow(section),
-                  if (controller.sidebar.openProjects.contains(
-                    section.project.id,
-                  ))
-                    Padding(
-                      key: ValueKey('chats of ${section.project.id}'),
-                      padding: const EdgeInsets.only(left: _projectIndent),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _groups(section.groups),
-                      ),
-                    ),
-                ],
-                if (sections.chats.isNotEmpty) ...[
-                  const _SidebarLabel('Chats'),
-                  ..._groups(sections.chats),
-                ],
               ],
             ),
           ),
@@ -1725,10 +1887,10 @@ class _SidebarLabel extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Color(0xFF737373),
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ),
@@ -1901,13 +2063,32 @@ class _MessagesState extends State<_Messages> {
   final _placed = <String, BuildContext>{};
 
   /// What the list's scroll shows over it, as [_cutOff] finds it, and
-  /// [scrolledUp] far enough from the newest to offer a way back down. Its
-  /// own notifier, so scrolling rebuilds only what's over the list.
+  /// [scrolledUp] far enough from the newest to offer a way back down; in
+  /// [chat]. Its own notifier, so scrolling rebuilds only what's over the
+  /// list.
   final _over =
       ValueNotifier<
-        ({String? pinned, String? chapter, bool chapterOff, bool scrolledUp})
-      >((pinned: null, chapter: null, chapterOff: false, scrolledUp: false));
+        ({
+          String? chat,
+          String? pinned,
+          String? chapter,
+          bool chapterOff,
+          bool scrolledUp,
+        })
+      >((
+        chat: null,
+        pinned: null,
+        chapter: null,
+        chapterOff: false,
+        scrolledUp: false,
+      ));
   bool _placing = false;
+
+  /// [_over], found in [chat], is of the chat as it's shown: not the last
+  /// chat's, a frame on from switching, nor before it's back where it was
+  /// left. Until then nothing's shown over the list, so what was over the
+  /// last chat doesn't fade out over this one.
+  bool _overShown(String? chat) => chat == _chatId && _restoring == null;
 
   /// The message whose chapter is being renamed in its divider, and its
   /// field.
@@ -1923,18 +2104,18 @@ class _MessagesState extends State<_Messages> {
     _chatId = widget.messages.firstOrNull?.chatId;
     // The chapter being read, for the rail, before any scroll.
     _place();
-    _takeReveal();
+    if (!_takeReveal()) _arrive();
   }
 
   /// The message a search just scrolled to, lit a moment so it's found.
   String? _flashed;
 
   /// Up to the message a search picked ([GaiaController.revealing]), once
-  /// the list has it.
-  void _takeReveal() {
+  /// the list has it; whether it was.
+  bool _takeReveal() {
     final id = widget.controller.revealing;
     if (id == null || !widget.messages.any((message) => message.id == id)) {
-      return;
+      return false;
     }
     widget.controller.revealing = null;
     // Not mid-build, as scrolling notifies.
@@ -1943,6 +2124,68 @@ class _MessagesState extends State<_Messages> {
       await _reveal(id);
       if (mounted) setState(() => _flashed = id);
     });
+    return true;
+  }
+
+  /// The chat going back to where it was left scrolled up to
+  /// ([GaiaController.scrolledTo]), which isn't saved over meanwhile.
+  String? _restoring;
+
+  /// [_chatId] newly in the list: back where it was left scrolled up to, or
+  /// at its newest, rather than at the last chat's scroll.
+  void _arrive() {
+    _restoring = null;
+    // Silently, as mid-build; the list lays out afresh for the new chat.
+    if (_scroll.hasClients) _scroll.position.correctPixels(0);
+    final chatId = _chatId;
+    final at = widget.controller.scrolledTo[chatId];
+    if (chatId == null ||
+        at == null ||
+        !widget.messages.any((message) => message.id == at.id)) {
+      return;
+    }
+    _restoring = chatId;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Gone on to another chat since.
+      if (!mounted || _restoring != chatId) return;
+      await _restore(at);
+      // A frame more unshown, for [_place] to find what's over it there.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || _restoring != chatId) return;
+      setState(() => _restoring = null);
+      _place();
+    });
+  }
+
+  /// [at]'s message as far above the list's top as it was.
+  Future<void> _restore(({String id, double into}) at) async {
+    if (!_scroll.hasClients) return;
+    final chatId = _restoring;
+    // Not built, laid out around it first, as in [_reveal].
+    if (_placed[at.id] == null) {
+      final i = widget.messages.indexWhere((message) => message.id == at.id);
+      final built = _placed.values.firstOrNull;
+      final to = built == null
+          ? null
+          : GaiaSteadyList.jumpTo(built, widget.messages.length - 1 - i);
+      if (to == null) return;
+      _scroll.jumpTo(max(0.0, to - _scroll.position.viewportDimension));
+      await WidgetsBinding.instance.endOfFrame;
+      // Gone on to another chat since.
+      if (!mounted || _restoring != chatId) return;
+    }
+    final list = context.findRenderObject();
+    final box = _placed[at.id]?.findRenderObject();
+    if (list is! RenderBox || box is! RenderBox || !box.hasSize) return;
+    final top = box.localToGlobal(Offset.zero, ancestor: list).dy;
+    // Reversed: scrolling further up moves it down as much.
+    final position = _scroll.position;
+    _scroll.jumpTo(
+      (position.pixels - at.into - top).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
   }
 
   void _startRename(GaiaMessage message) {
@@ -1988,7 +2231,7 @@ class _MessagesState extends State<_Messages> {
   void didUpdateWidget(_Messages old) {
     super.didUpdateWidget(old);
     _place();
-    _takeReveal();
+    final revealed = _takeReveal();
     // The user's latest message new while a reply's claimed here: just sent
     // from this window, so it gathers in. Its reply may already be in after
     // it. The controller adds to the list it gave last time, so it's told
@@ -2003,6 +2246,9 @@ class _MessagesState extends State<_Messages> {
     final chatId = widget.messages.firstOrNull?.chatId;
     final sameChat = chatId == _chatId;
     _chatId = chatId;
+    // A reveal places the new chat itself; the last chat's restore is off.
+    if (!sameChat && revealed) _restoring = null;
+    if (!sameChat && !revealed) _arrive();
     final was = _reply;
     final now = _reply = _latestReply(widget.messages);
     // A new reply in the same chat, running here: a message was sent from
@@ -2069,8 +2315,15 @@ class _MessagesState extends State<_Messages> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _placing = false;
       if (!mounted) return;
-      final (:pinned, :chapter, :chapterOff) = _cutOff();
+      final (:pinned, :chapter, :chapterOff, :across) = _cutOff();
       final scrolledUp = _scroll.hasClients && _scroll.offset > 100;
+      final chatId = _chatId;
+      if (_restoring == null && chatId != null) {
+        final places = widget.controller.scrolledTo;
+        !scrolledUp || across == null
+            ? places.remove(chatId)
+            : places[chatId] = across;
+      }
       // Diagnostic for the to-bottom button stuck on screen.
       if (scrolledUp != _over.value.scrolledUp) {
         debugPrint(
@@ -2080,6 +2333,7 @@ class _MessagesState extends State<_Messages> {
         );
       }
       _over.value = (
+        chat: chatId,
         pinned: pinned,
         chapter: chapter,
         chapterOff: chapterOff,
@@ -2093,9 +2347,16 @@ class _MessagesState extends State<_Messages> {
   /// [pinned]: the user's message, with text, heading the turn across the
   /// list's top, when that's scrolled above it. [chapter]: the message
   /// heading the chapter across the top, and [chapterOff] when its divider
-  /// is scrolled above it.
-  ({String? pinned, String? chapter, bool chapterOff}) _cutOff() {
-    const none = (pinned: null, chapter: null, chapterOff: false);
+  /// is scrolled above it. [across]: the message across the top, and how
+  /// far it's scrolled above it.
+  ({
+    String? pinned,
+    String? chapter,
+    bool chapterOff,
+    ({String id, double into})? across,
+  })
+  _cutOff() {
+    const none = (pinned: null, chapter: null, chapterOff: false, across: null);
     final list = context.findRenderObject();
     if (list is! RenderBox) return none;
     final messages = widget.messages;
@@ -2138,6 +2399,7 @@ class _MessagesState extends State<_Messages> {
         chapter: chapter < 0 ? null : messages[chapter].id,
         // One below the top, from the bottom, has its divider in view.
         chapterOff: chapter >= 0 && chapter <= i && !(chapter == i && top >= 0),
+        across: (id: message.id, into: -top),
       );
     }
     return none;
@@ -2443,97 +2705,113 @@ class _MessagesState extends State<_Messages> {
             }
             return false;
           },
-          child: Stack(
-            children: [
-              list,
-              Positioned(
-                top: 8,
-                left: left,
-                right: gutter,
-                child: ValueListenableBuilder(
-                  valueListenable: _over,
-                  builder: (context, over, _) {
-                    final pinned = messages
-                        .where((message) => message.id == over.pinned)
-                        .firstOrNull;
-                    final chapter = over.chapterOff
-                        ? messages
-                              .where(
-                                (message) =>
-                                    message.id == over.chapter &&
-                                    message.chapter != null,
-                              )
-                              .firstOrNull
-                        : null;
-                    return AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 150),
-                      transitionBuilder: gaiaPinnedFade,
-                      child: pinned == null && chapter == null
-                          ? const SizedBox.shrink()
-                          // One key for every prompt, so only coming and
-                          // going fades the box.
-                          : GaiaPinnedPrompt(
-                              key: const ValueKey('pinned'),
-                              id: pinned?.id,
-                              text: pinned == null
-                                  ? null
-                                  : _pinnedLabel(pinned),
-                              onTap: pinned == null
-                                  ? null
-                                  : () => _reveal(pinned.id),
-                              chapterId: chapter?.id,
-                              chapter: chapter?.chapter,
-                              onChapterTap: chapter == null
-                                  ? null
-                                  : () => _reveal(chapter.id),
-                            ),
-                    );
-                  },
-                ),
-              ),
-              if (chapters.isNotEmpty)
+          // Unpainted while going back to where the chat was left, so its
+          // newest doesn't flash up first.
+          child: Opacity(
+            opacity: _restoring == null ? 1 : 0,
+            child: Stack(
+              children: [
+                list,
                 Positioned(
                   top: 8,
-                  left: 0,
+                  left: left,
+                  right: gutter,
                   child: ValueListenableBuilder(
                     valueListenable: _over,
-                    builder: (context, over, _) => _ChapterRail(
-                      chapters: chapters,
-                      current:
-                          chapters
-                              .where((entry) => entry.id == over.chapter)
-                              .map((entry) => entry.id)
-                              .firstOrNull ??
-                          chapters.first.id,
-                      onPick: (id) => unawaited(_reveal(id)),
-                    ),
+                    builder: (context, over, _) {
+                      final shown = _overShown(over.chat);
+                      final pinned = !shown
+                          ? null
+                          : messages
+                                .where((message) => message.id == over.pinned)
+                                .firstOrNull;
+                      final chapter = shown && over.chapterOff
+                          ? messages
+                                .where(
+                                  (message) =>
+                                      message.id == over.chapter &&
+                                      message.chapter != null,
+                                )
+                                .firstOrNull
+                          : null;
+                      return AnimatedSwitcher(
+                        // Afresh as it's shown or not, so from one chat to
+                        // another nothing fades.
+                        key: ValueKey(shown),
+                        duration: const Duration(milliseconds: 150),
+                        transitionBuilder: gaiaPinnedFade,
+                        child: pinned == null && chapter == null
+                            ? const SizedBox.shrink()
+                            // One key for every prompt, so only coming and
+                            // going fades the box.
+                            : GaiaPinnedPrompt(
+                                key: const ValueKey('pinned'),
+                                id: pinned?.id,
+                                text: pinned == null
+                                    ? null
+                                    : _pinnedLabel(pinned),
+                                onTap: pinned == null
+                                    ? null
+                                    : () => _reveal(pinned.id),
+                                chapterId: chapter?.id,
+                                chapter: chapter?.chapter,
+                                onChapterTap: chapter == null
+                                    ? null
+                                    : () => _reveal(chapter.id),
+                              ),
+                      );
+                    },
                   ),
                 ),
-              Positioned(
-                bottom: 20,
-                left: 0,
-                right: 0,
-                // Above the composer's chips under it.
-                child: GaiaAboveFloat(
-                  child: Center(
+                if (chapters.isNotEmpty)
+                  Positioned(
+                    top: 8,
+                    left: 0,
                     child: ValueListenableBuilder(
                       valueListenable: _over,
-                      // Not clicked while it fades out.
-                      builder: (context, over, _) => IgnorePointer(
-                        ignoring: !over.scrolledUp,
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 150),
-                          transitionBuilder: gaiaPinnedFade,
-                          child: over.scrolledUp
-                              ? _ToBottom(onTap: _toBottom)
-                              : const SizedBox.shrink(),
-                        ),
+                      builder: (context, over, _) => _ChapterRail(
+                        chapters: chapters,
+                        current:
+                            chapters
+                                .where((entry) => entry.id == over.chapter)
+                                .map((entry) => entry.id)
+                                .firstOrNull ??
+                            chapters.first.id,
+                        onPick: (id) => unawaited(_reveal(id)),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  bottom: 20,
+                  left: 0,
+                  right: 0,
+                  // Above the composer's chips under it.
+                  child: GaiaAboveFloat(
+                    child: Center(
+                      child: ValueListenableBuilder(
+                        valueListenable: _over,
+                        // Not clicked while it fades out.
+                        builder: (context, over, _) {
+                          final shown = _overShown(over.chat);
+                          return IgnorePointer(
+                            ignoring: !(shown && over.scrolledUp),
+                            child: AnimatedSwitcher(
+                              // As over the top.
+                              key: ValueKey(shown),
+                              duration: const Duration(milliseconds: 150),
+                              transitionBuilder: gaiaPinnedFade,
+                              child: shown && over.scrolledUp
+                                  ? _ToBottom(onTap: _toBottom)
+                                  : const SizedBox.shrink(),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

@@ -150,9 +150,9 @@ void main() {
     await pick('Root', 'Pin');
     expect(order(), ['Root', 'Fork A', 'Fork B', 'Pinned fork', 'Other']);
 
-    // A fork pinned goes up on its own.
+    // A fork pinned goes up on its own, below the pinned already there.
     await pick('Fork B', 'Pin');
-    expect(order(), ['Fork B', 'Root', 'Fork A', 'Pinned fork', 'Other']);
+    expect(order(), ['Root', 'Fork A', 'Pinned fork', 'Fork B', 'Other']);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));

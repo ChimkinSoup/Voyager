@@ -2232,6 +2232,10 @@ class GaiaChatsTable extends Table {
 
   /// The last message [summary] covers.
   IntColumn get summarizedSeq => integer().withDefault(const Constant(-1))();
+
+  /// Where it was dragged to in the sidebar, and when (`GaiaChat.order`).
+  RealColumn get listOrder => real().nullable()();
+  DateTimeColumn get orderedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2248,6 +2252,10 @@ class GaiaProjectsTable extends Table {
 
   /// `{deviceId: path}`, its folder on each device (GAIA_PROJECTS_HLD.md §4).
   TextColumn get foldersJson => text().withDefault(const Constant('{}'))();
+
+  /// Where it was dragged to in the sidebar, and when (`GaiaProject.order`).
+  RealColumn get listOrder => real().nullable()();
+  DateTimeColumn get orderedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2362,8 +2370,7 @@ class GaiaSettingsTable extends Table {
 
   /// `{tier: agentId}`; null for the defaults.
   TextColumn get tiersJson => text().nullable()();
-  TextColumn get lastTier =>
-      text().withDefault(const Constant('standard'))();
+  TextColumn get lastTier => text().withDefault(const Constant('standard'))();
 
   /// Null for the last used tier.
   TextColumn get defaultTier => text().nullable()();
@@ -2385,8 +2392,7 @@ class GaiaSettingsTable extends Table {
 
   /// `{keybind: combo}` as JSON.
   TextColumn get keybindsJson => text().withDefault(const Constant('{}'))();
-  BoolColumn get windowContext =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get windowContext => boolean().withDefault(const Constant(true))();
 
   /// A JSON list of names and hosts; null for the defaults.
   TextColumn get contextExclusionsJson => text().nullable()();
@@ -2541,7 +2547,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 196;
+  int get schemaVersion => 197;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4759,6 +4765,36 @@ class AppDatabase extends _$AppDatabase {
           gaiaMemoriesTable.projectId,
         );
       }
+      if (from >= 169 && from < 197) {
+        // Chats dragged in the sidebar.
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.listOrder,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.orderedAt,
+        );
+      }
+      if (from >= 193 && from < 197) {
+        // Projects dragged in the sidebar.
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_projects_table',
+          gaiaProjectsTable,
+          gaiaProjectsTable.listOrder,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_projects_table',
+          gaiaProjectsTable,
+          gaiaProjectsTable.orderedAt,
+        );
+      }
     },
   );
 
@@ -5021,8 +5057,7 @@ class AppDatabase extends _$AppDatabase {
         // whose day already syncs as a `yyyy-MM-dd` key: bumping each
         // device's delta row there changes nothing remote and ties its
         // version with that device's next tap.
-        if (table != 'settings_table' &&
-            table != 'counter_adjustments_table') {
+        if (table != 'settings_table' && table != 'counter_adjustments_table') {
           sets.add('version = version + 1');
         }
         await customStatement(

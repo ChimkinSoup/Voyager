@@ -1262,6 +1262,19 @@ class GaiaHost {
         await store.setPinned(
           params['chatId']! as String,
           params['pinned']! as bool,
+          order: (params['order'] as num?)?.toDouble(),
+        );
+        return null;
+      case 'reorderChat':
+        await store.reorderChat(
+          params['chatId']! as String,
+          (params['order']! as num).toDouble(),
+        );
+        return null;
+      case 'reorderProject':
+        await store.reorderProject(
+          params['projectId']! as String,
+          (params['order']! as num).toDouble(),
         );
         return null;
       case 'projects':
@@ -1281,6 +1294,7 @@ class GaiaHost {
         await store.setProject(
           params['chatId']! as String,
           params['projectId'] as String?,
+          order: (params['order'] as num?)?.toDouble(),
         );
         return null;
       case 'setProjectFolder':

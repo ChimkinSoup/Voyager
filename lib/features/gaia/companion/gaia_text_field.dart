@@ -121,6 +121,15 @@ class _GaiaTextFieldState extends State<GaiaTextField>
         if (status == AnimationStatus.completed) _outgoing = null;
       });
 
+  /// Whether the caret is hidden while sent text vanishes, as of the last
+  /// build, and it fading back in once the text has gone.
+  var _caretHidden = false;
+  late final _caretIn = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+    value: 1,
+  )..addListener(() => setState(() {}));
+
   /// Set by a switch: the light's next move is a jump to its new spot, not
   /// a glide over to it.
   var _jump = false;
@@ -178,6 +187,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     _ticker.dispose();
     _shown.dispose();
     _swap.dispose();
+    _caretIn.dispose();
     _light.dispose();
     _scroll.dispose();
     super.dispose();
@@ -451,6 +461,8 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     final session = vim.session;
     final snippets = vim.snippetSession;
     final autocorrect = vim.autocorrectSession;
+    final hideCaret = _caretHidden;
+    final caretColor = vim.overlayCaretColor(accent);
     // A wrapped paragraph gets [SelectionHighlightLayer]'s highlight in place
     // of Flutter's, which runs short lines out to the widest and leaves seams
     // between rows. Vim's overlay draws it itself in Visual mode.
@@ -531,8 +543,11 @@ class _GaiaTextFieldState extends State<GaiaTextField>
             // The squiggles are the layer's: results of the field's own
             // would have it drop the controller's text span.
             spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+            showCursor: !hideCaret,
             // Held back for Vim's overlay, which draws the caret.
-            cursorColor: vim.overlayCaretColor(accent),
+            cursorColor: caretColor.withValues(
+              alpha: caretColor.a * _caretIn.value,
+            ),
             cursorWidth: vim.overlayCaretWidth,
             undoController: vim.undoController,
             decoration: InputDecoration(
@@ -551,17 +566,21 @@ class _GaiaTextFieldState extends State<GaiaTextField>
             ),
           ),
         ),
-        if (session != null || snippets != null)
+        // The field is empty while it hides: only Vim's block caret to lose.
+        if ((session != null || snippets != null) && !hideCaret)
           layer(
-            VimTextOverlay(
-              session: session,
-              snippetSession: snippets,
-              controller: widget.controller,
-              focusNode: widget.focusNode,
-              style: style,
-              accentColor: accent,
-              scrollController: _scroll,
-              hintText: widget.hintText,
+            Opacity(
+              opacity: _caretIn.value,
+              child: VimTextOverlay(
+                session: session,
+                snippetSession: snippets,
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                style: style,
+                accentColor: accent,
+                scrollController: _scroll,
+                hintText: widget.hintText,
+              ),
             ),
           ),
       ],
@@ -586,6 +605,18 @@ class _GaiaTextFieldState extends State<GaiaTextField>
 
   @override
   Widget build(BuildContext context) {
+    // While sent text vanishes, the light carries the eye to where the caret
+    // comes back. It fades in there once the text has gone, but comes back
+    // at once to typing.
+    final hideCaret =
+        context.findAncestorStateOfType<GaiaVanishState>()?.hidesCaret ?? false;
+    if (_caretHidden &&
+        !hideCaret &&
+        widget.controller.text.isEmpty &&
+        !(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+      _caretIn.forward(from: 0);
+    }
+    _caretHidden = hideCaret;
     return MouseRegion(
       onEnter: _onHover,
       onHover: _onHover,

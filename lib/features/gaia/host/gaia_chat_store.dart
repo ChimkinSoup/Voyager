@@ -42,18 +42,25 @@ Future<List<GaiaChat>> gaiaDeleteProject(
   final project = await repository.getProject(projectId);
   if (project == null || project.isDeleted) return const [];
   final at = utcNow();
+  final all = await repository.listChats();
   final chats = [
-    for (final chat in await repository.listChats())
+    for (final chat in all)
       if (chat.projectId == projectId) chat,
-  ];
+  ]..sort(gaiaChatListed);
+  // Let go, a pinned one goes to the bottom of the pinned chats in no
+  // project, as pinning puts it, in the order they were in.
+  final released = <GaiaChat>[];
+  for (final chat in withChats ? const <GaiaChat>[] : chats) {
+    final loose = chat.copyWith(clearProjectId: true);
+    released.add(
+      loose.pinned ? gaiaPinned(loose, true, [...all, ...released]) : loose,
+    );
+  }
   await repository.upsertProjectWithChats(
     project.copyWith(deletedAt: at),
-    [
-      for (final chat in chats)
-        withChats
-            ? chat.copyWith(deletedAt: at)
-            : chat.copyWith(clearProjectId: true),
-    ],
+    withChats
+        ? [for (final chat in chats) chat.copyWith(deletedAt: at)]
+        : released,
     memories: [
       for (final memory in await repository.listMemories())
         if (memory.projectId == projectId)
@@ -66,20 +73,25 @@ Future<List<GaiaChat>> gaiaDeleteProject(
 }
 
 /// [chatId] moved into project [projectId], or out of its project for null
-/// (GAIA_PROJECTS_HLD.md §3.2). Where there's no [GaiaChatStore], as on the
-/// phone.
+/// (GAIA_PROJECTS_HLD.md §3.2). A pinned one goes to the bottom of the
+/// pinned chats there, as pinning puts it, or to [order] where that's
+/// worked out already. Where there's no [GaiaChatStore], as on the phone.
 Future<void> gaiaMoveChat(
   GaiaRepository repository,
   String chatId,
-  String? projectId,
-) async {
+  String? projectId, {
+  double? order,
+}) async {
   final chat = await repository.getChat(chatId);
   if (chat == null || chat.projectId == projectId) return;
-  await repository.upsertChat(
-    projectId == null
-        ? chat.copyWith(clearProjectId: true)
-        : chat.copyWith(projectId: projectId),
-  );
+  final moved = projectId == null
+      ? chat.copyWith(clearProjectId: true)
+      : chat.copyWith(projectId: projectId);
+  await repository.upsertChat(switch (order) {
+    _ when !moved.pinned => moved,
+    final order? => moved.copyWith(order: order, orderedAt: utcNow()),
+    null => gaiaPinned(moved, true, await repository.listChats()),
+  });
 }
 
 /// The companion's chat reads and writes, as the main instance serves them
@@ -237,12 +249,38 @@ class GaiaChatStore {
         await _repository.upsertChat(chat.copyWith(title: title));
       });
 
-  /// Pinned or unpinned from Gaia's sidebar, as on the Gaia page.
-  Future<void> setPinned(String chatId, bool pinned) => _serial(() async {
+  /// Pinned or unpinned from Gaia's sidebar, as on the Gaia page; pinned
+  /// to [order] where the sidebar's worked that out already, so it stays
+  /// where it showed.
+  Future<void> setPinned(String chatId, bool pinned, {double? order}) =>
+      _serial(() async {
+        final chat = await _repository.getChat(chatId);
+        if (chat == null || chat.pinned == pinned) return;
+        await _repository.upsertChat(
+          pinned && order != null
+              ? chat.copyWith(pinned: true, order: order, orderedAt: utcNow())
+              : gaiaPinned(chat, pinned, await _repository.listChats()),
+        );
+      });
+
+  /// Dragged in Gaia's sidebar to [order] (`GaiaChat.order`).
+  Future<void> reorderChat(String chatId, double order) => _serial(() async {
     final chat = await _repository.getChat(chatId);
-    if (chat == null || chat.pinned == pinned) return;
-    await _repository.upsertChat(chat.copyWith(pinned: pinned));
+    if (chat == null) return;
+    await _repository.upsertChat(
+      chat.copyWith(order: order, orderedAt: utcNow()),
+    );
   });
+
+  /// Dragged in Gaia's sidebar to [order] (`GaiaProject.order`).
+  Future<void> reorderProject(String projectId, double order) =>
+      _serial(() async {
+        final project = await _repository.getProject(projectId);
+        if (project == null) return;
+        await _repository.upsertProject(
+          project.copyWith(order: order, orderedAt: utcNow()),
+        );
+      });
 
   /// [chatId]'s [summary] up to [seq] (GAIA_PROJECTS_HLD.md §5.5); one that
   /// covers less than the stored one is dropped.
@@ -256,8 +294,8 @@ class GaiaChatStore {
       });
 
   /// Moved into a project or out of one (GAIA_PROJECTS_HLD.md §3.2).
-  Future<void> setProject(String chatId, String? projectId) =>
-      _serial(() => gaiaMoveChat(_repository, chatId, projectId));
+  Future<void> setProject(String chatId, String? projectId, {double? order}) =>
+      _serial(() => gaiaMoveChat(_repository, chatId, projectId, order: order));
 
   Future<List<GaiaProject>> projects() => _repository.listProjects();
 

@@ -1240,7 +1240,7 @@ class _ChatRow extends ConsumerWidget {
               final current = await repository.getChat(chat.id);
               if (current == null) return;
               await repository.upsertChat(
-                current.copyWith(pinned: !chat.pinned),
+                gaiaPinned(current, !chat.pinned, await repository.listChats()),
               );
             },
           ),

@@ -17,15 +17,19 @@ constexpr LONG kUiaRootObjectId = -25;
 
 WNDPROC g_flutter_view_proc = nullptr;
 
-// Gaia's view, with the engine's accessibility off: an accessibility query
+// The view, with the engine's accessibility off: an accessibility query
 // (UI Automation or MSAA) is what turns Flutter's semantics on, and the
-// Windows engine can't take the first update Gaia sends: an OverlayPortal's
-// node comes before its parent lists it, the engine roots its tree there, and
-// later crashes on it (AccessibilityBridge::CreateRemoveReparentedNodesUpdate).
+// Windows engine can't keep up with the updates either window sends. In Gaia,
+// an OverlayPortal's node comes before its parent lists it, the engine roots
+// its tree there, and later crashes on it
+// (AccessibilityBridge::CreateRemoveReparentedNodesUpdate). In the main
+// window, Gaia's own reads of it turn semantics on, and an update the engine
+// rejects ("Failed to update ui::AXTree, error: N will not be in the tree")
+// leaves its tree out of step for good, failing again on every later frame.
 // Answered with Windows' default instead, so the engine never sees one;
-// screen readers see Gaia as a plain window.
-LRESULT CALLBACK GaiaViewProc(HWND hwnd, UINT message, WPARAM wparam,
-                              LPARAM lparam) {
+// screen readers see Voyager and Gaia as plain windows.
+LRESULT CALLBACK ViewProc(HWND hwnd, UINT message, WPARAM wparam,
+                          LPARAM lparam) {
   if (message == WM_GETOBJECT) {
     // Only the low 32 bits are valid, as the engine reads it.
     const auto object = static_cast<DWORD>(static_cast<DWORD_PTR>(lparam));
@@ -177,12 +181,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       instance, MAKEINTRESOURCE(IDI_GAIA_ICON), IMAGE_ICON,
                       ::GetSystemMetrics(SM_CXSMICON),
                       ::GetSystemMetrics(SM_CYSMICON), 0)));
-    HWND view = ::FindWindowExW(window.GetHandle(), nullptr, L"FLUTTERVIEW",
-                                nullptr);
-    if (view) {
-      g_flutter_view_proc = reinterpret_cast<WNDPROC>(::SetWindowLongPtrW(
-          view, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(GaiaViewProc)));
-    }
+  }
+  HWND view =
+      ::FindWindowExW(window.GetHandle(), nullptr, L"FLUTTERVIEW", nullptr);
+  if (view) {
+    g_flutter_view_proc = reinterpret_cast<WNDPROC>(::SetWindowLongPtrW(
+        view, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(ViewProc)));
   }
   window.SetQuitOnClose(true);
 

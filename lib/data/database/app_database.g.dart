@@ -58253,6 +58253,28 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(-1),
   );
+  static const VerificationMeta _listOrderMeta = const VerificationMeta(
+    'listOrder',
+  );
+  @override
+  late final GeneratedColumn<double> listOrder = GeneratedColumn<double>(
+    'list_order',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _orderedAtMeta = const VerificationMeta(
+    'orderedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> orderedAt = GeneratedColumn<DateTime>(
+    'ordered_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58315,6 +58337,8 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     projectId,
     summary,
     summarizedSeq,
+    listOrder,
+    orderedAt,
     createdAt,
     updatedAt,
     version,
@@ -58437,6 +58461,18 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         ),
       );
     }
+    if (data.containsKey('list_order')) {
+      context.handle(
+        _listOrderMeta,
+        listOrder.isAcceptableOrUnknown(data['list_order']!, _listOrderMeta),
+      );
+    }
+    if (data.containsKey('ordered_at')) {
+      context.handle(
+        _orderedAtMeta,
+        orderedAt.isAcceptableOrUnknown(data['ordered_at']!, _orderedAtMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58534,6 +58570,14 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.int,
         data['${effectivePrefix}summarized_seq'],
       )!,
+      listOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}list_order'],
+      ),
+      orderedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ordered_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58601,6 +58645,10 @@ class GaiaChatsTableData extends DataClass
 
   /// The last message [summary] covers.
   final int summarizedSeq;
+
+  /// Where it was dragged to in the sidebar, and when (`GaiaChat.order`).
+  final double? listOrder;
+  final DateTime? orderedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58621,6 +58669,8 @@ class GaiaChatsTableData extends DataClass
     this.projectId,
     this.summary,
     required this.summarizedSeq,
+    this.listOrder,
+    this.orderedAt,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58654,6 +58704,12 @@ class GaiaChatsTableData extends DataClass
       map['summary'] = Variable<String>(summary);
     }
     map['summarized_seq'] = Variable<int>(summarizedSeq);
+    if (!nullToAbsent || listOrder != null) {
+      map['list_order'] = Variable<double>(listOrder);
+    }
+    if (!nullToAbsent || orderedAt != null) {
+      map['ordered_at'] = Variable<DateTime>(orderedAt);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -58688,6 +58744,12 @@ class GaiaChatsTableData extends DataClass
           ? const Value.absent()
           : Value(summary),
       summarizedSeq: Value(summarizedSeq),
+      listOrder: listOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(listOrder),
+      orderedAt: orderedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(orderedAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58718,6 +58780,8 @@ class GaiaChatsTableData extends DataClass
       projectId: serializer.fromJson<String?>(json['projectId']),
       summary: serializer.fromJson<String?>(json['summary']),
       summarizedSeq: serializer.fromJson<int>(json['summarizedSeq']),
+      listOrder: serializer.fromJson<double?>(json['listOrder']),
+      orderedAt: serializer.fromJson<DateTime?>(json['orderedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58743,6 +58807,8 @@ class GaiaChatsTableData extends DataClass
       'projectId': serializer.toJson<String?>(projectId),
       'summary': serializer.toJson<String?>(summary),
       'summarizedSeq': serializer.toJson<int>(summarizedSeq),
+      'listOrder': serializer.toJson<double?>(listOrder),
+      'orderedAt': serializer.toJson<DateTime?>(orderedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58766,6 +58832,8 @@ class GaiaChatsTableData extends DataClass
     Value<String?> projectId = const Value.absent(),
     Value<String?> summary = const Value.absent(),
     int? summarizedSeq,
+    Value<double?> listOrder = const Value.absent(),
+    Value<DateTime?> orderedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58786,6 +58854,8 @@ class GaiaChatsTableData extends DataClass
     projectId: projectId.present ? projectId.value : this.projectId,
     summary: summary.present ? summary.value : this.summary,
     summarizedSeq: summarizedSeq ?? this.summarizedSeq,
+    listOrder: listOrder.present ? listOrder.value : this.listOrder,
+    orderedAt: orderedAt.present ? orderedAt.value : this.orderedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58820,6 +58890,8 @@ class GaiaChatsTableData extends DataClass
       summarizedSeq: data.summarizedSeq.present
           ? data.summarizedSeq.value
           : this.summarizedSeq,
+      listOrder: data.listOrder.present ? data.listOrder.value : this.listOrder,
+      orderedAt: data.orderedAt.present ? data.orderedAt.value : this.orderedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58845,6 +58917,8 @@ class GaiaChatsTableData extends DataClass
           ..write('projectId: $projectId, ')
           ..write('summary: $summary, ')
           ..write('summarizedSeq: $summarizedSeq, ')
+          ..write('listOrder: $listOrder, ')
+          ..write('orderedAt: $orderedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58854,7 +58928,7 @@ class GaiaChatsTableData extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     title,
     lastMessageAt,
@@ -58870,11 +58944,13 @@ class GaiaChatsTableData extends DataClass
     projectId,
     summary,
     summarizedSeq,
+    listOrder,
+    orderedAt,
     createdAt,
     updatedAt,
     version,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -58894,6 +58970,8 @@ class GaiaChatsTableData extends DataClass
           other.projectId == this.projectId &&
           other.summary == this.summary &&
           other.summarizedSeq == this.summarizedSeq &&
+          other.listOrder == this.listOrder &&
+          other.orderedAt == this.orderedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58916,6 +58994,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<String?> projectId;
   final Value<String?> summary;
   final Value<int> summarizedSeq;
+  final Value<double?> listOrder;
+  final Value<DateTime?> orderedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -58937,6 +59017,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.projectId = const Value.absent(),
     this.summary = const Value.absent(),
     this.summarizedSeq = const Value.absent(),
+    this.listOrder = const Value.absent(),
+    this.orderedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -58959,6 +59041,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.projectId = const Value.absent(),
     this.summary = const Value.absent(),
     this.summarizedSeq = const Value.absent(),
+    this.listOrder = const Value.absent(),
+    this.orderedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -58985,6 +59069,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<String>? projectId,
     Expression<String>? summary,
     Expression<int>? summarizedSeq,
+    Expression<double>? listOrder,
+    Expression<DateTime>? orderedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59007,6 +59093,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (projectId != null) 'project_id': projectId,
       if (summary != null) 'summary': summary,
       if (summarizedSeq != null) 'summarized_seq': summarizedSeq,
+      if (listOrder != null) 'list_order': listOrder,
+      if (orderedAt != null) 'ordered_at': orderedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59031,6 +59119,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<String?>? projectId,
     Value<String?>? summary,
     Value<int>? summarizedSeq,
+    Value<double?>? listOrder,
+    Value<DateTime?>? orderedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59053,6 +59143,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       projectId: projectId ?? this.projectId,
       summary: summary ?? this.summary,
       summarizedSeq: summarizedSeq ?? this.summarizedSeq,
+      listOrder: listOrder ?? this.listOrder,
+      orderedAt: orderedAt ?? this.orderedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59109,6 +59201,12 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (summarizedSeq.present) {
       map['summarized_seq'] = Variable<int>(summarizedSeq.value);
     }
+    if (listOrder.present) {
+      map['list_order'] = Variable<double>(listOrder.value);
+    }
+    if (orderedAt.present) {
+      map['ordered_at'] = Variable<DateTime>(orderedAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59145,6 +59243,8 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('projectId: $projectId, ')
           ..write('summary: $summary, ')
           ..write('summarizedSeq: $summarizedSeq, ')
+          ..write('listOrder: $listOrder, ')
+          ..write('orderedAt: $orderedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -64298,6 +64398,28 @@ class $GaiaProjectsTableTable extends GaiaProjectsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('{}'),
   );
+  static const VerificationMeta _listOrderMeta = const VerificationMeta(
+    'listOrder',
+  );
+  @override
+  late final GeneratedColumn<double> listOrder = GeneratedColumn<double>(
+    'list_order',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _orderedAtMeta = const VerificationMeta(
+    'orderedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> orderedAt = GeneratedColumn<DateTime>(
+    'ordered_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -64348,6 +64470,8 @@ class $GaiaProjectsTableTable extends GaiaProjectsTable
     id,
     name,
     foldersJson,
+    listOrder,
+    orderedAt,
     createdAt,
     updatedAt,
     version,
@@ -64385,6 +64509,18 @@ class $GaiaProjectsTableTable extends GaiaProjectsTable
           data['folders_json']!,
           _foldersJsonMeta,
         ),
+      );
+    }
+    if (data.containsKey('list_order')) {
+      context.handle(
+        _listOrderMeta,
+        listOrder.isAcceptableOrUnknown(data['list_order']!, _listOrderMeta),
+      );
+    }
+    if (data.containsKey('ordered_at')) {
+      context.handle(
+        _orderedAtMeta,
+        orderedAt.isAcceptableOrUnknown(data['ordered_at']!, _orderedAtMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -64436,6 +64572,14 @@ class $GaiaProjectsTableTable extends GaiaProjectsTable
         DriftSqlType.string,
         data['${effectivePrefix}folders_json'],
       )!,
+      listOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}list_order'],
+      ),
+      orderedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ordered_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -64468,6 +64612,10 @@ class GaiaProjectsTableData extends DataClass
 
   /// `{deviceId: path}`, its folder on each device (GAIA_PROJECTS_HLD.md §4).
   final String foldersJson;
+
+  /// Where it was dragged to in the sidebar, and when (`GaiaProject.order`).
+  final double? listOrder;
+  final DateTime? orderedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -64476,6 +64624,8 @@ class GaiaProjectsTableData extends DataClass
     required this.id,
     required this.name,
     required this.foldersJson,
+    this.listOrder,
+    this.orderedAt,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -64487,6 +64637,12 @@ class GaiaProjectsTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['folders_json'] = Variable<String>(foldersJson);
+    if (!nullToAbsent || listOrder != null) {
+      map['list_order'] = Variable<double>(listOrder);
+    }
+    if (!nullToAbsent || orderedAt != null) {
+      map['ordered_at'] = Variable<DateTime>(orderedAt);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -64501,6 +64657,12 @@ class GaiaProjectsTableData extends DataClass
       id: Value(id),
       name: Value(name),
       foldersJson: Value(foldersJson),
+      listOrder: listOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(listOrder),
+      orderedAt: orderedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(orderedAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -64519,6 +64681,8 @@ class GaiaProjectsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       foldersJson: serializer.fromJson<String>(json['foldersJson']),
+      listOrder: serializer.fromJson<double?>(json['listOrder']),
+      orderedAt: serializer.fromJson<DateTime?>(json['orderedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -64532,6 +64696,8 @@ class GaiaProjectsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'foldersJson': serializer.toJson<String>(foldersJson),
+      'listOrder': serializer.toJson<double?>(listOrder),
+      'orderedAt': serializer.toJson<DateTime?>(orderedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -64543,6 +64709,8 @@ class GaiaProjectsTableData extends DataClass
     String? id,
     String? name,
     String? foldersJson,
+    Value<double?> listOrder = const Value.absent(),
+    Value<DateTime?> orderedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -64551,6 +64719,8 @@ class GaiaProjectsTableData extends DataClass
     id: id ?? this.id,
     name: name ?? this.name,
     foldersJson: foldersJson ?? this.foldersJson,
+    listOrder: listOrder.present ? listOrder.value : this.listOrder,
+    orderedAt: orderedAt.present ? orderedAt.value : this.orderedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -64563,6 +64733,8 @@ class GaiaProjectsTableData extends DataClass
       foldersJson: data.foldersJson.present
           ? data.foldersJson.value
           : this.foldersJson,
+      listOrder: data.listOrder.present ? data.listOrder.value : this.listOrder,
+      orderedAt: data.orderedAt.present ? data.orderedAt.value : this.orderedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -64576,6 +64748,8 @@ class GaiaProjectsTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('foldersJson: $foldersJson, ')
+          ..write('listOrder: $listOrder, ')
+          ..write('orderedAt: $orderedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -64589,6 +64763,8 @@ class GaiaProjectsTableData extends DataClass
     id,
     name,
     foldersJson,
+    listOrder,
+    orderedAt,
     createdAt,
     updatedAt,
     version,
@@ -64601,6 +64777,8 @@ class GaiaProjectsTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.foldersJson == this.foldersJson &&
+          other.listOrder == this.listOrder &&
+          other.orderedAt == this.orderedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -64612,6 +64790,8 @@ class GaiaProjectsTableCompanion
   final Value<String> id;
   final Value<String> name;
   final Value<String> foldersJson;
+  final Value<double?> listOrder;
+  final Value<DateTime?> orderedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -64621,6 +64801,8 @@ class GaiaProjectsTableCompanion
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.foldersJson = const Value.absent(),
+    this.listOrder = const Value.absent(),
+    this.orderedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -64631,6 +64813,8 @@ class GaiaProjectsTableCompanion
     required String id,
     required String name,
     this.foldersJson = const Value.absent(),
+    this.listOrder = const Value.absent(),
+    this.orderedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -64644,6 +64828,8 @@ class GaiaProjectsTableCompanion
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? foldersJson,
+    Expression<double>? listOrder,
+    Expression<DateTime>? orderedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -64654,6 +64840,8 @@ class GaiaProjectsTableCompanion
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (foldersJson != null) 'folders_json': foldersJson,
+      if (listOrder != null) 'list_order': listOrder,
+      if (orderedAt != null) 'ordered_at': orderedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -64666,6 +64854,8 @@ class GaiaProjectsTableCompanion
     Value<String>? id,
     Value<String>? name,
     Value<String>? foldersJson,
+    Value<double?>? listOrder,
+    Value<DateTime?>? orderedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -64676,6 +64866,8 @@ class GaiaProjectsTableCompanion
       id: id ?? this.id,
       name: name ?? this.name,
       foldersJson: foldersJson ?? this.foldersJson,
+      listOrder: listOrder ?? this.listOrder,
+      orderedAt: orderedAt ?? this.orderedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -64695,6 +64887,12 @@ class GaiaProjectsTableCompanion
     }
     if (foldersJson.present) {
       map['folders_json'] = Variable<String>(foldersJson.value);
+    }
+    if (listOrder.present) {
+      map['list_order'] = Variable<double>(listOrder.value);
+    }
+    if (orderedAt.present) {
+      map['ordered_at'] = Variable<DateTime>(orderedAt.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -64720,6 +64918,8 @@ class GaiaProjectsTableCompanion
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('foldersJson: $foldersJson, ')
+          ..write('listOrder: $listOrder, ')
+          ..write('orderedAt: $orderedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -92793,6 +92993,8 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<String?> projectId,
       Value<String?> summary,
       Value<int> summarizedSeq,
+      Value<double?> listOrder,
+      Value<DateTime?> orderedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -92816,6 +93018,8 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<String?> projectId,
       Value<String?> summary,
       Value<int> summarizedSeq,
+      Value<double?> listOrder,
+      Value<DateTime?> orderedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -92904,6 +93108,16 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<int> get summarizedSeq => $composableBuilder(
     column: $table.summarizedSeq,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get listOrder => $composableBuilder(
+    column: $table.listOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get orderedAt => $composableBuilder(
+    column: $table.orderedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -93012,6 +93226,16 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get listOrder => $composableBuilder(
+    column: $table.listOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get orderedAt => $composableBuilder(
+    column: $table.orderedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -93099,6 +93323,12 @@ class $$GaiaChatsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get listOrder =>
+      $composableBuilder(column: $table.listOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get orderedAt =>
+      $composableBuilder(column: $table.orderedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -93164,6 +93394,8 @@ class $$GaiaChatsTableTableTableManager
                 Value<String?> projectId = const Value.absent(),
                 Value<String?> summary = const Value.absent(),
                 Value<int> summarizedSeq = const Value.absent(),
+                Value<double?> listOrder = const Value.absent(),
+                Value<DateTime?> orderedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -93185,6 +93417,8 @@ class $$GaiaChatsTableTableTableManager
                 projectId: projectId,
                 summary: summary,
                 summarizedSeq: summarizedSeq,
+                listOrder: listOrder,
+                orderedAt: orderedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -93208,6 +93442,8 @@ class $$GaiaChatsTableTableTableManager
                 Value<String?> projectId = const Value.absent(),
                 Value<String?> summary = const Value.absent(),
                 Value<int> summarizedSeq = const Value.absent(),
+                Value<double?> listOrder = const Value.absent(),
+                Value<DateTime?> orderedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -93229,6 +93465,8 @@ class $$GaiaChatsTableTableTableManager
                 projectId: projectId,
                 summary: summary,
                 summarizedSeq: summarizedSeq,
+                listOrder: listOrder,
+                orderedAt: orderedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -95664,6 +95902,8 @@ typedef $$GaiaProjectsTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<String> foldersJson,
+      Value<double?> listOrder,
+      Value<DateTime?> orderedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -95675,6 +95915,8 @@ typedef $$GaiaProjectsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String> foldersJson,
+      Value<double?> listOrder,
+      Value<DateTime?> orderedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -95703,6 +95945,16 @@ class $$GaiaProjectsTableTableFilterComposer
 
   ColumnFilters<String> get foldersJson => $composableBuilder(
     column: $table.foldersJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get listOrder => $composableBuilder(
+    column: $table.listOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get orderedAt => $composableBuilder(
+    column: $table.orderedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -95751,6 +96003,16 @@ class $$GaiaProjectsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get listOrder => $composableBuilder(
+    column: $table.listOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get orderedAt => $composableBuilder(
+    column: $table.orderedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -95791,6 +96053,12 @@ class $$GaiaProjectsTableTableAnnotationComposer
     column: $table.foldersJson,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get listOrder =>
+      $composableBuilder(column: $table.listOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get orderedAt =>
+      $composableBuilder(column: $table.orderedAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -95848,6 +96116,8 @@ class $$GaiaProjectsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> foldersJson = const Value.absent(),
+                Value<double?> listOrder = const Value.absent(),
+                Value<DateTime?> orderedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -95857,6 +96127,8 @@ class $$GaiaProjectsTableTableTableManager
                 id: id,
                 name: name,
                 foldersJson: foldersJson,
+                listOrder: listOrder,
+                orderedAt: orderedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -95868,6 +96140,8 @@ class $$GaiaProjectsTableTableTableManager
                 required String id,
                 required String name,
                 Value<String> foldersJson = const Value.absent(),
+                Value<double?> listOrder = const Value.absent(),
+                Value<DateTime?> orderedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -95877,6 +96151,8 @@ class $$GaiaProjectsTableTableTableManager
                 id: id,
                 name: name,
                 foldersJson: foldersJson,
+                listOrder: listOrder,
+                orderedAt: orderedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

@@ -2377,7 +2377,7 @@ class GaiaController extends ChangeNotifier {
         if (_running.contains(chat.id) && !saved.any((c) => c.id == chat.id))
           chat,
       ...saved,
-    ]..sort(_listed);
+    ]..sort(gaiaChatListed);
     final current = currentChatId;
     if (current != null &&
         !_running.contains(current) &&
@@ -2787,6 +2787,11 @@ class GaiaController extends ChangeNotifier {
   /// it; null once it has.
   String? revealing;
 
+  /// Where each chat was left scrolled up to this run: the message across
+  /// the list's top and how far it's scrolled above it, so coming back to
+  /// the chat finds it there. None for a chat left at the bottom.
+  final scrolledTo = <String, ({String id, double into})>{};
+
   /// [chatId] opened at [messageId].
   Future<void> revealMessage(String chatId, String messageId) {
     // Set after selecting, which forgets any earlier one, but before the
@@ -3106,7 +3111,7 @@ class GaiaController extends ChangeNotifier {
     } on GaiaPipeException catch (error) {
       return _note("Couldn't fork the chat", error.message, error: true);
     }
-    chats = [fork, ...chats]..sort(_listed);
+    chats = [fork, ...chats]..sort(gaiaChatListed);
     _messages[forkId] = copies;
     try {
       await _toolResults?.copy(at.chatId, forkId, gaiaKeptCallIds(copies));
@@ -3301,7 +3306,7 @@ class GaiaController extends ChangeNotifier {
                 rewinds: [...c.rewinds, rewind],
               )
             : c,
-    ]..sort(_listed);
+    ]..sort(gaiaChatListed);
     _messages[chatId] = [
       for (final message in list)
         if (message.seq < from) message,
@@ -3643,13 +3648,43 @@ class GaiaController extends ChangeNotifier {
     unawaited(_request('dropFork', {'chatId': chatId}));
   }
 
-  /// Pins or unpins [chatId], moving it in the list at once.
+  /// Pins or unpins [chatId], moving it in the list at once: pinned, to the
+  /// bottom of its pinned chats.
   Future<void> setPinned(String chatId, bool pinned) async {
     chats = [
-      for (final c in chats) c.id == chatId ? c.copyWith(pinned: pinned) : c,
-    ]..sort(_listed);
+      for (final c in chats) c.id == chatId ? gaiaPinned(c, pinned, chats) : c,
+    ]..sort(gaiaChatListed);
     notifyListeners();
-    await _request('setPinned', {'chatId': chatId, 'pinned': pinned});
+    // Where it's shown, rather than worked out again against the stored
+    // chats, which may not be these.
+    final order = pinned ? _chat(chatId)?.order : null;
+    await _request('setPinned', {
+      'chatId': chatId,
+      'pinned': pinned,
+      'order': ?order,
+    });
+  }
+
+  /// [chatId] dragged in the sidebar to [order] (`GaiaChat.order`).
+  Future<void> reorderChat(String chatId, double order) async {
+    final at = utcNow();
+    chats = [
+      for (final c in chats)
+        c.id == chatId ? c.copyWith(order: order, orderedAt: at) : c,
+    ]..sort(gaiaChatListed);
+    notifyListeners();
+    await _request('reorderChat', {'chatId': chatId, 'order': order});
+  }
+
+  /// [projectId] dragged in the sidebar to [order] (`GaiaProject.order`).
+  Future<void> reorderProject(String projectId, double order) async {
+    final at = utcNow();
+    projects = [
+      for (final p in projects)
+        p.id == projectId ? p.copyWith(order: order, orderedAt: at) : p,
+    ];
+    notifyListeners();
+    await _request('reorderProject', {'projectId': projectId, 'order': order});
   }
 
   /// A new chat started in [projectId] (GAIA_PROJECTS_HLD.md §3.2): its
@@ -3716,16 +3751,25 @@ class GaiaController extends ChangeNotifier {
   /// (GAIA_PROJECTS_HLD.md §3.2). One replying picks it up on its next
   /// turn.
   Future<void> moveChat(String chatId, String? projectId) async {
-    chats = [
-      for (final c in chats)
-        c.id != chatId
-            ? c
-            : projectId == null
-            ? c.copyWith(clearProjectId: true)
-            : c.copyWith(projectId: projectId),
-    ];
+    GaiaChat moved(GaiaChat c) {
+      final moved = projectId == null
+          ? c.copyWith(clearProjectId: true)
+          : c.copyWith(projectId: projectId);
+      // Pinned, to the bottom of the pinned chats there ([gaiaMoveChat]).
+      return moved.pinned ? gaiaPinned(moved, true, chats) : moved;
+    }
+
+    chats = [for (final c in chats) c.id != chatId ? c : moved(c)]
+      ..sort(gaiaChatListed);
     notifyListeners();
-    await _request('setProject', {'chatId': chatId, 'projectId': projectId});
+    // As for [setPinned].
+    final chat = _chat(chatId);
+    final order = chat != null && chat.pinned ? chat.order : null;
+    await _request('setProject', {
+      'chatId': chatId,
+      'projectId': projectId,
+      'order': ?order,
+    });
     // Summarized here, the device that moved it (GAIA_PROJECTS_HLD.md §5.5).
     if (projectId != null &&
         _chat(chatId)?.currentSummary == null &&
@@ -4607,7 +4651,7 @@ class GaiaController extends ChangeNotifier {
         error: true,
       );
     }
-    chats = [fork, ...chats]..sort(_listed);
+    chats = [fork, ...chats]..sort(gaiaChatListed);
     _messages[forkId] = messages;
     try {
       await _toolResults?.copy(source.id, forkId, gaiaKeptCallIds(messages));
@@ -5230,7 +5274,7 @@ class GaiaController extends ChangeNotifier {
         _newChatCanControl = false;
         _newChatAuto = null;
       }
-      chats = [chat, ...chats]..sort(_listed);
+      chats = [chat, ...chats]..sort(gaiaChatListed);
       // A remote chat is listed, but the one in view stays.
       if (remote == null) currentChatId = chatId;
       // The picker shows Auto until the router answers.
@@ -7013,18 +7057,12 @@ class GaiaController extends ChangeNotifier {
 
   GaiaChat? _chat(String id) => chats.where((c) => c.id == id).firstOrNull;
 
-  /// The main instance's order: pinned first, then the most recent.
-  static int _listed(GaiaChat a, GaiaChat b) {
-    if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-    final recent = b.lastMessageAt.compareTo(a.lastMessageAt);
-    return recent != 0 ? recent : a.id.compareTo(b.id);
-  }
-
-  /// To the top of its own kind: an unpinned chat stays below the pinned.
+  /// To the top of its own kind: an unpinned chat stays below the pinned,
+  /// and a pinned one where it was pinned or dragged to.
   void _moveToTop(String chatId, DateTime at) {
     chats = [
       for (final c in chats) c.id == chatId ? c.copyWith(lastMessageAt: at) : c,
-    ]..sort(_listed);
+    ]..sort(gaiaChatListed);
   }
 
   /// Swaps [updated] in for [old] in its chat's list, and redraws.
