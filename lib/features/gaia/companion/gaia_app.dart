@@ -2854,6 +2854,57 @@ class _MessagesState extends State<_Messages> {
             child: Stack(
               children: [
                 list,
+                // The chat going under the header, and under the pinned
+                // prompt while there is one, fades into the surface: its
+                // lines aren't cut through the middle at either's edge.
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: ValueListenableBuilder(
+                      valueListenable: _over,
+                      builder: (context, over, _) => _TopFade(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        band: 8 + GaiaPinnedPrompt.heightOf(context),
+                        covered:
+                            _overShown(over.chat) &&
+                            (over.pinned != null || over.chapterOff),
+                      ),
+                    ),
+                  ),
+                ),
+                // And at its foot, where it goes under the composer.
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      height: _TopFade._fade,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Theme.of(context).scaffoldBackgroundColor,
+                            Theme.of(
+                              context,
+                            ).scaffoldBackgroundColor.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // A new chat says what the composer takes, rather than
+                // nothing at all: only where there's room for it.
+                if (messages.isEmpty && constraints.maxHeight >= 200)
+                  Positioned.fill(
+                    child: _EmptyChat(
+                      sendKey: '${_sendCombo(widget.controller)}',
+                    ),
+                  ),
                 Positioned(
                   top: 8,
                   left: left,
@@ -2961,6 +3012,123 @@ class _MessagesState extends State<_Messages> {
   }
 }
 
+/// The chat's top edge: [color], the surface's, fading out downwards over a
+/// few pixels, and while [covered] by the pinned prompt, solid for [band],
+/// the prompt's depth, first. A gradient over the list rather than a mask on
+/// it, which would composite the whole chat every frame it scrolls.
+class _TopFade extends StatelessWidget {
+  const _TopFade({
+    required this.color,
+    required this.band,
+    required this.covered,
+  });
+
+  final Color color;
+  final double band;
+  final bool covered;
+
+  /// How far the fade runs.
+  static const _fade = 16.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final clear = color.withValues(alpha: 0);
+    return Stack(
+      children: [
+        Container(
+          height: _fade,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [color, clear],
+            ),
+          ),
+        ),
+        AnimatedOpacity(
+          duration: GaiaMotion.quick,
+          opacity: covered ? 1 : 0,
+          child: Container(
+            height: band + _fade,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [color, color, clear],
+                stops: [0, band / (band + _fade), 1],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What a chat with no messages shows: a line to start from, and the keys
+/// worth knowing before the first message. Not clickable: the composer under
+/// it already has the focus.
+class _EmptyChat extends StatelessWidget {
+  const _EmptyChat({required this.sendKey});
+
+  /// The send keybind, as the user set it.
+  final String sendKey;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget hint(String key, String does) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
+            border: Border.all(color: GaiaInk.hairline),
+          ),
+          child: Text(
+            key,
+            style: GaiaType.label.copyWith(color: GaiaInk.muted),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(does, style: GaiaType.label.copyWith(color: GaiaInk.faint)),
+      ],
+    );
+    return IgnorePointer(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'What can I help with?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                  color: GaiaInk.dim,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 20,
+                runSpacing: 8,
+                children: [
+                  hint('/', 'commands'),
+                  hint('Ctrl+V', 'paste an image'),
+                  hint(sendKey, 'send'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Back down to the newest message, while scrolled up from it: round, in
 /// the pinned prompt's colours.
 class _ToBottom extends StatelessWidget {
@@ -2971,19 +3139,26 @@ class _ToBottom extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: gaiaPromptColor(theme),
-      shape: const CircleBorder(),
-      elevation: 2,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            Icons.keyboard_double_arrow_down_rounded,
-            size: 18,
-            color: theme.colorScheme.primary,
+    return Tooltip(
+      message: 'Jump to latest',
+      child: DecoratedBox(
+        decoration: gaiaFloating(theme.colorScheme, radius: 17),
+        child: Material(
+          type: MaterialType.transparency,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            hoverColor: GaiaInk.hover,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                Icons.keyboard_double_arrow_down_rounded,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+            ),
           ),
         ),
       ),
@@ -3402,10 +3577,8 @@ class _ChapterRailState extends State<_ChapterRail> {
   Widget _list(ThemeData theme) => Padding(
     // Its first dash where the rail's was.
     padding: const EdgeInsets.only(left: 6),
-    child: Material(
-      color: theme.colorScheme.surfaceContainerHigh,
-      elevation: 6,
-      borderRadius: BorderRadius.circular(10),
+    child: Container(
+      decoration: gaiaFloating(theme.colorScheme, radius: GaiaRadius.panel),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 300, maxHeight: 360),
         child: SingleChildScrollView(
@@ -3429,12 +3602,11 @@ class _ChapterRailState extends State<_ChapterRail> {
     bool current,
     ThemeData theme,
   ) => Material(
-    color: current
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.08)
-        : Colors.transparent,
-    borderRadius: BorderRadius.circular(6),
+    color: current ? GaiaInk.selected : Colors.transparent,
+    borderRadius: BorderRadius.circular(GaiaRadius.chip),
     child: InkWell(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(GaiaRadius.chip),
+      hoverColor: GaiaInk.hover,
       onTap: () {
         setState(() => _open = false);
         widget.onPick(chapter.id);
@@ -3456,10 +3628,8 @@ class _ChapterRailState extends State<_ChapterRail> {
                 chapter.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: current
-                      ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurfaceVariant,
+                style: GaiaType.row.copyWith(
+                  color: current ? Colors.white : GaiaInk.dim,
                 ),
               ),
             ),
