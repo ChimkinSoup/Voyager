@@ -6,12 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_scroll_fade.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 
 /// A menu row's text, and its muted parts, as in a [GaiaMenu].
-const _dim = Color(0xFFD4D4D4);
-const _muted = Color(0xFFA3A3A3);
+const _dim = GaiaInk.dim;
+const _muted = GaiaInk.muted;
 
 /// Opens Gaia's search (GAIA_HLD.md §17) in a [GaiaPanel] over the middle of
 /// the window: chats whose title matches, then messages that do, newest
@@ -305,7 +307,7 @@ class _GaiaSearchState extends State<_GaiaSearch> {
                             message,
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Color(0xFF737373),
+                              color: GaiaInk.faint,
                             ),
                           ),
                         )
@@ -315,33 +317,37 @@ class _GaiaSearchState extends State<_GaiaSearch> {
                             context,
                           ).copyWith(scrollbars: false),
                           // Only the rows in view are built.
-                          child: ListView.builder(
-                            controller: _scroll,
-                            padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                            itemCount: items.length,
-                            itemBuilder: (context, n) => switch (items[n]) {
-                              final int i => Builder(
-                                builder: (context) {
-                                  _rows[i] = context;
-                                  return MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    onEnter: (_) => _highlight.value = i,
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => _pick(results[i]),
-                                      child: _Lit(
-                                        highlight: _highlight,
-                                        index: i,
-                                        last: results.length - 1,
-                                        builder: (lit) =>
-                                            _Row(result: results[i], lit: lit),
+                          child: GaiaScrollFade(
+                            child: ListView.builder(
+                              controller: _scroll,
+                              padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                              itemCount: items.length,
+                              itemBuilder: (context, n) => switch (items[n]) {
+                                final int i => Builder(
+                                  builder: (context) {
+                                    _rows[i] = context;
+                                    return MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      onEnter: (_) => _highlight.value = i,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => _pick(results[i]),
+                                        child: _Lit(
+                                          highlight: _highlight,
+                                          index: i,
+                                          last: results.length - 1,
+                                          builder: (lit) => _Row(
+                                            result: results[i],
+                                            lit: lit,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              final heading => _Heading('$heading'),
-                            },
+                                    );
+                                  },
+                                ),
+                                final heading => _Heading('$heading'),
+                              },
+                            ),
                           ),
                         ),
                 ),
@@ -416,15 +422,7 @@ class _Heading extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-    child: Text(
-      text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.4,
-        color: Color(0xFF737373),
-      ),
-    ),
+    child: Text(text, style: GaiaType.heading),
   );
 }
 
