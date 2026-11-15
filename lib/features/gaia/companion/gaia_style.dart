@@ -54,6 +54,10 @@ abstract final class GaiaRadius {
   static const panel = 12.0;
 }
 
+/// The chat's header: room for the round buttons' shadows. A divider's 1
+/// sits under it.
+const kGaiaHeaderHeight = 52.0;
+
 /// Gaia's timings. A state change (hover, selection, a fade) is [quick]; what
 /// moves or resizes is [move]; panels grow on the notch's spring.
 abstract final class GaiaMotion {

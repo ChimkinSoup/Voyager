@@ -363,6 +363,8 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(tester.getCenter(find.byTooltip('Copy code')));
+    // Past Gaia's tooltip wait.
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Copy code'), findsOneWidget);

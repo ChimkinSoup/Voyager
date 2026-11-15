@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The light's pace around the ring, as [GaiaButton]'s: a turn every 16s.
@@ -21,6 +23,10 @@ Duration _dwellFor(String body) {
 }
 
 OverlayEntry? _current;
+
+/// Where the chat column starts from the window's left, past the sidebar, so
+/// a toast centres on the chat rather than the window. Set by the shell.
+ValueListenable<double> gaiaToastLeft = ValueNotifier(0);
 
 /// What a toast is about, drawn at its core by [GaiaToastOrbIcon].
 enum GaiaToastMark {
@@ -104,6 +110,11 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
   Timer? _dwellTimer;
   var _leaving = false;
 
+  /// [gaiaToastLeft]'s value, read each tick: the shell may swap which
+  /// notifier it is, and the sidebar's is set mid-layout, too late to rebuild
+  /// on.
+  var _left = gaiaToastLeft.value;
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +137,8 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     final dt = (elapsed - _lastTick).inMicroseconds / 1e6;
     _lastTick = elapsed;
     _angle.value += _spin * dt;
+    final left = gaiaToastLeft.value;
+    if (left != _left) setState(() => _left = left);
   }
 
   Future<void> _dismiss() async {
@@ -141,11 +154,8 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final curve = CurvedAnimation(parent: _shown, curve: Curves.easeOutCubic);
-    return Positioned(
-      left: 16,
-      right: 16,
-      // Below the header.
-      top: 64,
+    final toast = Padding(
+      padding: EdgeInsets.only(left: _left),
       child: Center(
         child: FadeTransition(
           opacity: curve,
@@ -185,6 +195,14 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+    return Positioned(
+      left: 16,
+      right: 16,
+      // Below the header and its divider, and below where the pinned prompt
+      // shows under them, so it never covers that.
+      top: kGaiaHeaderHeight + 1 + 8 + GaiaPinnedPrompt.heightOf(context) + 8,
+      child: toast,
     );
   }
 

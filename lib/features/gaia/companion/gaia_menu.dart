@@ -355,7 +355,14 @@ class _GaiaPaletteState extends State<GaiaPalette>
         width: widget.width - 2,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 240),
-          child: GaiaScrollFade(child: _rowsList(context)),
+          child: GaiaScrollFade(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(
+                context,
+              ).copyWith(scrollbars: false),
+              child: _rowsList(context),
+            ),
+          ),
         ),
       ),
     );

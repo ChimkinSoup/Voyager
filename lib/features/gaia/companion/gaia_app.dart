@@ -53,6 +53,7 @@ import 'package:voyager/features/gaia/companion/gaia_lightbox.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_scroll_fade.dart';
 import 'package:voyager/features/gaia/companion/gaia_search.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
@@ -188,13 +189,20 @@ class _GaiaAppState extends State<GaiaApp> {
   static ThemeData _onGaiaSurface(Color accent) {
     final theme = VoyagerTheme.dark(accent: accent);
     final surface = gaiaSurface(accent);
+    final colors = theme.colorScheme.copyWith(surface: surface);
     return theme.copyWith(
       scaffoldBackgroundColor: surface,
       canvasColor: surface,
-      colorScheme: theme.colorScheme.copyWith(surface: surface),
+      colorScheme: colors,
       dialogTheme: theme.dialogTheme.copyWith(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
+      ),
+      // On the menus' floating panel, after a short wait.
+      tooltipTheme: theme.tooltipTheme.copyWith(
+        textStyle: theme.textTheme.bodySmall?.copyWith(color: GaiaInk.dim),
+        decoration: gaiaFloating(colors, radius: GaiaRadius.row),
+        waitDuration: const Duration(milliseconds: 400),
       ),
     );
   }
@@ -321,6 +329,9 @@ class _RunToastsState extends State<_RunToasts> {
   Widget build(BuildContext context) => widget.child;
 }
 
+/// A floater's: no sidebar, so its chat starts at the window's edge.
+final _noSidebar = ValueNotifier(0.0);
+
 class _GaiaShell extends StatelessWidget {
   const _GaiaShell({required this.controller});
 
@@ -328,6 +339,9 @@ class _GaiaShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    gaiaToastLeft = controller.layout == GaiaMode.window
+        ? controller.sidebar.edge
+        : _noSidebar;
     if (controller.cropping case final capture?
         when controller.layout == GaiaMode.overlay) {
       // A Material for its hint's text style, as the chat's Scaffold gives.
@@ -423,7 +437,7 @@ class _GaiaShell extends StatelessWidget {
                   child: GaiaStarfield(
                     active: controller.focused,
                     // Below the header and its divider.
-                    top: _headerHeight + 1,
+                    top: kGaiaHeaderHeight + 1,
                     left: floater ? null : controller.sidebar.edge,
                     child: floater
                         ? chat()
@@ -636,9 +650,6 @@ void _newChat(GaiaController controller) =>
     ? controller.moveDraftToNewChat()
     : controller.newChat();
 
-/// Room for the round buttons' shadows.
-const _headerHeight = 52.0;
-
 class _Header extends StatelessWidget {
   const _Header({
     required this.controller,
@@ -679,7 +690,7 @@ class _Header extends StatelessWidget {
       // reads as a stray full stop in it.
       child: Container(
         color: theme.scaffoldBackgroundColor,
-        height: _headerHeight,
+        height: kGaiaHeaderHeight,
         child: Row(
           children: [
             if (toggleSidebar case final toggle?) ...[
@@ -1803,73 +1814,98 @@ class _SidebarState extends State<_Sidebar> {
             behavior: ScrollConfiguration.of(
               context,
             ).copyWith(scrollbars: false),
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  sliver: SliverMainAxisGroup(
-                    slivers: [
-                      if (sections.pinned.isNotEmpty) ...[
-                        const SliverToBoxAdapter(
-                          child: _SidebarLabel('Pinned'),
-                        ),
-                        _chatList(sections.pinned),
-                      ],
-                      SliverToBoxAdapter(
-                        child: _SidebarLabel(
-                          'Projects',
-                          trailing: GaiaActionIcon(
-                            label: 'New project',
-                            icon: Icons.add,
-                            compact: true,
-                            tooltip: false,
-                            onPressed: _newProject,
+            child: GaiaScrollFade(
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    sliver: SliverMainAxisGroup(
+                      slivers: [
+                        if (sections.pinned.isNotEmpty) ...[
+                          const SliverToBoxAdapter(
+                            child: _SidebarLabel('Pinned'),
+                          ),
+                          _chatList(sections.pinned),
+                        ],
+                        SliverToBoxAdapter(
+                          child: _SidebarLabel(
+                            'Projects',
+                            trailing: GaiaActionIcon(
+                              label: 'New project',
+                              icon: Icons.add,
+                              compact: true,
+                              tooltip: false,
+                              onPressed: _newProject,
+                            ),
                           ),
                         ),
-                      ),
-                      SliverReorderableList(
-                        itemCount: sections.projects.length,
-                        itemBuilder: (context, index) {
-                          final section = sections.projects[index];
-                          final id = section.project.id;
-                          return Column(
-                            key: ValueKey('section $id'),
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              ReorderableDragStartListener(
-                                index: index,
-                                enabled: _renaming == null,
-                                child: _projectRow(section),
-                              ),
-                              if (controller.sidebar.openProjects.contains(id))
-                                Padding(
-                                  key: ValueKey('chats of $id'),
-                                  padding: const EdgeInsets.only(
-                                    left: _projectIndent,
-                                  ),
-                                  child: _chatList(
-                                    section.groups,
-                                    nested: true,
-                                  ),
+                        SliverReorderableList(
+                          itemCount: sections.projects.length,
+                          itemBuilder: (context, index) {
+                            final section = sections.projects[index];
+                            final id = section.project.id;
+                            return Column(
+                              key: ValueKey('section $id'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  enabled: _renaming == null,
+                                  child: _projectRow(section),
                                 ),
-                            ],
-                          );
-                        },
-                        onReorderItem: (from, to) =>
-                            _dropProject(sections.projects, from, to),
-                        proxyDecorator: _lifted,
-                      ),
-                      if (sections.chats.isNotEmpty) ...[
-                        const SliverToBoxAdapter(child: _SidebarLabel('Chats')),
-                        _chatList(sections.chats),
+                                if (controller.sidebar.openProjects.contains(
+                                  id,
+                                ))
+                                  // A line down their left, in the fork
+                                  // bracket's look, ties them to the project.
+                                  Stack(
+                                    key: ValueKey('chats of $id'),
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: _projectIndent,
+                                        ),
+                                        child: _chatList(
+                                          section.groups,
+                                          nested: true,
+                                        ),
+                                      ),
+                                      // Ending at the last chat, not its 2
+                                      // of margin below.
+                                      Positioned(
+                                        left: 7,
+                                        top: 0,
+                                        bottom: 2,
+                                        width: 1,
+                                        child: ColoredBox(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            );
+                          },
+                          onReorderItem: (from, to) =>
+                              _dropProject(sections.projects, from, to),
+                          proxyDecorator: _lifted,
+                        ),
+                        if (sections.chats.isNotEmpty) ...[
+                          const SliverToBoxAdapter(
+                            child: _SidebarLabel('Chats'),
+                          ),
+                          _chatList(sections.chats),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

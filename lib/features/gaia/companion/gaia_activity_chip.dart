@@ -12,8 +12,9 @@ import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
-/// The tools a reply used between its text blocks, in the orb's gold so it
-/// doesn't read as part of what Gaia said. Where [part] knows what its calls
+/// The tools a reply used between its text blocks, in muted ink behind an
+/// icon in the orb's gold, so it doesn't read as part of what Gaia said nor
+/// outshine it. Where [part] knows what its calls
 /// were called with or why they failed, clicking it shows each call's
 /// command, query or path beneath, with a failed one's reason in red, and
 /// clicking again hides them. Failed calls are counted beside the label.
@@ -56,7 +57,8 @@ class _GaiaActivityChipState extends State<GaiaActivityChip> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final gold = gaiaAstralGoldFor(theme.brightness);
-    final style = theme.textTheme.labelSmall?.copyWith(color: gold);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final style = theme.textTheme.labelSmall?.copyWith(color: muted);
     final part = widget.part;
     final failed = part.failures.where((failure) => failure != null).length;
     final expandable =
@@ -81,13 +83,12 @@ class _GaiaActivityChipState extends State<GaiaActivityChip> {
           Icon(
             _open ? Icons.expand_less : Icons.expand_more,
             size: 14,
-            color: gold,
+            color: muted,
           ),
       ],
     );
     if (!expandable) return row;
     final scheme = theme.colorScheme;
-    final muted = scheme.onSurfaceVariant;
     final nameStyle = theme.textTheme.labelSmall?.copyWith(
       color: muted,
       fontWeight: FontWeight.w600,
