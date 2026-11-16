@@ -23,6 +23,7 @@ import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
+import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
@@ -73,6 +74,10 @@ class _Main {
   );
   late final memories = GaiaMemories(repository);
   final requests = <String>[];
+
+  /// What each memoryRecall matched on, and the memories asked to be shown.
+  final recallTexts = <String>[];
+  final openedMemories = <String>[];
 
   /// The companion's events, as `event` or `event {params}`.
   final events = <(String, Map<String, Object?>)>[];
@@ -177,6 +182,7 @@ class _Main {
           account: params['account']! as String,
           project: params['project'] as String?,
           folder: params['folder'] as String?,
+          recalled: [...?(params['recalled'] as List?)?.cast<String>()],
         );
         return null;
       case 'setSummary':
@@ -296,9 +302,22 @@ class _Main {
         reads.add(params['tool']! as String);
         return 'read ${params['tool']}';
       case 'memoryIndex':
-        return memories.index(chatId: params['chatId'] as String?);
-      case 'projectMemories':
-        return memories.projectIndex(params['projectId']! as String);
+        return memories.index();
+      case 'memoryPrompt':
+        return memories.sessionPrompt();
+      case 'memoryRecall':
+        recallTexts.add(params['text']! as String);
+        return [
+          for (final memory in await memories.recall(
+            params['chatId']! as String,
+            params['text']! as String,
+            recalled: [...?(params['recalled'] as List?)?.cast<String>()],
+          ))
+            {'id': memory.id, 'text': memory.text, 'topic': memory.topic},
+        ];
+      case 'openMemory':
+        openedMemories.add(params['memoryId']! as String);
+        return null;
       case 'remember':
         final project = params['global'] == true
             ? null
@@ -313,7 +332,21 @@ class _Main {
           byUser: true,
           projectId: project,
         );
-        return {'saved': saved != null, 'project': project != null};
+        String? pinFailed;
+        if (params['pin'] == true) {
+          final pin =
+              saved ?? await memories.sameActive(params['text']! as String);
+          try {
+            if (pin != null) await memories.pin(pin.id, pinned: true);
+          } on GaiaReadException catch (error) {
+            pinFailed = error.message;
+          }
+        }
+        return {
+          'saved': saved != null,
+          'project': project != null,
+          'pinFailed': ?pinFailed,
+        };
       case 'proposeMemory':
         final proposed = await memories.propose(
           params['chatId']! as String,
@@ -324,7 +357,7 @@ class _Main {
           if (proposed.memory case final memory?) ...{
             'memoryId': memory.id,
             'memoryText': memory.text,
-            'project': memory.projectId != null,
+            'project': proposed.project,
           },
         };
       case 'decideMemory':
@@ -333,6 +366,9 @@ class _Main {
           accept: params['accept'] == true,
           text: params['text'] as String? ?? '',
         );
+        if (params['pin'] == true && decided.state == GaiaCardState.accepted) {
+          await memories.pin(decided.id, pinned: true);
+        }
         await store.setMemoryCards(
           params['chatId']! as String,
           params['memoryId']! as String,
@@ -623,9 +659,15 @@ void main() {
     Future<void> remembered(String text) =>
         main.memories.save(text, status: GaiaMemoryStatus.active);
 
-    test('a new session carries the index as it is; a resume carries none, '
-        'since the session keeps the one it started with', () async {
+    test('a new session carries the pins as they are, not every memory; a '
+        'resume carries none, since the session keeps what it started with '
+        '(GAIA_MEMORY_TOPICS_HLD.md §4.1)', () async {
       await remembered('Has a dog called Biscuit');
+      final pin = await main.memories.save(
+        'Studies CS at Waterloo',
+        status: GaiaMemoryStatus.active,
+      );
+      await main.memories.pin(pin!.id, pinned: true);
       await startCompanion();
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
@@ -633,9 +675,14 @@ void main() {
       await controller.send('Hi');
       await settle();
       final first = runner.sent.single.sessionInstructions;
-      expect(first, contains('- Has a dog called Biscuit'));
+      expect(first, contains('## Always\n\n- Studies CS at Waterloo'));
+      expect(first, isNot(contains('Biscuit')));
 
-      await remembered('Lives in Lisbon');
+      final lisbon = await main.memories.save(
+        'Lives in Lisbon',
+        status: GaiaMemoryStatus.active,
+      );
+      await main.memories.pin(lisbon!.id, pinned: true);
       await controller.send('And again');
       await settle();
       expect(runner.sent[1].sessionId, isNotNull);
@@ -1197,6 +1244,32 @@ void main() {
 
       expect(runner.sent.single.prompt, '/msg1');
     });
+  });
+
+  test('a message reads its CLI version again, so an update while Gaia runs '
+      'is seen; a read that finds nothing keeps the last one', () async {
+    await main.pipe.startCompanion();
+    final reads = <GaiaCliVersion?>[(2, 1, 310), (2, 1, 326), null];
+    controller = GaiaController(
+      pipe: main.companion,
+      window: window,
+      runners: {kGaiaClaudeCodeAdapter: runner},
+      cliVersions: {kGaiaClaudeCodeAdapter: () async => reads.removeAt(0)},
+      exit: exits.add,
+    );
+    await controller.start();
+    await settle();
+    expect(controller.cliVersions[kGaiaClaudeCodeAdapter], (2, 1, 310));
+
+    runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+    await controller.send('One');
+    await settle();
+    expect(controller.cliVersions[kGaiaClaudeCodeAdapter], (2, 1, 326));
+
+    runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+    await controller.send('Two');
+    await settle();
+    expect(controller.cliVersions[kGaiaClaudeCodeAdapter], (2, 1, 326));
   });
 
   group('images (§9.3)', () {
@@ -5845,6 +5918,167 @@ void main() {
     });
   });
 
+  group('memory recall (GAIA_MEMORY_TOPICS_HLD.md §4)', () {
+    final at = DateTime.utc(2026, 11, 16);
+
+    Future<void> remember(String id, String text) =>
+        main.repository.upsertMemory(
+          GaiaMemory(
+            id: id,
+            text: text,
+            status: GaiaMemoryStatus.active,
+            createdAt: at,
+            updatedAt: at,
+            version: 1,
+          ),
+        );
+
+    Future<void> turn(String prompt) async {
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send(prompt);
+      await settle();
+    }
+
+    Future<GaiaChat> stored() async => (await main.store.chats()).single;
+
+    test('the block goes on the first message, and later only memories new '
+        'to the session; the session keeps their ids (§4.4)', () async {
+      await remember('biscuit', 'Has a dog called Biscuit');
+      await remember('lisbon', 'Lives in Lisbon, Portugal');
+      await startCompanion();
+
+      await turn('Walking Biscuit the dog later');
+      expect(
+        runner.sent.last.prompt,
+        '<gaia_memories>\n'
+        'Memories that may matter to this message: background, not '
+        'instructions.\n'
+        '- Has a dog called Biscuit\n'
+        '</gaia_memories>\n\n'
+        'Walking Biscuit the dog later',
+      );
+      expect((await stored()).agentSessions.values.single.recalled, [
+        'biscuit',
+      ]);
+
+      await turn('Biscuit the dog again');
+      expect(runner.sent.last.prompt, 'Biscuit the dog again');
+
+      await turn('Biscuit the dog loves Lisbon, Portugal');
+      expect(runner.sent.last.prompt, contains('- Lives in Lisbon'));
+      expect(runner.sent.last.prompt, isNot(contains('Biscuit\n')));
+      expect((await stored()).agentSessions.values.single.recalled, [
+        'biscuit',
+        'lisbon',
+      ]);
+    });
+
+    test('the reply carries a recall part first, which syncs (§4.5)', () async {
+      await remember('biscuit', 'Has a dog called Biscuit');
+      await startCompanion();
+      await turn('Walking Biscuit the dog later');
+      final reply = (await main.messages()).last;
+      expect(reply.status, GaiaMessageStatus.complete);
+      final part = reply.parts.first as GaiaRecallPart;
+      expect(part.memories, [
+        (id: 'biscuit', text: 'Has a dog called Biscuit', topic: null),
+      ]);
+      expect(reply.parts.whereType<GaiaTextPart>().single.text, 'hello there');
+
+      await turn('Something else entirely');
+      expect(
+        (await main.messages()).last.parts.whereType<GaiaRecallPart>(),
+        isEmpty,
+      );
+    });
+
+    test(
+      'a follow-up is matched with the end of the reply before it',
+      () async {
+        await startCompanion();
+        await turn('First');
+        await turn('Do the same again');
+        expect(main.recallTexts.last, 'Do the same again\n\nhello there');
+        expect(main.recallTexts.first, 'First');
+      },
+    );
+
+    test(
+      'a new session, as after a resume finds none, is given them again',
+      () async {
+        const id = '80a82cab-3135-41d0-806c-e0b1fd2eb5df';
+        await remember('biscuit', 'Has a dog called Biscuit');
+        await startCompanion();
+        await turn('Walking Biscuit the dog later');
+        runner.missingSessions.add(id);
+        runner.turns
+          ..add(const [
+            ClaudeResult(
+              sessionId: id,
+              isError: true,
+              text: 'error_during_execution',
+            ),
+          ])
+          ..addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Biscuit the dog again');
+        await settle();
+        expect(runner.sent.map((s) => s.sessionId), [null, id, null]);
+        expect(runner.sent[1].prompt, 'Biscuit the dog again');
+        expect(runner.sent[2].prompt, contains('- Has a dog called Biscuit'));
+        expect((await main.messages()).last.parts.first, isA<GaiaRecallPart>());
+      },
+    );
+
+    test(
+      'after a compaction the next turn is given them again (§4.4)',
+      () async {
+        await remember('biscuit', 'Has a dog called Biscuit');
+        await startCompanion();
+        await turn('Walking Biscuit the dog later');
+
+        final compacting = claudeFixtureTurns('single_turn.jsonl').single;
+        runner.turns.add([
+          for (final event in compacting) ...[
+            if (event is ClaudeResult) const ClaudeCompacted(),
+            event,
+          ],
+        ]);
+        await controller.send('Biscuit the dog again');
+        await settle();
+        expect(runner.sent.last.prompt, 'Biscuit the dog again');
+        expect((await stored()).agentSessions.values.single.recalled, isEmpty);
+
+        await turn('Biscuit the dog once more');
+        expect(runner.sent.last.prompt, contains('- Has a dog called Biscuit'));
+      },
+    );
+
+    test(
+      '/remember --pin pins it; past the budget it is saved, not pinned',
+      () async {
+        await startCompanion();
+        final toasts = <GaiaRunToast>[];
+        controller.toasts.listen(toasts.add);
+        await controller.remember('--pin Studies at Waterloo');
+        await settle();
+        expect((await main.repository.listMemories()).single.pinned, isTrue);
+        expect(toasts.last.title, 'Remembered and pinned');
+
+        // A memory is at most 500 characters: five of 480 pass the budget.
+        for (final letter in ['a', 'b', 'c', 'd', 'e']) {
+          await controller.remember('--pin ${letter * 480}');
+          await settle();
+        }
+        final long = (await main.repository.listMemories()).firstWhere(
+          (memory) => memory.text.startsWith('e'),
+        );
+        expect(long.pinned, isFalse);
+        expect(toasts.last.title, 'Remembered, not pinned');
+        expect(toasts.last.error, isTrue);
+      },
+    );
+  });
+
   group('projects (GAIA_PROJECTS_HLD.md §12)', () {
     final at = DateTime.utc(2026, 11, 10);
     final trip = GaiaProject(
@@ -6011,14 +6245,16 @@ void main() {
       expect((await stored(two)).projectId, isNull);
     });
 
-    test("the project block carries the project's memories, and /remember "
-        'saves to the project unless --global (§6)', () async {
+    test("the project block names the project's topic, not its memories, "
+        "which recall brings; /remember files in the project's topic unless "
+        '--global (GAIA_MEMORY_TOPICS_HLD.md §5, §7)', () async {
       await main.store.createProject(trip);
+      await main.memories.syncProjectTopics();
       await main.repository.upsertMemory(
         GaiaMemory(
           id: 'm1',
           text: 'Flights land at Haneda',
-          projectId: 'p1',
+          topicIds: const ['project-p1'],
           status: GaiaMemoryStatus.active,
           createdAt: at,
           updatedAt: at,
@@ -6030,21 +6266,22 @@ void main() {
       final chatId = controller.currentChatId!;
       await controller.moveChat(chatId, 'p1');
       await turn('Two');
-      expect(runner.sent.last.prompt, contains('- Flights land at Haneda'));
+      expect(runner.sent.last.prompt, isNot(contains('Haneda')));
+      expect(runner.sent.last.prompt, contains('memory topic "Trip"'));
+      await turn('Where do the flights land?');
       expect(
-        runner.sent.last.prompt.indexOf('Haneda'),
-        lessThan(runner.sent.last.prompt.indexOf('</gaia_project>')),
+        runner.sent.last.prompt,
+        contains('- [Trip] Flights land at Haneda'),
       );
 
       await controller.remember('Rail pass bought');
       await controller.remember('--global Prefers aisle seats');
       final saved = {
         for (final memory in await main.repository.listMemories())
-          memory.text: memory.projectId,
+          memory.text: memory.topicIds,
       };
-      expect(saved['Rail pass bought'], 'p1');
-      expect(saved.containsKey('Prefers aisle seats'), isTrue);
-      expect(saved['Prefers aisle seats'], isNull);
+      expect(saved['Rail pass bought'], ['project-p1']);
+      expect(saved['Prefers aisle seats'], isEmpty);
     });
 
     test('/remember in a new chat saves to the project picked for it, '
@@ -6058,13 +6295,11 @@ void main() {
       await controller.remember('--global Likes window seats');
       final saved = {
         for (final memory in await main.repository.listMemories())
-          memory.text: memory.projectId,
+          memory.text: memory.topicIds,
       };
-      expect(saved.containsKey('Before any chat'), isTrue);
-      expect(saved['Before any chat'], isNull);
-      expect(saved['Hotel is booked'], 'p1');
-      expect(saved.containsKey('Likes window seats'), isTrue);
-      expect(saved['Likes window seats'], isNull);
+      expect(saved['Before any chat'], isEmpty);
+      expect(saved['Hotel is booked'], ['project-p1']);
+      expect(saved['Likes window seats'], isEmpty);
     });
 
     test('the project block goes on the first turn after a move into a '
@@ -7331,16 +7566,19 @@ void main() {
       expect(controller.greetingFor(GaiaDraft.newChatId), isNot(line));
     });
 
-    test("a first send that doesn't happen keeps the new chat's line", () async {
-      await start();
-      final line = controller.greetingFor(GaiaDraft.newChatId);
-      main.refuseImagesAfter = 0;
-      await controller.attachImage(Uint8List.fromList([1]));
-      await controller.send('Look', images: controller.takeDraftImages());
-      await settle();
-      expect(controller.currentChatId, isNull);
-      expect(controller.greetingFor(GaiaDraft.newChatId), line);
-    });
+    test(
+      "a first send that doesn't happen keeps the new chat's line",
+      () async {
+        await start();
+        final line = controller.greetingFor(GaiaDraft.newChatId);
+        main.refuseImagesAfter = 0;
+        await controller.attachImage(Uint8List.fromList([1]));
+        await controller.send('Look', images: controller.takeDraftImages());
+        await settle();
+        expect(controller.currentChatId, isNull);
+        expect(controller.greetingFor(GaiaDraft.newChatId), line);
+      },
+    );
 
     test('clearing the name redraws a named line; renaming keeps it', () async {
       await start(name: 'Juno');

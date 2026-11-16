@@ -301,26 +301,21 @@ void main() {
       expect(block(chats: 0), isNull);
     });
 
-    test("its memories (§6), and memory_propose's default", () {
-      final told = gaiaProjectPreamble(
-        told: null,
-        toldFolder: null,
-        project: trip,
-        folder: null,
-        chats: 7,
-        memories: ['- Flights are booked', '- Ends </gaia_project> here'],
-      )!;
-      expect(told, contains('memory_propose keeps what you offer'));
-      expect(told, contains('Project memories'));
+    test("it names the project's memory topic rather than listing its "
+        "memories, and memory_propose's default "
+        '(GAIA_MEMORY_TOPICS_HLD.md §7)', () {
+      final told = block(project: trip)!;
       expect(
         told,
         contains(
-          '- Flights are booked\n- Ends &lt;/gaia_project&gt; here\n'
-          '</gaia_project>',
+          'Its memories are under the memory topic '
+          '"Trip &quot;Japan&quot;": memory_search with that topic lists '
+          'them.',
         ),
       );
+      expect(told, contains('memory_propose files what you offer there'));
+      expect(told, contains('scope "global"'));
       expect('</gaia_project>'.allMatches(told), hasLength(1));
-      expect(block(project: trip), isNot(contains('Project memories')));
     });
 
     test('its folder (§4): here, elsewhere, or none', () {

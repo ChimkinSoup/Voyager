@@ -151,7 +151,7 @@ void main() {
     final jazz = (await memories.propose('c1', {'text': 'Likes jazz'})).memory!;
     expect(
       await memories.decide(tea.id, accept: true, text: ' Prefers green tea '),
-      (state: GaiaCardState.accepted, text: 'Prefers green tea'),
+      (id: tea.id, state: GaiaCardState.accepted, text: 'Prefers green tea'),
     );
     final kept = await repository.getMemory(tea.id);
     expect(kept!.status, GaiaMemoryStatus.active);
@@ -176,7 +176,7 @@ void main() {
     final tea = (await memories.propose('c1', {'text': 'Prefers tea'})).memory!;
     expect(
       await memories.decide(tea.id, accept: true, text: 'prefers  GREEN tea'),
-      (state: GaiaCardState.accepted, text: 'Prefers green tea'),
+      (id: 'm1', state: GaiaCardState.accepted, text: 'Prefers green tea'),
     );
     expect((await repository.getMemory(tea.id))!.isDeleted, isTrue);
     final active = (await repository.listMemories()).where(
@@ -226,6 +226,7 @@ void main() {
       tea.copyWith(text: 'Prefers oolong', status: GaiaMemoryStatus.active),
     );
     expect(await memories.decide(tea.id, accept: false, text: 'Prefers tea'), (
+      id: tea.id,
       state: GaiaCardState.accepted,
       text: 'Prefers oolong',
     ));
@@ -410,24 +411,13 @@ void main() {
     Future<String> search(String chatId) =>
         memories.tool(chatId, 'memory_search', {'query': 'tea'});
 
-    test("the session index is global only; the project's go in its block "
-        'and, for the curator, after the global ones', () async {
+    test("the curator's index holds every active memory, from any project "
+        '(GAIA_MEMORY_TOPICS_HLD.md §7)', () async {
       final index = await memories.index();
       expect(index, contains('Likes green tea'));
       expect(index, contains('Orphan tea fact'));
-      expect(index, isNot(contains('Trip tea house')));
-      expect(index, isNot(contains('Other project')));
-
-      expect(await memories.projectIndex('p1'), ['- Trip tea house booked']);
-
-      final curator = await memories.index(chatId: 'in1');
-      expect(curator, contains('Likes green tea'));
-      expect(
-        curator,
-        contains('# Project memories\n\n- Trip tea house booked'),
-      );
-      expect(curator, isNot(contains('Other project')));
-      expect(await memories.index(chatId: 'loose'), index);
+      expect(index, contains('Trip tea house'));
+      expect(index, contains('Other project'));
     });
 
     test('search finds every memory, from any project '
@@ -456,14 +446,16 @@ void main() {
         'scope': 'project',
       });
       await memories.tool('lost', 'memory_propose', {'text': 'Packs light'});
+      // Filed in the project's topic, with no `projectId` written
+      // (GAIA_MEMORY_TOPICS_HLD.md §10).
       final saved = {
         for (final memory in await repository.listMemories())
-          memory.text: memory.projectId,
+          memory.text: [?memory.projectId, ...memory.topicIds],
       };
-      expect(saved['Rail pass bought'], 'p1');
-      expect(saved['Hates early flights'], isNull);
-      expect(saved['Reads on trains'], isNull);
-      expect(saved['Packs light'], isNull);
+      expect(saved['Rail pass bought'], ['project-p1']);
+      expect(saved['Hates early flights'], isEmpty);
+      expect(saved['Reads on trains'], isEmpty);
+      expect(saved['Packs light'], isEmpty);
     });
 
     test("another project's memory, or one gone with its project, doesn't "
@@ -492,10 +484,10 @@ void main() {
       ]);
       final saved = {
         for (final memory in await repository.listMemories())
-          memory.text: memory.projectId,
+          memory.text: [?memory.projectId, ...memory.topicIds],
       };
-      expect(saved['Ryokan in Kyoto'], 'p1');
-      expect(saved['Walks daily'], isNull);
+      expect(saved['Ryokan in Kyoto'], ['project-p1']);
+      expect(saved['Walks daily'], isEmpty);
     });
 
     test("projectOf is the chat's live project", () async {

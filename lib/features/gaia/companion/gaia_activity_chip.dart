@@ -175,6 +175,132 @@ class _GaiaActivityChipState extends State<GaiaActivityChip> {
   }
 }
 
+/// The memories recall gave the agent with the message a reply answers
+/// (GAIA_MEMORY_TOPICS_HLD.md §4.5), styled like [GaiaActivityChip]: "Recalled
+/// 3 memories", which opens to list each with its topic path. Clicking one
+/// calls [onOpen] with its id, where it can be shown; null where it can't.
+class GaiaRecallChip extends StatefulWidget {
+  const GaiaRecallChip({super.key, required this.part, this.onOpen});
+
+  final GaiaRecallPart part;
+  final ValueChanged<String>? onOpen;
+
+  @override
+  State<GaiaRecallChip> createState() => _GaiaRecallChipState();
+}
+
+class _GaiaRecallChipState extends State<GaiaRecallChip> {
+  var _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = scheme.onSurfaceVariant;
+    final style = theme.textTheme.labelSmall?.copyWith(color: muted);
+    final memories = widget.part.memories;
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.psychology_outlined,
+          size: 12,
+          color: gaiaAstralGoldFor(theme.brightness),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            'Recalled ${memories.length} '
+            'memor${memories.length == 1 ? 'y' : 'ies'}',
+            style: style,
+          ),
+        ),
+        Icon(
+          _open ? Icons.expand_less : Icons.expand_more,
+          size: 14,
+          color: muted,
+        ),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              GaiaHoldInPlace(context).dispatch(context);
+              setState(() => _open = !_open);
+            },
+            child: Semantics(button: true, expanded: _open, child: row),
+          ),
+        ),
+        if (_open)
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: scheme.onSurface.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(GaiaRadius.row),
+              border: Border.all(
+                color: scheme.onSurface.withValues(alpha: 0.12),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Given isn't used: Gaia can't tell what the reply relied on.
+                Text(
+                  'Given to the agent with this message. It may not have '
+                  'used them.',
+                  style: style,
+                ),
+                for (final memory in memories) ...[
+                  Divider(
+                    height: 13,
+                    thickness: 1,
+                    color: scheme.onSurface.withValues(alpha: 0.08),
+                  ),
+                  MouseRegion(
+                    cursor: widget.onOpen == null
+                        ? MouseCursor.defer
+                        : SystemMouseCursors.click,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onOpen == null
+                          ? null
+                          : () => widget.onOpen!(memory.id),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            memory.topic ?? 'Unsorted',
+                            style: style?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            memory.text,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurface.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// "Used Bash ×3, Edit".
 String gaiaActivityLabel(List<String> tools) {
   final counts = <String, int>{};

@@ -1,7 +1,9 @@
 # Gaia — Memory Topics and Recall (HLD)
 
-Status: **Phase 1 built (2026-11-16)**, checked by unit tests and a two-profile sync pass; its
-live checks still to do are in §15. Phases 2-6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+Status: **Phases 1 and 2 built (2026-11-16).** Phase 1 is checked by unit tests and a
+two-profile sync pass; its live checks still to do are in §15. Phase 2 is checked by unit,
+controller and widget tests only; its live checks are all still to do (§16.4). Phases 3-6 not
+built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -504,6 +506,25 @@ desktop variant under the memory watchdog.
   - A project created on A got its topic, which reached B.
   - `memory_search` on A's real data: by topic (any case), topic plus query, a project memory
     found from a chat in no project, an unknown topic refused, topic paths in the results.
+- **After the review fixes, 2026-11-16** (§15.2 items 9 and 10, and topic names that hold `/`
+  or `>`): full `flutter test` on commit `05b1df20`: 7186 passed, 41 skipped and 1 failure,
+  `media_image_small_placeholder_test`, which passes on its own, as does
+  `heat_watch_section_test`; both fail only under full-suite load and touch none of this.
+- **Account-switch pass, 2026-11-16** (qa-128: A = `gaiaqa`, B = a fresh profile `qtopic2`,
+  debug build of `05b1df20`, by VM eval and read-only SQLite). All passed, and neither run log
+  had a `project topics not kept` line:
+  - Baseline: both devices held the same 5 topics, 38 memories and 7 projects, outbox empty.
+  - B signed out and into another account (qa-127, which has no Gaia projects), so its store
+    was wiped and pulled again: 0 topics, memories and projects, nothing queued.
+  - B signed out and back into qa-128, wiped and pulled again (about 41 s). Its topics,
+    memories and projects matched the baseline exactly, versions and `createdAt` included, with
+    nothing queued, and A's didn't change. This is the case the review's finding was about:
+    before the fix, the upkeep stayed subscribed through the wipe and the pull.
+  - The upkeep came back after that pull: a project renamed on B had its topic follow (v2), and
+    a new project "MT2 A/B tests" got its topic, with a memory saved in it filed there. Both
+    reached A.
+  - `memory_search` on A: topic `MT2 A/B tests`, and `mt2 a/b tests` with a query, both found
+    the memory; `B tests`, the tail of that name, was refused as no topic.
 
 ### 15.4 Live checks still to do for Phase 1
 
@@ -522,3 +543,139 @@ These need the screen on, the phone, or a real agent turn:
   project chat each file the memory in the project's topic (unit-tested only).
 - **Mixed builds:** a device still on schema 200 edits a memory that's been filed. The memory
   should keep its topics everywhere (unit-tested only).
+- **Account switch through the UI:** the pass above signed out by eval and in through the login
+  page. Sign out from Settings, sign in to another account, and back, with topics nested under
+  others in the cloud (Phase 4 adds re-parenting, so this waits for it): each should keep its
+  parent and its memories after the second pull.
+
+## 16. Phase 2 build notes (2026-11-16)
+
+### 16.1 What was built
+
+- **Stage 1 recall (§4.2):** `gaiaRecallCandidates` in `gaia_memories.dart` scores every
+  active memory by BM25 over its text, tags and the names on its topics' paths, with the home
+  boost for the chat's project topic and its subtopics and a small boost for topics already
+  recalled in the session. Each candidate has a strength from 0 to 1. The main instance
+  answers a new `memoryRecall {chatId, text, recalled}` pipe request.
+- **Picks without stage 2 (§4.3's fallback):** `gaiaRecallPicks` gives stage 1's top 5 with
+  strength at or above 0.5 (`kGaiaRecallThreshold`) that the session wasn't given yet, within
+  8 memories and 4,000 characters.
+- **`<gaia_memories>` (§4.4):** goes ahead of the message, after `<gaia_project>`, with each
+  memory in full and its topic path. The session's `agentSessions` entry keeps `recalled`, the
+  ids it was given. A compaction clears it, and a new session (a resume that found none, a
+  fork, a rewind, another account or agent) starts empty.
+- **The recall chip (§4.5):** a `GaiaRecallPart` goes first in the reply, with each memory's
+  id, text and topic path at the time. It syncs with the message. `GaiaRecallChip` shows
+  "Recalled N memories" on the companion and on the phone's chat page. Opened, it lists each
+  memory with its path and says the agent may not have used them. Clicking one opens it on
+  the Gaia page's Memories tab, highlighted and scrolled to.
+- **The system prompt (§4.1):** `memoryPrompt` gives a new session the pinned memories in full
+  under `## Always` and the topic tree with counts under `## Topics`, cut at the depth that
+  fits 3,000 characters. It replaces the index of every memory.
+- **`<gaia_project>` (§7)** no longer lists the project's memories. It names the project's
+  memory topic for `memory_search`.
+- **Pinning by hand (§3.3):** a pin button on each remembered memory's row on the Memories
+  tab, a pin toggle on the companion's memory card that goes with Remember, and
+  `/remember --pin` (with `--global` in either order). Pins are refused past 2,000 characters
+  in all (`kGaiaPinBudget`).
+- **`projectId` is no longer written** on new memories (§15.2 item 4). A memory that an older
+  build saves in a live project, with no topics, is filed in that project's topic by the
+  upkeep, which now watches memories as well as projects.
+
+### 16.2 Decisions made while building
+
+1. **Stage 1 picks on its own until Phase 3.** It uses §4.3's fallback rule, so a message gets
+   a memory only when at least half the memory's own terms, weighted by rarity, appear in
+   the message or the end of the last reply. Short, specific memories match easily; long ones
+   need most of their words. Phase 3 tunes the threshold.
+2. **Pinned memories are never recalled.** They're in the system prompt already. Archived and
+   proposed memories are never recalled either.
+3. **Nothing is cached.** Each message reads the active memories and topics and builds the
+   scores again. §4.2 says to keep them in memory, but at today's scale a read is cheaper
+   than the upkeep code. Add a cache if the §11 latency test shows it matters.
+4. **Words for matching:** lower case, letters and digits, a short English stop-word list,
+   one-letter words dropped and a plural `s` dropped ("assignments" matches "assignment").
+   "C++" is lost, as its only word is one letter. The home boost (×2) and the
+   recalled-topic boost (×1.25) don't stack.
+5. **The text matched** is what you typed, not the window, selection, quote or file blocks
+   Gaia adds, plus the last 1,000 characters of the text of the reply before it.
+6. **Filing an older build's memories (§15.2 item 4):** a memory with a live `projectId` and
+   no topics gets that project's topic. So anything in this build that takes a memory out of
+   its project's topic must also clear its `projectId`, or the upkeep files it back. The
+   Memories tab's "Move to" does. **Phase 4's "remove from topic", delete topic and merge
+   must do the same.**
+7. **The Memories tab until Phase 4:** its project filter and its "Move to" menu now read and
+   write project topics, keeping any other topics. Its duplicate checks still use
+   `projectId` until Phase 5 (§15.2 item 6), so memories saved from now on count as global
+   there.
+8. **The curator** still gets one line per active memory to avoid duplicates (`memoryIndex`),
+   now from every project. Phase 5 gives it stage 1's candidates instead (§5).
+9. **The recall history table** (§3.3) still isn't written. Nothing reads it before Phase 6's
+   pin suggestions. Writing it from Phase 2 on would give those suggestions history to start
+   from, if you'd rather have it sooner.
+10. **When `recalled` is saved:** with the session at the end of the turn, as `project` is. A
+    turn whose session isn't kept, such as one that failed straight away, records nothing, so
+    the next turn sends those memories again.
+11. **A retry as a new session** runs recall again with an empty list and replaces the
+    reply's recall part.
+12. **No recall ahead of a native command**, which the CLI would read as text, and none for a
+    debug-script reply.
+13. **The topic list** shows topics with no memories as "(0)", doesn't list Unsorted, and
+    leaves out §4.1's "[pinned]" tag, since `## Always` already says it.
+14. **A pin over the budget** from `/remember --pin` or the card leaves the memory remembered
+    but not pinned, with a toast. `/remember --pin` on text that's already remembered pins
+    the existing memory.
+15. **Opening a memory from the chip:** on the desktop it brings Voyager's main window
+    forward, goes to the Gaia page's Memories tab and clears its filter. On the phone it goes
+    back to the Gaia page.
+
+### 16.3 How it was checked
+
+- **Unit tests:** `test/gaia_memory_recall_test.dart` (new). It covers matching through topic
+  path names, the home boost ranking a project's memory first, the recalled-topic boost,
+  strength staying between 0 and 1 and unchanged by unrelated text, the 40-candidate cap, the
+  picks' 5 / 8 / 4,000-character caps, leaving out memories already given and pinned ones,
+  the system prompt's pins and topic counts, the topic list cut by depth and by roots, the pin
+  budget, the `<gaia_memories>` block's escaping, and the round trips of `GaiaRecallPart` and
+  `recalled`. Also updated: `gaia_memory_topics_test` (filing an older build's memory, at
+  once and through the upkeep), `gaia_memories_test`, `gaia_project_tools_test` and
+  `gaia_commands_test` (`--pin`).
+- **Controller tests** (`gaia_controller_test`, "memory recall"): the block on the first
+  message and only new memories later, `recalled` kept on the session, the recall part first
+  in the synced reply, a follow-up matched with the end of the last reply, a new session after
+  a missing resume given the memories again, a compaction clearing the list, and
+  `/remember --pin` within and past the budget. The §11 and project tests were updated for
+  the new system prompt and project block.
+- **Widget tests** (`gaia_memory_card_test`): the recall chip's count, list, paths and clicks,
+  and the card's pin going with Remember.
+- **Full `flutter test`** on the working tree: 7216 passed, 41 skipped and 2 failures,
+  `heat_watch_section_test` and `media_image_small_placeholder_test`. Both pass on their own
+  and touch none of this, as in §15.3. The controller and recall tests were run again after
+  a last fix to a retry's recall chip: 374 passed.
+
+### 16.4 Live checks still to do for Phase 2
+
+All skipped in this build because they need a running app on the screen. The first four
+could also run in `gaiaqa` by VM eval and session files, without the screen, as Phase 1's
+passes did.
+
+- **A real Claude Code turn:** the session's jsonl shows `<gaia_memories>` ahead of the
+  message on the first turn and only new memories after, and the new system prompt (pins and
+  topics, no index) in the CLI's appended prompt.
+- **A real Codex turn:** the same, with the system part in `developerInstructions`.
+- **Recall quality on real data:** on `gaiaqa`'s memories, and on Juno's own, which messages
+  recall what. Note the misses and false hits for Phase 3's threshold tuning.
+- **A compaction in a long real session:** the turn after it sends the memories again.
+- **The recall chip in the companion:** how it looks above the activity chip, opening it, and
+  clicking a memory: Voyager's main window comes forward on the Gaia page's Memories tab,
+  with the memory highlighted and scrolled to, even when a project filter was set.
+- **The phone:** a reply's recall chip shows after sync, and tapping a memory goes back to the
+  Gaia page with it highlighted.
+- **Pinning in the UI:** the row's pin button, the card's pin toggle then Remember, and
+  `/remember --pin`, each with the toast at the budget. A new chat's system prompt has the
+  pin.
+- **The Memories tab:** the project filter and "Move to" by topic, and a memory moved to
+  Global staying out of the project's topic after the upkeep runs.
+- **Mixed builds:** a device on an older build saves a memory in a project chat, and this
+  build files it in the project's topic.
+

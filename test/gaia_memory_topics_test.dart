@@ -312,10 +312,51 @@ void main() {
         'stays out', () async {
       await memories.syncProjectTopics();
       final m1 = (await repository.getMemory('m1'))!;
-      await repository.upsertMemory(m1.copyWith(topicIds: const []));
+      // Taken out by this build, which clears `projectId` as it does
+      // (§16.2).
+      await repository.upsertMemory(
+        m1.copyWith(topicIds: const [], clearProjectId: true),
+      );
       await memories.syncProjectTopics();
       expect((await repository.getMemory('m1'))!.topicIds, isEmpty);
     });
+
+    test('a memory an older build saves in a project after its topic was '
+        'made is filed in it (GAIA_MEMORY_TOPICS_HLD.md §16.2)', () async {
+      await memories.syncProjectTopics();
+      // An older build writes `projectId` and no topics.
+      await repository.upsertMemory(
+        _memory('old', 'Booked the ryokan', projectId: 'p1'),
+      );
+      // One in a deleted project, or with topics already, is left alone.
+      await repository.upsertMemory(
+        _memory('gone', 'Gone project fact', projectId: 'p-gone'),
+      );
+      await repository.upsertMemory(
+        _memory('own', 'Has its own topic', projectId: 'p1', topicIds: ['x']),
+      );
+      await memories.syncProjectTopics();
+      expect((await repository.getMemory('old'))!.topicIds, ['project-p1']);
+      expect((await repository.getMemory('gone'))!.topicIds, isEmpty);
+      expect((await repository.getMemory('own'))!.topicIds, ['x']);
+    });
+
+    test(
+      'keepProjectTopics files an older build\'s memory as it arrives',
+      () async {
+        await memories.syncProjectTopics();
+        memories.keepProjectTopics();
+        addTearDown(memories.stopProjectTopics);
+        await repository.upsertMemory(
+          _memory('old', 'Booked the ryokan', projectId: 'p1'),
+        );
+        for (var i = 0; i < 20; i++) {
+          if ((await repository.getMemory('old'))!.topicIds.isNotEmpty) break;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        expect((await repository.getMemory('old'))!.topicIds, ['project-p1']);
+      },
+    );
 
     test(
       'a renamed project renames its topic, wherever it was moved',
@@ -376,9 +417,12 @@ void main() {
       await memories.syncProjectTopics();
       final topic = (await repository.getMemoryTopic('project-p1'))!;
       await repository.upsertMemoryTopic(topic.copyWith(deletedAt: _at));
-      // Deleting a topic takes it off its memories (§3.2).
+      // Deleting a topic takes it off its memories (§3.2), and clears
+      // `projectId` as any removal by this build does (§16.2).
       await repository.upsertMemory(
-        (await repository.getMemory('m1'))!.copyWith(topicIds: const []),
+        (await repository.getMemory(
+          'm1',
+        ))!.copyWith(topicIds: const [], clearProjectId: true),
       );
       await memories.syncProjectTopics();
       final back = (await repository.getMemoryTopic('project-p1'))!;
@@ -424,7 +468,8 @@ void main() {
         status: GaiaMemoryStatus.active,
         projectId: 'p1',
       );
-      expect(saved!.projectId, 'p1');
+      // No `projectId` from Phase 2 on (§10).
+      expect(saved!.projectId, isNull);
       expect(saved.topicIds, ['project-p1']);
       final global = await memories.save(
         'Drinks oolong',

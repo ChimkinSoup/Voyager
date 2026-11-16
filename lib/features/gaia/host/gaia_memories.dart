@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -18,46 +19,93 @@ const _maxResults = 20;
 /// The longest an index line gets; `memory_search` has the rest.
 const _maxIndexLine = 200;
 
-/// Gaia's memories (GAIA_HLD.md §11), kept by the main instance: the index a
-/// new session's system prompt carries, `memory_search` and
-/// `memory_propose`, `/remember`, and the curator's proposals.
+/// The most characters pinned memories take in all
+/// (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+const kGaiaPinBudget = 2000;
+
+/// The longest the system prompt's topic list gets (§4.1).
+const _maxTopicList = 3000;
+
+/// Gaia's memories (GAIA_HLD.md §11), kept by the main instance: a new
+/// session's pins and topic list, recall for each message
+/// (GAIA_MEMORY_TOPICS_HLD.md §4), `memory_search` and `memory_propose`,
+/// `/remember`, pins, and the curator's proposals.
 class GaiaMemories {
   GaiaMemories(this._repository);
 
   final GaiaRepository _repository;
 
-  /// The index of the active global memories, for a new session (§11);
-  /// empty when there are none. With [chatId], as the curator reads it, the
-  /// chat's project's memories follow (GAIA_PROJECTS_HLD.md §6).
-  Future<String> index({String? chatId}) async {
-    final project = chatId == null ? null : await _projectOf(chatId);
-    final active = await _active();
-    final global = gaiaMemoryIndex([
-      for (final (memory, scope) in active)
-        if (scope == null) memory,
-    ]);
-    final own = project == null
-        ? const <String>[]
-        : _projectLines(active, project);
-    if (own.isEmpty) return global;
+  /// Every active memory as index lines, for the curator, so it doesn't
+  /// offer one again (§11); empty when there are none. Phase 5 gives it
+  /// recall's candidates instead (GAIA_MEMORY_TOPICS_HLD.md §5).
+  Future<String> index() async =>
+      gaiaMemoryIndex([for (final (memory, _) in await _active()) memory]);
+
+  /// What a new session's system prompt carries (GAIA_MEMORY_TOPICS_HLD.md
+  /// §4.1): the pinned memories and the topic list. Empty with no active
+  /// memories.
+  Future<String> sessionPrompt() async => gaiaMemoryPrompt([
+    for (final (memory, _) in await _active()) memory,
+  ], GaiaTopicTree(await _repository.listMemoryTopics()));
+
+  /// The memories to add to [chatId]'s message, matched on [text] (the
+  /// message, and the end of the last reply), leaving out those its session
+  /// was already given ([recalled]) (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.4).
+  /// Stage 1 alone: its strongest few (§4.3's fallback, until Phase 3).
+  Future<List<GaiaRecalledMemory>> recall(
+    String chatId,
+    String text, {
+    List<String> recalled = const [],
+  }) async {
+    final active = [
+      for (final (memory, _) in await _active())
+        // A pinned one is in the system prompt already.
+        if (!memory.pinned) memory,
+    ];
+    final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    final project = await _projectOf(chatId);
+    final home = project == null
+        ? const <String>{}
+        : tree.subtree(gaiaProjectTopicId(project));
+    final given = recalled.toSet();
+    final near = {
+      for (final memory in active)
+        if (given.contains(memory.id)) ...memory.topicIds,
+    };
+    final picks = gaiaRecallPicks(
+      gaiaRecallCandidates(active, tree, text, home: home, near: near),
+      recalled: given,
+    );
     return [
-      if (global.isNotEmpty) global,
-      '# Project memories\n\n${own.join('\n')}',
-    ].join('\n\n');
+      for (final memory in picks)
+        (
+          id: memory.id,
+          text: memory.text,
+          topic: gaiaMemoryTopicPath(memory, tree, prefer: home),
+        ),
+    ];
   }
 
-  /// Index lines of [projectId]'s active memories, for its `<gaia_project>`
-  /// block (GAIA_PROJECTS_HLD.md §5.2, §6).
-  Future<List<String>> projectIndex(String projectId) async =>
-      _projectLines(await _active(), projectId);
-
-  List<String> _projectLines(
-    List<(GaiaMemory, String?)> active,
-    String projectId,
-  ) => [
-    for (final (memory, scope) in active)
-      if (scope == projectId) '- ${_indexLine(memory)}',
-  ];
+  /// Pins memory [id], or unpins it (GAIA_MEMORY_TOPICS_HLD.md §3.3). Throws
+  /// a [GaiaReadException] for a pin that would take the active pins past
+  /// [kGaiaPinBudget].
+  Future<void> pin(String id, {required bool pinned}) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted || memory.pinned == pinned) return;
+    if (pinned) {
+      final used = [
+        for (final (other, _) in await _active())
+          if (other.pinned && other.id != id) other.text.trim().length,
+      ].fold(0, (sum, length) => sum + length);
+      if (used + memory.text.trim().length > kGaiaPinBudget) {
+        throw GaiaReadException(
+          'Pinned memories are kept under $kGaiaPinBudget characters in all. '
+          'Unpin one first.',
+        );
+      }
+    }
+    await _repository.upsertMemory(memory.copyWith(pinned: pinned));
+  }
 
   /// A memory tool's call from [chatId]: its text for the agent. Throws a
   /// [GaiaReadException] the agent is shown.
@@ -106,11 +154,12 @@ class GaiaMemories {
   /// A `memory_propose` call from [chatId]: the memory saved in the inbox,
   /// null when nothing new was, and the agent's text. Throws a
   /// [GaiaReadException] the agent is shown.
-  Future<({GaiaMemory? memory, String text})> propose(
+  Future<({GaiaMemory? memory, String text, bool project})> propose(
     String chatId,
     Map<String, Object?> arguments,
   ) async {
-    // The chat's project unless asked for global (GAIA_PROJECTS_HLD.md §6).
+    // The chat's project's topic unless asked for global
+    // (GAIA_MEMORY_TOPICS_HLD.md §5).
     final project = arguments['scope'] == 'global'
         ? null
         : await _projectOf(chatId);
@@ -123,6 +172,7 @@ class GaiaMemories {
     );
     return (
       memory: saved,
+      project: project != null,
       text: saved == null
           ? 'Already remembered, waiting in the inbox, or set aside by the '
                 'user: nothing new was proposed.'
@@ -136,23 +186,28 @@ class GaiaMemories {
   /// The user decided proposed memory [id] from its card in a chat (§11):
   /// [accept]ed as [text] says it, or dismissed, as the inbox does. One the
   /// inbox decided first stays as it was decided there. What it is now:
-  /// accepted with the text it has, or rejected. Throws a
+  /// accepted with the text it has, or rejected, and the memory that says
+  /// it: an active one it was merged into, if it was. Throws a
   /// [GaiaReadException] for empty or overlong [text].
-  Future<({GaiaCardState state, String text})> decide(
+  Future<({String id, GaiaCardState state, String text})> decide(
     String id, {
     required bool accept,
     required String text,
   }) async {
     final memory = await _repository.getMemory(id);
     if (memory == null || memory.isDeleted) {
-      return (state: GaiaCardState.rejected, text: memory?.text ?? text);
+      return (
+        id: id,
+        state: GaiaCardState.rejected,
+        text: memory?.text ?? text,
+      );
     }
     if (memory.status != GaiaMemoryStatus.proposed) {
-      return (state: GaiaCardState.accepted, text: memory.text);
+      return (id: id, state: GaiaCardState.accepted, text: memory.text);
     }
     if (!accept) {
       await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
-      return (state: GaiaCardState.rejected, text: memory.text);
+      return (id: id, state: GaiaCardState.rejected, text: memory.text);
     }
     final body = text.trim();
     if (body.isEmpty) throw GaiaReadException('A memory needs text.');
@@ -167,12 +222,12 @@ class GaiaMemories {
     if (await sameActive(body, projectId: memory.projectId, except: id)
         case final other?) {
       await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
-      return (state: GaiaCardState.accepted, text: other.text);
+      return (id: other.id, state: GaiaCardState.accepted, text: other.text);
     }
     await _repository.upsertMemory(
       memory.copyWith(text: body, status: GaiaMemoryStatus.active),
     );
-    return (state: GaiaCardState.accepted, text: body);
+    return (id: id, state: GaiaCardState.accepted, text: body);
   }
 
   /// Proposed memory [id] back in the inbox, its dismissal undone; its text
@@ -213,8 +268,9 @@ class GaiaMemories {
   /// active or proposed memory already says the same. Unless it's [byUser]
   /// (`/remember`), an archived, dismissed or deleted one counts too, so
   /// what the user set aside isn't offered again. Throws a
-  /// [GaiaReadException] for an empty or overlong one. It belongs to
-  /// [projectId], or is global for null.
+  /// [GaiaReadException] for an empty or overlong one. It's filed in
+  /// [projectId]'s topic, or in none for null; its own `projectId` is no
+  /// longer written (GAIA_MEMORY_TOPICS_HLD.md §3.1, §10).
   Future<GaiaMemory?> save(
     String text, {
     List<String> tags = const [],
@@ -258,9 +314,6 @@ class GaiaMemories {
       tags: tags,
       sourceChatId: chatId,
       status: status,
-      projectId: projectId,
-      // Its project's topic too, for when recall reads topics rather than
-      // the project (GAIA_MEMORY_TOPICS_HLD.md §5, §10).
       topicIds: [if (projectId != null) gaiaProjectTopicId(projectId)],
       createdAt: now,
       updatedAt: now,
@@ -302,9 +355,14 @@ class GaiaMemories {
   /// projects change (GAIA_MEMORY_TOPICS_HLD.md §7, §8). Not before that
   /// pull: a write here before it could overwrite a newer copy of the same
   /// topic or memory on the server. Calls while it's kept do nothing.
+  /// Memories change too: one an older build saves in a project gets
+  /// filed in its topic.
   void keepProjectTopics() {
     if (_projectTopics != null) return;
     _projectTopics = _repository.watchProjects().listen(
+      (_) => unawaited(_upkeep()),
+    );
+    _projectMemories = _repository.watchMemories().listen(
       (_) => unawaited(_upkeep()),
     );
   }
@@ -313,10 +371,12 @@ class GaiaMemories {
   /// is written while the store is wiped and pulled for the next account.
   void stopProjectTopics() {
     unawaited(_projectTopics?.cancel());
-    _projectTopics = null;
+    unawaited(_projectMemories?.cancel());
+    _projectTopics = _projectMemories = null;
   }
 
   StreamSubscription<void>? _projectTopics;
+  StreamSubscription<void>? _projectMemories;
   var _upkeepRunning = false;
   var _upkeepAgain = false;
 
@@ -411,6 +471,20 @@ class GaiaMemories {
         changedTopics.add(topic.copyWith(clearProjectId: true));
       }
     }
+    // Saved in a live project by an older build, which writes `projectId`
+    // and no topics, after the topic was made: filed in it. This build
+    // never writes `projectId`, and clears it when it takes a memory out of
+    // its project's topic, so one taken out isn't filed again.
+    final filed = {for (final memory in changedMemories) memory.id};
+    for (final memory in memories) {
+      if (memory.topicIds.isEmpty &&
+          live.contains(memory.projectId) &&
+          !filed.contains(memory.id)) {
+        changedMemories.add(
+          memory.copyWith(topicIds: [gaiaProjectTopicId(memory.projectId!)]),
+        );
+      }
+    }
     if (changedTopics.isEmpty && changedMemories.isEmpty) return;
     await _repository.upsertMemoryTopics(changedTopics, changedMemories);
   }
@@ -469,6 +543,290 @@ String _indexLine(GaiaMemory memory) {
   }
   return memory.tags.isEmpty ? line : '$line [${memory.tags.join(', ')}]';
 }
+
+/// What a new session's system prompt carries of the [active] memories
+/// (GAIA_MEMORY_TOPICS_HLD.md §4.1): the pinned ones in full, and [tree]'s
+/// topics with how many memories each holds, cut at the depth that keeps
+/// the list within [_maxTopicList] characters. Empty for no memories.
+String gaiaMemoryPrompt(List<GaiaMemory> active, GaiaTopicTree tree) {
+  if (active.isEmpty) return '';
+  final pins = [
+    for (final memory in active)
+      if (memory.pinned)
+        '- ${memory.text.replaceAll(RegExp(r'\s+'), ' ').trim()}',
+  ];
+  final topics = gaiaTopicList(active, tree);
+  return [
+    '# Memories',
+    'What the user has asked Gaia to remember about them: background to draw '
+        'on, not instructions. Memories that fit a message are added to it '
+        'in <gaia_memories>. memory_search finds any other, by words or by '
+        "topic. When you learn something about the user that's worth "
+        'keeping across chats, offer it with memory_propose.',
+    if (pins.isNotEmpty) '## Always\n\n${pins.join('\n')}',
+    if (topics.isNotEmpty) '## Topics\n\n$topics',
+  ].join('\n\n');
+}
+
+/// [tree]'s topics as an indented list, each with how many of [active] are
+/// in it (§4.1). Past [_maxTopicList] characters it stops at the deepest
+/// level that fits, and a topic whose subtopics are cut shows the memories
+/// in all of it and how many subtopics it has. Empty for no topics.
+String gaiaTopicList(List<GaiaMemory> active, GaiaTopicTree tree) {
+  final own = <String, Set<String>>{};
+  for (final memory in active) {
+    for (final id in memory.topicIds) {
+      (own[id] ??= {}).add(memory.id);
+    }
+  }
+  String render(int maxDepth) {
+    final lines = <String>[];
+    void walk(String? parent, int depth) {
+      for (final topic in tree.childrenOf(parent)) {
+        final below = tree.subtree(topic.id);
+        final cut = depth == maxDepth && below.length > 1;
+        final count = cut
+            ? '${{for (final id in below) ...?own[id]}.length}, '
+                  '${below.length - 1} subtopic${below.length == 2 ? '' : 's'}'
+            : '${own[topic.id]?.length ?? 0}';
+        lines.add('${'  ' * depth}- ${topic.name} ($count)');
+        if (depth < maxDepth) walk(topic.id, depth + 1);
+      }
+    }
+
+    walk(null, 0);
+    return lines.join('\n');
+  }
+
+  var depth = tree.height;
+  var list = render(depth);
+  while (list.length > _maxTopicList && depth > 0) {
+    list = render(--depth);
+  }
+  if (list.length <= _maxTopicList) return list;
+  // Too many roots even alone: as many as fit.
+  final cut = list.substring(0, list.lastIndexOf('\n', _maxTopicList - 2));
+  return '$cut\n- …';
+}
+
+/// The path of the topic [memory] is shown under ("CS246 › Assignments"):
+/// its first in [prefer], or else its first that points somewhere; null
+/// for Unsorted.
+String? gaiaMemoryTopicPath(
+  GaiaMemory memory,
+  GaiaTopicTree tree, {
+  Set<String> prefer = const {},
+}) {
+  final ids = [
+    ...memory.topicIds.where(prefer.contains),
+    ...memory.topicIds.where((id) => !prefer.contains(id)),
+  ];
+  for (final id in ids) {
+    final path = tree.path(id);
+    if (path.isNotEmpty) return path.join(' › ');
+  }
+  return null;
+}
+
+/// One memory stage 1 found for a message (GAIA_MEMORY_TOPICS_HLD.md §4.2):
+/// its BM25 [score] with boosts, which ranks it, and its [strength], from 0
+/// to 1, which says whether it counts as strong.
+typedef GaiaRecallCandidate = ({
+  GaiaMemory memory,
+  double score,
+  double strength,
+});
+
+/// A candidate counts as strong from this [GaiaRecallCandidate.strength]
+/// (§4.3); tuned in Phase 3.
+const kGaiaRecallThreshold = 0.5;
+
+/// How many strong candidates are given when stage 2 doesn't pick (§4.3).
+const _stageOnePicks = 5;
+
+/// The most memories, and characters of them, added to one message (§4.4).
+const _maxRecalled = 8;
+const _maxRecalledLength = 4000;
+
+/// How much a memory in the chat's project's topic (the home boost) and one
+/// in a topic already recalled in the session are worth over the others
+/// (§4.2).
+const _homeBoost = 2.0;
+const _nearBoost = 1.25;
+
+/// Stage 1 (§4.2): [memories] scored against [text] by BM25 over each one's
+/// text, tags and the names on its topics' paths in [tree], best first, at
+/// most [limit]. One in [home] (the chat's project's topics) gets the home
+/// boost, and one in [near] (the topics already recalled) a small one.
+/// Those that match nothing are left out.
+List<GaiaRecallCandidate> gaiaRecallCandidates(
+  List<GaiaMemory> memories,
+  GaiaTopicTree tree,
+  String text, {
+  Set<String> home = const {},
+  Set<String> near = const {},
+  int limit = 40,
+}) {
+  final query = _recallTerms(text).toSet();
+  if (query.isEmpty || memories.isEmpty) return const [];
+  final docs = [
+    for (final memory in memories)
+      _recallTerms(
+        [
+          memory.text,
+          ...memory.tags,
+          for (final id in memory.topicIds) ...tree.path(id),
+        ].join(' '),
+      ),
+  ];
+  final frequency = <String, int>{};
+  for (final doc in docs) {
+    for (final term in doc.toSet()) {
+      frequency[term] = (frequency[term] ?? 0) + 1;
+    }
+  }
+  final n = memories.length;
+  double idf(String term) {
+    final df = frequency[term] ?? 0;
+    return log(1 + (n - df + 0.5) / (df + 0.5));
+  }
+
+  final average = docs.fold(0, (sum, doc) => sum + doc.length) / n;
+  const k1 = 1.2, b = 0.75;
+  final found = <GaiaRecallCandidate>[];
+  for (final (i, memory) in memories.indexed) {
+    final doc = docs[i];
+    if (doc.isEmpty) continue;
+    final counts = <String, int>{};
+    for (final term in doc) {
+      counts[term] = (counts[term] ?? 0) + 1;
+    }
+    var score = 0.0;
+    var matched = 0.0;
+    var whole = 0.0;
+    for (final MapEntry(key: term, value: tf) in counts.entries) {
+      final weight = idf(term);
+      whole += weight;
+      if (!query.contains(term)) continue;
+      matched += weight;
+      score +=
+          weight *
+          tf *
+          (k1 + 1) /
+          (tf + k1 * (1 - b + b * doc.length / average));
+    }
+    if (score <= 0) continue;
+    if (memory.topicIds.any(home.contains)) {
+      score *= _homeBoost;
+    } else if (memory.topicIds.any(near.contains)) {
+      score *= _nearBoost;
+    }
+    found.add((
+      memory: memory,
+      score: score,
+      strength: whole == 0 ? 0 : (matched / whole).clamp(0.0, 1.0),
+    ));
+  }
+  found.sort((a, b) => b.score.compareTo(a.score));
+  return found.take(limit).toList();
+}
+
+/// What stage 1 alone gives a message (§4.3, §4.4): the best few strong
+/// [candidates] not [recalled] already, within the caps.
+List<GaiaMemory> gaiaRecallPicks(
+  List<GaiaRecallCandidate> candidates, {
+  Set<String> recalled = const {},
+}) {
+  final picks = <GaiaMemory>[];
+  var length = 0;
+  for (final candidate in candidates) {
+    if (picks.length == _stageOnePicks || picks.length == _maxRecalled) break;
+    final memory = candidate.memory;
+    if (candidate.strength < kGaiaRecallThreshold ||
+        recalled.contains(memory.id)) {
+      continue;
+    }
+    final size = memory.text.trim().length;
+    if (length + size > _maxRecalledLength) continue;
+    length += size;
+    picks.add(memory);
+  }
+  return picks;
+}
+
+/// Common words that say nothing about what a memory is about.
+const _stopWords = {
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'but',
+  'by',
+  'can',
+  'do',
+  'for',
+  'from',
+  'has',
+  'have',
+  'he',
+  'her',
+  'his',
+  'how',
+  'if',
+  'in',
+  'is',
+  'it',
+  'its',
+  'me',
+  'my',
+  'no',
+  'not',
+  'of',
+  'on',
+  'or',
+  'our',
+  'she',
+  'so',
+  'that',
+  'the',
+  'their',
+  'them',
+  'then',
+  'there',
+  'they',
+  'this',
+  'to',
+  'up',
+  'us',
+  'was',
+  'we',
+  'what',
+  'when',
+  'which',
+  'who',
+  'will',
+  'with',
+  'you',
+  'your',
+  'im',
+};
+
+/// [text]'s words for matching, in order: lower case, letters and digits,
+/// common words left out, and a plural's `s` dropped so "assignments"
+/// meets "assignment".
+List<String> _recallTerms(String text) => [
+  for (final word in text.toLowerCase().split(
+    RegExp(r"[^\p{L}\p{N}']+", unicode: true),
+  ))
+    if (word.replaceAll("'", '') case final bare
+        when bare.length > 1 && !_stopWords.contains(bare))
+      bare.length > 3 && bare.endsWith('s') && !bare.endsWith('ss')
+          ? bare.substring(0, bare.length - 1)
+          : bare,
+];
 
 /// [memories] matching [query] and every one of [tags], best first: the
 /// most of the query's words found in a memory's text or tags, then the
@@ -575,6 +933,16 @@ class GaiaTopicTree {
 
   /// [id]'s parent, null for a root.
   String? parentOf(String id) => _parent[id];
+
+  /// The topics right under [id], or the roots for null, by name.
+  List<GaiaMemoryTopic> childrenOf(String? id) => [
+    for (final topic in _topics.values)
+      if (_parent[topic.id] == id) topic,
+  ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+  /// The depth of the deepest topic, 0 when every one is a root.
+  int get height =>
+      _topics.keys.fold(0, (deepest, id) => max(deepest, path(id).length - 1));
 
   /// The names from the root down to [id]; empty for one that points
   /// nowhere.

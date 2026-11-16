@@ -792,6 +792,59 @@ void main() {
         );
       });
     });
+
+    test('/remember --pin of one only proposed says it is not pinned', () {
+      final repository = DriftGaiaRepository(db);
+      final memories = GaiaMemories(repository);
+      run(show: true, memories: memories, (async, host) {
+        connect(async);
+        memories.propose('c1', {'text': 'I like tea'});
+        async.flushMicrotasks();
+        final reply =
+            request(async, 'remember', {
+                  'chatId': null,
+                  'text': 'I like tea',
+                  'pin': true,
+                })!
+                as Map;
+        expect(reply['saved'], isFalse);
+        expect(reply['pinFailed'], contains('memory inbox'));
+      });
+    });
+
+    test('a card pinned and merged into an active memory pins that one', () {
+      final repository = DriftGaiaRepository(db);
+      final memories = GaiaMemories(repository);
+      run(show: true, memories: memories, (async, host) {
+        connect(async);
+        request(async, 'remember', {'chatId': null, 'text': 'I like tea'});
+        late GaiaMemory proposed;
+        memories
+            .propose('c1', {'text': 'I like coffee'})
+            .then((p) => proposed = p.memory!);
+        async.flushMicrotasks();
+        final reply =
+            request(async, 'decideMemory', {
+                  'memoryId': proposed.id,
+                  'chatId': 'c1',
+                  'accept': true,
+                  'text': 'i like TEA',
+                  'pin': true,
+                })!
+                as Map;
+        expect(reply['pinFailed'], isNull);
+        late List<GaiaMemory> list;
+        repository.listMemories().then((all) => list = all);
+        async.flushMicrotasks();
+        expect(
+          [
+            for (final memory in list)
+              if (memory.pinned) memory.text,
+          ],
+          ['I like tea'],
+        );
+      });
+    });
   });
 
   group('can see screen (§15.6)', () {

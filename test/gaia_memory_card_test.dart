@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
@@ -59,7 +60,7 @@ void main() {
       GaiaMemoryCard(
         key: const ValueKey('m1'),
         memory: memory,
-        onRemember: () {},
+        onRemember: (_) {},
       ),
     );
     String shown() =>
@@ -88,7 +89,7 @@ void main() {
         GaiaMemoryCard(
           memory: _tea,
           onEdit: edits.add,
-          onRemember: () => remembered++,
+          onRemember: (_) => remembered++,
           onDismiss: () => dismissed++,
         ),
       ),
@@ -119,7 +120,7 @@ void main() {
             GaiaCardState.accepted,
             text: 'Prefers green tea',
           ),
-          onRemember: () {},
+          onRemember: (_) {},
         ),
       ),
     );
@@ -148,5 +149,55 @@ void main() {
     await tester.tap(find.text('Dismiss'));
     await tester.pump();
     expect(find.text('Dismissed'), findsOneWidget);
+  });
+
+  testWidgets('its pin goes with Remember (GAIA_MEMORY_TOPICS_HLD.md §3.3)', (
+    tester,
+  ) async {
+    final pins = <bool>[];
+    await tester.pumpWidget(
+      host(GaiaMemoryCard(memory: _tea, onRemember: pins.add)),
+    );
+    await tester.tap(find.text('Remember'));
+    await tester.tap(find.byTooltip('Pin it to every chat'));
+    await tester.pump();
+    await tester.tap(find.text('Remember'));
+    expect(pins, [false, true]);
+  });
+
+  testWidgets('the recall chip counts what was given, opens to list each '
+      'with its path, and a click opens it (GAIA_MEMORY_TOPICS_HLD.md §4.5)', (
+    tester,
+  ) async {
+    final opened = <String>[];
+    await tester.pumpWidget(
+      host(
+        GaiaRecallChip(
+          part: const GaiaRecallPart([
+            (id: 'a', text: 'Submit with marmoset', topic: 'CS246 › A1'),
+            (id: 'b', text: 'Likes tea', topic: null),
+          ]),
+          onOpen: opened.add,
+        ),
+      ),
+    );
+    expect(find.text('Recalled 2 memories'), findsOneWidget);
+    expect(find.text('Submit with marmoset'), findsNothing);
+    await tester.tap(find.text('Recalled 2 memories'));
+    await tester.pump();
+    expect(find.text('CS246 › A1'), findsOneWidget);
+    expect(find.text('Unsorted'), findsOneWidget);
+    expect(find.textContaining('It may not have used them'), findsOneWidget);
+    await tester.tap(find.text('Likes tea'));
+    expect(opened, ['b']);
+
+    await tester.pumpWidget(
+      host(
+        const GaiaRecallChip(
+          part: GaiaRecallPart([(id: 'a', text: 'One', topic: null)]),
+        ),
+      ),
+    );
+    expect(find.text('Recalled 1 memory'), findsOneWidget);
   });
 }

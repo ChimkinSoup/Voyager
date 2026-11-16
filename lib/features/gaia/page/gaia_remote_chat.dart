@@ -826,6 +826,18 @@ class GaiaTranscriptMessage extends ConsumerWidget {
                   ),
                 ),
               },
+              // Its memories open on the Gaia page this chat was opened
+              // from (GAIA_MEMORY_TOPICS_HLD.md §4.5).
+              GaiaRecallPart() => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: GaiaRecallChip(
+                  part: part,
+                  onOpen: (id) {
+                    ref.read(gaiaRevealMemoryProvider.notifier).state = id;
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  },
+                ),
+              ),
               GaiaCardPart() when part.id == openCard?.id => GaiaCardView(
                 card: part,
                 waiting: true,

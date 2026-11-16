@@ -291,11 +291,27 @@ String? gaiaRememberText(String draft) {
   return match?.group(1)!.trim();
 }
 
-/// The rest of `/remember`'s [text] after a leading `--global`
-/// (GAIA_PROJECTS_HLD.md §6), possibly empty; null when it doesn't start so.
-String? gaiaRememberGlobal(String text) {
-  final match = RegExp(r'^--global(?:\s+([\s\S]*))?$').firstMatch(text.trim());
-  return match == null ? null : (match.group(1) ?? '').trim();
+/// `/remember`'s [text] without its leading flags, in any order, possibly
+/// empty: `--global` keeps it out of the chat's project
+/// (GAIA_MEMORY_TOPICS_HLD.md §5) and `--pin` pins it (§3.3).
+({String text, bool global, bool pin}) gaiaRememberOptions(String text) {
+  var rest = text.trim();
+  var global = false;
+  var pin = false;
+  final flag = RegExp(r'^--(global|pin)(?:\s+|$)');
+  for (
+    var match = flag.firstMatch(rest);
+    match != null;
+    match = flag.firstMatch(rest)
+  ) {
+    if (match.group(1) == 'global') {
+      global = true;
+    } else {
+      pin = true;
+    }
+    rest = rest.substring(match.end).trim();
+  }
+  return (text: rest, global: global, pin: pin);
 }
 
 /// What `/queue <text>` in [draft] queues (§13): the text after it, or null

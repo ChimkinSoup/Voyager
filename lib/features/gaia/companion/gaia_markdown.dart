@@ -273,6 +273,36 @@ class _LineSelection extends StaticSelectionContainerDelegate {
     return path.reversed.toList();
   }
 
+  /// Moves the other edge's kept screen point to where its text is now
+  /// before [event] moves this one. A text the drag reaches later is handed
+  /// that point as its start, and a chat scrolled since the drag began put
+  /// the point on one of its later lines, so the lines above it were left
+  /// out of the copy.
+  @override
+  SelectionResult handleSelectionEdgeUpdate(SelectionEdgeUpdateEvent event) {
+    final forEnd = event.type == SelectionEventType.endEdgeUpdate;
+    final index = forEnd
+        ? currentSelectionStartIndex
+        : currentSelectionEndIndex;
+    final selectable = index == -1 ? null : selectables[index];
+    // No point when that edge is outside the text's own bounds.
+    final point = selectable == null || !selectable.value.hasSelection
+        ? null
+        : forEnd
+        ? selectable.value.startSelectionPoint
+        : selectable.value.endSelectionPoint;
+    if (selectable != null && point != null) {
+      updateLastSelectionEdgeLocation(
+        globalSelectionEdgeLocation: MatrixUtils.transformPoint(
+          selectable.getTransformTo(null),
+          point.localPosition + Offset(0, -point.lineHeight / 2),
+        ),
+        forEnd: !forEnd,
+      );
+    }
+    return super.handleSelectionEdgeUpdate(event);
+  }
+
   @override
   SelectedContent? getSelectedContent() {
     final parts = [

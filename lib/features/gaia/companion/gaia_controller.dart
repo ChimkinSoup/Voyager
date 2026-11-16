@@ -49,6 +49,10 @@ const _persistEvery = Duration(seconds: 1);
 /// the files alone; the captions carry on, for the next one.
 const _captionWait = Duration(seconds: 20);
 
+/// How much of the reply before a message recall matches along with it
+/// (GAIA_MEMORY_TOPICS_HLD.md §4.2).
+const _recallContext = 1000;
+
 /// How long a chat this device ran sits idle before the memory curator
 /// reads its new turns (§11).
 const kGaiaCurateAfter = Duration(minutes: 10);
@@ -1688,11 +1692,13 @@ class GaiaController extends ChangeNotifier {
   /// dismisses it; the main instance writes the outcome to its card in
   /// [message]'s chat: no tool call waits on it (§11). One the inbox decided
   /// first shows as it was decided there. True when this dismissed it, which
-  /// [restoreMemory] undoes.
+  /// [restoreMemory] undoes. With [pin], a remembered one is pinned too
+  /// (GAIA_MEMORY_TOPICS_HLD.md §3.3).
   Future<bool> decideMemory(
     GaiaMessage message,
     GaiaMemoryPart memory, {
     required bool accept,
+    bool pin = false,
   }) async {
     // A second press before the first is answered is dropped.
     if (!_decidingMemories.add(memory.memoryId)) return false;
@@ -1704,6 +1710,7 @@ class GaiaController extends ChangeNotifier {
                 'chatId': message.chatId,
                 'accept': accept,
                 'text': memoryText(memory),
+                if (pin) 'pin': true,
               }))!
               as Map;
     } on GaiaPipeException catch (error) {
@@ -1719,9 +1726,22 @@ class GaiaController extends ChangeNotifier {
       _decidingMemories.remove(memory.memoryId);
     }
     _memoryEdits.remove(memory.memoryId);
+    if (decided['pinFailed'] case final String why) {
+      _note('Remembered, not pinned', why, error: true);
+    }
     final state = GaiaCardState.values.byName(decided['state']! as String);
     _showMemoryCard(message, memory, state, decided['text']! as String);
     return !accept && state == GaiaCardState.rejected;
+  }
+
+  /// Memory [id] shown on the Gaia page's Memories tab, from the recall chip
+  /// (GAIA_MEMORY_TOPICS_HLD.md §4.5).
+  Future<void> openMemory(String id) async {
+    try {
+      await _pipe.request('openMemory', {'memoryId': id});
+    } on GaiaPipeException catch (error) {
+      _note("Couldn't open that memory", error.message, error: true);
+    }
   }
 
   /// Memory card [memory], dismissed from its card, open again in [message]
@@ -1844,6 +1864,19 @@ class GaiaController extends ChangeNotifier {
     cliChecked = true;
     notifyListeners();
     _readMissingUsage();
+  }
+
+  /// [adapter]'s CLI version read again as a message runs on it, so one
+  /// updated while Gaia runs shows the untested chip from then on. A read
+  /// that finds nothing is ignored: an update swapping the file out says
+  /// nothing of whether the CLI is there.
+  Future<void> _recheckCli(String adapter) async {
+    final read = _cliVersions[adapter];
+    if (read == null || !cliChecked) return;
+    final version = await read();
+    if (version == null || version == cliVersions[adapter]) return;
+    cliVersions = {...cliVersions, adapter: version};
+    notifyListeners();
   }
 
   Future<void> _applySettings(Map<String, Object?> settings) async {
@@ -3075,6 +3108,24 @@ class GaiaController extends ChangeNotifier {
   /// otherwise.
   String? get forkingAt => _forkingAt;
   String? _forkingAt;
+
+  /// Debug menu: the header's untested-CLI chip for the next message's CLI,
+  /// as it reads after an update past the tested range, for eight seconds.
+  void previewUntestedCli() {
+    final adapter = agentFor(nextTier)?.adapter;
+    final cli = kGaiaClis[adapter];
+    if (adapter == null || cli == null || !cliChecked) return;
+    final real = cliVersions[adapter];
+    final preview = cli.tested.$2;
+    cliVersions = {...cliVersions, adapter: preview};
+    notifyListeners();
+    Timer(const Duration(seconds: 8), () {
+      // Already put back by an earlier preview's timer.
+      if (cliVersions[adapter] != preview) return;
+      cliVersions = {...cliVersions, adapter: real};
+      notifyListeners();
+    });
+  }
 
   /// Debug menu: "Forking…" on the open chat's last message for a few
   /// seconds, as a fork waiting on a prompt just sent shows it.
@@ -5179,8 +5230,9 @@ class GaiaController extends ChangeNotifier {
 
   /// `/remember <text>` (§11): [text] saved as a memory, active at once,
   /// since the user wrote it. Not saved, it goes back in the draft. In a
-  /// project chat, or a new chat with a project picked, it's the project's,
-  /// unless it starts `--global` (GAIA_PROJECTS_HLD.md §6).
+  /// project chat, or a new chat with a project picked, it's filed in the
+  /// project's topic, unless it starts `--global` (GAIA_MEMORY_TOPICS_HLD.md
+  /// §5). `--pin` pins it (§3.3).
   Future<void> remember(String text) async {
     void toast(String title, String body, {bool error = false}) => _toasts.add((
       chatId: '',
@@ -5189,8 +5241,7 @@ class GaiaController extends ChangeNotifier {
       error: error,
       question: false,
     ));
-    final global = gaiaRememberGlobal(text);
-    final body = global == null ? text.trim() : global;
+    final (text: body, :global, :pin) = gaiaRememberOptions(text);
     if (body.isEmpty) {
       return toast('Nothing to remember', 'Type it after /remember.');
     }
@@ -5200,17 +5251,30 @@ class GaiaController extends ChangeNotifier {
                 'chatId': currentChatId,
                 if (currentChatId == null) 'projectId': newChatProject,
                 'text': body,
-                'global': global != null,
+                'global': global,
+                if (pin) 'pin': true,
               }))!
               as Map;
-      reply['saved'] == true
-          ? toast(
-              reply['project'] == true
-                  ? 'Remembered for this project'
-                  : 'Remembered',
-              body,
-            )
-          : toast('Already remembered', body);
+      if (reply['pinFailed'] case final String why) {
+        toast(
+          reply['saved'] == true ? 'Remembered, not pinned' : 'Not pinned',
+          why,
+          error: true,
+        );
+      } else {
+        final pinned = pin ? ' and pinned' : '';
+        reply['saved'] == true
+            ? toast(
+                reply['project'] == true
+                    ? 'Remembered$pinned for this project'
+                    : 'Remembered$pinned',
+                body,
+              )
+            : toast(
+                pin ? 'Already remembered, now pinned' : 'Already remembered',
+                body,
+              );
+      }
     } on GaiaPipeException catch (error) {
       if (draft.text.isEmpty) draft.text = '/remember $text';
       toast("Couldn't remember that", error.message, error: true);
@@ -5851,6 +5915,7 @@ class GaiaController extends ChangeNotifier {
     if (started != null && !started.isCompleted) started.complete(null);
     // Ready for a later handoff; this turn's agent sees the images.
     if (script == null) unawaited(_caption([question]));
+    if (script == null && agent != null) unawaited(_recheckCli(agent.adapter));
 
     final builder = GaiaTurnBuilder();
     var session = agent == null
@@ -5868,6 +5933,11 @@ class GaiaController extends ChangeNotifier {
     // what it was told before, or this turn's block, and its folder then.
     String? toldProject;
     String? toldFolder;
+    // The memories the session has been given (GAIA_MEMORY_TOPICS_HLD.md
+    // §4.4), and this turn's, shown on the reply as a chip (§4.5).
+    var toldRecalled = const <String>[];
+    GaiaRecallPart? recallPart;
+    List<GaiaPart> withRecall(List<GaiaPart> parts) => [?recallPart, ...parts];
     // Here at once, so a next message straight away resumes it; the main
     // instance's copy follows. A null [sessionId] drops the chat's.
     void recordSession(String adapter, String? sessionId) {
@@ -5887,6 +5957,7 @@ class GaiaController extends ChangeNotifier {
                     lastSeq: reply.seq,
                     project: toldProject,
                     folder: toldFolder,
+                    recalled: toldRecalled,
                   ),
                 },
         );
@@ -5901,6 +5972,7 @@ class GaiaController extends ChangeNotifier {
           'lastSeq': reply.seq,
           'project': toldProject,
           'folder': toldFolder,
+          'recalled': toldRecalled,
         }),
       );
     }
@@ -5933,26 +6005,47 @@ class GaiaController extends ChangeNotifier {
       // Told again when its folder here changed.
       toldProject = session?.project;
       toldFolder = session?.folder;
+      toldRecalled = session?.recalled ?? const [];
+      // A retry's chip shows what its own session was given.
+      recallPart = null;
       final project = this.project(_chat(chatId)?.projectId);
       final folder = gaiaProjectFolder(project, _deviceId);
-      String? tell({List<String> memories = const []}) => gaiaProjectPreamble(
-        told: toldProject,
-        toldFolder: toldFolder,
-        project: project,
-        folder: folder,
-        chats: chats.where((c) => c.projectId == project?.id).length,
-        memories: memories,
-      );
-      var told = native != null ? null : tell();
-      // With its memories when it's told of one (GAIA_PROJECTS_HLD.md §6).
-      if (told != null && project != null) {
-        told = tell(memories: await _projectMemories(project.id));
-      }
+      final told = native != null
+          ? null
+          : gaiaProjectPreamble(
+              told: toldProject,
+              toldFolder: toldFolder,
+              project: project,
+              folder: folder,
+              chats: chats.where((c) => c.projectId == project?.id).length,
+            );
       if (told != null) {
         toldProject = project?.id;
         toldFolder = folder;
       }
-      final asked = told == null ? askedText : '$told\n\n$askedText';
+      // The memories that fit this message and are new to the session
+      // (GAIA_MEMORY_TOPICS_HLD.md §4.4); none ahead of a native command.
+      final recalled = native != null
+          ? const <GaiaRecalledMemory>[]
+          : await _recall(chatId, question.seq, prompt, toldRecalled);
+      // Shown on the reply, or a retry's earlier chip taken off it.
+      if (recalled.isNotEmpty || reply.parts.firstOrNull is GaiaRecallPart) {
+        toldRecalled = [
+          ...toldRecalled,
+          for (final memory in recalled) memory.id,
+        ];
+        if (recalled.isNotEmpty) recallPart = GaiaRecallPart(recalled);
+        reply = _replace(
+          reply,
+          reply.copyWith(parts: _keepChecks(reply, withRecall(builder.parts))),
+        );
+        unawaited(_persist(reply));
+      }
+      final asked = [
+        ?told,
+        ?gaiaMemoriesPreamble(recalled),
+        askedText,
+      ].join('\n\n');
       List<GaiaMessage> unseen() => gaiaUnseenTurns(
         _messages[chatId] ?? list,
         lastSeq: session?.lastSeq ?? fork?.lastSeq ?? -1,
@@ -6035,7 +6128,7 @@ class GaiaController extends ChangeNotifier {
       if (!builder.apply(event)) return;
       reply = _replace(
         reply,
-        reply.copyWith(parts: _keepChecks(reply, builder.parts)),
+        reply.copyWith(parts: _keepChecks(reply, withRecall(builder.parts))),
         textOnly: event is GaiaTextDelta,
       );
       if (event is GaiaBlocksAbandoned) {
@@ -6314,10 +6407,10 @@ class GaiaController extends ChangeNotifier {
               images: imageInputs,
               directories: directories,
               tools: tools,
-              // A resumed session keeps the index it started with, and a
-              // fork its source's.
+              // A resumed session keeps the pins and topics it started
+              // with, and a fork its source's.
               sessionInstructions: session == null && fork == null
-                  ? await _memoryIndex()
+                  ? await _memoryPrompt()
                   : '',
               account: account,
               promptId: question.id,
@@ -6360,7 +6453,7 @@ class GaiaController extends ChangeNotifier {
           images: imageInputs,
           directories: directories,
           tools: tools,
-          sessionInstructions: await _memoryIndex(),
+          sessionInstructions: await _memoryPrompt(),
           account: account,
           promptId: question.id,
           onEvent: onEvent,
@@ -6376,9 +6469,13 @@ class GaiaController extends ChangeNotifier {
           error: true,
         );
       }
-      // A compaction may have dropped the project block: the next turn tells
-      // it again (GAIA_PROJECTS_HLD.md §8).
-      if (result.compacted) toldProject = toldFolder = null;
+      // A compaction may have dropped the project and memory blocks: the
+      // next turn tells them again (GAIA_PROJECTS_HLD.md §8,
+      // GAIA_MEMORY_TOPICS_HLD.md §4.4).
+      if (result.compacted) {
+        toldProject = toldFolder = null;
+        toldRecalled = const [];
+      }
       // A scripted reply, or one no agent ran, has no session to resume. A failed turn's is kept when it was already
       // the chat's, or the agent got as far as replying or a tool; a
       // new one that failed straight away, like "Not logged in", exists
@@ -6418,6 +6515,7 @@ class GaiaController extends ChangeNotifier {
       // answered later, goes as the next message.
       cards.voidAll(chatId: chatId);
       final parts = _keepChecks(reply, [
+        ?recallPart,
         for (final part in builder.finished)
           part is GaiaCardPart &&
                   part.isOpen &&
@@ -6500,6 +6598,7 @@ class GaiaController extends ChangeNotifier {
         reply,
         reply.copyWith(
           parts: _keepChecks(reply, [
+            ?recallPart,
             for (final part in builder.finished)
               part is GaiaCardPart && part.isOpen
                   ? part.decided(GaiaCardState.voided)
@@ -6768,32 +6867,59 @@ class GaiaController extends ChangeNotifier {
     ];
   }
 
-  /// The memory index for a new session (§11): the active memories as
-  /// they are now, which the session keeps; a memory saved later is
-  /// reached through `memory_search`. Empty when the main instance can't
+  /// What a new session's system prompt carries of the memories
+  /// (GAIA_MEMORY_TOPICS_HLD.md §4.1): the pins and the topic list as they
+  /// are now, which the session keeps. Empty when the main instance can't
   /// say.
-  Future<String> _memoryIndex() async {
+  Future<String> _memoryPrompt() async {
     try {
-      return await _pipe.request('memoryIndex') as String? ?? '';
+      return await _pipe.request('memoryPrompt') as String? ?? '';
     } on GaiaPipeException catch (error) {
-      debugPrint('[gaia] memory index: $error');
+      debugPrint('[gaia] memory prompt: $error');
       return '';
     }
   }
 
-  /// [projectId]'s memory index lines (GAIA_PROJECTS_HLD.md §6); none when
-  /// the main instance can't say.
-  Future<List<String>> _projectMemories(String projectId) async {
+  /// The memories for [chatId]'s message [prompt] at [seq] that its session
+  /// wasn't given yet ([recalled]) (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.4),
+  /// matched with the end of the reply before it too, so a vague follow-up
+  /// still has context. None when the main instance can't say.
+  Future<List<GaiaRecalledMemory>> _recall(
+    String chatId,
+    int seq,
+    String prompt,
+    List<String> recalled,
+  ) async {
+    final last = (_messages[chatId] ?? const <GaiaMessage>[])
+        .where(
+          (message) =>
+              message.seq < seq && message.role == GaiaMessageRole.assistant,
+        )
+        .lastOrNull;
+    var before = [
+      for (final part in last?.parts ?? const <GaiaPart>[])
+        if (part is GaiaTextPart) part.text,
+    ].join('\n');
+    if (before.length > _recallContext) {
+      before = before.substring(before.length - _recallContext);
+    }
+    final text = [prompt, if (before.isNotEmpty) before].join('\n\n');
+    if (text.trim().isEmpty) return const [];
     try {
       return [
-        for (final line
-            in await _pipe.request('projectMemories', {'projectId': projectId})
+        for (final memory
+            in await _pipe.request('memoryRecall', {
+                      'chatId': chatId,
+                      'text': text,
+                      'recalled': recalled,
+                    })
                     as List? ??
                 const [])
-          line as String,
+          if (memory case {'id': final String id, 'text': final String text})
+            (id: id, text: text, topic: memory['topic'] as String?),
       ];
     } on GaiaPipeException catch (error) {
-      debugPrint('[gaia] project memories: $error');
+      debugPrint('[gaia] memory recall: $error');
       return const [];
     }
   }
@@ -6825,11 +6951,8 @@ class GaiaController extends ChangeNotifier {
     if (turns.every((message) => message.origin != null)) return;
     final String index;
     try {
-      // With the chat's project's memories, so they aren't offered again
-      // (GAIA_PROJECTS_HLD.md §6).
-      index =
-          await _pipe.request('memoryIndex', {'chatId': chatId}) as String? ??
-          '';
+      // Every active memory, so none is offered again.
+      index = await _pipe.request('memoryIndex') as String? ?? '';
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] curator: $error');
       return;

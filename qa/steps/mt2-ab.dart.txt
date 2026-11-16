@@ -1,0 +1,1 @@
+final r = c.read(gaiaRepositoryProvider); final now = utcNow(); await r.upsertProject(GaiaProject(id: 'mt2-ab-project', name: 'MT2 A/B tests', createdAt: now, updatedAt: now, version: 1)); final saved = await GaiaMemories(r).save('MT2 marker ZINNIA-9', status: GaiaMemoryStatus.active, projectId: 'mt2-ab-project'); debugPrint('MT2-SAVED ' + saved!.topicIds.toString());

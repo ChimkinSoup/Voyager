@@ -90,6 +90,10 @@ final gaiaMemoriesProvider = StreamProvider<List<GaiaMemory>>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchMemories(),
 );
 
+/// A memory to show on the Gaia page's Memories tab, from a recall chip
+/// (GAIA_MEMORY_TOPICS_HLD.md §4.5); null for none.
+final gaiaRevealMemoryProvider = StateProvider<String?>((ref) => null);
+
 final gaiaSettingsProvider = StreamProvider<GaiaSettings>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchSettings(),
 );

@@ -605,6 +605,70 @@ void main() {
     expect(copied, 'One para.\nitem\ncode');
   });
 
+  testWidgets('a drag the chat scrolls under copies every line', (
+    tester,
+  ) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    final second = List.filled(12, 'second').join(' ');
+    final text = 'First.\n\n$second\n\nThird.';
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: VoyagerTheme.dark(),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 150,
+              height: 300,
+              child: ListView(
+                children: [
+                  GaiaMarkdown(text: text),
+                  const SizedBox(height: 600),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final from = tester.getTopLeft(find.text('First.')) + const Offset(1, 2);
+    final gesture = await tester.startGesture(
+      from,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await gesture.moveTo(from + const Offset(10, 0));
+    await tester.pump();
+    // Scrolled by the wheel, mid-drag, until where the drag began is on the
+    // second paragraph's second line.
+    final wheel = TestPointer(2, PointerDeviceKind.mouse)..hover(from);
+    final secondTop = tester.getTopLeft(find.textContaining('second')).dy;
+    await tester.sendEventToBinding(
+      wheel.scroll(Offset(0, secondTop - from.dy + 20)),
+    );
+    await tester.pump();
+    await gesture.moveTo(tester.getBottomRight(find.text('Third.')));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    tester
+        .state<SelectableRegionState>(find.byType(SelectableRegion))
+        .contextMenuButtonItems
+        .firstWhere((button) => button.type == ContextMenuButtonType.copy)
+        .onPressed!();
+    await tester.pump();
+    expect(copied, 'First.\n$second\nThird.');
+  });
+
   group('a selection copies the TeX it crosses as written', () {
     late String? copied;
     setUp(() => copied = null);

@@ -75,14 +75,16 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `voyagerWrite {tool, arguments}`
-/// (`add_reminder`, the one write without a card), `memoryIndex {chatId?}` (§11;
-/// with the chat's project's memories after, for the curator),
-/// `projectMemories {projectId}` (its memory index lines,
-/// GAIA_PROJECTS_HLD.md §6),
+/// (`add_reminder`, the one write without a card), `memoryIndex` (§11; every
+/// active memory, for the curator), `memoryPrompt` (a new session's pins and
+/// topic list, GAIA_MEMORY_TOPICS_HLD.md §4.1), `memoryRecall {chatId, text,
+/// recalled}` (`[{id, text, topic}]`, the memories for a message, §4.4),
+/// `openMemory {memoryId}` (shown on the Gaia page, §4.5),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
 /// `setSummary {chatId, summary, seq}`,
-/// `remember {chatId, projectId?, text, global?}` (returns `{saved, project}`), `curated {chatId, seq, memories}`, `setSeeScreen
+/// `remember {chatId, projectId?, text, global?, pin?}` (returns `{saved,
+/// project, pinned?}`), `curated {chatId, seq, memories}`, `setSeeScreen
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
@@ -248,6 +250,9 @@ class GaiaHost {
   GaiaBeaconService? _beacon;
   GaiaBeaconService? get beacon => _beacon;
   Future<void> Function(String word)? _addWord;
+
+  /// Shows a memory on the Gaia page (GAIA_MEMORY_TOPICS_HLD.md §4.5).
+  void Function(String memoryId)? _openMemory;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
@@ -338,6 +343,7 @@ class GaiaHost {
     GaiaExecutor? executor,
     GaiaMemories? memories,
     Future<void> Function(String word)? addWord,
+    void Function(String memoryId)? openMemory,
     GaiaBeaconService? beacon,
     GaiaPower? power,
     bool Function()? vaultUnlocked,
@@ -345,6 +351,7 @@ class GaiaHost {
     if (_attached.isCompleted) return;
     if (vaultUnlocked != null) _vaultUnlocked = vaultUnlocked;
     _addWord = addWord;
+    _openMemory = openMemory;
     _beacon = beacon
       ?..onCommand = _runCommand
       ..setAborted(_aborted)
@@ -415,9 +422,8 @@ class GaiaHost {
 
   /// The startup pull is done: from now on every project keeps a memory
   /// topic (GAIA_MEMORY_TOPICS_HLD.md §7, §8), once the store is attached.
-  void startupPulled() => unawaited(
-    _attached.future.then((_) => _memories?.keepProjectTopics()),
-  );
+  void startupPulled() =>
+      unawaited(_attached.future.then((_) => _memories?.keepProjectTopics()));
 
   /// Signed out: project topics wait for the next account's startup pull.
   void signedOut() => _memories?.stopProjectTopics();
@@ -1259,6 +1265,7 @@ class GaiaHost {
           account: params['account'] as String? ?? kGaiaDefaultAccountId,
           project: params['project'] as String?,
           folder: params['folder'] as String?,
+          recalled: [...?(params['recalled'] as List?)?.cast<String>()],
         );
         return null;
       case 'setSummary':
@@ -1606,12 +1613,21 @@ class GaiaHost {
         );
         return null;
       case 'memoryIndex':
-        return await _memories?.index(chatId: params['chatId'] as String?) ??
-            '';
-      case 'projectMemories':
-        return await _memoriesOrThrow().projectIndex(
-          params['projectId']! as String,
-        );
+        return await _memories?.index() ?? '';
+      case 'memoryPrompt':
+        return await _memories?.sessionPrompt() ?? '';
+      case 'memoryRecall':
+        return [
+          for (final memory in await _memoriesOrThrow().recall(
+            params['chatId']! as String,
+            params['text']! as String,
+            recalled: [...?(params['recalled'] as List?)?.cast<String>()],
+          ))
+            {'id': memory.id, 'text': memory.text, 'topic': memory.topic},
+        ];
+      case 'openMemory':
+        _openMemory?.call(params['memoryId']! as String);
+        return null;
       case 'memoryTool':
         try {
           return await _memoriesOrThrow().tool(
@@ -1633,7 +1649,7 @@ class GaiaHost {
             if (proposed.memory case final memory?) ...{
               'memoryId': memory.id,
               'memoryText': memory.text,
-              'project': memory.projectId != null,
+              'project': proposed.project,
             },
           };
         } on GaiaReadException catch (error) {
@@ -1648,18 +1664,35 @@ class GaiaHost {
         }
         try {
           final memoryId = params['memoryId']! as String;
-          final decided = await _memoriesOrThrow().decide(
+          final memories = _memoriesOrThrow();
+          final decided = await memories.decide(
             memoryId,
             accept: accept,
             text: params['text'] as String? ?? '',
           );
+          // Pinned from its card (GAIA_MEMORY_TOPICS_HLD.md §3.3): refused
+          // past the budget, the memory still remembered. Merged into an
+          // active one, that one is pinned.
+          String? pinFailed;
+          if (params['pin'] == true &&
+              decided.state == GaiaCardState.accepted) {
+            try {
+              await memories.pin(decided.id, pinned: true);
+            } on GaiaReadException catch (error) {
+              pinFailed = error.message;
+            }
+          }
           await store.setMemoryCards(
             params['chatId']! as String,
             memoryId,
             decided.state,
             decided.text,
           );
-          return {'state': decided.state.name, 'text': decided.text};
+          return {
+            'state': decided.state.name,
+            'text': decided.text,
+            'pinFailed': ?pinFailed,
+          };
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }
@@ -1711,7 +1744,29 @@ class GaiaHost {
             byUser: true,
             projectId: project,
           );
-          return {'saved': saved != null, 'project': project != null};
+          // `--pin` (GAIA_MEMORY_TOPICS_HLD.md §3.3): the one saved, or the
+          // one already saying it. One only proposed can't be pinned yet.
+          String? pinFailed;
+          if (params['pin'] == true) {
+            final pin =
+                saved ?? await memories.sameActive(params['text']! as String);
+            try {
+              if (pin == null) {
+                pinFailed =
+                    'It is waiting in the memory inbox. Accept it there, '
+                    'then pin it.';
+              } else {
+                await memories.pin(pin.id, pinned: true);
+              }
+            } on GaiaReadException catch (error) {
+              pinFailed = error.message;
+            }
+          }
+          return {
+            'saved': saved != null,
+            'project': project != null,
+            'pinFailed': ?pinFailed,
+          };
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }

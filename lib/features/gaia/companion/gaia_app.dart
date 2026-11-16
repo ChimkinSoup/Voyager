@@ -3960,6 +3960,13 @@ class _MessageView extends StatelessWidget {
                   ),
                 ),
               },
+              GaiaRecallPart() => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: GaiaRecallChip(
+                  part: part,
+                  onOpen: controller.openMemory,
+                ),
+              ),
               // Rebuilt with the controller, not the message: whether it's
               // waiting and what's picked aren't on the message.
               GaiaCardPart() => ListenableBuilder(
@@ -3991,8 +3998,12 @@ class _MessageView extends StatelessWidget {
                 memory: part,
                 text: controller.memoryText(part),
                 onEdit: (text) => controller.editMemory(part, text),
-                onRemember: () =>
-                    controller.decideMemory(message, part, accept: true),
+                onRemember: (pin) => controller.decideMemory(
+                  message,
+                  part,
+                  accept: true,
+                  pin: pin,
+                ),
                 onDismiss: () async {
                   // Undoable, as the memory inbox's Dismiss is.
                   if (!await controller.decideMemory(

@@ -91,6 +91,7 @@ class GaiaDevPipe extends GaiaPipe {
           adapter: p['adapter'] as String? ?? kGaiaClaudeCodeAdapter,
           project: p['project'] as String?,
           folder: p['folder'] as String?,
+          recalled: [...?(p['recalled'] as List?)?.cast<String>()],
         );
         return null;
       case 'setSummary':

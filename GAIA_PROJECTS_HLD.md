@@ -72,6 +72,9 @@ until it's moved.
 
 ### 3.3 Deleting
 
+> **Changed (2026-11-16):** deleting a project now always keeps its memories, in its
+> memory topic. See GAIA_MEMORY_TOPICS_HLD.md §7.
+
 **Delete project…** opens a dialog:
 
 > Delete "Trip to Japan"?
@@ -221,6 +224,10 @@ GAIA_HLD.md accepts for `voyager_*` reads. Limiting reads to the chat's own proj
 showing every call on the activity card, are what bounds it.
 
 ## 6. Project memories
+
+> **Superseded (2026-11-16):** a project's memories are its memory topic, with no walls,
+> and recall brings them to any chat, first in the project's own. `<gaia_project>` names
+> the topic instead of listing them. See GAIA_MEMORY_TOPICS_HLD.md §7 and §16.
 
 - **A memory with a `projectId` belongs to that project.** Global memories (null) work as
   today. One whose project is missing or deleted counts as global, by §2's rule.

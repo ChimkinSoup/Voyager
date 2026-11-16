@@ -6,8 +6,9 @@ import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 
 /// A memory the agent offered (GAIA_HLD.md §11), in its reply. Open, with
 /// [onRemember], it's an editor over [text], changed through [onEdit], that
-/// [onRemember] saves and [onDismiss] drops; nothing waits on it, so the
-/// chat goes on meanwhile. Otherwise it's a record of what came of it.
+/// [onRemember] saves, pinned when its pin is on (GAIA_MEMORY_TOPICS_HLD.md
+/// §3.3), and [onDismiss] drops; nothing waits on it, so the chat goes on
+/// meanwhile. Otherwise it's a record of what came of it.
 class GaiaMemoryCard extends StatefulWidget {
   const GaiaMemoryCard({
     super.key,
@@ -23,7 +24,9 @@ class GaiaMemoryCard extends StatefulWidget {
   /// What its editor starts with; the memory's own text when null.
   final String? text;
   final ValueChanged<String>? onEdit;
-  final VoidCallback? onRemember;
+
+  /// Called with whether to pin it too.
+  final ValueChanged<bool>? onRemember;
   final VoidCallback? onDismiss;
 
   @override
@@ -61,6 +64,9 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   }
 
   bool get _answerable => widget.memory.isOpen && widget.onRemember != null;
+
+  /// Pinned as it's remembered.
+  var _pin = false;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +129,18 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
                     ),
                   ),
                 ),
+                IconButton(
+                  tooltip: _pin ? "Don't pin it" : 'Pin it to every chat',
+                  isSelected: _pin,
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    _pin ? Icons.push_pin : Icons.push_pin_outlined,
+                    size: 16,
+                    color: _pin ? accent : theme.colorScheme.outline,
+                  ),
+                  onPressed: () => setState(() => _pin = !_pin),
+                ),
+                const SizedBox(width: 4),
                 if (widget.onDismiss != null)
                   GaiaButton(
                     label: 'Dismiss',
@@ -135,7 +153,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
                   label: 'Remember',
                   onPressed: _text.text.trim().isEmpty
                       ? null
-                      : widget.onRemember,
+                      : () => widget.onRemember!(_pin),
                   size: 28,
                 ),
               ],

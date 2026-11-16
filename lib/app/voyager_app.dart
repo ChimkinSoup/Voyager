@@ -279,6 +279,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       ),
       memories: GaiaMemories(ref.read(gaiaRepositoryProvider)),
       addWord: _addWordFromGaia,
+      openMemory: _openGaiaMemory,
       toast: (chatId, title, body, {btwId}) => unawaited(
         os
             .showNow(
@@ -302,6 +303,16 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
             }),
       ),
     );
+  }
+
+  /// A recalled memory clicked in Gaia (GAIA_MEMORY_TOPICS_HLD.md §4.5): the
+  /// Gaia page's Memories tab, with it shown.
+  void _openGaiaMemory(String memoryId) {
+    if (desktopWindowChromeActive) {
+      unawaited(ref.read(floaterControllerProvider).showMainWindow());
+    }
+    ref.read(gaiaRevealMemoryProvider.notifier).state = memoryId;
+    ref.read(routerProvider).go('/gaia');
   }
 
   /// A Gaia push tapped on the phone: its chat, on the Gaia page.

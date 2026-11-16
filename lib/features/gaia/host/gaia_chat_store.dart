@@ -231,7 +231,8 @@ class GaiaChatStore {
 
   /// Records the native session [chatId] resumes on this device with
   /// [adapter] and [account], the last message it took part in, and the
-  /// project it was last told it's in (GAIA_PROJECTS_HLD.md §5.2); a null
+  /// project it was last told it's in (GAIA_PROJECTS_HLD.md §5.2), and the
+  /// memories it was given (GAIA_MEMORY_TOPICS_HLD.md §4.4); a null
   /// [sessionId] forgets it.
   Future<void> setSession(
     String chatId,
@@ -241,6 +242,7 @@ class GaiaChatStore {
     String account = kGaiaDefaultAccountId,
     String? project,
     String? folder,
+    List<String> recalled = const [],
   }) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
@@ -256,6 +258,7 @@ class GaiaChatStore {
                   lastSeq: lastSeq,
                   project: project,
                   folder: folder,
+                  recalled: recalled,
                 ),
               },
       ),

@@ -86,11 +86,38 @@ void main() {
     expect(gaiaRememberText('/remember'), isNull);
     expect(gaiaRememberText('/remembered that'), isNull);
     expect(gaiaRememberText('please /remember this'), isNull);
-    // `--global` saves outside the project (GAIA_PROJECTS_HLD.md §6).
-    expect(gaiaRememberGlobal('--global I like tea'), 'I like tea');
-    expect(gaiaRememberGlobal('--global'), '');
-    expect(gaiaRememberGlobal('I like tea'), isNull);
-    expect(gaiaRememberGlobal('--globally fine'), isNull);
+    // `--global` saves outside the project, `--pin` pins it, in either
+    // order (GAIA_MEMORY_TOPICS_HLD.md §3.3, §5).
+    expect(gaiaRememberOptions('--global I like tea'), (
+      text: 'I like tea',
+      global: true,
+      pin: false,
+    ));
+    expect(gaiaRememberOptions('--global'), (
+      text: '',
+      global: true,
+      pin: false,
+    ));
+    expect(gaiaRememberOptions('--pin --global  I like tea'), (
+      text: 'I like tea',
+      global: true,
+      pin: true,
+    ));
+    expect(gaiaRememberOptions('--pin I like tea'), (
+      text: 'I like tea',
+      global: false,
+      pin: true,
+    ));
+    expect(gaiaRememberOptions('I like tea --pin'), (
+      text: 'I like tea --pin',
+      global: false,
+      pin: false,
+    ));
+    expect(gaiaRememberOptions('--globally fine'), (
+      text: '--globally fine',
+      global: false,
+      pin: false,
+    ));
     expect(gaiaBuiltinIn('/remember'), GaiaBuiltin.remember);
   });
 

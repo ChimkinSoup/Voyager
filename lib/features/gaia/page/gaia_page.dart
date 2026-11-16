@@ -54,8 +54,31 @@ class GaiaPage extends ConsumerStatefulWidget {
 class _GaiaPageState extends ConsumerState<GaiaPage> {
   var _tab = _GaiaTab.chats;
 
+  /// The memory a recall chip asked to show (GAIA_MEMORY_TOPICS_HLD.md §4.5).
+  String? _revealed;
+
+  @override
+  void initState() {
+    super.initState();
+    _reveal(ref.read(gaiaRevealMemoryProvider));
+  }
+
+  /// Memory [id] shown on the Memories tab; the request is taken, so the
+  /// page doesn't open on it again.
+  void _reveal(String? id) {
+    if (id == null) return;
+    _tab = _GaiaTab.memories;
+    _revealed = id;
+    Future.microtask(
+      () => ref.read(gaiaRevealMemoryProvider.notifier).state = null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(gaiaRevealMemoryProvider, (_, id) {
+      if (id != null) setState(() => _reveal(id));
+    });
     final theme = Theme.of(context);
     final inbox = [
       for (final memory
@@ -146,7 +169,7 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
               switch (_tab) {
                 _GaiaTab.chats => const _ChatsTab(),
                 _GaiaTab.actions => const _ActionsTab(),
-                _GaiaTab.memories => const _MemoriesTab(),
+                _GaiaTab.memories => _MemoriesTab(focus: _revealed),
                 _GaiaTab.queue => const GaiaQueueTab(),
                 _GaiaTab.status => const GaiaStatusTab(),
                 _GaiaTab.setup => const _SetupTab(),
@@ -752,10 +775,13 @@ class _ActionRowState extends State<_ActionRow> {
 
 /// Gaia's memories (§11, §17): the inbox of proposed ones to approve, edit
 /// or dismiss, the active ones every new chat's index lists, and the
-/// archived ones kept out of it. Filtered by project (GAIA_PROJECTS_HLD.md
-/// §6).
+/// archived ones kept out of it. Filtered by project, by its memory topic
+/// (GAIA_MEMORY_TOPICS_HLD.md §7). [focus] is shown highlighted, scrolled
+/// to.
 class _MemoriesTab extends ConsumerStatefulWidget {
-  const _MemoriesTab();
+  const _MemoriesTab({this.focus});
+
+  final String? focus;
 
   @override
   ConsumerState<_MemoriesTab> createState() => _MemoriesTabState();
@@ -764,6 +790,34 @@ class _MemoriesTab extends ConsumerStatefulWidget {
 class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
   /// The project shown: null for every memory, '' for global ones only.
   String? _filter;
+
+  final _focusKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollToFocus();
+  }
+
+  @override
+  void didUpdateWidget(_MemoriesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focus != oldWidget.focus) {
+      // A filter could hide it.
+      _filter = null;
+      _scrollToFocus();
+    }
+  }
+
+  void _scrollToFocus() {
+    if (widget.focus == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _focusKey.currentContext;
+      if (context != null && context.mounted) {
+        Scrollable.ensureVisible(context, alignment: 0.3);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -784,10 +838,16 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
       for (final memory in memories.reversed)
         if (memory.status == status &&
             (filter == null ||
-                // One whose project points nowhere is global (§2).
-                (byId[memory.projectId]?.id ?? '') == filter))
+                (filter.isEmpty
+                    ? gaiaMemoryProject(memory, byId.keys) == null
+                    : memory.topicIds.contains(gaiaProjectTopicId(filter)))))
           memory,
     ];
+    Widget row(GaiaMemory memory) => _MemoryRow(
+      key: memory.id == widget.focus ? _focusKey : null,
+      memory: memory,
+      highlighted: memory.id == widget.focus,
+    );
     final inbox = withStatus(GaiaMemoryStatus.proposed);
     final active = withStatus(GaiaMemoryStatus.active);
     final archived = withStatus(GaiaMemoryStatus.archived);
@@ -795,8 +855,8 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Every new chat starts with a list of these, whichever agent '
-          "answers, and a project's chats with its own too. Save one "
+          'Gaia adds the ones that fit to each message you send, whichever '
+          'agent answers, and pinned ones go in every chat. Save one '
           'yourself with /remember in Gaia. What Gaia offers, or notices '
           'once a chat goes quiet, waits in the inbox.',
           style: muted,
@@ -842,7 +902,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
         const SizedBox(height: 8),
         if (inbox.isNotEmpty) ...[
           _SectionLabel('Inbox (${inbox.length})'),
-          for (final memory in inbox) _MemoryRow(memory: memory),
+          for (final memory in inbox) row(memory),
           const SizedBox(height: 16),
         ],
         _SectionLabel(
@@ -853,11 +913,11 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text('Nothing yet.', style: muted),
           ),
-        for (final memory in active) _MemoryRow(memory: memory),
+        for (final memory in active) row(memory),
         if (archived.isNotEmpty) ...[
           const SizedBox(height: 16),
           _SectionLabel('Archived (${archived.length})'),
-          for (final memory in archived) _MemoryRow(memory: memory),
+          for (final memory in archived) row(memory),
         ],
       ],
     );
@@ -865,9 +925,10 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
 }
 
 class _MemoryRow extends ConsumerWidget {
-  const _MemoryRow({required this.memory});
+  const _MemoryRow({super.key, required this.memory, this.highlighted = false});
 
   final GaiaMemory memory;
+  final bool highlighted;
 
   Future<void> _save(WidgetRef ref, GaiaMemory memory) =>
       ref.read(gaiaRepositoryProvider).upsertMemory(memory);
@@ -896,20 +957,45 @@ class _MemoryRow extends ConsumerWidget {
     }
   }
 
-  /// Moved to project [id], or global for empty. An active one isn't moved
-  /// where another already says it.
-  Future<void> _move(BuildContext context, WidgetRef ref, String id) async {
+  /// Moved to project [id]'s topic, or out of every project's for empty
+  /// (GAIA_MEMORY_TOPICS_HLD.md §7); its other topics stay. Its old
+  /// `projectId` is cleared, so it isn't filed back in that project's topic
+  /// (§16.2). An active one isn't moved where another already says it.
+  Future<void> _move(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    Iterable<String> projects,
+  ) async {
     final projectId = id.isEmpty ? null : id;
     if (memory.status == GaiaMemoryStatus.active &&
         await _alreadyRemembered(context, ref, memory.text, projectId)) {
       return;
     }
+    final projectTopics = {for (final id in projects) gaiaProjectTopicId(id)};
     await _save(
       ref,
-      projectId == null
-          ? memory.copyWith(clearProjectId: true)
-          : memory.copyWith(projectId: projectId),
+      memory.copyWith(
+        clearProjectId: true,
+        topicIds: [
+          for (final topic in memory.topicIds)
+            if (!projectTopics.contains(topic)) topic,
+          if (projectId != null) gaiaProjectTopicId(projectId),
+        ],
+      ),
     );
+  }
+
+  /// Pinned, or unpinned (GAIA_MEMORY_TOPICS_HLD.md §3.3); a pin past the
+  /// budget is refused with a toast.
+  Future<void> _pin(BuildContext context, WidgetRef ref) async {
+    try {
+      await GaiaMemories(
+        ref.read(gaiaRepositoryProvider),
+      ).pin(memory.id, pinned: !memory.pinned);
+    } on GaiaReadException catch (error) {
+      if (context.mounted) showVoyagerToast(context, message: error.message);
+    }
   }
 
   /// Whether an active memory other than this one says [text] where a
@@ -1002,9 +1088,12 @@ class _MemoryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
-    // One whose project points nowhere is global (GAIA_PROJECTS_HLD.md §2).
+    // The live project whose topic it's in (GAIA_MEMORY_TOPICS_HLD.md §7).
+    final projectId = gaiaMemoryProject(memory, [
+      for (final project in projects) project.id,
+    ]);
     final project = projects
-        .where((project) => project.id == memory.projectId)
+        .where((project) => project.id == projectId)
         .firstOrNull;
     final source = memory.sourceChatId == null
         ? null
@@ -1040,6 +1129,7 @@ class _MemoryRow extends ConsumerWidget {
     };
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      selected: highlighted,
       title: Text(memory.text),
       subtitle: Text(
         [
@@ -1058,7 +1148,9 @@ class _MemoryRow extends ConsumerWidget {
           if (projects.isNotEmpty)
             PopupMenuButton<String>(
               tooltip: 'Move to',
-              onSelected: (id) => _move(context, ref, id),
+              onSelected: (id) => _move(context, ref, id, [
+                for (final project in projects) project.id,
+              ]),
               itemBuilder: (_) => [
                 CheckedPopupMenuItem(
                   value: '',
@@ -1097,6 +1189,18 @@ class _MemoryRow extends ConsumerWidget {
                         ),
                 ),
               ),
+            ),
+          // In every chat's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+          if (memory.status == GaiaMemoryStatus.active || memory.pinned)
+            IconButton(
+              tooltip: memory.pinned ? 'Unpin' : 'Pin to every chat',
+              icon: Icon(
+                memory.pinned
+                    ? PhosphorIconsFill.pushPin
+                    : PhosphorIconsRegular.pushPin,
+                size: 16,
+              ),
+              onPressed: () => _pin(context, ref),
             ),
           IconButton(
             tooltip: label,

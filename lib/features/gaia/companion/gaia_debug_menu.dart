@@ -434,6 +434,24 @@ class _DebugMenu extends StatelessWidget {
                   },
           ),
         ),
+        heading('Untested CLI'),
+        Text(
+          "The header chip shown when the next message's CLI is past its "
+          'tested range, as after an update: here it reads the first untested '
+          'version for eight seconds. Nothing is run.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            label: 'Show untested CLI',
+            onPressed: () {
+              Navigator.of(context).pop();
+              controller.previewUntestedCli();
+            },
+          ),
+        ),
         heading('Side questions'),
         Text(
           "The /btw panel and chip on the open chat, with made-up side "
@@ -1605,7 +1623,7 @@ class _GaiaMemoryCardPreviewState extends State<GaiaMemoryCardPreview> {
             key: ValueKey(_shows),
             memory: _memory,
             onEdit: (text) => _text = text,
-            onRemember: () => _decide(GaiaCardState.accepted),
+            onRemember: (_) => _decide(GaiaCardState.accepted),
             onDismiss: () => _decide(GaiaCardState.rejected),
           ),
         ),

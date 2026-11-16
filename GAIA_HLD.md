@@ -1161,6 +1161,10 @@ Questions and Voyager data proposals still do.
 
 ## 11. Memory ("global graphify")
 
+> **Superseded in part (2026-11-16):** the index in every new session's system prompt
+> is replaced by pins, a topic list and per-message recall. See
+> GAIA_MEMORY_TOPICS_HLD.md §4 (built in its Phase 2, §16).
+
 Feasible as you described. It's essentially Claude Code's memory pattern,
 shared by every agent:
 

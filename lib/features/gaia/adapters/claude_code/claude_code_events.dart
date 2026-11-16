@@ -17,7 +17,7 @@ import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 /// The Claude Code versions the adapter is tested against: at least the
 /// first, and below the second. Outside it, chats still run, with an
 /// "untested CLI version" chip.
-const kClaudeCodeTestedVersions = ((2, 1, 300), (2, 2, 0));
+const kClaudeCodeTestedVersions = ((2, 1, 300), (2, 1, 326));
 
 sealed class ClaudeEvent {
   const ClaudeEvent();
