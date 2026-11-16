@@ -2422,6 +2422,7 @@ class GaiaSettings extends SoftDeletable {
     this.contextExclusions = kGaiaDefaultContextExclusions,
     this.autoAcceptCurator = false,
     this.splitGaiaRight = false,
+    this.userName = '',
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -2498,6 +2499,10 @@ class GaiaSettings extends SoftDeletable {
   /// the left, rather than the other way round.
   final bool splitGaiaRight;
 
+  /// What new-chat greetings call the user (GAIA_GREETINGS_HLD.md §3); empty
+  /// for none.
+  final String userName;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -2522,6 +2527,7 @@ class GaiaSettings extends SoftDeletable {
     List<String>? contextExclusions,
     bool? autoAcceptCurator,
     bool? splitGaiaRight,
+    String? userName,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -2544,6 +2550,7 @@ class GaiaSettings extends SoftDeletable {
     contextExclusions: contextExclusions ?? this.contextExclusions,
     autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
     splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
+    userName: userName ?? this.userName,
   );
 
   /// What the companion needs of them.
@@ -2565,6 +2572,7 @@ class GaiaSettings extends SoftDeletable {
     'windowContext': windowContext,
     'contextExclusions': contextExclusions,
     'autoAcceptCurator': autoAcceptCurator,
+    'userName': userName,
   };
 }
 

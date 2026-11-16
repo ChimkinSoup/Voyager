@@ -21,6 +21,7 @@ import 'package:voyager/features/gaia/companion/gaia_command_history.dart';
 import 'package:voyager/features/gaia/companion/gaia_command_uses.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
@@ -101,6 +102,7 @@ class GaiaController extends ChangeNotifier {
     GaiaZoomLevel? zoom,
     GaiaCommandUses? commandUses,
     GaiaCommandHistory? history,
+    GaiaGreetings? greetings,
     this._utility,
     Future<String> Function()? clipboard,
     Future<void> Function(Uint8List png)? copyPng,
@@ -125,7 +127,8 @@ class GaiaController extends ChangeNotifier {
        sidebar = sidebar ?? GaiaSidebar(),
        zoom = zoom ?? GaiaZoomLevel(),
        commandUses = commandUses ?? GaiaCommandUses(),
-       history = history ?? GaiaCommandHistory();
+       history = history ?? GaiaCommandHistory(),
+       _greetings = greetings ?? GaiaGreetings();
 
   final GaiaPipe _pipe;
   final GaiaWindow _window;
@@ -718,6 +721,26 @@ class GaiaController extends ChangeNotifier {
   /// Each chat's [draftUndo] history while another chat is in view, by
   /// [_keyOf] its chat. For this run of the app only.
   final _draftHistories = <String, SavedUndoHistory>{};
+
+  /// New-chat lines (GAIA_GREETINGS_HLD.md §5), and the one each empty chat
+  /// holds by [_keyOf] its chat. For this run of the app only.
+  final GaiaGreetings _greetings;
+  final _heldGreetings = <String, GaiaGreeting>{};
+
+  /// What greetings call the user, trimmed; empty for none.
+  var _userName = '';
+
+  /// Whether [_userName] has come from the settings yet.
+  var _nameKnown = false;
+
+  /// The line chat [key] (`GaiaDraft.newChatId` for the new chat) opens on,
+  /// drawn once and kept while it has no messages. None until the name is
+  /// known, so a chat shown before the settings can still use it.
+  String greetingFor(String key) => !_nameKnown
+      ? ''
+      : (_heldGreetings[key] ??= _greetings.draw(
+          hasName: _userName.isNotEmpty,
+        )).filled(_userName);
 
   /// [chatId]'s draft's key, here and in the main instance's store.
   static String _keyOf(String? chatId) => chatId ?? GaiaDraft.newChatId;
@@ -1835,6 +1858,12 @@ class GaiaController extends ChangeNotifier {
     _claudeConfigDir = settings['claudeConfigDir'] as String? ?? '';
     accounts = gaiaAccountsFromJson(settings['accounts']);
     _currentAccounts = gaiaCurrentAccountsFromJson(settings['currentAccounts']);
+    _userName = (settings['userName'] as String? ?? '').trim();
+    _nameKnown = true;
+    // A held line that needs a name can't show without one.
+    if (_userName.isEmpty) {
+      _heldGreetings.removeWhere((_, greeting) => greeting.named);
+    }
     final dirs = {
       for (final adapter in const [kGaiaClaudeCodeAdapter, kGaiaCodexAdapter])
         for (final account in accountsFor(adapter)) account.key: account.dir,
@@ -5375,6 +5404,8 @@ class GaiaController extends ChangeNotifier {
     }
     final sentAt = utcNow();
     if (remote == null) seeScreenWarning = false;
+    // Back on the new chat if the send doesn't happen (§5).
+    GaiaGreeting? greeting;
     if (chat == null) {
       chat = GaiaChat(
         id: chatId,
@@ -5400,6 +5431,8 @@ class GaiaController extends ChangeNotifier {
             : const {},
       );
       if (remote == null) {
+        // The next new chat draws a line of its own.
+        greeting = _heldGreetings.remove(GaiaDraft.newChatId);
         newChatProject = null;
         newAutoConsented = _newChatAuto ?? false;
         _newChatSeesScreen = false;
@@ -5479,6 +5512,10 @@ class GaiaController extends ChangeNotifier {
             if (c.id != chatId) c,
         ];
         _messages.remove(chatId);
+        // Unless a new chat opened meanwhile has drawn its own.
+        if (greeting != null) {
+          _heldGreetings.putIfAbsent(GaiaDraft.newChatId, () => greeting!);
+        }
         if (currentChatId == chatId) _viewChat(null);
         // What was typed in it since goes back to a new chat with the rest.
         if (_drafts.remove(chatId) case final typed?) {

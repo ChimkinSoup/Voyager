@@ -2400,6 +2400,7 @@ class GaiaSettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get splitGaiaRight =>
       boolean().withDefault(const Constant(false))();
+  TextColumn get userName => text().withDefault(const Constant(''))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2547,7 +2548,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 197;
+  int get schemaVersion => 198;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4793,6 +4794,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_projects_table',
           gaiaProjectsTable,
           gaiaProjectsTable.orderedAt,
+        );
+      }
+      if (from >= 169 && from < 198) {
+        // New-chat greetings call the user by name (GAIA_GREETINGS_HLD.md §3).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.userName,
         );
       }
     },

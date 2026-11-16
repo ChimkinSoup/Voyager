@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -14,6 +15,7 @@ import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -499,9 +501,11 @@ void main() {
     Duration usageEvery = const Duration(hours: 1),
     Duration runWorkedFor = const Duration(hours: 1),
     GaiaToolResultStore? toolResults,
+    GaiaGreetings? greetings,
   }) async {
     await main.pipe.startCompanion();
     controller = GaiaController(
+      greetings: greetings,
       toolResults: toolResults,
       cardHold: cardHold,
       curateAfter: curateAfter,
@@ -7278,6 +7282,88 @@ void main() {
       final sent = runner.sent.single;
       expect(sent.prompt, isNot(contains('Secret chapter')));
       expect(sent.sessionInstructions, isNot(contains('Secret chapter')));
+    });
+  });
+
+  group('new-chat greetings (GAIA_GREETINGS_HLD.md §5)', () {
+    Future<void> start({String name = ''}) {
+      main.settings = GaiaSettings.initial().copyWith(userName: name).toJson();
+      return startCompanion(
+        greetings: GaiaGreetings(
+          random: Random(1),
+          now: () => DateTime(2026, 11, 15, 10),
+        ),
+      );
+    }
+
+    void setName(String name) => main.companion.onEvent!(
+      'settings',
+      GaiaSettings.initial().copyWith(userName: name).toJson(),
+    );
+
+    test('a chat keeps its line, across calls and a chat switch', () async {
+      await main.store.createChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Hi',
+          createdAt: DateTime.utc(2026, 10, 24),
+          updatedAt: DateTime.utc(2026, 10, 24),
+          lastMessageAt: DateTime.utc(2026, 10, 24),
+        ),
+      );
+      await start(name: 'Juno');
+      final line = controller.greetingFor(GaiaDraft.newChatId);
+      expect(controller.greetingFor(GaiaDraft.newChatId), line);
+      await controller.selectChat('c1');
+      controller.newChat();
+      expect(controller.greetingFor(GaiaDraft.newChatId), line);
+    });
+
+    test('after the first message the next new chat draws anew', () async {
+      await start();
+      final line = controller.greetingFor(GaiaDraft.newChatId);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      controller.newChat();
+      expect(controller.greetingFor(GaiaDraft.newChatId), isNot(line));
+    });
+
+    test("a first send that doesn't happen keeps the new chat's line", () async {
+      await start();
+      final line = controller.greetingFor(GaiaDraft.newChatId);
+      main.refuseImagesAfter = 0;
+      await controller.attachImage(Uint8List.fromList([1]));
+      await controller.send('Look', images: controller.takeDraftImages());
+      await settle();
+      expect(controller.currentChatId, isNull);
+      expect(controller.greetingFor(GaiaDraft.newChatId), line);
+    });
+
+    test('clearing the name redraws a named line; renaming keeps it', () async {
+      await start(name: 'Juno');
+      // Draws until the new chat holds a line with the name in it.
+      var line = controller.greetingFor(GaiaDraft.newChatId);
+      while (!line.contains('Juno')) {
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        controller.newChat();
+        line = controller.greetingFor(GaiaDraft.newChatId);
+      }
+
+      setName('  Jay ');
+      await settle();
+      expect(
+        controller.greetingFor(GaiaDraft.newChatId),
+        line.replaceAll('Juno', 'Jay'),
+      );
+
+      setName('   ');
+      await settle();
+      final redrawn = controller.greetingFor(GaiaDraft.newChatId);
+      expect(redrawn, isNot(contains('Jay')));
+      expect(redrawn, isNot(contains('{name}')));
     });
   });
 

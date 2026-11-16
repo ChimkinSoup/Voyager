@@ -969,6 +969,25 @@ void main() {
     },
   );
 
+  test('197→198 adds your name, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN user_name',
+    );
+    await seed.customStatement('PRAGMA user_version = 197');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.userName, '');
+
+    await repo.upsertSettings(settings.copyWith(userName: 'Juno'));
+    expect((await repo.getSettings()).userName, 'Juno');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

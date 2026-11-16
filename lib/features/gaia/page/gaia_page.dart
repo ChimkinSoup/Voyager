@@ -2196,6 +2196,8 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _NameSection(settings: settings),
+        const SizedBox(height: 24),
         Text('GAIA.md', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
@@ -2256,6 +2258,86 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
             style: muted,
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// What new-chat greetings call the user (GAIA_GREETINGS_HLD.md §3).
+class _NameSection extends ConsumerStatefulWidget {
+  const _NameSection({required this.settings});
+
+  final GaiaSettings settings;
+
+  @override
+  ConsumerState<_NameSection> createState() => _NameSectionState();
+}
+
+class _NameSectionState extends ConsumerState<_NameSection> {
+  final _name = TextEditingController();
+
+  /// The name as last loaded or saved.
+  String? _saved;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    // Stored as the companion uses it: spaces alone are no name (§3).
+    final text = _name.text.trim();
+    _name.text = text;
+    await ref
+        .read(gaiaRepositoryProvider)
+        .upsertSettings(widget.settings.copyWith(userName: text));
+    if (mounted) setState(() => _saved = text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stored = widget.settings.userName;
+    // As GAIA.md's: reloaded when it changes elsewhere with nothing unsaved.
+    if (_saved == null || (_name.text == _saved && _saved != stored)) {
+      _saved = stored;
+      _name.text = stored;
+    }
+    final dirty = _name.text != _saved;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Your name', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Gaia uses it to greet you in a new chat. Synced to all your '
+          'devices.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        VoyagerTextField(
+          controller: _name,
+          maxLength: 24,
+          buildCounter:
+              (_, {required currentLength, required isFocused, maxLength}) =>
+                  null,
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) {
+            if (_name.text != _saved) _save();
+          },
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: GlassButton(
+            onPressed: dirty ? _save : null,
+            label: 'Save',
+            dense: true,
+          ),
+        ),
       ],
     );
   }

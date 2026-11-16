@@ -60562,6 +60562,18 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _userNameMeta = const VerificationMeta(
+    'userName',
+  );
+  @override
+  late final GeneratedColumn<String> userName = GeneratedColumn<String>(
+    'user_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -60628,6 +60640,7 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     contextExclusionsJson,
     autoAcceptCurator,
     splitGaiaRight,
+    userName,
     createdAt,
     updatedAt,
     version,
@@ -60797,6 +60810,12 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         ),
       );
     }
+    if (data.containsKey('user_name')) {
+      context.handle(
+        _userNameMeta,
+        userName.isAcceptableOrUnknown(data['user_name']!, _userNameMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -60910,6 +60929,10 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}split_gaia_right'],
       )!,
+      userName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_name'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -60972,6 +60995,7 @@ class GaiaSettingsTableData extends DataClass
   final String? contextExclusionsJson;
   final bool autoAcceptCurator;
   final bool splitGaiaRight;
+  final String userName;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -60996,6 +61020,7 @@ class GaiaSettingsTableData extends DataClass
     this.contextExclusionsJson,
     required this.autoAcceptCurator,
     required this.splitGaiaRight,
+    required this.userName,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -61031,6 +61056,7 @@ class GaiaSettingsTableData extends DataClass
     }
     map['auto_accept_curator'] = Variable<bool>(autoAcceptCurator);
     map['split_gaia_right'] = Variable<bool>(splitGaiaRight);
+    map['user_name'] = Variable<String>(userName);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -61069,6 +61095,7 @@ class GaiaSettingsTableData extends DataClass
           : Value(contextExclusionsJson),
       autoAcceptCurator: Value(autoAcceptCurator),
       splitGaiaRight: Value(splitGaiaRight),
+      userName: Value(userName),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -61107,6 +61134,7 @@ class GaiaSettingsTableData extends DataClass
       ),
       autoAcceptCurator: serializer.fromJson<bool>(json['autoAcceptCurator']),
       splitGaiaRight: serializer.fromJson<bool>(json['splitGaiaRight']),
+      userName: serializer.fromJson<String>(json['userName']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -61138,6 +61166,7 @@ class GaiaSettingsTableData extends DataClass
       ),
       'autoAcceptCurator': serializer.toJson<bool>(autoAcceptCurator),
       'splitGaiaRight': serializer.toJson<bool>(splitGaiaRight),
+      'userName': serializer.toJson<String>(userName),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -61165,6 +61194,7 @@ class GaiaSettingsTableData extends DataClass
     Value<String?> contextExclusionsJson = const Value.absent(),
     bool? autoAcceptCurator,
     bool? splitGaiaRight,
+    String? userName,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -61191,6 +61221,7 @@ class GaiaSettingsTableData extends DataClass
         : this.contextExclusionsJson,
     autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
     splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
+    userName: userName ?? this.userName,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -61245,6 +61276,7 @@ class GaiaSettingsTableData extends DataClass
       splitGaiaRight: data.splitGaiaRight.present
           ? data.splitGaiaRight.value
           : this.splitGaiaRight,
+      userName: data.userName.present ? data.userName.value : this.userName,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -61274,6 +61306,7 @@ class GaiaSettingsTableData extends DataClass
           ..write('contextExclusionsJson: $contextExclusionsJson, ')
           ..write('autoAcceptCurator: $autoAcceptCurator, ')
           ..write('splitGaiaRight: $splitGaiaRight, ')
+          ..write('userName: $userName, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -61303,6 +61336,7 @@ class GaiaSettingsTableData extends DataClass
     contextExclusionsJson,
     autoAcceptCurator,
     splitGaiaRight,
+    userName,
     createdAt,
     updatedAt,
     version,
@@ -61331,6 +61365,7 @@ class GaiaSettingsTableData extends DataClass
           other.contextExclusionsJson == this.contextExclusionsJson &&
           other.autoAcceptCurator == this.autoAcceptCurator &&
           other.splitGaiaRight == this.splitGaiaRight &&
+          other.userName == this.userName &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -61358,6 +61393,7 @@ class GaiaSettingsTableCompanion
   final Value<String?> contextExclusionsJson;
   final Value<bool> autoAcceptCurator;
   final Value<bool> splitGaiaRight;
+  final Value<String> userName;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -61383,6 +61419,7 @@ class GaiaSettingsTableCompanion
     this.contextExclusionsJson = const Value.absent(),
     this.autoAcceptCurator = const Value.absent(),
     this.splitGaiaRight = const Value.absent(),
+    this.userName = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -61409,6 +61446,7 @@ class GaiaSettingsTableCompanion
     this.contextExclusionsJson = const Value.absent(),
     this.autoAcceptCurator = const Value.absent(),
     this.splitGaiaRight = const Value.absent(),
+    this.userName = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -61437,6 +61475,7 @@ class GaiaSettingsTableCompanion
     Expression<String>? contextExclusionsJson,
     Expression<bool>? autoAcceptCurator,
     Expression<bool>? splitGaiaRight,
+    Expression<String>? userName,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -61465,6 +61504,7 @@ class GaiaSettingsTableCompanion
         'context_exclusions_json': contextExclusionsJson,
       if (autoAcceptCurator != null) 'auto_accept_curator': autoAcceptCurator,
       if (splitGaiaRight != null) 'split_gaia_right': splitGaiaRight,
+      if (userName != null) 'user_name': userName,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -61493,6 +61533,7 @@ class GaiaSettingsTableCompanion
     Value<String?>? contextExclusionsJson,
     Value<bool>? autoAcceptCurator,
     Value<bool>? splitGaiaRight,
+    Value<String>? userName,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -61520,6 +61561,7 @@ class GaiaSettingsTableCompanion
           contextExclusionsJson ?? this.contextExclusionsJson,
       autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
       splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
+      userName: userName ?? this.userName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -61592,6 +61634,9 @@ class GaiaSettingsTableCompanion
     if (splitGaiaRight.present) {
       map['split_gaia_right'] = Variable<bool>(splitGaiaRight.value);
     }
+    if (userName.present) {
+      map['user_name'] = Variable<String>(userName.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -61632,6 +61677,7 @@ class GaiaSettingsTableCompanion
           ..write('contextExclusionsJson: $contextExclusionsJson, ')
           ..write('autoAcceptCurator: $autoAcceptCurator, ')
           ..write('splitGaiaRight: $splitGaiaRight, ')
+          ..write('userName: $userName, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -94004,6 +94050,7 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<String?> contextExclusionsJson,
       Value<bool> autoAcceptCurator,
       Value<bool> splitGaiaRight,
+      Value<String> userName,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -94031,6 +94078,7 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<String?> contextExclusionsJson,
       Value<bool> autoAcceptCurator,
       Value<bool> splitGaiaRight,
+      Value<String> userName,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -94139,6 +94187,11 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<bool> get splitGaiaRight => $composableBuilder(
     column: $table.splitGaiaRight,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userName => $composableBuilder(
+    column: $table.userName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -94267,6 +94320,11 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get userName => $composableBuilder(
+    column: $table.userName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -94382,6 +94440,9 @@ class $$GaiaSettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get userName =>
+      $composableBuilder(column: $table.userName, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -94454,6 +94515,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String?> contextExclusionsJson = const Value.absent(),
                 Value<bool> autoAcceptCurator = const Value.absent(),
                 Value<bool> splitGaiaRight = const Value.absent(),
+                Value<String> userName = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -94479,6 +94541,7 @@ class $$GaiaSettingsTableTableTableManager
                 contextExclusionsJson: contextExclusionsJson,
                 autoAcceptCurator: autoAcceptCurator,
                 splitGaiaRight: splitGaiaRight,
+                userName: userName,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -94506,6 +94569,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<String?> contextExclusionsJson = const Value.absent(),
                 Value<bool> autoAcceptCurator = const Value.absent(),
                 Value<bool> splitGaiaRight = const Value.absent(),
+                Value<String> userName = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -94531,6 +94595,7 @@ class $$GaiaSettingsTableTableTableManager
                 contextExclusionsJson: contextExclusionsJson,
                 autoAcceptCurator: autoAcceptCurator,
                 splitGaiaRight: splitGaiaRight,
+                userName: userName,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

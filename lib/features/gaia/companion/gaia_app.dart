@@ -2936,6 +2936,9 @@ class _MessagesState extends State<_Messages> {
                     constraints.maxHeight >= 200)
                   Positioned.fill(
                     child: _EmptyChat(
+                      greeting: widget.controller.greetingFor(
+                        widget.controller.currentChatId ?? GaiaDraft.newChatId,
+                      ),
                       sendKey: '${_sendCombo(widget.controller)}',
                     ),
                   ),
@@ -3103,7 +3106,11 @@ class _TopFade extends StatelessWidget {
 /// worth knowing before the first message. Not clickable: the composer under
 /// it already has the focus.
 class _EmptyChat extends StatelessWidget {
-  const _EmptyChat({required this.sendKey});
+  const _EmptyChat({required this.greeting, required this.sendKey});
+
+  /// The chat's line, drawn once for it (GAIA_GREETINGS_HLD.md §5): this is
+  /// rebuilt on every keystroke and resize.
+  final String greeting;
 
   /// The send keybind, as the user set it.
   final String sendKey;
@@ -3135,10 +3142,10 @@ class _EmptyChat extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'What can I help with?',
+              Text(
+                greeting,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w500,
                   color: GaiaInk.dim,
