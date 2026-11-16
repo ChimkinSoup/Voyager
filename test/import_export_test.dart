@@ -1084,6 +1084,16 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertMemoryTopic(
+    GaiaMemoryTopic(
+      id: 'project-gaia-project-1',
+      name: 'Trip to Japan',
+      projectId: 'gaia-project-1',
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1464,6 +1474,7 @@ void main() {
         'gaia_queue_table',
         'gaia_btw_table',
         'gaia_projects_table',
+        'gaia_memory_topics_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };
@@ -1481,6 +1492,9 @@ void main() {
         // written, a restore included.
         'gaia_message_search',
         'gaia_btw_search',
+        // Which memories were recalled in which chat here: pin suggestions
+        // count this device's use (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+        'gaia_recall_history_table',
       };
 
       expect(

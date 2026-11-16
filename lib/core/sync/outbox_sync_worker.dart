@@ -914,6 +914,11 @@ class OutboxSyncWorker {
           DriftGaiaRepository(_db).getProject,
           gaiaProjectToFirestore,
         );
+      case FirestoreCollections.gaiaMemoryTopics:
+        return byId(
+          DriftGaiaRepository(_db).getMemoryTopic,
+          gaiaMemoryTopicToFirestore,
+        );
       case FirestoreCollections.snippets:
         return byId(
           DriftSettingsRepository(_db).getSnippetRecord,

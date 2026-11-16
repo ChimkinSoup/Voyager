@@ -946,13 +946,13 @@ abstract class GaiaRepository {
     bool recordLocalActivity = true,
   });
 
-  /// Writes [chats], [memories] and then [project] in one transaction, all
+  /// Writes [chats], [topics] and then [project] in one transaction, all
   /// or none, and tells sync once it's done: a project delete
-  /// (GAIA_PROJECTS_HLD.md §3.3).
+  /// (GAIA_PROJECTS_HLD.md §3.3, GAIA_MEMORY_TOPICS_HLD.md §7).
   Future<void> upsertProjectWithChats(
     GaiaProject project,
     List<GaiaChat> chats, {
-    List<GaiaMemory> memories,
+    List<GaiaMemoryTopic> topics,
   });
 
   /// [listProjects] as it changes.
@@ -968,6 +968,22 @@ abstract class GaiaRepository {
 
   /// [listMemories] as it changes.
   Stream<List<GaiaMemory>> watchMemories();
+
+  /// Memory topics (GAIA_MEMORY_TOPICS_HLD.md §3.1), oldest first;
+  /// tombstones only with [includeDeleted].
+  Future<List<GaiaMemoryTopic>> listMemoryTopics({bool includeDeleted = false});
+  Future<GaiaMemoryTopic?> getMemoryTopic(String id);
+  Future<void> upsertMemoryTopic(
+    GaiaMemoryTopic topic, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Writes [topics] and then [memories] in one transaction, all or none,
+  /// and tells sync once it's done.
+  Future<void> upsertMemoryTopics(
+    List<GaiaMemoryTopic> topics,
+    List<GaiaMemory> memories,
+  );
 
   /// The prompt queue (§13), in order: waiting items only, unless
   /// [includeDeleted], which adds sent and deleted ones.

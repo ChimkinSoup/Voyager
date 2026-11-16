@@ -4996,6 +4996,9 @@ Map<String, dynamic> gaiaMemoryToFirestore(GaiaMemory memory) => {
   'sourceChatId': memory.sourceChatId,
   'status': memory.status.name,
   'projectId': memory.projectId,
+  'topicIds': memory.topicIds,
+  'pinned': memory.pinned,
+  'suggestedTopic': gaiaSuggestedTopicToJson(memory.suggestedTopic),
   'createdAt': _dateToFirestoreRequired(memory.createdAt),
   'updatedAt': _dateToFirestoreRequired(memory.updatedAt),
   'version': memory.version,
@@ -5026,6 +5029,60 @@ GaiaMemory mergeGaiaMemoryFromRemote(
     status: data.containsKey('status')
         ? gaiaMemoryStatusFromName(data['status'])
         : local?.status ?? GaiaMemoryStatus.proposed,
+    projectId: data.containsKey('projectId')
+        ? data['projectId'] as String?
+        : local?.projectId,
+    // An older build's write has none of these: they stay as they are here.
+    topicIds: data['topicIds'] is List
+        ? gaiaTopicIdsFromJson(data['topicIds'])
+        : local?.topicIds ?? const [],
+    pinned: data['pinned'] is bool
+        ? data['pinned'] as bool
+        : local?.pinned ?? false,
+    suggestedTopic: data.containsKey('suggestedTopic')
+        ? gaiaSuggestedTopicFromJson(data['suggestedTopic'])
+        : local?.suggestedTopic,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> gaiaMemoryTopicToFirestore(GaiaMemoryTopic topic) => {
+  'id': topic.id,
+  'name': topic.name,
+  'parentId': topic.parentId,
+  'projectId': topic.projectId,
+  'createdAt': _dateToFirestoreRequired(topic.createdAt),
+  'updatedAt': _dateToFirestoreRequired(topic.updatedAt),
+  'version': topic.version,
+  'deletedAt': _dateToFirestore(topic.deletedAt),
+};
+
+GaiaMemoryTopic mergeGaiaMemoryTopicFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaMemoryTopic? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GaiaMemoryTopic(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    parentId: data.containsKey('parentId')
+        ? data['parentId'] as String?
+        : local?.parentId,
     projectId: data.containsKey('projectId')
         ? data['projectId'] as String?
         : local?.projectId,

@@ -62410,6 +62410,42 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _topicIdsJsonMeta = const VerificationMeta(
+    'topicIdsJson',
+  );
+  @override
+  late final GeneratedColumn<String> topicIdsJson = GeneratedColumn<String>(
+    'topic_ids_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _suggestedTopicJsonMeta =
+      const VerificationMeta('suggestedTopicJson');
+  @override
+  late final GeneratedColumn<String> suggestedTopicJson =
+      GeneratedColumn<String>(
+        'suggested_topic_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -62463,6 +62499,9 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
     sourceChatId,
     status,
     projectId,
+    topicIdsJson,
+    pinned,
+    suggestedTopicJson,
     createdAt,
     updatedAt,
     version,
@@ -62520,6 +62559,30 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
       context.handle(
         _projectIdMeta,
         projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
+    if (data.containsKey('topic_ids_json')) {
+      context.handle(
+        _topicIdsJsonMeta,
+        topicIdsJson.isAcceptableOrUnknown(
+          data['topic_ids_json']!,
+          _topicIdsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('suggested_topic_json')) {
+      context.handle(
+        _suggestedTopicJsonMeta,
+        suggestedTopicJson.isAcceptableOrUnknown(
+          data['suggested_topic_json']!,
+          _suggestedTopicJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -62583,6 +62646,18 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
         DriftSqlType.string,
         data['${effectivePrefix}project_id'],
       ),
+      topicIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic_ids_json'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      suggestedTopicJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_topic_json'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -62622,6 +62697,15 @@ class GaiaMemoriesTableData extends DataClass
 
   /// The project it belongs to (GAIA_PROJECTS_HLD.md §6); null for global.
   final String? projectId;
+
+  /// A JSON list of the topics it's in (GAIA_MEMORY_TOPICS_HLD.md §3.1).
+  final String topicIdsJson;
+
+  /// In every session's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+  final bool pinned;
+
+  /// `{name, parentId}`, a new topic offered for it; null for none.
+  final String? suggestedTopicJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -62633,6 +62717,9 @@ class GaiaMemoriesTableData extends DataClass
     this.sourceChatId,
     required this.status,
     this.projectId,
+    required this.topicIdsJson,
+    required this.pinned,
+    this.suggestedTopicJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -62650,6 +62737,11 @@ class GaiaMemoriesTableData extends DataClass
     map['status'] = Variable<String>(status);
     if (!nullToAbsent || projectId != null) {
       map['project_id'] = Variable<String>(projectId);
+    }
+    map['topic_ids_json'] = Variable<String>(topicIdsJson);
+    map['pinned'] = Variable<bool>(pinned);
+    if (!nullToAbsent || suggestedTopicJson != null) {
+      map['suggested_topic_json'] = Variable<String>(suggestedTopicJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -62672,6 +62764,11 @@ class GaiaMemoriesTableData extends DataClass
       projectId: projectId == null && nullToAbsent
           ? const Value.absent()
           : Value(projectId),
+      topicIdsJson: Value(topicIdsJson),
+      pinned: Value(pinned),
+      suggestedTopicJson: suggestedTopicJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedTopicJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -62693,6 +62790,11 @@ class GaiaMemoriesTableData extends DataClass
       sourceChatId: serializer.fromJson<String?>(json['sourceChatId']),
       status: serializer.fromJson<String>(json['status']),
       projectId: serializer.fromJson<String?>(json['projectId']),
+      topicIdsJson: serializer.fromJson<String>(json['topicIdsJson']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      suggestedTopicJson: serializer.fromJson<String?>(
+        json['suggestedTopicJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -62709,6 +62811,9 @@ class GaiaMemoriesTableData extends DataClass
       'sourceChatId': serializer.toJson<String?>(sourceChatId),
       'status': serializer.toJson<String>(status),
       'projectId': serializer.toJson<String?>(projectId),
+      'topicIdsJson': serializer.toJson<String>(topicIdsJson),
+      'pinned': serializer.toJson<bool>(pinned),
+      'suggestedTopicJson': serializer.toJson<String?>(suggestedTopicJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -62723,6 +62828,9 @@ class GaiaMemoriesTableData extends DataClass
     Value<String?> sourceChatId = const Value.absent(),
     String? status,
     Value<String?> projectId = const Value.absent(),
+    String? topicIdsJson,
+    bool? pinned,
+    Value<String?> suggestedTopicJson = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -62734,6 +62842,11 @@ class GaiaMemoriesTableData extends DataClass
     sourceChatId: sourceChatId.present ? sourceChatId.value : this.sourceChatId,
     status: status ?? this.status,
     projectId: projectId.present ? projectId.value : this.projectId,
+    topicIdsJson: topicIdsJson ?? this.topicIdsJson,
+    pinned: pinned ?? this.pinned,
+    suggestedTopicJson: suggestedTopicJson.present
+        ? suggestedTopicJson.value
+        : this.suggestedTopicJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -62749,6 +62862,13 @@ class GaiaMemoriesTableData extends DataClass
           : this.sourceChatId,
       status: data.status.present ? data.status.value : this.status,
       projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      topicIdsJson: data.topicIdsJson.present
+          ? data.topicIdsJson.value
+          : this.topicIdsJson,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      suggestedTopicJson: data.suggestedTopicJson.present
+          ? data.suggestedTopicJson.value
+          : this.suggestedTopicJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -62765,6 +62885,9 @@ class GaiaMemoriesTableData extends DataClass
           ..write('sourceChatId: $sourceChatId, ')
           ..write('status: $status, ')
           ..write('projectId: $projectId, ')
+          ..write('topicIdsJson: $topicIdsJson, ')
+          ..write('pinned: $pinned, ')
+          ..write('suggestedTopicJson: $suggestedTopicJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -62781,6 +62904,9 @@ class GaiaMemoriesTableData extends DataClass
     sourceChatId,
     status,
     projectId,
+    topicIdsJson,
+    pinned,
+    suggestedTopicJson,
     createdAt,
     updatedAt,
     version,
@@ -62796,6 +62922,9 @@ class GaiaMemoriesTableData extends DataClass
           other.sourceChatId == this.sourceChatId &&
           other.status == this.status &&
           other.projectId == this.projectId &&
+          other.topicIdsJson == this.topicIdsJson &&
+          other.pinned == this.pinned &&
+          other.suggestedTopicJson == this.suggestedTopicJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -62810,6 +62939,9 @@ class GaiaMemoriesTableCompanion
   final Value<String?> sourceChatId;
   final Value<String> status;
   final Value<String?> projectId;
+  final Value<String> topicIdsJson;
+  final Value<bool> pinned;
+  final Value<String?> suggestedTopicJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -62822,6 +62954,9 @@ class GaiaMemoriesTableCompanion
     this.sourceChatId = const Value.absent(),
     this.status = const Value.absent(),
     this.projectId = const Value.absent(),
+    this.topicIdsJson = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.suggestedTopicJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -62835,6 +62970,9 @@ class GaiaMemoriesTableCompanion
     this.sourceChatId = const Value.absent(),
     required String status,
     this.projectId = const Value.absent(),
+    this.topicIdsJson = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.suggestedTopicJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -62852,6 +62990,9 @@ class GaiaMemoriesTableCompanion
     Expression<String>? sourceChatId,
     Expression<String>? status,
     Expression<String>? projectId,
+    Expression<String>? topicIdsJson,
+    Expression<bool>? pinned,
+    Expression<String>? suggestedTopicJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -62865,6 +63006,10 @@ class GaiaMemoriesTableCompanion
       if (sourceChatId != null) 'source_chat_id': sourceChatId,
       if (status != null) 'status': status,
       if (projectId != null) 'project_id': projectId,
+      if (topicIdsJson != null) 'topic_ids_json': topicIdsJson,
+      if (pinned != null) 'pinned': pinned,
+      if (suggestedTopicJson != null)
+        'suggested_topic_json': suggestedTopicJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -62880,6 +63025,9 @@ class GaiaMemoriesTableCompanion
     Value<String?>? sourceChatId,
     Value<String>? status,
     Value<String?>? projectId,
+    Value<String>? topicIdsJson,
+    Value<bool>? pinned,
+    Value<String?>? suggestedTopicJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -62893,6 +63041,9 @@ class GaiaMemoriesTableCompanion
       sourceChatId: sourceChatId ?? this.sourceChatId,
       status: status ?? this.status,
       projectId: projectId ?? this.projectId,
+      topicIdsJson: topicIdsJson ?? this.topicIdsJson,
+      pinned: pinned ?? this.pinned,
+      suggestedTopicJson: suggestedTopicJson ?? this.suggestedTopicJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -62922,6 +63073,15 @@ class GaiaMemoriesTableCompanion
     if (projectId.present) {
       map['project_id'] = Variable<String>(projectId.value);
     }
+    if (topicIdsJson.present) {
+      map['topic_ids_json'] = Variable<String>(topicIdsJson.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (suggestedTopicJson.present) {
+      map['suggested_topic_json'] = Variable<String>(suggestedTopicJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -62949,6 +63109,9 @@ class GaiaMemoriesTableCompanion
           ..write('sourceChatId: $sourceChatId, ')
           ..write('status: $status, ')
           ..write('projectId: $projectId, ')
+          ..write('topicIdsJson: $topicIdsJson, ')
+          ..write('pinned: $pinned, ')
+          ..write('suggestedTopicJson: $suggestedTopicJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -65077,6 +65240,804 @@ class GaiaProjectsTableCompanion
   }
 }
 
+class $GaiaMemoryTopicsTableTable extends GaiaMemoryTopicsTable
+    with TableInfo<$GaiaMemoryTopicsTableTable, GaiaMemoryTopicsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaMemoryTopicsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<String> parentId = GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    parentId,
+    projectId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_memory_topics_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaMemoryTopicsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GaiaMemoryTopicsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaMemoryTopicsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_id'],
+      ),
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $GaiaMemoryTopicsTableTable createAlias(String alias) {
+    return $GaiaMemoryTopicsTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaMemoryTopicsTableData extends DataClass
+    implements Insertable<GaiaMemoryTopicsTableData> {
+  final String id;
+  final String name;
+
+  /// Its parent; null for a root topic.
+  final String? parentId;
+
+  /// The project it belongs to while they're linked (§7).
+  final String? projectId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const GaiaMemoryTopicsTableData({
+    required this.id,
+    required this.name,
+    this.parentId,
+    this.projectId,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = Variable<String>(parentId);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  GaiaMemoryTopicsTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaMemoryTopicsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      parentId: parentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory GaiaMemoryTopicsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaMemoryTopicsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      parentId: serializer.fromJson<String?>(json['parentId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'parentId': serializer.toJson<String?>(parentId),
+      'projectId': serializer.toJson<String?>(projectId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  GaiaMemoryTopicsTableData copyWith({
+    String? id,
+    String? name,
+    Value<String?> parentId = const Value.absent(),
+    Value<String?> projectId = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => GaiaMemoryTopicsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    parentId: parentId.present ? parentId.value : this.parentId,
+    projectId: projectId.present ? projectId.value : this.projectId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  GaiaMemoryTopicsTableData copyWithCompanion(
+    GaiaMemoryTopicsTableCompanion data,
+  ) {
+    return GaiaMemoryTopicsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemoryTopicsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('parentId: $parentId, ')
+          ..write('projectId: $projectId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    parentId,
+    projectId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaMemoryTopicsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.parentId == this.parentId &&
+          other.projectId == this.projectId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class GaiaMemoryTopicsTableCompanion
+    extends UpdateCompanion<GaiaMemoryTopicsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> parentId;
+  final Value<String?> projectId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const GaiaMemoryTopicsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.parentId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaMemoryTopicsTableCompanion.insert({
+    required String id,
+    required String name,
+    this.parentId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<GaiaMemoryTopicsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? parentId,
+    Expression<String>? projectId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (parentId != null) 'parent_id': parentId,
+      if (projectId != null) 'project_id': projectId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaMemoryTopicsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? parentId,
+    Value<String?>? projectId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaMemoryTopicsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      parentId: parentId ?? this.parentId,
+      projectId: projectId ?? this.projectId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (parentId.present) {
+      map['parent_id'] = Variable<String>(parentId.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemoryTopicsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('parentId: $parentId, ')
+          ..write('projectId: $projectId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GaiaRecallHistoryTableTable extends GaiaRecallHistoryTable
+    with TableInfo<$GaiaRecallHistoryTableTable, GaiaRecallHistoryTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaRecallHistoryTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _memoryIdMeta = const VerificationMeta(
+    'memoryId',
+  );
+  @override
+  late final GeneratedColumn<String> memoryId = GeneratedColumn<String>(
+    'memory_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chatIdMeta = const VerificationMeta('chatId');
+  @override
+  late final GeneratedColumn<String> chatId = GeneratedColumn<String>(
+    'chat_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recalledAtMeta = const VerificationMeta(
+    'recalledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recalledAt = GeneratedColumn<DateTime>(
+    'recalled_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [memoryId, chatId, recalledAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_recall_history_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaRecallHistoryTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('memory_id')) {
+      context.handle(
+        _memoryIdMeta,
+        memoryId.isAcceptableOrUnknown(data['memory_id']!, _memoryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_memoryIdMeta);
+    }
+    if (data.containsKey('chat_id')) {
+      context.handle(
+        _chatIdMeta,
+        chatId.isAcceptableOrUnknown(data['chat_id']!, _chatIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chatIdMeta);
+    }
+    if (data.containsKey('recalled_at')) {
+      context.handle(
+        _recalledAtMeta,
+        recalledAt.isAcceptableOrUnknown(data['recalled_at']!, _recalledAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recalledAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {memoryId, chatId};
+  @override
+  GaiaRecallHistoryTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaRecallHistoryTableData(
+      memoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}memory_id'],
+      )!,
+      chatId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chat_id'],
+      )!,
+      recalledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recalled_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GaiaRecallHistoryTableTable createAlias(String alias) {
+    return $GaiaRecallHistoryTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaRecallHistoryTableData extends DataClass
+    implements Insertable<GaiaRecallHistoryTableData> {
+  final String memoryId;
+  final String chatId;
+  final DateTime recalledAt;
+  const GaiaRecallHistoryTableData({
+    required this.memoryId,
+    required this.chatId,
+    required this.recalledAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['memory_id'] = Variable<String>(memoryId);
+    map['chat_id'] = Variable<String>(chatId);
+    map['recalled_at'] = Variable<DateTime>(recalledAt);
+    return map;
+  }
+
+  GaiaRecallHistoryTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaRecallHistoryTableCompanion(
+      memoryId: Value(memoryId),
+      chatId: Value(chatId),
+      recalledAt: Value(recalledAt),
+    );
+  }
+
+  factory GaiaRecallHistoryTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaRecallHistoryTableData(
+      memoryId: serializer.fromJson<String>(json['memoryId']),
+      chatId: serializer.fromJson<String>(json['chatId']),
+      recalledAt: serializer.fromJson<DateTime>(json['recalledAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'memoryId': serializer.toJson<String>(memoryId),
+      'chatId': serializer.toJson<String>(chatId),
+      'recalledAt': serializer.toJson<DateTime>(recalledAt),
+    };
+  }
+
+  GaiaRecallHistoryTableData copyWith({
+    String? memoryId,
+    String? chatId,
+    DateTime? recalledAt,
+  }) => GaiaRecallHistoryTableData(
+    memoryId: memoryId ?? this.memoryId,
+    chatId: chatId ?? this.chatId,
+    recalledAt: recalledAt ?? this.recalledAt,
+  );
+  GaiaRecallHistoryTableData copyWithCompanion(
+    GaiaRecallHistoryTableCompanion data,
+  ) {
+    return GaiaRecallHistoryTableData(
+      memoryId: data.memoryId.present ? data.memoryId.value : this.memoryId,
+      chatId: data.chatId.present ? data.chatId.value : this.chatId,
+      recalledAt: data.recalledAt.present
+          ? data.recalledAt.value
+          : this.recalledAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaRecallHistoryTableData(')
+          ..write('memoryId: $memoryId, ')
+          ..write('chatId: $chatId, ')
+          ..write('recalledAt: $recalledAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(memoryId, chatId, recalledAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaRecallHistoryTableData &&
+          other.memoryId == this.memoryId &&
+          other.chatId == this.chatId &&
+          other.recalledAt == this.recalledAt);
+}
+
+class GaiaRecallHistoryTableCompanion
+    extends UpdateCompanion<GaiaRecallHistoryTableData> {
+  final Value<String> memoryId;
+  final Value<String> chatId;
+  final Value<DateTime> recalledAt;
+  final Value<int> rowid;
+  const GaiaRecallHistoryTableCompanion({
+    this.memoryId = const Value.absent(),
+    this.chatId = const Value.absent(),
+    this.recalledAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaRecallHistoryTableCompanion.insert({
+    required String memoryId,
+    required String chatId,
+    required DateTime recalledAt,
+    this.rowid = const Value.absent(),
+  }) : memoryId = Value(memoryId),
+       chatId = Value(chatId),
+       recalledAt = Value(recalledAt);
+  static Insertable<GaiaRecallHistoryTableData> custom({
+    Expression<String>? memoryId,
+    Expression<String>? chatId,
+    Expression<DateTime>? recalledAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (memoryId != null) 'memory_id': memoryId,
+      if (chatId != null) 'chat_id': chatId,
+      if (recalledAt != null) 'recalled_at': recalledAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaRecallHistoryTableCompanion copyWith({
+    Value<String>? memoryId,
+    Value<String>? chatId,
+    Value<DateTime>? recalledAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaRecallHistoryTableCompanion(
+      memoryId: memoryId ?? this.memoryId,
+      chatId: chatId ?? this.chatId,
+      recalledAt: recalledAt ?? this.recalledAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (memoryId.present) {
+      map['memory_id'] = Variable<String>(memoryId.value);
+    }
+    if (chatId.present) {
+      map['chat_id'] = Variable<String>(chatId.value);
+    }
+    if (recalledAt.present) {
+      map['recalled_at'] = Variable<DateTime>(recalledAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaRecallHistoryTableCompanion(')
+          ..write('memoryId: $memoryId, ')
+          ..write('chatId: $chatId, ')
+          ..write('recalledAt: $recalledAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -65241,6 +66202,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $GaiaBtwTableTable gaiaBtwTable = $GaiaBtwTableTable(this);
   late final $GaiaProjectsTableTable gaiaProjectsTable =
       $GaiaProjectsTableTable(this);
+  late final $GaiaMemoryTopicsTableTable gaiaMemoryTopicsTable =
+      $GaiaMemoryTopicsTableTable(this);
+  late final $GaiaRecallHistoryTableTable gaiaRecallHistoryTable =
+      $GaiaRecallHistoryTableTable(this);
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -65398,6 +66363,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaQueueTable,
     gaiaBtwTable,
     gaiaProjectsTable,
+    gaiaMemoryTopicsTable,
+    gaiaRecallHistoryTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -95070,6 +96037,9 @@ typedef $$GaiaMemoriesTableTableCreateCompanionBuilder =
       Value<String?> sourceChatId,
       required String status,
       Value<String?> projectId,
+      Value<String> topicIdsJson,
+      Value<bool> pinned,
+      Value<String?> suggestedTopicJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -95084,6 +96054,9 @@ typedef $$GaiaMemoriesTableTableUpdateCompanionBuilder =
       Value<String?> sourceChatId,
       Value<String> status,
       Value<String?> projectId,
+      Value<String> topicIdsJson,
+      Value<bool> pinned,
+      Value<String?> suggestedTopicJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -95127,6 +96100,21 @@ class $$GaiaMemoriesTableTableFilterComposer
 
   ColumnFilters<String> get projectId => $composableBuilder(
     column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topicIdsJson => $composableBuilder(
+    column: $table.topicIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedTopicJson => $composableBuilder(
+    column: $table.suggestedTopicJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -95190,6 +96178,21 @@ class $$GaiaMemoriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get topicIdsJson => $composableBuilder(
+    column: $table.topicIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get suggestedTopicJson => $composableBuilder(
+    column: $table.suggestedTopicJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -95239,6 +96242,19 @@ class $$GaiaMemoriesTableTableAnnotationComposer
 
   GeneratedColumn<String> get projectId =>
       $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get topicIdsJson => $composableBuilder(
+    column: $table.topicIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<String> get suggestedTopicJson => $composableBuilder(
+    column: $table.suggestedTopicJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -95299,6 +96315,9 @@ class $$GaiaMemoriesTableTableTableManager
                 Value<String?> sourceChatId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
+                Value<String> topicIdsJson = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<String?> suggestedTopicJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -95311,6 +96330,9 @@ class $$GaiaMemoriesTableTableTableManager
                 sourceChatId: sourceChatId,
                 status: status,
                 projectId: projectId,
+                topicIdsJson: topicIdsJson,
+                pinned: pinned,
+                suggestedTopicJson: suggestedTopicJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -95325,6 +96347,9 @@ class $$GaiaMemoriesTableTableTableManager
                 Value<String?> sourceChatId = const Value.absent(),
                 required String status,
                 Value<String?> projectId = const Value.absent(),
+                Value<String> topicIdsJson = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<String?> suggestedTopicJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -95337,6 +96362,9 @@ class $$GaiaMemoriesTableTableTableManager
                 sourceChatId: sourceChatId,
                 status: status,
                 projectId: projectId,
+                topicIdsJson: topicIdsJson,
+                pinned: pinned,
+                suggestedTopicJson: suggestedTopicJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -96396,6 +97424,465 @@ typedef $$GaiaProjectsTableTableProcessedTableManager =
       GaiaProjectsTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaMemoryTopicsTableTableCreateCompanionBuilder =
+    GaiaMemoryTopicsTableCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> parentId,
+      Value<String?> projectId,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaMemoryTopicsTableTableUpdateCompanionBuilder =
+    GaiaMemoryTopicsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> parentId,
+      Value<String?> projectId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaMemoryTopicsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaMemoryTopicsTableTable> {
+  $$GaiaMemoryTopicsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaMemoryTopicsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaMemoryTopicsTableTable> {
+  $$GaiaMemoryTopicsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaMemoryTopicsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaMemoryTopicsTableTable> {
+  $$GaiaMemoryTopicsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$GaiaMemoryTopicsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaMemoryTopicsTableTable,
+          GaiaMemoryTopicsTableData,
+          $$GaiaMemoryTopicsTableTableFilterComposer,
+          $$GaiaMemoryTopicsTableTableOrderingComposer,
+          $$GaiaMemoryTopicsTableTableAnnotationComposer,
+          $$GaiaMemoryTopicsTableTableCreateCompanionBuilder,
+          $$GaiaMemoryTopicsTableTableUpdateCompanionBuilder,
+          (
+            GaiaMemoryTopicsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaMemoryTopicsTableTable,
+              GaiaMemoryTopicsTableData
+            >,
+          ),
+          GaiaMemoryTopicsTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaMemoryTopicsTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaMemoryTopicsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaMemoryTopicsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$GaiaMemoryTopicsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GaiaMemoryTopicsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> parentId = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemoryTopicsTableCompanion(
+                id: id,
+                name: name,
+                parentId: parentId,
+                projectId: projectId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> parentId = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemoryTopicsTableCompanion.insert(
+                id: id,
+                name: name,
+                parentId: parentId,
+                projectId: projectId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaMemoryTopicsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaMemoryTopicsTableTable,
+      GaiaMemoryTopicsTableData,
+      $$GaiaMemoryTopicsTableTableFilterComposer,
+      $$GaiaMemoryTopicsTableTableOrderingComposer,
+      $$GaiaMemoryTopicsTableTableAnnotationComposer,
+      $$GaiaMemoryTopicsTableTableCreateCompanionBuilder,
+      $$GaiaMemoryTopicsTableTableUpdateCompanionBuilder,
+      (
+        GaiaMemoryTopicsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaMemoryTopicsTableTable,
+          GaiaMemoryTopicsTableData
+        >,
+      ),
+      GaiaMemoryTopicsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$GaiaRecallHistoryTableTableCreateCompanionBuilder =
+    GaiaRecallHistoryTableCompanion Function({
+      required String memoryId,
+      required String chatId,
+      required DateTime recalledAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaRecallHistoryTableTableUpdateCompanionBuilder =
+    GaiaRecallHistoryTableCompanion Function({
+      Value<String> memoryId,
+      Value<String> chatId,
+      Value<DateTime> recalledAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaRecallHistoryTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaRecallHistoryTableTable> {
+  $$GaiaRecallHistoryTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get memoryId => $composableBuilder(
+    column: $table.memoryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chatId => $composableBuilder(
+    column: $table.chatId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recalledAt => $composableBuilder(
+    column: $table.recalledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaRecallHistoryTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaRecallHistoryTableTable> {
+  $$GaiaRecallHistoryTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get memoryId => $composableBuilder(
+    column: $table.memoryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chatId => $composableBuilder(
+    column: $table.chatId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recalledAt => $composableBuilder(
+    column: $table.recalledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaRecallHistoryTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaRecallHistoryTableTable> {
+  $$GaiaRecallHistoryTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get memoryId =>
+      $composableBuilder(column: $table.memoryId, builder: (column) => column);
+
+  GeneratedColumn<String> get chatId =>
+      $composableBuilder(column: $table.chatId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get recalledAt => $composableBuilder(
+    column: $table.recalledAt,
+    builder: (column) => column,
+  );
+}
+
+class $$GaiaRecallHistoryTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaRecallHistoryTableTable,
+          GaiaRecallHistoryTableData,
+          $$GaiaRecallHistoryTableTableFilterComposer,
+          $$GaiaRecallHistoryTableTableOrderingComposer,
+          $$GaiaRecallHistoryTableTableAnnotationComposer,
+          $$GaiaRecallHistoryTableTableCreateCompanionBuilder,
+          $$GaiaRecallHistoryTableTableUpdateCompanionBuilder,
+          (
+            GaiaRecallHistoryTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaRecallHistoryTableTable,
+              GaiaRecallHistoryTableData
+            >,
+          ),
+          GaiaRecallHistoryTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaRecallHistoryTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaRecallHistoryTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaRecallHistoryTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$GaiaRecallHistoryTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GaiaRecallHistoryTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> memoryId = const Value.absent(),
+                Value<String> chatId = const Value.absent(),
+                Value<DateTime> recalledAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaRecallHistoryTableCompanion(
+                memoryId: memoryId,
+                chatId: chatId,
+                recalledAt: recalledAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String memoryId,
+                required String chatId,
+                required DateTime recalledAt,
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaRecallHistoryTableCompanion.insert(
+                memoryId: memoryId,
+                chatId: chatId,
+                recalledAt: recalledAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaRecallHistoryTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaRecallHistoryTableTable,
+      GaiaRecallHistoryTableData,
+      $$GaiaRecallHistoryTableTableFilterComposer,
+      $$GaiaRecallHistoryTableTableOrderingComposer,
+      $$GaiaRecallHistoryTableTableAnnotationComposer,
+      $$GaiaRecallHistoryTableTableCreateCompanionBuilder,
+      $$GaiaRecallHistoryTableTableUpdateCompanionBuilder,
+      (
+        GaiaRecallHistoryTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaRecallHistoryTableTable,
+          GaiaRecallHistoryTableData
+        >,
+      ),
+      GaiaRecallHistoryTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -96633,4 +98120,11 @@ class $AppDatabaseManager {
       $$GaiaBtwTableTableTableManager(_db, _db.gaiaBtwTable);
   $$GaiaProjectsTableTableTableManager get gaiaProjectsTable =>
       $$GaiaProjectsTableTableTableManager(_db, _db.gaiaProjectsTable);
+  $$GaiaMemoryTopicsTableTableTableManager get gaiaMemoryTopicsTable =>
+      $$GaiaMemoryTopicsTableTableTableManager(_db, _db.gaiaMemoryTopicsTable);
+  $$GaiaRecallHistoryTableTableTableManager get gaiaRecallHistoryTable =>
+      $$GaiaRecallHistoryTableTableTableManager(
+        _db,
+        _db.gaiaRecallHistoryTable,
+      );
 }

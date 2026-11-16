@@ -413,6 +413,15 @@ class GaiaHost {
     });
   }
 
+  /// The startup pull is done: from now on every project keeps a memory
+  /// topic (GAIA_MEMORY_TOPICS_HLD.md §7, §8), once the store is attached.
+  void startupPulled() => unawaited(
+    _attached.future.then((_) => _memories?.keepProjectTopics()),
+  );
+
+  /// Signed out: project topics wait for the next account's startup pull.
+  void signedOut() => _memories?.stopProjectTopics();
+
   /// Registers each hotkey's combo under [keybinds], replacing one that
   /// changed. A combo with no Ctrl, Alt or Win would take over plain typing
   /// everywhere, so it's left unregistered, as is one Windows refuses.

@@ -138,6 +138,9 @@ abstract final class FirestoreCollections {
   /// Named groups of chats (GAIA_PROJECTS_HLD.md §2).
   static const gaiaProjects = 'gaia_projects';
 
+  /// The topics memories are filed under (GAIA_MEMORY_TOPICS_HLD.md §3.1).
+  static const gaiaMemoryTopics = 'gaia_memory_topics';
+
   /// A message's parts when they're too big for its own document (§8), as
   /// pieces of their JSON at `{messageId}_{n}`. Read with the message, never
   /// pulled on their own.
@@ -257,6 +260,7 @@ abstract final class FirestoreCollections {
     gaiaQueue,
     gaiaBtw,
     gaiaProjects,
+    gaiaMemoryTopics,
   };
 
   /// The only collections whose documents carry text two devices can edit at

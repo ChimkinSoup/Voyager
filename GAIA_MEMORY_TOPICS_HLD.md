@@ -1,6 +1,7 @@
 # Gaia — Memory Topics and Recall (HLD)
 
-Status: **Draft (2026-11-15).** Not built. This replaces the memory index in GAIA_HLD.md §11 and
+Status: **Phase 1 built (2026-11-16)**, checked by unit tests and a two-profile sync pass; its
+live checks still to do are in §15. Phases 2-6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -424,3 +425,100 @@ desktop variant under the memory watchdog.
 - `lib/features/gaia/tools/gaia_mcp.dart`: `memory_search` topic, `memory_propose` topics.
 - `lib/features/gaia/page/gaia_page.dart`: the Memories tab tree.
 - `GAIA_HLD.md` §11 and `GAIA_PROJECTS_HLD.md` §3.3 and §6: notes pointing here.
+
+## 15. Phase 1 build notes (2026-11-16)
+
+### 15.1 What was built
+
+- **Data model (§3.1, §8):** `GaiaMemoryTopic` and the synced `gaia_memory_topics` collection
+  (drift table, outbox, pull, live sync, backup, a "memory topic" trash kind), and `topicIds`,
+  `pinned` and `suggestedTopic` on memories. Schema 200 → 201 adds both new tables and the three
+  columns. A write from an older build, which has none of the three fields, leaves them as they
+  are on this device.
+- **The recall-history table** (§3.3) is created in 201 as §8 says, local-only and left out of
+  backups. Nothing writes it yet.
+- **The tree** (`GaiaTopicTree`, `gaia_memories.dart`): paths, subtrees, finding a topic by
+  name or path, and a sync-made cycle broken at the topic changed longest ago.
+- **Project topics and the migration (§7, §8):** `GaiaMemories.syncProjectTopics` and
+  `keepProjectTopics`. Deleting a project keeps its topic and memories and clears the topic's
+  link. Restoring it links the topic again.
+- **`memory_search`** (§4.6): the `topic` argument, no project wall, topic paths in results.
+
+### 15.2 Decisions made while building
+
+1. **No migration flag.** A project's topic being created for the first time is the migration
+   for that project: that's when the memories naming it are filed in it. A topic already there,
+   even a tombstone, means it has been done, so a memory taken out of it later stays out. Two
+   devices doing it at once write the same documents.
+2. **When it runs:** on the main instance (Windows), after each startup pull and then whenever
+   projects change, as §8 asks. The pull matters because the outbox writes with a blind merge,
+   so a write made before it could overwrite a newer topic or memory in the cloud. As a result,
+   **a signed-out install, or one with the dev disable-cache flag on, gets no project topics**
+   until it signs in or the flag is turned off. Projects made on the phone get their topic when
+   a desktop main instance next sees them.
+3. **The topic's name follows the project's** while they're linked: the upkeep renames the
+   topic to match. Phase 4's topic rename must rename the project at the same time, or the
+   next upkeep run will undo it.
+4. **New memories in a project still get `projectId`**, as well as the project's topic, because
+   the index and `<gaia_project>` still read `projectId` until Phase 2 (§10). Phase 2 stops
+   writing it. **Phase 2 also has to file memories that an older build writes with a
+   `projectId` after the topic exists:** those get no topic from this build.
+5. **Refusing cycles on re-parent** (§3.1) waits for Phase 4, which adds the first re-parent
+   operation. Readers already break cycles.
+6. **The duplicate check keeps its project walls** (`save`, `sameActive`) until Phase 5 (§5).
+7. **`memory_search` paths** accept `›`, `>` or `/` between names. With only `topic`, it lists
+   that topic's memories and its subtopics', newest first, capped at 20.
+8. **The project trash kind** still lists memories as children, so a project deleted before
+   this build restores the memories that were trashed with it.
+9. **A deleted project's memories are global until Phase 2.** They keep its `projectId`, which
+   now points to a deleted project, so the index and the duplicate check count them as global,
+   with the box checked or not. That's accepted: §7 has no walls, so Phase 2 recalls them in
+   any chat anyway.
+10. **The upkeep stops at sign-out** and starts again after the next account's startup pull, so
+    it never writes while the store is wiped and pulled again. Changes that land while it runs
+    ask for one more run, not one each, and its errors are logged as
+    `[gaia] project topics not kept`.
+
+### 15.3 How it was checked
+
+- **Unit tests:** `test/gaia_memory_topics_test.dart` (new: the tree and cycles, Firestore
+  round trips and older-build writes, the batch write, the migration run twice and on two
+  devices, rename, delete and restore, a deleted topic coming back empty, `keepProjectTopics`,
+  saving into the project topic, `memory_search` by topic), plus updates to
+  `gaia_projects_test`, `gaia_memories_test`, `gaia_migration_test` (200 → 201) and
+  `import_export_test`. Full `flutter test`: 7184 passed, 41 skipped and 1 failure,
+  `heat_watch_section_test`, which passes on its own and touches none of this.
+- **Two-profile sync, 2026-11-16** (qa-128: A = `gaiaqa`, a real schema-200 database with 6
+  projects and 38 memories; B = a fresh profile `qtopic`; debug build of the working tree; done
+  by VM eval and read-only SQLite, since the screen was off). All passed, and neither run log
+  had an error:
+  - A migrated to 201. After the pull it made exactly one topic per live project (4, none for
+    the 2 deleted) and filed all 7 live project memories, proposed ones included. The deleted
+    memory and the global ones were left alone, nothing was pinned, and the outbox drained.
+  - B pulled the same topics from the cloud (same `createdAt`), and its own upkeep wrote
+    nothing: memory versions were equal on both devices. `dbdiff` found no difference in the
+    topic, memory, project or recall tables.
+  - Project renamed on B: the topic followed on B and reached A (v2 on both).
+  - Project deleted on A with the box unchecked: the topic was kept and unlinked on both, and no
+    memory changed. Restored on B: linked again on both (v3).
+  - A project created on A got its topic, which reached B.
+  - `memory_search` on A's real data: by topic (any case), topic plus query, a project memory
+    found from a chat in no project, an unknown topic refused, topic paths in the results.
+
+### 15.4 Live checks still to do for Phase 1
+
+These need the screen on, the phone, or a real agent turn:
+
+- **Juno's real instance:** after the first launch on this build, check that `gaia_memory_topics_table`
+  has one topic per live project and that the project memories are filed in them.
+- **A real agent turn** calling `memory_search` with `topic`, on Claude Code and on Codex: does
+  the agent see the new argument and use it? The checks above called the tool directly.
+- **The UI paths** of what was done by eval: delete a project from the companion's and the
+  page's dialog, with the box both ways, restore it from the Trash page, and rename it from the
+  companion and from the page. Then check its topic each time.
+- **The phone:** a project created or renamed on the phone gets or renames its topic once the
+  desktop runs, and the phone pulls `gaia_memory_topics` without error.
+- **Capture into the project topic, live:** `/remember`, `memory_propose` and the curator in a
+  project chat each file the memory in the project's topic (unit-tested only).
+- **Mixed builds:** a device still on schema 200 edits a memory that's been filed. The memory
+  should keep its topics everywhere (unit-tested only).

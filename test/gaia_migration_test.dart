@@ -1035,6 +1035,56 @@ void main() {
     expect((await repo.getChat('c1'))!.archivedAt, now);
   });
 
+  test('200→201 adds memory topics and recall history, every old memory '
+      'Unsorted and unpinned', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertMemory(
+      GaiaMemory(
+        id: 'm1',
+        text: 'Likes tea',
+        projectId: 'p1',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await seed.customStatement('DROP TABLE gaia_memory_topics_table');
+    await seed.customStatement('DROP TABLE gaia_recall_history_table');
+    for (final column in ['topic_ids_json', 'pinned', 'suggested_topic_json']) {
+      await seed.customStatement(
+        'ALTER TABLE gaia_memories_table DROP COLUMN $column',
+      );
+    }
+    await seed.customStatement('PRAGMA user_version = 200');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final memory = (await repo.getMemory('m1'))!;
+    expect(memory.text, 'Likes tea');
+    expect(memory.projectId, 'p1');
+    expect(memory.topicIds, isEmpty);
+    expect(memory.pinned, isFalse);
+    expect(memory.suggestedTopic, isNull);
+    expect(await repo.listMemoryTopics(), isEmpty);
+    await repo.upsertMemoryTopic(
+      GaiaMemoryTopic(
+        id: 'project-p1',
+        name: 'Trip',
+        projectId: 'p1',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await repo.upsertMemory(memory.copyWith(topicIds: ['project-p1']));
+    expect((await repo.getMemory('m1'))!.topicIds, ['project-p1']);
+    expect((await repo.listMemoryTopics()).single.name, 'Trip');
+    await upgraded.customStatement(
+      "INSERT INTO gaia_recall_history_table (memory_id, chat_id, recalled_at) "
+      "VALUES ('m1', 'c1', 0)",
+    );
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

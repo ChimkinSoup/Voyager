@@ -6,6 +6,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/trash/trash_service.dart';
 
@@ -174,6 +175,8 @@ void main() {
           version: 1,
         ),
       );
+      // p1's topic, which m1 is filed under (GAIA_MEMORY_TOPICS_HLD.md §7).
+      await GaiaMemories(repository).syncProjectTopics();
     });
 
     tearDown(() => db.close());
@@ -182,10 +185,13 @@ void main() {
       for (final chat in await repository.listChats()) chat.id: chat.projectId,
     };
 
-    Future<Map<String, String?>> liveMemories() async => {
+    Future<Map<String, List<String>>> liveMemories() async => {
       for (final memory in await repository.listMemories())
-        memory.id: memory.projectId,
+        memory.id: memory.topicIds,
     };
+
+    Future<String?> topicLink() async =>
+        (await repository.getMemoryTopic('project-p1'))!.projectId;
 
     test('unchecked, its chats stay in no project, and a restore brings it '
         'back empty', () async {
@@ -197,8 +203,13 @@ void main() {
       expect(deleted, isEmpty);
       expect(await repository.listProjects(), isEmpty);
       expect(await live(), {'one': null, 'two': null, 'other': null});
-      // Its memories become global (§3.3).
-      expect(await liveMemories(), {'m1': null, 'g1': null});
+      // Its memories stay in its topic, now an ordinary one
+      // (GAIA_MEMORY_TOPICS_HLD.md §7).
+      expect(await liveMemories(), {
+        'm1': ['project-p1'],
+        'g1': <String>[],
+      });
+      expect(await topicLink(), isNull);
 
       final item = (await trash.list()).firstWhere((i) => i.id == 'p1');
       expect(item.title, 'p1');
@@ -206,7 +217,13 @@ void main() {
       await trash.restore(item);
       expect((await repository.listProjects()).single.id, 'p1');
       expect(await live(), {'one': null, 'two': null, 'other': null});
-      expect(await liveMemories(), {'m1': null, 'g1': null});
+      // The main instance links its topic again.
+      await GaiaMemories(repository).syncProjectTopics();
+      expect(await topicLink(), 'p1');
+      expect(await liveMemories(), {
+        'm1': ['project-p1'],
+        'g1': <String>[],
+      });
     });
 
     test('checked, its chats go to the trash with it and come back with it, '
@@ -218,8 +235,12 @@ void main() {
       );
       expect(deleted.map((c) => c.id), unorderedEquals(['one', 'two']));
       expect(await live(), {'other': null});
-      // Its memories go to the trash with it (§3.3).
-      expect(await liveMemories(), {'g1': null});
+      // Its memories stay, checked or not (GAIA_MEMORY_TOPICS_HLD.md §7).
+      expect(await liveMemories(), {
+        'm1': ['project-p1'],
+        'g1': <String>[],
+      });
+      expect(await topicLink(), isNull);
 
       final items = await trash.list();
       final item = items.firstWhere((i) => i.id == 'p1');
@@ -230,13 +251,14 @@ void main() {
       await trash.restore(item);
       expect((await repository.listProjects()).single.id, 'p1');
       expect(await live(), {'one': 'p1', 'two': 'p1', 'other': null});
-      expect(await liveMemories(), {'m1': 'p1', 'g1': null});
+      await GaiaMemories(repository).syncProjectTopics();
+      expect(await topicLink(), 'p1');
       // The one deleted before it stays deleted.
       expect((await repository.getChat('earlier'))!.isDeleted, isTrue);
     });
 
     test(
-      'its chats, memories and the project reach sync once, after one write',
+      'its chats, its topic and the project reach sync once, after one write',
       () async {
         final writes = <String>[];
         final notifier = SyncedWriteNotifier()
@@ -254,7 +276,7 @@ void main() {
         await watching.cancel();
         expect(writes, [
           '${FirestoreCollections.gaiaChats}: one two',
-          '${FirestoreCollections.gaiaMemories}: m1',
+          '${FirestoreCollections.gaiaMemoryTopics}: project-p1',
           '${FirestoreCollections.gaiaProjects}: p1',
         ]);
         expect(changes, hasLength(1));

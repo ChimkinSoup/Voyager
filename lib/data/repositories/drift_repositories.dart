@@ -10288,7 +10288,7 @@ class DriftGaiaRepository implements GaiaRepository {
   Future<void> upsertProjectWithChats(
     GaiaProject project,
     List<GaiaChat> chats, {
-    List<GaiaMemory> memories = const [],
+    List<GaiaMemoryTopic> topics = const [],
   }) async {
     await _db.transaction(() async {
       for (final chat in chats) {
@@ -10296,15 +10296,15 @@ class DriftGaiaRepository implements GaiaRepository {
             .into(_db.gaiaChatsTable)
             .insertOnConflictUpdate(_gaiaChatCompanion(chat));
       }
-      for (final memory in memories) {
-        await upsertMemory(memory, recordLocalActivity: false);
+      for (final topic in topics) {
+        await upsertMemoryTopic(topic, recordLocalActivity: false);
       }
       await _db
           .into(_db.gaiaProjectsTable)
           .insertOnConflictUpdate(_gaiaProjectCompanion(project));
     });
     _syncedWrites?.notify(FirestoreCollections.gaiaChats, chats);
-    _syncedWrites?.notify(FirestoreCollections.gaiaMemories, memories);
+    _syncedWrites?.notify(FirestoreCollections.gaiaMemoryTopics, topics);
     _syncedWrites?.notifyOne(FirestoreCollections.gaiaProjects, project);
   }
 
@@ -10349,6 +10349,13 @@ class DriftGaiaRepository implements GaiaRepository {
             sourceChatId: Value(memory.sourceChatId),
             status: Value(memory.status.name),
             projectId: Value(memory.projectId),
+            topicIdsJson: Value(jsonEncode(memory.topicIds)),
+            pinned: Value(memory.pinned),
+            suggestedTopicJson: Value(
+              memory.suggestedTopic == null
+                  ? null
+                  : jsonEncode(gaiaSuggestedTopicToJson(memory.suggestedTopic)),
+            ),
             createdAt: Value(memory.createdAt),
             updatedAt: Value(memory.updatedAt),
             version: Value(memory.version),
@@ -10363,6 +10370,73 @@ class DriftGaiaRepository implements GaiaRepository {
   @override
   Stream<List<GaiaMemory>> watchMemories() =>
       _memories().watch().map((rows) => rows.map(_mapGaiaMemory).toList());
+
+  @override
+  Future<List<GaiaMemoryTopic>> listMemoryTopics({
+    bool includeDeleted = false,
+  }) async =>
+      (await (_db.select(_db.gaiaMemoryTopicsTable)
+                ..where(
+                  (t) => includeDeleted
+                      ? const Constant(true)
+                      : t.deletedAt.isNull(),
+                )
+                ..orderBy([
+                  (t) => OrderingTerm.asc(t.createdAt),
+                  (t) => OrderingTerm.asc(t.id),
+                ]))
+              .get())
+          .map(_mapGaiaMemoryTopic)
+          .toList();
+
+  @override
+  Future<GaiaMemoryTopic?> getMemoryTopic(String id) async {
+    final row = await (_db.select(
+      _db.gaiaMemoryTopicsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapGaiaMemoryTopic(row);
+  }
+
+  @override
+  Future<void> upsertMemoryTopic(
+    GaiaMemoryTopic topic, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaMemoryTopicsTable)
+        .insertOnConflictUpdate(
+          GaiaMemoryTopicsTableCompanion(
+            id: Value(topic.id),
+            name: Value(topic.name),
+            parentId: Value(topic.parentId),
+            projectId: Value(topic.projectId),
+            createdAt: Value(topic.createdAt),
+            updatedAt: Value(topic.updatedAt),
+            version: Value(topic.version),
+            deletedAt: Value(topic.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaMemoryTopics, topic);
+    }
+  }
+
+  @override
+  Future<void> upsertMemoryTopics(
+    List<GaiaMemoryTopic> topics,
+    List<GaiaMemory> memories,
+  ) async {
+    await _db.transaction(() async {
+      for (final topic in topics) {
+        await upsertMemoryTopic(topic, recordLocalActivity: false);
+      }
+      for (final memory in memories) {
+        await upsertMemory(memory, recordLocalActivity: false);
+      }
+    });
+    _syncedWrites?.notify(FirestoreCollections.gaiaMemoryTopics, topics);
+    _syncedWrites?.notify(FirestoreCollections.gaiaMemories, memories);
+  }
 
   SimpleSelectStatement<$GaiaQueueTableTable, GaiaQueueTableData> _queue({
     bool includeDeleted = false,
@@ -10583,11 +10657,28 @@ GaiaMemory _mapGaiaMemory(GaiaMemoriesTableData row) => GaiaMemory(
   sourceChatId: row.sourceChatId,
   status: gaiaMemoryStatusFromName(row.status),
   projectId: row.projectId,
+  topicIds: gaiaTopicIdsFromJson(jsonDecode(row.topicIdsJson)),
+  pinned: row.pinned,
+  suggestedTopic: row.suggestedTopicJson == null
+      ? null
+      : gaiaSuggestedTopicFromJson(jsonDecode(row.suggestedTopicJson!)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,
   deletedAt: row.deletedAt,
 );
+
+GaiaMemoryTopic _mapGaiaMemoryTopic(GaiaMemoryTopicsTableData row) =>
+    GaiaMemoryTopic(
+      id: row.id,
+      name: row.name,
+      parentId: row.parentId,
+      projectId: row.projectId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+    );
 
 GaiaDraft _mapGaiaDraft(GaiaDraftsTableData row) => GaiaDraft(
   id: row.id,

@@ -479,6 +479,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           }
           progressToast.complete();
           _startupPullDone = true;
+          if (isWindows) GaiaHost.instance.startupPulled();
           // Loaded before the pull, so it has only this device's draws.
           ref.invalidate(quoteHistoryProvider);
           unawaited(_registerThisDevice());
@@ -676,6 +677,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       _authSession++;
       _postAuthWarmupStarted = false;
       _startupPullDone = false;
+      if (isWindows) GaiaHost.instance.signedOut();
       _liveSync?.close();
       _liveSync = null;
     }

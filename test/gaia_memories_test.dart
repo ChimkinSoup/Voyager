@@ -102,19 +102,17 @@ void main() {
     ]);
   });
 
-  test(
-    'memory_search needs a query or tags, and says when nothing matches',
-    () async {
-      await expectLater(
-        memories.tool('c1', 'memory_search', {}),
-        throwsA(isA<GaiaReadException>()),
-      );
-      expect(
-        await memories.tool('c1', 'memory_search', {'query': 'dog'}),
-        'The user has no memories saved.',
-      );
-    },
-  );
+  test('memory_search needs a query, tags or a topic, and says when nothing '
+      'matches', () async {
+    await expectLater(
+      memories.tool('c1', 'memory_search', {}),
+      throwsA(isA<GaiaReadException>()),
+    );
+    expect(
+      await memories.tool('c1', 'memory_search', {'query': 'dog'}),
+      'The user has no memories saved.',
+    );
+  });
 
   test('memory_propose puts it in the inbox from its chat, once', () async {
     final first = await memories.tool('c1', 'memory_propose', {
@@ -372,6 +370,9 @@ void main() {
       'a',
     );
     expect(moved.projectId, 'p1');
+    expect(back.topicIds, isEmpty);
+    expect(back.pinned, isFalse);
+    expect(back.suggestedTopic, isNull);
   });
 
   group('project memories (GAIA_PROJECTS_HLD.md §6)', () {
@@ -429,19 +430,14 @@ void main() {
       expect(await memories.index(chatId: 'loose'), index);
     });
 
-    test("search finds global ones and the chat's project's, never another "
-        "project's", () async {
-      final inProject = await search('in1');
-      expect(inProject, contains('Trip tea house'));
-      expect(inProject, contains('Likes green tea'));
-      expect(inProject, contains('Orphan tea fact'));
-      expect(inProject, isNot(contains('Other project')));
-
-      for (final id in ['loose', 'lost']) {
-        final outside = await search(id);
-        expect(outside, contains('Likes green tea'));
-        expect(outside, isNot(contains('Trip tea house')));
-        expect(outside, isNot(contains('Other project')));
+    test('search finds every memory, from any project '
+        '(GAIA_MEMORY_TOPICS_HLD.md §4.6)', () async {
+      for (final id in ['in1', 'loose', 'lost']) {
+        final found = await search(id);
+        expect(found, contains('Trip tea house'));
+        expect(found, contains('Likes green tea'));
+        expect(found, contains('Orphan tea fact'));
+        expect(found, contains('Other project'));
       }
     });
 

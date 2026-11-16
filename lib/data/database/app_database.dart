@@ -2450,6 +2450,15 @@ class GaiaMemoriesTable extends Table {
 
   /// The project it belongs to (GAIA_PROJECTS_HLD.md §6); null for global.
   TextColumn get projectId => text().nullable()();
+
+  /// A JSON list of the topics it's in (GAIA_MEMORY_TOPICS_HLD.md §3.1).
+  TextColumn get topicIdsJson => text().withDefault(const Constant('[]'))();
+
+  /// In every session's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+
+  /// `{name, parentId}`, a new topic offered for it; null for none.
+  TextColumn get suggestedTopicJson => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2457,6 +2466,36 @@ class GaiaMemoriesTable extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// A topic Gaia's memories are filed under (GAIA_MEMORY_TOPICS_HLD.md §3.1).
+class GaiaMemoryTopicsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+
+  /// Its parent; null for a root topic.
+  TextColumn get parentId => text().nullable()();
+
+  /// The project it belongs to while they're linked (§7).
+  TextColumn get projectId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Which memories were recalled in which chat, on this device only
+/// (GAIA_MEMORY_TOPICS_HLD.md §3.3): what pin suggestions count.
+class GaiaRecallHistoryTable extends Table {
+  TextColumn get memoryId => text()();
+  TextColumn get chatId => text()();
+  DateTimeColumn get recalledAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {memoryId, chatId};
 }
 
 @DriftDatabase(
@@ -2547,13 +2586,15 @@ class GaiaMemoriesTable extends Table {
     GaiaQueueTable,
     GaiaBtwTable,
     GaiaProjectsTable,
+    GaiaMemoryTopicsTable,
+    GaiaRecallHistoryTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 200;
+  int get schemaVersion => 201;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4821,6 +4862,31 @@ class AppDatabase extends _$AppDatabase {
           'gaia_chats_table',
           gaiaChatsTable,
           gaiaChatsTable.archivedAt,
+        );
+      }
+      if (from < 201) {
+        // Memory topics (GAIA_MEMORY_TOPICS_HLD.md §3, §8).
+        await migrator.createTable(gaiaMemoryTopicsTable);
+        await migrator.createTable(gaiaRecallHistoryTable);
+      }
+      if (from >= 181 && from < 201) {
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_memories_table',
+          gaiaMemoriesTable,
+          gaiaMemoriesTable.topicIdsJson,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_memories_table',
+          gaiaMemoriesTable,
+          gaiaMemoriesTable.pinned,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_memories_table',
+          gaiaMemoriesTable,
+          gaiaMemoriesTable.suggestedTopicJson,
         );
       }
     },

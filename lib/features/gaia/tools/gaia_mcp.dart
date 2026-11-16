@@ -396,8 +396,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         'preferences, people, projects, facts about their life. Returns '
         'each matching memory in full. Your instructions list the memories '
         'saved when this chat started; search for the full text of one, '
-        "or for any saved since. In a project chat, the project's memories "
-        'are searched too.',
+        'or for any saved since. Every memory is searched, from any '
+        'project. Each result shows the topics it is filed under.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -411,6 +411,13 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           'type': 'array',
           'items': {'type': 'string'},
           'description': 'Only memories with every one of these tags.',
+        },
+        'topic': {
+          'type': 'string',
+          'description':
+              'Only memories filed under this topic or its subtopics: a '
+              'name, or a path such as "CS246 › Assignments". On its own, '
+              "lists the topic's memories, newest first.",
         },
       },
     },

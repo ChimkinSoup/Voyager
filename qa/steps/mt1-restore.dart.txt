@@ -1,0 +1,1 @@
+final r = c.read(gaiaRepositoryProvider); final p = await r.getProject('68b3cc78-6af7-49c8-8248-5e0875535876'); await r.upsertProject(p!.copyWith(clearDeletedAt: true));

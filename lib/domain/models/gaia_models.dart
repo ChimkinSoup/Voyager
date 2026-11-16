@@ -2664,10 +2664,24 @@ class GaiaMemory extends SoftDeletable {
     this.sourceChatId,
     this.status = GaiaMemoryStatus.proposed,
     this.projectId,
+    this.topicIds = const [],
+    this.pinned = false,
+    this.suggestedTopic,
   });
 
   final String text;
   final List<String> tags;
+
+  /// The topics it's in (GAIA_MEMORY_TOPICS_HLD.md §3.1); none for
+  /// Unsorted. One that points nowhere is ignored.
+  final List<String> topicIds;
+
+  /// In every session's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+  final bool pinned;
+
+  /// A new topic offered for it, not made until accepted
+  /// (GAIA_MEMORY_TOPICS_HLD.md §5).
+  final GaiaSuggestedTopic? suggestedTopic;
 
   /// The chat it was learnt in; null for one written on the Gaia page.
   final String? sourceChatId;
@@ -2683,6 +2697,7 @@ class GaiaMemory extends SoftDeletable {
     GaiaMemoryStatus? status,
     String? projectId,
     bool clearProjectId = false,
+    List<String>? topicIds,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
   }) => GaiaMemory(
@@ -2696,8 +2711,80 @@ class GaiaMemory extends SoftDeletable {
     sourceChatId: sourceChatId,
     status: status ?? this.status,
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
+    topicIds: topicIds ?? this.topicIds,
+    pinned: pinned,
+    suggestedTopic: suggestedTopic,
   );
 }
+
+/// A new topic offered for a memory: [name], under [parentId] or at the
+/// root (GAIA_MEMORY_TOPICS_HLD.md §5).
+typedef GaiaSuggestedTopic = ({String name, String? parentId});
+
+/// [GaiaSuggestedTopic] as it's stored; null for none.
+Map<String, Object?>? gaiaSuggestedTopicToJson(GaiaSuggestedTopic? topic) =>
+    topic == null ? null : {'name': topic.name, 'parentId': topic.parentId};
+
+/// A stored [GaiaSuggestedTopic]; null for none or one without a name.
+GaiaSuggestedTopic? gaiaSuggestedTopicFromJson(Object? json) =>
+    json is Map && json['name'] is String && (json['name'] as String).isNotEmpty
+    ? (name: json['name'] as String, parentId: json['parentId'] as String?)
+    : null;
+
+/// A memory's topics from JSON: the strings, each once.
+List<String> gaiaTopicIdsFromJson(Object? json) => [
+  ...{
+    if (json is List)
+      for (final id in json)
+        if (id is String && id.isNotEmpty) id,
+  },
+];
+
+/// A topic memories are filed under (GAIA_MEMORY_TOPICS_HLD.md §3.1): one
+/// node of a tree, under [parentId] or at the root. A project's has
+/// [projectId], and its id is always [gaiaProjectTopicId] (§7).
+class GaiaMemoryTopic extends SoftDeletable {
+  const GaiaMemoryTopic({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.name,
+    this.parentId,
+    this.projectId,
+  });
+
+  final String name;
+
+  /// Its parent; null, or one that points nowhere, for a root topic.
+  final String? parentId;
+
+  /// The project it belongs to while they're linked (§7).
+  final String? projectId;
+
+  GaiaMemoryTopic copyWith({
+    String? name,
+    String? projectId,
+    bool clearProjectId = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+  }) => GaiaMemoryTopic(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version + 1,
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    name: name ?? this.name,
+    parentId: parentId,
+    projectId: clearProjectId ? null : (projectId ?? this.projectId),
+  );
+}
+
+/// The id of project [projectId]'s topic (GAIA_MEMORY_TOPICS_HLD.md §7):
+/// fixed, so two devices can't make two, and it's found after the link is
+/// cleared.
+String gaiaProjectTopicId(String projectId) => 'project-$projectId';
 
 /// [GaiaMemoryStatus.proposed] for a name this build doesn't know.
 GaiaMemoryStatus gaiaMemoryStatusFromName(Object? name) =>

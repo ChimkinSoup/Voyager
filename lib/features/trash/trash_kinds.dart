@@ -808,9 +808,10 @@ final _kinds = <TrashKind>[
     wipe: ['text'],
     listed: false,
   ),
-  // A project's delete takes its chats and memories only when asked to;
-  // otherwise it lets them go, and a restore brings it back empty
-  // (GAIA_PROJECTS_HLD.md §3.3).
+  // A project's delete takes its chats only when asked to; otherwise it lets
+  // them go, and a restore brings it back empty (GAIA_PROJECTS_HLD.md
+  // §3.3). Its memories stay in its topic (GAIA_MEMORY_TOPICS_HLD.md §7),
+  // but one deleted with it before that comes back with it.
   TrashKind(
     collection: FirestoreCollections.gaiaProjects,
     feature: TrashFeature.gaia,
@@ -826,12 +827,23 @@ final _kinds = <TrashKind>[
       TrashChild(FirestoreCollections.gaiaMemories, ['projectId']),
     ],
   ),
-  // Only ever deleted with a project: one deleted on its own has its undo.
+  // A topic's delete takes it off its memories and moves its subtopics up
+  // to its parent (GAIA_MEMORY_TOPICS_HLD.md §3.2); a restore brings back
+  // the topic alone.
+  const TrashKind(
+    collection: FirestoreCollections.gaiaMemoryTopics,
+    feature: TrashFeature.gaia,
+    noun: 'memory topic',
+    containerLabel: 'Memory topic',
+    wipe: ['name'],
+  ),
+  // In the trash only when deleted with a project before
+  // GAIA_MEMORY_TOPICS_HLD.md §7: one deleted on its own has its undo.
   const TrashKind(
     collection: FirestoreCollections.gaiaMemories,
     feature: TrashFeature.gaia,
     noun: 'memory',
-    wipe: ['text', 'tags'],
+    wipe: ['text', 'tags', 'suggestedTopic'],
     listed: false,
   ),
   const TrashKind(

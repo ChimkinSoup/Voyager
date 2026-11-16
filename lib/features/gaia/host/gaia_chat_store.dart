@@ -61,9 +61,10 @@ Future<void> gaiaSetMemoryCards(
 }
 
 /// Deletes project [projectId] (GAIA_PROJECTS_HLD.md §3.3). With
-/// [withChats] its chats and memories go to the trash with it, at the same
-/// instant, so restoring it brings them back; without, they're let go, to
-/// no project and global. Gives back the chats it deleted.
+/// [withChats] its chats go to the trash with it, at the same instant, so
+/// restoring it brings them back; without, they're let go, to no project.
+/// Either way its memories stay in its topic, which becomes an ordinary one
+/// (GAIA_MEMORY_TOPICS_HLD.md §7). Gives back the chats it deleted.
 Future<List<GaiaChat>> gaiaDeleteProject(
   GaiaRepository repository,
   String projectId, {
@@ -91,12 +92,10 @@ Future<List<GaiaChat>> gaiaDeleteProject(
     withChats
         ? [for (final chat in chats) chat.copyWith(deletedAt: at)]
         : released,
-    memories: [
-      for (final memory in await repository.listMemories())
-        if (memory.projectId == projectId)
-          withChats
-              ? memory.copyWith(deletedAt: at)
-              : memory.copyWith(clearProjectId: true),
+    topics: [
+      if (await repository.getMemoryTopic(gaiaProjectTopicId(projectId))
+          case final topic? when topic.projectId == projectId)
+        topic.copyWith(clearProjectId: true),
     ],
   );
   return withChats ? chats : const [];
