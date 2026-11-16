@@ -51,8 +51,10 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
       (widget.onEdit != null || widget.onAccept != null);
 
   /// Without [GaiaProposalCard.onEdit], as on the phone, it's accepted as
-  /// proposed or turned down: a summary with the buttons.
-  bool get _editing => _answerable && widget.onEdit != null;
+  /// proposed or turned down: a summary with the buttons. A delete has
+  /// nothing to edit, so it's always one.
+  bool get _editing =>
+      _answerable && widget.onEdit != null && !_proposal.delete;
 
   @override
   void dispose() {
@@ -138,7 +140,9 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
               children: [
                 Text(
                   [
-                    if (widget.sendKey != null) '${widget.sendKey} saves',
+                    if (widget.sendKey != null)
+                      '${widget.sendKey} '
+                          '${_proposal.delete ? 'deletes' : 'saves'}',
                     'or type what to change',
                   ].join(' · '),
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -150,10 +154,13 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
                   children: [
                     if (widget.onReject != null)
                       GaiaButton(
-                        label: 'Turn down',
+                        label: _proposal.delete ? 'Keep it' : 'Turn down',
                         onPressed: widget.onReject,
                         size: 28,
-                        color: theme.colorScheme.error,
+                        // Keeping it is the safe choice: only Delete is red.
+                        color: _proposal.delete
+                            ? null
+                            : theme.colorScheme.error,
                       ),
                     if (widget.onAcceptAll != null) ...[
                       const SizedBox(width: 8),
@@ -165,9 +172,10 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
                     ],
                     const SizedBox(width: 8),
                     GaiaButton(
-                      label: 'Save',
+                      label: _proposal.delete ? 'Delete' : 'Save',
                       onPressed: problem == null ? widget.onAccept : null,
                       size: 28,
+                      color: _proposal.delete ? theme.colorScheme.error : null,
                     ),
                   ],
                 ),
@@ -192,11 +200,12 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
 
   String _outcome() {
     final answer = widget.card.answer;
+    final saved = _proposal.delete ? 'Deleted' : 'Saved';
     return switch (widget.card.state) {
       GaiaCardState.open => 'No longer waiting',
       GaiaCardState.accepted when answer?['undoneAt'] != null =>
-        'Saved, then undone',
-      GaiaCardState.accepted => 'Saved',
+        '$saved, then undone',
+      GaiaCardState.accepted => saved,
       GaiaCardState.rejected => [
         'Turned down',
         if ((answer?['message'] as String? ?? '').isNotEmpty)
@@ -216,6 +225,18 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
   ) {
     final theme = Theme.of(context);
     final before = _proposal.before;
+    // A delete shows what goes, struck through, and nothing after it.
+    if (_proposal.delete) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Text(
+          _clip(gaiaProposalValueLabel(_proposal, before!, key)),
+          style: theme.textTheme.bodySmall?.copyWith(
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Text.rich(
@@ -253,7 +274,7 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
     final label = gaiaProposalFieldLabel(key);
     final Widget input = switch (key) {
       'title' => _textInput(key, label: label),
-      'notes' || 'body' => _textInput(key, label: label, lines: 6),
+      'notes' || 'body' || 'text' => _textInput(key, label: label, lines: 6),
       'list' || 'calendar' || 'journal' => _choice(key, label, fields),
       'due' || 'start' || 'end' || 'date' => _when(context, key, label, fields),
       'starred' || 'completed' || 'allDay' => _toggle(key, label, fields),

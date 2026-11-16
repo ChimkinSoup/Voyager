@@ -5,6 +5,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 
@@ -23,11 +24,55 @@ void main() {
       journal: DriftJournalRepository(db),
       workouts: DriftWorkoutRepository(db),
       trackers: DriftTrackerRepository(db),
+      notifications: DriftNotificationRepository(db),
       now: () => DateTime(2026, 10, 28, 9),
     );
   });
 
   tearDown(() => db.close());
+
+  test(
+    'voyager_reminders lists live reminders, oldest first, with ids',
+    () async {
+      final notes = DriftNotificationRepository(db);
+      await notes.upsertPinnedNote(
+        PinnedNote(
+          id: 'n2',
+          text: 'Second\nwith a second line',
+          createdAt: DateTime(2026, 10, 27, 12),
+          updatedAt: at,
+        ),
+      );
+      await notes.upsertPinnedNote(
+        PinnedNote(
+          id: 'n1',
+          text: 'First',
+          createdAt: DateTime(2026, 10, 20, 12),
+          updatedAt: at,
+        ),
+      );
+      await notes.upsertPinnedNote(
+        PinnedNote(
+          id: 'gone',
+          text: 'Deleted',
+          createdAt: DateTime(2026, 10, 21, 12),
+          updatedAt: at,
+          deletedAt: at,
+        ),
+      );
+      final text = await reads.read('voyager_reminders', {});
+      expect(text, startsWith('<voyager_data source="reminders">'));
+      expect(
+        text,
+        contains(
+          '- (added 2026-10-20 Tuesday, id n1) First\n'
+          '- (added 2026-10-27 Tuesday, id n2) Second\n'
+          '  with a second line',
+        ),
+      );
+      expect(text, isNot(contains('Deleted')));
+    },
+  );
 
   test('every answer is framed as reference data, with today', () async {
     final text = await reads.read('voyager_todos', {});

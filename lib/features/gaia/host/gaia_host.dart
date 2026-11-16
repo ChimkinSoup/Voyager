@@ -66,7 +66,7 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, account, sessionId, lastSeq, project}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
-/// pinned}`, `projects`, `putProject {project}`, `renameProject {projectId,
+/// pinned}`, `setArchived {chatId, archived}`, `projects`, `putProject {project}`, `renameProject {projectId,
 /// name}`, `setProject {chatId, projectId}`, `setProjectFolder {projectId,
 /// path}` (this device's, null to remove it), `deleteProject {projectId,
 /// withChats}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
@@ -74,7 +74,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// (`[GaiaSearchHit]`), `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
-/// arguments}` (a `voyager_*` tool's text), `memoryIndex {chatId?}` (§11;
+/// arguments}` (a `voyager_*` tool's text), `voyagerWrite {tool, arguments}`
+/// (`add_reminder`, the one write without a card), `memoryIndex {chatId?}` (§11;
 /// with the chat's project's memories after, for the curator),
 /// `projectMemories {projectId}` (its memory index lines,
 /// GAIA_PROJECTS_HLD.md §6),
@@ -1283,6 +1284,12 @@ class GaiaHost {
           order: (params['order'] as num?)?.toDouble(),
         );
         return null;
+      case 'setArchived':
+        await store.setArchived(
+          params['chatId']! as String,
+          params['archived']! as bool,
+        );
+        return null;
       case 'reorderChat':
         await store.reorderChat(
           params['chatId']! as String,
@@ -1461,6 +1468,17 @@ class GaiaHost {
           );
         } on GaiaReadException catch (error) {
           // The pipe would carry it as `GaiaReadException: …`.
+          throw GaiaPipeException(error.message);
+        }
+      case 'voyagerWrite':
+        // Checked here as a commit is, whatever the companion did about
+        // Abort (§15.7).
+        if (_aborted) throw GaiaPipeException('Gaia is aborted.');
+        try {
+          return await _executorOrThrow().addReminder(
+            _map(params['arguments']),
+          );
+        } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }
       case 'setSeeScreen':

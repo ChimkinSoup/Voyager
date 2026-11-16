@@ -335,6 +335,61 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     },
   },
   {
+    'name': 'voyager_reminders',
+    'description':
+        "Read the user's quick reminders from Voyager's Inbox: short notes "
+        'with no due date, such as bugs they found or things to look into, '
+        'each with when it was added and its id.',
+    'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
+  },
+  {
+    'name': 'add_reminder',
+    'description':
+        "Add a quick reminder to Voyager's Inbox: a short note with no due "
+        'date. It is saved at once, with no card for the user to accept, so '
+        'tell them in your reply what you saved. Use it when the user asks '
+        'you to note, jot down or remember something for later in Voyager, '
+        'such as a bug they found. For something due at a time, propose a '
+        'task instead.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'text': {
+          'type': 'string',
+          'description':
+              'The reminder as the user would write it: short, in their '
+              'words, complete on its own.',
+        },
+      },
+      'required': ['text'],
+    },
+  },
+  {
+    'name': 'propose_reminder',
+    'description':
+        'Propose a change to one of the quick reminders in Voyager\'s Inbox, '
+        'or deleting it. Nothing is written until the user accepts it: they '
+        'see it on a card, can change the text, and accept or turn it down. '
+        'The result says what was saved or what they want changed instead. '
+        'Pass "id" from voyager_reminders, and either the new "text" or '
+        '"delete". To add a new reminder, use add_reminder.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'id': {'type': 'string', 'description': "The reminder's id."},
+        'text': {
+          'type': 'string',
+          'description': 'The whole new text, replacing the old.',
+        },
+        'delete': {
+          'type': 'boolean',
+          'description': 'Delete the reminder instead of changing it.',
+        },
+      },
+      'required': ['id'],
+    },
+  },
+  {
     'name': 'memory_search',
     'description':
         "Search what the user has asked Gaia to remember about them: "
@@ -811,6 +866,10 @@ const _readAfter = <String, Object?>{
 
 /// The `voyager_*` read tools: the main instance answers them.
 bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
+
+/// The Voyager writes that need no card (§10's one exception: a quick
+/// reminder, added at once). The main instance's executor makes them.
+bool isGaiaVoyagerWrite(String name) => name == 'add_reminder';
 
 /// The `memory_*` tools (§11): the main instance answers them too.
 bool isGaiaMemoryTool(String name) => name.startsWith('memory_');

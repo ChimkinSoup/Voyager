@@ -4390,6 +4390,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'summarizedSeq': chat.summarizedSeq,
   'order': chat.order,
   'orderedAt': _dateToFirestore(chat.orderedAt),
+  'archivedAt': _dateToFirestore(chat.archivedAt),
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4480,6 +4481,10 @@ GaiaChat mergeGaiaChatFromRemote(
     orderedAt: data.containsKey('orderedAt')
         ? parseFirestoreDate(data['orderedAt'])
         : local?.orderedAt,
+    // Present but null when unarchived.
+    archivedAt: data.containsKey('archivedAt')
+        ? parseFirestoreDate(data['archivedAt'])
+        : local?.archivedAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -5101,6 +5106,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'financeHotkey': s.financeHotkey,
   'reminderHotkey': s.reminderHotkey,
   'calendarHotkey': s.calendarHotkey,
+  'noteHotkey': s.noteHotkey,
   'calendarNavigateLeftKey': s.calendarNavigateLeftKey,
   'calendarNavigateRightKey': s.calendarNavigateRightKey,
   'srsFailKey': s.srsFailKey,
@@ -5348,6 +5354,7 @@ AppSettings mergeSettingsFromRemote(
     financeHotkey: data['financeHotkey'] as String?,
     reminderHotkey: data['reminderHotkey'] as String?,
     calendarHotkey: data['calendarHotkey'] as String?,
+    noteHotkey: data['noteHotkey'] as String?,
     calendarNavigateLeftKey: data['calendarNavigateLeftKey'] as String?,
     calendarNavigateRightKey: data['calendarNavigateRightKey'] as String?,
     srsFailKey: data['srsFailKey'] as String?,

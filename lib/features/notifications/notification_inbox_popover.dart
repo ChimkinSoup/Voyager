@@ -44,6 +44,7 @@ import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/core/secure_vault/secure_clipboard.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 import 'package:voyager/features/notifications/secure_vault_dialogs.dart';
@@ -141,11 +142,18 @@ class _PinnedGrowthPhysics extends ScrollPhysics {
 /// unified urgency-sorted feed, a hidden/dismissed browser, and an embedded
 /// daily-stats logger.
 class NotificationInboxPopover extends ConsumerStatefulWidget {
-  const NotificationInboxPopover({super.key, this.prewarm = false});
+  const NotificationInboxPopover({
+    super.key,
+    this.prewarm = false,
+    this.focusNote = false,
+  });
 
   /// The offscreen copy [NotificationPopoverWarmup] builds. It never shows
   /// Secure Notes, and its going away doesn't lock the vault.
   final bool prewarm;
+
+  /// Opened by the quick-note hotkey: the quick-reminder field has focus.
+  final bool focusNote;
 
   @override
   ConsumerState<NotificationInboxPopover> createState() =>
@@ -245,7 +253,10 @@ class _NotificationInboxPopoverState
               ),
               const SliverToBoxAdapter(child: _BackupAlertSection()),
               const SliverToBoxAdapter(child: _FolderBackupAlertSection()),
-              const _PinnedNotesSection(),
+              _PinnedNotesSection(
+                focus: widget.focusNote,
+                shareDraft: !widget.prewarm,
+              ),
               if (unlocked) const _SecureNotesSection(),
               const SliverToBoxAdapter(child: ScheduledRemindersSection()),
               const SliverToBoxAdapter(child: _FeedSection()),
@@ -444,7 +455,14 @@ class _Header extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _PinnedNotesSection extends ConsumerStatefulWidget {
-  const _PinnedNotesSection();
+  const _PinnedNotesSection({required this.focus, required this.shareDraft});
+
+  /// The field takes focus as the section opens.
+  final bool focus;
+
+  /// The field's text is the quick-note floater's draft too
+  /// ([noteCaptureDraftProvider]); not in the offscreen warm-up copy.
+  final bool shareDraft;
 
   @override
   ConsumerState<_PinnedNotesSection> createState() =>
@@ -458,6 +476,15 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
   @override
   void initState() {
     super.initState();
+    if (widget.shareDraft) {
+      _controller
+        ..text = ref.read(noteCaptureDraftProvider)
+        ..addListener(_keepDraft);
+      // Follows the floater's edits too, or a note it added stays here.
+      ref.listenManual(noteCaptureDraftProvider, (_, draft) {
+        if (draft != _controller.text) _controller.text = draft;
+      });
+    }
     _focusNode.onKeyEvent = (node, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if ((event.logicalKey == LogicalKeyboardKey.enter ||
@@ -472,10 +499,16 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller
+      ..removeListener(_keepDraft)
+      ..dispose();
     _focusNode.dispose();
     super.dispose();
   }
+
+  /// Cleared with the field once a note is added.
+  void _keepDraft() =>
+      ref.read(noteCaptureDraftProvider.notifier).state = _controller.text;
 
   Future<void> _addNote() async {
     final text = _controller.text.trim();
@@ -593,6 +626,7 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
           VoyagerTextField(
             controller: _controller,
             focusNode: _focusNode,
+            autofocus: widget.focus,
             // Same slot the rows below use, so the input and the notes it
             // produces are the same size.
             style: theme.textTheme.bodySmall,

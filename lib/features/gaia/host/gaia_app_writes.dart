@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
 import 'package:voyager/features/journal/journal_entry_delete.dart';
@@ -71,5 +72,20 @@ class GaiaAppWrites implements GaiaVoyagerWrites {
   @override
   Future<void> deleteEntry(String id) async {
     await softDeleteJournalEntry(_container, id);
+  }
+
+  // A reminder's upload is the repository's own, as the Inbox's is.
+  @override
+  Future<void> saveReminder(PinnedNote note) async {
+    await _container
+        .read(notificationRepositoryProvider)
+        .upsertPinnedNote(note);
+    _container.invalidate(pinnedNotesProvider);
+  }
+
+  @override
+  Future<void> deleteReminder(String id) async {
+    await _container.read(notificationRepositoryProvider).deletePinnedNote(id);
+    _container.invalidate(pinnedNotesProvider);
   }
 }

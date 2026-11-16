@@ -381,12 +381,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           ),
                         ),
                         ListTile(
-                          title: const Text('Reminder hotkey'),
+                          title: const Text('Scheduled reminder hotkey'),
                           subtitle: _HotkeySubtitle(
                             settings.reminderHotkey,
                             taken: takenHotkeys.contains(
                               QuickCaptureKind.reminder,
                             ),
+                          ),
+                        ),
+                        ListTile(
+                          title: const Text('Quick note hotkey'),
+                          subtitle: _HotkeySubtitle(
+                            '${settings.noteHotkey}\n'
+                            'Adds a quick reminder to the Inbox.',
+                            taken: takenHotkeys.contains(QuickCaptureKind.note),
                           ),
                         ),
                         ListTile(

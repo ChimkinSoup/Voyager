@@ -6,6 +6,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -30,6 +31,10 @@ abstract interface class GaiaVoyagerWrites {
     JournalEntry Function(JournalEntry current) apply,
   );
   Future<void> deleteEntry(String id);
+
+  /// One of the Inbox's quick reminders, new or changed.
+  Future<void> saveReminder(PinnedNote note);
+  Future<void> deleteReminder(String id);
 }
 
 /// What a commit wrote, for the card ([record]) and the agent ([text]).
@@ -40,7 +45,8 @@ typedef GaiaCommitted = ({Map<String, Object?> record, String text});
 /// a card's [GaiaProposal] and remembers it; [commit] writes it once the
 /// user accepted it in the companion, which issued the approval token, and
 /// only once; [undo] takes a commit back from the action log. Every row it
-/// creates gets [kGaiaOrigin].
+/// creates gets [kGaiaOrigin], save a quick reminder, which has no origin.
+/// [addReminder] is the one write with no card: a new quick reminder.
 ///
 /// It never trusts the companion's copy of a proposal: what's written to
 /// and from which version are the ones [prepare] kept, and only the fields
@@ -50,6 +56,7 @@ class GaiaExecutor {
     required this.todos,
     required this.calendar,
     required this.journal,
+    required this.notifications,
     required this.settings,
     required this.writes,
     DateTime Function()? now,
@@ -60,6 +67,7 @@ class GaiaExecutor {
   final TodoRepository todos;
   final CalendarRepository calendar;
   final JournalRepository journal;
+  final NotificationRepository notifications;
   final SettingsRepository settings;
   final GaiaVoyagerWrites writes;
   final DateTime Function() _now;
@@ -89,6 +97,7 @@ class GaiaExecutor {
       GaiaProposalEntity.todo => await _prepareTodo(id, arguments),
       GaiaProposalEntity.event => await _prepareEvent(id, arguments),
       GaiaProposalEntity.journal => await _prepareJournal(id, arguments),
+      GaiaProposalEntity.reminder => await _prepareReminder(id, arguments),
     };
     // What the agent proposed may not be committable as it stands, a
     // missing title say; the user can fix it in the editor. Nothing at all
@@ -131,6 +140,7 @@ class GaiaExecutor {
       baseVersion: proposal.baseVersion,
       before: proposal.before,
       choices: proposal.choices,
+      delete: proposal.delete,
       fields: {
         for (final key in gaiaProposalFieldKeys(proposal.entity))
           key: fields[key],
@@ -143,6 +153,7 @@ class GaiaExecutor {
       GaiaProposalEntity.todo => await _commitTodo(checked),
       GaiaProposalEntity.event => await _commitEvent(checked),
       GaiaProposalEntity.journal => await _commitJournal(checked),
+      GaiaProposalEntity.reminder => await _commitReminder(checked),
     };
     return (
       record: record,
@@ -185,6 +196,23 @@ class GaiaExecutor {
             (current) => _applyJournal(current, before),
           );
         }
+      case GaiaProposalEntity.reminder:
+        final note = await notifications.getPinnedNote(id);
+        if (note == null) throw GaiaReadException("It's gone already.");
+        if (note.version != version) {
+          throw GaiaReadException(
+            "It's been changed since, so undoing would lose that change.",
+          );
+        }
+        // A deleted one comes back; a changed one gets its old text back.
+        await writes.saveReminder(
+          note.copyWith(
+            text: record['deleted'] == true ? null : before!['text']! as String,
+            clearDeletedAt: true,
+            updatedAt: utcNow(),
+            version: note.version + 1,
+          ),
+        );
     }
   }
 
@@ -610,6 +638,87 @@ class GaiaExecutor {
     );
   }
 
+  // ---- Reminders ----
+
+  /// An `add_reminder` call: a new quick reminder, saved at once with no
+  /// card, and what the agent is told. Throws a [GaiaReadException] with no
+  /// text.
+  Future<String> addReminder(Map<String, Object?> arguments) async {
+    final text = switch (arguments['text']) {
+      final String text when text.trim().isNotEmpty => text.trim(),
+      _ => throw GaiaReadException('add_reminder needs some "text".'),
+    };
+    final now = utcNow();
+    final note = PinnedNote(
+      id: _newId(),
+      text: text,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await writes.saveReminder(note);
+    return 'Saved a new reminder in the Inbox (id ${note.id}):\n$text\n'
+        'It was saved without asking, so tell the user what you saved.';
+  }
+
+  /// A change or a delete only: a new reminder is [addReminder]'s.
+  Future<GaiaProposal> _prepareReminder(
+    String? id,
+    Map<String, Object?> arguments,
+  ) async {
+    if (id == null) {
+      throw GaiaReadException(
+        '"id" is required. To add a new reminder, use add_reminder.',
+      );
+    }
+    final note = await notifications.getPinnedNote(id);
+    if (note == null || note.deletedAt != null) {
+      throw GaiaReadException('No reminder has the id "$id".');
+    }
+    final before = {'text': note.text};
+    final delete = arguments['delete'] == true;
+    return GaiaProposal(
+      entity: GaiaProposalEntity.reminder,
+      targetId: note.id,
+      baseVersion: note.version,
+      before: before,
+      delete: delete,
+      fields: switch (arguments['text']) {
+        _ when delete => before,
+        final String text => {'text': text.trim()},
+        _ => throw GaiaReadException('Pass the new "text", or "delete".'),
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> _commitReminder(GaiaProposal proposal) async {
+    final id = proposal.targetId!;
+    final current = await notifications.getPinnedNote(id);
+    if (current == null || current.deletedAt != null) {
+      throw GaiaReadException("It's been deleted since it was proposed.");
+    }
+    if (current.version != proposal.baseVersion) {
+      throw GaiaReadException(
+        "It's been changed since it was proposed; nothing was saved.",
+      );
+    }
+    if (proposal.delete) {
+      await writes.deleteReminder(id);
+    } else {
+      await writes.saveReminder(
+        current.copyWith(
+          text: (proposal.fields['text']! as String).trim(),
+          updatedAt: utcNow(),
+          version: current.version + 1,
+        ),
+      );
+    }
+    final saved = await notifications.getPinnedNote(id);
+    return {
+      ..._record(proposal, id, saved!.version),
+      if (proposal.delete) 'deleted': true,
+    };
+  }
+
   // ---- Shared ----
 
   /// The id of the choice named [name], case aside; null for none named.
@@ -682,6 +791,9 @@ class GaiaExecutor {
     Map<String, Object?> proposed,
     Map<String, Object?> record,
   ) {
+    if (proposal.delete) {
+      return 'The user accepted. Deleted the reminder (id ${record['id']}).';
+    }
     final fields = proposal.fields;
     final changed = gaiaProposalChanged(proposal, fields);
     final edited = gaiaProposalEdited(proposal.entity, proposed, fields);
@@ -704,6 +816,7 @@ class GaiaExecutor {
       GaiaProposalEntity.todo => 'task',
       GaiaProposalEntity.event => 'event',
       GaiaProposalEntity.journal => 'journal entry',
+      GaiaProposalEntity.reminder => 'reminder',
     };
     return [
       proposal.isEdit

@@ -3826,6 +3826,15 @@ class GaiaController extends ChangeNotifier {
     });
   }
 
+  /// Archives or unarchives [chatId], moving it in the list at once.
+  Future<void> setArchived(String chatId, bool archived) async {
+    chats = [
+      for (final c in chats) c.id == chatId ? gaiaArchived(c, archived) : c,
+    ]..sort(gaiaChatListed);
+    notifyListeners();
+    await _request('setArchived', {'chatId': chatId, 'archived': archived});
+  }
+
   /// [chatId] dragged in the sidebar to [order] (`GaiaChat.order`).
   Future<void> reorderChat(String chatId, double order) async {
     final at = utcNow();
@@ -6105,6 +6114,8 @@ class GaiaController extends ChangeNotifier {
                     ? 'memoryTool'
                     : isGaiaProjectTool(tool)
                     ? 'projectTool'
+                    : isGaiaVoyagerWrite(tool)
+                    ? 'voyagerWrite'
                     : 'voyagerRead',
                 {'tool': tool, 'arguments': arguments, 'chatId': chatId},
               )

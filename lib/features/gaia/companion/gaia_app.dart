@@ -975,7 +975,7 @@ class _ChatSwitcherState extends State<_ChatSwitcher> {
           if (_wasOpen) return;
           final recent = [
             for (final chat in controller.chats)
-              if (chat.id != controller.currentChatId) chat,
+              if (chat.id != controller.currentChatId && !chat.archived) chat,
           ]..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
           // Under the title, not over it.
           final title = context.findRenderObject()! as RenderBox;
@@ -1155,6 +1155,9 @@ class _SidebarState extends State<_Sidebar> {
   String? _renaming;
   var _renamingProject = false;
   final _rename = TextEditingController();
+
+  /// Whether the Archived chats show; folded away each time Gaia opens.
+  var _archivedOpen = false;
   final _renameFocus = FocusNode();
 
   @override
@@ -1667,6 +1670,11 @@ class _SidebarState extends State<_Sidebar> {
         onPressed: () => _moveMenu(chat, position),
       ),
       GaiaMenuItem(
+        label: chat.archived ? 'Unarchive' : 'Archive',
+        icon: chat.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
+        onPressed: () => controller.setArchived(chat.id, !chat.archived),
+      ),
+      GaiaMenuItem(
         label: 'Copy title',
         icon: Icons.content_copy,
         onPressed: () => Clipboard.setData(ClipboardData(text: chat.title)),
@@ -1900,6 +1908,34 @@ class _SidebarState extends State<_Sidebar> {
                             child: _SidebarLabel('Chats'),
                           ),
                           _chatList(sections.chats),
+                        ],
+                        if (sections.archived.isNotEmpty) ...[
+                          SliverToBoxAdapter(
+                            child: _SidebarLabel(
+                              'Archived',
+                              trailing: GaiaActionIcon(
+                                label: _archivedOpen
+                                    ? 'Hide archived'
+                                    : 'Show archived',
+                                icon: _archivedOpen
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                compact: true,
+                                tooltip: false,
+                                onPressed: () => setState(
+                                  () => _archivedOpen = !_archivedOpen,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Not dragged: they're in no order but recency.
+                          if (_archivedOpen)
+                            SliverList.list(
+                              children: [
+                                for (final group in sections.archived)
+                                  _group(group),
+                              ],
+                            ),
                         ],
                       ],
                     ),
@@ -5747,6 +5783,9 @@ class _ComposerState extends State<_Composer> {
                                     GaiaCardKind.question => 'Type an answer',
                                     GaiaCardKind.permission =>
                                       'Send to allow, or say why not',
+                                    GaiaCardKind.proposal
+                                        when card!.proposal?.delete ?? false =>
+                                      'Send to delete, or say what to change',
                                     GaiaCardKind.proposal =>
                                       'Send to save, or say what to change',
                                     GaiaCardKind.control =>

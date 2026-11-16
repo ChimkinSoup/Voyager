@@ -844,6 +844,8 @@ class SettingsTable extends Table {
       text().withDefault(const Constant(defaultReminderHotkey))();
   TextColumn get calendarHotkey =>
       text().withDefault(const Constant(defaultCalendarHotkey))();
+  TextColumn get noteHotkey =>
+      text().withDefault(const Constant(defaultNoteHotkey))();
   TextColumn get calendarNavigateLeftKey =>
       text().withDefault(const Constant(defaultCalendarNavigateLeftKey))();
   TextColumn get calendarNavigateRightKey =>
@@ -2236,6 +2238,9 @@ class GaiaChatsTable extends Table {
   /// Where it was dragged to in the sidebar, and when (`GaiaChat.order`).
   RealColumn get listOrder => real().nullable()();
   DateTimeColumn get orderedAt => dateTime().nullable()();
+
+  /// When it was archived (`GaiaChat.archivedAt`).
+  DateTimeColumn get archivedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2548,7 +2553,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 198;
+  int get schemaVersion => 200;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4803,6 +4808,19 @@ class AppDatabase extends _$AppDatabase {
           'gaia_settings_table',
           gaiaSettingsTable,
           gaiaSettingsTable.userName,
+        );
+      }
+      if (from < 199) {
+        // The quick-note hotkey.
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.noteHotkey);
+      }
+      if (from >= 169 && from < 200) {
+        // Archived chats.
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_chats_table',
+          gaiaChatsTable,
+          gaiaChatsTable.archivedAt,
         );
       }
     },

@@ -288,10 +288,25 @@ class GaiaChatStore {
         if (chat == null || chat.pinned == pinned) return;
         await _repository.upsertChat(
           pinned && order != null
-              ? chat.copyWith(pinned: true, order: order, orderedAt: utcNow())
+              ? chat.copyWith(
+                  pinned: true,
+                  clearArchivedAt: true,
+                  order: order,
+                  orderedAt: utcNow(),
+                )
               : gaiaPinned(chat, pinned, await _repository.listChats()),
         );
       });
+
+  /// Archived or unarchived from Gaia's sidebar, as on the Gaia page.
+  Future<void> setArchived(String chatId, bool archived) => _serial(() async {
+    final chat = await _repository.getChat(chatId);
+    if (chat == null || chat.archived == archived) return;
+    final all = await _repository.listChats();
+    for (final changed in gaiaArchivedWithForks(chat, archived, all)) {
+      await _repository.upsertChat(changed);
+    }
+  });
 
   /// Dragged in Gaia's sidebar to [order] (`GaiaChat.order`).
   Future<void> reorderChat(String chatId, double order) => _serial(() async {

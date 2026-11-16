@@ -5,6 +5,7 @@ import 'package:voyager/features/hotkeys/floaters/calendar_floater.dart';
 import 'package:voyager/features/hotkeys/floaters/finance_floater.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/journal_floater.dart';
+import 'package:voyager/features/hotkeys/floaters/note_floater.dart';
 import 'package:voyager/features/hotkeys/floaters/reminder_floater.dart';
 import 'package:voyager/features/hotkeys/floaters/todo_floater.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
@@ -122,6 +123,7 @@ class _FloaterSurface extends StatelessWidget {
                         QuickCaptureKind.finance => const FinanceFloater(),
                         QuickCaptureKind.reminder => const ReminderFloater(),
                         QuickCaptureKind.calendar => const CalendarFloater(),
+                        QuickCaptureKind.note => const NoteFloater(),
                       },
                     ),
                   ),

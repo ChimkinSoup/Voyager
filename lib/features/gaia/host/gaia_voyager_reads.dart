@@ -23,6 +23,7 @@ class GaiaVoyagerReads {
     required this.journal,
     required this.workouts,
     required this.trackers,
+    required this.notifications,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -31,6 +32,7 @@ class GaiaVoyagerReads {
   final JournalRepository journal;
   final WorkoutRepository workouts;
   final TrackerRepository trackers;
+  final NotificationRepository notifications;
   final DateTime Function() _now;
 
   /// [tool]'s answer to [arguments]. Throws a [GaiaReadException] the agent
@@ -42,6 +44,7 @@ class GaiaVoyagerReads {
       'voyager_journal' => ('journal', await _journal(arguments)),
       'voyager_workouts' => ('workouts', await _workouts(arguments)),
       'voyager_trackers' => ('trackers', await _trackers(arguments)),
+      'voyager_reminders' => ('reminders', await _reminders()),
       _ => throw GaiaReadException('Unknown tool: $tool'),
     };
     final today = _day(_now());
@@ -350,6 +353,17 @@ class GaiaVoyagerReads {
       out.writeln();
     }
     return out.toString();
+  }
+
+  /// The Inbox's quick reminders, oldest first. A reminder's later lines are
+  /// indented under its first.
+  Future<String> _reminders() async {
+    final notes = await notifications.listPinnedNotes();
+    return [
+      for (final note in notes)
+        '- (added ${_dayLabel(_day(note.createdAt))}, id ${note.id}) '
+            '${_clip(note.text.trim(), 2000).replaceAll('\n', '\n  ')}',
+    ].join('\n');
   }
 
   static int _bySet(WorkoutSetLog a, WorkoutSetLog b) =>

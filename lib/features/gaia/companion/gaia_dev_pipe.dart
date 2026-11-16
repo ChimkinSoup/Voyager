@@ -117,6 +117,12 @@ class GaiaDevPipe extends GaiaPipe {
           order: (p['order'] as num?)?.toDouble(),
         );
         return null;
+      case 'setArchived':
+        await _store.setArchived(
+          p['chatId']! as String,
+          p['archived']! as bool,
+        );
+        return null;
       case 'reorderChat':
         await _store.reorderChat(
           p['chatId']! as String,

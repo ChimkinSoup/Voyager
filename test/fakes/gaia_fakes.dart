@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
@@ -544,11 +545,12 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
 /// The executor's writes straight to the repositories, as the app's would
 /// be, minus the uploads and providers.
 class DirectGaiaWrites implements GaiaVoyagerWrites {
-  DirectGaiaWrites(this.todos, this.calendar, this.journal);
+  DirectGaiaWrites(this.todos, this.calendar, this.journal, this.notifications);
 
   final TodoRepository todos;
   final CalendarRepository calendar;
   final JournalRepository journal;
+  final NotificationRepository notifications;
 
   @override
   Future<void> saveTasks(List<TodoTask> tasks) async {
@@ -577,4 +579,11 @@ class DirectGaiaWrites implements GaiaVoyagerWrites {
 
   @override
   Future<void> deleteEntry(String id) => journal.softDeleteEntry(id);
+
+  @override
+  Future<void> saveReminder(PinnedNote note) =>
+      notifications.upsertPinnedNote(note);
+
+  @override
+  Future<void> deleteReminder(String id) => notifications.deletePinnedNote(id);
 }

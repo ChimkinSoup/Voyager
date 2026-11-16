@@ -180,6 +180,9 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
   /// The forks listed so far, so a new one shows its group again.
   Set<String>? _forks;
 
+  /// Whether the Archived chats show; folded away to begin with.
+  var _archivedOpen = false;
+
   @override
   void dispose() {
     _search.dispose();
@@ -371,6 +374,27 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
           if (pinned.isNotEmpty || sections.projects.isNotEmpty)
             const _SectionLabel('Chats'),
           ...rows(recent),
+        ],
+        // A search lists them with the rest.
+        if (query.isEmpty && sections.archived.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const _SectionLabel('Archived'),
+              IconButton(
+                tooltip: _archivedOpen ? 'Hide archived' : 'Show archived',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  _archivedOpen
+                      ? PhosphorIconsRegular.caretDown
+                      : PhosphorIconsRegular.caretRight,
+                  size: 14,
+                ),
+                onPressed: () => setState(() => _archivedOpen = !_archivedOpen),
+              ),
+            ],
+          ),
+          if (_archivedOpen) ...rows(sections.archived),
         ],
       ],
     );
@@ -696,6 +720,7 @@ class _ActionRowState extends State<_ActionRow> {
         GaiaProposalEntity.todo => PhosphorIconsRegular.checkSquare,
         GaiaProposalEntity.event => PhosphorIconsRegular.calendarBlank,
         GaiaProposalEntity.journal => PhosphorIconsRegular.notebook,
+        GaiaProposalEntity.reminder => PhosphorIconsRegular.tray,
       }, size: 20),
       title: Text(
         gaiaProposalTitle(proposal, fields),
@@ -1398,6 +1423,29 @@ class _ChatRow extends ConsumerWidget {
                     child: const Text('Remove from project'),
                   ),
               ];
+            },
+          ),
+          IconButton(
+            tooltip: chat.archived ? 'Unarchive' : 'Archive',
+            icon: Icon(
+              chat.archived
+                  ? PhosphorIconsRegular.arrowCounterClockwise
+                  : PhosphorIconsRegular.archive,
+              size: 16,
+            ),
+            // From the stored chat, as Pin is.
+            onPressed: () async {
+              final repository = ref.read(gaiaRepositoryProvider);
+              final current = await repository.getChat(chat.id);
+              if (current == null) return;
+              final all = await repository.listChats();
+              for (final changed in gaiaArchivedWithForks(
+                current,
+                !chat.archived,
+                all,
+              )) {
+                await repository.upsertChat(changed);
+              }
             },
           ),
           IconButton(
@@ -3126,7 +3174,8 @@ class _KeysSection extends ConsumerWidget {
             'Quick journal entry': voyager.journalHotkey,
             'Quick to-do': voyager.todoHotkey,
             'Quick transaction': voyager.financeHotkey,
-            'Quick reminder': voyager.reminderHotkey,
+            'Scheduled reminder': voyager.reminderHotkey,
+            'Quick note': voyager.noteHotkey,
             'Quick event': voyager.calendarHotkey,
           });
     if (voyagerClash != null) {

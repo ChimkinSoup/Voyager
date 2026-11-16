@@ -1109,6 +1109,34 @@ final _proposalScripts = {
       ]),
     ],
   ),
+  '/propose9': GaiaDebugScript(
+    "Proposal: a change to your Inbox's first quick reminder",
+    [
+      const GaiaDebugText('Rewording a reminder:'),
+      GaiaDebugProposals([
+        GaiaDebugProposal(
+          'propose_reminder',
+          (today) => {
+            'text': 'Reworded by Gaia debug: the sidebar flickers on resize',
+          },
+          read: 'voyager_reminders',
+        ),
+      ]),
+    ],
+  ),
+  '/propose10': GaiaDebugScript(
+    "Proposal: deleting your Inbox's first quick reminder",
+    [
+      const GaiaDebugText('Deleting a reminder:'),
+      GaiaDebugProposals([
+        GaiaDebugProposal(
+          'propose_reminder',
+          (today) => {'delete': true},
+          read: 'voyager_reminders',
+        ),
+      ]),
+    ],
+  ),
 };
 
 const _scripts = {

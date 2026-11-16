@@ -529,9 +529,20 @@ class GaiaChat extends SoftDeletable {
     this.summarizedSeq = -1,
     this.order,
     this.orderedAt,
+    this.archivedAt,
   });
 
   final String title;
+
+  /// When it was archived; null for never, or unarchived since.
+  final DateTime? archivedAt;
+
+  /// Off the chat lists, but still found by search and seen by Gaia. A
+  /// message after [archivedAt] brings it back.
+  bool get archived => switch (archivedAt) {
+    final at? => !lastMessageAt.isAfter(at),
+    null => false,
+  };
 
   /// Where it was dragged to in the sidebar, as a [listRank]; null for
   /// none.
@@ -652,12 +663,15 @@ class GaiaChat extends SoftDeletable {
     double? order,
     DateTime? orderedAt,
     bool clearOrder = false,
+    DateTime? archivedAt,
+    bool clearArchivedAt = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
     bool bumpVersion = true,
     bool touch = true,
   }) => GaiaChat(
+    archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
     order: clearOrder ? null : (order ?? this.order),
     orderedAt: clearOrder ? null : (orderedAt ?? this.orderedAt),
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
@@ -708,6 +722,7 @@ class GaiaChat extends SoftDeletable {
     'summarizedSeq': summarizedSeq,
     'order': order,
     'orderedAt': orderedAt?.toIso8601String(),
+    'archivedAt': archivedAt?.toIso8601String(),
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -734,9 +749,38 @@ class GaiaChat extends SoftDeletable {
       summarizedSeq: (json['summarizedSeq'] as num?)?.toInt() ?? -1,
       order: (json['order'] as num?)?.toDouble(),
       orderedAt: _date(json['orderedAt']),
+      archivedAt: _date(json['archivedAt']),
     );
   }
 }
+
+/// [chat] archived, and unpinned, as an archived chat isn't; or back on
+/// the lists. Archived no earlier than its last message, which another
+/// device's clock may have put ahead of this one's.
+GaiaChat gaiaArchived(GaiaChat chat, bool archived) {
+  if (!archived) return chat.copyWith(clearArchivedAt: true);
+  final now = utcNow();
+  return chat.copyWith(
+    archivedAt: now.isBefore(chat.lastMessageAt) ? chat.lastMessageAt : now,
+    pinned: false,
+    clearOrder: true,
+  );
+}
+
+/// [chat] as [gaiaArchived] makes it, with those of its forks among [all]
+/// that aren't so already: they're put away, and brought back, with it.
+List<GaiaChat> gaiaArchivedWithForks(
+  GaiaChat chat,
+  bool archived,
+  List<GaiaChat> all,
+) => [
+  gaiaArchived(chat, archived),
+  for (final fork in all)
+    if (fork.forkOf == chat.id &&
+        fork.id != chat.id &&
+        fork.archived != archived)
+      gaiaArchived(fork, archived),
+];
 
 /// The sidebar's order: pinned first, then by [GaiaChat.listRank].
 int gaiaChatListed(GaiaChat a, GaiaChat b) {
@@ -747,7 +791,7 @@ int gaiaChatListed(GaiaChat a, GaiaChat b) {
 
 /// [chat] pinned, at the bottom of the pinned chats it's listed with (its
 /// project's, or those in none), or unpinned, back where its recency puts
-/// it. [chats]: the chats there are.
+/// it. [chats]: the chats there are. An archived chat pinned is unarchived.
 GaiaChat gaiaPinned(GaiaChat chat, bool pinned, Iterable<GaiaChat> chats) {
   if (!pinned) return chat.copyWith(pinned: false, clearOrder: true);
   final ranks = [
@@ -760,6 +804,7 @@ GaiaChat gaiaPinned(GaiaChat chat, bool pinned, Iterable<GaiaChat> chats) {
   ];
   return chat.copyWith(
     pinned: true,
+    clearArchivedAt: true,
     order: ranks.isEmpty
         ? chat.lastMessageAt.millisecondsSinceEpoch.toDouble()
         : ranks.reduce(min) - 1000,
@@ -918,19 +963,24 @@ typedef GaiaProjectSection = ({
 /// live project, and each of [projects] its own, with forks grouped as
 /// [gaiaForkGroups] does. A chat whose project isn't in [projects] is in
 /// none. Projects go by [GaiaProject.listRank], from their most recent
-/// chat, an empty one's from when it was made.
+/// chat, an empty one's from when it was made. [archived] holds the
+/// archived chats, from every project or none, and only there.
 ({
   List<GaiaForkGroup> pinned,
   List<GaiaProjectSection> projects,
   List<GaiaForkGroup> chats,
+  List<GaiaForkGroup> archived,
 })
 gaiaChatSections(List<GaiaChat> chats, List<GaiaProject> projects) {
   final ordered = [...chats]..sort(gaiaChatListed);
   final live = {for (final project in projects) project.id};
   final loose = <GaiaChat>[];
+  final archived = <GaiaChat>[];
   final byProject = <String, List<GaiaChat>>{};
   for (final chat in ordered) {
-    if (chat.projectId case final id? when live.contains(id)) {
+    if (chat.archived) {
+      archived.add(chat);
+    } else if (chat.projectId case final id? when live.contains(id)) {
       (byProject[id] ??= []).add(chat);
     } else {
       loose.add(chat);
@@ -966,6 +1016,7 @@ gaiaChatSections(List<GaiaChat> chats, List<GaiaProject> projects) {
       for (final group in looseGroups)
         if (!group.chat.pinned) group,
     ],
+    archived: gaiaForkGroups(archived),
   );
 }
 
@@ -1707,17 +1758,18 @@ enum GaiaCardState { open, accepted, rejected, voided, expired }
 /// One option of a question card.
 typedef GaiaCardOption = ({String label, String description});
 
-/// What a proposal writes to.
-enum GaiaProposalEntity { todo, event, journal }
+/// What a proposal writes to. A reminder is one of the Inbox's quick
+/// reminders (a `PinnedNote`).
+enum GaiaProposalEntity { todo, event, journal, reminder }
 
 /// A list, calendar or journal a proposal can go in.
 typedef GaiaProposalChoice = ({String id, String name});
 
 /// What a proposal card would write (§10): a new [entity] row, or, with
 /// [targetId], changes to that row as it stood at [baseVersion], when its
-/// values were [before]. [fields] are the values proposed, as the editor
-/// shows them (see `gaia_proposals.dart`), and [choices] are where the row
-/// can go.
+/// values were [before]; with [delete] too, that row deleted. [fields] are
+/// the values proposed, as the editor shows them (see
+/// `gaia_proposals.dart`), and [choices] are where the row can go.
 class GaiaProposal {
   const GaiaProposal({
     required this.entity,
@@ -1726,6 +1778,7 @@ class GaiaProposal {
     this.baseVersion,
     this.before,
     this.choices = const [],
+    this.delete = false,
   });
 
   final GaiaProposalEntity entity;
@@ -1734,6 +1787,7 @@ class GaiaProposal {
   final Map<String, Object?> fields;
   final Map<String, Object?>? before;
   final List<GaiaProposalChoice> choices;
+  final bool delete;
 
   bool get isEdit => targetId != null;
 
@@ -1746,6 +1800,7 @@ class GaiaProposal {
     'choices': [
       for (final choice in choices) {'id': choice.id, 'name': choice.name},
     ],
+    if (delete) 'delete': true,
   };
 
   factory GaiaProposal.fromJson(Map<String, Object?> json) => GaiaProposal(
@@ -1754,6 +1809,7 @@ class GaiaProposal {
     baseVersion: (json['baseVersion'] as num?)?.toInt(),
     fields: (json['fields']! as Map).cast<String, Object?>(),
     before: (json['before'] as Map?)?.cast<String, Object?>(),
+    delete: json['delete'] == true,
     choices: [
       for (final choice
           in (json['choices'] as List?)?.cast<Map<Object?, Object?>>() ??

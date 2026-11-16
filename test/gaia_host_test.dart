@@ -1503,11 +1503,13 @@ void main() {
         todos: todos,
         calendar: DriftCalendarRepository(db),
         journal: DriftJournalRepository(db),
+        notifications: DriftNotificationRepository(db),
         settings: DriftSettingsRepository(db),
         writes: DirectGaiaWrites(
           todos,
           DriftCalendarRepository(db),
           DriftJournalRepository(db),
+          DriftNotificationRepository(db),
         ),
       );
     }

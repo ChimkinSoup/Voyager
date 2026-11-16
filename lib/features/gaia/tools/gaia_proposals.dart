@@ -10,6 +10,8 @@
 ///   `end` (days when all day, times otherwise), `notes`.
 /// - journal: `journal` (a journal's id), `title`, `body`, `date` (a time),
 ///   `mood` (0–10).
+/// - reminder: `text`. Only a change or a delete is proposed; a new one is
+///   added at once, with no card.
 ///
 /// A when is a day, `YYYY-MM-DD`, or a local time on one,
 /// `YYYY-MM-DDTHH:mm`.
@@ -25,6 +27,7 @@ const kGaiaProposalTools = {
   'propose_todo': GaiaProposalEntity.todo,
   'propose_calendar_event': GaiaProposalEntity.event,
   'propose_journal_entry': GaiaProposalEntity.journal,
+  'propose_reminder': GaiaProposalEntity.reminder,
 };
 
 /// The `origin` every row Gaia creates gets (§10), so the trash and the
@@ -111,6 +114,7 @@ List<String> gaiaProposalFieldKeys(GaiaProposalEntity entity) =>
         'mood',
         'body',
       ],
+      GaiaProposalEntity.reminder => ['text'],
     };
 
 String gaiaProposalFieldLabel(String key) => switch (key) {
@@ -128,6 +132,7 @@ String gaiaProposalFieldLabel(String key) => switch (key) {
   'end' => 'Ends',
   'date' => 'Written',
   'mood' => 'Mood',
+  'text' => 'Reminder',
   _ => key,
 };
 
@@ -153,7 +158,7 @@ String gaiaProposalValueLabel(
 }
 
 /// The fields an edit changes, in the editor's order; every field of a
-/// new row.
+/// new row, or of one being deleted.
 List<String> gaiaProposalChanged(
   GaiaProposal proposal,
   Map<String, Object?> fields,
@@ -161,7 +166,8 @@ List<String> gaiaProposalChanged(
   final before = proposal.before;
   return [
     for (final key in gaiaProposalFieldKeys(proposal.entity))
-      if (before == null || !_same(before[key], fields[key])) key,
+      if (before == null || proposal.delete || !_same(before[key], fields[key]))
+        key,
   ];
 }
 
@@ -227,6 +233,9 @@ String? gaiaProposalProblem(
       if (mood is! int || mood < 0 || mood > 10) {
         return 'Mood is 0 to 10.';
       }
+    case GaiaProposalEntity.reminder:
+      if (proposal.delete) return null;
+      if (text('text').isEmpty) return 'A reminder needs some text.';
   }
   if (proposal.isEdit && gaiaProposalChanged(proposal, fields).isEmpty) {
     return 'Nothing is changed.';
@@ -240,10 +249,29 @@ String gaiaProposalTitle(GaiaProposal proposal, Map<String, Object?> fields) {
     GaiaProposalEntity.todo => 'task',
     GaiaProposalEntity.event => 'event',
     GaiaProposalEntity.journal => 'journal entry',
+    GaiaProposalEntity.reminder => 'reminder',
   };
-  final title = switch (fields['title']) {
-    final String title when title.trim().isNotEmpty => ' "${title.trim()}"',
+  // A reminder has no title: its text, cut to one short line, stands in.
+  final reminder = proposal.entity == GaiaProposalEntity.reminder;
+  final title = switch (fields[reminder ? 'text' : 'title']) {
+    final String title when title.trim().isNotEmpty =>
+      ' "${reminder ? _firstLine(title.trim()) : title.trim()}"',
     _ => '',
   };
-  return '${proposal.isEdit ? 'Change' : 'New'} $name$title';
+  final verb = proposal.delete
+      ? 'Delete'
+      : proposal.isEdit
+      ? 'Change'
+      : 'New';
+  return '$verb $name$title';
+}
+
+String _firstLine(String text) {
+  final line = text.split('\n').first.trim();
+  if (line.length > 60) {
+    // Not between an emoji's two halves.
+    final end = (line.codeUnitAt(59) & 0xFC00) == 0xD800 ? 59 : 60;
+    return '${line.substring(0, end)}…';
+  }
+  return line == text ? line : '$line…';
 }

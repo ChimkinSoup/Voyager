@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -986,6 +987,52 @@ void main() {
 
     await repo.upsertSettings(settings.copyWith(userName: 'Juno'));
     expect((await repo.getSettings()).userName, 'Juno');
+  });
+
+  test('198→199 adds the quick-note hotkey, at its default', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    final seedRepo = DriftSettingsRepository(seed);
+    await seedRepo.saveSettings(await seedRepo.getSettings());
+    await seed.customStatement(
+      'ALTER TABLE settings_table DROP COLUMN note_hotkey',
+    );
+    await seed.customStatement('PRAGMA user_version = 198');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftSettingsRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.noteHotkey, defaultNoteHotkey);
+
+    await repo.saveSettings(settings.copyWith(noteHotkey: 'Ctrl+Alt+K'));
+    expect((await repo.getSettings()).noteHotkey, 'Ctrl+Alt+K');
+  });
+
+  test('199→200 adds archiving to chats, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Plans',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN archived_at',
+    );
+    await seed.customStatement('PRAGMA user_version = 199');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.archivedAt, isNull);
+    await repo.upsertChat(chat.copyWith(archivedAt: now));
+    expect((await repo.getChat('c1'))!.archivedAt, now);
   });
 
   test('173→174 adds slash commands, none at first', () async {

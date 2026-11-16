@@ -43,6 +43,10 @@ const kReminderFloaterSize = Size(kReminderFormWidth, 496);
 /// `calendar_floater_fits_form_test.dart` holds this to the real panel.
 const kCalendarFloaterSize = Size(384, 420.4);
 
+/// The quick-note floater's window: a note box under the todo bar's width,
+/// tall enough for a few lines, which scroll past that.
+const kNoteFloaterSize = Size(520, 132);
+
 /// Routes global hotkeys and owns the floater lifecycle.
 ///
 /// A hotkey for the floater already open does nothing; a different one
@@ -89,12 +93,15 @@ class FloaterController extends ChangeNotifier with WindowListener {
         QuickCaptureKind.finance => kFinanceFloaterSize,
         QuickCaptureKind.reminder => kReminderFloaterSize,
         QuickCaptureKind.calendar => kCalendarFloaterSize,
+        QuickCaptureKind.note => kNoteFloaterSize,
       };
 
   /// The finance, reminder and calendar forms report their height; the todo
-  /// bar and the notepad are sized by [_sizeFor] alone.
+  /// bar, the notepad and the note box are sized by [_sizeFor] alone.
   Future<void> Function()? _fitFor(QuickCaptureKind kind) => switch (kind) {
-    QuickCaptureKind.todo || QuickCaptureKind.journal => null,
+    QuickCaptureKind.todo ||
+    QuickCaptureKind.journal ||
+    QuickCaptureKind.note => null,
     QuickCaptureKind.finance ||
     QuickCaptureKind.reminder ||
     QuickCaptureKind.calendar => _fitHeight,
@@ -106,6 +113,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
     QuickCaptureKind.finance => FloaterAnchor.center,
     QuickCaptureKind.reminder => FloaterAnchor.center,
     QuickCaptureKind.calendar => FloaterAnchor.center,
+    QuickCaptureKind.note => FloaterAnchor.upperCenter,
   };
 
   /// Operations run one at a time: a blur, a hotkey and a save can all land

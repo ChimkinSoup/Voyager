@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_proposal_card.dart';
 
 import 'narrow_window_harness.dart';
@@ -84,4 +85,54 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
+
+  testWidgets('a reminder delete shows what goes, with Delete and Keep it', (
+    tester,
+  ) async {
+    const before = {'text': 'Sidebar flickers on resize'};
+    final card = GaiaCardPart(
+      id: 'p2',
+      kind: GaiaCardKind.proposal,
+      tool: 'propose_reminder',
+      proposal: const GaiaProposal(
+        entity: GaiaProposalEntity.reminder,
+        targetId: 'n1',
+        baseVersion: 0,
+        before: before,
+        fields: before,
+        delete: true,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: VoyagerTheme.dark(),
+        home: Scaffold(
+          body: GaiaProposalCard(
+            card: card,
+            fields: before,
+            waiting: true,
+            sendKey: 'Ctrl+Enter',
+            onEdit: (_, _) {},
+            onAccept: () {},
+            onReject: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Delete reminder "Sidebar flickers on resize"'), findsOne);
+    final text = tester.widget<Text>(find.text('Sidebar flickers on resize'));
+    expect(text.style?.decoration, TextDecoration.lineThrough);
+    // Nothing to edit on a delete.
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('Delete'), findsOne);
+    expect(find.text('Keep it'), findsOne);
+    // Only Delete is red: keeping it is the safe choice.
+    GaiaButton button(String label) => tester.widget<GaiaButton>(
+      find.ancestor(of: find.text(label), matching: find.byType(GaiaButton)),
+    );
+    final error = VoyagerTheme.dark().colorScheme.error;
+    expect(button('Delete').color, error);
+    expect(button('Keep it').color, isNot(error));
+    expect(find.text('Ctrl+Enter deletes · or type what to change'), findsOne);
+  });
 }

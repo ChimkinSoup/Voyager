@@ -17,7 +17,7 @@ typedef GaiaFrame = ({int left, int top, int width, int height});
 
 /// Logical sizes. The Gaia window and the floaters remember their own once
 /// moved or resized.
-const _smallSize = Size(560, 460);
+const _smallSize = Size(560, 720);
 const _largeSize = Size(980, 760);
 const _windowSize = Size(1200, 820);
 const _pickUpSize = Size(460, 48);

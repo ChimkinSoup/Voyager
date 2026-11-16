@@ -4,6 +4,7 @@ const defaultTodoHotkey = 'Ctrl+Alt+T';
 const defaultFinanceHotkey = 'Ctrl+Alt+F';
 const defaultReminderHotkey = 'Ctrl+Alt+R';
 const defaultCalendarHotkey = 'Ctrl+Alt+C';
+const defaultNoteHotkey = 'Ctrl+Alt+N';
 
 const legacyJournalHotkey = 'Ctrl+Shift+J';
 const legacyTodoHotkey = 'Ctrl+Shift+T';

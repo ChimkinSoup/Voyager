@@ -11,12 +11,16 @@ enum QuickCaptureKind {
   journal('/journal'),
   finance('/finance'),
   reminder(null),
-  calendar('/calendar');
+  calendar('/calendar'),
+
+  /// A quick reminder in the Inbox: a note with no due date.
+  note(null);
 
   const QuickCaptureKind(this.path);
 
   /// The shell page the in-app path navigates to, or null for a capture no
-  /// page owns — the reminder editor opens over whatever page is showing.
+  /// page owns — the reminder editor opens over whatever page is showing,
+  /// and a note goes in the Inbox, which opens over it too.
   final String? path;
 }
 
@@ -104,6 +108,11 @@ void storeScheduledReminderDraft(
     () => container.read(scheduledReminderDraftProvider.notifier).state = draft,
   );
 }
+
+/// The quick note's unsaved text, shared by the hotkey floater and the
+/// Inbox's quick-reminder field until one of them adds it. Session memory
+/// only.
+final noteCaptureDraftProvider = StateProvider<String>((_) => '');
 
 /// The new-event panel's unsaved fields, kept across the calendar floater's
 /// dismissals until a save clears them, and taken up by the calendar page's

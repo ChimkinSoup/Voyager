@@ -4,6 +4,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/gaia/host/gaia_executor.dart';
@@ -20,6 +21,7 @@ void main() {
   late DriftTodoRepository todos;
   late DriftCalendarRepository calendar;
   late DriftJournalRepository journal;
+  late DriftNotificationRepository notifications;
   late GaiaExecutor executor;
   final at = DateTime.utc(2026, 10, 1);
   var ids = 0;
@@ -30,14 +32,16 @@ void main() {
     todos = DriftTodoRepository(db);
     calendar = DriftCalendarRepository(db);
     journal = DriftJournalRepository(db);
+    notifications = DriftNotificationRepository(db);
     ids = 0;
     clock = DateTime(2026, 10, 28, 9);
     executor = GaiaExecutor(
       todos: todos,
       calendar: calendar,
       journal: journal,
+      notifications: notifications,
       settings: DriftSettingsRepository(db),
-      writes: DirectGaiaWrites(todos, calendar, journal),
+      writes: DirectGaiaWrites(todos, calendar, journal, notifications),
       now: () => clock,
       newRowId: () => 'new${ids++}',
     );
@@ -562,6 +566,114 @@ void main() {
         throwsA(isA<GaiaReadException>()),
       );
       expect((await todos.getTask('new0'))!.deletedAt, isNull);
+    });
+  });
+
+  group('reminder', () {
+    Future<void> note(String id, String text) => notifications.upsertPinnedNote(
+      PinnedNote(id: id, text: text, createdAt: at, updatedAt: at),
+    );
+
+    test('add_reminder saves at once, trimmed, and says so', () async {
+      final text = await executor.addReminder({
+        'text': '  Sidebar flickers on resize  ',
+      });
+      final saved = (await notifications.getPinnedNote('new0'))!;
+      expect(saved.text, 'Sidebar flickers on resize');
+      expect(saved.deletedAt, isNull);
+      expect(text, contains('Saved a new reminder in the Inbox (id new0)'));
+      expect(text, contains('tell the user what you saved'));
+    });
+
+    test('add_reminder refuses no text', () async {
+      await expectLater(
+        executor.addReminder({'text': '  '}),
+        throwsA(isA<GaiaReadException>()),
+      );
+      expect(await notifications.listPinnedNotes(), isEmpty);
+    });
+
+    test('a proposal needs an existing reminder', () async {
+      await expectLater(
+        executor.prepare('card', 'propose_reminder', {'text': 'New'}),
+        throwsA(isA<GaiaReadException>()),
+      );
+      await expectLater(
+        executor.prepare('card', 'propose_reminder', {
+          'id': 'missing',
+          'text': 'New',
+        }),
+        throwsA(isA<GaiaReadException>()),
+      );
+    });
+
+    test('a change, as the user edited it, and its undo', () async {
+      await note('n1', 'Sidebar flickers');
+      final proposal = await executor.prepare('card', 'propose_reminder', {
+        'id': 'n1',
+        'text': 'Sidebar flickers on resize',
+      });
+      expect(proposal.delete, isFalse);
+      expect(proposal.before, {'text': 'Sidebar flickers'});
+      expect(
+        gaiaProposalTitle(proposal, proposal.fields),
+        'Change reminder "Sidebar flickers on resize"',
+      );
+      final committed = await accept('card', proposal, {
+        'text': 'Sidebar flickers when resized',
+      });
+      expect(
+        (await notifications.getPinnedNote('n1'))!.text,
+        'Sidebar flickers when resized',
+      );
+      expect(committed.text, contains('Saved the changes to the reminder'));
+      expect(committed.text, contains('(changed by the user'));
+      await executor.undo(committed.record);
+      expect(
+        (await notifications.getPinnedNote('n1'))!.text,
+        'Sidebar flickers',
+      );
+    });
+
+    test('a delete, and its undo brings it back', () async {
+      await note('n1', 'Sidebar flickers');
+      final proposal = await executor.prepare('card', 'propose_reminder', {
+        'id': 'n1',
+        'delete': true,
+      });
+      expect(proposal.delete, isTrue);
+      expect(gaiaProposalProblem(proposal, proposal.fields), isNull);
+      expect(
+        gaiaProposalTitle(proposal, proposal.fields),
+        'Delete reminder "Sidebar flickers"',
+      );
+      // It survives the trip to the companion and back.
+      expect(GaiaProposal.fromJson(proposal.toJson()).delete, isTrue);
+      final committed = await accept('card', proposal);
+      expect((await notifications.getPinnedNote('n1'))!.deletedAt, isNotNull);
+      expect(committed.record['deleted'], isTrue);
+      expect(committed.text, contains('Deleted the reminder (id n1)'));
+      await executor.undo(committed.record);
+      final back = (await notifications.getPinnedNote('n1'))!;
+      expect(back.deletedAt, isNull);
+      expect(back.text, 'Sidebar flickers');
+    });
+
+    test("won't commit over a change made since it was proposed", () async {
+      await note('n1', 'Sidebar flickers');
+      final proposal = await executor.prepare('card', 'propose_reminder', {
+        'id': 'n1',
+        'delete': true,
+      });
+      final current = (await notifications.getPinnedNote('n1'))!;
+      await notifications.upsertPinnedNote(
+        current.copyWith(text: 'Edited elsewhere', version: 1),
+      );
+      await expectLater(
+        accept('card', proposal),
+        throwsA(isA<GaiaReadException>()),
+      );
+      expect((await notifications.getPinnedNote('n1'))!.deletedAt, isNull);
     });
   });
 }

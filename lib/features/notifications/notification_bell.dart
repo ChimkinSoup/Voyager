@@ -8,6 +8,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 
 const _bellWidth = 68.0;
@@ -50,7 +51,9 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
     super.dispose();
   }
 
-  void _openPopover() {
+  /// With [focusNote], the quick-reminder field takes the keyboard: the
+  /// quick-note hotkey's in-app path.
+  void _openPopover({bool focusNote = false}) {
     final box = _anchorKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final topLeft = box.localToGlobal(Offset.zero);
@@ -67,12 +70,15 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
       ),
       accentBorder: true,
       accentColor: widget.accent,
-      builder: (ctx) => const NotificationInboxPopover(),
+      builder: (ctx) => NotificationInboxPopover(focusNote: focusNote),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind == QuickCaptureKind.note) _openPopover(focusNote: true);
+    });
     final urgency = ref.watch(notificationBadgeStateProvider);
     final colorScheme = Theme.of(context).colorScheme;
 

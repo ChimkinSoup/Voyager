@@ -9597,6 +9597,18 @@ class $SettingsTableTable extends SettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(defaultCalendarHotkey),
   );
+  static const VerificationMeta _noteHotkeyMeta = const VerificationMeta(
+    'noteHotkey',
+  );
+  @override
+  late final GeneratedColumn<String> noteHotkey = GeneratedColumn<String>(
+    'note_hotkey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(defaultNoteHotkey),
+  );
   static const VerificationMeta _calendarNavigateLeftKeyMeta =
       const VerificationMeta('calendarNavigateLeftKey');
   @override
@@ -11412,6 +11424,7 @@ class $SettingsTableTable extends SettingsTable
     financeHotkey,
     reminderHotkey,
     calendarHotkey,
+    noteHotkey,
     calendarNavigateLeftKey,
     calendarNavigateRightKey,
     timelineModeYearZero,
@@ -11727,6 +11740,12 @@ class $SettingsTableTable extends SettingsTable
           data['calendar_hotkey']!,
           _calendarHotkeyMeta,
         ),
+      );
+    }
+    if (data.containsKey('note_hotkey')) {
+      context.handle(
+        _noteHotkeyMeta,
+        noteHotkey.isAcceptableOrUnknown(data['note_hotkey']!, _noteHotkeyMeta),
       );
     }
     if (data.containsKey('calendar_navigate_left_key')) {
@@ -13075,6 +13094,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}calendar_hotkey'],
       )!,
+      noteHotkey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_hotkey'],
+      )!,
       calendarNavigateLeftKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}calendar_navigate_left_key'],
@@ -13674,6 +13697,7 @@ class SettingsTableData extends DataClass
   final String financeHotkey;
   final String reminderHotkey;
   final String calendarHotkey;
+  final String noteHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
   final bool timelineModeYearZero;
@@ -13964,6 +13988,7 @@ class SettingsTableData extends DataClass
     required this.financeHotkey,
     required this.reminderHotkey,
     required this.calendarHotkey,
+    required this.noteHotkey,
     required this.calendarNavigateLeftKey,
     required this.calendarNavigateRightKey,
     required this.timelineModeYearZero,
@@ -14136,6 +14161,7 @@ class SettingsTableData extends DataClass
     map['finance_hotkey'] = Variable<String>(financeHotkey);
     map['reminder_hotkey'] = Variable<String>(reminderHotkey);
     map['calendar_hotkey'] = Variable<String>(calendarHotkey);
+    map['note_hotkey'] = Variable<String>(noteHotkey);
     map['calendar_navigate_left_key'] = Variable<String>(
       calendarNavigateLeftKey,
     );
@@ -14515,6 +14541,7 @@ class SettingsTableData extends DataClass
       financeHotkey: Value(financeHotkey),
       reminderHotkey: Value(reminderHotkey),
       calendarHotkey: Value(calendarHotkey),
+      noteHotkey: Value(noteHotkey),
       calendarNavigateLeftKey: Value(calendarNavigateLeftKey),
       calendarNavigateRightKey: Value(calendarNavigateRightKey),
       timelineModeYearZero: Value(timelineModeYearZero),
@@ -14803,6 +14830,7 @@ class SettingsTableData extends DataClass
       financeHotkey: serializer.fromJson<String>(json['financeHotkey']),
       reminderHotkey: serializer.fromJson<String>(json['reminderHotkey']),
       calendarHotkey: serializer.fromJson<String>(json['calendarHotkey']),
+      noteHotkey: serializer.fromJson<String>(json['noteHotkey']),
       calendarNavigateLeftKey: serializer.fromJson<String>(
         json['calendarNavigateLeftKey'],
       ),
@@ -15177,6 +15205,7 @@ class SettingsTableData extends DataClass
       'financeHotkey': serializer.toJson<String>(financeHotkey),
       'reminderHotkey': serializer.toJson<String>(reminderHotkey),
       'calendarHotkey': serializer.toJson<String>(calendarHotkey),
+      'noteHotkey': serializer.toJson<String>(noteHotkey),
       'calendarNavigateLeftKey': serializer.toJson<String>(
         calendarNavigateLeftKey,
       ),
@@ -15465,6 +15494,7 @@ class SettingsTableData extends DataClass
     String? financeHotkey,
     String? reminderHotkey,
     String? calendarHotkey,
+    String? noteHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
     bool? timelineModeYearZero,
@@ -15632,6 +15662,7 @@ class SettingsTableData extends DataClass
     financeHotkey: financeHotkey ?? this.financeHotkey,
     reminderHotkey: reminderHotkey ?? this.reminderHotkey,
     calendarHotkey: calendarHotkey ?? this.calendarHotkey,
+    noteHotkey: noteHotkey ?? this.noteHotkey,
     calendarNavigateLeftKey:
         calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
     calendarNavigateRightKey:
@@ -15968,6 +15999,9 @@ class SettingsTableData extends DataClass
       calendarHotkey: data.calendarHotkey.present
           ? data.calendarHotkey.value
           : this.calendarHotkey,
+      noteHotkey: data.noteHotkey.present
+          ? data.noteHotkey.value
+          : this.noteHotkey,
       calendarNavigateLeftKey: data.calendarNavigateLeftKey.present
           ? data.calendarNavigateLeftKey.value
           : this.calendarNavigateLeftKey,
@@ -16424,6 +16458,7 @@ class SettingsTableData extends DataClass
           ..write('financeHotkey: $financeHotkey, ')
           ..write('reminderHotkey: $reminderHotkey, ')
           ..write('calendarHotkey: $calendarHotkey, ')
+          ..write('noteHotkey: $noteHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
@@ -16624,6 +16659,7 @@ class SettingsTableData extends DataClass
     financeHotkey,
     reminderHotkey,
     calendarHotkey,
+    noteHotkey,
     calendarNavigateLeftKey,
     calendarNavigateRightKey,
     timelineModeYearZero,
@@ -16792,6 +16828,7 @@ class SettingsTableData extends DataClass
           other.financeHotkey == this.financeHotkey &&
           other.reminderHotkey == this.reminderHotkey &&
           other.calendarHotkey == this.calendarHotkey &&
+          other.noteHotkey == this.noteHotkey &&
           other.calendarNavigateLeftKey == this.calendarNavigateLeftKey &&
           other.calendarNavigateRightKey == this.calendarNavigateRightKey &&
           other.timelineModeYearZero == this.timelineModeYearZero &&
@@ -16982,6 +17019,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String> financeHotkey;
   final Value<String> reminderHotkey;
   final Value<String> calendarHotkey;
+  final Value<String> noteHotkey;
   final Value<String> calendarNavigateLeftKey;
   final Value<String> calendarNavigateRightKey;
   final Value<bool> timelineModeYearZero;
@@ -17145,6 +17183,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.financeHotkey = const Value.absent(),
     this.reminderHotkey = const Value.absent(),
     this.calendarHotkey = const Value.absent(),
+    this.noteHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
     this.calendarNavigateRightKey = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
@@ -17309,6 +17348,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.financeHotkey = const Value.absent(),
     this.reminderHotkey = const Value.absent(),
     this.calendarHotkey = const Value.absent(),
+    this.noteHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
     this.calendarNavigateRightKey = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
@@ -17473,6 +17513,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? financeHotkey,
     Expression<String>? reminderHotkey,
     Expression<String>? calendarHotkey,
+    Expression<String>? noteHotkey,
     Expression<String>? calendarNavigateLeftKey,
     Expression<String>? calendarNavigateRightKey,
     Expression<bool>? timelineModeYearZero,
@@ -17642,6 +17683,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (financeHotkey != null) 'finance_hotkey': financeHotkey,
       if (reminderHotkey != null) 'reminder_hotkey': reminderHotkey,
       if (calendarHotkey != null) 'calendar_hotkey': calendarHotkey,
+      if (noteHotkey != null) 'note_hotkey': noteHotkey,
       if (calendarNavigateLeftKey != null)
         'calendar_navigate_left_key': calendarNavigateLeftKey,
       if (calendarNavigateRightKey != null)
@@ -17915,6 +17957,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String>? financeHotkey,
     Value<String>? reminderHotkey,
     Value<String>? calendarHotkey,
+    Value<String>? noteHotkey,
     Value<String>? calendarNavigateLeftKey,
     Value<String>? calendarNavigateRightKey,
     Value<bool>? timelineModeYearZero,
@@ -18081,6 +18124,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       financeHotkey: financeHotkey ?? this.financeHotkey,
       reminderHotkey: reminderHotkey ?? this.reminderHotkey,
       calendarHotkey: calendarHotkey ?? this.calendarHotkey,
+      noteHotkey: noteHotkey ?? this.noteHotkey,
       calendarNavigateLeftKey:
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:
@@ -18373,6 +18417,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (calendarHotkey.present) {
       map['calendar_hotkey'] = Variable<String>(calendarHotkey.value);
+    }
+    if (noteHotkey.present) {
+      map['note_hotkey'] = Variable<String>(noteHotkey.value);
     }
     if (calendarNavigateLeftKey.present) {
       map['calendar_navigate_left_key'] = Variable<String>(
@@ -19002,6 +19049,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('financeHotkey: $financeHotkey, ')
           ..write('reminderHotkey: $reminderHotkey, ')
           ..write('calendarHotkey: $calendarHotkey, ')
+          ..write('noteHotkey: $noteHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
@@ -58275,6 +58323,17 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _archivedAtMeta = const VerificationMeta(
+    'archivedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> archivedAt = GeneratedColumn<DateTime>(
+    'archived_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58339,6 +58398,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     summarizedSeq,
     listOrder,
     orderedAt,
+    archivedAt,
     createdAt,
     updatedAt,
     version,
@@ -58473,6 +58533,12 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         orderedAt.isAcceptableOrUnknown(data['ordered_at']!, _orderedAtMeta),
       );
     }
+    if (data.containsKey('archived_at')) {
+      context.handle(
+        _archivedAtMeta,
+        archivedAt.isAcceptableOrUnknown(data['archived_at']!, _archivedAtMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58578,6 +58644,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}ordered_at'],
       ),
+      archivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}archived_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58649,6 +58719,9 @@ class GaiaChatsTableData extends DataClass
   /// Where it was dragged to in the sidebar, and when (`GaiaChat.order`).
   final double? listOrder;
   final DateTime? orderedAt;
+
+  /// When it was archived (`GaiaChat.archivedAt`).
+  final DateTime? archivedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58671,6 +58744,7 @@ class GaiaChatsTableData extends DataClass
     required this.summarizedSeq,
     this.listOrder,
     this.orderedAt,
+    this.archivedAt,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58709,6 +58783,9 @@ class GaiaChatsTableData extends DataClass
     }
     if (!nullToAbsent || orderedAt != null) {
       map['ordered_at'] = Variable<DateTime>(orderedAt);
+    }
+    if (!nullToAbsent || archivedAt != null) {
+      map['archived_at'] = Variable<DateTime>(archivedAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -58750,6 +58827,9 @@ class GaiaChatsTableData extends DataClass
       orderedAt: orderedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(orderedAt),
+      archivedAt: archivedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(archivedAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58782,6 +58862,7 @@ class GaiaChatsTableData extends DataClass
       summarizedSeq: serializer.fromJson<int>(json['summarizedSeq']),
       listOrder: serializer.fromJson<double?>(json['listOrder']),
       orderedAt: serializer.fromJson<DateTime?>(json['orderedAt']),
+      archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58809,6 +58890,7 @@ class GaiaChatsTableData extends DataClass
       'summarizedSeq': serializer.toJson<int>(summarizedSeq),
       'listOrder': serializer.toJson<double?>(listOrder),
       'orderedAt': serializer.toJson<DateTime?>(orderedAt),
+      'archivedAt': serializer.toJson<DateTime?>(archivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58834,6 +58916,7 @@ class GaiaChatsTableData extends DataClass
     int? summarizedSeq,
     Value<double?> listOrder = const Value.absent(),
     Value<DateTime?> orderedAt = const Value.absent(),
+    Value<DateTime?> archivedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58856,6 +58939,7 @@ class GaiaChatsTableData extends DataClass
     summarizedSeq: summarizedSeq ?? this.summarizedSeq,
     listOrder: listOrder.present ? listOrder.value : this.listOrder,
     orderedAt: orderedAt.present ? orderedAt.value : this.orderedAt,
+    archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58892,6 +58976,9 @@ class GaiaChatsTableData extends DataClass
           : this.summarizedSeq,
       listOrder: data.listOrder.present ? data.listOrder.value : this.listOrder,
       orderedAt: data.orderedAt.present ? data.orderedAt.value : this.orderedAt,
+      archivedAt: data.archivedAt.present
+          ? data.archivedAt.value
+          : this.archivedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -58919,6 +59006,7 @@ class GaiaChatsTableData extends DataClass
           ..write('summarizedSeq: $summarizedSeq, ')
           ..write('listOrder: $listOrder, ')
           ..write('orderedAt: $orderedAt, ')
+          ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -58946,6 +59034,7 @@ class GaiaChatsTableData extends DataClass
     summarizedSeq,
     listOrder,
     orderedAt,
+    archivedAt,
     createdAt,
     updatedAt,
     version,
@@ -58972,6 +59061,7 @@ class GaiaChatsTableData extends DataClass
           other.summarizedSeq == this.summarizedSeq &&
           other.listOrder == this.listOrder &&
           other.orderedAt == this.orderedAt &&
+          other.archivedAt == this.archivedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -58996,6 +59086,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<int> summarizedSeq;
   final Value<double?> listOrder;
   final Value<DateTime?> orderedAt;
+  final Value<DateTime?> archivedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59019,6 +59110,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.summarizedSeq = const Value.absent(),
     this.listOrder = const Value.absent(),
     this.orderedAt = const Value.absent(),
+    this.archivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59043,6 +59135,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.summarizedSeq = const Value.absent(),
     this.listOrder = const Value.absent(),
     this.orderedAt = const Value.absent(),
+    this.archivedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59071,6 +59164,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<int>? summarizedSeq,
     Expression<double>? listOrder,
     Expression<DateTime>? orderedAt,
+    Expression<DateTime>? archivedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59095,6 +59189,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (summarizedSeq != null) 'summarized_seq': summarizedSeq,
       if (listOrder != null) 'list_order': listOrder,
       if (orderedAt != null) 'ordered_at': orderedAt,
+      if (archivedAt != null) 'archived_at': archivedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59121,6 +59216,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<int>? summarizedSeq,
     Value<double?>? listOrder,
     Value<DateTime?>? orderedAt,
+    Value<DateTime?>? archivedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59145,6 +59241,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       summarizedSeq: summarizedSeq ?? this.summarizedSeq,
       listOrder: listOrder ?? this.listOrder,
       orderedAt: orderedAt ?? this.orderedAt,
+      archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59207,6 +59304,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (orderedAt.present) {
       map['ordered_at'] = Variable<DateTime>(orderedAt.value);
     }
+    if (archivedAt.present) {
+      map['archived_at'] = Variable<DateTime>(archivedAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59245,6 +59345,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('summarizedSeq: $summarizedSeq, ')
           ..write('listOrder: $listOrder, ')
           ..write('orderedAt: $orderedAt, ')
+          ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -69849,6 +69950,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String> financeHotkey,
       Value<String> reminderHotkey,
       Value<String> calendarHotkey,
+      Value<String> noteHotkey,
       Value<String> calendarNavigateLeftKey,
       Value<String> calendarNavigateRightKey,
       Value<bool> timelineModeYearZero,
@@ -70014,6 +70116,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String> financeHotkey,
       Value<String> reminderHotkey,
       Value<String> calendarHotkey,
+      Value<String> noteHotkey,
       Value<String> calendarNavigateLeftKey,
       Value<String> calendarNavigateRightKey,
       Value<bool> timelineModeYearZero,
@@ -70264,6 +70367,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get calendarHotkey => $composableBuilder(
     column: $table.calendarHotkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteHotkey => $composableBuilder(
+    column: $table.noteHotkey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71091,6 +71199,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<String> get calendarHotkey => $composableBuilder(
     column: $table.calendarHotkey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteHotkey => $composableBuilder(
+    column: $table.noteHotkey,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -71925,6 +72038,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get noteHotkey => $composableBuilder(
+    column: $table.noteHotkey,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get calendarNavigateLeftKey => $composableBuilder(
     column: $table.calendarNavigateLeftKey,
     builder: (column) => column,
@@ -72699,6 +72817,7 @@ class $$SettingsTableTableTableManager
                 Value<String> financeHotkey = const Value.absent(),
                 Value<String> reminderHotkey = const Value.absent(),
                 Value<String> calendarHotkey = const Value.absent(),
+                Value<String> noteHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
                 Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
@@ -72886,6 +73005,7 @@ class $$SettingsTableTableTableManager
                 financeHotkey: financeHotkey,
                 reminderHotkey: reminderHotkey,
                 calendarHotkey: calendarHotkey,
+                noteHotkey: noteHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
                 calendarNavigateRightKey: calendarNavigateRightKey,
                 timelineModeYearZero: timelineModeYearZero,
@@ -73058,6 +73178,7 @@ class $$SettingsTableTableTableManager
                 Value<String> financeHotkey = const Value.absent(),
                 Value<String> reminderHotkey = const Value.absent(),
                 Value<String> calendarHotkey = const Value.absent(),
+                Value<String> noteHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
                 Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
@@ -73245,6 +73366,7 @@ class $$SettingsTableTableTableManager
                 financeHotkey: financeHotkey,
                 reminderHotkey: reminderHotkey,
                 calendarHotkey: calendarHotkey,
+                noteHotkey: noteHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
                 calendarNavigateRightKey: calendarNavigateRightKey,
                 timelineModeYearZero: timelineModeYearZero,
@@ -93041,6 +93163,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<int> summarizedSeq,
       Value<double?> listOrder,
       Value<DateTime?> orderedAt,
+      Value<DateTime?> archivedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -93066,6 +93189,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<int> summarizedSeq,
       Value<double?> listOrder,
       Value<DateTime?> orderedAt,
+      Value<DateTime?> archivedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -93164,6 +93288,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<DateTime> get orderedAt => $composableBuilder(
     column: $table.orderedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -93282,6 +93411,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -93375,6 +93509,11 @@ class $$GaiaChatsTableTableAnnotationComposer
   GeneratedColumn<DateTime> get orderedAt =>
       $composableBuilder(column: $table.orderedAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -93442,6 +93581,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<int> summarizedSeq = const Value.absent(),
                 Value<double?> listOrder = const Value.absent(),
                 Value<DateTime?> orderedAt = const Value.absent(),
+                Value<DateTime?> archivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -93465,6 +93605,7 @@ class $$GaiaChatsTableTableTableManager
                 summarizedSeq: summarizedSeq,
                 listOrder: listOrder,
                 orderedAt: orderedAt,
+                archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -93490,6 +93631,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<int> summarizedSeq = const Value.absent(),
                 Value<double?> listOrder = const Value.absent(),
                 Value<DateTime?> orderedAt = const Value.absent(),
+                Value<DateTime?> archivedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -93513,6 +93655,7 @@ class $$GaiaChatsTableTableTableManager
                 summarizedSeq: summarizedSeq,
                 listOrder: listOrder,
                 orderedAt: orderedAt,
+                archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

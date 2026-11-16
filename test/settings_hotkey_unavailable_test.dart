@@ -72,7 +72,7 @@ void main() {
       await pumpEditingTab(tester, {QuickCaptureKind.reminder});
       expect(
         find.descendant(
-          of: tileWith('Reminder hotkey'),
+          of: tileWith('Scheduled reminder hotkey'),
           matching: find.textContaining(_notice, findRichText: true),
         ),
         findsOneWidget,
@@ -87,7 +87,7 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
     (tester) async {
       await pumpEditingTab(tester, const {});
-      expect(find.text('Reminder hotkey'), findsOneWidget);
+      expect(find.text('Scheduled reminder hotkey'), findsOneWidget);
       expect(find.textContaining(_notice, findRichText: true), findsNothing);
     },
   );

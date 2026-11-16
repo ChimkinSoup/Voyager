@@ -50,6 +50,7 @@ class AppSettings {
     this.financeHotkey = defaultFinanceHotkey,
     this.reminderHotkey = defaultReminderHotkey,
     this.calendarHotkey = defaultCalendarHotkey,
+    this.noteHotkey = defaultNoteHotkey,
     this.calendarNavigateLeftKey = defaultCalendarNavigateLeftKey,
     this.calendarNavigateRightKey = defaultCalendarNavigateRightKey,
     this.srsFailKey = defaultStudyFailKey,
@@ -247,6 +248,9 @@ class AppSettings {
   final String financeHotkey;
   final String reminderHotkey;
   final String calendarHotkey;
+
+  /// Opens the quick-note floater: a new quick reminder in the Inbox.
+  final String noteHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
 
@@ -615,6 +619,7 @@ class AppSettings {
     String? financeHotkey,
     String? reminderHotkey,
     String? calendarHotkey,
+    String? noteHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
     String? srsFailKey,
@@ -812,6 +817,7 @@ class AppSettings {
       financeHotkey: financeHotkey ?? this.financeHotkey,
       reminderHotkey: reminderHotkey ?? this.reminderHotkey,
       calendarHotkey: calendarHotkey ?? this.calendarHotkey,
+      noteHotkey: noteHotkey ?? this.noteHotkey,
       calendarNavigateLeftKey:
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:
