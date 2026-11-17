@@ -935,6 +935,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
         }
       }
     }
+    final sort = ref.watch(gaiaSortProvider);
     Widget row(GaiaMemory memory, bool narrow) => _MemoryRow(
       key: memory.id == widget.focus ? _focusKey : null,
       memory: memory,
@@ -942,10 +943,45 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
       moveWithin: moveWithin,
       narrow: narrow,
       highlighted: memory.id == widget.focus,
+      sorted: sort.suggested[memory.id],
     );
     final inbox = withStatus(GaiaMemoryStatus.proposed);
     final active = withStatus(GaiaMemoryStatus.active);
     final archived = withStatus(GaiaMemoryStatus.archived);
+    // Suggestions in the inbox (GAIA_MEMORY_TOPICS_HLD.md §3.3, §5): pins
+    // from this device's recall history and the curator, and merges.
+    final hints = ref.watch(gaiaMemoryHintsProvider).valueOrNull ?? const [];
+    final pins = [
+      for (final pin in gaiaPinSuggestions(
+        memories,
+        ref.watch(gaiaRecallHistoryProvider).valueOrNull ?? const [],
+        hints,
+        utcNow(),
+      ))
+        if (matches(pin.memory)) pin,
+    ];
+    final merges = [
+      for (final merge in gaiaMergeSuggestions(tree, memories, {
+        for (final project
+            in ref.watch(gaiaProjectsProvider).valueOrNull ?? const [])
+          project.id,
+      }, hints))
+        if (query.isEmpty ||
+            named.contains(merge.from.id) ||
+            named.contains(merge.into.id))
+          merge,
+    ];
+    final suggestions = pins.length + merges.length;
+    // Unsorted's memories still to be sorted, and those suggested for
+    // (§6). A memory filed meanwhile drops out of both.
+    final unsorted = selected == _unsorted
+        ? [...active, ...archived]
+        : const <GaiaMemory>[];
+    final sortedHere = [
+      for (final memory in unsorted)
+        if (sort.suggested[memory.id] case final placement?)
+          (memory.id, placement),
+    ];
     final title = switch (selected) {
       null => 'All memories',
       _unsorted => 'Unsorted',
@@ -954,8 +990,10 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
     Widget list(bool narrow) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (inbox.isNotEmpty) ...[
-          _SectionLabel('Inbox (${inbox.length})'),
+        if (inbox.isNotEmpty || suggestions > 0) ...[
+          _SectionLabel('Inbox (${inbox.length + suggestions})'),
+          for (final merge in merges) _MergeSuggestionRow(merge, tree: tree),
+          for (final pin in pins) _PinSuggestionRow(pin),
           for (final memory in inbox) row(memory, narrow),
           const SizedBox(height: 16),
         ],
@@ -979,6 +1017,43 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
             ],
           ],
         ),
+        // The utility model, which only the desktop's companion runs,
+        // suggests where each goes; nothing moves until accepted (§6).
+        if (isWindows && unsorted.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              GlassButton(
+                onPressed: sort.running
+                    ? null
+                    : () => ref.read(gaiaSortProvider.notifier).sort(unsorted),
+                icon: sort.running
+                    ? const SizedBox.square(
+                        dimension: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(PhosphorIconsRegular.sparkle, size: 13),
+                label: sort.running ? 'Sorting…' : 'Sort these',
+                dense: true,
+              ),
+              if (sortedHere.isNotEmpty)
+                GlassButton(
+                  onPressed: () async {
+                    for (final (id, placement) in sortedHere) {
+                      await _acceptSorted(ref, id, placement);
+                    }
+                  },
+                  icon: const Icon(PhosphorIconsRegular.checks, size: 13),
+                  label: 'Accept all (${sortedHere.length})',
+                  dense: true,
+                ),
+              if (sort.error case final error?) Text(error, style: muted),
+            ],
+          ),
+        ],
         const SizedBox(height: 4),
         _SectionLabel(
           active.isEmpty ? 'Remembered' : 'Remembered (${active.length})',
@@ -1201,10 +1276,11 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
 
   GaiaMemories get _memories => GaiaMemories(ref.read(gaiaRepositoryProvider));
 
-  /// [action], with a refusal shown in a toast.
-  Future<void> _run(Future<void> Function() action) async {
+  /// [action], with a refusal shown in a toast; whether it went through.
+  Future<bool> _run(Future<void> Function() action) async {
     try {
       await action();
+      return true;
     } on GaiaReadException catch (error) {
       if (mounted) {
         showVoyagerToast(
@@ -1213,6 +1289,7 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
           icon: PhosphorIconsRegular.warning,
         );
       }
+      return false;
     }
   }
 
@@ -1271,6 +1348,31 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
     await _run(() => _memories.deleteTopic(topic.id));
   }
 
+  /// Merged into a topic picked in a dialog (GAIA_MEMORY_TOPICS_HLD.md
+  /// §3.2), once confirmed.
+  Future<void> _merge(GaiaMemoryTopic topic) async {
+    final into = await _pickTopic(
+      context,
+      widget.tree,
+      title: 'Merge "${topic.name}" into',
+      exclude: {topic.id},
+    );
+    if (into == null || !mounted) return;
+    final kept = widget.tree.path(into).join(' › ');
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Merge "${topic.name}" into "$kept"?',
+      message:
+          'Its memories and subtopics move to $kept, and "${topic.name}" '
+          'goes to the trash.',
+      confirmLabel: 'Merge',
+    );
+    if (!confirmed) return;
+    if (await _run(() => _memories.mergeTopic(topic.id, into))) {
+      widget.onSelect(into);
+    }
+  }
+
   void _drop(_Dragged dragged, String? onto) => unawaited(
     _run(() async {
       switch (dragged) {
@@ -1317,6 +1419,12 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
           icon: PhosphorIconsRegular.arrowElbowDownRight,
           onTap: () => _moveUnder(topic),
         ),
+      // A project's topic can be kept in a merge, not merged away (§3.2).
+      ContextMenuItem(
+        label: linked ? "Merge into… (a project's topic stays)" : 'Merge into…',
+        icon: PhosphorIconsRegular.arrowsMerge,
+        onTap: linked ? null : () => _merge(topic),
+      ),
       ContextMenuItem(
         label: linked ? 'Delete (goes with its project)' : 'Delete',
         icon: PhosphorIconsRegular.trash,
@@ -1529,10 +1637,15 @@ class _MemoryRow extends ConsumerWidget {
     required this.moveWithin,
     required this.narrow,
     this.highlighted = false,
+    this.sorted,
   });
 
   final GaiaMemory memory;
   final GaiaTopicTree tree;
+
+  /// Where Sort these would file it, to accept or change
+  /// (GAIA_MEMORY_TOPICS_HLD.md §6); null for none.
+  final GaiaPlacement? sorted;
 
   /// The tree is in a dialog, so there's nothing to drag a memory onto.
   final bool narrow;
@@ -1714,6 +1827,8 @@ class _MemoryRow extends ConsumerWidget {
     final suggested = memory.suggestedTopic == null
         ? null
         : gaiaSuggestedTopicLabel(memory.suggestedTopic!, tree);
+    // Sort these's suggestion, while it's still Unsorted (§6).
+    final sorted = topics.isEmpty ? this.sorted : null;
     final (icon, label, onPressed) = switch (memory.status) {
       GaiaMemoryStatus.proposed => (
         PhosphorIconsRegular.check,
@@ -1781,6 +1896,10 @@ class _MemoryRow extends ConsumerWidget {
               ],
             ),
           ],
+          if (sorted != null) ...[
+            const SizedBox(height: 4),
+            _SortedLine(memory: memory, placement: sorted, tree: tree),
+          ],
         ],
       ),
       onTap: () => _edit(context, ref),
@@ -1789,7 +1908,10 @@ class _MemoryRow extends ConsumerWidget {
         children: [
           // Unsorted, with nothing offered: the utility model, which only
           // the desktop's companion runs, can file it (§5).
-          if (isWindows && topics.isEmpty && suggested == null)
+          if (isWindows &&
+              topics.isEmpty &&
+              suggested == null &&
+              sorted == null)
             _SuggestButton(memory: memory),
           // In every chat's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
           if (memory.status == GaiaMemoryStatus.active || memory.pinned)
@@ -1846,6 +1968,183 @@ class _MemoryRow extends ConsumerWidget {
       feedback: _dragLabel(context, memory.text),
       childWhenDragging: Opacity(opacity: 0.5, child: tile),
       child: tile,
+    );
+  }
+}
+
+/// Sort these's [placement] for Unsorted memory [id] accepted
+/// (GAIA_MEMORY_TOPICS_HLD.md §6): filed in its topics with its tags, and
+/// its new topic, if any, made and filed in too, since accepting it is
+/// asking for it.
+Future<void> _acceptSorted(
+  WidgetRef ref,
+  String id,
+  GaiaPlacement placement,
+) async {
+  ref.read(gaiaSortProvider.notifier).drop(id);
+  final memories = GaiaMemories(ref.read(gaiaRepositoryProvider));
+  await memories.place(id, placement);
+  if (placement.suggested != null) await memories.acceptSuggestedTopic(id);
+}
+
+/// Where Sort these would file [memory] (§6): each topic and any new one,
+/// with × to leave it out, and Accept or Skip. Nothing is filed until
+/// it's accepted; a drag files it as usual instead.
+class _SortedLine extends ConsumerWidget {
+  const _SortedLine({
+    required this.memory,
+    required this.placement,
+    required this.tree,
+  });
+
+  final GaiaMemory memory;
+  final GaiaPlacement placement;
+  final GaiaTopicTree tree;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final sort = ref.read(gaiaSortProvider.notifier);
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text('Suggested:', style: theme.textTheme.bodySmall),
+        for (final id in placement.topicIds)
+          if (tree.path(id) case final path when path.isNotEmpty)
+            _TopicChip(
+              label: path.join(' › '),
+              removeTooltip: 'Leave this topic out',
+              onRemove: () => sort.change(memory.id, (
+                topicIds: [
+                  for (final other in placement.topicIds)
+                    if (other != id) other,
+                ],
+                suggested: placement.suggested,
+                tags: placement.tags,
+              )),
+            ),
+        if (placement.suggested case final offer?)
+          _TopicChip(
+            label: '+ New topic: ${gaiaSuggestedTopicLabel(offer, tree)}',
+            removeTooltip: "Don't make it",
+            onRemove: () => sort.change(memory.id, (
+              topicIds: placement.topicIds,
+              suggested: null,
+              tags: placement.tags,
+            )),
+          ),
+        TextButton(
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          onPressed: () => _acceptSorted(ref, memory.id, placement),
+          child: const Text('Accept'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          onPressed: () => sort.drop(memory.id),
+          child: const Text('Skip'),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Pin this?" in the inbox (GAIA_MEMORY_TOPICS_HLD.md §3.3): Pin, or Not
+/// now for [kGaiaPinLater].
+class _PinSuggestionRow extends ConsumerWidget {
+  const _PinSuggestionRow(this.suggestion);
+
+  final GaiaPinSuggestion suggestion;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final memories = GaiaMemories(ref.read(gaiaRepositoryProvider));
+    final memory = suggestion.memory;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(PhosphorIconsRegular.pushPin, size: 16),
+      minLeadingWidth: 16,
+      title: Text(memory.text),
+      subtitle: Text('Pin this? ${suggestion.why}.'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () async {
+              try {
+                await memories.pin(memory.id, pinned: true);
+              } on GaiaReadException catch (error) {
+                if (context.mounted) {
+                  showVoyagerToast(
+                    context,
+                    message: error.message,
+                    icon: PhosphorIconsRegular.warning,
+                    dwell: const Duration(seconds: 4),
+                  );
+                }
+              }
+            },
+            child: const Text('Pin'),
+          ),
+          TextButton(
+            onPressed: () => memories.pinLater(memory.id),
+            child: const Text('Not now'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Merge X into Y?" in the inbox (GAIA_MEMORY_TOPICS_HLD.md §5): Merge, or
+/// Keep both, which this device doesn't suggest again.
+class _MergeSuggestionRow extends ConsumerWidget {
+  const _MergeSuggestionRow(this.suggestion, {required this.tree});
+
+  final GaiaMergeSuggestion suggestion;
+  final GaiaTopicTree tree;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final memories = GaiaMemories(ref.read(gaiaRepositoryProvider));
+    final from = tree.path(suggestion.from.id).join(' › ');
+    final into = tree.path(suggestion.into.id).join(' › ');
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(PhosphorIconsRegular.arrowsMerge, size: 16),
+      minLeadingWidth: 16,
+      title: Text('Merge "$from" into "$into"?'),
+      subtitle: Text('${suggestion.why}.'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () async {
+              try {
+                await memories.mergeTopic(
+                  suggestion.from.id,
+                  suggestion.into.id,
+                );
+              } on GaiaReadException catch (error) {
+                if (context.mounted) {
+                  showVoyagerToast(
+                    context,
+                    message: error.message,
+                    icon: PhosphorIconsRegular.warning,
+                  );
+                }
+              }
+            },
+            child: const Text('Merge'),
+          ),
+          TextButton(
+            onPressed: () =>
+                memories.keepApart(suggestion.from.id, suggestion.into.id),
+            child: const Text('Keep both'),
+          ),
+        ],
+      ),
     );
   }
 }

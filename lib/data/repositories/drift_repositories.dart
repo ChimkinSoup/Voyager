@@ -10443,6 +10443,92 @@ class DriftGaiaRepository implements GaiaRepository {
     _syncedWrites?.notify(FirestoreCollections.gaiaMemories, memories);
   }
 
+  @override
+  Future<void> recordRecall(
+    String chatId,
+    List<String> memoryIds,
+    DateTime at, {
+    int keepChats = 20,
+  }) async {
+    if (memoryIds.isEmpty) return;
+    await _db.transaction(() async {
+      for (final id in memoryIds) {
+        await _db
+            .into(_db.gaiaRecallHistoryTable)
+            .insertOnConflictUpdate(
+              GaiaRecallHistoryTableCompanion.insert(
+                memoryId: id,
+                chatId: chatId,
+                recalledAt: at,
+              ),
+            );
+      }
+      final latest = <String, DateTime>{};
+      for (final row in await _db.select(_db.gaiaRecallHistoryTable).get()) {
+        final was = latest[row.chatId];
+        if (was == null || row.recalledAt.isAfter(was)) {
+          latest[row.chatId] = row.recalledAt;
+        }
+      }
+      if (latest.length <= keepChats) return;
+      final dropped =
+          (latest.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+              .skip(keepChats)
+              .map((entry) => entry.key)
+              .toList();
+      await (_db.delete(
+        _db.gaiaRecallHistoryTable,
+      )..where((t) => t.chatId.isIn(dropped))).go();
+    });
+  }
+
+  @override
+  Stream<List<GaiaRecallRow>> watchRecallHistory() => _db
+      .select(_db.gaiaRecallHistoryTable)
+      .watch()
+      .map(
+        (rows) => [
+          for (final row in rows)
+            (
+              memoryId: row.memoryId,
+              chatId: row.chatId,
+              recalledAt: row.recalledAt,
+            ),
+        ],
+      );
+
+  GaiaMemoryHint? _mapGaiaMemoryHint(GaiaMemoryHintsTableData row) {
+    final kind = GaiaMemoryHintKind.values
+        .where((kind) => kind.name == row.kind)
+        .firstOrNull;
+    return kind == null
+        ? null
+        : (kind: kind, subject: row.subject, until: row.until);
+  }
+
+  @override
+  Future<List<GaiaMemoryHint>> listMemoryHints() async => [
+    for (final row in await _db.select(_db.gaiaMemoryHintsTable).get())
+      ?_mapGaiaMemoryHint(row),
+  ];
+
+  @override
+  Stream<List<GaiaMemoryHint>> watchMemoryHints() => _db
+      .select(_db.gaiaMemoryHintsTable)
+      .watch()
+      .map((rows) => [for (final row in rows) ?_mapGaiaMemoryHint(row)]);
+
+  @override
+  Future<void> putMemoryHint(GaiaMemoryHint hint) => _db
+      .into(_db.gaiaMemoryHintsTable)
+      .insertOnConflictUpdate(
+        GaiaMemoryHintsTableCompanion.insert(
+          kind: hint.kind.name,
+          subject: hint.subject,
+          until: Value(hint.until),
+        ),
+      );
+
   SimpleSelectStatement<$GaiaQueueTableTable, GaiaQueueTableData> _queue({
     bool includeDeleted = false,
   }) => _db.select(_db.gaiaQueueTable)

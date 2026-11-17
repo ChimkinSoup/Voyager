@@ -1,0 +1,7 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+final m = await g.save('MT6 P4 Del Trash marker: the rental van is booked for Friday.', status: GaiaMemoryStatus.active, byUser: true, projectId: '7503bed9-95fe-48b0-99b6-c0c9e03059ac');
+await r.upsertMemory(m!.copyWith(projectId: '7503bed9-95fe-48b0-99b6-c0c9e03059ac'));
+await gaiaDeleteProject(r, '7503bed9-95fe-48b0-99b6-c0c9e03059ac', withChats: false);
+final t = await r.getMemoryTopic('project-7503bed9-95fe-48b0-99b6-c0c9e03059ac');
+debugPrint('MT6-PROJMEM ' + m.id + ' topic=' + (t?.projectId ?? 'none') + ' deleted=' + (t?.deletedAt?.toString() ?? 'no'));

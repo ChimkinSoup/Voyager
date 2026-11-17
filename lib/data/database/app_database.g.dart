@@ -66038,6 +66038,279 @@ class GaiaRecallHistoryTableCompanion
   }
 }
 
+class $GaiaMemoryHintsTableTable extends GaiaMemoryHintsTable
+    with TableInfo<$GaiaMemoryHintsTableTable, GaiaMemoryHintsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaMemoryHintsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subjectMeta = const VerificationMeta(
+    'subject',
+  );
+  @override
+  late final GeneratedColumn<String> subject = GeneratedColumn<String>(
+    'subject',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _untilMeta = const VerificationMeta('until');
+  @override
+  late final GeneratedColumn<DateTime> until = GeneratedColumn<DateTime>(
+    'until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [kind, subject, until];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_memory_hints_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaMemoryHintsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('subject')) {
+      context.handle(
+        _subjectMeta,
+        subject.isAcceptableOrUnknown(data['subject']!, _subjectMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_subjectMeta);
+    }
+    if (data.containsKey('until')) {
+      context.handle(
+        _untilMeta,
+        until.isAcceptableOrUnknown(data['until']!, _untilMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {kind, subject};
+  @override
+  GaiaMemoryHintsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaMemoryHintsTableData(
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      subject: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subject'],
+      )!,
+      until: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}until'],
+      ),
+    );
+  }
+
+  @override
+  $GaiaMemoryHintsTableTable createAlias(String alias) {
+    return $GaiaMemoryHintsTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaMemoryHintsTableData extends DataClass
+    implements Insertable<GaiaMemoryHintsTableData> {
+  final String kind;
+  final String subject;
+  final DateTime? until;
+  const GaiaMemoryHintsTableData({
+    required this.kind,
+    required this.subject,
+    this.until,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['kind'] = Variable<String>(kind);
+    map['subject'] = Variable<String>(subject);
+    if (!nullToAbsent || until != null) {
+      map['until'] = Variable<DateTime>(until);
+    }
+    return map;
+  }
+
+  GaiaMemoryHintsTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaMemoryHintsTableCompanion(
+      kind: Value(kind),
+      subject: Value(subject),
+      until: until == null && nullToAbsent
+          ? const Value.absent()
+          : Value(until),
+    );
+  }
+
+  factory GaiaMemoryHintsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaMemoryHintsTableData(
+      kind: serializer.fromJson<String>(json['kind']),
+      subject: serializer.fromJson<String>(json['subject']),
+      until: serializer.fromJson<DateTime?>(json['until']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'kind': serializer.toJson<String>(kind),
+      'subject': serializer.toJson<String>(subject),
+      'until': serializer.toJson<DateTime?>(until),
+    };
+  }
+
+  GaiaMemoryHintsTableData copyWith({
+    String? kind,
+    String? subject,
+    Value<DateTime?> until = const Value.absent(),
+  }) => GaiaMemoryHintsTableData(
+    kind: kind ?? this.kind,
+    subject: subject ?? this.subject,
+    until: until.present ? until.value : this.until,
+  );
+  GaiaMemoryHintsTableData copyWithCompanion(
+    GaiaMemoryHintsTableCompanion data,
+  ) {
+    return GaiaMemoryHintsTableData(
+      kind: data.kind.present ? data.kind.value : this.kind,
+      subject: data.subject.present ? data.subject.value : this.subject,
+      until: data.until.present ? data.until.value : this.until,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemoryHintsTableData(')
+          ..write('kind: $kind, ')
+          ..write('subject: $subject, ')
+          ..write('until: $until')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(kind, subject, until);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaMemoryHintsTableData &&
+          other.kind == this.kind &&
+          other.subject == this.subject &&
+          other.until == this.until);
+}
+
+class GaiaMemoryHintsTableCompanion
+    extends UpdateCompanion<GaiaMemoryHintsTableData> {
+  final Value<String> kind;
+  final Value<String> subject;
+  final Value<DateTime?> until;
+  final Value<int> rowid;
+  const GaiaMemoryHintsTableCompanion({
+    this.kind = const Value.absent(),
+    this.subject = const Value.absent(),
+    this.until = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaMemoryHintsTableCompanion.insert({
+    required String kind,
+    required String subject,
+    this.until = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : kind = Value(kind),
+       subject = Value(subject);
+  static Insertable<GaiaMemoryHintsTableData> custom({
+    Expression<String>? kind,
+    Expression<String>? subject,
+    Expression<DateTime>? until,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (kind != null) 'kind': kind,
+      if (subject != null) 'subject': subject,
+      if (until != null) 'until': until,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaMemoryHintsTableCompanion copyWith({
+    Value<String>? kind,
+    Value<String>? subject,
+    Value<DateTime?>? until,
+    Value<int>? rowid,
+  }) {
+    return GaiaMemoryHintsTableCompanion(
+      kind: kind ?? this.kind,
+      subject: subject ?? this.subject,
+      until: until ?? this.until,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (subject.present) {
+      map['subject'] = Variable<String>(subject.value);
+    }
+    if (until.present) {
+      map['until'] = Variable<DateTime>(until.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemoryHintsTableCompanion(')
+          ..write('kind: $kind, ')
+          ..write('subject: $subject, ')
+          ..write('until: $until, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -66206,6 +66479,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $GaiaMemoryTopicsTableTable(this);
   late final $GaiaRecallHistoryTableTable gaiaRecallHistoryTable =
       $GaiaRecallHistoryTableTable(this);
+  late final $GaiaMemoryHintsTableTable gaiaMemoryHintsTable =
+      $GaiaMemoryHintsTableTable(this);
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -66365,6 +66640,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaProjectsTable,
     gaiaMemoryTopicsTable,
     gaiaRecallHistoryTable,
+    gaiaMemoryHintsTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -97883,6 +98159,184 @@ typedef $$GaiaRecallHistoryTableTableProcessedTableManager =
       GaiaRecallHistoryTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaMemoryHintsTableTableCreateCompanionBuilder =
+    GaiaMemoryHintsTableCompanion Function({
+      required String kind,
+      required String subject,
+      Value<DateTime?> until,
+      Value<int> rowid,
+    });
+typedef $$GaiaMemoryHintsTableTableUpdateCompanionBuilder =
+    GaiaMemoryHintsTableCompanion Function({
+      Value<String> kind,
+      Value<String> subject,
+      Value<DateTime?> until,
+      Value<int> rowid,
+    });
+
+class $$GaiaMemoryHintsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaMemoryHintsTableTable> {
+  $$GaiaMemoryHintsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subject => $composableBuilder(
+    column: $table.subject,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get until => $composableBuilder(
+    column: $table.until,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaMemoryHintsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaMemoryHintsTableTable> {
+  $$GaiaMemoryHintsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subject => $composableBuilder(
+    column: $table.subject,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get until => $composableBuilder(
+    column: $table.until,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaMemoryHintsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaMemoryHintsTableTable> {
+  $$GaiaMemoryHintsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get subject =>
+      $composableBuilder(column: $table.subject, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get until =>
+      $composableBuilder(column: $table.until, builder: (column) => column);
+}
+
+class $$GaiaMemoryHintsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaMemoryHintsTableTable,
+          GaiaMemoryHintsTableData,
+          $$GaiaMemoryHintsTableTableFilterComposer,
+          $$GaiaMemoryHintsTableTableOrderingComposer,
+          $$GaiaMemoryHintsTableTableAnnotationComposer,
+          $$GaiaMemoryHintsTableTableCreateCompanionBuilder,
+          $$GaiaMemoryHintsTableTableUpdateCompanionBuilder,
+          (
+            GaiaMemoryHintsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaMemoryHintsTableTable,
+              GaiaMemoryHintsTableData
+            >,
+          ),
+          GaiaMemoryHintsTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaMemoryHintsTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaMemoryHintsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaMemoryHintsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GaiaMemoryHintsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GaiaMemoryHintsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> kind = const Value.absent(),
+                Value<String> subject = const Value.absent(),
+                Value<DateTime?> until = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemoryHintsTableCompanion(
+                kind: kind,
+                subject: subject,
+                until: until,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String kind,
+                required String subject,
+                Value<DateTime?> until = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemoryHintsTableCompanion.insert(
+                kind: kind,
+                subject: subject,
+                until: until,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaMemoryHintsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaMemoryHintsTableTable,
+      GaiaMemoryHintsTableData,
+      $$GaiaMemoryHintsTableTableFilterComposer,
+      $$GaiaMemoryHintsTableTableOrderingComposer,
+      $$GaiaMemoryHintsTableTableAnnotationComposer,
+      $$GaiaMemoryHintsTableTableCreateCompanionBuilder,
+      $$GaiaMemoryHintsTableTableUpdateCompanionBuilder,
+      (
+        GaiaMemoryHintsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaMemoryHintsTableTable,
+          GaiaMemoryHintsTableData
+        >,
+      ),
+      GaiaMemoryHintsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -98127,4 +98581,6 @@ class $AppDatabaseManager {
         _db,
         _db.gaiaRecallHistoryTable,
       );
+  $$GaiaMemoryHintsTableTableTableManager get gaiaMemoryHintsTable =>
+      $$GaiaMemoryHintsTableTableTableManager(_db, _db.gaiaMemoryHintsTable);
 }

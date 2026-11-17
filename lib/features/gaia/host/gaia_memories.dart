@@ -139,6 +139,14 @@ class GaiaMemories {
       }
     }
     await _repository.upsertMemory(memory.copyWith(pinned: pinned));
+    // Unpinned on purpose: not suggested as a pin again (§3.3).
+    if (!pinned) {
+      await _repository.putMemoryHint((
+        kind: GaiaMemoryHintKind.pinLater,
+        subject: id,
+        until: null,
+      ));
+    }
   }
 
   /// A memory tool's call from [chatId]: its text for the agent. Throws a
@@ -459,7 +467,7 @@ class GaiaMemories {
     final project = await _projectOf(chatId);
     for (final memory in found) {
       if (memory.text.trim().length > kGaiaMemoryMaxLength) continue;
-      await save(
+      final saved = await save(
         memory.text,
         tags: memory.tags,
         chatId: chatId,
@@ -470,6 +478,14 @@ class GaiaMemories {
         topicIds: memory.topicIds,
         suggested: memory.suggested,
       );
+      // About the user in general: "Pin this?" once it's remembered (§3.3).
+      if (memory.pin && saved != null) {
+        await _repository.putMemoryHint((
+          kind: GaiaMemoryHintKind.pinCandidate,
+          subject: saved.id,
+          until: null,
+        ));
+      }
     }
     final chat = await _repository.getChat(chatId);
     if (chat == null || chat.curatedSeq >= seq) return;
@@ -702,6 +718,82 @@ class GaiaMemories {
       ],
     );
   }
+
+  /// Topic [fromId] merged into [intoId] (§3.2), in one write: each of its
+  /// memories is in [intoId] instead (once), its subtopics move under
+  /// [intoId], and it goes to the trash. A [intoId] under [fromId] first
+  /// moves up to [fromId]'s place, so no cycle is made. Throws a
+  /// [GaiaReadException] for a live project's topic as [fromId], which the
+  /// upkeep would make again (§7), or [intoId] gone.
+  Future<void> mergeTopic(String fromId, String intoId) async {
+    if (fromId == intoId) return;
+    final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    final from = tree[fromId];
+    final into = tree[intoId];
+    if (from == null) return;
+    if (into == null) {
+      throw GaiaReadException('That topic is gone.');
+    }
+    if (await _live(from.projectId) != null) {
+      throw GaiaReadException(
+        "A project's topic can be merged into, not merged away.",
+      );
+    }
+    final parentId = tree.parentOf(fromId);
+    final moved = <GaiaMemoryTopic>[
+      for (final child in tree.childrenOf(fromId))
+        if (child.id != intoId) child.copyWith(parentId: intoId),
+      // Under the one merged away: it takes that one's place.
+      if (tree.subtree(fromId).contains(intoId))
+        parentId == null
+            ? into.copyWith(clearParentId: true)
+            : into.copyWith(parentId: parentId),
+      from.copyWith(deletedAt: utcNow()),
+    ];
+    await _repository.upsertMemoryTopics(moved, [
+      for (final memory in await _repository.listMemories())
+        if (memory.topicIds.contains(fromId) ||
+            memory.suggestedTopic?.parentId == fromId)
+          _offeredUnder(
+            memory.topicIds.contains(fromId)
+                ? _refiled(memory, {fromId}, intoId)
+                : memory,
+            fromId,
+            intoId,
+          ),
+    ]);
+  }
+
+  /// [memory] with a new topic offered under [fromId] offered under [intoId]
+  /// instead, as a merge leaves it.
+  GaiaMemory _offeredUnder(GaiaMemory memory, String fromId, String intoId) {
+    if (memory.suggestedTopic case (
+      :final name,
+      parentId: final offerParent,
+    ) when offerParent == fromId) {
+      return memory.copyWith(suggestedTopic: (name: name, parentId: intoId));
+    }
+    return memory;
+  }
+
+  /// [memoryIds] were given to an agent in [chatId]: the recall history pin
+  /// suggestions count (§3.3), on this device.
+  Future<void> recalled(String chatId, List<String> memoryIds) =>
+      _repository.recordRecall(chatId, memoryIds, utcNow());
+
+  /// The pin suggestion for memory [id] put off for [kGaiaPinLater] (§3.3).
+  Future<void> pinLater(String id) => _repository.putMemoryHint((
+    kind: GaiaMemoryHintKind.pinLater,
+    subject: id,
+    until: utcNow().add(kGaiaPinLater),
+  ));
+
+  /// Topics [a] and [b] kept apart: not suggested for a merge again (§5).
+  Future<void> keepApart(String a, String b) => _repository.putMemoryHint((
+    kind: GaiaMemoryHintKind.keptApart,
+    subject: gaiaTopicPairKey(a, b),
+    until: null,
+  ));
 
   /// Memory [memoryId] moved to topic [topicId] (§3.2): it replaces the
   /// memory's topics [within] (the selected topic's subtree), or every one
@@ -938,6 +1030,158 @@ String gaiaSuggestedTopicLabel(
   return parent.isEmpty
       ? suggested.name
       : '${suggested.name} under ${parent.join(' › ')}';
+}
+
+/// How long Not now puts off a pin suggestion (GAIA_MEMORY_TOPICS_HLD.md
+/// §3.3).
+const kGaiaPinLater = Duration(days: 30);
+
+/// In how many of the chats in the recall history a memory is recalled
+/// before it's suggested as a pin (§3.3).
+const _pinRecalls = 8;
+
+/// A memory suggested as a pin (§3.3), and why, as the inbox says it.
+typedef GaiaPinSuggestion = ({GaiaMemory memory, String why});
+
+/// The [memories] to suggest as pins (§3.3): active, unpinned and not put
+/// off past [now] in [hints], and recalled in at least [_pinRecalls] of the
+/// chats in [history] (the most recalled first), or flagged by the curator
+/// as about the user in general.
+List<GaiaPinSuggestion> gaiaPinSuggestions(
+  List<GaiaMemory> memories,
+  List<GaiaRecallRow> history,
+  List<GaiaMemoryHint> hints,
+  DateTime now,
+) {
+  final chats = {for (final row in history) row.chatId}.length;
+  final recalls = <String, Set<String>>{};
+  for (final row in history) {
+    (recalls[row.memoryId] ??= {}).add(row.chatId);
+  }
+  final later = {
+    for (final hint in hints)
+      if (hint.kind == GaiaMemoryHintKind.pinLater &&
+          (hint.until?.isAfter(now) ?? true))
+        hint.subject,
+  };
+  final flagged = {
+    for (final hint in hints)
+      if (hint.kind == GaiaMemoryHintKind.pinCandidate) hint.subject,
+  };
+  final suggested = <(int, GaiaPinSuggestion)>[];
+  for (final memory in memories) {
+    if (memory.isDeleted ||
+        memory.status != GaiaMemoryStatus.active ||
+        memory.pinned ||
+        later.contains(memory.id)) {
+      continue;
+    }
+    final count = recalls[memory.id]?.length ?? 0;
+    if (count >= _pinRecalls) {
+      suggested.add((
+        count,
+        (memory: memory, why: 'Recalled in $count of the last $chats chats'),
+      ));
+    } else if (flagged.contains(memory.id)) {
+      suggested.add((0, (memory: memory, why: 'About you in general')));
+    }
+  }
+  suggested.sort((a, b) => b.$1.compareTo(a.$1));
+  return [for (final (_, suggestion) in suggested) suggestion];
+}
+
+/// How two topics kept apart are stored: their ids in order.
+String gaiaTopicPairKey(String a, String b) =>
+    a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
+
+/// Two topics suggested for a merge (§5): [from] into [into], and why, as
+/// the inbox says it.
+typedef GaiaMergeSuggestion = ({
+  GaiaMemoryTopic from,
+  GaiaMemoryTopic into,
+  String why,
+});
+
+/// Topics in [tree] to suggest merging (§5): two under the same parent with
+/// near-identical names (case, punctuation and a plural aside), or two
+/// that share most of their [memories] (at least 3, and three quarters of
+/// those in either). A topic and one under it are never suggested, nor two
+/// kept apart in [hints]. The one kept is a live project's ([projects])
+/// if either is, which can't be merged away (two never are), otherwise
+/// the one with more memories, then the older, then by id.
+List<GaiaMergeSuggestion> gaiaMergeSuggestions(
+  GaiaTopicTree tree,
+  List<GaiaMemory> memories,
+  Set<String> projects,
+  List<GaiaMemoryHint> hints,
+) {
+  final own = <String, Set<String>>{};
+  for (final memory in memories) {
+    if (memory.isDeleted) continue;
+    for (final id in memory.topicIds) {
+      (own[id] ??= {}).add(memory.id);
+    }
+  }
+  final apart = {
+    for (final hint in hints)
+      if (hint.kind == GaiaMemoryHintKind.keptApart) hint.subject,
+  };
+  String nameKey(String name) => [
+    for (final word in name.toLowerCase().split(
+      RegExp(r'[^\p{L}\p{N}+#]+', unicode: true),
+    ))
+      if (word.isNotEmpty)
+        word.length > 3 && word.endsWith('s') && !word.endsWith('ss')
+            ? word.substring(0, word.length - 1)
+            : word,
+  ].join(' ');
+  final topics = [for (final line in gaiaTopicLines(tree)) tree[line.id]!];
+  final keys = {for (final topic in topics) topic.id: nameKey(topic.name)};
+  bool under(String id, String above) {
+    for (var at = tree.parentOf(id); at != null; at = tree.parentOf(at)) {
+      if (at == above) return true;
+    }
+    return false;
+  }
+
+  final found = <GaiaMergeSuggestion>[];
+  for (final (i, a) in topics.indexed) {
+    for (final b in topics.skip(i + 1)) {
+      if (apart.contains(gaiaTopicPairKey(a.id, b.id)) ||
+          under(b.id, a.id) ||
+          under(a.id, b.id)) {
+        continue;
+      }
+      final inA = own[a.id] ?? const <String>{};
+      final inB = own[b.id] ?? const <String>{};
+      final shared = inA.intersection(inB).length;
+      final String why;
+      if (tree.parentOf(a.id) == tree.parentOf(b.id) &&
+          keys[a.id]!.isNotEmpty &&
+          keys[a.id] == keys[b.id]) {
+        why = 'Near-identical names';
+      } else if (shared >= 3 && shared / inA.union(inB).length >= 0.75) {
+        why = '$shared memories in common';
+      } else {
+        continue;
+      }
+      final aLinked = projects.contains(a.projectId);
+      final bLinked = projects.contains(b.projectId);
+      if (aLinked && bLinked) continue;
+      final keepA =
+          aLinked ||
+          (!bLinked &&
+              (inA.length != inB.length
+                  ? inA.length > inB.length
+                  : a.createdAt != b.createdAt
+                  ? a.createdAt.isBefore(b.createdAt)
+                  : a.id.compareTo(b.id) < 0));
+      found.add(
+        keepA ? (from: b, into: a, why: why) : (from: a, into: b, why: why),
+      );
+    }
+  }
+  return found;
 }
 
 /// [memory]'s topics in [tree], and the new topic offered for it, for its

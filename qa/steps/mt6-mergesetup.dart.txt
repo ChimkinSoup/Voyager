@@ -1,0 +1,13 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+final all = await r.listMemories();
+final ce = all.firstWhere((m) => m.text.startsWith('The user writes in Canadian English'));
+await g.acceptSuggestedTopic(ce.id);
+final topics = await r.listMemoryTopics();
+final tea = topics.firstWhere((t) => t.name == 'Tea' && t.deletedAt == null);
+final drinks = await g.newTopic('Drinks');
+final coffee = await g.save('I limit myself to one coffee a day, before noon.', status: GaiaMemoryStatus.active, byUser: true, topicIds: [tea.id]);
+for (final m in await r.listMemories()) {
+  if (m.topicIds.contains(tea.id)) await g.addMemoryTopic(m.id, drinks.id);
+}
+debugPrint('MT6-MERGESETUP tea=' + tea.id + ' drinks=' + drinks.id + ' coffee=' + (coffee?.id ?? 'none'));

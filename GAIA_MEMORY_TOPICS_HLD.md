@@ -11,7 +11,10 @@ drags and what §20.5 lists. **Phase 5 (placement on capture, suggested topics, 
 smaller input) built 2026-11-16** (§21): tested, and placement and the curator checked
 with the real utility model off-screen. The on-screen checks of §19, §20.5 and §21.4 were run
 on 2026-11-17 (§22): all passed except the phone's, and BUG-381 (a memory card's chips didn't
-follow edits) was found and fixed. Phase 6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+follow edits) was found and fixed. **Phase 6 (topic merge, Sort these, and pin and merge
+suggestions) built 2026-11-17** (§23): unit-, controller- and widget-tested, and checked
+live on 2026-11-17 (§24): all passed except the curator's pin flag (not yet seen) and the
+phone's; BUG-382 (Sort these' Accept also makes a memory's older offer) found, not fixed. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -1399,3 +1402,205 @@ probes and is left.
   0.52 in §18.3, is now 0.44, below the threshold. The corpus also grew by about 40 memories
   and the placement burst's tags since then, so how much of that drop is the stemming isn't
   known.
+
+## 23. Phase 6 build notes (2026-11-17)
+
+### 23.1 What was built
+
+- **Topic merge (§3.2):** `GaiaMemories.mergeTopic(from, into)`, one write. Each of the
+  merged topic's memories is in the kept one instead (once), its subtopics move under the
+  kept one, and it goes to the trash. On the desktop it's right-click → **Merge into…**, on
+  the phone the topic's ⋯ menu: pick the topic to keep, then confirm. A linked project's topic
+  can be kept but not merged away: its item is disabled and reads "Merge into… (a project's
+  topic stays)", and `mergeTopic` refuses it too.
+- **Sort these (§6):** a button above Unsorted's memories, on the desktop. It sends them to
+  the utility model in batches of 30 (`kGaiaSortBatch`), one call per batch
+  (`GaiaUtility.placeMany`, through a new `sortMemories` pipe request to the companion). Each
+  answer shows on its memory's row as "Suggested:" chips: the existing topics, any new topic,
+  each with × to leave it out. **Accept** files it, **Skip** drops the suggestion, and **Accept
+  all (N)** accepts every one shown. Nothing is filed before that.
+- **The recall history (§3.3)** is written now. After a message's recall is settled (stage 2
+  or stage 1), the companion sends `recalled {chatId, memoryIds}`, and the main instance keeps
+  one row per memory per chat for the 20 chats that recalled anything most recently
+  (`recordRecall`).
+- **Pin suggestions (§3.3):** "Pin this?" in the inbox, with **Pin** and **Not now**, for an
+  active, unpinned memory recalled in at least 8 of the chats in the history ("Recalled in 9
+  of the last 20 chats"), or one the curator flagged as about you in general ("About you in
+  general"). The curator now returns `"pin": true` for those. Not now puts it off 30 days
+  (`kGaiaPinLater`).
+- **Merge suggestions (§5):** "Merge X into Y?" in the inbox, with **Merge** and **Keep
+  both**, for two topics under the same parent with near-identical names, or two that share
+  most of their memories (`gaiaMergeSuggestions`).
+- **A local table for the suggestions' state:** `gaia_memory_hints_table` (schema 201 → 202),
+  holding the curator's pin flags, Not now until when, and the pairs kept apart. Like the
+  recall history, it isn't synced or backed up.
+
+### 23.2 Decisions made while building
+
+1. **The suggestions' state is local, in a new table (schema 202), not new synced fields.**
+   Pin suggestions already count this device's recall history (§3.3), so a pin flag and Not
+   now that stay on the device fit them, and the curator runs on the device whose main
+   instance saves what it finds. The cost is that **pin suggestions only show on the desktop
+   that ran the chats**, and **Keep both** on one device doesn't stop the other suggesting the
+   same merge. Merge suggestions show on every device, the phone included.
+2. **"8 of the last 20" counts chats in the history**, so with fewer than 20 chats that
+   recalled anything, 8 of them still counts. A memory recalled twice in one chat counts once.
+3. **The curator's pin flag waits for the memory to be remembered.** A flagged proposal sits in
+   the inbox as a proposal first; "Pin this?" shows once it's active. Pin over the budget gives
+   the usual toast.
+4. **Merging a topic into one of its own subtopics** moves that subtopic up to the merged
+   topic's place first, so the other subtopics can go under it without a cycle.
+5. **A new topic offered under the merged topic** (`suggestedTopic.parentId`) is offered under
+   the kept one instead. Without that, it would be offered at the root.
+6. **Merge clears `projectId`** on a memory taken out of an unlinked project topic, through the
+   same `_refiled` as delete and remove (§16.2 item 6), so the upkeep doesn't file it back
+   when its project is restored. That's §19.6's third way.
+7. **Merge from the topic menu asks first; Merge from the inbox doesn't.** The inbox row is
+   already the question. Either way it can't be undone, except that the trash restores the
+   topic alone, as for delete (§20.2 item 11).
+8. **What counts as a merge suggestion:**
+   - **Names:** the same after lower case, punctuation and a plural `s` ("Assignments" and
+     "assignment", "Co-op" and "co op"), and only between topics under the same parent. CS246 ›
+     Assignments and CS245 › Assignments are different topics.
+   - **Memories:** at least 3 in common, and at least three quarters of the memories in
+     either.
+   - **Never** a topic and one under it, and never two linked project topics.
+   - **The one kept:** a linked project's topic, else the one with more memories, else the
+     older, else by id.
+   - Kept apart is forever on the device; there's no undo short of the database.
+9. **Sort these covers Unsorted's remembered and archived memories as shown**, the search
+   applied, and not the inbox's proposals, which are shown across every topic. Memories that
+   already have a suggestion aren't sent again.
+10. **Accepting a suggestion with a new topic makes it.** §5 says new topics are never made
+    silently; accepting one you can see is asking for it. Two memories accepted with the same
+    new name share one topic (§21.2 item 5). To keep a memory out of the new topic, × its chip
+    first.
+11. **Suggestions are held in memory on the page, not stored.** They survive leaving the tab
+    but not a restart; Sort these again costs one call per 30. A memory filed some other way
+    meanwhile (a drag, Suggest), or deleted, loses its suggestion for good, so if it's ever
+    back in Unsorted it shows none and the next Sort these asks about it again.
+12. **One call per batch, with numbered facts.** The answer names each fact by its number, not
+    its id, so 30 uuids aren't repeated back. A batch has 90 seconds. A failure stops the run
+    and shows why beside the button; the batches already answered stay.
+13. **The inbox's section count includes the suggestions**; the tab's badge still counts
+    proposals only.
+14. **A memory unpinned on purpose is never suggested as a pin again**, by either route (the
+    recall history or the curator's flag). Unpinning stores a `pinLater` hint with no until,
+    which counts as for good. Like Keep both, it's on the device and has no undo short of the
+    database; pinning it by hand still works.
+
+### 23.3 How it was checked
+
+- **Unit tests:** `gaia_memory_topics_test`, "merge and suggestions" (merge moves memories
+  once and subtopics, into its own subtopic without a cycle, an offer re-pointed, a project
+  topic kept but not merged away until its project is deleted, and its memories losing
+  `projectId` and not filed back after a restore; the recall history keeping 20 chats; pin
+  suggestions at 8, not for pinned or archived ones, Not now for 30 days, never again once
+  unpinned, the curator's flag only once remembered; merge suggestions by sibling names and by memories in common, none for
+  a topic and one under it, Keep both, and a project topic kept). `gaia_utility_test`:
+  the curator's `pin`, Sort these' answer parser (numbers, out of range, repeated, nothing
+  placed) and its job's input. `gaia_migration_test`: 201 → 202.
+  `import_export_test`: the new table listed as local-only.
+- **Controller tests:** the recall history written for a recalled message
+  (`gaia_controller_test`, "memory recall"), and Sort these through the pipe returning
+  placements by id without filing anything ("placement on capture").
+- **Widget tests** (`gaia_memory_tree_test`, Windows variant, under a 1.5 GB watchdog, peak
+  1.27 GB): Merge into… from the right-click menu; Sort these with ×, Accept and Skip; Accept
+  all making one new topic for two memories; a memory filed some other way losing its
+  suggestion and asked about again once back in Unsorted; the inbox's pin and merge
+  suggestions with Pin and Keep both. 13 passed in the file.
+- **The Gaia suites** (controller, host, memories, recall, card, utility): 541 passed.
+
+### 23.4 Live checks still to do for Phase 6
+
+All need the app on the screen and real Haiku in `gaiaqa`, or the phone.
+
+- **Sort these on real data:** in `gaiaqa`, make a few dozen memories Unsorted, then Sort
+  these. Check the batches (log `[gaia] memory sort: placed N of M in T ms`), how good the
+  placements are, how often it offers new topics and whether facts that belong together get
+  the same one, and Accept, ×, Skip and Accept all on screen.
+- **Pin suggestions live:** with stage 2 on, run the same subject in 8 chats; "Pin this?"
+  shows for its memory. Pin, Not now (gone, and not back after a restart), and a pin over the
+  budget.
+- **The curator's pin flag:** a chat that states something general ("I'm a CS student at
+  Waterloo"); after the curator runs, the memory is in the inbox, and once remembered "Pin
+  this?" says "About you in general".
+- **Merge live:** from the menu, on a project topic kept and on one under the other; from the
+  inbox, both rules. Restore the merged topic from Settings → Trash: it comes back with no
+  memories.
+- **Two devices:** a merge made on one reaches the other, memories and subtopics included;
+  Keep both on one doesn't hide it on the other (§23.2 item 1).
+- **The phone:** Merge into… in a topic's ⋯ menu, and merge suggestions in the inbox. No Sort
+  these and no pin suggestions there.
+- **§19.6's third way, by merge:** a memory in an unlinked project topic, merged away, loses
+  `projectId`, and isn't filed back when the project is restored (unit-tested only).
+
+## 24. Live pass, 2026-11-17 (Phase 6)
+
+`gaiaqa` (qa-128) on a copy of the Debug build with a fresh `flutter build bundle` of this
+tree (schema 201 → 202 on launch), the main window parked off-screen and driven by `voy.ps1`
+in background mode, VM eval (`qa/steps/mt6-*.dart.txt`) and read-only SQLite. A fresh
+`qtopic5` on the same account was the second device. Real turns on Juno's default Claude
+account (Haiku), stage 2 on for the pass. One new bug, BUG-382, not fixed. The phone wasn't
+run: there's no emulator or `adb` on this PC.
+
+- **Sort these on real data:** passed, with BUG-382. 33 filed memories were made Unsorted
+  (three from each of nine topics) and six new ones saved (bouldering and Spanish lessons),
+  56 in all with the 24 already there. Two batches: `placed 25 of 30 in 10921 ms` and
+  `placed 26 of 26 in 19995 ms`. The five not placed were the long "MT3 budget" filler.
+  Every seeded memory went back to the topic it came from (Car, Cooking, Family, Finance,
+  Fitness, Music, Pets; Obsidian's Plugins ones to Obsidian › Plugins, one to Obsidian), and
+  "the A5 plan of attack" to CS246 › Assignments. New topics were offered for 21: Languages
+  (all three Spanish facts), Preferences (7: colour, season, metric units, dark mode, …), Tea
+  (2), Travel (2, the Dordogne and the P4 hotel), Gap checks and Global markers (QA markers).
+  Facts that belong together got the same name every time. The bouldering facts went to
+  Fitness rather than a new topic. Inbox proposals weren't sent (§23.2 item 9).
+  On screen: Accept filed one in CS246 › Assignments and its row left Unsorted; Skip dropped
+  the suggestion and kept the memory and its older offer; × on a row's only chip dropped the
+  suggestion (no row had two chips, so × leaving the rest wasn't seen); Accept all (48) filed
+  all 48 in about 4 s and made each new topic once (no duplicate names). **BUG-382:** a row
+  whose memory already had a Phase 5 offer shows two "+ New topic" chips, the old offer above
+  and Sort's beside Accept, and accepting Sort's after its topic exists also makes the old
+  offer: the timezone memory ended in Preferences and a new "Profile".
+- **Pin suggestions live:** passed. Eleven Biscuit chats with stage 2 on (each picked 1-8 of
+  18-40 candidates in 1.0-2.6 s); the recall history kept one row per memory per chat. Three
+  memories reached 8: "Pin this? Recalled in 9 of the last 11 chats." (§23.2 item 2's
+  wording with fewer than 20). Pin pinned the diet memory; Not now put the weight memory off
+  to 2026-12-17, and after a restart only the corgi row came back. With pins at 1,999 of
+  2,000 characters, Pin on the corgi row gave the budget toast (warning icon) and pinned
+  nothing; the filler pins were taken off again after.
+- **The curator's pin flag:** not checked yet. The chat ("I am left-handed and a third-year
+  CS student at the University of Waterloo…") was sent at 04:06:53 and the curator wasn't due
+  until about 04:17; the pass stopped before then. The eleven Biscuit chats were curated in
+  the meantime and gave nothing new, which is right.
+- **Merge live, from the inbox:** passed for both rules. "Merge "Language" into
+  "Languages"? Near-identical names." and "Merge "Drinks" into "Tea"? 3 memories in common."
+  (Drinks made with the same three memories as Tea). Merge on each moved the memories once
+  and trashed the merged topic. Keep both on "Teas"/"Tea" wrote a `keptApart` hint and hid it.
+- **Merge live, from the menu:** passed. Right-click → Merge into… lists every topic but the
+  one merged, then asks ("Its memories and subtopics move to …, and … goes to the trash.").
+  "Global markers" into the project topic "P4 Memories QA": its three memories moved there.
+  The project topic's own item is disabled ("Merge into… (a project's topic stays)") and a
+  click does nothing; Delete reads "Delete (goes with its project)". Sailing into its own
+  subtopic Gardening, the pair §22.1 left stored as a cycle: Gardening became a root with all
+  three memories and the cycle was gone. The picker hides Sailing, so Gardening shows indented
+  under the row above it ("Profile"), as if it were Profile's subtopic; the confirm says
+  "Sailing › Gardening" correctly. Cosmetic, not filed.
+- **Restore from Settings → Trash:** passed. Sailing came back under Gardening with no
+  memories.
+- **§19.6's third way, by merge:** passed. A memory saved with P4 Del Trash's `projectId` and
+  filed in its topic; the project deleted (topic unlinked); the topic merged into Travel from
+  the menu: the memory was in Travel with no `projectId`. Restoring the project linked its
+  topic again and the memory stayed in Travel.
+- **Two devices:** passed. `qtopic5` signed in fresh and its pull matched `gaiaqa` exactly (36
+  topics, 349 memories, merges included). A live merge on `gaiaqa` (Gardening, with Sailing
+  under it, into Hobbies) reached `qtopic5` with its memories and the subtopic re-parented,
+  between 11 and about 25 s later (just after its first pull). Keep both on `gaiaqa` didn't
+  hide "Merge "Teas" into "Tea"?" on `qtopic5`, which also showed no pin suggestions
+  (§23.2 item 1).
+- **Not run:** the phone (Merge into… in the ⋯ menu, merge suggestions in its inbox).
+
+Left on qa-128: the Biscuit and general-fact chats from this pass; topics Languages,
+Preferences, Profile, Tea, Teas, Travel, Gap checks; Hobbies now holding Gardening's memories
+with Sailing under it; the merged topics in the trash; "MT6 P4 Del Trash marker" in Travel;
+the diet memory pinned.

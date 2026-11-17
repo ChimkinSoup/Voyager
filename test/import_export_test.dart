@@ -1495,6 +1495,8 @@ void main() {
         // Which memories were recalled in which chat here: pin suggestions
         // count this device's use (GAIA_MEMORY_TOPICS_HLD.md §3.3).
         'gaia_recall_history_table',
+        // Pin and merge suggestion hints that go with it (§23).
+        'gaia_memory_hints_table',
       };
 
       expect(

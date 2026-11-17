@@ -1,0 +1,19 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+final topics = ['mt3-t-car', 'mt3-t-cook', 'mt3-t-family', 'mt3-t-fin', 'mt3-t-fit', 'mt3-t-health', 'mt3-t-music', 'mt3-t-pets', 'mt3-t-obs-plug'];
+final all = await r.listMemories();
+var n = 0;
+for (final t in topics) {
+  var k = 0;
+  for (final m in all) {
+    if (k >= 3) break;
+    if (m.isDeleted || m.status.name != 'active' || m.pinned || !m.topicIds.contains(t)) continue;
+    for (final id in m.topicIds.toList()) { await g.removeMemoryTopic(m.id, id); }
+    k++; n++;
+  }
+}
+for (final s in ['I go bouldering at Grand River Rocks twice a week.', 'My climbing shoes are La Sportiva Solutions, size 41.', 'I am working on my first V5 boulder problem.', 'I take Spanish lessons on Thursday evenings.', 'My Spanish tutor is called Lucia.', 'I want to reach B2 in Spanish before the Mexico trip.']) {
+  await g.save(s, status: GaiaMemoryStatus.active, byUser: true);
+  n++;
+}
+debugPrint('MT6-UNSORT ' + n.toString());

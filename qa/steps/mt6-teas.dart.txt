@@ -1,0 +1,2 @@
+final t = await GaiaMemories(c.read(gaiaRepositoryProvider)).newTopic('Teas');
+debugPrint('MT6-TEAS ' + t.id);

@@ -4039,4 +4039,12 @@ Entry format:
 - Notes: `_MessageView` built `GaiaMemoryCard` straight from the message, so it rebuilt only when the message did, unlike `GaiaCardPart` beside it, which has a `ListenableBuilder` on the controller. Placement filling in a card that's already open (§21.4) goes through the same path. The widget tests pump the card alone, and the controller tests check the state, so neither saw it.
 - Notes (fixed 2026-11-17, uncommitted): `gaia_app.dart` wraps the memory card in a `ListenableBuilder` on the controller. Checked live on the same card: Family added, Pets removed, both shown at once; Remember saved it active in Family only (`mt5-card-fix-family.png`, `mt5-card-fix-xpets.png`). No widget test of the card inside a chat was added.
 
-<!-- Last ID: BUG-381. -->
+### BUG-382 [GAIA-MEMORY] Accepting a Sort these suggestion also makes the memory's older offered topic
+- Severity: Minor
+- Found: 2026-11-17, GAIA_MEMORY_TOPICS_HLD.md Phase 6 live pass (`gaiaqa`, qa-128)
+- Steps: an Unsorted memory with a standing offer from Phase 5 placement ("The user's timezone is America/Toronto", offered "+ New topic: Profile"); Sort these suggests "+ New topic: Preferences" for it, and the row shows both chips (`qa/shots/mt6-twonew.png`). Accept another memory's "Preferences" suggestion first (or use Accept all, which did it here), so Preferences exists, then accept this one.
+- Actual: the memory is filed in Preferences **and** in a new topic "Profile" (made 1.5 s after Preferences). Profile was never part of Sort's suggestion.
+- Expected: Accept files the memory as Sort's suggestion shows; the older offer stays an offer (or is replaced), and no topic is made from it.
+- Notes: `_acceptSorted` (`gaia_page.dart:1976`) calls `place(id, placement)` then, because `placement.suggested != null`, `acceptSuggestedTopic(id)`. When the suggested name already exists, `_filed` files the memory in it and returns no offer, and `place` writes `copyWith(suggestedTopic: null)`, which keeps the memory's old offer, so `acceptSuggestedTopic` then makes that one. When Sort's topic doesn't exist yet the old offer is overwritten and it's fine, which is why the first accept of a name works. Only memories that already had a different offer are hit (3 of 51 here: Profile made, Language and Computer setup left as offers because those rows were skipped and ×'d).
+
+<!-- Last ID: BUG-382. -->

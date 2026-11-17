@@ -10,6 +10,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/page/gaia_page.dart';
+import 'package:voyager/features/gaia/page/gaia_providers.dart';
 
 /// The Memories tab's topic tree (GAIA_MEMORY_TOPICS_HLD.md §3.2, Phase 4):
 /// browsing by topic, dragging memories and topics on the desktop, the
@@ -51,6 +52,8 @@ void main() {
     WidgetTester tester, {
     double width = 1300,
     Map<String, GaiaSuggestedTopic> suggested = const {},
+    List<Override> overrides = const [],
+    Future<void> Function()? seed,
   }) async {
     tester.view.physicalSize = Size(width, 1600);
     tester.view.devicePixelRatio = 1;
@@ -76,9 +79,13 @@ void main() {
         ],
       ),
     );
+    if (seed != null) await tester.runAsync(seed);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [gaiaRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          gaiaRepositoryProvider.overrideWithValue(repository),
+          ...overrides,
+        ],
         child: MaterialApp(
           theme: VoyagerTheme.light(),
           home: const Scaffold(body: GaiaPage()),
@@ -299,6 +306,212 @@ void main() {
     expect((await topic(tester, 'exam')).parentId, 'uni');
     expect(await topicsOf(tester, 'm1'), isEmpty);
   }, variant: _desktop);
+
+  testWidgets(
+    'right-click → Merge into… merges after asking, leaving the topic itself '
+    'out of the list (Phase 6)',
+    (tester) async {
+      await pump(tester);
+      await tester.tap(row('Final exam'), buttons: kSecondaryButton);
+      await settle(tester);
+      await tester.tap(find.text('Merge into…'));
+      await settle(tester);
+      expect(
+        find.widgetWithText(SimpleDialogOption, 'Final exam'),
+        findsNothing,
+      );
+      await tester.tap(find.widgetWithText(SimpleDialogOption, 'CS246'));
+      await settle(tester);
+      expect(find.textContaining('goes to the trash'), findsOneWidget);
+      await tester.tap(find.text('Merge').last);
+      await settle(tester);
+      expect((await topic(tester, 'exam')).isDeleted, isTrue);
+      expect(await topicsOf(tester, 'm2'), ['cs246']);
+    },
+    variant: _desktop,
+  );
+
+  testWidgets(
+    "Unsorted's Sort these shows where each would go; × leaves a topic out, "
+    'Accept files it, Skip drops it, and nothing moves before (§6)',
+    (tester) async {
+      final asked = <List<String>>[];
+      await pump(
+        tester,
+        seed: () =>
+            repository.upsertMemory(_memory('m5', 'Plays the cello', [])),
+        overrides: [
+          gaiaSortMemoriesProvider.overrideWithValue((memories) async {
+            asked.add([for (final memory in memories) memory.id]);
+            return {
+              'm4': (
+                topicIds: const ['obs', 'cs246'],
+                suggested: null,
+                tags: const ['drink'],
+              ),
+              'm5': (
+                topicIds: const <String>[],
+                suggested: (name: 'Music', parentId: null),
+                tags: const <String>[],
+              ),
+            };
+          }),
+        ],
+      );
+      expect(find.text('Sort these'), findsNothing);
+      await tester.tap(row('Unsorted'));
+      await settle(tester);
+      await tester.tap(find.text('Sort these'));
+      await settle(tester);
+      expect(asked.single, unorderedEquals(['m4', 'm5']));
+      expect(find.text('Suggested:'), findsNWidgets(2));
+      expect(find.text('Accept all (2)'), findsOneWidget);
+      expect(await topicsOf(tester, 'm4'), isEmpty);
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(Container, 'Obsidian'),
+          matching: find.byTooltip('Leave this topic out'),
+        ),
+      );
+      await settle(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Likes tea'),
+          matching: find.text('Accept'),
+        ),
+      );
+      await settle(tester);
+      final m4 = (await tester.runAsync(() => repository.getMemory('m4')))!;
+      expect(m4.topicIds, ['cs246']);
+      expect(m4.tags, ['drink']);
+      expect(find.text('Likes tea'), findsNothing, reason: 'sorted now');
+
+      await tester.tap(find.text('Skip'));
+      await settle(tester);
+      expect(find.text('Suggested:'), findsNothing);
+      expect(await topicsOf(tester, 'm5'), isEmpty);
+    },
+    variant: _desktop,
+  );
+
+  testWidgets(
+    'a memory filed some other way loses its Sort these suggestion, so back '
+    'in Unsorted it shows none and is asked about again (§6)',
+    (tester) async {
+      final asked = <List<String>>[];
+      await pump(
+        tester,
+        seed: () =>
+            repository.upsertMemory(_memory('m5', 'Plays the cello', [])),
+        overrides: [
+          gaiaSortMemoriesProvider.overrideWithValue((memories) async {
+            asked.add([for (final memory in memories) memory.id]);
+            return {
+              for (final memory in memories)
+                memory.id: (
+                  topicIds: const ['cs246'],
+                  suggested: null,
+                  tags: const <String>[],
+                ),
+            };
+          }),
+        ],
+      );
+      await tester.tap(row('Unsorted'));
+      await settle(tester);
+      await tester.tap(find.text('Sort these'));
+      await settle(tester);
+      expect(find.text('Suggested:'), findsNWidgets(2));
+
+      Future<void> file(List<String> topicIds) => tester.runAsync(() async {
+        final m4 = (await repository.getMemory('m4'))!;
+        await repository.upsertMemory(m4.copyWith(topicIds: topicIds));
+      });
+      await file(['obs']);
+      await settle(tester);
+      await file([]);
+      await settle(tester);
+      expect(find.text('Likes tea'), findsOneWidget);
+      expect(find.text('Suggested:'), findsOneWidget, reason: 'm5 only');
+
+      await tester.tap(find.text('Sort these'));
+      await settle(tester);
+      expect(asked.last, ['m4']);
+    },
+    variant: _desktop,
+  );
+
+  testWidgets(
+    "Accept all files each, making a new topic offered; one's new topic is "
+    'made once (§6)',
+    (tester) async {
+      await pump(
+        tester,
+        seed: () =>
+            repository.upsertMemory(_memory('m5', 'Plays the cello', [])),
+        overrides: [
+          gaiaSortMemoriesProvider.overrideWithValue(
+            (memories) async => {
+              for (final memory in memories)
+                memory.id: (
+                  topicIds: const <String>[],
+                  suggested: (name: 'Hobbies', parentId: null),
+                  tags: const <String>[],
+                ),
+            },
+          ),
+        ],
+      );
+      await tester.tap(row('Unsorted'));
+      await settle(tester);
+      await tester.tap(find.text('Sort these'));
+      await settle(tester);
+      await tester.tap(find.text('Accept all (2)'));
+      await settle(tester);
+      final hobbies = (await tester.runAsync(
+        repository.listMemoryTopics,
+      ))!.where((topic) => topic.name == 'Hobbies').toList();
+      expect(hobbies, hasLength(1));
+      expect(await topicsOf(tester, 'm4'), [hobbies.single.id]);
+      expect(await topicsOf(tester, 'm5'), [hobbies.single.id]);
+    },
+    variant: _desktop,
+  );
+
+  testWidgets(
+    "the inbox suggests a pin from this device's recall history, with Pin "
+    'and Not now, and a merge, with Merge and Keep both (§3.3, §5)',
+    (tester) async {
+      await pump(
+        tester,
+        seed: () async {
+          for (var i = 0; i < 8; i++) {
+            await repository.recordRecall('c$i', ['m3'], _at);
+          }
+          await repository.upsertMemoryTopic(_topic('obs2', 'obsidian'));
+        },
+      );
+      expect(find.text('Inbox (2)'), findsOneWidget);
+      expect(
+        find.text('Pin this? Recalled in 8 of the last 8 chats.'),
+        findsOneWidget,
+      );
+      expect(find.text('Merge "obsidian" into "Obsidian"?'), findsOneWidget);
+
+      await tester.tap(find.text('Keep both'));
+      await settle(tester);
+      expect(find.textContaining('Merge "obsidian"'), findsNothing);
+      await tester.tap(find.text('Pin'));
+      await settle(tester);
+      expect(
+        (await tester.runAsync(() => repository.getMemory('m3')))!.pinned,
+        isTrue,
+      );
+      expect(find.textContaining('Pin this?'), findsNothing);
+    },
+    variant: _desktop,
+  );
 
   testWidgets("on the phone, a memory's menu moves it and a topic's menu "
       'moves the topic', (tester) async {

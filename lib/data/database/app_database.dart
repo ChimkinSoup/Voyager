@@ -2498,6 +2498,19 @@ class GaiaRecallHistoryTable extends Table {
   Set<Column> get primaryKey => {memoryId, chatId};
 }
 
+/// What this device remembers about the Memories tab's suggestions
+/// (GAIA_MEMORY_TOPICS_HLD.md §23): a memory the curator flagged as a pin,
+/// a pin suggestion put off with Not now until [until], and two topics
+/// kept apart. Local, like the recall history the pin suggestions count.
+class GaiaMemoryHintsTable extends Table {
+  TextColumn get kind => text()();
+  TextColumn get subject => text()();
+  DateTimeColumn get until => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {kind, subject};
+}
+
 @DriftDatabase(
   // Gaia's message search (GAIA_HLD.md §17), an FTS5 table. Declared to drift
   // rather than created by hand, so it is in `allTables` and an account
@@ -2588,13 +2601,14 @@ class GaiaRecallHistoryTable extends Table {
     GaiaProjectsTable,
     GaiaMemoryTopicsTable,
     GaiaRecallHistoryTable,
+    GaiaMemoryHintsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 201;
+  int get schemaVersion => 202;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4888,6 +4902,10 @@ class AppDatabase extends _$AppDatabase {
           gaiaMemoriesTable,
           gaiaMemoriesTable.suggestedTopicJson,
         );
+      }
+      if (from < 202) {
+        // Pin and merge suggestions (GAIA_MEMORY_TOPICS_HLD.md §23).
+        await migrator.createTable(gaiaMemoryHintsTable);
       }
     },
   );

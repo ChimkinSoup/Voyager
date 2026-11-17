@@ -1085,6 +1085,31 @@ void main() {
     );
   });
 
+  test('201→202 adds memory suggestion hints, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(
+      seed,
+    ).recordRecall('c1', ['m1'], DateTime.utc(2026, 11, 17));
+    await seed.customStatement('DROP TABLE gaia_memory_hints_table');
+    await seed.customStatement('PRAGMA user_version = 201');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect(await repo.listMemoryHints(), isEmpty);
+    expect((await repo.watchRecallHistory().first).single.memoryId, 'm1');
+    await repo.putMemoryHint((
+      kind: GaiaMemoryHintKind.pinLater,
+      subject: 'm1',
+      until: DateTime.utc(2026, 12, 17),
+    ));
+    expect(
+      (await repo.listMemoryHints()).single.until,
+      DateTime.utc(2026, 12, 17),
+    );
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

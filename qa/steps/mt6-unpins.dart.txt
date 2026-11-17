@@ -1,0 +1,3 @@
+﻿final g = GaiaMemories(c.read(gaiaRepositoryProvider));
+for (final id in ['2dfc1862-d68a-4085-8658-6dee96f276f5', '2e910b96-920f-4db9-a220-f933611ab075', '107a8d0a-890e-40d6-9a58-42eb69813b15', 'mt3-m-001', 'mt3-m-036', 'mt3-m-010', 'mt3-m-008']) { await g.pin(id, pinned: false); }
+debugPrint('MT6-UNPINS done');

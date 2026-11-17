@@ -988,6 +988,24 @@ abstract class GaiaRepository {
     List<GaiaMemory> memories,
   );
 
+  /// [memoryIds] recalled in [chatId] at [at], on this device only
+  /// (GAIA_MEMORY_TOPICS_HLD.md §3.3). Only the [keepChats] chats that
+  /// recalled anything most recently are kept.
+  Future<void> recordRecall(
+    String chatId,
+    List<String> memoryIds,
+    DateTime at, {
+    int keepChats = 20,
+  });
+
+  /// The recall history [recordRecall] keeps, as it changes.
+  Stream<List<GaiaRecallRow>> watchRecallHistory();
+
+  /// This device's pin and merge suggestion hints (§23).
+  Future<List<GaiaMemoryHint>> listMemoryHints();
+  Stream<List<GaiaMemoryHint>> watchMemoryHints();
+  Future<void> putMemoryHint(GaiaMemoryHint hint);
+
   /// The prompt queue (§13), in order: waiting items only, unless
   /// [includeDeleted], which adds sent and deleted ones.
   Future<List<GaiaQueueItem>> listQueue({bool includeDeleted = false});

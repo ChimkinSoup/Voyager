@@ -340,6 +340,11 @@ class _Main {
       case 'openMemory':
         openedMemories.add(params['memoryId']! as String);
         return null;
+      case 'recalled':
+        await memories.recalled(params['chatId']! as String, [
+          ...(params['memoryIds']! as List).cast<String>(),
+        ]);
+        return null;
       case 'remember':
         final project = params['global'] == true
             ? null
@@ -421,6 +426,7 @@ class _Main {
                   tags: gaiaMemoryTags(memory['tags']),
                   topicIds: gaiaTopicIdsFromJson(memory['topicIds']),
                   suggested: gaiaSuggestedTopicFromJson(memory['suggested']),
+                  pin: memory['pin'] == true,
                 ),
             ]);
         return null;
@@ -4063,6 +4069,10 @@ void main() {
             : job.startsWith('You keep')
             ? '[{"text": "Is learning Portuguese", "tags": ["languages"], '
                   '"topics": ["lang", "nope"], "new": null}]'
+            : job.startsWith('File each fact')
+            ? '[{"n": 2, "topics": ["pets"], "tags": ["vet"]}, '
+                  '{"n": 1, "topics": [], "new": {"name": "Music", '
+                  '"parent": null}}]'
             : 'Title',
       );
       await startCompanion(
@@ -4100,6 +4110,38 @@ void main() {
         isTrue,
       );
       expect((await main.repository.getMemory(loose.id))!.topicIds, ['pets']);
+    });
+
+    test("the page's Sort these gets where each memory would go, by id, "
+        'and nothing is filed (§6)', () async {
+      final a = await main.memories.save(
+        'Plays the cello',
+        status: GaiaMemoryStatus.active,
+      );
+      final b = await main.memories.save(
+        'Takes Biscuit to Dr Lee',
+        status: GaiaMemoryStatus.active,
+      );
+      final sorted = await main.pipe.request('sortMemories', {
+        'memories': [
+          {'id': a!.id, 'text': a.text},
+          {'id': b!.id, 'text': b.text},
+        ],
+      });
+      expect(sorted, {
+        a.id: gaiaPlacementToJson((
+          topicIds: const [],
+          suggested: (name: 'Music', parentId: null),
+          tags: const [],
+        )),
+        b.id: gaiaPlacementToJson((
+          topicIds: const ['pets'],
+          suggested: null,
+          tags: const ['vet'],
+        )),
+      });
+      expect(utility.inputs.last, contains('1. Plays the cello'));
+      expect((await main.repository.getMemory(b.id))!.topicIds, isEmpty);
     });
 
     test(
@@ -6150,6 +6192,17 @@ void main() {
         'biscuit',
         'lisbon',
       ]);
+    });
+
+    test("what's recalled goes in this device's recall history, for pin "
+        'suggestions (§3.3)', () async {
+      await remember('biscuit', 'Has a dog called Biscuit');
+      await startCompanion();
+      await turn('Walking Biscuit the dog later');
+      await turn('Something else entirely');
+      final history = await main.repository.watchRecallHistory().first;
+      expect([for (final row in history) row.memoryId], ['biscuit']);
+      expect(history.single.chatId, (await stored()).id);
     });
 
     test('the reply carries a recall part first, which syncs (§4.5)', () async {

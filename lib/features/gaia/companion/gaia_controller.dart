@@ -1747,6 +1747,27 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Where the utility model would file each of [memories], for the Gaia
+  /// page's Sort these (GAIA_MEMORY_TOPICS_HLD.md §6): placements by memory
+  /// id, applied only once the user accepts them; null when it couldn't
+  /// say.
+  Future<Map<String, Object?>?> _sort(
+    List<({String id, String text})> memories,
+  ) async {
+    final utility = _utility;
+    if (utility == null || memories.isEmpty) return null;
+    final placements = await utility.placeMany(
+      memories,
+      gaiaTopicLinesFromJson(await _pipe.request('memoryTopics')),
+    );
+    return placements == null
+        ? null
+        : {
+            for (final MapEntry(:key, :value) in placements.entries)
+              key: gaiaPlacementToJson(value),
+          };
+  }
+
   /// Memory [memoryId], saying [text], filed by the utility model
   /// (GAIA_MEMORY_TOPICS_HLD.md §5): `/remember`, `memory_propose` with no
   /// topics named, and the Gaia page's Suggest. True once it's in a topic
@@ -2650,6 +2671,12 @@ class GaiaController extends ChangeNotifier {
         return _onRemote(params);
       case 'placeMemory':
         return _place(params['memoryId']! as String, params['text']! as String);
+      case 'sortMemories':
+        return _sort([
+          for (final memory in params['memories']! as List)
+            if (memory case {'id': final String id, 'text': final String text})
+              (id: id, text: text),
+        ]);
       default:
         throw GaiaPipeException('unknown method $method');
     }
@@ -6187,7 +6214,21 @@ class GaiaController extends ChangeNotifier {
           ...toldRecalled,
           for (final memory in recalled) memory.id,
         ];
-        if (recalled.isNotEmpty) recallPart = GaiaRecallPart(recalled);
+        if (recalled.isNotEmpty) {
+          recallPart = GaiaRecallPart(recalled);
+          // What pin suggestions count (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+          unawaited(
+            _pipe
+                .request('recalled', {
+                  'chatId': chatId,
+                  'memoryIds': [for (final memory in recalled) memory.id],
+                })
+                .catchError((Object error) {
+                  debugPrint('[gaia] recall history: $error');
+                  return null;
+                }),
+          );
+        }
         reply = _replace(
           reply,
           reply.copyWith(parts: _keepChecks(reply, withRecall(builder.parts))),
@@ -7164,6 +7205,7 @@ class GaiaController extends ChangeNotifier {
               'tags': memory.tags,
               'topicIds': memory.topicIds,
               'suggested': gaiaSuggestedTopicToJson(memory.suggested),
+              if (memory.pin) 'pin': true,
             },
         ],
       });

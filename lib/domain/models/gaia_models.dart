@@ -1996,6 +1996,10 @@ typedef GaiaRecalledMemory = ({String id, String text, String? topic});
 const kGaiaMaxRecalled = 8;
 const kGaiaMaxRecalledLength = 4000;
 
+/// How many memories the Gaia page's Sort these sends the utility model at
+/// once (GAIA_MEMORY_TOPICS_HLD.md §6).
+const kGaiaSortBatch = 30;
+
 /// Stage 1's answer for a message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3):
 /// its [picks] when stage 2 doesn't run, the [candidates] stage 2 picks from
 /// (none the session was given yet, best first), and whether any of them is
@@ -2861,6 +2865,26 @@ typedef GaiaFoundMemory = ({
   List<String> tags,
   List<String> topicIds,
   GaiaSuggestedTopic? suggested,
+  // About the user in general, not a subject: a pin candidate (§3.3).
+  bool pin,
+});
+
+/// One memory recalled in one chat, on this device
+/// (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+typedef GaiaRecallRow = ({String memoryId, String chatId, DateTime recalledAt});
+
+/// What a [GaiaMemoryHint] says (GAIA_MEMORY_TOPICS_HLD.md §23): memory
+/// [GaiaMemoryHint.subject] flagged by the curator as a pin, its pin
+/// suggestion put off until [GaiaMemoryHint.until] (for good once it's
+/// unpinned, with no until), or the two topics
+/// in it ("a|b") kept apart.
+enum GaiaMemoryHintKind { pinCandidate, pinLater, keptApart }
+
+/// What this device remembers about a pin or merge suggestion; local.
+typedef GaiaMemoryHint = ({
+  GaiaMemoryHintKind kind,
+  String subject,
+  DateTime? until,
 });
 
 /// A memory's topics as its card shows them (GAIA_MEMORY_TOPICS_HLD.md

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -983,11 +984,309 @@ void main() {
           tags: const [],
           topicIds: ['a1', 'gone'],
           suggested: (name: 'Languages', parentId: null),
+          pin: false,
         ),
       ]);
       final found = await memoryOf('Prefers C++ for A5');
       expect(found.topicIds, ['project-p1', 'a1']);
       expect(found.suggestedTopic, (name: 'Languages', parentId: null));
+    });
+  });
+
+  group('merge and suggestions (§3.2, §3.3, §5, Phase 6)', () {
+    late AppDatabase db;
+    late DriftGaiaRepository repository;
+    late GaiaMemories memories;
+
+    setUp(() async {
+      db = AppDatabase.inMemory();
+      repository = DriftGaiaRepository(db);
+      memories = GaiaMemories(repository);
+      await repository.upsertMemoryTopics(
+        [
+          _topic('uni', 'University'),
+          _topic('cs246', 'CS246', parentId: 'uni'),
+          _topic('a1', 'Assignments', parentId: 'cs246'),
+          _topic('exam', 'Final exam', parentId: 'cs246'),
+          _topic('cpp', 'C++'),
+        ],
+        [
+          _memory('m1', 'Assignments use C++', topicIds: ['a1', 'cpp']),
+          _memory('m2', 'Marmoset for hand-in', topicIds: ['cs246']),
+          _memory('m3', 'Uses clang', topicIds: ['cpp']),
+          _memory('m4', 'Likes tea'),
+        ],
+      );
+    });
+
+    tearDown(() => db.close());
+
+    Future<List<String>> topicsOf(String id) async =>
+        (await repository.getMemory(id))!.topicIds;
+
+    test('merging gives its memories the topic kept, once, moves its '
+        'subtopics under it, and trashes it', () async {
+      await memories.mergeTopic('cpp', 'a1');
+      expect(await topicsOf('m1'), ['a1']);
+      expect(await topicsOf('m3'), ['a1']);
+      expect((await repository.getMemoryTopic('cpp'))!.isDeleted, isTrue);
+
+      await memories.mergeTopic('cs246', 'uni');
+      final tree = GaiaTopicTree(await repository.listMemoryTopics());
+      expect(tree.path('a1'), ['University', 'Assignments']);
+      expect(tree.path('exam'), ['University', 'Final exam']);
+      expect(await topicsOf('m2'), ['uni']);
+    });
+
+    test('merging a topic into its own subtopic moves that one up to its '
+        'place first, so no cycle is made', () async {
+      await memories.mergeTopic('cs246', 'a1');
+      final tree = GaiaTopicTree(await repository.listMemoryTopics());
+      expect(tree.path('a1'), ['University', 'Assignments']);
+      expect(tree.path('exam'), ['University', 'Assignments', 'Final exam']);
+      expect(await topicsOf('m2'), ['a1']);
+      expect((await repository.getMemoryTopic('cs246'))!.isDeleted, isTrue);
+    });
+
+    test("a new topic offered under the merged one is offered under the "
+        'one kept', () async {
+      final m4 = (await repository.getMemory('m4'))!;
+      await repository.upsertMemory(
+        m4.copyWith(suggestedTopic: (name: 'Templates', parentId: 'cpp')),
+      );
+      await memories.mergeTopic('cpp', 'cs246');
+      expect((await repository.getMemory('m4'))!.suggestedTopic, (
+        name: 'Templates',
+        parentId: 'cs246',
+      ));
+    });
+
+    test('a memory in the merged topic with a new topic offered under it is '
+        'refiled and its offer moved', () async {
+      final m3 = (await repository.getMemory('m3'))!;
+      await repository.upsertMemory(
+        m3.copyWith(suggestedTopic: (name: 'Templates', parentId: 'cpp')),
+      );
+      await memories.mergeTopic('cpp', 'cs246');
+      final merged = (await repository.getMemory('m3'))!;
+      expect(merged.topicIds, ['cs246']);
+      expect(merged.suggestedTopic, (name: 'Templates', parentId: 'cs246'));
+    });
+
+    test("a live project's topic can be kept, not merged away; once its "
+        "project is deleted it can, and its memories lose the project's id "
+        'so the upkeep leaves them out', () async {
+      await repository.upsertProject(_project('p1', 'Trip'));
+      await memories.syncProjectTopics();
+      final memory = _memory('m5', 'Ryokan in Kyoto', projectId: 'p1');
+      await repository.upsertMemory(memory.copyWith(topicIds: ['project-p1']));
+      await expectLater(
+        memories.mergeTopic('project-p1', 'cpp'),
+        throwsA(isA<GaiaReadException>()),
+      );
+      await memories.mergeTopic('exam', 'project-p1');
+      expect((await repository.getMemoryTopic('exam'))!.isDeleted, isTrue);
+
+      final project = (await repository.getProject('p1'))!;
+      await repository.upsertProject(project.copyWith(deletedAt: _at));
+      await memories.syncProjectTopics();
+      await memories.mergeTopic('project-p1', 'cpp');
+      final merged = (await repository.getMemory('m5'))!;
+      expect(merged.topicIds, ['cpp']);
+      expect(merged.projectId, isNull);
+      await repository.upsertProject(project.copyWith(clearDeletedAt: true));
+      await memories.syncProjectTopics();
+      expect(await topicsOf('m5'), ['cpp']);
+    });
+
+    test('the recall history keeps the 20 chats that recalled anything most '
+        'recently', () async {
+      for (var i = 0; i < 22; i++) {
+        await repository.recordRecall('c$i', [
+          'm1',
+          'm2',
+        ], _at.add(Duration(minutes: i)));
+      }
+      // Recalled again: c0 is recent now.
+      await repository.recordRecall('c0', [
+        'm3',
+      ], _at.add(const Duration(hours: 1)));
+      final chats = {
+        for (final row in await repository.watchRecallHistory().first)
+          row.chatId,
+      };
+      expect(chats, hasLength(20));
+      expect(chats, contains('c0'));
+      expect(chats, isNot(contains('c1')));
+      expect(chats, isNot(contains('c2')));
+    });
+
+    test('a memory recalled in 8 of the chats is suggested as a pin, not '
+        'once pinned, archived or put off; Not now lasts 30 days', () async {
+      List<GaiaRecallRow> history(String memoryId, int chats) => [
+        for (var i = 0; i < chats; i++)
+          (memoryId: memoryId, chatId: 'c$i', recalledAt: _at),
+      ];
+      final all = await repository.listMemories();
+      final rows = [...history('m1', 8), ...history('m2', 7)];
+      var pins = gaiaPinSuggestions(all, rows, const [], _at);
+      expect([for (final pin in pins) pin.memory.id], ['m1']);
+      expect(pins.single.why, 'Recalled in 8 of the last 8 chats');
+
+      final archived = [
+        for (final memory in all)
+          memory.id == 'm1'
+              ? memory.copyWith(status: GaiaMemoryStatus.archived)
+              : memory,
+      ];
+      expect(gaiaPinSuggestions(archived, rows, const [], _at), isEmpty);
+      final pinned = [
+        for (final memory in all)
+          memory.id == 'm1' ? memory.copyWith(pinned: true) : memory,
+      ];
+      expect(gaiaPinSuggestions(pinned, rows, const [], _at), isEmpty);
+
+      await memories.pinLater('m1');
+      final hints = await repository.listMemoryHints();
+      final now = utcNow();
+      expect(gaiaPinSuggestions(all, rows, hints, now), isEmpty);
+      pins = gaiaPinSuggestions(
+        all,
+        rows,
+        hints,
+        now.add(const Duration(days: 31)),
+      );
+      expect(pins.single.memory.id, 'm1');
+    });
+
+    test(
+      'a memory unpinned on purpose is never suggested as a pin again',
+      () async {
+        final rows = [
+          for (var i = 0; i < 8; i++)
+            (memoryId: 'm1', chatId: 'c$i', recalledAt: _at),
+        ];
+        await memories.pin('m1', pinned: true);
+        await memories.pin('m1', pinned: false);
+        expect(
+          gaiaPinSuggestions(
+            await repository.listMemories(),
+            rows,
+            await repository.listMemoryHints(),
+            utcNow().add(const Duration(days: 3650)),
+          ),
+          isEmpty,
+        );
+      },
+    );
+
+    test('the curator flags a memory about the user in general: suggested '
+        'as a pin once remembered', () async {
+      await repository.upsertChat(
+        GaiaChat(
+          id: 'c1',
+          title: 'Hi',
+          createdAt: _at,
+          updatedAt: _at,
+          lastMessageAt: _at,
+        ),
+      );
+      await memories.curated('c1', 1, [
+        (
+          text: "I'm a CS student at Waterloo",
+          tags: const [],
+          topicIds: const [],
+          suggested: null,
+          pin: true,
+        ),
+      ]);
+      final hints = await repository.listMemoryHints();
+      final saved = (await repository.listMemories()).singleWhere(
+        (memory) => memory.text.startsWith("I'm a CS"),
+      );
+      expect(hints.single.kind, GaiaMemoryHintKind.pinCandidate);
+      expect(hints.single.subject, saved.id);
+      // Waiting in the inbox: not until it's remembered.
+      expect(
+        gaiaPinSuggestions(
+          await repository.listMemories(),
+          const [],
+          hints,
+          _at,
+        ),
+        isEmpty,
+      );
+      final pins = gaiaPinSuggestions(
+        [saved.copyWith(status: GaiaMemoryStatus.active)],
+        const [],
+        hints,
+        _at,
+      );
+      expect(pins.single.why, 'About you in general');
+    });
+
+    test('merges are suggested for siblings with near-identical names and '
+        'for topics sharing most memories, never for a topic and one under '
+        'it, nor once kept apart', () async {
+      final topics = [
+        _topic('uni', 'University'),
+        _topic('cs246', 'CS246', parentId: 'uni'),
+        _topic('a1', 'Assignments', parentId: 'cs246'),
+        _topic('a1b', 'assignment', parentId: 'cs246', minutes: 1),
+        _topic('cs245', 'CS245', parentId: 'uni'),
+        _topic('a2', 'Assignments', parentId: 'cs245'),
+        _topic('cpp', 'C++'),
+        _topic('cplus', 'Cpp'),
+      ];
+      final tree = GaiaTopicTree(topics);
+      final shared = [
+        for (var i = 0; i < 4; i++)
+          _memory('s$i', 'fact $i', topicIds: ['cpp', 'cplus']),
+        _memory('x', 'only C++', topicIds: ['cpp']),
+        // A topic and its subtopic sharing all of theirs: no merge.
+        for (var i = 0; i < 3; i++)
+          _memory('u$i', 'uni $i', topicIds: ['uni', 'cs245']),
+      ];
+      var merges = gaiaMergeSuggestions(tree, shared, const {}, const []);
+      expect(
+        [for (final merge in merges) (merge.from.id, merge.into.id, merge.why)],
+        unorderedEquals([
+          ('a1b', 'a1', 'Near-identical names'),
+          ('cplus', 'cpp', '4 memories in common'),
+        ]),
+      );
+
+      merges = gaiaMergeSuggestions(tree, shared, const {}, [
+        (
+          kind: GaiaMemoryHintKind.keptApart,
+          subject: gaiaTopicPairKey('cpp', 'cplus'),
+          until: null,
+        ),
+      ]);
+      expect([for (final merge in merges) merge.from.id], ['a1b']);
+    });
+
+    test("in a suggested merge a live project's topic is the one kept, and "
+        'two never merge', () {
+      final topics = [
+        _topic('t1', 'Trip'),
+        _topic('project-p1', 'trips').copyWith(projectId: 'p1'),
+        _topic('project-p2', 'Trip').copyWith(projectId: 'p2'),
+      ];
+      final merges = gaiaMergeSuggestions(GaiaTopicTree(topics), const [], {
+        'p1',
+        'p2',
+      }, const []);
+      expect([
+        for (final merge in merges) (merge.from.id, merge.into.id),
+      ], unorderedEquals([('t1', 'project-p1'), ('t1', 'project-p2')]));
+    });
+
+    test('Keep both is remembered on this device', () async {
+      await memories.keepApart('b', 'a');
+      final hint = (await repository.listMemoryHints()).single;
+      expect(hint.kind, GaiaMemoryHintKind.keptApart);
+      expect(hint.subject, 'a|b');
     });
   });
 }

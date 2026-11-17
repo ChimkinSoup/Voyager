@@ -15,6 +15,7 @@ const _summaryTimeout = Duration(seconds: 30);
 const _captionTimeout = Duration(seconds: 30);
 const _curateTimeout = Duration(seconds: 60);
 const _placeTimeout = Duration(seconds: 30);
+const _sortTimeout = Duration(seconds: 90);
 
 /// What the placement and curator jobs say about the topics.
 const _placementRules =
@@ -288,6 +289,46 @@ class GaiaUtility {
     }
   }
 
+  /// Where each of [memories] is filed, for the Gaia page's Sort these
+  /// (GAIA_MEMORY_TOPICS_HLD.md §6): one call for the batch, at most
+  /// [kGaiaSortBatch]. By memory id, only those the answer places; null when
+  /// it failed. Nothing is applied: the user accepts each.
+  Future<Map<String, GaiaPlacement>?> placeMany(
+    List<({String id, String text})> memories,
+    List<GaiaTopicLine> topics,
+  ) async {
+    final elapsed = Stopwatch()..start();
+    try {
+      final answer = await _runner.generate(
+        'File each fact about the user in <input>, kept by their assistant '
+            'Gaia, under the topics listed. For each fact: $_placementRules '
+            'Offer the same new topic, with the same name, for facts that '
+            'belong together. Also give up to 3 tags: one-word keywords '
+            "someone might use when the fact matters that aren't among its "
+            'own words.\n\n'
+            'Reply with only a JSON array, one item per fact: {"n": <its '
+            'number>, "topics": ["<id>"], "new": null or {"name": "...", '
+            '"parent": "<id>" or null}, "tags": ["..."]}.',
+        'Facts:\n'
+            '${[for (final (i, memory) in memories.indexed) '${i + 1}. ${_clip(memory.text.replaceAll(RegExp(r'\s+'), ' ').trim(), 1000)}'].join('\n')}'
+            '\n\n${_topicLines(topics)}',
+        timeout: _sortTimeout,
+      );
+      final placements = parseSortAnswer(answer, memories, topics);
+      debugPrint(
+        '[gaia] memory sort: placed ${placements.length} of '
+        '${memories.length} in ${elapsed.elapsedMilliseconds} ms',
+      );
+      return placements;
+    } catch (error) {
+      debugPrint(
+        '[gaia] memory sort: failed after ${elapsed.elapsedMilliseconds} ms: '
+        '$error',
+      );
+      return null;
+    }
+  }
+
   /// At most three memories worth keeping from a chat's new turns in
   /// [transcript], none of them among [kept], the memories already kept
   /// that are nearest to it (§11), each filed in [topics]
@@ -317,7 +358,10 @@ class GaiaUtility {
             'two one-word topics.\n\n'
             'File each under the topics listed. $_placementRules Give them '
             'as "topics": ["<id>"] and "new": null or {"name": "...", '
-            '"parent": "<id>" or null} in its item.',
+            '"parent": "<id>" or null} in its item. Add "pin": true to an '
+            'item only when the fact is about the user in general rather '
+            'than one subject: who they are, or how they like answers given '
+            '("I\'m a CS student at Waterloo", "I prefer short answers").',
         'Memories kept that may overlap:\n'
             '${kept.trim().isEmpty ? '(none)' : kept}\n\n'
             '${_topicLines(topics)}\n\n'
@@ -379,6 +423,7 @@ List<GaiaFoundMemory> parseCuratorAnswer(
             ],
             topicIds: placement.topicIds,
             suggested: placement.suggested,
+            pin: item['pin'] == true,
           ),
   ].take(3).toList();
 }
@@ -428,6 +473,42 @@ GaiaPlacement _placementOf(
     suggested: suggested,
     tags: gaiaMemoryTags(json['tags']).take(3).toList(),
   );
+}
+
+/// Where a Sort these [answer] files each of [memories]
+/// (GAIA_MEMORY_TOPICS_HLD.md §6): its JSON array, wherever it is in the
+/// text, each item naming a fact by its number from 1. By memory id; a
+/// number out of range or repeated is dropped, as is an item that places
+/// nothing. Throws a [FormatException] when there's no array.
+@visibleForTesting
+Map<String, GaiaPlacement> parseSortAnswer(
+  String answer,
+  List<({String id, String text})> memories,
+  List<GaiaTopicLine> topics,
+) {
+  final start = answer.indexOf('[');
+  final end = answer.lastIndexOf(']');
+  if (start < 0 || end < start) {
+    throw FormatException('no JSON array', answer);
+  }
+  final list = jsonDecode(answer.substring(start, end + 1));
+  if (list is! List) throw FormatException('not a JSON array', answer);
+  final placements = <String, GaiaPlacement>{};
+  for (final item in list) {
+    if (item is! Map) continue;
+    final n = switch (item['n']) {
+      final int n => n,
+      final String n => int.tryParse(n),
+      _ => null,
+    };
+    if (n == null || n < 1 || n > memories.length) continue;
+    final id = memories[n - 1].id;
+    if (placements.containsKey(id)) continue;
+    final placement = _placementOf(item, topics);
+    if (placement.topicIds.isEmpty && placement.suggested == null) continue;
+    placements[id] = placement;
+  }
+  return placements;
 }
 
 /// The [candidates] a recall [answer] picks (GAIA_MEMORY_TOPICS_HLD.md

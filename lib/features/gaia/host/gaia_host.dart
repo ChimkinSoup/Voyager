@@ -84,7 +84,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// `memoryPrompt` (a new session's pins and
 /// topic list, GAIA_MEMORY_TOPICS_HLD.md §4.1), `memoryRecall {chatId, text,
 /// recalled, projectId}` (stage 1's `{picks, candidates, strong}` for a
-/// message, §4.2-§4.4),
+/// message, §4.2-§4.4), `recalled {chatId, memoryIds}` (the recall
+/// history, §3.3),
 /// `openMemory {memoryId}` (shown on the Gaia page, §4.5),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
@@ -923,6 +924,34 @@ class GaiaHost {
         throw GaiaReadException("Gaia's utility model couldn't place it.");
       }
       return placed == true;
+    } on GaiaRemoteException catch (error) {
+      throw GaiaReadException(error.message);
+    } on GaiaPipeException catch (error) {
+      throw GaiaReadException(error.message);
+    }
+  }
+
+  /// Where the utility model, which only the companion runs, would file each
+  /// of [memories] (at most [kGaiaSortBatch]): the Gaia page's Sort these
+  /// (GAIA_MEMORY_TOPICS_HLD.md §6). By memory id, those it placed; nothing
+  /// is applied. Throws a [GaiaReadException] saying why it couldn't.
+  Future<Map<String, GaiaPlacement>> sortMemories(
+    List<GaiaMemory> memories,
+  ) async {
+    try {
+      await _companionUp();
+      final sorted = await _pipe.request('sortMemories', {
+        'memories': [
+          for (final memory in memories) {'id': memory.id, 'text': memory.text},
+        ],
+      });
+      if (sorted is! Map) {
+        throw GaiaReadException("Gaia's utility model couldn't sort them.");
+      }
+      return {
+        for (final MapEntry(:key, :value) in sorted.entries)
+          key as String: gaiaPlacementFromJson(value),
+      };
     } on GaiaRemoteException catch (error) {
       throw GaiaReadException(error.message);
     } on GaiaPipeException catch (error) {
@@ -1835,8 +1864,16 @@ class GaiaHost {
                     tags: gaiaMemoryTags(memory['tags']),
                     topicIds: gaiaTopicIdsFromJson(memory['topicIds']),
                     suggested: gaiaSuggestedTopicFromJson(memory['suggested']),
+                    pin: memory['pin'] == true,
                   ),
             ]);
+        return null;
+      case 'recalled':
+        // Given to an agent in this chat: what pin suggestions count
+        // (GAIA_MEMORY_TOPICS_HLD.md §3.3).
+        await _memoriesOrThrow().recalled(params['chatId']! as String, [
+          ...(params['memoryIds']! as List).cast<String>(),
+        ]);
         return null;
       case 'prepareProposal':
         try {

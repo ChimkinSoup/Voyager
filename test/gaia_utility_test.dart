@@ -189,8 +189,61 @@ void main() {
       ).curate('turns', '- Likes tea', topics);
       expect(found!.single.topicIds, ['t2']);
       expect(found.single.suggested, (name: 'Tools', parentId: 't2'));
+      expect(found.single.pin, isFalse);
       expect(runner.inputs.single, contains('t3 · Pets'));
       expect(runner.inputs.single, contains('- Likes tea'));
+    });
+
+    test('the curator flags a fact about the user in general as a pin '
+        '(§3.3)', () {
+      final found = parseCuratorAnswer(
+        '[{"text": "I\'m a CS student at Waterloo", "pin": true}, '
+        '{"text": "Uses valgrind", "pin": "yes"}]',
+      );
+      expect([for (final memory in found) memory.pin], [true, false]);
+    });
+
+    test("Sort these' answer (§6): facts by number, known topics only; out "
+        'of range, repeated, or placing nothing is dropped', () {
+      const memories = [
+        (id: 'm1', text: 'Assignments use C++'),
+        (id: 'm2', text: "Biscuit's booster is in May"),
+        (id: 'm3', text: 'Likes tea'),
+      ];
+      final sorted = parseSortAnswer(
+        'Here: [{"n": 1, "topics": ["t2", "nope"], "tags": ["homework"]}, '
+        '{"n": "2", "topics": [], "new": {"name": "Vet", "parent": "t3"}}, '
+        '{"n": 3, "topics": ["nope"]}, {"n": 1, "topics": ["t1"]}, '
+        '{"n": 9, "topics": ["t1"]}]',
+        memories,
+        topics,
+      );
+      expect(sorted.keys, ['m1', 'm2']);
+      expect(sorted['m1']!.topicIds, ['t2']);
+      expect(sorted['m1']!.tags, ['homework']);
+      expect(sorted['m2']!.suggested, (name: 'Vet', parentId: 't3'));
+      expect(
+        () => parseSortAnswer('No.', memories, topics),
+        throwsFormatException,
+      );
+    });
+
+    test('the Sort these job numbers the facts and lists the topics; a bad '
+        'answer gives null', () async {
+      final runner = FakeUtilityRunner((_) => '[{"n": 2, "topics": ["t3"]}]');
+      final sorted = await GaiaUtility(runner).placeMany([
+        (id: 'm1', text: 'Likes\n tea'),
+        (id: 'm2', text: 'Biscuit is a beagle'),
+      ], topics);
+      expect(sorted!.keys, ['m2']);
+      expect(runner.inputs.single, contains('1. Likes tea\n2. Biscuit'));
+      expect(runner.inputs.single, contains('t3 · Pets'));
+      expect(
+        await GaiaUtility(
+          FakeUtilityRunner((_) => 'no'),
+        ).placeMany([(id: 'm1', text: 'x')], topics),
+        isNull,
+      );
     });
   });
 

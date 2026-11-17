@@ -502,4 +502,4 @@ void main() {
 
 /// A memory the curator found, filed nowhere.
 GaiaFoundMemory _found(String text, [List<String> tags = const []]) =>
-    (text: text, tags: tags, topicIds: const [], suggested: null);
+    (text: text, tags: tags, topicIds: const [], suggested: null, pin: false);
