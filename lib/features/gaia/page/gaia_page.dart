@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -773,11 +776,11 @@ class _ActionRowState extends State<_ActionRow> {
   }
 }
 
-/// Gaia's memories (§11, §17): the inbox of proposed ones to approve, edit
-/// or dismiss, the active ones every new chat's index lists, and the
-/// archived ones kept out of it. Filtered by project, by its memory topic
-/// (GAIA_MEMORY_TOPICS_HLD.md §7). [focus] is shown highlighted, scrolled
-/// to.
+/// Gaia's memories (§11, §17), in two panes (GAIA_MEMORY_TOPICS_HLD.md
+/// §3.2): the topic tree, and the selected topic's memories. The inbox of
+/// proposed ones to approve, edit or dismiss comes first, across every
+/// topic; then the active ones recall draws on, and the archived ones kept
+/// out of it. [focus] is shown highlighted, scrolled to.
 class _MemoriesTab extends ConsumerStatefulWidget {
   const _MemoriesTab({this.focus});
 
@@ -787,9 +790,17 @@ class _MemoriesTab extends ConsumerStatefulWidget {
   ConsumerState<_MemoriesTab> createState() => _MemoriesTabState();
 }
 
+/// The tree's entry for memories in no topic (§3.1).
+const _unsorted = '';
+
 class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
-  /// The project shown: null for every memory, '' for global ones only.
-  String? _filter;
+  /// The topic shown: null for every memory, [_unsorted] for those in none.
+  String? _selected;
+
+  /// Whether a topic shows its subtopics' memories too (§3.2).
+  var _subtopics = true;
+
+  final _search = TextEditingController();
 
   final _focusKey = GlobalKey();
 
@@ -803,10 +814,17 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
   void didUpdateWidget(_MemoriesTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.focus != oldWidget.focus) {
-      // A filter could hide it.
-      _filter = null;
+      // A topic or a search could hide it.
+      _selected = null;
+      _search.clear();
       _scrollToFocus();
     }
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   void _scrollToFocus() {
@@ -819,38 +837,165 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
     });
   }
 
+  /// A dialog with the tree, for a window too narrow for two panes.
+  Future<void> _pickShown() => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Topics'),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Consumer(
+            builder: (context, ref, _) {
+              final tree = GaiaTopicTree(
+                ref.watch(gaiaMemoryTopicsProvider).valueOrNull ?? const [],
+              );
+              return _TopicTree(
+                tree: tree,
+                selected: _validSelected(tree),
+                moveWithin: null,
+                onSelect: (id) {
+                  setState(() => _selected = id);
+                  Navigator.of(dialogContext).pop();
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    ),
+  );
+
+  /// [_selected], or null for a topic deleted meanwhile, which shows
+  /// everything again.
+  String? _validSelected(GaiaTopicTree tree) =>
+      _selected == null ||
+          _selected == _unsorted ||
+          tree.path(_selected!).isNotEmpty
+      ? _selected
+      : null;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final memories = ref.watch(gaiaMemoriesProvider).valueOrNull;
     final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
-    final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
+    final topics = ref.watch(gaiaMemoryTopicsProvider).valueOrNull ?? const [];
     if (memories == null || settings == null) return const SizedBox.shrink();
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final byId = {for (final project in projects) project.id: project};
-    // A project deleted meanwhile shows everything again.
-    final filter = _filter == null || _filter == '' || byId.containsKey(_filter)
-        ? _filter
-        : null;
+    final tree = GaiaTopicTree(topics);
+    final selected = _validSelected(tree);
+    final query = _search.text.trim().toLowerCase();
+    final named = {
+      for (final topic in topics)
+        if (query.isNotEmpty && topic.name.toLowerCase().contains(query))
+          topic.id,
+    };
+    bool matches(GaiaMemory memory) =>
+        query.isEmpty ||
+        memory.text.toLowerCase().contains(query) ||
+        memory.tags.any((tag) => tag.toLowerCase().contains(query)) ||
+        memory.topicIds.any(named.contains);
+    // A memory dropped on a topic leaves the ones it has in the selected
+    // topic's subtree (§3.2), or every one it has from All and Unsorted.
+    final moveWithin = selected == null || selected == _unsorted
+        ? null
+        : tree.subtree(selected);
+    final scope = moveWithin == null || _subtopics ? moveWithin : {selected!};
+    bool inScope(GaiaMemory memory) => switch (selected) {
+      null => true,
+      _unsorted => memory.topicIds.every((id) => tree.path(id).isEmpty),
+      _ => memory.topicIds.any(scope!.contains),
+    };
     List<GaiaMemory> withStatus(GaiaMemoryStatus status) => [
       for (final memory in memories.reversed)
         if (memory.status == status &&
-            (filter == null ||
-                (filter.isEmpty
-                    ? gaiaMemoryProject(memory, byId.keys) == null
-                    : memory.topicIds.contains(gaiaProjectTopicId(filter)))))
+            matches(memory) &&
+            // The inbox is shown across every topic (§3.2).
+            (status == GaiaMemoryStatus.proposed || inScope(memory)))
           memory,
     ];
-    Widget row(GaiaMemory memory) => _MemoryRow(
+    // A search keeps the topics it names, and those holding a memory it
+    // finds, with the topics above them.
+    Set<String>? visible;
+    if (query.isNotEmpty) {
+      final found = {
+        for (final memory in memories)
+          if (matches(memory)) ...memory.topicIds,
+      };
+      visible = {};
+      for (final topic in topics) {
+        if (!named.contains(topic.id) && !found.contains(topic.id)) {
+          continue;
+        }
+        for (String? at = topic.id; at != null; at = tree.parentOf(at)) {
+          visible.add(at);
+        }
+      }
+    }
+    Widget row(GaiaMemory memory, bool narrow) => _MemoryRow(
       key: memory.id == widget.focus ? _focusKey : null,
       memory: memory,
+      tree: tree,
+      moveWithin: moveWithin,
+      narrow: narrow,
       highlighted: memory.id == widget.focus,
     );
     final inbox = withStatus(GaiaMemoryStatus.proposed);
     final active = withStatus(GaiaMemoryStatus.active);
     final archived = withStatus(GaiaMemoryStatus.archived);
+    final title = switch (selected) {
+      null => 'All memories',
+      _unsorted => 'Unsorted',
+      _ => tree.path(selected).join(' › '),
+    };
+    Widget list(bool narrow) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (inbox.isNotEmpty) ...[
+          _SectionLabel('Inbox (${inbox.length})'),
+          for (final memory in inbox) row(memory, narrow),
+          const SizedBox(height: 16),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            if (scope != null) ...[
+              Checkbox(
+                value: _subtopics,
+                visualDensity: VisualDensity.compact,
+                onChanged: (value) =>
+                    setState(() => _subtopics = value ?? true),
+              ),
+              Text('Include subtopics', style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        _SectionLabel(
+          active.isEmpty ? 'Remembered' : 'Remembered (${active.length})',
+        ),
+        if (active.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text('Nothing yet.', style: muted),
+          ),
+        for (final memory in active) row(memory, narrow),
+        if (archived.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _SectionLabel('Archived (${archived.length})'),
+          for (final memory in archived) row(memory, narrow),
+        ],
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -873,61 +1018,475 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
               .read(gaiaRepositoryProvider)
               .upsertSettings(settings.copyWith(autoAcceptCurator: value)),
         ),
-        if (projects.isNotEmpty)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: DropdownButton<String?>(
-              value: filter,
-              // A null value shows the hint, not its item.
-              hint: const Text('All memories'),
-              onChanged: (value) => setState(() => _filter = value),
-              items: [
-                const DropdownMenuItem(child: Text('All memories')),
-                const DropdownMenuItem(value: '', child: Text('Global')),
-                for (final project in projects)
-                  DropdownMenuItem(
-                    value: project.id,
-                    child: Text(
-                      project.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
+        VoyagerTextField(
+          controller: _search,
+          decoration: const InputDecoration(
+            hintText: 'Search memories and topics',
+            prefixIcon: Icon(PhosphorIconsRegular.magnifyingGlass, size: 16),
+            isDense: true,
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Each pane scrolls on its own, a window high, so a memory far
+            // down the list can still be dragged onto any topic.
+            if (constraints.maxWidth >= 640) {
+              return SizedBox(
+                height: max(400, MediaQuery.sizeOf(context).height - 48),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 240,
+                      child: SingleChildScrollView(
+                        child: _TopicTree(
+                          tree: tree,
+                          selected: selected,
+                          visible: visible,
+                          moveWithin: moveWithin,
+                          onSelect: (id) => setState(() => _selected = id),
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 24),
+                    Expanded(child: SingleChildScrollView(child: list(false))),
+                  ],
+                ),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: GlassButton(
+                    onPressed: _pickShown,
+                    icon: const Icon(PhosphorIconsRegular.treeView, size: 13),
+                    label: title,
+                    dense: true,
                   ),
+                ),
+                const SizedBox(height: 12),
+                list(true),
               ],
-            ),
-          ),
-        const SizedBox(height: 8),
-        if (inbox.isNotEmpty) ...[
-          _SectionLabel('Inbox (${inbox.length})'),
-          for (final memory in inbox) row(memory),
-          const SizedBox(height: 16),
-        ],
-        _SectionLabel(
-          active.isEmpty ? 'Remembered' : 'Remembered (${active.length})',
+            );
+          },
         ),
-        if (active.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('Nothing yet.', style: muted),
-          ),
-        for (final memory in active) row(memory),
-        if (archived.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _SectionLabel('Archived (${archived.length})'),
-          for (final memory in archived) row(memory),
-        ],
       ],
     );
   }
 }
 
+/// What's dragged on the Memories tab (GAIA_MEMORY_TOPICS_HLD.md §3.2): a
+/// memory onto a topic, or a topic onto another or the tree's root.
+sealed class _Dragged {
+  const _Dragged(this.id);
+
+  final String id;
+}
+
+class _DraggedMemory extends _Dragged {
+  const _DraggedMemory(super.id);
+}
+
+class _DraggedTopic extends _Dragged {
+  const _DraggedTopic(super.id);
+}
+
+/// What follows the pointer while [text]'s row is dragged.
+Widget _dragLabel(BuildContext context, String text) {
+  final theme = Theme.of(context);
+  return Material(
+    elevation: 4,
+    borderRadius: BorderRadius.circular(8),
+    color: theme.colorScheme.surfaceContainerHigh,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 260),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall,
+        ),
+      ),
+    ),
+  );
+}
+
+/// [tree]'s topics in the order shown, each with its depth.
+List<(GaiaMemoryTopic, int)> _topicsInOrder(GaiaTopicTree tree) {
+  final order = <(GaiaMemoryTopic, int)>[];
+  void walk(String? parent, int depth) {
+    for (final topic in tree.childrenOf(parent)) {
+      order.add((topic, depth));
+      walk(topic.id, depth + 1);
+    }
+  }
+
+  walk(null, 0);
+  return order;
+}
+
+/// A topic picked from [tree] in a dialog, leaving out [exclude]; with
+/// [topLevel], an entry for the root, which gives [_unsorted]. Null when
+/// cancelled.
+Future<String?> _pickTopic(
+  BuildContext context,
+  GaiaTopicTree tree, {
+  required String title,
+  Set<String> exclude = const {},
+  bool topLevel = false,
+}) => showDialog<String>(
+  context: context,
+  builder: (context) => SimpleDialog(
+    title: Text(title),
+    children: [
+      if (topLevel)
+        SimpleDialogOption(
+          onPressed: () => Navigator.of(context).pop(_unsorted),
+          child: const Text('Top level'),
+        ),
+      for (final (topic, depth) in _topicsInOrder(tree))
+        if (!exclude.contains(topic.id))
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop(topic.id),
+            child: Padding(
+              padding: EdgeInsets.only(left: 16.0 * depth),
+              child: Text(topic.name, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+    ],
+  ),
+);
+
+/// The Memories tab's topic tree (GAIA_MEMORY_TOPICS_HLD.md §3.2): All
+/// memories, every topic, and Unsorted. On the desktop a memory dragged
+/// onto a topic moves there ([moveWithin] says which of its topics it
+/// leaves) or, with Ctrl, is added; a topic dragged onto another goes under
+/// it, or onto All memories, to the root. Right-click or F2 for the rest.
+/// On the phone each topic has a menu instead.
+class _TopicTree extends ConsumerStatefulWidget {
+  const _TopicTree({
+    required this.tree,
+    required this.selected,
+    required this.moveWithin,
+    required this.onSelect,
+    this.visible,
+  });
+
+  final GaiaTopicTree tree;
+  final String? selected;
+
+  /// The topics a search keeps; null for every one.
+  final Set<String>? visible;
+  final Set<String>? moveWithin;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  ConsumerState<_TopicTree> createState() => _TopicTreeState();
+}
+
+class _TopicTreeState extends ConsumerState<_TopicTree> {
+  final _focus = FocusNode(debugLabel: 'memory topics');
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  GaiaMemories get _memories => GaiaMemories(ref.read(gaiaRepositoryProvider));
+
+  /// [action], with a refusal shown in a toast.
+  Future<void> _run(Future<void> Function() action) async {
+    try {
+      await action();
+    } on GaiaReadException catch (error) {
+      if (mounted) {
+        showVoyagerToast(
+          context,
+          message: error.message,
+          icon: PhosphorIconsRegular.warning,
+        );
+      }
+    }
+  }
+
+  String? _named(String name) => name.trim().isEmpty ? 'Give it a name.' : null;
+
+  Future<void> _newTopic({String? parentId}) async {
+    final name = await showPromptNameDialog(
+      context,
+      title: parentId == null ? 'New topic' : 'New subtopic',
+      validate: _named,
+    );
+    if (name == null) return;
+    final topic = await _memories.newTopic(name, parentId: parentId);
+    widget.onSelect(topic.id);
+  }
+
+  Future<void> _rename(GaiaMemoryTopic topic) async {
+    final name = await showPromptNameDialog(
+      context,
+      title: 'Rename topic',
+      initial: topic.name,
+      validate: _named,
+    );
+    if (name == null) return;
+    await _memories.renameTopic(topic.id, name);
+  }
+
+  Future<void> _moveUnder(GaiaMemoryTopic topic) async {
+    final to = await _pickTopic(
+      context,
+      widget.tree,
+      title: 'Move "${topic.name}" under',
+      exclude: widget.tree.subtree(topic.id),
+      topLevel: true,
+    );
+    if (to == null) return;
+    await _run(
+      () => _memories.moveTopic(topic.id, to == _unsorted ? null : to),
+    );
+  }
+
+  Future<void> _delete(GaiaMemoryTopic topic) async {
+    final parent = widget.tree.parentOf(topic.id);
+    final hasChildren = widget.tree.childrenOf(topic.id).isNotEmpty;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete "${topic.name}"?',
+      message: [
+        'Its memories stay in their other topics, or go to Unsorted.',
+        if (hasChildren)
+          'Its subtopics move up to '
+              '${parent == null ? 'the top level' : widget.tree.path(parent).last}.',
+      ].join(' '),
+    );
+    if (!confirmed) return;
+    await _run(() => _memories.deleteTopic(topic.id));
+  }
+
+  void _drop(_Dragged dragged, String? onto) => unawaited(
+    _run(() async {
+      switch (dragged) {
+        case _DraggedMemory(:final id) when onto != null:
+          if (HardwareKeyboard.instance.isControlPressed) {
+            await _memories.addMemoryTopic(id, onto);
+          } else {
+            await _memories.moveMemory(id, onto, within: widget.moveWithin);
+          }
+        case _DraggedTopic(:final id):
+          await _memories.moveTopic(id, onto);
+        default:
+      }
+    }),
+  );
+
+  /// Whether [dragged] can go onto [onto] (null for the root): a topic not
+  /// under itself or where it already is (§3.1).
+  bool _accepts(_Dragged dragged, String? onto) => switch (dragged) {
+    _DraggedMemory() => onto != null,
+    _DraggedTopic(:final id) =>
+      widget.tree[id]?.parentId != onto &&
+          (onto == null || !widget.tree.subtree(id).contains(onto)),
+  };
+
+  List<ContextMenuItem> _menu(GaiaMemoryTopic topic, Set<String> projects) {
+    final linked = projects.contains(topic.projectId);
+    return [
+      ContextMenuItem(
+        label: 'Rename',
+        icon: PhosphorIconsRegular.pencilSimple,
+        trailing: isWindows ? const Text('F2') : null,
+        onTap: () => _rename(topic),
+      ),
+      ContextMenuItem(
+        label: 'New subtopic',
+        icon: PhosphorIconsRegular.plus,
+        onTap: () => _newTopic(parentId: topic.id),
+      ),
+      // The desktop drags it instead.
+      if (!isWindows)
+        ContextMenuItem(
+          label: 'Move under…',
+          icon: PhosphorIconsRegular.arrowElbowDownRight,
+          onTap: () => _moveUnder(topic),
+        ),
+      ContextMenuItem(
+        label: linked ? 'Delete (goes with its project)' : 'Delete',
+        icon: PhosphorIconsRegular.trash,
+        isDestructive: true,
+        onTap: linked ? null : () => _delete(topic),
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final projects = <String>{
+      for (final project
+          in ref.watch(gaiaProjectsProvider).valueOrNull ?? const [])
+        project.id,
+    };
+    final tree = widget.tree;
+    final drags = isWindows;
+
+    Widget tile({
+      required String? id,
+      required String label,
+      required int depth,
+      required IconData icon,
+      bool hovered = false,
+      bool refused = false,
+      Widget? trailing,
+    }) => Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: refused
+              ? theme.colorScheme.error
+              : hovered
+              ? theme.colorScheme.primary
+              : Colors.transparent,
+        ),
+      ),
+      child: ListTile(
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        contentPadding: EdgeInsets.only(left: 4 + 16.0 * depth, right: 4),
+        minLeadingWidth: 16,
+        horizontalTitleGap: 8,
+        leading: Icon(icon, size: 15),
+        title: Text(label, overflow: TextOverflow.ellipsis),
+        trailing: trailing,
+        selected: widget.selected == id,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        onTap: () {
+          _focus.requestFocus();
+          widget.onSelect(id);
+        },
+      ),
+    );
+
+    Widget topicRow(GaiaMemoryTopic topic, int depth) {
+      final menu = _menu(topic, projects);
+      if (!drags) {
+        return tile(
+          id: topic.id,
+          label: topic.name,
+          depth: depth,
+          icon: PhosphorIconsRegular.folderSimple,
+          trailing: ContextMenuButton(items: menu),
+        );
+      }
+      return DragTarget<_Dragged>(
+        onWillAcceptWithDetails: (details) => _accepts(details.data, topic.id),
+        onAcceptWithDetails: (details) => _drop(details.data, topic.id),
+        builder: (context, candidates, rejected) => Draggable<_Dragged>(
+          data: _DraggedTopic(topic.id),
+          feedback: _dragLabel(context, topic.name),
+          child: ContextMenuRegion(
+            items: menu,
+            child: tile(
+              id: topic.id,
+              label: topic.name,
+              depth: depth,
+              icon: PhosphorIconsRegular.folderSimple,
+              hovered: candidates.isNotEmpty,
+              refused: rejected.isNotEmpty,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final all = drags
+        ? DragTarget<_Dragged>(
+            onWillAcceptWithDetails: (details) => _accepts(details.data, null),
+            onAcceptWithDetails: (details) => _drop(details.data, null),
+            builder: (context, candidates, _) => tile(
+              id: null,
+              label: 'All memories',
+              depth: 0,
+              icon: PhosphorIconsRegular.stack,
+              hovered: candidates.isNotEmpty,
+            ),
+          )
+        : tile(
+            id: null,
+            label: 'All memories',
+            depth: 0,
+            icon: PhosphorIconsRegular.stack,
+          );
+    final selected = widget.selected;
+    return Focus(
+      focusNode: _focus,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent ||
+            event.logicalKey != LogicalKeyboardKey.f2 ||
+            selected == null ||
+            selected == _unsorted) {
+          return KeyEventResult.ignored;
+        }
+        final topic = tree[selected];
+        if (topic == null) return KeyEventResult.ignored;
+        unawaited(_rename(topic));
+        return KeyEventResult.handled;
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GlassButton(
+              onPressed: () => _newTopic(),
+              icon: const Icon(PhosphorIconsRegular.plus, size: 13),
+              label: 'New topic',
+              dense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          all,
+          for (final (topic, depth) in _topicsInOrder(tree))
+            if (widget.visible?.contains(topic.id) ?? true)
+              topicRow(topic, depth),
+          tile(
+            id: _unsorted,
+            label: 'Unsorted',
+            depth: 0,
+            icon: PhosphorIconsRegular.tray,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MemoryRow extends ConsumerWidget {
-  const _MemoryRow({super.key, required this.memory, this.highlighted = false});
+  const _MemoryRow({
+    super.key,
+    required this.memory,
+    required this.tree,
+    required this.moveWithin,
+    required this.narrow,
+    this.highlighted = false,
+  });
 
   final GaiaMemory memory;
+  final GaiaTopicTree tree;
+
+  /// The tree is in a dialog, so there's nothing to drag a memory onto.
+  final bool narrow;
+
+  /// The topics a move takes it out of (GAIA_MEMORY_TOPICS_HLD.md §3.2);
+  /// null for every one.
+  final Set<String>? moveWithin;
   final bool highlighted;
 
   Future<void> _save(WidgetRef ref, GaiaMemory memory) =>
@@ -957,33 +1516,27 @@ class _MemoryRow extends ConsumerWidget {
     }
   }
 
-  /// Moved to project [id]'s topic, or out of every project's for empty
-  /// (GAIA_MEMORY_TOPICS_HLD.md §7); its other topics stay. Its old
-  /// `projectId` is cleared, so it isn't filed back in that project's topic
-  /// (§16.2). An active one isn't moved where another already says it.
-  Future<void> _move(
+  /// Moved to a topic picked in a dialog, or with [add] added to one, for
+  /// the phone, which has no dragging (GAIA_MEMORY_TOPICS_HLD.md §3.2), and
+  /// a [narrow] desktop window.
+  Future<void> _file(
     BuildContext context,
-    WidgetRef ref,
-    String id,
-    Iterable<String> projects,
-  ) async {
-    final projectId = id.isEmpty ? null : id;
-    if (memory.status == GaiaMemoryStatus.active &&
-        await _alreadyRemembered(context, ref, memory.text, projectId)) {
-      return;
-    }
-    final projectTopics = {for (final id in projects) gaiaProjectTopicId(id)};
-    await _save(
-      ref,
-      memory.copyWith(
-        clearProjectId: true,
-        topicIds: [
-          for (final topic in memory.topicIds)
-            if (!projectTopics.contains(topic)) topic,
-          if (projectId != null) gaiaProjectTopicId(projectId),
-        ],
-      ),
+    WidgetRef ref, {
+    required bool add,
+  }) async {
+    final to = await _pickTopic(
+      context,
+      tree,
+      title: add ? 'Add to topic' : 'Move to topic',
+      exclude: add ? memory.topicIds.toSet() : const {},
     );
+    if (to == null) return;
+    final memories = GaiaMemories(ref.read(gaiaRepositoryProvider));
+    if (add) {
+      await memories.addMemoryTopic(memory.id, to);
+    } else {
+      await memories.moveMemory(memory.id, to, within: moveWithin);
+    }
   }
 
   /// Pinned, or unpinned (GAIA_MEMORY_TOPICS_HLD.md §3.3); a pin past the
@@ -1094,19 +1647,18 @@ class _MemoryRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final projects = ref.watch(gaiaProjectsProvider).valueOrNull ?? const [];
-    // The live project whose topic it's in (GAIA_MEMORY_TOPICS_HLD.md §7).
-    final projectId = gaiaMemoryProject(memory, [
-      for (final project in projects) project.id,
-    ]);
-    final project = projects
-        .where((project) => project.id == projectId)
-        .firstOrNull;
     final source = memory.sourceChatId == null
         ? null
         : (ref.watch(gaiaChatsProvider).valueOrNull ?? const [])
               .where((chat) => chat.id == memory.sourceChatId)
               .firstOrNull;
+    // Its topics, each by its path, with × to take it out of one
+    // (GAIA_MEMORY_TOPICS_HLD.md §3.2); one that points nowhere is left out.
+    final topics = [
+      for (final id in memory.topicIds)
+        if (tree.path(id) case final path when path.isNotEmpty)
+          (id, path.join(' › ')),
+    ];
     final (icon, label, onPressed) = switch (memory.status) {
       GaiaMemoryStatus.proposed => (
         PhosphorIconsRegular.check,
@@ -1134,69 +1686,45 @@ class _MemoryRow extends ConsumerWidget {
         },
       ),
     };
-    return ListTile(
+    final tile = ListTile(
       contentPadding: EdgeInsets.zero,
       selected: highlighted,
       title: Text(memory.text),
-      subtitle: Text(
-        [
-          if (memory.tags.isNotEmpty) memory.tags.map((t) => '#$t').join(' '),
-          ?source?.title,
-          DateFormat.yMMMd().format(memory.createdAt.toLocal()),
-        ].join(' · '),
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            [
+              if (memory.tags.isNotEmpty)
+                memory.tags.map((t) => '#$t').join(' '),
+              ?source?.title,
+              DateFormat.yMMMd().format(memory.createdAt.toLocal()),
+            ].join(' · '),
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
+          if (topics.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final (id, path) in topics)
+                  _TopicChip(
+                    label: path,
+                    onRemove: () => GaiaMemories(
+                      ref.read(gaiaRepositoryProvider),
+                    ).removeMemoryTopic(memory.id, id),
+                  ),
+              ],
+            ),
+          ],
+        ],
       ),
       onTap: () => _edit(context, ref),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Its scope, which can be changed (GAIA_PROJECTS_HLD.md §6).
-          if (projects.isNotEmpty)
-            PopupMenuButton<String>(
-              tooltip: 'Move to',
-              onSelected: (id) => _move(context, ref, id, [
-                for (final project in projects) project.id,
-              ]),
-              itemBuilder: (_) => [
-                CheckedPopupMenuItem(
-                  value: '',
-                  checked: project == null,
-                  child: const Text('Global'),
-                ),
-                for (final other in projects)
-                  CheckedPopupMenuItem(
-                    value: other.id,
-                    checked: other.id == project?.id,
-                    child: Text(
-                      other.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 140),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
-                ),
-                child: Text(
-                  project?.name ?? 'Global',
-                  overflow: TextOverflow.ellipsis,
-                  style: project == null
-                      ? theme.textTheme.labelSmall
-                      : theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                ),
-              ),
-            ),
           // In every chat's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
           if (memory.status == GaiaMemoryStatus.active || memory.pinned)
             IconButton(
@@ -1225,6 +1753,81 @@ class _MemoryRow extends ConsumerWidget {
               size: 16,
             ),
             onPressed: () => _delete(context),
+          ),
+          // The phone has no dragging (§3.2), and a narrow window no tree
+          // to drag onto.
+          if ((!isWindows || narrow) && tree.childrenOf(null).isNotEmpty)
+            ContextMenuButton(
+              items: [
+                ContextMenuItem(
+                  label: 'Move to topic…',
+                  icon: PhosphorIconsRegular.arrowBendUpRight,
+                  onTap: () => _file(context, ref, add: false),
+                ),
+                ContextMenuItem(
+                  label: 'Add to topic…',
+                  icon: PhosphorIconsRegular.plus,
+                  onTap: () => _file(context, ref, add: true),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+    if (!isWindows) return tile;
+    return Draggable<_Dragged>(
+      data: _DraggedMemory(memory.id),
+      feedback: _dragLabel(context, memory.text),
+      childWhenDragging: Opacity(opacity: 0.5, child: tile),
+      child: tile,
+    );
+  }
+}
+
+/// A memory's topic on its row, with × to take it out.
+class _TopicChip extends StatelessWidget {
+  const _TopicChip({required this.label, required this.onRemove});
+
+  final String label;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: const EdgeInsets.only(left: 8, right: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: onRemove,
+            customBorder: const CircleBorder(),
+            child: Tooltip(
+              message: 'Remove from topic',
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: Icon(
+                  PhosphorIconsRegular.x,
+                  size: 10,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           ),
         ],
       ),

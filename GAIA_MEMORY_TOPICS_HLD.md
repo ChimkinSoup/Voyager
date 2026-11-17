@@ -5,7 +5,9 @@ live checks of §15.4, §16.4 and §17.4 were run on 2026-11-16 (§18): all pass
 those that need the phone, a week of real chats, more §11 bursts, or Phase 4 (§19). Stage 2
 (Phase 3) is behind a debug-menu switch that's off. The first §11 burst is in §11; the
 threshold isn't settled (§18.3). Decisions after the live pass are in §18.4: stage 1 is a
-candidate list only, and without stage 2 recall is left to `memory_search`. Phases 4-6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+candidate list only, and without stage 2 recall is left to `memory_search`. **Phase 4 (the
+Memories tab tree) built 2026-11-16** (§20): tested, and checked live off-screen except for
+drags and what §20.5 lists. Phases 5-6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -993,4 +995,146 @@ along with its own checks. Wrap any eval that changes state in `Future(() => ...
    memories out of a project's topic each way Phase 4 allows: "remove from topic", deleting the
    topic, and merging it into another (if merge comes in Phase 6, check it then). Each memory
    leaves the topic with its `projectId` cleared. After the upkeep runs, none is filed back.
+
+## 20. Phase 4 build notes (2026-11-16)
+
+### 20.1 What was built
+
+- **Topic edits (§3.2)** in `GaiaMemories` (`gaia_memories.dart`): `newTopic`, `renameTopic`,
+  `moveTopic` (re-parent), `deleteTopic`, and for memories `moveMemory`, `addMemoryTopic` and
+  `removeMemoryTopic`. `GaiaMemoryTopic.copyWith` takes `parentId`, and the repository has
+  `watchMemoryTopics` behind a new `gaiaMemoryTopicsProvider`.
+- **Re-parenting refuses cycles** (§3.1, §15.2 item 5): `moveTopic` throws for a move under
+  the topic itself or any of its subtopics, and the tree refuses the drop before that.
+- **Renaming a linked project's topic renames the project** in the same write
+  (`upsertProjectWithChats` with the topic), so the upkeep keeps the new name (§15.2 item 3).
+- **Deleting a topic** is one write: its memories lose it, its subtopics move up to its
+  parent (or become roots), and it goes to the trash. Restoring it from the trash brings back
+  the topic alone, under its old parent if that's still there.
+- **Taking a memory out of its project's topic clears `projectId`** on every path that does it
+  (remove, move, delete topic), so the upkeep doesn't file it back (§16.2 item 6).
+- **The Memories tab** is two panes on a window 640 px or wider: the tree (All memories, every
+  topic indented under its parent, Unsorted) with a **New topic** button, and the selected
+  topic's memories, each scrolling on its own (§20.4). "Include subtopics" is on by default. The inbox comes first and is shown
+  across every topic. A search box above filters both panes. Each memory row shows its topics
+  as chips with their paths, each with × to take it out.
+- **On the desktop:** drag a memory onto a topic to move it, Ctrl+drag to add it. Drag a topic
+  onto another to put it under it, or onto All memories for the root. A refused drop outlines
+  the target in red. Right-click a topic for Rename (or F2 on the selected one), New subtopic
+  and Delete.
+- **On the phone, or a narrow window:** the selected topic is a button that opens the tree in
+  a dialog. Each topic has a ⋯ menu with Rename, New subtopic, Move under… and Delete. On the
+  phone, each memory's ⋯ menu has Move to topic… and Add to topic….
+- **A project's subtopics (§18.4):** selecting a project's topic lists its subtopics'
+  memories too, and every memory is labelled by its topic paths. The old project dropdown,
+  its "Global" entry and the "Move to" project chip are gone: project topics are in the tree
+  like any other.
+
+### 20.2 Decisions made while building
+
+1. **A live project's topic can't be deleted.** The upkeep would make it again at once, empty
+   (§7). Its Delete menu item is disabled and reads "Delete (goes with its project)", and
+   `deleteTopic` refuses it too. Deleting the project unlinks the topic, and then it can be
+   deleted.
+2. **What a move replaces:** from a selected topic, the memory's topics in that topic's
+   subtree, whether or not "Include subtopics" is on. From All memories or Unsorted, every
+   topic it has.
+3. **The root area is the All memories row.** Topics dropped there go to the root. Memories
+   can't be dropped on All memories or Unsorted; a chip's × takes a memory out of a topic.
+4. **The "Global" view is gone.** Unsorted is the nearest thing, but it isn't the same:
+   Global meant "in no project's topic", and Unsorted means "in no topic".
+5. **Search** matches a memory's text and tags, and the names of its topics. The tree keeps the topics it
+   names and those holding a memory it finds, with the topics above them. The inbox is
+   filtered too.
+6. **Duplicate checks are unchanged.** They still use `projectId` until Phase 5 (§15.2 item
+   6), and moving between topics doesn't check for duplicates.
+7. **Desktop menus have no Move under… or Move to topic….** Dragging does those, as §3.2
+   lays out. The phone has the menus. A narrow desktop window gets the tree dialog, and
+   Move to topic… and Add to topic…, since a memory has no tree there to be dragged onto.
+8. **Names:** a blank name is refused. Repeated names are allowed, siblings included.
+9. **A new topic or subtopic is selected** once it's made.
+10. **The tree shows no counts.** The system prompt's topic list has them (§4.1).
+11. **Deleting a topic asks first**, rather than an undo toast, because an undo that brings
+    back the topic alone (as the trash does) would read as a full undo.
+12. **Ctrl is read when the memory is dropped.** Nothing on screen shows whether a drop will
+    move or add.
+13. **Merge stays in Phase 6** (§10), so topics have no "Merge into…" item yet.
+
+### 20.3 How it was checked
+
+- **Unit tests** (`test/gaia_memory_topics_test.dart`, "editing the tree"): new topics at the
+  root and under a parent; re-parenting a subtree, and refusing a move under itself or a
+  subtopic; deleting a topic, at the root and below; a live project's topic refused and then
+  allowed once the project is deleted; a project topic's rename renaming the project and
+  holding after the upkeep; move within a subtree against everywhere, add and remove; and a
+  memory taken out of its project's topic each way losing `projectId` and not being filed back
+  after a restore of the project. 32 passed in the file.
+- **Widget tests** (`test/gaia_memory_tree_test.dart`, new; the desktop ones in the Windows
+  variant, under a 1.5 GB memory watchdog): a topic lists its subtopics' memories with path
+  labels and no "Global", and only its own without subtopics; Unsorted; dragging a memory
+  moves it within the selected subtree and Ctrl+drag adds it; a topic dragged onto its own
+  subtopic stays put, onto another goes under it, and onto All memories goes to the root; a
+  chip's × takes a memory out; search filters both panes; right-click New subtopic, F2
+  rename, and Delete with its message about subtopics; and on the phone, Move to topic… and
+  Move under… (which leaves out the topic itself). 6 passed.
+- **Full `flutter test`** (3 GB watchdog): 7,243 passed, 42 skipped and 2 failures,
+  `heat_watch_section_test` and `media_image_small_placeholder_test`. Both pass on their own,
+  as in §15.3 to §17.3.
+
+### 20.4 Live pass, 2026-11-16 (off-screen)
+
+`gaiaqa` on a copy of the Debug build with this tree's Dart bundle (Juno's own debug run held
+the build folder), parked off-screen and driven by `voy.ps1` in background mode, VM eval
+(`qa/steps/mt4-*.dart.txt`) and read-only SQLite. No new bugs.
+
+- **The tab on real data** (300 active memories, 20 topics): the two panes, the tree with
+  CS246 › Assignments, Final exam and Obsidian › Plugins, New topic, All memories and
+  Unsorted. Passed.
+- **§19.3, a project's subtopics:** passed. CS246 lists 70 memories, its own 30 and its
+  subtopics' 40 (the count matches SQLite), each labelled "CS246 › Assignments" or "CS246 ›
+  Final exam". Nothing reads "Global".
+- **§19.5, renaming a project's topic:** passed, through F2 on the selected row. Topic and
+  project both became "CS246 Winter" (v2), and the name held through the upkeep runs that
+  the later memory edits set off. Renamed back to "CS246" by eval afterwards.
+- **§19.6, taking memories out of a project's topic:** passed for two of the three ways. A
+  chip's × took "P4 dinner is at 19:30." out, with `projectId` cleared. Deleting the topic
+  "P4 Del Trash" (after its project was deleted by eval) left "TRASHMEM beta fact." Unsorted,
+  with `projectId` cleared. Restoring that project by eval gave it a new, empty topic (v8),
+  and neither memory was filed back. The third way, a drag, is in §20.5.
+- **A linked project's topic:** its menu shows Rename (F2), New subtopic, and Delete greyed
+  out as "Delete (goes with its project)". The unlinked one asked "Delete "P4 Del Trash"?"
+  first.
+- **Found and fixed during the pass:** the tree and the memories first shared the page's one
+  scroll. With the inbox's 21 rows on top, a memory further down and most tree rows were
+  never on screen together, so a memory couldn't be dragged onto them. In the wide layout
+  each pane now scrolls on its own, and the two are a window high.
+- **Drags didn't work in background mode.** `voy.ps1`'s burst drag and an in-process
+  pointer sequence over the VM service both failed to drop a memory, and one left a topic
+  drag hanging until a restart (no write happened). Synthetic input can't settle this, so
+  drags wait for real input (§20.5). The widget tests cover them meanwhile.
+
+### 20.5 Live checks still to do for Phase 4
+
+Skipped because they need real input on the screen (`voy.ps1` foreground mode), the phone, a
+second account or a real agent turn. Run them with §19's list.
+
+- **Drags with a real mouse:** a memory onto a topic (moved within the selected topic's
+  subtree), Ctrl+drag (added), a topic onto another and onto All memories, the red outline on
+  a refused drop, and §19.2's drag onto a topic's own subtopic. Also a drag of a project
+  memory out of its project's topic (§19.6's third way): `projectId` cleared and not filed
+  back after the upkeep. And whether a drag from the bottom of a long list onto a topic is
+  comfortable with the panes scrolling apart.
+- **§19.1, account switch through Settings** with nested topics (CS246's subtopics are nested
+  in `gaiaqa`'s cloud copy now).
+- **§19.2's second half, two devices:** re-parent two topics under each other on both at
+  once; after sync the cycle is broken at the oldest `updatedAt` on both, nothing lost.
+- **§19.4, the agent searching its memories:** real Claude Code and Codex turns with stage 2
+  off.
+- **The phone:** the tree button and dialog, each topic's ⋯ menu (Rename, New subtopic, Move
+  under…, Delete) and each memory's Move to topic… and Add to topic….
+- **A narrow desktop window** (under 640 px): the tree button opens the dialog, and picking a
+  topic closes it.
+- **Search on real data:** a word in a memory, and a topic's name, filter both panes.
+- **Restore from Settings → Trash** of a deleted topic: it comes back under its old parent,
+  with no memories.
 

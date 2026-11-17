@@ -1,0 +1,2 @@
+await GaiaMemories(c.read(gaiaRepositoryProvider)).renameTopic('project-mt3-cs246', 'CS246');
+debugPrint('MT4-RENAMEBACK done');

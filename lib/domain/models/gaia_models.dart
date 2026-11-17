@@ -2861,6 +2861,8 @@ class GaiaMemoryTopic extends SoftDeletable {
 
   GaiaMemoryTopic copyWith({
     String? name,
+    String? parentId,
+    bool clearParentId = false,
     String? projectId,
     bool clearProjectId = false,
     DateTime? deletedAt,
@@ -2872,7 +2874,7 @@ class GaiaMemoryTopic extends SoftDeletable {
     version: version + 1,
     deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     name: name ?? this.name,
-    parentId: parentId,
+    parentId: clearParentId ? null : (parentId ?? this.parentId),
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
   );
 }
@@ -2881,12 +2883,6 @@ class GaiaMemoryTopic extends SoftDeletable {
 /// fixed, so two devices can't make two, and it's found after the link is
 /// cleared.
 String gaiaProjectTopicId(String projectId) => 'project-$projectId';
-
-/// The first of the [live] projects whose topic [memory] is in, null for
-/// none (GAIA_MEMORY_TOPICS_HLD.md §7).
-String? gaiaMemoryProject(GaiaMemory memory, Iterable<String> live) => live
-    .where((id) => memory.topicIds.contains(gaiaProjectTopicId(id)))
-    .firstOrNull;
 
 /// [GaiaMemoryStatus.proposed] for a name this build doesn't know.
 GaiaMemoryStatus gaiaMemoryStatusFromName(Object? name) =>

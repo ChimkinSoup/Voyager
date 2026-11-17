@@ -567,4 +567,156 @@ void main() {
       },
     );
   });
+
+  group('editing the tree (§3.2, Phase 4)', () {
+    late AppDatabase db;
+    late DriftGaiaRepository repository;
+    late GaiaMemories memories;
+
+    setUp(() async {
+      db = AppDatabase.inMemory();
+      repository = DriftGaiaRepository(db);
+      memories = GaiaMemories(repository);
+      await repository.upsertMemoryTopics(
+        [
+          _topic('uni', 'University'),
+          _topic('cs246', 'CS246', parentId: 'uni'),
+          _topic('a1', 'Assignments', parentId: 'cs246'),
+          _topic('cpp', 'C++'),
+        ],
+        [
+          _memory('m1', 'Assignments use C++', topicIds: ['a1', 'cpp']),
+          _memory('m2', 'Marmoset for hand-in', topicIds: ['cs246']),
+          _memory('m3', 'Likes tea'),
+        ],
+      );
+    });
+
+    tearDown(() => db.close());
+
+    Future<List<String>> topicsOf(String id) async =>
+        (await repository.getMemory(id))!.topicIds;
+
+    test('a new topic goes at the root or under its parent', () async {
+      final root = await memories.newTopic('  Obsidian ');
+      final sub = await memories.newTopic('Plugins', parentId: root.id);
+      final tree = GaiaTopicTree(await repository.listMemoryTopics());
+      expect(tree.path(sub.id), ['Obsidian', 'Plugins']);
+    });
+
+    test('re-parenting moves a topic and its subtree; under itself or a '
+        'subtopic is refused', () async {
+      await memories.moveTopic('cs246', 'cpp');
+      var tree = GaiaTopicTree(await repository.listMemoryTopics());
+      expect(tree.path('a1'), ['C++', 'CS246', 'Assignments']);
+      await memories.moveTopic('cs246', null);
+      tree = GaiaTopicTree(await repository.listMemoryTopics());
+      expect(tree.path('a1'), ['CS246', 'Assignments']);
+      for (final under in ['cs246', 'a1']) {
+        await expectLater(
+          memories.moveTopic('cs246', under),
+          throwsA(isA<GaiaReadException>()),
+        );
+      }
+      expect((await repository.getMemoryTopic('cs246'))!.parentId, isNull);
+    });
+
+    test('a topic under a trashed one, shown at the root, moves to the root '
+        "for real, so it doesn't follow it back from the trash", () async {
+      final uni = (await repository.getMemoryTopic('uni'))!;
+      await repository.upsertMemoryTopic(
+        uni.copyWith(deletedAt: DateTime.utc(2026, 11, 16)),
+      );
+      await memories.moveTopic('cs246', null);
+      expect((await repository.getMemoryTopic('cs246'))!.parentId, isNull);
+    });
+
+    test('deleting a topic takes it off its memories and moves its '
+        'subtopics up to its parent, in one write', () async {
+      await memories.deleteTopic('cs246');
+      expect((await repository.getMemoryTopic('cs246'))!.isDeleted, isTrue);
+      expect((await repository.getMemoryTopic('a1'))!.parentId, 'uni');
+      expect(await topicsOf('m2'), isEmpty);
+      expect(await topicsOf('m1'), ['a1', 'cpp']);
+      // At the root, its subtopics become roots.
+      await memories.deleteTopic('uni');
+      expect((await repository.getMemoryTopic('a1'))!.parentId, isNull);
+    });
+
+    test("a live project's topic can't be deleted; once the project is, "
+        'it can', () async {
+      await repository.upsertProject(_project('p1', 'Trip'));
+      await memories.syncProjectTopics();
+      await expectLater(
+        memories.deleteTopic('project-p1'),
+        throwsA(isA<GaiaReadException>()),
+      );
+      await gaiaDeleteProject(repository, 'p1', withChats: false);
+      await memories.deleteTopic('project-p1');
+      expect(
+        (await repository.getMemoryTopic('project-p1'))!.isDeleted,
+        isTrue,
+      );
+    });
+
+    test("renaming a project's topic renames the project, and the upkeep "
+        'keeps the new name', () async {
+      await repository.upsertProject(_project('p1', 'Trip'));
+      await memories.syncProjectTopics();
+      await memories.renameTopic('project-p1', 'Japan trip');
+      expect((await repository.getProject('p1'))!.name, 'Japan trip');
+      await memories.syncProjectTopics();
+      expect(
+        (await repository.getMemoryTopic('project-p1'))!.name,
+        'Japan trip',
+      );
+      // An ordinary topic renames alone; a blank name does nothing.
+      await memories.renameTopic('cpp', ' ');
+      await memories.renameTopic('cpp', 'C plus plus');
+      expect((await repository.getMemoryTopic('cpp'))!.name, 'C plus plus');
+    });
+
+    test("a move replaces the memory's topics within the selected subtree "
+        'only; add keeps them; remove leaves Unsorted', () async {
+      final tree = GaiaTopicTree(await repository.listMemoryTopics());
+      await memories.moveMemory('m1', 'cs246', within: tree.subtree('uni'));
+      expect(await topicsOf('m1'), ['cpp', 'cs246']);
+      await memories.moveMemory('m1', 'uni');
+      expect(await topicsOf('m1'), ['uni']);
+      await memories.addMemoryTopic('m3', 'cpp');
+      await memories.addMemoryTopic('m3', 'uni');
+      expect(await topicsOf('m3'), ['cpp', 'uni']);
+      await memories.removeMemoryTopic('m3', 'cpp');
+      await memories.removeMemoryTopic('m3', 'uni');
+      expect(await topicsOf('m3'), isEmpty);
+    });
+
+    test("a memory taken out of its project's topic each way loses its "
+        'projectId, so the upkeep leaves it out (§16.2 item 6)', () async {
+      await repository.upsertProject(_project('p1', 'Trip'));
+      for (final id in ['removed', 'moved', 'deleted']) {
+        await repository.upsertMemory(_memory(id, 'Fact $id', projectId: 'p1'));
+      }
+      await memories.syncProjectTopics();
+      expect(await topicsOf('removed'), ['project-p1']);
+
+      await memories.removeMemoryTopic('removed', 'project-p1');
+      await memories.moveMemory('moved', 'cpp');
+      for (final id in ['removed', 'moved']) {
+        expect((await repository.getMemory(id))!.projectId, isNull);
+      }
+      // Deleting the topic: possible once the project is gone, and a
+      // restored project must not file the memory back.
+      await gaiaDeleteProject(repository, 'p1', withChats: false);
+      await memories.deleteTopic('project-p1');
+      expect((await repository.getMemory('deleted'))!.projectId, isNull);
+      await repository.upsertProject(
+        (await repository.getProject('p1'))!.copyWith(clearDeletedAt: true),
+      );
+      await memories.syncProjectTopics();
+      expect(await topicsOf('removed'), isEmpty);
+      expect(await topicsOf('moved'), ['cpp']);
+      expect(await topicsOf('deleted'), isEmpty);
+    });
+  });
 }

@@ -10371,23 +10371,28 @@ class DriftGaiaRepository implements GaiaRepository {
   Stream<List<GaiaMemory>> watchMemories() =>
       _memories().watch().map((rows) => rows.map(_mapGaiaMemory).toList());
 
+  SimpleSelectStatement<$GaiaMemoryTopicsTableTable, GaiaMemoryTopicsTableData>
+  _memoryTopics({bool includeDeleted = false}) =>
+      _db.select(_db.gaiaMemoryTopicsTable)
+        ..where(
+          (t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull(),
+        )
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.createdAt),
+          (t) => OrderingTerm.asc(t.id),
+        ]);
+
   @override
   Future<List<GaiaMemoryTopic>> listMemoryTopics({
     bool includeDeleted = false,
-  }) async =>
-      (await (_db.select(_db.gaiaMemoryTopicsTable)
-                ..where(
-                  (t) => includeDeleted
-                      ? const Constant(true)
-                      : t.deletedAt.isNull(),
-                )
-                ..orderBy([
-                  (t) => OrderingTerm.asc(t.createdAt),
-                  (t) => OrderingTerm.asc(t.id),
-                ]))
-              .get())
-          .map(_mapGaiaMemoryTopic)
-          .toList();
+  }) async => (await _memoryTopics(
+    includeDeleted: includeDeleted,
+  ).get()).map(_mapGaiaMemoryTopic).toList();
+
+  @override
+  Stream<List<GaiaMemoryTopic>> watchMemoryTopics() => _memoryTopics()
+      .watch()
+      .map((rows) => rows.map(_mapGaiaMemoryTopic).toList());
 
   @override
   Future<GaiaMemoryTopic?> getMemoryTopic(String id) async {

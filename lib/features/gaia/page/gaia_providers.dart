@@ -90,6 +90,11 @@ final gaiaMemoriesProvider = StreamProvider<List<GaiaMemory>>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchMemories(),
 );
 
+/// Live memory topics (GAIA_MEMORY_TOPICS_HLD.md §3.1), oldest first.
+final gaiaMemoryTopicsProvider = StreamProvider<List<GaiaMemoryTopic>>(
+  (ref) => ref.watch(gaiaRepositoryProvider).watchMemoryTopics(),
+);
+
 /// A memory to show on the Gaia page's Memories tab, from a recall chip
 /// (GAIA_MEMORY_TOPICS_HLD.md §4.5); null for none.
 final gaiaRevealMemoryProvider = StateProvider<String?>((ref) => null);

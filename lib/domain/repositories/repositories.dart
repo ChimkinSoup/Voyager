@@ -978,6 +978,9 @@ abstract class GaiaRepository {
     bool recordLocalActivity = true,
   });
 
+  /// [listMemoryTopics] as it changes.
+  Stream<List<GaiaMemoryTopic>> watchMemoryTopics();
+
   /// Writes [topics] and then [memories] in one transaction, all or none,
   /// and tells sync once it's done.
   Future<void> upsertMemoryTopics(

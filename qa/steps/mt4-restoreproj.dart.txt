@@ -1,0 +1,4 @@
+final r = c.read(gaiaRepositoryProvider);
+final p = await r.getProject('7503bed9-95fe-48b0-99b6-c0c9e03059ac');
+await r.upsertProject(p!.copyWith(clearDeletedAt: true));
+debugPrint('MT4-RESTORE done');

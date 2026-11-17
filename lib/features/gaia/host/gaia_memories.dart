@@ -502,6 +502,157 @@ class GaiaMemories {
     await _repository.upsertMemoryTopics(changedTopics, changedMemories);
   }
 
+  /// A new topic named [name], under [parentId] or at the root
+  /// (GAIA_MEMORY_TOPICS_HLD.md §3.2).
+  Future<GaiaMemoryTopic> newTopic(String name, {String? parentId}) async {
+    final now = utcNow();
+    final topic = GaiaMemoryTopic(
+      id: _uuid.v4(),
+      name: name.trim(),
+      parentId: parentId,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    );
+    await _repository.upsertMemoryTopic(topic);
+    return topic;
+  }
+
+  /// Topic [id] renamed. A project's topic renames its project with it, in
+  /// one write, or the upkeep would name it back (§7, §15.2 item 3).
+  Future<void> renameTopic(String id, String name) async {
+    final topic = await _liveTopic(id);
+    name = name.trim();
+    if (topic == null || name.isEmpty || name == topic.name) return;
+    final project = topic.projectId == null
+        ? null
+        : await _repository.getProject(topic.projectId!);
+    final renamed = topic.copyWith(name: name);
+    if (project == null || project.isDeleted) {
+      await _repository.upsertMemoryTopic(renamed);
+    } else {
+      await _repository.upsertProjectWithChats(
+        project.copyWith(name: name),
+        const [],
+        topics: [renamed],
+      );
+    }
+  }
+
+  /// Topic [id] moved under [parentId], or to the root for null (§3.2).
+  /// Throws a [GaiaReadException] for a move under itself or one of its own
+  /// subtopics (§3.1).
+  Future<void> moveTopic(String id, String? parentId) async {
+    final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    final topic = tree[id];
+    // The stored parent, not the tree's: one pointing at a trashed topic
+    // shows at the root but would follow it back from the trash.
+    if (topic == null || topic.parentId == parentId) return;
+    if (parentId != null && tree.subtree(id).contains(parentId)) {
+      throw GaiaReadException(
+        "A topic can't go under itself or one of its subtopics.",
+      );
+    }
+    await _repository.upsertMemoryTopic(
+      parentId == null
+          ? topic.copyWith(clearParentId: true)
+          : topic.copyWith(parentId: parentId),
+    );
+  }
+
+  /// Topic [id] to the trash, in one write (§3.2): its memories lose it and
+  /// stay in their other topics, or go to Unsorted, and its subtopics move
+  /// up to its parent. Throws a [GaiaReadException] for a live project's
+  /// topic, which the upkeep would only make again: deleting the project
+  /// lets it go (§7).
+  Future<void> deleteTopic(String id) async {
+    final topics = await _repository.listMemoryTopics();
+    final tree = GaiaTopicTree(topics);
+    final topic = topics.where((topic) => topic.id == id).firstOrNull;
+    if (topic == null) return;
+    if (await _live(topic.projectId) != null) {
+      throw GaiaReadException(
+        "A project's topic goes when the project is deleted.",
+      );
+    }
+    final parentId = tree.parentOf(id);
+    await _repository.upsertMemoryTopics(
+      [
+        for (final child in tree.childrenOf(id))
+          parentId == null
+              ? child.copyWith(clearParentId: true)
+              : child.copyWith(parentId: parentId),
+        topic.copyWith(deletedAt: utcNow()),
+      ],
+      [
+        for (final memory in await _repository.listMemories())
+          if (memory.topicIds.contains(id)) _refiled(memory, {id}, null),
+      ],
+    );
+  }
+
+  /// Memory [memoryId] moved to topic [topicId] (§3.2): it replaces the
+  /// memory's topics [within] (the selected topic's subtree), or every one
+  /// it has for null.
+  Future<void> moveMemory(
+    String memoryId,
+    String topicId, {
+    Set<String>? within,
+  }) async {
+    final memory = await _repository.getMemory(memoryId);
+    if (memory == null || memory.isDeleted) return;
+    final out = {
+      for (final id in memory.topicIds)
+        if (id != topicId && (within == null || within.contains(id))) id,
+    };
+    if (out.isEmpty && memory.topicIds.contains(topicId)) return;
+    await _repository.upsertMemory(_refiled(memory, out, topicId));
+  }
+
+  /// Memory [memoryId] added to topic [topicId], keeping its others (§3.2).
+  Future<void> addMemoryTopic(String memoryId, String topicId) async {
+    final memory = await _repository.getMemory(memoryId);
+    if (memory == null ||
+        memory.isDeleted ||
+        memory.topicIds.contains(topicId)) {
+      return;
+    }
+    await _repository.upsertMemory(_refiled(memory, const {}, topicId));
+  }
+
+  /// Memory [memoryId] taken out of topic [topicId]; with none left it's
+  /// Unsorted (§3.2).
+  Future<void> removeMemoryTopic(String memoryId, String topicId) async {
+    final memory = await _repository.getMemory(memoryId);
+    if (memory == null ||
+        memory.isDeleted ||
+        !memory.topicIds.contains(topicId)) {
+      return;
+    }
+    await _repository.upsertMemory(_refiled(memory, {topicId}, null));
+  }
+
+  /// [memory] without the topics [out], and in [add] if given. Taken out of
+  /// its project's topic, it loses its `projectId` too, or the upkeep would
+  /// file it back (§16.2 item 6).
+  GaiaMemory _refiled(GaiaMemory memory, Set<String> out, String? add) {
+    final projectId = memory.projectId;
+    return memory.copyWith(
+      topicIds: [
+        for (final id in memory.topicIds)
+          if (!out.contains(id)) id,
+        if (add != null && !memory.topicIds.contains(add)) add,
+      ],
+      clearProjectId:
+          projectId != null && out.contains(gaiaProjectTopicId(projectId)),
+    );
+  }
+
+  Future<GaiaMemoryTopic?> _liveTopic(String id) async {
+    final topic = await _repository.getMemoryTopic(id);
+    return topic == null || topic.isDeleted ? null : topic;
+  }
+
   /// The project [chatId] is in, or with no chat yet the [newChat] one
   /// picked for it; null for none, or one that points nowhere
   /// (GAIA_PROJECTS_HLD.md §2).
@@ -941,6 +1092,9 @@ class GaiaTopicTree {
 
   final Map<String, GaiaMemoryTopic> _topics;
   final _parent = <String, String>{};
+
+  /// Live topic [id], or null.
+  GaiaMemoryTopic? operator [](String id) => _topics[id];
 
   /// [id]'s parent, null for a root.
   String? parentOf(String id) => _parent[id];
