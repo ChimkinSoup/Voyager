@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -45,7 +46,12 @@ void main() {
   /// The Gaia page on its Memories tab, over University › CS246 › Final
   /// exam and Obsidian, with a memory in each of CS246, Final exam and
   /// Obsidian, and one Unsorted.
-  Future<void> pump(WidgetTester tester, {double width = 1300}) async {
+  /// [suggested] offers a new topic for memories, by id.
+  Future<void> pump(
+    WidgetTester tester, {
+    double width = 1300,
+    Map<String, GaiaSuggestedTopic> suggested = const {},
+  }) async {
     tester.view.physicalSize = Size(width, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -60,10 +66,13 @@ void main() {
           _topic('obs', 'Obsidian'),
         ],
         [
-          _memory('m1', 'Submit with marmoset', ['cs246']),
-          _memory('m2', 'Exam is in PAC', ['exam']),
-          _memory('m3', 'Vault lives in Dropbox', ['obs']),
-          _memory('m4', 'Likes tea', []),
+          for (final memory in [
+            _memory('m1', 'Submit with marmoset', ['cs246']),
+            _memory('m2', 'Exam is in PAC', ['exam']),
+            _memory('m3', 'Vault lives in Dropbox', ['obs']),
+            _memory('m4', 'Likes tea', []),
+          ])
+            memory.copyWith(suggestedTopic: suggested[memory.id]),
         ],
       ),
     );
@@ -190,6 +199,47 @@ void main() {
       expect(find.text('Exam is in PAC'), findsOneWidget);
       expect(find.text('Vault lives in Dropbox'), findsNothing);
       expect(row('University'), findsOneWidget);
+    },
+    variant: _desktop,
+  );
+
+  testWidgets(
+    'a new topic offered for a memory shows as a chip that makes it, or × '
+    "drops it; only an Unsorted memory with none offered has Suggest "
+    '(GAIA_MEMORY_TOPICS_HLD.md §5)',
+    (tester) async {
+      await pump(
+        tester,
+        suggested: {
+          'm3': (name: 'Plugins', parentId: 'obs'),
+          'm1': (name: 'Tools', parentId: null),
+        },
+      );
+      Finder suggest(String text) => find.descendant(
+        of: find.widgetWithText(ListTile, text),
+        matching: find.byTooltip('Suggest topics'),
+      );
+      expect(suggest('Likes tea'), findsOneWidget);
+      expect(suggest('Exam is in PAC'), findsNothing);
+      await tester.tap(find.text('+ New topic: Plugins under Obsidian'));
+      await settle(tester);
+      final made = (await tester.runAsync(
+        repository.listMemoryTopics,
+      ))!.singleWhere((topic) => topic.name == 'Plugins');
+      expect(made.parentId, 'obs');
+      expect(await topicsOf(tester, 'm3'), ['obs', made.id]);
+      expect(find.textContaining('New topic: Plugins'), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(Container, '+ New topic: Tools'),
+          matching: find.byIcon(PhosphorIconsRegular.x),
+        ),
+      );
+      await settle(tester);
+      final m1 = (await tester.runAsync(() => repository.getMemory('m1')))!;
+      expect(m1.suggestedTopic, isNull);
+      expect(m1.topicIds, ['cs246']);
     },
     variant: _desktop,
   );

@@ -1676,6 +1676,129 @@ class GaiaController extends ChangeNotifier {
   /// The user's edits to each open memory card's text, by memory id.
   final _memoryEdits = <String, String>{};
 
+  /// Each open memory card's topics as the main instance last said, by
+  /// memory id, and the user's edits to them: its topics, and whether the
+  /// new topic offered is taken (true) or dropped (false)
+  /// (GAIA_MEMORY_TOPICS_HLD.md §3.2).
+  final _filings = <String, GaiaMemoryFiling>{};
+  final _filingAsked = <String>{};
+  final _topicEdits = <String, List<GaiaTopicLine>>{};
+  final _newTopicEdits = <String, bool>{};
+
+  /// What memory card [memory] shows of its topics, with the user's edits;
+  /// null until the main instance has said, which this asks it.
+  ({List<GaiaTopicLine> topics, String? suggested, bool? newTopic})?
+  memoryFiling(GaiaMemoryPart memory) {
+    final id = memory.memoryId;
+    final filing = _filings[id];
+    if (filing == null) {
+      if (memory.isOpen && _filingAsked.add(id)) {
+        unawaited(_askFiling(id));
+      }
+      return null;
+    }
+    return (
+      topics: _topicEdits[id] ?? filing.topics,
+      suggested: filing.suggested,
+      newTopic: _newTopicEdits[id],
+    );
+  }
+
+  Future<void> _askFiling(String memoryId) async {
+    try {
+      final filing = await _pipe.request('memoryFiling', {
+        'memoryId': memoryId,
+      });
+      if (filing == null) return;
+      _filings[memoryId] = gaiaMemoryFilingFromJson(filing);
+      notifyListeners();
+    } on GaiaPipeException catch (error) {
+      // Asked again when the card next builds.
+      _filingAsked.remove(memoryId);
+      debugPrint('[gaia] memory card topics: $error');
+    }
+  }
+
+  /// Every memory topic, for a memory card's topic menu (§3.2); empty when
+  /// the main instance can't say.
+  Future<List<GaiaTopicLine>> memoryTopics() async {
+    try {
+      return gaiaTopicLinesFromJson(await _pipe.request('memoryTopics'));
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memory topics: $error');
+      return const [];
+    }
+  }
+
+  /// Memory card [memory]'s topics edited to [topics] before Remember.
+  void editMemoryTopics(GaiaMemoryPart memory, List<GaiaTopicLine> topics) {
+    if (!memory.isOpen) return;
+    _topicEdits[memory.memoryId] = topics;
+    notifyListeners();
+  }
+
+  /// The new topic offered on memory card [memory] taken ([take] true),
+  /// dropped (false), or left for later (null) as it's remembered.
+  void takeNewTopic(GaiaMemoryPart memory, bool? take) {
+    if (!memory.isOpen) return;
+    take == null
+        ? _newTopicEdits.remove(memory.memoryId)
+        : _newTopicEdits[memory.memoryId] = take;
+    notifyListeners();
+  }
+
+  /// Memory [memoryId], saying [text], filed by the utility model
+  /// (GAIA_MEMORY_TOPICS_HLD.md §5): `/remember`, `memory_propose` with no
+  /// topics named, and the Gaia page's Suggest. True once it's in a topic
+  /// or offered one, false when it's placed with neither, null when it
+  /// couldn't be placed. A [proposal] the user decided first is left as
+  /// they filed it.
+  Future<bool?> _place(
+    String memoryId,
+    String text, {
+    bool proposal = false,
+  }) async {
+    final utility = _utility;
+    if (utility == null) return null;
+    try {
+      final placement = await utility.place(
+        text,
+        gaiaTopicLinesFromJson(await _pipe.request('memoryTopics')),
+      );
+      if (placement == null) return null;
+      final filing = await _pipe.request('placedMemory', {
+        'memoryId': memoryId,
+        'placement': gaiaPlacementToJson(placement),
+        if (proposal) 'proposal': true,
+      });
+      if (filing == null) return null;
+      final placed = gaiaMemoryFilingFromJson(filing);
+      // A card showing it shows where it went.
+      if (_filingAsked.contains(memoryId)) {
+        // Topics edited on the card before it landed keep the ones it adds.
+        if (_topicEdits[memoryId] case final edits?) {
+          final before = {
+            for (final topic in _filings[memoryId]?.topics ?? const [])
+              topic.id,
+          };
+          _topicEdits[memoryId] = [
+            ...edits,
+            for (final topic in placed.topics)
+              if (!before.contains(topic.id) &&
+                  !edits.any((edit) => edit.id == topic.id))
+                topic,
+          ];
+        }
+        _filings[memoryId] = placed;
+        notifyListeners();
+      }
+      return placed.topics.isNotEmpty || placed.suggested != null;
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memory placement: $error');
+      return null;
+    }
+  }
+
   /// The memory cards whose answer is on its way to the host, by memory id.
   final _decidingMemories = <String>{};
 
@@ -1711,6 +1834,9 @@ class GaiaController extends ChangeNotifier {
                 'accept': accept,
                 'text': memoryText(memory),
                 if (pin) 'pin': true,
+                if (_topicEdits[memory.memoryId] case final topics?)
+                  'topicIds': [for (final topic in topics) topic.id],
+                'newTopic': ?_newTopicEdits[memory.memoryId],
               }))!
               as Map;
     } on GaiaPipeException catch (error) {
@@ -1726,6 +1852,10 @@ class GaiaController extends ChangeNotifier {
       _decidingMemories.remove(memory.memoryId);
     }
     _memoryEdits.remove(memory.memoryId);
+    _topicEdits.remove(memory.memoryId);
+    _newTopicEdits.remove(memory.memoryId);
+    _filings.remove(memory.memoryId);
+    _filingAsked.remove(memory.memoryId);
     if (decided['pinFailed'] case final String why) {
       _note('Remembered, not pinned', why, error: true);
     }
@@ -2518,6 +2648,8 @@ class GaiaController extends ChangeNotifier {
         return _drain();
       case 'remote':
         return _onRemote(params);
+      case 'placeMemory':
+        return _place(params['memoryId']! as String, params['text']! as String);
       default:
         throw GaiaPipeException('unknown method $method');
     }
@@ -5234,7 +5366,7 @@ class GaiaController extends ChangeNotifier {
   /// since the user wrote it. Not saved, it goes back in the draft. In a
   /// project chat, or a new chat with a project picked, it's filed in the
   /// project's topic, unless it starts `--global` (GAIA_MEMORY_TOPICS_HLD.md
-  /// §5). `--pin` pins it (§3.3).
+  /// §5), and the utility model files it after. `--pin` pins it (§3.3).
   Future<void> remember(String text) async {
     void toast(String title, String body, {bool error = false}) => _toasts.add((
       chatId: '',
@@ -5257,6 +5389,10 @@ class GaiaController extends ChangeNotifier {
                 if (pin) 'pin': true,
               }))!
               as Map;
+      // In Unsorted, or its project's topic, until this returns.
+      if (reply['memoryId'] case final String memoryId) {
+        unawaited(_place(memoryId, body));
+      }
       if (reply['pinFailed'] case final String why) {
         toast(
           reply['saved'] == true ? 'Remembered, not pinned' : 'Not pinned',
@@ -6216,6 +6352,17 @@ class GaiaController extends ChangeNotifier {
                   ),
                 ),
               );
+              // The agent named no topics: the utility model files it, and
+              // its card shows where (GAIA_MEMORY_TOPICS_HLD.md §5).
+              if (proposed['place'] == true) {
+                unawaited(
+                  _place(
+                    memoryId,
+                    proposed['memoryText']! as String,
+                    proposal: true,
+                  ),
+                );
+              }
             }
             return proposed['text']! as String;
           }
@@ -6986,15 +7133,22 @@ class GaiaController extends ChangeNotifier {
     // Only copies: a rewind's auto-fork not carried on, whose dropped turns
     // aren't learned from until it is (GAIA_REWIND_HLD.md §9).
     if (turns.every((message) => message.origin != null)) return;
-    final String index;
+    final transcript = gaiaTranscriptText(turns);
+    final Map<Object?, Object?> context;
     try {
-      // Every active memory, so none is offered again.
-      index = await _pipe.request('memoryIndex') as String? ?? '';
+      // The memories nearest these turns, so none is offered again, and the
+      // topics to file what it finds in (GAIA_MEMORY_TOPICS_HLD.md §5).
+      context =
+          (await _pipe.request('curatorContext', {'text': transcript}))! as Map;
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] curator: $error');
       return;
     }
-    final found = await utility.curate(gaiaTranscriptText(turns), index);
+    final found = await utility.curate(
+      transcript,
+      context['kept'] as String? ?? '',
+      gaiaTopicLinesFromJson(context['topics']),
+    );
     // Sent again meanwhile: its next idle reads these turns too.
     if (found == null || _running.contains(chatId)) return;
     final seq = turns.last.seq;
@@ -7005,7 +7159,12 @@ class GaiaController extends ChangeNotifier {
         'seq': seq,
         'memories': [
           for (final memory in found)
-            {'text': memory.text, 'tags': memory.tags},
+            {
+              'text': memory.text,
+              'tags': memory.tags,
+              'topicIds': memory.topicIds,
+              'suggested': gaiaSuggestedTopicToJson(memory.suggested),
+            },
         ],
       });
     } on GaiaPipeException catch (error) {

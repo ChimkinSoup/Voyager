@@ -448,12 +448,22 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           'items': {'type': 'string'},
           'description': 'A few one-word topics, such as "food" or "work".',
         },
+        'topics': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description':
+              'Topics to file it under, from the topic list in your '
+              'instructions: names, or paths such as "CS246 › Assignments". '
+              'One not on the list is offered to the user as a new topic. '
+              'Leave out to have Gaia file it.',
+        },
         'scope': {
           'type': 'string',
           'enum': ['project', 'global'],
           'description':
-              "In a project chat, whether it's kept for this project's "
-              'chats (the default) or for every chat. Leave out elsewhere.',
+              "In a project chat, whether it's filed under this project's "
+              'topic too (the default) or not. Every memory can come up in '
+              'any chat. Leave out elsewhere.',
         },
       },
       'required': ['text'],

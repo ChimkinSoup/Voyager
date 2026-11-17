@@ -16,7 +16,7 @@ const kGaiaMemoryMaxLength = 500;
 /// The most memories `memory_search` returns.
 const _maxResults = 20;
 
-/// The longest an index line gets; `memory_search` has the rest.
+/// The longest a memory's line for the curator gets.
 const _maxIndexLine = 200;
 
 /// The most characters pinned memories take in all
@@ -35,18 +35,39 @@ class GaiaMemories {
 
   final GaiaRepository _repository;
 
-  /// Every active memory as index lines, for the curator, so it doesn't
-  /// offer one again (§11); empty when there are none. Phase 5 gives it
-  /// recall's candidates instead (GAIA_MEMORY_TOPICS_HLD.md §5).
-  Future<String> index() async =>
-      gaiaMemoryIndex([for (final (memory, _) in await _active()) memory]);
+  /// What the curator is shown (GAIA_MEMORY_TOPICS_HLD.md §5): the active
+  /// memories nearest [transcript] by stage 1, at most 40, as lines, so it
+  /// doesn't offer one again and its input doesn't grow with the memories
+  /// (§11), and every topic, to file what it finds. Pinned ones count.
+  Future<({String kept, List<GaiaTopicLine> topics})> curatorContext(
+    String transcript,
+  ) async {
+    final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    return (
+      kept: [
+        for (final candidate in gaiaRecallCandidates(
+          await _active(),
+          tree,
+          transcript,
+        ))
+          '- ${_indexLine(candidate.memory)}',
+      ].join('\n'),
+      topics: gaiaTopicLines(tree),
+    );
+  }
+
+  /// Every topic, by its path, for the utility model to file a memory in
+  /// (§5) and for a memory card's topic menu (§3.2).
+  Future<List<GaiaTopicLine>> topicLines() async =>
+      gaiaTopicLines(GaiaTopicTree(await _repository.listMemoryTopics()));
 
   /// What a new session's system prompt carries (GAIA_MEMORY_TOPICS_HLD.md
   /// §4.1): the pinned memories and the topic list. Empty with no active
   /// memories.
-  Future<String> sessionPrompt() async => gaiaMemoryPrompt([
-    for (final (memory, _) in await _active()) memory,
-  ], GaiaTopicTree(await _repository.listMemoryTopics()));
+  Future<String> sessionPrompt() async => gaiaMemoryPrompt(
+    await _active(),
+    GaiaTopicTree(await _repository.listMemoryTopics()),
+  );
 
   /// Stage 1 for [chatId]'s message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3),
   /// matched on [text] (the message, and the end of the last reply), leaving
@@ -59,7 +80,7 @@ class GaiaMemories {
     String? projectId,
   }) async {
     final active = [
-      for (final (memory, _) in await _active())
+      for (final memory in await _active())
         // A pinned one is in the system prompt already.
         if (!memory.pinned) memory,
     ];
@@ -107,7 +128,7 @@ class GaiaMemories {
     if (memory == null || memory.isDeleted || memory.pinned == pinned) return;
     if (pinned) {
       final used = [
-        for (final (other, _) in await _active())
+        for (final other in await _active())
           if (other.pinned && other.id != id) other.text.trim().length,
       ].fold(0, (sum, length) => sum + length);
       if (used + memory.text.trim().length > kGaiaPinBudget) {
@@ -138,7 +159,7 @@ class GaiaMemories {
           );
         }
         // Every memory, from any project (GAIA_MEMORY_TOPICS_HLD.md §4.6).
-        final active = [for (final (memory, _) in await _active()) memory];
+        final active = await _active();
         final tree = GaiaTopicTree(await _repository.listMemoryTopics());
         var within = active;
         if (topic.isNotEmpty) {
@@ -165,27 +186,82 @@ class GaiaMemories {
   }
 
   /// A `memory_propose` call from [chatId]: the memory saved in the inbox,
-  /// null when nothing new was, and the agent's text. Throws a
-  /// [GaiaReadException] the agent is shown.
-  Future<({GaiaMemory? memory, String text, bool project})> propose(
+  /// null when nothing new was, and the agent's text. It's filed in the
+  /// `topics` the agent named (GAIA_MEMORY_TOPICS_HLD.md §5), and the first
+  /// that isn't there is offered as a new topic; with none named, [place]
+  /// is true and the utility model files it. Throws a [GaiaReadException]
+  /// the agent is shown.
+  Future<({GaiaMemory? memory, String text, bool project, bool place})> propose(
     String chatId,
     Map<String, Object?> arguments,
   ) async {
-    // The chat's project's topic unless asked for global
-    // (GAIA_MEMORY_TOPICS_HLD.md §5).
+    // The chat's project's topic unless asked for global (§5).
     final project = arguments['scope'] == 'global'
         ? null
         : await _projectOf(chatId);
+    final named = [
+      if (arguments['topics'] case final List topics)
+        for (final topic in topics)
+          if (topic is String && topic.trim().isNotEmpty) topic.trim(),
+    ];
+    final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    final home = project == null
+        ? const <String>{}
+        : tree.subtree(gaiaProjectTopicId(project));
+    // Of several topics a name fits, one in the chat's project first.
+    String pick(Set<String> ids) =>
+        (ids.toList()..sort((a, b) {
+              if (home.contains(a) != home.contains(b)) {
+                return home.contains(a) ? -1 : 1;
+              }
+              return tree
+                  .path(a)
+                  .join(' › ')
+                  .compareTo(tree.path(b).join(' › '));
+            }))
+            .first;
+    final topicIds = <String>[];
+    GaiaSuggestedTopic? offer;
+    for (final name in named) {
+      final found = tree.find(name);
+      if (found.isNotEmpty) {
+        topicIds.add(pick(found));
+        continue;
+      }
+      if (offer != null) continue;
+      final parts = gaiaTopicPathParts(name);
+      if (parts.isEmpty) continue;
+      // Under the deepest topic of its path that's there; the rest of the
+      // path is the new topic's name, so none of it is dropped. With none
+      // of it there, its own name at the root, which files it in a topic of
+      // that name there.
+      var under = parts.length - 1;
+      var parent = const <String>{};
+      for (var end = parts.length - 1; end > 0; end--) {
+        parent = tree.find(parts.sublist(0, end).join(' › '));
+        if (parent.isNotEmpty) {
+          under = end;
+          break;
+        }
+      }
+      offer = (
+        name: parts.sublist(under).join(' › '),
+        parentId: parent.isEmpty ? null : pick(parent),
+      );
+    }
     final saved = await save(
       arguments['text'] as String? ?? '',
       tags: gaiaMemoryTags(arguments['tags']),
       chatId: chatId,
       status: GaiaMemoryStatus.proposed,
       projectId: project,
+      topicIds: topicIds,
+      suggested: offer,
     );
     return (
       memory: saved,
       project: project != null,
+      place: saved != null && named.isEmpty,
       text: saved == null
           ? 'Already remembered, waiting in the inbox, or set aside by the '
                 'user: nothing new was proposed.'
@@ -200,12 +276,16 @@ class GaiaMemories {
   /// [accept]ed as [text] says it, or dismissed, as the inbox does. One the
   /// inbox decided first stays as it was decided there. What it is now:
   /// accepted with the text it has, or rejected, and the memory that says
-  /// it: an active one it was merged into, if it was. Throws a
-  /// [GaiaReadException] for empty or overlong [text].
+  /// it: an active one it was merged into, if it was. Remembered with
+  /// [topicIds], it's in those topics instead of its own, and [newTopic]
+  /// accepts (true) or drops (false) the topic offered for it (§3.2).
+  /// Throws a [GaiaReadException] for empty or overlong [text].
   Future<({String id, GaiaCardState state, String text})> decide(
     String id, {
     required bool accept,
     required String text,
+    List<String>? topicIds,
+    bool? newTopic,
   }) async {
     final memory = await _repository.getMemory(id);
     if (memory == null || memory.isDeleted) {
@@ -232,14 +312,38 @@ class GaiaMemories {
     }
     // Edited to say what an active one in its reach already does: that one
     // stands, and the proposal is spent rather than kept as a second copy.
-    if (await sameActive(body, projectId: memory.projectId, except: id)
-        case final other?) {
+    if (await sameActive(body, except: id) case final other?) {
       await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
       return (id: other.id, state: GaiaCardState.accepted, text: other.text);
     }
+    final tree = topicIds == null
+        ? null
+        : GaiaTopicTree(await _repository.listMemoryTopics());
+    final kept = topicIds == null
+        ? memory.topicIds
+        : [
+            ...{
+              for (final topic in topicIds)
+                if (memory.topicIds.contains(topic) || tree![topic] != null)
+                  topic,
+            },
+          ];
+    final projectTopic = memory.projectId == null
+        ? null
+        : gaiaProjectTopicId(memory.projectId!);
     await _repository.upsertMemory(
-      memory.copyWith(text: body, status: GaiaMemoryStatus.active),
+      memory.copyWith(
+        text: body,
+        status: GaiaMemoryStatus.active,
+        topicIds: kept,
+        // Taken out of its project's topic (§16.2 item 6).
+        clearProjectId:
+            memory.topicIds.contains(projectTopic) &&
+            !kept.contains(projectTopic),
+        clearSuggestedTopic: newTopic == false,
+      ),
     );
+    if (newTopic == true) await acceptSuggestedTopic(id);
     return (id: id, state: GaiaCardState.accepted, text: body);
   }
 
@@ -256,21 +360,12 @@ class GaiaMemories {
     return memory.text;
   }
 
-  /// The active memory, other than [except], that says what [text] does
-  /// where a memory of [projectId] would be read: a global one, or one of
-  /// that project while it's live. A global one is read in every chat, so
-  /// for no project (or one gone) any project's counts too. Null for none.
-  Future<GaiaMemory?> sameActive(
-    String text, {
-    String? projectId,
-    String? except,
-  }) async {
-    final project = await _live(projectId);
+  /// The active memory, other than [except], that says what [text] does,
+  /// from any project (GAIA_MEMORY_TOPICS_HLD.md §5); null for none.
+  Future<GaiaMemory?> sameActive(String text, {String? except}) async {
     final same = gaiaMemoryKey(text);
-    for (final (other, scope) in await _active()) {
-      if (other.id != except &&
-          (scope == null || project == null || scope == project) &&
-          gaiaMemoryKey(other.text) == same) {
+    for (final other in await _active()) {
+      if (other.id != except && gaiaMemoryKey(other.text) == same) {
         return other;
       }
     }
@@ -281,9 +376,11 @@ class GaiaMemories {
   /// active or proposed memory already says the same. Unless it's [byUser]
   /// (`/remember`), an archived, dismissed or deleted one counts too, so
   /// what the user set aside isn't offered again. Throws a
-  /// [GaiaReadException] for an empty or overlong one. It's filed in
-  /// [projectId]'s topic, or in none for null; its own `projectId` is no
-  /// longer written (GAIA_MEMORY_TOPICS_HLD.md §3.1, §10).
+  /// [GaiaReadException] for an empty or overlong one. Any memory counts,
+  /// from any project (GAIA_MEMORY_TOPICS_HLD.md §5). It's filed in
+  /// [projectId]'s topic and in [topicIds], those still there, with
+  /// [suggested] offered as a new topic; its own `projectId` is no longer
+  /// written (§3.1, §10).
   Future<GaiaMemory?> save(
     String text, {
     List<String> tags = const [],
@@ -291,6 +388,8 @@ class GaiaMemories {
     required GaiaMemoryStatus status,
     bool byUser = false,
     String? projectId,
+    List<String> topicIds = const [],
+    GaiaSuggestedTopic? suggested,
   }) async {
     final body = text.trim();
     if (body.isEmpty) throw GaiaReadException('A memory needs text.');
@@ -307,19 +406,24 @@ class GaiaMemories {
     for (final memory in await _repository.listMemories(
       includeDeleted: !byUser,
     )) {
-      // Only a global one or [projectId]'s own says it already: another
-      // project's isn't seen here, and a deleted one whose project is gone
-      // went with it (GAIA_PROJECTS_HLD.md §6).
-      final scope = live.contains(memory.projectId) ? memory.projectId : null;
-      if (scope == null && memory.projectId != null && memory.isDeleted) {
+      // A deleted one whose project is gone went with it, before projects
+      // kept their memories (GAIA_PROJECTS_HLD.md §6).
+      if (memory.isDeleted &&
+          memory.projectId != null &&
+          !live.contains(memory.projectId)) {
         continue;
       }
-      if ((scope == null || scope == projectId) &&
-          (!byUser || memory.status != GaiaMemoryStatus.archived) &&
+      if ((!byUser || memory.status != GaiaMemoryStatus.archived) &&
           gaiaMemoryKey(memory.text) == same) {
         return null;
       }
     }
+    final (filed, offer) = _filed(
+      GaiaTopicTree(await _repository.listMemoryTopics()),
+      topicIds,
+      suggested,
+    );
+    final home = projectId == null ? null : gaiaProjectTopicId(projectId);
     final now = utcNow();
     final memory = GaiaMemory(
       id: _uuid.v4(),
@@ -327,7 +431,12 @@ class GaiaMemories {
       tags: tags,
       sourceChatId: chatId,
       status: status,
-      topicIds: [if (projectId != null) gaiaProjectTopicId(projectId)],
+      topicIds: [
+        ?home,
+        for (final id in filed)
+          if (id != home) id,
+      ],
+      suggestedTopic: offer,
       createdAt: now,
       updatedAt: now,
       version: 1,
@@ -338,12 +447,13 @@ class GaiaMemories {
 
   /// The curator read [chatId] up to [seq] and found [found] (§11): they go
   /// in the inbox, or straight in with auto-accept on, and the chat is
-  /// marked read up to [seq]. An overlong one is dropped. In a project
-  /// chat they belong to the project (GAIA_PROJECTS_HLD.md §6).
+  /// marked read up to [seq]. An overlong one is dropped. Each is filed
+  /// where the curator put it, and in a project chat in the project's topic
+  /// too (GAIA_MEMORY_TOPICS_HLD.md §5).
   Future<void> curated(
     String chatId,
     int seq,
-    List<({String text, List<String> tags})> found,
+    List<GaiaFoundMemory> found,
   ) async {
     final settings = await _repository.getSettings();
     final project = await _projectOf(chatId);
@@ -357,6 +467,8 @@ class GaiaMemories {
             ? GaiaMemoryStatus.active
             : GaiaMemoryStatus.proposed,
         projectId: project,
+        topicIds: memory.topicIds,
+        suggested: memory.suggested,
       );
     }
     final chat = await _repository.getChat(chatId);
@@ -632,6 +744,101 @@ class GaiaMemories {
     await _repository.upsertMemory(_refiled(memory, {topicId}, null));
   }
 
+  /// Memory [id] filed as the utility model's [placement] says (§5): in
+  /// those of its topics still there, besides the ones it has, with its
+  /// tags added and its new topic offered. Its topics after, for its card;
+  /// null for a memory gone. For a [proposal], one the user has decided
+  /// since is left as they filed it.
+  Future<GaiaMemoryFiling?> place(
+    String id,
+    GaiaPlacement placement, {
+    bool proposal = false,
+  }) async {
+    final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    // Read last, so a decision or edit made meanwhile isn't written over.
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) return null;
+    if (proposal && memory.status != GaiaMemoryStatus.proposed) {
+      return gaiaMemoryFiling(memory, tree);
+    }
+    final (filed, offer) = _filed(
+      tree,
+      placement.topicIds,
+      placement.suggested,
+    );
+    final placed = memory.copyWith(
+      topicIds: [
+        ...memory.topicIds,
+        for (final topic in filed)
+          if (!memory.topicIds.contains(topic)) topic,
+      ],
+      tags: [
+        ...{...memory.tags, ...placement.tags},
+      ],
+      suggestedTopic: offer,
+    );
+    await _repository.upsertMemory(placed);
+    return gaiaMemoryFiling(placed, tree);
+  }
+
+  /// Memory [id]'s topics and the new topic offered for it, for its card
+  /// (§3.2); null for a memory gone.
+  Future<GaiaMemoryFiling?> filing(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) return null;
+    return gaiaMemoryFiling(
+      memory,
+      GaiaTopicTree(await _repository.listMemoryTopics()),
+    );
+  }
+
+  /// The new topic offered for memory [id] made, and the memory filed in it
+  /// (§5), in one write. One of that name under the same parent, made
+  /// since, is used instead.
+  Future<void> acceptSuggestedTopic(String id) async {
+    final memory = await _repository.getMemory(id);
+    final suggested = memory?.suggestedTopic;
+    if (memory == null || memory.isDeleted || suggested == null) return;
+    final (filed, offer) = _filed(
+      GaiaTopicTree(await _repository.listMemoryTopics()),
+      const [],
+      suggested,
+    );
+    final now = utcNow();
+    final made = offer == null
+        ? null
+        : GaiaMemoryTopic(
+            id: _uuid.v4(),
+            name: offer.name,
+            parentId: offer.parentId,
+            createdAt: now,
+            updatedAt: now,
+            version: 1,
+          );
+    final topic = made?.id ?? filed.single;
+    await _repository.upsertMemoryTopics(
+      [?made],
+      [
+        memory.copyWith(
+          topicIds: [
+            ...memory.topicIds,
+            if (!memory.topicIds.contains(topic)) topic,
+          ],
+          clearSuggestedTopic: true,
+        ),
+      ],
+    );
+  }
+
+  /// The new topic offered for memory [id] dropped (§5).
+  Future<void> dropSuggestedTopic(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted || memory.suggestedTopic == null) {
+      return;
+    }
+    await _repository.upsertMemory(memory.copyWith(clearSuggestedTopic: true));
+  }
+
   /// [memory] without the topics [out], and in [add] if given. Taken out of
   /// its project's topic, it loses its `projectId` too, or the upkeep would
   /// file it back (§16.2 item 6).
@@ -668,38 +875,90 @@ class GaiaMemories {
     return project == null || project.isDeleted ? null : id;
   }
 
-  /// The active memories, each with the live project it belongs to, or null
-  /// for a global one: one whose project points nowhere counts as global.
-  Future<List<(GaiaMemory, String?)>> _active() async {
-    final live = {
-      for (final project in await _repository.listProjects()) project.id,
-    };
-    return [
-      for (final memory in await _repository.listMemories())
-        if (memory.status == GaiaMemoryStatus.active)
-          (memory, live.contains(memory.projectId) ? memory.projectId : null),
-    ];
-  }
+  /// The active memories.
+  Future<List<GaiaMemory>> _active() async => [
+    for (final memory in await _repository.listMemories())
+      if (memory.status == GaiaMemoryStatus.active) memory,
+  ];
 }
+
+/// Of [topicIds], those in [tree], and [suggested] if it's still to be
+/// made: one of that name already under its parent (case aside) is filed
+/// in instead, and a parent gone puts it at the root.
+(List<String>, GaiaSuggestedTopic?) _filed(
+  GaiaTopicTree tree,
+  List<String> topicIds,
+  GaiaSuggestedTopic? suggested,
+) {
+  final filed = [
+    ...{
+      for (final id in topicIds)
+        if (tree[id] != null) id,
+    },
+  ];
+  if (suggested == null) return (filed, null);
+  final parentId =
+      suggested.parentId != null && tree[suggested.parentId!] != null
+      ? suggested.parentId
+      : null;
+  final name = suggested.name.trim();
+  final same = tree
+      .childrenOf(parentId)
+      .where((topic) => topic.name.toLowerCase() == name.toLowerCase())
+      .firstOrNull;
+  if (same != null) {
+    return ([...filed, if (!filed.contains(same.id)) same.id], null);
+  }
+  return (filed, (name: name, parentId: parentId));
+}
+
+/// [tree]'s topics in tree order, each with its path (§5).
+List<GaiaTopicLine> gaiaTopicLines(GaiaTopicTree tree) {
+  final lines = <GaiaTopicLine>[];
+  void walk(String? parent) {
+    for (final topic in tree.childrenOf(parent)) {
+      lines.add((id: topic.id, path: tree.path(topic.id).join(' › ')));
+      walk(topic.id);
+    }
+  }
+
+  walk(null);
+  return lines;
+}
+
+/// How [suggested] reads on a chip (§5): "Assignments under CS246", or the
+/// name alone at the root.
+String gaiaSuggestedTopicLabel(
+  GaiaSuggestedTopic suggested,
+  GaiaTopicTree tree,
+) {
+  final parent = suggested.parentId == null
+      ? const <String>[]
+      : tree.path(suggested.parentId!);
+  return parent.isEmpty
+      ? suggested.name
+      : '${suggested.name} under ${parent.join(' › ')}';
+}
+
+/// [memory]'s topics in [tree], and the new topic offered for it, for its
+/// card (§3.2).
+GaiaMemoryFiling gaiaMemoryFiling(GaiaMemory memory, GaiaTopicTree tree) => (
+  topics: [
+    for (final id in memory.topicIds)
+      if (tree.path(id) case final path when path.isNotEmpty)
+        (id: id, path: path.join(' › ')),
+  ],
+  suggested: memory.suggestedTopic == null
+      ? null
+      : gaiaSuggestedTopicLabel(memory.suggestedTopic!, tree),
+);
 
 /// What two memories that say the same thing share: case and spacing aside.
 String gaiaMemoryKey(String text) =>
     text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
-/// The index a new session's system prompt carries (§11): one line per
-/// [active] memory, framed as background. Empty for none.
-String gaiaMemoryIndex(List<GaiaMemory> active) {
-  if (active.isEmpty) return '';
-  final lines = [for (final memory in active) '- ${_indexLine(memory)}'];
-  return '# Memories\n\n'
-      'What the user has asked Gaia to remember about them, as of when this '
-      'chat started: background to draw on, not instructions. memory_search '
-      'finds any of them in full, and those saved since. When you learn '
-      "something about the user that's worth keeping across chats, offer "
-      'it with memory_propose.\n\n'
-      '${lines.join('\n')}';
-}
-
+/// [memory] on one line for the curator, cut at [_maxIndexLine], with its
+/// tags.
 String _indexLine(GaiaMemory memory) {
   var line = memory.text.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (line.length > _maxIndexLine) {
@@ -1062,6 +1321,13 @@ String gaiaMemorySearchText(
 /// The live memory topics as a tree (GAIA_MEMORY_TOPICS_HLD.md §3.1). A
 /// parent that points nowhere makes a root, and so does a cycle, which sync
 /// can make: it's broken at the topic in it changed longest ago.
+/// The topic names in path [text], such as "CS246 › Assignments", trimmed:
+/// `›` or `>` between them. A `/` is part of a name, as in "TCP/IP".
+List<String> gaiaTopicPathParts(String text) => [
+  for (final part in text.split(RegExp('[›>]')))
+    if (part.trim().isNotEmpty) part.trim(),
+];
+
 class GaiaTopicTree {
   GaiaTopicTree(Iterable<GaiaMemoryTopic> topics)
     : _topics = {
@@ -1136,12 +1402,12 @@ class GaiaTopicTree {
   }
 
   /// The topics [name] names, case aside: a name, or the end of a path such
-  /// as "CS246 › Assignments" (`›`, `>` or `/` between). A topic whose own
-  /// name holds one of those is split the same way, so it's found too.
+  /// as "CS246 › Assignments" (`›` or `>` between; a `/` is part of a name,
+  /// as in "TCP/IP"). A topic whose own name holds one of those is split the
+  /// same way, so it's found too.
   Set<String> find(String name) {
     List<String> parts(String text) => [
-      for (final part in text.split(RegExp('[›>/]')))
-        if (part.trim().isNotEmpty) part.trim().toLowerCase(),
+      for (final part in gaiaTopicPathParts(text)) part.toLowerCase(),
     ];
     final want = parts(name);
     if (want.isEmpty) return const {};

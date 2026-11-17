@@ -786,10 +786,11 @@ void main() {
         async.flushMicrotasks();
 
         request(async, 'rearm');
-        expect(
-          request(async, 'remember', {'chatId': null, 'text': 'I like tea'}),
-          {'saved': true, 'project': false},
-        );
+        final saved =
+            request(async, 'remember', {'chatId': null, 'text': 'I like tea'})!
+                as Map;
+        expect((saved['saved'], saved['project']), (true, false));
+        expect(saved['memoryId'], isA<String>());
       });
     });
 

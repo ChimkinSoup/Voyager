@@ -75,8 +75,13 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `voyagerWrite {tool, arguments}`
-/// (`add_reminder`, the one write without a card), `memoryIndex` (§11; every
-/// active memory, for the curator), `memoryPrompt` (a new session's pins and
+/// (`add_reminder`, the one write without a card), `curatorContext {text}`
+/// (`{kept, topics}`: the memories nearest a chat's turns and every topic,
+/// for the curator, GAIA_MEMORY_TOPICS_HLD.md §5), `memoryTopics` (every
+/// topic's `{id, path}`), `memoryFiling {memoryId}` and `placedMemory
+/// {memoryId, placement}` (a memory's `{topics, suggested}` for its card,
+/// after the utility model's placement for the latter, §3.2, §5),
+/// `memoryPrompt` (a new session's pins and
 /// topic list, GAIA_MEMORY_TOPICS_HLD.md §4.1), `memoryRecall {chatId, text,
 /// recalled, projectId}` (stage 1's `{picks, candidates, strong}` for a
 /// message, §4.2-§4.4),
@@ -85,7 +90,7 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
 /// `setSummary {chatId, summary, seq}`,
 /// `remember {chatId, projectId?, text, global?, pin?}` (returns `{saved,
-/// project, pinned?}`), `curated {chatId, seq, memories}`, `setSeeScreen
+/// memoryId?, project, pinned?}`), `curated {chatId, seq, memories}`, `setSeeScreen
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
@@ -902,6 +907,29 @@ class GaiaHost {
         )
       : await gaiaSetMemoryCards(repository, chatId, memoryId, state, text);
 
+  /// Memory [memoryId], saying [text], filed by the utility model, which
+  /// only the companion runs: the Gaia page's Suggest
+  /// (GAIA_MEMORY_TOPICS_HLD.md §5). True when it's in a topic or offered
+  /// one after; throws a [GaiaReadException] saying why it couldn't be
+  /// placed.
+  Future<bool> suggestTopics(String memoryId, String text) async {
+    try {
+      await _companionUp();
+      final placed = await _pipe.request('placeMemory', {
+        'memoryId': memoryId,
+        'text': text,
+      });
+      if (placed == null) {
+        throw GaiaReadException("Gaia's utility model couldn't place it.");
+      }
+      return placed == true;
+    } on GaiaRemoteException catch (error) {
+      throw GaiaReadException(error.message);
+    } on GaiaPipeException catch (error) {
+      throw GaiaReadException(error.message);
+    }
+  }
+
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
   /// With [btwId], at that side question.
@@ -1613,8 +1641,29 @@ class GaiaHost {
           latch: true,
         );
         return null;
-      case 'memoryIndex':
-        return await _memories?.index() ?? '';
+      case 'curatorContext':
+        final context = await _memoriesOrThrow().curatorContext(
+          params['text']! as String,
+        );
+        return {
+          'kept': context.kept,
+          'topics': gaiaTopicLinesToJson(context.topics),
+        };
+      case 'memoryTopics':
+        return gaiaTopicLinesToJson(await _memoriesOrThrow().topicLines());
+      case 'memoryFiling':
+        final filing = await _memoriesOrThrow().filing(
+          params['memoryId']! as String,
+        );
+        return filing == null ? null : gaiaMemoryFilingToJson(filing);
+      case 'placedMemory':
+        // Filed by the utility model (GAIA_MEMORY_TOPICS_HLD.md §5).
+        final filing = await _memoriesOrThrow().place(
+          params['memoryId']! as String,
+          gaiaPlacementFromJson(params['placement']),
+          proposal: params['proposal'] == true,
+        );
+        return filing == null ? null : gaiaMemoryFilingToJson(filing);
       case 'memoryPrompt':
         return await _memories?.sessionPrompt() ?? '';
       case 'memoryRecall':
@@ -1651,6 +1700,7 @@ class GaiaHost {
               'memoryId': memory.id,
               'memoryText': memory.text,
               'project': proposed.project,
+              if (proposed.place) 'place': true,
             },
           };
         } on GaiaReadException catch (error) {
@@ -1670,6 +1720,8 @@ class GaiaHost {
             memoryId,
             accept: accept,
             text: params['text'] as String? ?? '',
+            topicIds: (params['topicIds'] as List?)?.cast<String>(),
+            newTopic: params['newTopic'] as bool?,
           );
           // Pinned from its card (GAIA_MEMORY_TOPICS_HLD.md §3.3): refused
           // past the budget, the memory still remembered. Merged into an
@@ -1765,6 +1817,7 @@ class GaiaHost {
           }
           return {
             'saved': saved != null,
+            'memoryId': ?saved?.id,
             'project': project != null,
             'pinFailed': ?pinFailed,
           };
@@ -1777,7 +1830,12 @@ class GaiaHost {
             .curated(params['chatId']! as String, params['seq']! as int, [
               for (final memory in params['memories']! as List)
                 if (memory case {'text': final String text})
-                  (text: text, tags: gaiaMemoryTags(memory['tags'])),
+                  (
+                    text: text,
+                    tags: gaiaMemoryTags(memory['tags']),
+                    topicIds: gaiaTopicIdsFromJson(memory['topicIds']),
+                    suggested: gaiaSuggestedTopicFromJson(memory['suggested']),
+                  ),
             ]);
         return null;
       case 'prepareProposal':

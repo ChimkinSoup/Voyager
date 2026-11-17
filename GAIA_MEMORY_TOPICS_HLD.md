@@ -7,7 +7,9 @@ those that need the phone, a week of real chats, more §11 bursts, or Phase 4 (�
 threshold isn't settled (§18.3). Decisions after the live pass are in §18.4: stage 1 is a
 candidate list only, and without stage 2 recall is left to `memory_search`. **Phase 4 (the
 Memories tab tree) built 2026-11-16** (§20): tested, and checked live off-screen except for
-drags and what §20.5 lists. Phases 5-6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+drags and what §20.5 lists. **Phase 5 (placement on capture, suggested topics, the curator's
+smaller input) built 2026-11-16** (§21): tested, and placement and the curator checked
+with the real utility model off-screen. The on-screen checks are in §21.4. Phase 6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -494,7 +496,8 @@ desktop variant under the memory watchdog.
 5. **Refusing cycles on re-parent** (§3.1) waits for Phase 4, which adds the first re-parent
    operation. Readers already break cycles.
 6. **The duplicate check keeps its project walls** (`save`, `sameActive`) until Phase 5 (§5).
-7. **`memory_search` paths** accept `›`, `>` or `/` between names. With only `topic`, it lists
+7. **`memory_search` paths** accept `›` or `>` between names; a `/` is part of a name, as in
+   "TCP/IP" (changed in Phase 5's review). With only `topic`, it lists
    that topic's memories and its subtopics', newest first, capped at 20.
 8. **The project trash kind** still lists memories as children, so a project deleted before
    this build restores the memories that were trashed with it.
@@ -1138,3 +1141,134 @@ second account or a real agent turn. Run them with §19's list.
 - **Restore from Settings → Trash** of a deleted topic: it comes back under its old parent,
   with no memories.
 
+## 21. Phase 5 build notes (2026-11-16)
+
+### 21.1 What was built
+
+- **Placement (§5):** a new utility job, `GaiaUtility.place`, gets the memory's text and every
+  topic as `id · path`, and answers with the existing topics it goes in (at most 3), a new
+  topic if none fits well (`{name, parent}`), and up to 3 tags. `GaiaMemories.place` files the
+  memory in those topics that are still there, beside the ones it has, merges the tags and
+  keeps the new topic as `suggestedTopic`.
+- **When it runs:** after `/remember` saves a new memory, after `memory_propose` saves one
+  with no `topics` named, and from the Gaia page's **Suggest topics** button. Until it
+  returns, the memory is in Unsorted, or in its project's topic.
+- **`memory_propose` takes `topics`** (names or paths, from the system prompt's list). Each
+  one found is filed in. The first one not found is offered as a new topic, under the topic
+  its path names if that's there. `scope: "global"` now only means "not in the project's
+  topic", and the tool's description says so.
+- **The curator** gets the topic list and returns `topics` and `new` in each item, so what it
+  finds is filed as it's saved. In place of the whole index it's shown stage 1's top 40
+  memories for the transcript (pinned ones included), so its input doesn't grow with the
+  number of memories. The `memoryIndex` pipe request and `gaiaMemoryIndex` are gone.
+- **Suggested topics in the inbox and on the tab:** a memory with a topic offered shows a
+  "+ New topic: Assignments under CS246" chip on its row. Clicking it makes the topic and
+  files the memory there, in one write; its × drops the offer.
+- **The companion's memory card** shows the memory's topics as chips, each with ×, the new
+  topic offered (click to take it, × to drop it), and a "+ Topic" menu of the other topics.
+  Edits go with Remember.
+- **Duplicate checks without project walls (§5, §15.2 item 6, §20.2 item 6):** `save`,
+  `sameActive` and the Memories tab's checks see every memory. A memory says the same as
+  another if their text matches, whichever projects or topics they're in.
+
+### 21.2 Decisions made while building
+
+1. **Placement runs in the companion,** since only it has the utility model. `/remember` and
+   `memory_propose` start it after the save and don't wait for it. The page's Suggest asks the
+   companion over the pipe, starting it if it isn't running, so the button is desktop only.
+2. **Placement also gives tags,** aimed at §18.4's word-mismatch misses: words someone might
+   use when the memory matters that aren't in its text ("shots" for a vaccine booster). They're
+   merged into the memory's tags, which stage 1 matches on.
+3. **Placement only adds.** It never takes a memory out of a topic, so the project's topic and
+   anything you filed stay.
+4. **A name that fits several topics** (`memory_propose`'s "Assignments") picks one in the
+   chat's project first, otherwise the first by path. With `topics` named, nothing is left to
+   the utility model, even when none of them was found.
+5. **An offered topic that's already there is used.** If its parent already has a topic of
+   that name (case aside), the memory is filed there and nothing is offered. This is checked
+   on save, on placement and on accept, so accepting the same offer on two memories makes one
+   topic. Two devices accepting at the same moment can still make two. That's accepted; the
+   duplicate can be deleted.
+6. **An offer stays until you decide it.** A memory remembered from its card with the offer
+   left alone keeps it, and the chip on the Memories tab still shows it.
+7. **The card sends topics only if you changed them.** Otherwise the memory keeps what it has,
+   so an edit made on the page meanwhile isn't overwritten. The card asks for its topics when
+   it first shows, and isn't updated by later page edits. Removing the project's topic on the
+   card clears `projectId`, as the tab does (§16.2 item 6).
+8. **Suggest topics** shows only on an Unsorted memory with no offer waiting. A memory that
+   already has topics can be moved by hand, and Phase 6's Sort these covers the rest.
+9. **The topic list sent to the utility model isn't capped.** It grows with topics, not
+   memories. If it ever gets long, cut it as §4.1 does.
+10. **One case still skips the duplicate check:** a deleted memory whose project is gone. Those
+    were trashed with their project before projects kept their memories, so they weren't set
+    aside by you.
+
+### 21.3 How it was checked
+
+- **Unit tests:** `gaia_utility_test` (the placement answer's parser, the job's input, a bad
+  answer as null, the curator given topics and filing its finds); `gaia_memory_topics_test`,
+  "placement on capture" (the topic list in tree order, `memory_propose` with topics named,
+  a name fitting several, an offer that names an existing topic, placement adding topics and
+  tags, the card's filing, accepting and dropping an offer, a second memory accepting the
+  same name, a card remembered with edited topics clearing `projectId`, the curator's 40
+  nearest with pins and its filing); `gaia_memories_test` updated for the curator's list and
+  duplicates with no walls; `gaia_host_test` for `remember`'s `memoryId`.
+- **Controller tests** ("placement on capture"): `/remember` filed with tags and an offer, a
+  repeat not placed again, the page's Suggest through `placeMemory`; `memory_propose` with no
+  topics placed and its card showing where, with topics named not placed, and the card's edits
+  and taken offer going with Remember; the curator shown the nearest memories and the topics,
+  and its find filed where it said.
+- **Widget tests:** the card's chips, taking and dropping the offer, and "+ Topic" offering only
+  topics it isn't in (`gaia_memory_card_test`); a row's offer chip making the topic, its ×
+  dropping it, and Suggest only on an Unsorted row (`gaia_memory_tree_test`, Windows variant,
+  under a memory watchdog).
+- **Full `flutter test`** (3 GB watchdog): 7,258 passed, 42 skipped and 3 failures. Two are
+  `heat_watch_section_test` and `media_image_small_placeholder_test`, which pass on their own,
+  as in §15.3 to §20.3. The third, `photo_series_page_test` "compare: a quick pick never lands
+  on B", fails on its own too. It imports nothing this phase touched, so it's a separate
+  problem and isn't fixed here. The Gaia controller tests were run again after a last change:
+  all passed.
+- **Live, off-screen, 2026-11-16:** a throwaway test (not kept) ran the real utility model
+  (Haiku, on Juno's default Claude account) over an in-memory store with 12 topics. Results:
+  - **Placement:** all 8 answers were valid JSON. Each memory went into the right topic (the
+    vaccine into Pets, the A5 into CS246 › Assignments, the vault into Obsidian), with no new
+    topic offered, since one always fit. Each took 1.7 to 2.8 s, from a cold start.
+  - **Tags:** "vet, shots, rabies" for the vaccine booster.
+  - **§18.4's word-mismatch misses, again:** "when is Biscuit due for shots" now has the
+    vaccine memory as its top candidate. It needed the "shots" tag: the memory's own text
+    says "vaccine booster". "I've been sleeping badly" still finds nothing in stage 1, even
+    with a "sleep" tag. Stage 1 drops only a plural `s`, so "sleeping" doesn't match "sleep"
+    (§16.2 item 4). A light stemmer for -ing and -ed would close that gap, and it isn't done
+    here. Neither message's top candidate counts as strong.
+  - **The curator:** for a chat about a sister moving to Lisbon who is vegetarian, it was shown
+    the one memory nearest the turns (the peanut allergy) and filed both of its finds: Family
+    and Food. It took 3.8 s.
+
+### 21.4 Live checks still to do for Phase 5
+
+Skipped because they need the app on the screen, a real agent turn, the phone, or a second
+device. Run them with §20.5's list, in `gaiaqa` with real Haiku.
+
+- **`/remember` live:** the toast, then within a few seconds the memory is filed (Memories tab,
+  and a `[gaia] memory placement:` log line), with its tags and any offer chip.
+- **A real `memory_propose` turn, on Claude Code and Codex:** does the agent pass `topics` from
+  the system prompt's list? With none, the card's chips fill in once placement returns (the
+  card was open before it did). Take, drop and leave the offer, edit the chips, use "+ Topic",
+  then Remember, and check the memory on the tab each time.
+- **The card's look:** the chips under the editor, the "+ Topic" menu's position, a long path
+  cut off, the card in a narrow companion.
+- **The curator live:** on real chats in `gaiaqa` (300 memories), what it files where, and how
+  often it offers new topics. Check its input size in the log against the old index.
+- **The Memories tab:** the offer chip on inbox and remembered rows, clicking it and its ×;
+  Suggest on an Unsorted memory with the companion running, and with it not running (it should
+  start hidden, not show a window).
+- **The phone:** the offer chip shows and can be accepted or dropped; no Suggest button.
+- **Two devices:** an offer accepted on one device reaches the other with its topic. Accepting
+  the same offer on both at once makes two topics (§21.2 item 5): confirm, and that deleting
+  one is clean.
+- **Duplicates without walls:** in a project chat, `/remember` text already saved in another
+  project says "Already remembered".
+- **§18.4's word-mismatch misses in `gaiaqa`:** place the 290 seeded memories (Phase 6's Sort
+  these, or a burst by eval), then run §18.3's misses with stage 2 on: "when is Biscuit due for
+  shots" and "I've been sleeping badly". The vaccine one now
+  reaches stage 1 in the off-screen probe (§21.3). Also decide whether to stem -ing and -ed.

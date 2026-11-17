@@ -114,9 +114,84 @@ void main() {
 
   test('the curator keeps the newest turns of a long transcript', () async {
     final runner = FakeUtilityRunner((_) => '[]');
-    await GaiaUtility(runner).curate('first ${'x' * 200000} newest', '');
+    await GaiaUtility(
+      runner,
+    ).curate('first ${'x' * 200000} newest', '', const []);
     expect(runner.inputs.single, contains('newest'));
     expect(runner.inputs.single, isNot(contains('first')));
+  });
+
+  group('placement (GAIA_MEMORY_TOPICS_HLD.md §5)', () {
+    const topics = [
+      (id: 't1', path: 'University'),
+      (id: 't2', path: 'University › CS246'),
+      (id: 't3', path: 'Pets'),
+    ];
+
+    test('the answer: known topics only, at most 3, once each; a new topic '
+        'under a known parent or at the root; tags as kept', () {
+      final placed = parsePlacementAnswer(
+        'Sure: {"topics": ["t2", "nope", "t2", "t1", "t3", 4], '
+        '"new": {"name": " Assignments ", "parent": "t2"}, '
+        '"tags": ["#Homework", "C++", "a", "b"]}',
+        topics,
+      );
+      expect(placed.topicIds, ['t2', 't1', 't3']);
+      expect(placed.suggested, (name: 'Assignments', parentId: 't2'));
+      expect(placed.tags, ['homework', 'c++', 'a']);
+      expect(
+        parsePlacementAnswer(
+          '{"topics": [], "new": {"name": "Vet", "parent": "gone"}}',
+          topics,
+        ).suggested,
+        (name: 'Vet', parentId: null),
+      );
+      final plain = parsePlacementAnswer(
+        '{"topics": ["t3"], "new": null}',
+        topics,
+      );
+      expect(plain.topicIds, ['t3']);
+      expect(plain.suggested, isNull);
+      expect(plain.tags, isEmpty);
+      expect(
+        () => parsePlacementAnswer('No idea.', topics),
+        throwsFormatException,
+      );
+    });
+
+    test("the job sends the memory and every topic by id and path; a bad "
+        'answer gives null', () async {
+      final runner = FakeUtilityRunner(
+        (_) => '{"topics": ["t3"], "tags": ["shots"]}',
+      );
+      final placed = await GaiaUtility(
+        runner,
+      ).place("Biscuit's booster is due in May", topics);
+      expect(placed?.topicIds, ['t3']);
+      expect(placed?.tags, ['shots']);
+      expect(runner.inputs.single, contains("Fact: Biscuit's booster"));
+      expect(runner.inputs.single, contains('t2 · University › CS246'));
+      expect(
+        await GaiaUtility(FakeUtilityRunner((_) => 'no')).place('x', topics),
+        isNull,
+      );
+    });
+
+    test("the curator gets the topics, files each find in those it knows, "
+        'and offers a new one', () async {
+      final runner = FakeUtilityRunner(
+        (_) =>
+            '[{"text": "Uses valgrind", "tags": ["c"], "topics": ["t2", '
+            '"x"], "new": {"name": "Tools", "parent": "t2"}}]',
+      );
+      final found = await GaiaUtility(
+        runner,
+      ).curate('turns', '- Likes tea', topics);
+      expect(found!.single.topicIds, ['t2']);
+      expect(found.single.suggested, (name: 'Tools', parentId: 't2'));
+      expect(runner.inputs.single, contains('t3 · Pets'));
+      expect(runner.inputs.single, contains('- Likes tea'));
+    });
   });
 
   group('router and titles', () {

@@ -14,9 +14,14 @@ const _titleTimeout = Duration(seconds: 15);
 const _summaryTimeout = Duration(seconds: 30);
 const _captionTimeout = Duration(seconds: 30);
 const _curateTimeout = Duration(seconds: 60);
+const _placeTimeout = Duration(seconds: 30);
 
-/// A memory the curator found (§11).
-typedef GaiaFoundMemory = ({String text, List<String> tags});
+/// What the placement and curator jobs say about the topics.
+const _placementRules =
+    'Pick the existing topics it belongs in, at most 3, usually 1, or none '
+    'when none fits. Only when none fits well, offer one new topic, with a '
+    'short name, under the existing topic it would belong in or at the '
+    'root (parent null).';
 
 /// Gaia's small internal jobs on the utility model (GAIA_HLD.md §5.1): the
 /// tier router, chat titles, handoff summaries and image captions, and the
@@ -255,10 +260,44 @@ class GaiaUtility {
     }
   }
 
+  /// Where memory [text] is filed (GAIA_MEMORY_TOPICS_HLD.md §5): which of
+  /// [topics] it goes in, a new topic if none fits, and tags to match it by.
+  /// Null when it failed, so it stays where it is.
+  Future<GaiaPlacement?> place(String text, List<GaiaTopicLine> topics) async {
+    try {
+      final answer = await _runner.generate(
+        'File a fact about the user, kept by their assistant Gaia, under '
+            'the topics listed in <input>. $_placementRules Also give up to '
+            '3 tags: one-word keywords someone might use when this fact '
+            "matters that aren't among its own words (for \"Biscuit's "
+            'vaccine booster is due in May": vet, shots).\n\n'
+            'Reply with only a JSON object: {"topics": ["<id>"], "new": null '
+            'or {"name": "...", "parent": "<id>" or null}, "tags": ["..."]}.',
+        'Fact: ${_clip(text, 1000)}\n\n${_topicLines(topics)}',
+        timeout: _placeTimeout,
+      );
+      final placement = parsePlacementAnswer(answer, topics);
+      debugPrint(
+        '[gaia] memory placement: ${placement.topicIds.length} topics'
+        '${placement.suggested == null ? '' : ', new "${placement.suggested!.name}"'}',
+      );
+      return placement;
+    } catch (error) {
+      debugPrint('[gaia] memory placement: $error');
+      return null;
+    }
+  }
+
   /// At most three memories worth keeping from a chat's new turns in
-  /// [transcript], none of them in [index], the memories already kept
-  /// (§11); null when it failed, so the turns are read again next time.
-  Future<List<GaiaFoundMemory>?> curate(String transcript, String index) async {
+  /// [transcript], none of them among [kept], the memories already kept
+  /// that are nearest to it (§11), each filed in [topics]
+  /// (GAIA_MEMORY_TOPICS_HLD.md §5); null when it failed, so the turns are
+  /// read again next time.
+  Future<List<GaiaFoundMemory>?> curate(
+    String transcript,
+    String kept,
+    List<GaiaTopicLine> topics,
+  ) async {
     try {
       final answer = await _runner.generate(
         'You keep a short list of lasting facts about the user for '
@@ -275,13 +314,18 @@ class GaiaUtility {
             'sentence under 200 characters that makes sense on its own, '
             'in the first person as the user would put it ("I prefer '
             'metric units", "My sister lives in Lisbon"), the tags one or '
-            'two one-word topics.',
-        'Memories kept:\n${index.trim().isEmpty ? '(none)' : index}\n\n'
+            'two one-word topics.\n\n'
+            'File each under the topics listed. $_placementRules Give them '
+            'as "topics": ["<id>"] and "new": null or {"name": "...", '
+            '"parent": "<id>" or null} in its item.',
+        'Memories kept that may overlap:\n'
+            '${kept.trim().isEmpty ? '(none)' : kept}\n\n'
+            '${_topicLines(topics)}\n\n'
             // The newest kept: the chat is marked read up to its last.
             'New turns:\n${transcript.length <= 100000 ? transcript : transcript.substring(transcript.length - 100000)}',
         timeout: _curateTimeout,
       );
-      return parseCuratorAnswer(answer);
+      return parseCuratorAnswer(answer, topics);
     } catch (error) {
       debugPrint('[gaia] curator: $error');
       return null;
@@ -290,6 +334,9 @@ class GaiaUtility {
 
   static String _clip(String text, int max) =>
       text.length <= max ? text : text.substring(0, max);
+
+  static String _topicLines(List<GaiaTopicLine> topics) =>
+      'Topics (id · path):\n${topics.isEmpty ? '(none yet)' : [for (final topic in topics) '${topic.id} · ${topic.path}'].join('\n')}';
 }
 
 /// The tier a router answer names; null when it names none.
@@ -305,9 +352,13 @@ GaiaTier? parseRoute(String answer) {
 }
 
 /// The memories in a curator [answer]: its JSON array, wherever it is in
-/// the text, at most three. Throws a [FormatException] when there's none.
+/// the text, at most three, each filed in those of [topics] it names.
+/// Throws a [FormatException] when there's none.
 @visibleForTesting
-List<GaiaFoundMemory> parseCuratorAnswer(String answer) {
+List<GaiaFoundMemory> parseCuratorAnswer(
+  String answer, [
+  List<GaiaTopicLine> topics = const [],
+]) {
   final start = answer.indexOf('[');
   final end = answer.lastIndexOf(']');
   if (start < 0 || end < start) {
@@ -318,15 +369,65 @@ List<GaiaFoundMemory> parseCuratorAnswer(String answer) {
   return [
     for (final item in list)
       if (item case {'text': final String text} when text.trim().isNotEmpty)
-        (
-          text: text.trim(),
-          tags: [
-            if (item['tags'] case final List tags)
-              for (final tag in tags)
-                if (tag is String) tag,
-          ],
-        ),
+        if (_placementOf(item, topics) case final placement)
+          (
+            text: text.trim(),
+            tags: [
+              if (item['tags'] case final List tags)
+                for (final tag in tags)
+                  if (tag is String) tag,
+            ],
+            topicIds: placement.topicIds,
+            suggested: placement.suggested,
+          ),
   ].take(3).toList();
+}
+
+/// Where a placement [answer] files a memory (GAIA_MEMORY_TOPICS_HLD.md
+/// §5): its JSON object, wherever it is in the text. Throws a
+/// [FormatException] when there's none.
+@visibleForTesting
+GaiaPlacement parsePlacementAnswer(String answer, List<GaiaTopicLine> topics) {
+  final start = answer.indexOf('{');
+  final end = answer.lastIndexOf('}');
+  if (start < 0 || end < start) {
+    throw FormatException('no JSON object', answer);
+  }
+  final json = jsonDecode(answer.substring(start, end + 1));
+  if (json is! Map) throw FormatException('not a JSON object', answer);
+  return _placementOf(json, topics);
+}
+
+/// The topics and new topic [json] names, only those of [topics] it
+/// knows, at most 3; its tags too.
+GaiaPlacement _placementOf(
+  Map<Object?, Object?> json,
+  List<GaiaTopicLine> topics,
+) {
+  final known = {for (final topic in topics) topic.id};
+  final suggested = switch (json['new']) {
+    {'name': final String name} when name.trim().isNotEmpty => (
+      name: name.trim().length <= 60
+          ? name.trim()
+          : name.trim().substring(0, 60).trim(),
+      parentId: switch (json['new']) {
+        {'parent': final String parent} when known.contains(parent) => parent,
+        _ => null,
+      },
+    ),
+    _ => null,
+  };
+  return (
+    topicIds: [
+      ...{
+        if (json['topics'] case final List ids)
+          for (final id in ids)
+            if (id is String && known.contains(id)) id,
+      },
+    ].take(3).toList(),
+    suggested: suggested,
+    tags: gaiaMemoryTags(json['tags']).take(3).toList(),
+  );
 }
 
 /// The [candidates] a recall [answer] picks (GAIA_MEMORY_TOPICS_HLD.md

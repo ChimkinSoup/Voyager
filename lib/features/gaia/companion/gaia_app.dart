@@ -4016,6 +4016,10 @@ class _MessageView extends StatelessWidget {
                 memory: part,
                 text: controller.memoryText(part),
                 onEdit: (text) => controller.editMemory(part, text),
+                filing: controller.memoryFiling(part),
+                onTopics: (topics) => controller.editMemoryTopics(part, topics),
+                onNewTopic: (take) => controller.takeNewTopic(part, take),
+                topicChoices: controller.memoryTopics,
                 onRemember: (pin) => controller.decideMemory(
                   message,
                   part,

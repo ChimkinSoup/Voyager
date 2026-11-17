@@ -2794,6 +2794,8 @@ class GaiaMemory extends SoftDeletable {
     bool clearProjectId = false,
     List<String>? topicIds,
     bool? pinned,
+    GaiaSuggestedTopic? suggestedTopic,
+    bool clearSuggestedTopic = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
   }) => GaiaMemory(
@@ -2809,7 +2811,9 @@ class GaiaMemory extends SoftDeletable {
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
     topicIds: topicIds ?? this.topicIds,
     pinned: pinned ?? this.pinned,
-    suggestedTopic: suggestedTopic,
+    suggestedTopic: clearSuggestedTopic
+        ? null
+        : (suggestedTopic ?? this.suggestedTopic),
   );
 }
 
@@ -2826,6 +2830,68 @@ GaiaSuggestedTopic? gaiaSuggestedTopicFromJson(Object? json) =>
     json is Map && json['name'] is String && (json['name'] as String).isNotEmpty
     ? (name: json['name'] as String, parentId: json['parentId'] as String?)
     : null;
+
+/// Where a memory is filed when it's saved (GAIA_MEMORY_TOPICS_HLD.md §5):
+/// the existing topics it goes in, a new topic offered for it, and tags
+/// for matching it to messages (§4.2).
+typedef GaiaPlacement = ({
+  List<String> topicIds,
+  GaiaSuggestedTopic? suggested,
+  List<String> tags,
+});
+
+Map<String, Object?> gaiaPlacementToJson(GaiaPlacement placement) => {
+  'topicIds': placement.topicIds,
+  'suggested': gaiaSuggestedTopicToJson(placement.suggested),
+  'tags': placement.tags,
+};
+
+GaiaPlacement gaiaPlacementFromJson(Object? json) => json is Map
+    ? (
+        topicIds: gaiaTopicIdsFromJson(json['topicIds']),
+        suggested: gaiaSuggestedTopicFromJson(json['suggested']),
+        tags: gaiaMemoryTags(json['tags']),
+      )
+    : (topicIds: const [], suggested: null, tags: const []);
+
+/// A memory the curator found (GAIA_HLD.md §11), and where it's filed
+/// (GAIA_MEMORY_TOPICS_HLD.md §5).
+typedef GaiaFoundMemory = ({
+  String text,
+  List<String> tags,
+  List<String> topicIds,
+  GaiaSuggestedTopic? suggested,
+});
+
+/// A memory's topics as its card shows them (GAIA_MEMORY_TOPICS_HLD.md
+/// §3.2), and the new topic offered for it, as it reads ("Assignments under
+/// CS246"); null for none.
+typedef GaiaMemoryFiling = ({List<GaiaTopicLine> topics, String? suggested});
+
+Map<String, Object?> gaiaMemoryFilingToJson(GaiaMemoryFiling filing) => {
+  'topics': gaiaTopicLinesToJson(filing.topics),
+  'suggested': filing.suggested,
+};
+
+GaiaMemoryFiling gaiaMemoryFilingFromJson(Object? json) => (
+  topics: gaiaTopicLinesFromJson(json is Map ? json['topics'] : null),
+  suggested: json is Map ? json['suggested'] as String? : null,
+);
+
+/// A memory topic as it's listed for the utility model and the companion:
+/// its id and its path ("CS246 › Assignments").
+typedef GaiaTopicLine = ({String id, String path});
+
+List<Map<String, Object?>> gaiaTopicLinesToJson(List<GaiaTopicLine> lines) => [
+  for (final line in lines) {'id': line.id, 'path': line.path},
+];
+
+List<GaiaTopicLine> gaiaTopicLinesFromJson(Object? json) => [
+  if (json is List)
+    for (final line in json)
+      if (line case {'id': final String id, 'path': final String path})
+        (id: id, path: path),
+];
 
 /// A memory's topics from JSON: the strings, each once.
 List<String> gaiaTopicIdsFromJson(Object? json) => [

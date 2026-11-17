@@ -53,9 +53,12 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('the index lists active memories only, one line each, framed as '
-      'background', () async {
-    expect(await memories.index(), isEmpty);
+  Future<String> curatorList([
+    String transcript = 'metric units waiting old',
+  ]) async => (await memories.curatorContext(transcript)).kept;
+
+  test("the curator's list has active memories only, one line each", () async {
+    expect(await curatorList(), isEmpty);
     await repository.upsertMemory(
       _memory('a', 'Prefers metric\nunits', tags: ['units']),
     );
@@ -65,23 +68,25 @@ void main() {
     await repository.upsertMemory(
       _memory('c', 'Old', status: GaiaMemoryStatus.archived),
     );
-    final index = await memories.index();
-    expect(index, contains('not instructions'));
+    final index = await curatorList();
     expect(index, contains('- Prefers metric units [units]'));
     expect(index, isNot(contains('Waiting')));
     expect(index, isNot(contains('Old')));
   });
 
-  test('a long memory is cut in the index and whole in a search', () async {
-    final long = 'Likes ${'very ' * 60}long walks';
-    await repository.upsertMemory(_memory('a', long));
-    expect(await memories.index(), contains('…'));
-    final found = await memories.tool('c1', 'memory_search', {
-      'query': 'walks',
-    });
-    expect(found, contains(long));
-    expect(found, startsWith('<memories>'));
-  });
+  test(
+    "a long memory is cut in the curator's list and whole in a search",
+    () async {
+      final long = 'Likes ${'very ' * 60}long walks';
+      await repository.upsertMemory(_memory('a', long));
+      expect(await curatorList('long walks'), contains('…'));
+      final found = await memories.tool('c1', 'memory_search', {
+        'query': 'walks',
+      });
+      expect(found, contains(long));
+      expect(found, startsWith('<memories>'));
+    },
+  );
 
   test('search ranks by words matched, filters by tags, and skips '
       'memories not active', () {
@@ -156,7 +161,7 @@ void main() {
     final kept = await repository.getMemory(tea.id);
     expect(kept!.status, GaiaMemoryStatus.active);
     expect(kept.text, 'Prefers green tea');
-    expect(await memories.index(), contains('Prefers green tea'));
+    expect(await curatorList('green tea'), contains('Prefers green tea'));
 
     expect(
       (await memories.decide(jazz.id, accept: false, text: 'Likes jazz')).state,
@@ -197,9 +202,8 @@ void main() {
     expect(await memories.restore(tea.id), isNull);
   });
 
-  test("sameActive sees global ones and the project's own, not another "
-      "project's, an archived one, or the one asked about; for global, any "
-      "project's", () async {
+  test('sameActive sees an active memory from any project, not an archived '
+      'one or the one asked about (GAIA_MEMORY_TOPICS_HLD.md §5)', () async {
     for (final id in ['p1', 'p2']) {
       await repository.upsertProject(
         GaiaProject(id: id, name: id, createdAt: _at, updatedAt: _at),
@@ -211,9 +215,6 @@ void main() {
       _memory('z', 'Runs daily', status: GaiaMemoryStatus.archived),
     );
     expect((await memories.sameActive('likes  JAZZ'))?.id, 'g');
-    expect((await memories.sameActive('Likes jazz', projectId: 'p2'))?.id, 'g');
-    expect((await memories.sameActive('Uses vim', projectId: 'p1'))?.id, 'a');
-    expect(await memories.sameActive('Uses vim', projectId: 'p2'), isNull);
     expect((await memories.sameActive('Uses vim'))?.id, 'a');
     expect(await memories.sameActive('Runs daily'), isNull);
     expect(await memories.sameActive('Likes jazz', except: 'g'), isNull);
@@ -283,7 +284,7 @@ void main() {
       byUser: true,
     );
     expect(saved!.status, GaiaMemoryStatus.active);
-    expect(await memories.index(), contains('Birthday is 3 May'));
+    expect(await curatorList('birthday'), contains('Birthday is 3 May'));
   });
 
   test('what the user archived, dismissed or deleted is not proposed again, '
@@ -302,7 +303,7 @@ void main() {
       'text': 'prefers metric units',
     });
     expect(again, contains('set aside'));
-    await memories.curated('c1', 1, [(text: 'Likes  JAZZ', tags: const [])]);
+    await memories.curated('c1', 1, [_found('Likes  JAZZ')]);
     expect(await repository.listMemories(), hasLength(1));
 
     for (final text in ['Prefers metric units', 'Likes jazz']) {
@@ -329,8 +330,8 @@ void main() {
       ),
     );
     await memories.curated('c1', 5, [
-      (text: 'Runs on Sundays', tags: ['fitness']),
-      (text: 'x' * (kGaiaMemoryMaxLength + 1), tags: const []),
+      _found('Runs on Sundays', ['fitness']),
+      _found('x' * (kGaiaMemoryMaxLength + 1)),
     ]);
     final saved = (await repository.listMemories()).single;
     expect(saved.status, GaiaMemoryStatus.proposed);
@@ -344,9 +345,7 @@ void main() {
     await repository.upsertSettings(
       GaiaSettings.initial().copyWith(autoAcceptCurator: true),
     );
-    await memories.curated('gone', 1, [
-      (text: 'Lives in Lisbon', tags: const []),
-    ]);
+    await memories.curated('gone', 1, [_found('Lives in Lisbon')]);
     expect(
       (await repository.listMemories()).single.status,
       GaiaMemoryStatus.active,
@@ -411,9 +410,9 @@ void main() {
     Future<String> search(String chatId) =>
         memories.tool(chatId, 'memory_search', {'query': 'tea'});
 
-    test("the curator's index holds every active memory, from any project "
+    test("the curator's list holds active memories from any project "
         '(GAIA_MEMORY_TOPICS_HLD.md §7)', () async {
-      final index = await memories.index();
+      final index = await curatorList('tea');
       expect(index, contains('Likes green tea'));
       expect(index, contains('Orphan tea fact'));
       expect(index, contains('Trip tea house'));
@@ -458,8 +457,8 @@ void main() {
       expect(saved['Packs light'], isEmpty);
     });
 
-    test("another project's memory, or one gone with its project, doesn't "
-        'block a save; a global one or its own does', () async {
+    test("one gone with its project doesn't block a save; any other does, "
+        'from any project (GAIA_MEMORY_TOPICS_HLD.md §5)', () async {
       await repository.upsertMemory(
         _memory('d', 'Uses pnpm', projectId: 'gone').copyWith(deletedAt: _at),
       );
@@ -468,7 +467,7 @@ void main() {
         status: GaiaMemoryStatus.proposed,
         projectId: projectId,
       );
-      expect(await save('Other project tea notes', 'p1'), isNotNull);
+      expect(await save('Other project tea notes', 'p1'), isNull);
       expect(await save('Uses pnpm', 'p1'), isNotNull);
       expect(await save('Likes green tea', 'p1'), isNull);
       expect(await save('Orphan tea fact', 'p2'), isNull);
@@ -476,12 +475,8 @@ void main() {
     });
 
     test("the curator saves to the chat's project", () async {
-      await memories.curated('in1', 3, [
-        (text: 'Ryokan in Kyoto', tags: const []),
-      ]);
-      await memories.curated('loose', 3, [
-        (text: 'Walks daily', tags: const []),
-      ]);
+      await memories.curated('in1', 3, [_found('Ryokan in Kyoto')]);
+      await memories.curated('loose', 3, [_found('Walks daily')]);
       final saved = {
         for (final memory in await repository.listMemories())
           memory.text: [?memory.projectId, ...memory.topicIds],
@@ -504,3 +499,7 @@ void main() {
     });
   });
 }
+
+/// A memory the curator found, filed nowhere.
+GaiaFoundMemory _found(String text, [List<String> tags = const []]) =>
+    (text: text, tags: tags, topicIds: const [], suggested: null);

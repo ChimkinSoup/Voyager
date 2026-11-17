@@ -79,6 +79,9 @@ class _Main {
   final recallTexts = <String>[];
   final openedMemories = <String>[];
 
+  /// The memories each curator read was shown as kept already.
+  final curatorKept = <String>[];
+
   /// The companion's events, as `event` or `event {params}`.
   final events = <(String, Map<String, Object?>)>[];
   late FakeGaiaPipe companion;
@@ -301,8 +304,27 @@ class _Main {
       case 'voyagerRead':
         reads.add(params['tool']! as String);
         return 'read ${params['tool']}';
-      case 'memoryIndex':
-        return memories.index();
+      case 'curatorContext':
+        final context = await memories.curatorContext(
+          params['text']! as String,
+        );
+        curatorKept.add(context.kept);
+        return {
+          'kept': context.kept,
+          'topics': gaiaTopicLinesToJson(context.topics),
+        };
+      case 'memoryTopics':
+        return gaiaTopicLinesToJson(await memories.topicLines());
+      case 'memoryFiling':
+        final filing = await memories.filing(params['memoryId']! as String);
+        return filing == null ? null : gaiaMemoryFilingToJson(filing);
+      case 'placedMemory':
+        final filing = await memories.place(
+          params['memoryId']! as String,
+          gaiaPlacementFromJson(params['placement']),
+          proposal: params['proposal'] == true,
+        );
+        return filing == null ? null : gaiaMemoryFilingToJson(filing);
       case 'memoryPrompt':
         return memories.sessionPrompt();
       case 'memoryRecall':
@@ -344,6 +366,7 @@ class _Main {
         }
         return {
           'saved': saved != null,
+          'memoryId': ?saved?.id,
           'project': project != null,
           'pinFailed': ?pinFailed,
         };
@@ -358,6 +381,7 @@ class _Main {
             'memoryId': memory.id,
             'memoryText': memory.text,
             'project': proposed.project,
+            if (proposed.place) 'place': true,
           },
         };
       case 'decideMemory':
@@ -365,6 +389,8 @@ class _Main {
           params['memoryId']! as String,
           accept: params['accept'] == true,
           text: params['text'] as String? ?? '',
+          topicIds: (params['topicIds'] as List?)?.cast<String>(),
+          newTopic: params['newTopic'] as bool?,
         );
         if (params['pin'] == true && decided.state == GaiaCardState.accepted) {
           await memories.pin(decided.id, pinned: true);
@@ -393,6 +419,8 @@ class _Main {
                 (
                   text: (memory as Map)['text']! as String,
                   tags: gaiaMemoryTags(memory['tags']),
+                  topicIds: gaiaTopicIdsFromJson(memory['topicIds']),
+                  suggested: gaiaSuggestedTopicFromJson(memory['suggested']),
                 ),
             ]);
         return null;
@@ -4001,6 +4029,157 @@ void main() {
       main.pipe.notify('settings', {'gaiaMd': 'Be briefer.'});
       await settle();
       expect(runner.instructions, ['Be brief.', 'Be briefer.']);
+    });
+  });
+
+  group('placement on capture (GAIA_MEMORY_TOPICS_HLD.md §5)', () {
+    late FakeUtilityRunner utility;
+
+    /// The placement jobs' inputs.
+    List<String> placements() => [
+      for (final (i, job) in utility.jobs.indexed)
+        if (job.startsWith('File a fact')) utility.inputs[i],
+    ];
+
+    setUp(() async {
+      await main.repository.upsertMemoryTopics([
+        GaiaMemoryTopic(
+          id: 'pets',
+          name: 'Pets',
+          createdAt: DateTime.utc(2026, 11, 16),
+          updatedAt: DateTime.utc(2026, 11, 16),
+        ),
+        GaiaMemoryTopic(
+          id: 'lang',
+          name: 'Languages',
+          createdAt: DateTime.utc(2026, 11, 16),
+          updatedAt: DateTime.utc(2026, 11, 16),
+        ),
+      ], const []);
+      utility = FakeUtilityRunner(
+        (job) => job.startsWith('File a fact')
+            ? '{"topics": ["pets"], "new": {"name": "Vets", "parent": '
+                  '"pets"}, "tags": ["shots"]}'
+            : job.startsWith('You keep')
+            ? '[{"text": "Is learning Portuguese", "tags": ["languages"], '
+                  '"topics": ["lang", "nope"], "new": null}]'
+            : 'Title',
+      );
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+    });
+
+    test('/remember is filed by the utility model once saved, with its tags '
+        'and a new topic offered; the Gaia page asks the same', () async {
+      await controller.send('/remember Biscuit needs a booster');
+      await settle();
+      final memory = (await main.repository.listMemories()).single;
+      expect(memory.topicIds, ['pets']);
+      expect(memory.tags, ['shots']);
+      expect(memory.suggestedTopic, (name: 'Vets', parentId: 'pets'));
+      expect(placements().single, contains('Fact: Biscuit needs a booster'));
+      expect(placements().single, contains('lang · Languages'));
+
+      // Already remembered: nothing new to file.
+      await controller.send('/remember biscuit needs a BOOSTER');
+      await settle();
+      expect(placements(), hasLength(1));
+
+      // The page's Suggest, through the main instance.
+      final loose = await main.memories.save(
+        'Takes Biscuit to Dr Lee',
+        status: GaiaMemoryStatus.active,
+      );
+      expect(
+        await main.pipe.request('placeMemory', {
+          'memoryId': loose!.id,
+          'text': loose.text,
+        }),
+        isTrue,
+      );
+      expect((await main.repository.getMemory(loose.id))!.topicIds, ['pets']);
+    });
+
+    test(
+      "memory_propose with no topics named is filed by the utility model, "
+      "and its card shows where; the card's topic edits go with Remember",
+      () async {
+        runner.turns.add([
+          const ClaudeTextStart(),
+          const ClaudeTextDelta('Hm.'),
+        ]);
+        unawaited(controller.send('Hi'));
+        await settle();
+        final tools = runner.sent.last.tools!;
+        await tools.call('memory_propose', {'text': 'Biscuit needs a booster'});
+        await settle();
+        final part = controller.messages.last.parts
+            .whereType<GaiaMemoryPart>()
+            .single;
+        // Its card asks the main instance where it's filed.
+        controller.memoryFiling(part);
+        await settle();
+        final filing = controller.memoryFiling(part)!;
+        expect(filing.topics, [(id: 'pets', path: 'Pets')]);
+        expect(filing.suggested, 'Vets under Pets');
+        expect(filing.newTopic, isNull);
+
+        await tools.call('memory_propose', {
+          'text': 'Speaks Spanish',
+          'topics': ['Languages'],
+        });
+        await settle();
+        expect(placements(), hasLength(1), reason: 'the agent filed it');
+
+        expect((await controller.memoryTopics()).map((topic) => topic.path), [
+          'Languages',
+          'Pets',
+        ]);
+        controller.editMemoryTopics(part, [(id: 'lang', path: 'Languages')]);
+        controller.takeNewTopic(part, true);
+        expect(controller.memoryFiling(part)!.topics.single.id, 'lang');
+        await controller.decideMemory(
+          controller.messages.last,
+          part,
+          accept: true,
+        );
+        final vets = (await main.repository.listMemoryTopics()).singleWhere(
+          (topic) => topic.name == 'Vets',
+        );
+        final kept = (await main.repository.getMemory(part.memoryId))!;
+        expect(kept.status, GaiaMemoryStatus.active);
+        expect(kept.topicIds, ['lang', vets.id]);
+        expect(kept.suggestedTopic, isNull);
+      },
+    );
+
+    test('the curator is shown the memories nearest the turns and every '
+        'topic, and files what it finds where it says', () async {
+      await main.memories.save(
+        'Speaks Spanish at home',
+        status: GaiaMemoryStatus.active,
+      );
+      await main.memories.save(
+        'Grows tomatoes',
+        status: GaiaMemoryStatus.active,
+      );
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Help me practise Portuguese, like my Spanish');
+      await settle();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      final found = (await main.repository.listMemories()).singleWhere(
+        (memory) => memory.text == 'Is learning Portuguese',
+      );
+      expect(found.topicIds, ['lang']);
+      expect(main.curatorKept.single, contains('Speaks Spanish at home'));
+      expect(main.curatorKept.single, isNot(contains('tomatoes')));
+      final curated = utility
+          .inputs[utility.jobs.indexWhere((job) => job.startsWith('You keep'))];
+      expect(curated, contains('lang · Languages'));
+      expect(placements(), isEmpty, reason: 'the curator filed it');
     });
   });
 

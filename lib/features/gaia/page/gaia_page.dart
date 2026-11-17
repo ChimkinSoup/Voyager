@@ -1468,6 +1468,59 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
   }
 }
 
+/// Memory [memory] filed by Gaia's utility model, through the companion
+/// (GAIA_MEMORY_TOPICS_HLD.md §5): into topics there already, and any new
+/// topic offered as a chip to accept. Busy, and not pressed again, until
+/// it's answered.
+class _SuggestButton extends StatefulWidget {
+  const _SuggestButton({required this.memory});
+
+  final GaiaMemory memory;
+
+  @override
+  State<_SuggestButton> createState() => _SuggestButtonState();
+}
+
+class _SuggestButtonState extends State<_SuggestButton> {
+  var _busy = false;
+
+  Future<void> _suggest() async {
+    setState(() => _busy = true);
+    String? said;
+    try {
+      final filed = await GaiaHost.instance.suggestTopics(
+        widget.memory.id,
+        widget.memory.text,
+      );
+      if (!filed) said = 'No topic fits it yet.';
+    } on GaiaReadException catch (error) {
+      said = error.message;
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (said != null) {
+      showVoyagerToast(
+        context,
+        message: said,
+        icon: PhosphorIconsRegular.warning,
+        dwell: const Duration(seconds: 4),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: _busy ? 'Suggesting topics…' : 'Suggest topics',
+    icon: _busy
+        ? const SizedBox.square(
+            dimension: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(PhosphorIconsRegular.sparkle, size: 16),
+    onPressed: _busy ? null : _suggest,
+  );
+}
+
 class _MemoryRow extends ConsumerWidget {
   const _MemoryRow({
     super.key,
@@ -1501,7 +1554,7 @@ class _MemoryRow extends ConsumerWidget {
     // An active one edited to say what another does would be a second copy
     // in every chat's index. A proposal is checked as it's remembered.
     if (memory.status == GaiaMemoryStatus.active &&
-        await _alreadyRemembered(context, ref, edited.text, memory.projectId)) {
+        await _alreadyRemembered(context, ref, edited.text)) {
       return;
     }
     await _save(ref, memory.copyWith(text: edited.text, tags: edited.tags));
@@ -1558,18 +1611,16 @@ class _MemoryRow extends ConsumerWidget {
     }
   }
 
-  /// Whether an active memory other than this one says [text] where a
-  /// memory of [projectId] (global for null) is read, said in a toast when
-  /// it does.
+  /// Whether an active memory other than this one says [text], from any
+  /// project (GAIA_MEMORY_TOPICS_HLD.md §5), said in a toast when it does.
   Future<bool> _alreadyRemembered(
     BuildContext context,
     WidgetRef ref,
     String text,
-    String? projectId,
   ) async {
     final same = await GaiaMemories(
       ref.read(gaiaRepositoryProvider),
-    ).sameActive(text, projectId: projectId, except: memory.id);
+    ).sameActive(text, except: memory.id);
     if (same == null) return false;
     if (context.mounted) {
       showVoyagerToast(context, message: 'Already remembered: ${same.text}');
@@ -1583,7 +1634,7 @@ class _MemoryRow extends ConsumerWidget {
     final repository = ref.read(gaiaRepositoryProvider);
     final same = await GaiaMemories(
       repository,
-    ).sameActive(memory.text, projectId: memory.projectId, except: memory.id);
+    ).sameActive(memory.text, except: memory.id);
     if (same == null) {
       await _save(ref, memory.copyWith(status: GaiaMemoryStatus.active));
     } else {
@@ -1659,6 +1710,10 @@ class _MemoryRow extends ConsumerWidget {
         if (tree.path(id) case final path when path.isNotEmpty)
           (id, path.join(' › ')),
     ];
+    // A new topic offered for it, made only once accepted (§5).
+    final suggested = memory.suggestedTopic == null
+        ? null
+        : gaiaSuggestedTopicLabel(memory.suggestedTopic!, tree);
     final (icon, label, onPressed) = switch (memory.status) {
       GaiaMemoryStatus.proposed => (
         PhosphorIconsRegular.check,
@@ -1674,12 +1729,7 @@ class _MemoryRow extends ConsumerWidget {
         PhosphorIconsRegular.arrowCounterClockwise,
         'Remember again',
         () async {
-          if (await _alreadyRemembered(
-            context,
-            ref,
-            memory.text,
-            memory.projectId,
-          )) {
+          if (await _alreadyRemembered(context, ref, memory.text)) {
             return;
           }
           await _save(ref, memory.copyWith(status: GaiaMemoryStatus.active));
@@ -1703,7 +1753,7 @@ class _MemoryRow extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall,
           ),
-          if (topics.isNotEmpty) ...[
+          if (topics.isNotEmpty || suggested != null) ...[
             const SizedBox(height: 4),
             Wrap(
               spacing: 4,
@@ -1716,6 +1766,18 @@ class _MemoryRow extends ConsumerWidget {
                       ref.read(gaiaRepositoryProvider),
                     ).removeMemoryTopic(memory.id, id),
                   ),
+                if (suggested != null)
+                  _TopicChip(
+                    label: '+ New topic: $suggested',
+                    tooltip: 'Make this topic and file it there',
+                    removeTooltip: "Don't make it",
+                    onTap: () => GaiaMemories(
+                      ref.read(gaiaRepositoryProvider),
+                    ).acceptSuggestedTopic(memory.id),
+                    onRemove: () => GaiaMemories(
+                      ref.read(gaiaRepositoryProvider),
+                    ).dropSuggestedTopic(memory.id),
+                  ),
               ],
             ),
           ],
@@ -1725,6 +1787,10 @@ class _MemoryRow extends ConsumerWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Unsorted, with nothing offered: the utility model, which only
+          // the desktop's companion runs, can file it (§5).
+          if (isWindows && topics.isEmpty && suggested == null)
+            _SuggestButton(memory: memory),
           // In every chat's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
           if (memory.status == GaiaMemoryStatus.active || memory.pinned)
             IconButton(
@@ -1784,16 +1850,34 @@ class _MemoryRow extends ConsumerWidget {
   }
 }
 
-/// A memory's topic on its row, with × to take it out.
+/// A memory's topic on its row, with × to take it out; or a new topic
+/// offered for it, which [onTap] accepts.
 class _TopicChip extends StatelessWidget {
-  const _TopicChip({required this.label, required this.onRemove});
+  const _TopicChip({
+    required this.label,
+    required this.onRemove,
+    this.onTap,
+    this.tooltip,
+    this.removeTooltip = 'Remove from topic',
+  });
 
   final String label;
   final VoidCallback onRemove;
+  final VoidCallback? onTap;
+  final String? tooltip;
+  final String removeTooltip;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final text = Text(
+      label,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.primary,
+        fontWeight: FontWeight.bold,
+      ),
+    );
     return Container(
       constraints: const BoxConstraints(maxWidth: 220),
       padding: const EdgeInsets.only(left: 8, right: 2),
@@ -1805,20 +1889,18 @@ class _TopicChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
+            child: InkWell(
+              onTap: onTap,
+              child: tooltip == null
+                  ? text
+                  : Tooltip(message: tooltip, child: text),
             ),
           ),
           InkWell(
             onTap: onRemove,
             customBorder: const CircleBorder(),
             child: Tooltip(
-              message: 'Remove from topic',
+              message: removeTooltip,
               child: Padding(
                 padding: const EdgeInsets.all(3),
                 child: Icon(

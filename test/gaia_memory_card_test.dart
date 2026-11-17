@@ -165,6 +165,71 @@ void main() {
     expect(pins, [false, true]);
   });
 
+  testWidgets('open, it shows its topics and the new topic offered, to edit '
+      'before Remember (GAIA_MEMORY_TOPICS_HLD.md §3.2)', (tester) async {
+    var topics = <GaiaTopicLine>[(id: 'pets', path: 'Pets')];
+    bool? newTopic;
+    Widget card() => host(
+      GaiaMemoryCard(
+        memory: _tea,
+        onRemember: (_) {},
+        filing: (
+          topics: topics,
+          suggested: 'Vets under Pets',
+          newTopic: newTopic,
+        ),
+        onTopics: (edited) => topics = edited,
+        onNewTopic: (take) => newTopic = take,
+        topicChoices: () async => const [
+          (id: 'pets', path: 'Pets'),
+          (id: 'lang', path: 'Languages'),
+        ],
+      ),
+    );
+    await tester.pumpWidget(card());
+    expect(find.text('Pets'), findsOneWidget);
+    expect(find.text('+ New topic: Vets under Pets'), findsOneWidget);
+
+    await tester.tap(find.text('+ New topic: Vets under Pets'));
+    expect(newTopic, isTrue);
+    await tester.pumpWidget(card());
+    expect(find.text('✓ New topic: Vets under Pets'), findsOneWidget);
+
+    // Only the topics it isn't in are offered.
+    // Pumped in steps: the editor's caret blinks for ever.
+    Future<void> settleMenu() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    await tester.tap(find.text('+ Topic'));
+    await settleMenu();
+    expect(find.text('Pets'), findsOneWidget);
+    await tester.tap(find.text('Languages'));
+    await settleMenu();
+    expect(topics.map((topic) => topic.id), ['pets', 'lang']);
+
+    await tester.pumpWidget(card());
+    await tester.tap(find.byIcon(Icons.close).first);
+    expect(topics.map((topic) => topic.id), ['lang']);
+    await tester.tap(find.byIcon(Icons.close).last);
+    expect(newTopic, isFalse);
+    await tester.pumpWidget(card());
+    expect(find.textContaining('New topic'), findsNothing);
+
+    // Decided, it's a record without them.
+    await tester.pumpWidget(
+      host(
+        GaiaMemoryCard(
+          memory: _tea.decided(GaiaCardState.accepted),
+          filing: (topics: topics, suggested: null, newTopic: null),
+        ),
+      ),
+    );
+    expect(find.text('Languages'), findsNothing);
+  });
+
   testWidgets('the recall chip counts what was given, opens to list each '
       'with its path, and a click opens it (GAIA_MEMORY_TOPICS_HLD.md §4.5)', (
     tester,

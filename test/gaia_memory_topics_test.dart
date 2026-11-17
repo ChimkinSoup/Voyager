@@ -82,7 +82,8 @@ void main() {
       expect(tree.find('assignments'), {'a1', 'a2'});
       expect(tree.find('CS246 › Assignments'), {'a1'});
       expect(tree.find('university > cs245 > assignments'), {'a2'});
-      expect(tree.find('CS246/Assignments'), {'a1'});
+      // A `/` is part of a name ("TCP/IP"), not a path.
+      expect(tree.find('CS246/Assignments'), isEmpty);
       expect(tree.find('Nope'), isEmpty);
       expect(tree.find(' › '), isEmpty);
     });
@@ -717,6 +718,276 @@ void main() {
       expect(await topicsOf('removed'), isEmpty);
       expect(await topicsOf('moved'), ['cpp']);
       expect(await topicsOf('deleted'), isEmpty);
+    });
+  });
+  group('placement on capture (§5, Phase 5)', () {
+    late AppDatabase db;
+    late DriftGaiaRepository repository;
+    late GaiaMemories memories;
+
+    setUp(() async {
+      db = AppDatabase.inMemory();
+      repository = DriftGaiaRepository(db);
+      memories = GaiaMemories(repository);
+      await repository.upsertProject(_project('p1', 'CS246'));
+      await repository.upsertChat(
+        GaiaChat(
+          id: 'in1',
+          title: 'A5',
+          projectId: 'p1',
+          createdAt: _at,
+          updatedAt: _at,
+          lastMessageAt: _at,
+        ),
+      );
+      await memories.syncProjectTopics();
+      await repository.upsertMemoryTopics([
+        _topic('uni', 'University'),
+        _topic('a1', 'Assignments', parentId: 'project-p1'),
+        _topic('a2', 'Assignments', parentId: 'uni'),
+        _topic('pets', 'Pets'),
+      ], const []);
+    });
+
+    tearDown(() => db.close());
+
+    Future<GaiaMemory> memoryOf(String text) async =>
+        (await repository.listMemories()).singleWhere((m) => m.text == text);
+
+    test('the topic list runs in tree order, each by its path', () async {
+      expect((await memories.topicLines()).map((line) => line.path), [
+        'CS246',
+        'CS246 › Assignments',
+        'Pets',
+        'University',
+        'University › Assignments',
+      ]);
+    });
+
+    test("memory_propose files it in the topics named, the project's first "
+        'when a name fits several; the first name not there is offered as '
+        'new, under its parent; none named asks for placement', () async {
+      final named = await memories.propose('in1', {
+        'text': 'Uses valgrind',
+        'topics': ['Assignments', 'Tools', 'Pets › Vets'],
+      });
+      expect(named.place, isFalse);
+      final valgrind = await memoryOf('Uses valgrind');
+      expect(valgrind.topicIds, ['project-p1', 'a1']);
+      expect(valgrind.suggestedTopic, (name: 'Tools', parentId: null));
+
+      await memories.propose('in1', {
+        'text': 'Vet is Dr Lee',
+        'topics': ['pets › vets'],
+        'scope': 'global',
+      });
+      final vet = await memoryOf('Vet is Dr Lee');
+      expect(vet.topicIds, isEmpty);
+      expect(vet.suggestedTopic, (name: 'vets', parentId: 'pets'));
+
+      expect(
+        (await memories.propose('in1', {'text': 'Likes tea'})).place,
+        isTrue,
+      );
+      // An offer that names a topic already there files it there instead.
+      await memories.propose('in1', {
+        'text': 'Has a cat',
+        'topics': ['Nope › PETS'],
+      });
+      expect((await memoryOf('Has a cat')).topicIds, ['project-p1', 'pets']);
+      expect((await memoryOf('Has a cat')).suggestedTopic, isNull);
+      // Under the deepest topic of the path that's there, the rest kept.
+      await memories.propose('in1', {
+        'text': 'Biscuit had shots',
+        'topics': ['Pets › Vets › Shots'],
+      });
+      expect((await memoryOf('Biscuit had shots')).suggestedTopic, (
+        name: 'Vets › Shots',
+        parentId: 'pets',
+      ));
+      // A `/` is part of a name.
+      await memories.propose('in1', {
+        'text': 'Port 80 is HTTP',
+        'topics': ['TCP/IP'],
+      });
+      expect((await memoryOf('Port 80 is HTTP')).suggestedTopic, (
+        name: 'TCP/IP',
+        parentId: null,
+      ));
+    });
+
+    test('placement adds topics that are there, merges tags and offers a new '
+        "topic; the card's filing reads it", () async {
+      final saved = await memories.save(
+        'Biscuit needs a booster',
+        tags: ['dog'],
+        status: GaiaMemoryStatus.active,
+      );
+      final filing = await memories.place(saved!.id, (
+        topicIds: ['pets', 'gone'],
+        suggested: (name: 'Vet visits', parentId: 'pets'),
+        tags: ['shots', 'dog'],
+      ));
+      final placed = (await repository.getMemory(saved.id))!;
+      expect(placed.topicIds, ['pets']);
+      expect(placed.tags, ['dog', 'shots']);
+      expect(placed.suggestedTopic, (name: 'Vet visits', parentId: 'pets'));
+      expect(filing!.topics, [(id: 'pets', path: 'Pets')]);
+      expect(filing.suggested, 'Vet visits under Pets');
+      final read = (await memories.filing(saved.id))!;
+      expect(read.topics, filing.topics);
+      expect(read.suggested, filing.suggested);
+      await repository.upsertMemory(placed.copyWith(deletedAt: _at));
+      expect(
+        await memories.place(saved.id, (
+          topicIds: ['uni'],
+          suggested: null,
+          tags: const [],
+        )),
+        isNull,
+      );
+    });
+
+    test("a proposal's placement landing after the user decided it leaves it "
+        'as they filed it', () async {
+      final saved = await memories.save(
+        'Biscuit needs a booster',
+        status: GaiaMemoryStatus.active,
+      );
+      final filing = await memories.place(saved!.id, (
+        topicIds: ['pets'],
+        suggested: (name: 'Vet visits', parentId: 'pets'),
+        tags: ['shots'],
+      ), proposal: true);
+      final kept = (await repository.getMemory(saved.id))!;
+      expect(kept.topicIds, isEmpty);
+      expect(kept.tags, isEmpty);
+      expect(kept.suggestedTopic, isNull);
+      expect(filing!.topics, isEmpty);
+    });
+
+    test('accepting an offer makes the topic and files the memory in one '
+        'write; a second memory offered the same name gets that topic, and '
+        'dropping clears it', () async {
+      final a = await memories.save(
+        'Booster in May',
+        status: GaiaMemoryStatus.active,
+        suggested: (name: 'Vet', parentId: 'pets'),
+      );
+      final b = await memories.save(
+        'Vet is Dr Lee',
+        status: GaiaMemoryStatus.proposed,
+        suggested: (name: 'vet', parentId: 'pets'),
+      );
+      final c = await memories.save(
+        'Walks at seven',
+        status: GaiaMemoryStatus.active,
+        suggested: (name: 'Routine', parentId: null),
+      );
+      await memories.acceptSuggestedTopic(a!.id);
+      final made = (await repository.listMemoryTopics()).singleWhere(
+        (topic) => topic.name == 'Vet',
+      );
+      expect(made.parentId, 'pets');
+      final accepted = (await repository.getMemory(a.id))!;
+      expect(accepted.topicIds, [made.id]);
+      expect(accepted.suggestedTopic, isNull);
+
+      await memories.acceptSuggestedTopic(b!.id);
+      expect((await repository.getMemory(b.id))!.topicIds, [made.id]);
+      expect(
+        (await repository.listMemoryTopics()).where((t) => t.name == 'Vet'),
+        hasLength(1),
+      );
+
+      await memories.dropSuggestedTopic(c!.id);
+      final dropped = (await repository.getMemory(c.id))!;
+      expect(dropped.suggestedTopic, isNull);
+      expect(dropped.topicIds, isEmpty);
+    });
+
+    test("a card remembered with its topics edited takes them, and its "
+        "project's topic taken out clears projectId; the offer is taken, "
+        'dropped or left', () async {
+      Future<GaiaMemory> proposed(String text) async {
+        final memory = (await memories.propose('in1', {
+          'text': text,
+          'topics': ['Pets', 'Vets'],
+        })).memory!;
+        // As an older build filed it.
+        await repository.upsertMemory(memory.copyWith(projectId: 'p1'));
+        return memory;
+      }
+
+      final edited = await proposed('Booster in May');
+      final dropped = await proposed('Dr Lee');
+      final left = await proposed('Clinic on King St');
+      await memories.decide(
+        edited.id,
+        accept: true,
+        text: 'Booster in May',
+        topicIds: ['pets', 'uni', 'gone'],
+        newTopic: true,
+      );
+      final vets = (await repository.listMemoryTopics()).singleWhere(
+        (topic) => topic.name == 'Vets',
+      );
+      final kept = (await repository.getMemory(edited.id))!;
+      expect(kept.status, GaiaMemoryStatus.active);
+      expect(kept.topicIds, ['pets', 'uni', vets.id]);
+      expect(kept.projectId, isNull);
+      expect(kept.suggestedTopic, isNull);
+
+      await memories.decide(
+        dropped.id,
+        accept: true,
+        text: 'Dr Lee',
+        newTopic: false,
+      );
+      final noOffer = (await repository.getMemory(dropped.id))!;
+      expect(noOffer.topicIds, ['project-p1', 'pets']);
+      expect(noOffer.projectId, 'p1');
+      expect(noOffer.suggestedTopic, isNull);
+
+      await memories.decide(left.id, accept: true, text: 'Clinic on King St');
+      expect(
+        (await repository.getMemory(left.id))!.suggestedTopic?.name,
+        'Vets',
+      );
+    });
+
+    test('the curator files what it found where it said, in the project '
+        'topic too, and is shown the nearest memories, pins included, and '
+        'every topic', () async {
+      for (var i = 0; i < 50; i++) {
+        await memories.save(
+          'Unrelated fact number $i about gardening',
+          status: GaiaMemoryStatus.active,
+        );
+      }
+      final pin = await memories.save(
+        'My dog is Biscuit',
+        status: GaiaMemoryStatus.active,
+      );
+      await memories.pin(pin!.id, pinned: true);
+      final context = await memories.curatorContext('Biscuit had a walk');
+      expect(context.kept, contains('My dog is Biscuit'));
+      expect(context.kept, isNot(contains('gardening')));
+      expect(context.topics.map((t) => t.id), contains('a1'));
+      final all = await memories.curatorContext('gardening fact');
+      expect('\n'.allMatches(all.kept).length + 1, 40);
+
+      await memories.curated('in1', 2, [
+        (
+          text: 'Prefers C++ for A5',
+          tags: const [],
+          topicIds: ['a1', 'gone'],
+          suggested: (name: 'Languages', parentId: null),
+        ),
+      ]);
+      final found = await memoryOf('Prefers C++ for A5');
+      expect(found.topicIds, ['project-p1', 'a1']);
+      expect(found.suggestedTopic, (name: 'Languages', parentId: null));
     });
   });
 }
