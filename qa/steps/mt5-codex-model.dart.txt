@@ -1,0 +1,4 @@
+final repo = c.read(gaiaRepositoryProvider);
+final s = await repo.watchSettings().first;
+await repo.upsertSettings(s.copyWith(agents: [for (final a in s.agents) a.id == 'sol' ? GaiaAgent(id: a.id, label: a.label, adapter: a.adapter, model: 'gpt-6-luna') : a]));
+debugPrint('MT5-CODEX ' + [for (final a in (await repo.watchSettings().first).agents) a.id + '=' + a.model].join(','));

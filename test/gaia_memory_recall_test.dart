@@ -130,6 +130,32 @@ void main() {
       expect(strength(short), greaterThanOrEqualTo(kGaiaRecallThreshold));
     });
 
+    test('an -ing or -ed form meets its word, either way round', () {
+      final memories = [
+        ..._memories,
+        _memory('sleep', 'Wants more sleep on weekdays'),
+        _memory('jog', 'Goes running on Sundays'),
+        _memory('need', 'Needs a new speed bike'),
+        _memory('staff', 'The clinic staff are friendly'),
+      ];
+      List<String> ids(String text) => [
+        for (final c in gaiaRecallCandidates(memories, tree, text)) c.memory.id,
+      ];
+      expect(ids("I've been sleeping badly"), contains('sleep'));
+      // "Booked" in the memory, "booking" in the message.
+      expect(ids('booking'), contains('ryokan'));
+      // A doubled last letter made single: "running" meets "run".
+      expect(ids('a run in the rain'), contains('jog'));
+      // The plural's `s` too: "needed" meets "Needs".
+      expect(ids('I needed help'), contains('need'));
+      // An -eed word keeps its `ed`: "speeding" meets "speed".
+      expect(ids('I keep speeding'), contains('need'));
+      // A doubled f stays doubled: "staffed" meets "staff".
+      expect(ids('short-staffed today'), contains('staff'));
+      // "evening" stems to "even", a common word: no match.
+      expect(ids('this evening'), isEmpty);
+    });
+
     test('common words alone match nothing', () {
       expect(gaiaRecallCandidates(_memories, tree, 'what is the'), isEmpty);
     });

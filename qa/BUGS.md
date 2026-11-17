@@ -4030,4 +4030,13 @@ Entry format:
 - Notes: the window was parked off-screen by the harness for part of that time; whether that holds the toast's timer wasn't checked.
 - Notes (fixed 2026-11-16, uncommitted): not the window. The toast was raised with no `icon` and no `dwell`, which is `showVoyagerToast`'s "work in flight" form: a spinner, up until its caller dismisses it, and nothing did. It now has a warning icon and a 4 s dwell, as the Trash's refusals do. The Gaia page's other six toasts are raised the same way (`gaia_page.dart`: delete refused, undo failed, "Already remembered" twice, the two keybind clashes) and weren't touched.
 
-<!-- Last ID: BUG-380. -->
+### BUG-381 [GAIA-MEMORY] A memory card's topic chips don't follow edits in the chat
+- Severity: Major
+- Found: 2026-11-17, GAIA_MEMORY_TOPICS_HLD.md Phases 4-5 live pass (`gaiaqa`, qa-128)
+- Steps: in a Haiku chat, ask the agent to save a memory; on its card (filed in Pets), pick "+ Topic" → Family, then click Pets' ×.
+- Actual: the chips stayed "Pets, + Topic" through both, with real and background input (`qa/shots/mt5-card-family3.png`, `mt5-card-xpets.png`). The controller had the edits: `_topicEdits` held `[]` after the ×, so Remember would have saved the memory with no topics while the card showed Pets.
+- Expected: each edit shows on the card at once, and what Remember saves is what the card shows.
+- Notes: `_MessageView` built `GaiaMemoryCard` straight from the message, so it rebuilt only when the message did, unlike `GaiaCardPart` beside it, which has a `ListenableBuilder` on the controller. Placement filling in a card that's already open (§21.4) goes through the same path. The widget tests pump the card alone, and the controller tests check the state, so neither saw it.
+- Notes (fixed 2026-11-17, uncommitted): `gaia_app.dart` wraps the memory card in a `ListenableBuilder` on the controller. Checked live on the same card: Family added, Pets removed, both shown at once; Remember saved it active in Family only (`mt5-card-fix-family.png`, `mt5-card-fix-xpets.png`). No widget test of the card inside a chat was added.
+
+<!-- Last ID: BUG-381. -->

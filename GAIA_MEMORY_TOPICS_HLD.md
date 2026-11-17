@@ -9,7 +9,9 @@ candidate list only, and without stage 2 recall is left to `memory_search`. **Ph
 Memories tab tree) built 2026-11-16** (§20): tested, and checked live off-screen except for
 drags and what §20.5 lists. **Phase 5 (placement on capture, suggested topics, the curator's
 smaller input) built 2026-11-16** (§21): tested, and placement and the curator checked
-with the real utility model off-screen. The on-screen checks are in §21.4. Phase 6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+with the real utility model off-screen. The on-screen checks of §19, §20.5 and §21.4 were run
+on 2026-11-17 (§22): all passed except the phone's, and BUG-381 (a memory card's chips didn't
+follow edits) was found and fixed. Phase 6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -624,6 +626,7 @@ These need the screen on, the phone, or a real agent turn:
    than the upkeep code. Add a cache if the §11 latency test shows it matters.
 4. **Words for matching:** lower case, letters and digits, a short English stop-word list,
    one-letter words dropped and a plural `s` dropped ("assignments" matches "assignment").
+   Since 2026-11-17 (§22.4) an `-ing` or `-ed` is dropped too.
    "C++" is lost, as its only word is one letter. The home boost (×2) and the
    recalled-topic boost (×1.25) don't stack.
 5. **The text matched** is what you typed, not the window, selection, quote or file blocks
@@ -1272,3 +1275,127 @@ device. Run them with §20.5's list, in `gaiaqa` with real Haiku.
   these, or a burst by eval), then run §18.3's misses with stage 2 on: "when is Biscuit due for
   shots" and "I've been sleeping badly". The vaccine one now
   reaches stage 1 in the off-screen probe (§21.3). Also decide whether to stem -ing and -ed.
+
+## 22. Live pass, 2026-11-17 (Phases 4 and 5)
+
+`gaiaqa` (qa-128) on a copy of the Debug build with this tree's Dart bundle, on screen for the
+companion and parked or on screen for the main window. Driven by `voy.ps1` (background, and
+foreground for drags, resizes and the menu retry), VM eval (`qa/steps/mt5-*.dart.txt`) and
+read-only SQLite. A fresh profile `qtopic5` on the same account was the second device and did
+the account switch. Real turns used Juno's default Claude account (Haiku) and, for Codex, the
+`sol` agent pointed at `gpt-6-luna` for the pass (`gpt-6.1-sol` is refused on a ChatGPT
+account, §18.1), then set back. One new bug, BUG-381, fixed during the pass. The phone wasn't
+run: there's no emulator or `adb` on this PC.
+
+### 22.1 Phase 4 (§19, §20.5)
+
+- **Drags with a real mouse:** passed. With Hobbies selected, a memory dragged onto Music left
+  Hobbies for Music. Ctrl+drag onto Health added Health and kept Hobbies (Ctrl held by
+  `keybd_event` through the drop). The Hobbies topic went under Music, then back to the root
+  on All memories. Sailing dragged onto its own subtopic was refused: red outline on the
+  target, as in `qa/shots/mt5-refused.png`, and nothing written.
+- **§19.6's third way, a drag:** passed. "The P4 hotel is the Kinosaki Inn." dragged from
+  P4 Memories QA onto Health lost its project topic and `projectId`. A project rename then ran
+  the upkeep, and it wasn't filed back.
+- **A long list:** works but takes scrolling. The inbox (30 rows here) shows above every
+  topic's memories, so a topic's own memories start below it. The memory pane scrolls on its
+  own, but a wheel at its end scrolls the whole page, which can push the tree's top rows off
+  screen. Every drag was done with both ends on screen.
+- **§19.1, account switch through Settings:** passed on `qtopic5`. Signed out as Settings
+  does, into qa-127 (no Gaia data there), out, and back into qa-128. After the pull its 24
+  topics (four nested, one three deep) and 334 memories matched `gaiaqa`'s exactly, with
+  nothing queued.
+- **§19.2's second half, two devices:** passed. `gaiaqa` put Sailing under Gardening and
+  `qtopic5` put Gardening under Sailing in the same 2 ms. Both stored the same cycle, and both
+  resolve it at the older write (Sailing, 1.9 ms older): Sailing is a root with Gardening
+  under it, in the tree and the topic list. Nothing lost or duplicated.
+- **§19.4, the agent searching its memories (stage 2 off):** passed on both. Asked "Who is my
+  insurer again, and when do I need to renew?", nothing was recalled, and Haiku called
+  `memory_search` unprompted and answered Belairdirect, renewing in August. On Codex, "Which
+  garage puts my snow tyres on, and roughly when?" got `memory_search` unprompted and
+  Canadian Tire, mid-November. "Check your memories" was never needed.
+- **A narrow desktop window:** passed. The window stops at 1,424 px (712 logical). The tree is
+  a button, the dialog lists the tree, and picking Family closed it and relabelled the button.
+  The dialog's topics have no ⋯ menu on Windows; that's §20.2 item 7, not a gap.
+- **Search on real data:** passed. "heartworm" (a word in a memory) and "Plugins" (a topic
+  name) each filtered both panes.
+- **Restore from Settings → Trash:** passed. The long-named topic under CS246 › Assignments
+  came back under Assignments with no memories. Its delete dialog asked first.
+- **Not run:** the phone.
+
+### 22.2 Phase 5 (§21.4)
+
+- **`/remember`:** passed. The toast "Remembered", and 0.7 s later the memory was in Pets with
+  the tags heartworm, medication and monthly (`[gaia] memory placement: 1 topics`).
+- **`memory_propose` on Claude Code:** passed. Asked to save a fact, Haiku passed
+  `topics: ["Pets"]` from the list itself. Asked to leave `topics` out, it did, and placement
+  filled the open card about 1.8 s later with "+ New topic: Sailing" and four tags.
+- **`memory_propose` on Codex:** passed. It passed `topics: ["Car"]` from the list itself (for
+  a bike: the nearest existing topic).
+- **The card:** BUG-381 at first: "+ Topic" → Family and the chip's × reached the controller
+  but the chips didn't change, so the card would have saved what it didn't show. Fixed by
+  rebuilding the card with the controller. After the fix: Family added, Pets removed, then
+  Remember saved it active in Family alone. Offers: taken (Sailing made at the root and the
+  memory filed there), dropped (offer cleared, memory Unsorted), and left (offer kept on the
+  remembered memory). The "+ Topic" menu fits the window and leaves out topics the memory is
+  in. At the companion's narrowest (1,104 px) a three-level path is cut off with its × still
+  showing.
+- **The Memories tab:** passed. The offer chip on a remembered row and on inbox rows made the
+  topic and filed the memory. Two memories offered the same "Gardening" made one topic between
+  them. Suggest shows only on an Unsorted row with no offer; it filed one in Hobbies with the
+  companion running. With the companion killed just before the click it was started again
+  with no window (hwnd 0) and the memory filed in Health. The host also restarts a killed
+  companion within 2 s on its own, so which of the two started it isn't certain; both start
+  hidden.
+- **The curator:** four chats that mentioned facts in passing, curated after 10 quiet
+  minutes. It found four facts and filed each in an existing topic (knee in Health, spin class
+  in Fitness, sister's wedding in Family, the Pentax in Hobbies), offered no new topics, and
+  found nothing in the A5 chat. Each pass took 2-6 s. Its input for one of them was 2,262
+  characters (the 40 nearest memories) and 24 topic lines, against about 19,400 characters for
+  a full index of the 305 active memories.
+- **Two devices:** passed. An offer accepted on `gaiaqa` reached `qtopic5` with the same topic
+  id within a second. Accepting one offer on both at once (4 ms apart) made two "Woodworking"
+  topics, as §21.2 item 5 says; the memory ended in the same one on both. Deleting the empty
+  one was clean on both, and the two databases then matched exactly.
+- **Duplicates without walls:** passed. In a CS246 chat, `/remember The P4 hotel is the
+  Kinosaki Inn.` (saved in P4 Memories QA) said "Already remembered".
+- **§18.4's word-mismatch misses:** the 274 seeded memories were placed through the page's
+  Suggest path, three at a time: all 274 answered, none failed, in 4 minutes (about 0.8 s
+  each). Then, with stage 2 on, "when is Biscuit due for shots" put the vaccine memory first
+  among 24 candidates (0.24, from its new "shots" tag). Stage 2 picked 3 in 791 ms, and Haiku
+  answered March 2027. "I have been sleeping badly" still had no candidates, so stage 2 never
+  ran, and the agent didn't search either. "my sleep has been bad lately" does reach the
+  sleep memory, at 0.13. So the remaining miss is the -ing form alone (§21.3). Stemming was
+  added after the pass (§22.4).
+- **Not run:** the phone's offer chip.
+
+### 22.3 Left on qa-128
+
+New chats from this pass ("Adopting Second Dog Pepper", "Sailing dinghy storage memory" and
+about ten more); topics Sailing (with Gardening under it), Hobbies, Gardening, Astronomy,
+Woodworking and "Biquadris group project design documents and UML diagrams"; the memories they
+hold; inbox proposals from the curator and the agents; and tags added to the seeded memories
+by the placement burst. `sol` is back on `gpt-6.1-sol`, the debug switch is off, and
+`qtopic5` ended signed out.
+
+### 22.4 Stemming in stage 1 (2026-11-17)
+
+Decided after §22.2: stage 1 stems `-ing` and `-ed` as well as a plural `s`
+(`_recallStem` in `gaia_memories.dart`), the same on the message and the memories. A doubled
+consonant left behind is made single ("running" meets "run"), but not l, s or z ("falling"
+stays "fall"). The stem always keeps three letters, so "thing" and "used" stay whole. A
+dropped `e` isn't put back, so "making" still doesn't meet "make"; that wasn't seen in the
+probes and is left.
+
+- **Tests:** `gaia_memory_recall_test`, "an -ing or -ed form meets its word, either way
+  round" (sleeping and sleep, booking and Booked, run and running, needed and Needs). It
+  failed before the change. The memory, topics and recall test files and the controller's
+  recall group all pass.
+- **Live, `gaiaqa`:** "I have been sleeping badly" now has 4 candidates, the sleep memory
+  among the top. With stage 2 on, it picked 3 of 4 in 740 ms (the sleep memory, cutting
+  caffeine, reading before bed), and Haiku answered from them. On §18.3's 24 messages the top
+  candidates are unchanged in kind and none is strong. One new weak false candidate:
+  "pulling" now meets "pull-ups" (0.12, second for the leash message). The valgrind message,
+  0.52 in §18.3, is now 0.44, below the threshold. The corpus also grew by about 40 memories
+  and the placement burst's tags since then, so how much of that drop is the stemming isn't
+  known.

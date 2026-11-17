@@ -53,6 +53,11 @@ param([Parameter(Position = 0)][string]$Cmd = 'status', [Parameter(Position = 1,
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ($Cmd -eq 'awake') { & (Join-Path $here 'awake.ps1') @Rest; exit }
+# Resets awake.ps1's 20-minute timer (Write-Host: kept out of callers' captured output).
+$awake = Join-Path (Split-Path -Parent $here) 'logs\awake.json'
+if (Test-Path -LiteralPath $awake) { (Get-Item -LiteralPath $awake).LastWriteTime = Get-Date }
+else { Write-Host "awake: off. The screen saver can cover a live run: 'voy.ps1 awake on' first." }
 $shots = Join-Path (Split-Path -Parent $here) 'shots'
 New-Item -ItemType Directory -Force $shots | Out-Null
 if (-not ('Bg' -as [type])) {

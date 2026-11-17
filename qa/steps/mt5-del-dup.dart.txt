@@ -1,0 +1,2 @@
+await GaiaMemories(c.read(gaiaRepositoryProvider)).deleteTopic('af0af6bc-55da-4751-adc1-74f39482c501');
+debugPrint('MT5-DELDUP done');

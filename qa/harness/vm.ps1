@@ -11,6 +11,9 @@ $rest = @($args)
 $name = ''
 if ($rest.Count -ge 2 -and $rest[0] -eq '-Profile') { $name = $rest[1]; $rest = @($rest | Select-Object -Skip 2) }
 $name = Resolve-QaProfile $name
+# Resets awake.ps1's 20-minute timer.
+$awake = Join-Path (Split-Path -Parent $PSScriptRoot) 'logs\awake.json'
+if (Test-Path -LiteralPath $awake) { (Get-Item -LiteralPath $awake).LastWriteTime = Get-Date }
 Set-Location (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $exe = 'qa\logs\vm.exe'
 if (-not (Test-Path $exe) -or (Get-Item $exe).LastWriteTime -lt (Get-Item 'qa\harness\vm.dart').LastWriteTime) {

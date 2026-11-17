@@ -1713,8 +1713,8 @@ class GaiaController extends ChangeNotifier {
       _filings[memoryId] = gaiaMemoryFilingFromJson(filing);
       notifyListeners();
     } on GaiaPipeException catch (error) {
-      // Asked again when the card next builds.
-      _filingAsked.remove(memoryId);
+      // Not asked again: the card rebuilds with every controller change,
+      // and a refusal (no memory store) usually lasts.
       debugPrint('[gaia] memory card topics: $error');
     }
   }

@@ -1,0 +1,8 @@
+final r = c.read(gaiaRepositoryProvider);
+final active = [for (final m in await r.listMemories()) if (m.status.name == 'active' && m.deletedAt == null && !m.pinned) m];
+final tree = GaiaTopicTree(await r.listMemoryTopics());
+String s(GaiaRecallCandidate x) => x.strength.toStringAsFixed(2) + ' ' + (x.memory.text.length > 50 ? x.memory.text.substring(0, 50) : x.memory.text);
+for (final text in ['when is Biscuit due for shots', 'I have been sleeping badly', 'I\'ve been sleeping badly', 'my sleep has been bad lately']) {
+  final cand = gaiaRecallCandidates(active, tree, text, home: const {});
+  debugPrint('MT5-S1 ' + text + ' || candidates ' + cand.length.toString() + ' strong ' + cand.where((x) => x.strength >= kGaiaRecallThreshold).length.toString() + ' || top3: ' + [for (final x in cand.take(3)) s(x)].join(' ; '));
+}

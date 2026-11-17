@@ -1,0 +1,8 @@
+final r = c.read(gaiaRepositoryProvider);
+final p = await r.getProject('mt1-new-project');
+await r.upsertProject(p!.copyWith(name: 'MT1 upkeep poke'));
+await Future.delayed(const Duration(seconds: 3));
+final m = (await r.listMemories()).firstWhere((m) => m.text == 'The P4 hotel is the Kinosaki Inn.');
+final t = await r.getMemoryTopic('project-mt1-new-project');
+debugPrint('MT5-UPKEEP topic=' + (t?.name ?? '-') + ' hotel projectId=' + (m.projectId ?? 'null') + ' topics=' + m.topicIds.join(','));
+await r.upsertProject((await r.getProject('mt1-new-project'))!.copyWith(name: 'MT1 New after sign-in'));

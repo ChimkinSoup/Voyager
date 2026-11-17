@@ -4011,39 +4011,45 @@ class _MessageView extends StatelessWidget {
                   onRunNext: () => controller.approveControl(part, once: false),
                 ),
               ),
-              GaiaMemoryPart() => GaiaMemoryCard(
+              // Rebuilt with the controller too: its edited text and topics,
+              // and where placement filed it, aren't on the message.
+              GaiaMemoryPart() => ListenableBuilder(
                 key: ValueKey(part.memoryId),
-                memory: part,
-                text: controller.memoryText(part),
-                onEdit: (text) => controller.editMemory(part, text),
-                filing: controller.memoryFiling(part),
-                onTopics: (topics) => controller.editMemoryTopics(part, topics),
-                onNewTopic: (take) => controller.takeNewTopic(part, take),
-                topicChoices: controller.memoryTopics,
-                onRemember: (pin) => controller.decideMemory(
-                  message,
-                  part,
-                  accept: true,
-                  pin: pin,
+                listenable: controller,
+                builder: (context, _) => GaiaMemoryCard(
+                  memory: part,
+                  text: controller.memoryText(part),
+                  onEdit: (text) => controller.editMemory(part, text),
+                  filing: controller.memoryFiling(part),
+                  onTopics: (topics) =>
+                      controller.editMemoryTopics(part, topics),
+                  onNewTopic: (take) => controller.takeNewTopic(part, take),
+                  topicChoices: controller.memoryTopics,
+                  onRemember: (pin) => controller.decideMemory(
+                    message,
+                    part,
+                    accept: true,
+                    pin: pin,
+                  ),
+                  onDismiss: () async {
+                    // Undoable, as the memory inbox's Dismiss is.
+                    if (!await controller.decideMemory(
+                          message,
+                          part,
+                          accept: false,
+                        ) ||
+                        !context.mounted) {
+                      return;
+                    }
+                    showGaiaToast(
+                      context,
+                      mark: GaiaToastMark.done,
+                      title: 'Dismissed',
+                      body: 'Click to undo',
+                      onTap: () => controller.restoreMemory(message, part),
+                    );
+                  },
                 ),
-                onDismiss: () async {
-                  // Undoable, as the memory inbox's Dismiss is.
-                  if (!await controller.decideMemory(
-                        message,
-                        part,
-                        accept: false,
-                      ) ||
-                      !context.mounted) {
-                    return;
-                  }
-                  showGaiaToast(
-                    context,
-                    mark: GaiaToastMark.done,
-                    title: 'Dismissed',
-                    body: 'Click to undo',
-                    onTap: () => controller.restoreMemory(message, part),
-                  );
-                },
               ),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||

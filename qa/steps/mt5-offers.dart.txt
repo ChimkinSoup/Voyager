@@ -1,0 +1,4 @@
+final g = GaiaMemories(c.read(gaiaRepositoryProvider));
+final a = await g.save('I have a 6-inch Dobsonian telescope.', status: GaiaMemoryStatus.active, byUser: true, suggested: (name: 'Astronomy', parentId: null));
+final b = await g.save('I am building a walnut bookshelf in my garage.', status: GaiaMemoryStatus.active, byUser: true, suggested: (name: 'Woodworking', parentId: null));
+debugPrint('MT5-OFFERS ' + a!.id + ' ' + b!.id);

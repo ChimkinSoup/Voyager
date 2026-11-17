@@ -1188,6 +1188,8 @@ const _stopWords = {
   'by',
   'can',
   'do',
+  // "evening" stems to it.
+  'even',
   'for',
   'from',
   'has',
@@ -1236,18 +1238,41 @@ const _stopWords = {
 };
 
 /// [text]'s words for matching, in order: lower case, letters and digits,
-/// common words left out, and a plural's `s` dropped so "assignments"
-/// meets "assignment".
+/// common words left out, and each one stemmed by [_recallStem].
 List<String> _recallTerms(String text) => [
   for (final word in text.toLowerCase().split(
     RegExp(r"[^\p{L}\p{N}']+", unicode: true),
   ))
     if (word.replaceAll("'", '') case final bare
         when bare.length > 1 && !_stopWords.contains(bare))
-      bare.length > 3 && bare.endsWith('s') && !bare.endsWith('ss')
-          ? bare.substring(0, bare.length - 1)
-          : bare,
+      _recallStem(bare),
 ];
+
+/// [word] with a plural's `s` dropped, then an `-ing` or `-ed`, and a
+/// doubled consonant they leave made single: "assignments" meets
+/// "assignment", "sleeping" "sleep", "booked" "book" and "running" "run".
+/// Three letters are always kept, so "thing" and "used" stay whole, and an
+/// `-eed` keeps its `ed`, so "speed" meets "speeding". A dropped `e` isn't
+/// put back: "making" doesn't meet "make".
+String _recallStem(String word) {
+  var stem = word.length > 3 && word.endsWith('s') && !word.endsWith('ss')
+      ? word.substring(0, word.length - 1)
+      : word;
+  final suffix = stem.endsWith('ing')
+      ? 3
+      : stem.endsWith('ed') && !stem.endsWith('eed')
+      ? 2
+      : 0;
+  if (suffix == 0 || stem.length - suffix < 3) return stem;
+  stem = stem.substring(0, stem.length - suffix);
+  final last = stem[stem.length - 1];
+  // "called", "passed", "buzzed" and "staffed" keep theirs.
+  return stem.length > 3 &&
+          last == stem[stem.length - 2] &&
+          !'aeiouylszf'.contains(last)
+      ? stem.substring(0, stem.length - 1)
+      : stem;
+}
 
 /// [memories] matching [query] and every one of [tags], best first: the
 /// most of the query's words found in a memory's text or tags, then the

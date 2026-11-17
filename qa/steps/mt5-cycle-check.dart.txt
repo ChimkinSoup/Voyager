@@ -1,0 +1,5 @@
+final tree = GaiaTopicTree(await c.read(gaiaRepositoryProvider).listMemoryTopics());
+final all = await c.read(gaiaRepositoryProvider).listMemoryTopics();
+final sail = all.firstWhere((t) => t.name == 'Sailing').id;
+final garden = all.firstWhere((t) => t.name == 'Gardening').id;
+debugPrint('MT5-CYCLE-CHECK sailing=' + tree.path(sail).join(' > ') + ' | gardening=' + tree.path(garden).join(' > ') + ' | lines=' + [for (final l in gaiaTopicLines(tree)) if (l.path.contains('Sailing') || l.path.contains('Gardening')) l.path].join(' ; '));

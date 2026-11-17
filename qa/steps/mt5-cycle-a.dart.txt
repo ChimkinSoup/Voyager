@@ -1,0 +1,8 @@
+final at = int.parse(File(r'C:\Users\Juno\AppData\Local\Temp\claude\e5ebcdb8936ec77e\0679a1ee-9051-46b8-9023-8860fdeba82c\scratchpad\cycle_at.txt').readAsStringSync().trim());
+final r = c.read(gaiaRepositoryProvider);
+final all = await r.listMemoryTopics();
+final sail = all.firstWhere((t) => t.name == 'Sailing').id;
+final garden = all.firstWhere((t) => t.name == 'Gardening').id;
+await Future.delayed(Duration(milliseconds: at - DateTime.now().millisecondsSinceEpoch));
+await GaiaMemories(r).moveTopic(sail, garden);
+debugPrint('MT5-CYCLE-A moved Sailing under Gardening at ' + DateTime.now().toUtc().toIso8601String());

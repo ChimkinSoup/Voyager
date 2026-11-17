@@ -1,0 +1,6 @@
+final r = c.read(gaiaRepositoryProvider);
+final ctx = await GaiaMemories(r).curatorContext('User: Can you suggest a quick warm-up for my Tuesday 6am spin class? I have a bad left knee from a ski accident two winters ago. Keep it short. Gaia: Five minutes easy spin, then leg swings and gentle knee circles.');
+final active = [for (final m in await r.listMemories()) if (m.status.name == 'active' && m.deletedAt == null) m];
+var all = 0;
+for (final m in active) { all += m.text.length + 3 + m.tags.join(', ').length; }
+debugPrint('MT5-CURSIZE kept=' + ctx.kept.length.toString() + ' lines=' + ctx.kept.split('\n').length.toString() + ' topics=' + ctx.topics.length.toString() + ' active=' + active.length.toString() + ' fullIndexChars~' + all.toString());
