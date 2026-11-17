@@ -65,9 +65,10 @@ class GaiaDebug extends ChangeNotifier {
   var allowScreenshots = false;
 
   /// Memory recall's stage 2: the utility model picks from stage 1's
-  /// candidates (GAIA_MEMORY_TOPICS_HLD.md §4.3). Off by default until the
-  /// plan-usage test (§11) is done.
-  var recallPick = false;
+  /// candidates (GAIA_MEMORY_TOPICS_HLD.md §4.3). On by default (§18.4).
+  /// Saved as `recallPickOff`: files from when it was off by default have
+  /// `recallPick: false` from any other toggle's save, which isn't a choice.
+  var recallPick = true;
 
   /// Runs while [showFps] or [fpsAlert] is on.
   late final fps = FpsMonitorController()..addListener(_checkFps);
@@ -99,7 +100,7 @@ class GaiaDebug extends ChangeNotifier {
       fpsAlertThreshold = alertThreshold;
       slowAnimations = json['slowAnimations'] == true;
       allowScreenshots = json['allowScreenshots'] == true;
-      recallPick = json['recallPick'] == true;
+      recallPick = json['recallPickOff'] != true;
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
     }
@@ -203,7 +204,7 @@ class GaiaDebug extends ChangeNotifier {
           'fpsAlertThreshold': fpsAlertThreshold,
           'slowAnimations': slowAnimations,
           'allowScreenshots': allowScreenshots,
-          'recallPick': recallPick,
+          'recallPickOff': !recallPick,
         }),
       );
     } catch (error) {

@@ -162,6 +162,22 @@ void main() {
     expect(after.streamSpeed, 100);
   });
 
+  test("recall's stage 2 is on by default, and an old file's off "
+      "isn't a choice", () async {
+    expect(GaiaDebug().recallPick, isTrue);
+    await file.parent.create(recursive: true);
+    // What any save wrote while it was off by default.
+    await file.writeAsString('{"showFps": false, "recallPick": false}');
+    final old = GaiaDebug(file: file);
+    await old.load();
+    expect(old.recallPick, isTrue);
+
+    await old.setRecallPick(false);
+    final after = GaiaDebug(file: file);
+    await after.load();
+    expect(after.recallPick, isFalse);
+  });
+
   test('an unreadable file leaves the defaults', () async {
     await file.parent.create(recursive: true);
     await file.writeAsString('{not json');

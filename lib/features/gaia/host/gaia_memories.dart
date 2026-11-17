@@ -36,20 +36,44 @@ class GaiaMemories {
   final GaiaRepository _repository;
 
   /// What the curator is shown (GAIA_MEMORY_TOPICS_HLD.md §5): the active
-  /// memories nearest [transcript] by stage 1, at most 40, as lines, so it
-  /// doesn't offer one again and its input doesn't grow with the memories
-  /// (§11), and every topic, to file what it finds. Pinned ones count.
+  /// memories nearest [transcript] by stage 1, at most 40, then the waiting,
+  /// archived and dismissed ones nearest it, at most 20, so set-aside ones
+  /// don't crowd out kept ones (§25.5), as lines, so it doesn't offer one
+  /// again, reworded, and its input doesn't grow with the memories (§11),
+  /// and every topic, to file what it finds. Pinned ones count. Not a kept
+  /// or archived memory the user deleted: deleting it is asking to forget
+  /// it, and it may be learned again.
   Future<({String kept, List<GaiaTopicLine> topics})> curatorContext(
     String transcript,
   ) async {
     final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+    final offered = await _offeredBefore();
     return (
       kept: [
-        for (final candidate in gaiaRecallCandidates(
-          await _active(),
-          tree,
-          transcript,
-        ))
+        for (final candidate in [
+          ...gaiaRecallCandidates(
+            [
+              for (final memory in offered)
+                if (!memory.isDeleted &&
+                    memory.status == GaiaMemoryStatus.active)
+                  memory,
+            ],
+            tree,
+            transcript,
+          ),
+          ...gaiaRecallCandidates(
+            [
+              for (final memory in offered)
+                if (memory.status == GaiaMemoryStatus.proposed ||
+                    (!memory.isDeleted &&
+                        memory.status == GaiaMemoryStatus.archived))
+                  memory,
+            ],
+            tree,
+            transcript,
+            limit: 20,
+          ),
+        ])
           '- ${_indexLine(candidate.memory)}',
       ].join('\n'),
       topics: gaiaTopicLines(tree),
@@ -408,23 +432,12 @@ class GaiaMemories {
       );
     }
     final same = gaiaMemoryKey(body);
-    final live = {
-      for (final project in await _repository.listProjects()) project.id,
-    };
-    for (final memory in await _repository.listMemories(
-      includeDeleted: !byUser,
-    )) {
-      // A deleted one whose project is gone went with it, before projects
-      // kept their memories (GAIA_PROJECTS_HLD.md §6).
-      if (memory.isDeleted &&
-          memory.projectId != null &&
-          !live.contains(memory.projectId)) {
+    for (final memory in await _offeredBefore()) {
+      if (byUser &&
+          (memory.isDeleted || memory.status == GaiaMemoryStatus.archived)) {
         continue;
       }
-      if ((!byUser || memory.status != GaiaMemoryStatus.archived) &&
-          gaiaMemoryKey(memory.text) == same) {
-        return null;
-      }
+      if (gaiaMemoryKey(memory.text) == same) return null;
     }
     final (filed, offer) = _filed(
       GaiaTopicTree(await _repository.listMemoryTopics()),
@@ -965,6 +978,23 @@ class GaiaMemories {
     if (id == null) return null;
     final project = await _repository.getProject(id);
     return project == null || project.isDeleted ? null : id;
+  }
+
+  /// Every memory that counts as offered before, for [save]'s duplicate
+  /// check and the curator's list: active, waiting, archived, dismissed and
+  /// deleted. Not a deleted one whose project is gone: it went with it,
+  /// before projects kept their memories (GAIA_PROJECTS_HLD.md §6).
+  Future<List<GaiaMemory>> _offeredBefore() async {
+    final live = {
+      for (final project in await _repository.listProjects()) project.id,
+    };
+    return [
+      for (final memory in await _repository.listMemories(includeDeleted: true))
+        if (!memory.isDeleted ||
+            memory.projectId == null ||
+            live.contains(memory.projectId))
+          memory,
+    ];
   }
 
   /// The active memories.

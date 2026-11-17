@@ -1,0 +1,8 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+var n = 0;
+for (final s in ['MT7 I keep my CS246 assignment notes in an Obsidian vault with the Dataview plugin.', 'MT7 I brew a pot of oolong tea before every Spanish lesson.', 'MT7 My sister Hana and I are planning a Japan trip together next spring.']) {
+  await g.save(s, status: GaiaMemoryStatus.active, byUser: true);
+  n++;
+}
+debugPrint('MT7-TWOCHIP2 ' + n.toString());

@@ -330,8 +330,8 @@ class GaiaUtility {
   }
 
   /// At most three memories worth keeping from a chat's new turns in
-  /// [transcript], none of them among [kept], the memories already kept
-  /// that are nearest to it (§11), each filed in [topics]
+  /// [transcript], none of them among [kept], the memories kept, in the
+  /// inbox or set aside that are nearest to it (§11), each filed in [topics]
   /// (GAIA_MEMORY_TOPICS_HLD.md §5); null when it failed, so the turns are
   /// read again next time.
   Future<List<GaiaFoundMemory>?> curate(
@@ -348,8 +348,9 @@ class GaiaUtility {
             'and projects in their life, decisions they made, how they like '
             'to work. Leave out anything that only matters to this chat, '
             'anything only the assistant said, anything already among the '
-            'memories kept, and secrets such as passwords or account '
-            'numbers. Usually there is nothing worth keeping.\n\n'
+            'memories listed, however worded, and secrets such as '
+            'passwords or account numbers. Usually there is nothing worth '
+            'keeping.\n\n'
             'Reply with only a JSON array, [] for nothing: each item '
             '{"text": "...", "tags": ["..."]}, the text one fact in one '
             'sentence under 200 characters that makes sense on its own, '
@@ -362,7 +363,8 @@ class GaiaUtility {
             'item only when the fact is about the user in general rather '
             'than one subject: who they are, or how they like answers given '
             '("I\'m a CS student at Waterloo", "I prefer short answers").',
-        'Memories kept that may overlap:\n'
+        'Memories kept, waiting for the user to approve, or set aside by '
+            'the user, that may overlap:\n'
             '${kept.trim().isEmpty ? '(none)' : kept}\n\n'
             '${_topicLines(topics)}\n\n'
             // The newest kept: the chat is marked read up to its last.

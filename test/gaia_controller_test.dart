@@ -3176,12 +3176,13 @@ void main() {
       expect(controller.routable, isFalse);
     });
 
-    test('a new chat starts the router ahead of its first message', () async {
+    test('a new chat starts the router and recall ahead of its first '
+        'message', () async {
       final runner = FakeUtilityRunner((_) => 'quick');
       await startCompanion(utility: GaiaUtility(runner));
       final before = runner.warmed;
       controller.newChat();
-      expect(runner.warmed, before + 1);
+      expect(runner.warmed, before + 2);
     });
 
     test('dummy mode never starts the router', () async {

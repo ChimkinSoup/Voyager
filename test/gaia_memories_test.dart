@@ -57,7 +57,8 @@ void main() {
     String transcript = 'metric units waiting old',
   ]) async => (await memories.curatorContext(transcript)).kept;
 
-  test("the curator's list has active memories only, one line each", () async {
+  test("the curator's list has every memory offered before, one line each: "
+      'kept, waiting, archived and dismissed', () async {
     expect(await curatorList(), isEmpty);
     await repository.upsertMemory(
       _memory('a', 'Prefers metric\nunits', tags: ['units']),
@@ -68,10 +69,52 @@ void main() {
     await repository.upsertMemory(
       _memory('c', 'Old', status: GaiaMemoryStatus.archived),
     );
-    final index = await curatorList();
+    final dismissed = _memory(
+      'd',
+      'Dismissed',
+      status: GaiaMemoryStatus.proposed,
+    );
+    await repository.upsertMemory(dismissed.copyWith(deletedAt: _at));
+    // Deleted with its project, before projects kept their memories.
+    final gone = _memory('e', 'Gone', projectId: 'no-such-project');
+    await repository.upsertMemory(gone.copyWith(deletedAt: _at));
+    // Deleted by the user: asked to forget it, and it may be learned again.
+    final forgotten = _memory('f', 'Forgotten');
+    await repository.upsertMemory(forgotten.copyWith(deletedAt: _at));
+    final shelved = _memory('g', 'Shelved', status: GaiaMemoryStatus.archived);
+    await repository.upsertMemory(shelved.copyWith(deletedAt: _at));
+    final index = await curatorList(
+      'metric units waiting old dismissed gone forgotten shelved',
+    );
     expect(index, contains('- Prefers metric units [units]'));
-    expect(index, isNot(contains('Waiting')));
-    expect(index, isNot(contains('Old')));
+    // None may be offered again, reworded.
+    expect(index, contains('- Waiting'));
+    expect(index, contains('- Old'));
+    expect(index, contains('- Dismissed'));
+    expect(index, isNot(contains('Gone')));
+    expect(index, isNot(contains('Forgotten')));
+    expect(index, isNot(contains('Shelved')));
+  });
+
+  test("set-aside memories don't crowd kept ones out of the curator's "
+      'list', () async {
+    for (var i = 0; i < 50; i++) {
+      final dismissed = _memory(
+        'd$i',
+        'Dismissed cs246 fact $i',
+        status: GaiaMemoryStatus.proposed,
+      );
+      await repository.upsertMemory(dismissed.copyWith(deletedAt: _at));
+    }
+    for (var i = 0; i < 40; i++) {
+      await repository.upsertMemory(_memory('a$i', 'Kept cs246 fact $i'));
+    }
+    final lines = (await curatorList('cs246')).split('\n');
+    expect(lines.where((line) => line.startsWith('- Kept')), hasLength(40));
+    expect(
+      lines.where((line) => line.startsWith('- Dismissed')),
+      hasLength(20),
+    );
   });
 
   test(

@@ -1,0 +1,4 @@
+# Firebase UIDs of the qa accounts phone.ps1 may drive the emulator's Voyager
+# with. Never a real account. Add a qa account's UID from its desktop profile:
+# settings_table.local_owner_uid in <profile>\voyager.sqlite.
+iqdUEDgy1bOtlcW7wEFxpEfh6ih1  # voyager-qa-128@example.com (gaiaqa)

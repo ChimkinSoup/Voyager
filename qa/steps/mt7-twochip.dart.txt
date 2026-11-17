@@ -1,0 +1,8 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+var n = 0;
+for (final s in ['MT7 Biscuit vet bills come out of my emergency savings fund.', 'MT7 I meal-prep high-protein lunches on Sundays for my lifting program.', 'MT7 I drive Biscuit to the dog park in the Civic every weekend.', 'MT7 My sister Hana lends me her car when the Civic is in the shop.']) {
+  await g.save(s, status: GaiaMemoryStatus.active, byUser: true);
+  n++;
+}
+debugPrint('MT7-TWOCHIP ' + n.toString());

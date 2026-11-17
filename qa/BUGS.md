@@ -4047,4 +4047,12 @@ Entry format:
 - Expected: Accept files the memory as Sort's suggestion shows; the older offer stays an offer (or is replaced), and no topic is made from it.
 - Notes: `_acceptSorted` (`gaia_page.dart:1976`) calls `place(id, placement)` then, because `placement.suggested != null`, `acceptSuggestedTopic(id)`. When the suggested name already exists, `_filed` files the memory in it and returns no offer, and `place` writes `copyWith(suggestedTopic: null)`, which keeps the memory's old offer, so `acceptSuggestedTopic` then makes that one. When Sort's topic doesn't exist yet the old offer is overwritten and it's fine, which is why the first accept of a name works. Only memories that already had a different offer are hit (3 of 51 here: Profile made, Language and Computer setup left as offers because those rows were skipped and ×'d).
 
-<!-- Last ID: BUG-382. -->
+### BUG-383 [GAIA-MEMORY] On the phone, the first memory opened from a recall chip is highlighted but not scrolled to
+- Severity: Minor
+- Found: 2026-11-17, GAIA_MEMORY_TOPICS_HLD.md phone pass (§25; emulator, qa-128)
+- Steps: on Android, open the Gaia page (Chats tab), open a chat whose reply has a recall chip ("CS246 Final Exam Study Memories"), open the chip and tap a memory ("the Bridge pattern"). This is the first time the Memories tab is built since the app started.
+- Actual: the page switches to the Memories tab at its top (inbox first) and stays there (`qa/shots/mt7-ph-reveal.png`). The memory is highlighted, as a search for it showed (`mt7-ph-reveal3.png`), but far down the 316-memory list.
+- Expected: the page scrolls to the memory and highlights it, as the desktop does and as the phone does on the second try.
+- Notes: a second chip tap in the same run ("design for change") scrolled to it and highlighted it (`mt7-ph-reveal4.png`). `_MemoriesTab._scrollToFocus` (`gaia_page.dart`) runs once, in a post-frame callback from `initState`; on the tab's first build `build` returns `SizedBox.shrink()` until `gaiaSettingsProvider` (and the memories) have a value, so `_focusKey` has no context then and nothing retries. Not fixed.
+
+<!-- Last ID: BUG-383. -->

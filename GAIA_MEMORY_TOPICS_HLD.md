@@ -3,7 +3,8 @@
 Status: **Phases 1-3 built (2026-11-16).** Each is unit- and controller-tested, and the
 live checks of §15.4, §16.4 and §17.4 were run on 2026-11-16 (§18): all passed except
 those that need the phone, a week of real chats, more §11 bursts, or Phase 4 (§19). Stage 2
-(Phase 3) is behind a debug-menu switch that's off. The first §11 burst is in §11; the
+(Phase 3) is **on by default since 2026-11-17** (§25.1); the debug-menu switch now only turns
+it off. The first §11 burst is in §11; the
 threshold isn't settled (§18.3). Decisions after the live pass are in §18.4: stage 1 is a
 candidate list only, and without stage 2 recall is left to `memory_search`. **Phase 4 (the
 Memories tab tree) built 2026-11-16** (§20): tested, and checked live off-screen except for
@@ -14,7 +15,13 @@ on 2026-11-17 (§22): all passed except the phone's, and BUG-381 (a memory card'
 follow edits) was found and fixed. **Phase 6 (topic merge, Sort these, and pin and merge
 suggestions) built 2026-11-17** (§23): unit-, controller- and widget-tested, and checked
 live on 2026-11-17 (§24): all passed except the curator's pin flag (not yet seen) and the
-phone's; BUG-382 (Sort these' Accept also makes a memory's older offer) found, not fixed. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+phone's; BUG-382 (Sort these' Accept also makes a memory's older offer) found, not fixed.
+**The checks left after §24 were run on 2026-11-17 (§25):** the curator's pin flag and its
+filing in a project chat, a real Codex turn calling `memory_search` with `topic`, Sort these'
+× on one of two chips, and the phone for every phase. All passed. BUG-383 (the phone's first
+reveal from a recall chip doesn't scroll) found, not fixed. **Still open:** §11's two clean
+bursts and a week of real chats, which take separate days and now tune stage 2's later-message
+trigger rather than decide whether it's on; and BUG-378, BUG-382 and BUG-383. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -284,7 +291,9 @@ Every new memory gets topics when it's saved:
   that says the same as any active one isn't saved again.
 - **The curator's input shrinks.** Today it gets the whole index to avoid duplicates
   (`gaia_utility.dart:245`). It gets stage 1's top 40 candidates for the transcript instead, so
-  its input doesn't grow with your memory count.
+  its input doesn't grow with your memory count. The candidates are the 40 nearest active
+  memories plus the 20 nearest waiting, archived or dismissed ones (§25.4, §25.5), so it
+  doesn't offer one again in other words; not one the user deleted after keeping it.
 
 ## 6. Starting topics
 
@@ -361,7 +370,9 @@ is tested in the live pass but isn't a gate for any phase.
 
 ## 11. Test: what recall costs on the plan
 
-**To do once Phase 3 is built, before stage 2 is turned on by default.**
+**To do once Phase 3 is built, before stage 2 is turned on by default.** Stage 2 was turned on
+by default on 2026-11-17 before the clean bursts (§25.1), so what's left here tunes the
+threshold and decides whether stage 2 keeps running on later messages.
 
 Gaia runs on a Claude subscription, not the API, so the cost that matters is how much of the
 **5-hour limit** each Haiku pass uses, not dollars. That percentage varies over time, so a
@@ -964,7 +975,8 @@ once the clean bursts are in.
    as a fallback was considered and left out: it brings back the per-session cost this design
    removes.
 3. **Recall quality waits for the whole design.** Stage 2 stays behind the debug switch until
-   §11's clean bursts are in. Weak recall in the meantime is expected, not a bug.
+   §11's clean bursts are in. Weak recall in the meantime is expected, not a bug. *Changed
+   2026-11-17: stage 2 is on by default (§25.1).*
 4. **Carried into later phases** (§10):
    - Phase 4: a project's filter on the Memories tab includes its subtopics' memories, and
      those memories are labelled with their topic, not "Global" (§18.2).
@@ -1604,3 +1616,141 @@ Left on qa-128: the Biscuit and general-fact chats from this pass; topics Langua
 Preferences, Profile, Tea, Teas, Travel, Gap checks; Hobbies now holding Gardening's memories
 with Sailing under it; the merged topics in the trash; "MT6 P4 Del Trash marker" in Travel;
 the diet memory pinned.
+
+## 25. Stage 2 on by default, and the last live checks (2026-11-17)
+
+`gaiaqa` (qa-128) on a fresh debug build of the working tree, the main window parked
+off-screen and driven by `voy.ps1` in background mode, VM eval (`qa/steps/mt7-*.dart.txt`)
+and read-only SQLite. The phone was the Android emulator (`Medium_Phone_API_37.0`) on a fresh
+debug APK, wiped and signed in to qa-128 by email, driven through `qa/harness/phone.ps1`
+(below), with its database read over `run-as`. Real turns on Juno's default Claude account,
+and Codex on the `sol` agent pointed at `gpt-6-luna` for the pass, then set back. One new
+bug, BUG-383, not fixed.
+
+### 25.1 Stage 2 on by default
+
+Decided by Juno on 2026-11-17, ahead of §11's clean bursts: stage 1 alone gives almost no
+recall (§18.3, §18.4), and a pass costs about 1.2k tokens and answers in under a second most
+of the time (§11). `GaiaDebug.recallPick` now starts true, and the debug menu's switch only
+turns it off. It's saved as `recallPickOff`: every `debug.json` written while it was off by
+default has `recallPick: false` from any other toggle's save, which wasn't a choice, so that
+key is no longer read. Checked by `gaia_debug_test` ("recall's stage 2 is on by default, and
+an old file's off isn't a choice"), which fails on the old default, and live: `gaiaqa`'s
+`debug.json` from §24, with `recallPick: false`, loaded as on. With recall and the router
+both on, a new chat starts two utility processes ahead; the controller test that counted one
+now counts two. §11's bursts and week of chats now tune the later-message trigger only.
+
+### 25.2 What was checked
+
+- **The curator's pin flag** (§23.4): passed. A new chat stated "I am left-handed and a
+  third-year computer science student at the University of Waterloo". The curator ran 10
+  minutes after the reply (`curator: 2 from …`) and proposed the student fact, filed in
+  Profile, with a `pinCandidate` hint. Once remembered, the inbox read "Pin this? About you in
+  general." (`qa/shots/mt7-pinflag.png`). §24's chat with the same facts had been curated
+  since and left two near-duplicates in the inbox ("I am a third-year CS student…", "I am
+  left-handed."): the curator was shown active memories only, so a proposal still waiting
+  could be offered again in other words. Fixed after the pass (§25.4).
+- **The curator filing in a project chat** (§15.4): passed. In a CS246 chat, "My CS246 final
+  project group meets every Wednesday at 4pm in the MC building, and my teammate Priya is
+  doing the UML diagrams" was proposed as "My CS246 project group meets every Wednesday at 4pm
+  in the MC building.", filed in CS246 and CS246 › Assignments.
+- **A real Codex turn with `memory_search` `topic`** (§15.4, §18.1): passed. "What memories
+  do you have saved under my Final exam topic?" was answered from `<gaia_memories>` (7, with
+  stage 2 on) and made no call. Asked whether that was all, Codex called
+  `memory_search({topic: "CS246 › Final exam"})`, the full path from the topic list, and
+  listed all 14.
+- **Sort these, × on one of two chips** (§24): passed. Of seven memories seeded across two
+  topics, three got two chips (Travel and Family; Tea and Languages; Obsidian › Plugins and
+  CS246 › Assignments). The prompt asks for "usually 1", and the four looser ones got one.
+  × on Family left Travel, and Accept filed the memory in Travel alone.
+- **The phone, Phase 1** (§15.4): passed. A project made on the phone ("MT7 Phone Proj") got
+  its linked topic on the desktop, and a rename on the phone was followed by the topic (v2).
+  The phone pulled the same 33 topics as the desktop; its error log has only a
+  `hotkey_manager` plugin message at start.
+- **Phase 2** (§16.4): passed, with BUG-383. The Codex chat's reply showed "Recalled 3
+  memories" after sync; opened, it listed each under "CS246 › Final exam" with "Given to the
+  agent with this message. It may not have used them." Tapping a memory went back to the Gaia
+  page's Memories tab with it highlighted, but the first time the page didn't scroll to it
+  (BUG-383); a second tap scrolled and highlighted.
+- **Phase 4** (§20.5): passed. The tree button opens the Topics dialog, each topic with a ⋯
+  menu: Rename, New subtopic, Move under… (the picker leaves out the topic and its subtree),
+  Merge into… and Delete ("Its memories stay in their other topics, or go to Unsorted. Its
+  subtopics move up to …"), each reaching the desktop. A linked project's topic shows
+  "Merge into… (a project's topic stays)" and "Delete (goes with its project)" disabled; at
+  phone width the first is cut off. A memory's ⋯ has Move to topic… (from All memories it
+  replaced both topics) and Add to topic… (kept Car, added the new one). The button's label
+  followed a re-parent ("MT7 Phone B › MT7 Phone A2 › MT7 Sub").
+- **Phase 5** (§21.4): passed. A `/remember` that placement offered "+ New topic:
+  Volunteering" showed its chip on the phone; tapping it made the topic and filed the memory.
+  × on the Keychron memory's "Computer setup" offer cleared it with no topic made. No Suggest
+  button on the phone, on an Unsorted memory with no offer either.
+- **Phase 6** (§23.4): passed. Merge into… from the phone moved a topic's memory and its
+  subtopic into a project topic and trashed it. The inbox's "Merge "Teas" into "Tea"?" showed
+  on the phone, and Merge there trashed Teas on the desktop. No Sort these on the phone's
+  Unsorted view and no pin suggestions in its inbox.
+
+### 25.3 The phone and Juno's real account
+
+Before the wipe, the emulator's install, kept by `adb install -r`, was still signed in to
+Juno's real account. It showed the login page for a moment while that session loaded, and
+taps and typed text meant for the login page landed in the real app. What they hit wasn't
+seen; Juno chose to wipe the install (`pm clear`). Since then, input reaches the emulator
+only through `qa/harness/phone.ps1`, which refuses any tap, typing, swipe or key unless the
+app is signed out or the account its local data belongs to (`settings_table
+.local_owner_uid`, read over `run-as`) is listed in `qa/harness/phone_accounts.txt`
+(qa-128 only). Checked both ways: allowed on qa-128, refused with qa-128 taken off the list.
+
+### 25.4 The curator is shown every memory offered before (2026-11-17)
+
+Decided after §25.2's near-duplicates. `save` already drops a memory that says exactly what
+any other says (`gaiaMemoryKey`, inbox and dismissed ones included), so "I am left-handed."
+wasn't saved twice; a rewording gets past it, and only the model can tell. `curatorContext`
+now ranks every memory offered before for its 40: active, waiting in the inbox, archived, and
+dismissed or deleted, the same set `save` checks for exact duplicates (`_offeredBefore`, now
+shared by both; a deleted one whose project is gone stays out, as before). The prompt calls
+them "Memories kept, waiting for the user to approve, or set aside by the user" and asks it to
+leave out anything already among them "however worded". Fuzzy matching at save time was
+considered and left out: wording alone either misses a rewording or merges two different
+facts.
+
+- **Tests:** `gaia_memories_test`, "the curator's list has every memory offered before, one
+  line each: kept, waiting, archived and dismissed" (it said active only before), which also
+  checks a deleted memory of a gone project stays out. The memories, topics, utility and
+  controller test files pass; `save`'s duplicate tests are unchanged and pass.
+- **Live, real Haiku** (a throwaway probe of `GaiaUtility.curate`, three runs each): a chat
+  restating qa-128's two waiting proposals in other words ("I'm a lefty…", "my CS246 group
+  still gets together Wednesdays at 4 in MC"). Shown the active memory alone, the curator
+  proposed both again every time ("I'm left-handed, so most mice feel awkward to me.", "My
+  CS246 group meets Wednesdays at 4 in MC."). With the two proposals in its list, it returned
+  `[]` every time. Run again with the final prompt (the list as dismissed or archived ones
+  appear, no status shown), the chat also mentioning a new cat: three of three proposed only
+  "I just adopted a cat named Miso.", so a new fact still gets through.
+- **Cost:** a user who sets many memories aside fills more of the 40 with them, leaving fewer
+  places for active ones near the chat. The 40 are still the nearest by stage 1, whatever
+  their status. *Changed by §25.5.*
+
+### 25.5 Deleted memories left out, and kept ones given their own 40 (2026-11-17)
+
+Decided by Juno after a review of §25.4.
+
+- **A kept or archived memory the user deleted is no longer shown to the curator.** Deleting
+  it is asking Gaia to forget it, and §25.4 sent its text to the utility model again whenever
+  a chat touched it. Shown, it also stopped a corrected fact (a move back to a city once
+  deleted) from ever being learned again. A dismissed proposal is still shown: the model
+  wrote it from the user's own chat, so it shows the model nothing new, and it's what stopped
+  §25.2's rewordings. A deleted fact can now be proposed again; dismissed, it stays out.
+  `save`'s exact-duplicate check is unchanged.
+- **Kept memories aren't crowded out.** The curator gets the 40 nearest active memories, then
+  the 20 nearest waiting, archived or dismissed ones, each ranked by stage 1 on its own.
+- **Tests:** `gaia_memories_test`, the curator's list test now also checks that a deleted
+  active and a deleted archived memory stay out, and "set-aside memories don't crowd kept
+  ones out of the curator's list" (50 dismissed and 40 kept, all matching: 40 kept and 20
+  dismissed listed). The memories, utility, controller and debug test files pass. Not checked
+  live against Haiku.
+
+Left on qa-128: the curator, Codex and remember chats from this pass; the CS246 group proposal
+and the two §24 duplicates in the inbox; the student fact remembered, in Profile; topics MT7
+Phone Proj Renamed (its project too) with MT7 Sub under it, and Volunteering; MT7 Phone A2,
+MT7 Phone B and Teas in the trash; six of the seven "MT7 …" memories Unsorted and the Japan
+trip one in Travel; the cabin air filter memory back in Car. The emulator is signed in to
+qa-128.
