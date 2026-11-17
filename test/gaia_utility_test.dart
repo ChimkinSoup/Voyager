@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,7 @@ import 'fakes/gaia_fakes.dart';
 /// The utility model (GAIA_HLD.md §5.1): the router, titles and summaries
 /// on Haiku through Claude Code.
 ///
-/// The last test runs the real CLI, skipped unless GAIA_CLI_CHECK=1 (as
+/// The last two tests run the real CLI, skipped unless GAIA_CLI_CHECK=1 (as
 /// test/gaia_cli_contract_test.dart); GAIA_CLAUDE_CONFIG_DIR picks the
 /// account. It makes two tiny Haiku calls.
 void main() {
@@ -29,6 +30,86 @@ void main() {
       <String>[],
     ]);
     expect(() => parseCuratorAnswer('Nothing.'), throwsFormatException);
+  });
+
+  group('memory recall (GAIA_MEMORY_TOPICS_HLD.md §4.3)', () {
+    GaiaRecalledMemory memory(String id, [int length = 10]) =>
+        (id: id, text: 'x' * length, topic: id == 'a' ? 'CS246' : null);
+
+    test("the answer: its ids in order, unknown and repeated ones dropped, "
+        'within the caps', () {
+      final candidates = [for (var i = 0; i < 12; i++) memory('$i')];
+      expect(parseRecallAnswer('[]', candidates), isEmpty);
+      expect(
+        parseRecallAnswer(
+          'Picked: ["3", "nope", "1", "3", 7]',
+          candidates,
+        ).map((m) => m.id),
+        ['3', '1'],
+      );
+      expect(
+        parseRecallAnswer(
+          '[${[for (var i = 0; i < 12; i++) '"$i"'].join(',')}]',
+          candidates,
+        ),
+        hasLength(kGaiaMaxRecalled),
+      );
+      final long = [memory('a', 3000), memory('b', 2000), memory('c', 900)];
+      expect(parseRecallAnswer('["a", "b", "c"]', long).map((m) => m.id), [
+        'a',
+        'c',
+      ]);
+      expect(
+        () => parseRecallAnswer('None.', candidates),
+        throwsFormatException,
+      );
+    });
+
+    test('sends the message, title and candidates, and logs its usage; a '
+        'bad answer is null', () async {
+      final runner = FakeUtilityRunner((_) => '["a"]');
+      final picks = await GaiaUtility(
+        runner,
+      ).recall('My assignment', 'CS246 help', [memory('a'), memory('b')]);
+      expect(picks!.single.id, 'a');
+      expect(runner.inputs.single, contains('Chat: CS246 help'));
+      expect(runner.inputs.single, contains('Message:\nMy assignment'));
+      expect(runner.inputs.single, contains('a · CS246 · xxxxxxxxxx'));
+      expect(runner.inputs.single, contains('b · Unsorted · xxxxxxxxxx'));
+      expect(runner.usages.single, 'memory recall');
+
+      final bad = FakeUtilityRunner((_) => 'a, I think');
+      expect(await GaiaUtility(bad).recall('x', null, [memory('a')]), isNull);
+      expect(bad.inputs.single, isNot(contains('Chat:')));
+    });
+
+    test('warming for recall starts one more process', () {
+      final runner = FakeUtilityRunner((_) => '');
+      GaiaUtility(runner).warm(recall: true);
+      expect(runner.warmed, 2);
+      final off = FakeUtilityRunner((_) => '');
+      (GaiaUtility(off)..autoRoute = false).warm(recall: true);
+      expect(off.warmed, 1);
+    });
+
+    test("a job's tokens are summed over its models", () {
+      expect(
+        claudeUtilityTokens({
+          'claude-haiku-5-5': {
+            'inputTokens': 3000,
+            'outputTokens': 20,
+            'cacheReadInputTokens': 500,
+            'cacheCreationInputTokens': 100,
+          },
+          'other': {'inputTokens': 1, 'outputTokens': 2},
+        }),
+        'in 3001, cache read 500, cache write 100, out 22',
+      );
+      expect(
+        claudeUtilityTokens(null),
+        'in 0, cache read 0, cache write 0, out 0',
+      );
+    });
   });
 
   test('the curator keeps the newest turns of a long transcript', () async {
@@ -141,9 +222,40 @@ void main() {
         await runner.generate(
           'Reply with the word in <input>, in capitals.',
           'gaia',
+          timeout: const Duration(seconds: 30),
         ),
         'GAIA',
       );
+    },
+  );
+
+  test(
+    'FRAGILE(cli): a utility job past its timeout has its process killed',
+    skip: Platform.environment['GAIA_CLI_CHECK'] != '1',
+    timeout: const Timeout(Duration(minutes: 1)),
+    () async {
+      final dir = Directory('${Directory.systemTemp.path}/gaia_utility_kill');
+      final runner = ClaudeUtilityRunner(workingDirectory: dir.path)
+        ..configure(
+          model: kGaiaDefaultUtilityModel,
+          configDir: Platform.environment['GAIA_CLAUDE_CONFIG_DIR'] ?? '',
+        );
+      await expectLater(
+        runner.generate(
+          // Long enough to run well past the check below.
+          'Write 300 numbered lines, each a different sentence of 25 words.',
+          '',
+          timeout: const Duration(seconds: 4),
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      await Future<void>.delayed(const Duration(seconds: 1));
+      final left = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        "(Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*gaia_utility_kill*' -and \$_.Name -ne 'powershell.exe' }).Count",
+      ]);
+      expect(left.stdout.toString().trim(), '0');
     },
   );
 }

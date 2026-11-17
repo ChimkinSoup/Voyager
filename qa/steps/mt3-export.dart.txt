@@ -1,0 +1,20 @@
+final dir = r'C:\Users\Juno\AppData\Local\Temp\claude\e5ebcdb8936ec77e\df155935-b217-4d82-a7c1-845ec4cc8075\scratchpad';
+final r = c.read(gaiaRepositoryProvider);
+final active = [for (final m in await r.listMemories()) if (m.status.name == 'active' && !m.pinned && !m.isDeleted) m];
+final tree = GaiaTopicTree(await r.listMemoryTopics());
+final cs = tree.subtree('project-mt3-cs246');
+final out = StringBuffer();
+for (final line in File(dir + r'\probes.txt').readAsLinesSync()) {
+  if (!line.contains('\t')) continue;
+  final inCs = line.startsWith('cs');
+  final text = line.substring(line.indexOf('\t') + 1);
+  final home = inCs ? cs : const <String>{};
+  final cand = gaiaRecallCandidates(active, tree, text, home: home);
+  final picks = gaiaRecallPicks(cand).map((m) => m.id).toSet();
+  out.writeln('P\t' + (inCs ? 'cs' : 'none') + '\t' + text + '\t' + picks.join(','));
+  for (final x in cand) {
+    out.writeln('C\t' + x.memory.id + '\t' + (gaiaMemoryTopicPath(x.memory, tree, prefer: home) ?? 'Unsorted') + '\t' + x.strength.toStringAsFixed(2) + '\t' + x.memory.text);
+  }
+}
+File(dir + r'\cands.txt').writeAsStringSync(out.toString());
+debugPrint('MT3-EXPORT ' + out.length.toString());

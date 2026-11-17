@@ -1,0 +1,6 @@
+final uid = FirebaseAuth.instanceFor(app: voyagerFirebaseApp).currentUser!.uid;
+final fs = FirebaseFirestore.instanceFor(app: voyagerFirebaseApp);
+final now = DateTime.now().toUtc().toIso8601String();
+await fs.doc('users/' + uid + '/gaia_memories/mt3-m-001').set({'id': 'mt3-m-001', 'text': 'CS246 is taught in C++20 and the course compiles with g++-14 -std=c++20 -Wall -MMD (edited by an older build)', 'tags': <String>[], 'sourceChatId': null, 'status': 'active', 'projectId': null, 'createdAt': '2026-11-16T23:26:20.530371Z', 'updatedAt': now, 'version': 2, 'deletedAt': null}, SetOptions(merge: true));
+await fs.doc('users/' + uid + '/gaia_memories/mt3-old-new').set({'id': 'mt3-old-new', 'text': 'Saved by an older build in a CS246 chat: the A5 plan of attack is in docs/plan.md', 'tags': <String>[], 'sourceChatId': null, 'status': 'active', 'projectId': 'mt3-cs246', 'createdAt': now, 'updatedAt': now, 'version': 1, 'deletedAt': null}, SetOptions(merge: true));
+debugPrint('MT3-OLD written');

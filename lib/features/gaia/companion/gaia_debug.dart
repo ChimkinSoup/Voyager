@@ -64,6 +64,11 @@ class GaiaDebug extends ChangeNotifier {
   /// otherwise excluded from (GAIA_HLD.md §3.2).
   var allowScreenshots = false;
 
+  /// Memory recall's stage 2: the utility model picks from stage 1's
+  /// candidates (GAIA_MEMORY_TOPICS_HLD.md §4.3). Off by default until the
+  /// plan-usage test (§11) is done.
+  var recallPick = false;
+
   /// Runs while [showFps] or [fpsAlert] is on.
   late final fps = FpsMonitorController()..addListener(_checkFps);
 
@@ -94,6 +99,7 @@ class GaiaDebug extends ChangeNotifier {
       fpsAlertThreshold = alertThreshold;
       slowAnimations = json['slowAnimations'] == true;
       allowScreenshots = json['allowScreenshots'] == true;
+      recallPick = json['recallPick'] == true;
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
     }
@@ -149,6 +155,8 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setAllowScreenshots(bool value) =>
       _set(() => allowScreenshots = value);
 
+  Future<void> setRecallPick(bool value) => _set(() => recallPick = value);
+
   /// The script [prompt] calls for, while [scriptedReplies] is on, else
   /// [gaiaDummyScript] while [dummyMode] is.
   GaiaDebugScript? scriptFor(String prompt) {
@@ -195,6 +203,7 @@ class GaiaDebug extends ChangeNotifier {
           'fpsAlertThreshold': fpsAlertThreshold,
           'slowAnimations': slowAnimations,
           'allowScreenshots': allowScreenshots,
+          'recallPick': recallPick,
         }),
       );
     } catch (error) {

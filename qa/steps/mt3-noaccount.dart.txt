@@ -1,0 +1,9 @@
+final empty = Directory(r'C:\Users\Juno\AppData\Local\Temp\claude\e5ebcdb8936ec77e\df155935-b217-4d82-a7c1-845ec4cc8075\scratchpad\noclaude')..createSync(recursive: true);
+final u = GaiaUtility(ClaudeUtilityRunner(workingDirectory: p.join((await appSupportRoot()).path, 'gaia', 'utility-mt3')));
+u.apply({'claudeConfigDir': empty.path});
+for (final warm in [false, true]) {
+  if (warm) { u.warm(recall: true); await Future.delayed(const Duration(seconds: 4)); }
+  final sw = Stopwatch()..start();
+  final r = await u.recall('valgrind says I leak memory in my destructor', null, [(id: 'mt3-m-011', text: 'The user uses valgrind --leak-check=full for CS246 memory checks', topic: 'CS246')]);
+  debugPrint('MT3-NOACC warm=' + warm.toString() + ' result=' + r.toString() + ' in ' + sw.elapsedMilliseconds.toString() + ' ms');
+}

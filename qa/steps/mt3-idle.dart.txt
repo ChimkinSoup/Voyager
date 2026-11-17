@@ -1,0 +1,4 @@
+final r = ClaudeUtilityRunner(workingDirectory: p.join((await appSupportRoot()).path, 'gaia', 'utility-mt3idle'));
+r.configure(model: kGaiaDefaultUtilityModel, configDir: '');
+await r.warm(2);
+debugPrint('MT3-IDLE warmed 2 at ' + DateTime.now().toIso8601String());

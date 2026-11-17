@@ -1,0 +1,7 @@
+final r = ClaudeUtilityRunner(workingDirectory: p.join((await appSupportRoot()).path, 'gaia', 'utility-mt3drop'));
+r.configure(model: kGaiaDefaultUtilityModel, configDir: '');
+await r.warm(1);
+debugPrint('MT3-DROP warmed ' + DateTime.now().toIso8601String());
+await Future.delayed(const Duration(seconds: 15));
+r.configure(model: 'claude-sonnet-5-5', configDir: '');
+debugPrint('MT3-DROP dropped ' + DateTime.now().toIso8601String());

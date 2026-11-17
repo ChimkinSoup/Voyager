@@ -2822,7 +2822,9 @@ class GaiaController extends ChangeNotifier {
     bool? fullScreen,
     bool activate = true,
   }) {
-    if (currentChatId == null && !debug.dummyMode) _utility?.warm();
+    if (currentChatId == null && !debug.dummyMode) {
+      _utility?.warm(recall: debug.recallPick);
+    }
     onScreen.value = true;
     return _window.show(
       mode,
@@ -2841,7 +2843,7 @@ class GaiaController extends ChangeNotifier {
     _viewChat(null);
     pickedTier = null;
     newChatProject = null;
-    if (!debug.dummyMode) _utility?.warm();
+    if (!debug.dummyMode) _utility?.warm(recall: debug.recallPick);
     notifyListeners();
   }
 
@@ -5720,11 +5722,22 @@ class GaiaController extends ChangeNotifier {
     // The router picks only a new chat's first tier, and never over the
     // user's own pick (§7.2).
     // Nor a command's, whose CLI is the one its palette row came from.
+    // Memory recall's utility pass goes beside it (GAIA_MEMORY_TOPICS_HLD.md
+    // §4.3), for the chat's first session; picked or not, recall runs
+    // below.
+    Future<List<GaiaRecalledMemory>>? recalling;
     if (isNew &&
         native == null &&
         (remote == null ? pickedTier == null : remote.tier == null) &&
         !debug.dummyMode) {
       if (_utility == null) debugPrint('[gaia] router: no utility model');
+      if (_utility != null &&
+          debug.recallPick &&
+          debug.scriptFor(prompt) == null) {
+        // Dropped by the returns before handedOver awaits it: its error
+        // mustn't go unhandled.
+        recalling = _recall(chatId, question.seq, prompt, const [])..ignore();
+      }
       tier = await _utility?.route(topic) ?? tier;
       // In the picker at once, not once the chat is saved below.
       if (_routing.remove(chatId)) {
@@ -6025,9 +6038,13 @@ class GaiaController extends ChangeNotifier {
       }
       // The memories that fit this message and are new to the session
       // (GAIA_MEMORY_TOPICS_HLD.md §4.4); none ahead of a native command.
+      // The pass begun beside the router serves a first session only.
+      final early = toldRecalled.isEmpty ? recalling : null;
+      recalling = null;
       final recalled = native != null
           ? const <GaiaRecalledMemory>[]
-          : await _recall(chatId, question.seq, prompt, toldRecalled);
+          : await (early ??
+                _recall(chatId, question.seq, prompt, toldRecalled));
       // Shown on the reply, or a retry's earlier chip taken off it.
       if (recalled.isNotEmpty || reply.parts.firstOrNull is GaiaRecallPart) {
         toldRecalled = [
@@ -6881,9 +6898,12 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// The memories for [chatId]'s message [prompt] at [seq] that its session
-  /// wasn't given yet ([recalled]) (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.4),
+  /// wasn't given yet ([recalled]) (GAIA_MEMORY_TOPICS_HLD.md §4.2-§4.4),
   /// matched with the end of the reply before it too, so a vague follow-up
-  /// still has context. None when the main instance can't say.
+  /// still has context. With [GaiaDebug.recallPick] on, the utility model
+  /// picks them on the chat's first message, and on a later one with a new
+  /// strong candidate; stage 1's picks otherwise, or when it fails. None when
+  /// the main instance can't say.
   Future<List<GaiaRecalledMemory>> _recall(
     String chatId,
     int seq,
@@ -6896,6 +6916,7 @@ class GaiaController extends ChangeNotifier {
               message.seq < seq && message.role == GaiaMessageRole.assistant,
         )
         .lastOrNull;
+    final chat = _chat(chatId);
     var before = [
       for (final part in last?.parts ?? const <GaiaPart>[])
         if (part is GaiaTextPart) part.text,
@@ -6905,23 +6926,39 @@ class GaiaController extends ChangeNotifier {
     }
     final text = [prompt, if (before.isNotEmpty) before].join('\n\n');
     if (text.trim().isEmpty) return const [];
+    final GaiaRecall found;
     try {
-      return [
-        for (final memory
-            in await _pipe.request('memoryRecall', {
-                      'chatId': chatId,
-                      'text': text,
-                      'recalled': recalled,
-                    })
-                    as List? ??
-                const [])
-          if (memory case {'id': final String id, 'text': final String text})
-            (id: id, text: text, topic: memory['topic'] as String?),
-      ];
+      found = gaiaRecallFromJson(
+        await _pipe.request('memoryRecall', {
+          'chatId': chatId,
+          'text': text,
+          'recalled': recalled,
+          'projectId': chat?.projectId,
+        }),
+      );
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] memory recall: $error');
       return const [];
     }
+    final utility = _utility;
+    final first = last == null;
+    if (utility == null ||
+        !debug.recallPick ||
+        debug.dummyMode ||
+        found.candidates.isEmpty ||
+        !(first || found.strong)) {
+      return found.picks;
+    }
+    debugPrint(
+      '[gaia] memory recall: asking the utility model, '
+      '${first ? 'first message' : 'a new strong candidate'}',
+    );
+    return await utility.recall(
+          prompt,
+          first ? null : chat?.title,
+          found.candidates,
+        ) ??
+        found.picks;
   }
 
   /// The memory curator (§11): the utility model reads [chatId]'s turns

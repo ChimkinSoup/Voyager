@@ -527,17 +527,23 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
   }
 
   @override
-  Future<void> warm() async => warmed++;
+  Future<void> warm([int count = 1]) async => warmed += count;
+
+  /// Each job's usage label, null for none, in order.
+  final usages = <String?>[];
 
   @override
   Future<String> generate(
     String job,
     String input, {
+    required Duration timeout,
     List<GaiaImageInput> images = const [],
+    String? usage,
   }) async {
     jobs.add(job);
     inputs.add(input);
     this.images.add(images);
+    usages.add(usage);
     return answer(job);
   }
 }

@@ -1,0 +1,36 @@
+final dir = r'C:\Users\Juno\AppData\Local\Temp\claude\e5ebcdb8936ec77e\df155935-b217-4d82-a7c1-845ec4cc8075\scratchpad';
+final runner = ClaudeUtilityRunner(workingDirectory: p.join((await appSupportRoot()).path, 'gaia', 'utility-mt3'));
+runner.configure(model: kGaiaDefaultUtilityModel, configDir: '');
+final probes = <(String, List<GaiaRecalledMemory>)>[];
+for (final line in File(dir + r'\cands.txt').readAsLinesSync()) {
+  final f = line.split('\t');
+  if (f[0] == 'P') probes.add((f[2], <GaiaRecalledMemory>[]));
+  if (f[0] == 'C') probes.last.$2.add((id: f[1], text: f.sublist(4).join('\t'), topic: f[2]));
+}
+final limit = int.parse(File(dir + r'\burst_limit.txt').readAsStringSync().trim());
+final mode = File(dir + r'\burst_mode.txt').readAsStringSync().trim();
+var i = 0;
+for (final (message, all) in probes.take(limit)) {
+  i++;
+  final candidates = all.take(40).toList();
+  if (candidates.isEmpty) { debugPrint('MT3-B ' + i.toString() + ' | ' + message + ' | no candidates, stage 2 not run'); continue; }
+  if (mode == 'warm') { await runner.warm(1); await Future.delayed(const Duration(seconds: 4)); }
+  final sw = Stopwatch()..start();
+  String answer;
+  try {
+    answer = await runner.generate(
+      'Pick the memories about the user that an assistant answering '
+          'the user\'s message should know. Pick only those that bear on '
+          'this message, at most $kGaiaMaxRecalled, usually fewer, and '
+          'none when none do.\n\n'
+          'Reply with only a JSON array of the picked ids, [] for none.',
+      'Message:\n$message\n\n'
+          'Memories (id \u00b7 topic \u00b7 text):\n'
+          '${[for (final memory in candidates) '${memory.id} \u00b7 ${memory.topic ?? 'Unsorted'} \u00b7 ${memory.text}'].join('\n')}',
+      usage: 'memory recall',
+    );
+  } catch (err) { answer = 'ERROR ' + err.toString(); }
+  final picks = answer.startsWith('ERROR') ? <GaiaRecalledMemory>[] : parseRecallAnswer(answer, candidates);
+  debugPrint('MT3-B ' + i.toString() + ' | ' + message + ' | ' + sw.elapsedMilliseconds.toString() + ' ms | raw ' + answer.replaceAll('\n', ' ') + ' | picks ' + [for (final m in picks) (m.topic ?? '') + ': ' + m.text].join(' ;; '));
+}
+debugPrint('MT3-B done');

@@ -209,10 +209,10 @@ void main() {
     tearDown(() => db.close());
 
     test('gives the strong ones in full, with their topic paths', () async {
-      final recalled = await memories.recall(
+      final recalled = (await memories.recall(
         'loose',
         'My CS246 assignment: submit with marmoset?',
-      );
+      )).picks;
       expect(recalled.first, (
         id: 'marmoset',
         text: 'Submit with marmoset_submit',
@@ -228,13 +228,45 @@ void main() {
         'CS246 assignment: submit with marmoset, C++ clang-tidy',
         recalled: ['marmoset'],
       );
-      expect(recalled, isEmpty);
+      expect(recalled.picks, isEmpty);
+      // Nor are they among stage 2's candidates.
+      expect([
+        for (final m in recalled.candidates) m.id,
+      ], isNot(anyOf(contains('marmoset'), contains('cpp'))));
     });
 
     test("ranks the chat's project's memories first", () async {
-      final inTrip = await memories.recall('in-trip', 'Kyoto ryokan booked?');
+      final inTrip = (await memories.recall(
+        'in-trip',
+        'Kyoto ryokan booked?',
+      )).picks;
       expect(inTrip.first.id, 'ryokan');
       expect(inTrip.first.topic, 'Japan trip');
+    });
+
+    test("gives stage 2 the weak candidates too, and says when one's strong "
+        '(§4.3)', () async {
+      final weak = await memories.recall('loose', 'marmoset');
+      expect(weak.picks, isEmpty);
+      expect(weak.strong, isFalse);
+      expect(weak.candidates.first.id, 'marmoset');
+      expect(weak.candidates.first.topic, 'University › CS246 › Assignments');
+      final strong = await memories.recall(
+        'loose',
+        'CS246 assignment: submit with marmoset',
+      );
+      expect(strong.strong, isTrue);
+    });
+
+    test("a new chat not saved yet goes by the project it's given", () async {
+      final plain = await memories.recall('not-saved', 'Kyoto');
+      expect(plain.candidates.first.id, 'kyoto');
+      final home = await memories.recall(
+        'not-saved',
+        'Kyoto',
+        projectId: 'trip',
+      );
+      expect(home.candidates.first.id, 'ryokan');
     });
 
     test('archived and proposed memories are never recalled', () async {
@@ -253,7 +285,10 @@ void main() {
         ),
       );
       final ids = [
-        for (final m in await memories.recall('loose', 'Kyoto ryokan booked'))
+        for (final m in (await memories.recall(
+          'loose',
+          'Kyoto ryokan booked',
+        )).candidates)
           m.id,
       ];
       expect(ids, isNot(contains('old')));

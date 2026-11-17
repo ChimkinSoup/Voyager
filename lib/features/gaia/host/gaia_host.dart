@@ -78,7 +78,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// (`add_reminder`, the one write without a card), `memoryIndex` (§11; every
 /// active memory, for the curator), `memoryPrompt` (a new session's pins and
 /// topic list, GAIA_MEMORY_TOPICS_HLD.md §4.1), `memoryRecall {chatId, text,
-/// recalled}` (`[{id, text, topic}]`, the memories for a message, §4.4),
+/// recalled, projectId}` (stage 1's `{picks, candidates, strong}` for a
+/// message, §4.2-§4.4),
 /// `openMemory {memoryId}` (shown on the Gaia page, §4.5),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
@@ -1617,14 +1618,14 @@ class GaiaHost {
       case 'memoryPrompt':
         return await _memories?.sessionPrompt() ?? '';
       case 'memoryRecall':
-        return [
-          for (final memory in await _memoriesOrThrow().recall(
+        return gaiaRecallToJson(
+          await _memoriesOrThrow().recall(
             params['chatId']! as String,
             params['text']! as String,
             recalled: [...?(params['recalled'] as List?)?.cast<String>()],
-          ))
-            {'id': memory.id, 'text': memory.text, 'topic': memory.topic},
-        ];
+            projectId: params['projectId'] as String?,
+          ),
+        );
       case 'openMemory':
         _openMemory?.call(params['memoryId']! as String);
         return null;

@@ -1992,6 +1992,48 @@ class GaiaMemoryPart extends GaiaPart {
 /// ("CS246 › Assignments"), null for Unsorted.
 typedef GaiaRecalledMemory = ({String id, String text, String? topic});
 
+/// The most memories, and characters of them, added to one message (§4.4).
+const kGaiaMaxRecalled = 8;
+const kGaiaMaxRecalledLength = 4000;
+
+/// Stage 1's answer for a message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3):
+/// its [picks] when stage 2 doesn't run, the [candidates] stage 2 picks from
+/// (none the session was given yet, best first), and whether any of them is
+/// [strong], which runs stage 2 on a later message.
+typedef GaiaRecall = ({
+  List<GaiaRecalledMemory> picks,
+  List<GaiaRecalledMemory> candidates,
+  bool strong,
+});
+
+Map<String, Object?> gaiaRecallToJson(GaiaRecall recall) {
+  List<Map<String, Object?>> list(List<GaiaRecalledMemory> memories) => [
+    for (final memory in memories)
+      {'id': memory.id, 'text': memory.text, 'topic': memory.topic},
+  ];
+  return {
+    'picks': list(recall.picks),
+    'candidates': list(recall.candidates),
+    'strong': recall.strong,
+  };
+}
+
+GaiaRecall gaiaRecallFromJson(Object? json) {
+  List<GaiaRecalledMemory> list(Object? memories) => [
+    if (memories is List)
+      for (final memory in memories)
+        if (memory case {'id': final String id, 'text': final String text})
+          (id: id, text: text, topic: memory['topic'] as String?),
+  ];
+  return json is Map
+      ? (
+          picks: list(json['picks']),
+          candidates: list(json['candidates']),
+          strong: json['strong'] == true,
+        )
+      : (picks: const [], candidates: const [], strong: false);
+}
+
 /// The memories given to the agent with the message a reply answers
 /// (GAIA_MEMORY_TOPICS_HLD.md §4.5), shown as a "Recalled N memories" chip.
 /// Given, which isn't the same as used. The texts are kept as they were, in

@@ -307,14 +307,14 @@ class _Main {
         return memories.sessionPrompt();
       case 'memoryRecall':
         recallTexts.add(params['text']! as String);
-        return [
-          for (final memory in await memories.recall(
+        return gaiaRecallToJson(
+          await memories.recall(
             params['chatId']! as String,
             params['text']! as String,
             recalled: [...?(params['recalled'] as List?)?.cast<String>()],
-          ))
-            {'id': memory.id, 'text': memory.text, 'topic': memory.topic},
-        ];
+            projectId: params['projectId'] as String?,
+          ),
+        );
       case 'openMemory':
         openedMemories.add(params['memoryId']! as String);
         return null;
@@ -6052,6 +6052,112 @@ void main() {
         expect(runner.sent.last.prompt, contains('- Has a dog called Biscuit'));
       },
     );
+
+    group('stage 2, the utility model picks (§4.3)', () {
+      late List<String> calls;
+      late FakeUtilityRunner utilityRunner;
+
+      /// Recall answers [pick] (a JSON array of ids, or anything else).
+      Future<void> start(
+        String Function() pick, {
+        bool recallPick = true,
+      }) async {
+        utilityRunner = FakeUtilityRunner((job) {
+          final kind = job.startsWith('Route')
+              ? 'route'
+              : job.startsWith('Pick the memories')
+              ? 'recall'
+              : 'title';
+          calls.add(kind);
+          return switch (kind) {
+            'route' => 'standard',
+            'recall' => pick(),
+            _ => 'A title',
+          };
+        });
+        await startCompanion(
+          debug: GaiaDebug()..recallPick = recallPick,
+          utility: GaiaUtility(utilityRunner),
+        );
+      }
+
+      String recallInput() =>
+          utilityRunner.inputs[utilityRunner.jobs.indexWhere(
+            (job) => job.startsWith('Pick the memories'),
+          )];
+
+      setUp(() => calls = []);
+
+      test("picks on a chat's first message, beside the router, from weak "
+          'candidates too, and logs the pass', () async {
+        await remember('biscuit', 'Has a dog called Biscuit');
+        await remember('lisbon', 'Lives in Lisbon, Portugal');
+        await start(() => '["biscuit", "unknown"]');
+
+        // Too weak for stage 1 alone.
+        await turn('Walking the dog later');
+        expect(calls, containsAll(['recall', 'route']));
+        expect(recallInput(), contains('biscuit · Unsorted · Has a dog'));
+        expect(recallInput(), isNot(contains('lisbon')));
+        expect(utilityRunner.usages, contains('memory recall'));
+        expect(runner.sent.last.prompt, contains('- Has a dog called Biscuit'));
+        expect((await stored()).agentSessions.values.single.recalled, [
+          'biscuit',
+        ]);
+      });
+
+      test('on a later message, only with a new strong candidate', () async {
+        await remember('biscuit', 'Has a dog called Biscuit');
+        await remember('lisbon', 'Lives in Lisbon, Portugal');
+        var answer = '["biscuit"]';
+        await start(() => answer);
+        await turn('Walking Biscuit the dog later');
+        calls.clear();
+
+        // Biscuit was given already: nothing new and strong.
+        await turn('Biscuit the dog again');
+        expect(calls, isNot(contains('recall')));
+        expect(runner.sent.last.prompt, 'Biscuit the dog again');
+
+        answer = '[]';
+        await turn('Moving to Lisbon, Portugal');
+        expect(calls, contains('recall'));
+        // It picked none, so none goes, strong or not.
+        expect(runner.sent.last.prompt, isNot(contains('<gaia_memories>')));
+      });
+
+      test("a bad answer falls back to stage 1's picks", () async {
+        await remember('biscuit', 'Has a dog called Biscuit');
+        await start(() => 'Biscuit, I think');
+        await turn('Walking Biscuit the dog later');
+        expect(calls, contains('recall'));
+        expect(runner.sent.last.prompt, contains('- Has a dog called Biscuit'));
+      });
+
+      test(
+        'runs on a first message whose tier was picked, with no router',
+        () async {
+          await remember('biscuit', 'Has a dog called Biscuit');
+          await start(() => '["biscuit"]');
+          controller.pickTier(GaiaTier.deep);
+          await turn('Walking the dog later');
+          expect(calls, isNot(contains('route')));
+          expect(calls, contains('recall'));
+          expect(
+            runner.sent.last.prompt,
+            contains('- Has a dog called Biscuit'),
+          );
+        },
+      );
+
+      test('off in the debug menu: stage 1 alone', () async {
+        await remember('biscuit', 'Has a dog called Biscuit');
+        await start(() => '["biscuit"]', recallPick: false);
+        await turn('Walking the dog later');
+        expect(calls, isNot(contains('recall')));
+        expect(runner.sent.last.prompt, 'Walking the dog later');
+      });
+    });
 
     test(
       '/remember --pin pins it; past the budget it is saved, not pinned',

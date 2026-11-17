@@ -1,0 +1,36 @@
+final r = c.read(gaiaRepositoryProvider);
+final active = [for (final m in await r.listMemories()) if (m.status == GaiaMemoryStatus.active && !m.pinned) m];
+final tree = GaiaTopicTree(await r.listMemoryTopics());
+final cs = tree.subtree('project-mt3-cs246');
+String s(GaiaRecallCandidate x) => x.strength.toStringAsFixed(2) + ' ' + (gaiaMemoryTopicPath(x.memory, tree) ?? 'Unsorted') + ': ' + (x.memory.text.length > 60 ? x.memory.text.substring(0, 60) : x.memory.text);
+final probes = <(bool, String)>[
+  (true, 'Can you help me with the Board class for my Biquadris A5?'),
+  (true, 'Explain the rule of five'),
+  (false, 'Explain the rule of five'),
+  (true, 'When is my final?'),
+  (true, 'Summarise the Visitor pattern'),
+  (true, 'valgrind says I leak memory in my destructor, help'),
+  (true, 'How do I take notes on this lecture in Obsidian?'),
+  (true, 'what should I study tonight'),
+  (false, 'How should I write a Dataview query that lists my reading notes?'),
+  (false, 'walking the dog later, any tips?'),
+  (false, 'Biscuit keeps pulling on the leash'),
+  (false, 'What can I cook for dinner tonight?'),
+  (false, 'Help me plan my leg day'),
+  (false, 'My brakes squeak when I stop the car'),
+  (false, 'What should I get my mom for her birthday?'),
+  (false, 'I have a headache again'),
+  (false, 'Can you review this Riverpod provider in Voyager?'),
+  (false, 'How much should I put in my TFSA this month?'),
+  (false, 'Help me practise Clair de Lune'),
+  (false, 'What is the weather like tomorrow?'),
+  (false, 'Write me a haiku about autumn'),
+  (false, 'hi'),
+  (false, 'Plan a budget for the Japan trip'),
+  (false, 'what should I eat after the gym for protein'),
+];
+for (final (inCs, text) in probes) {
+  final cand = gaiaRecallCandidates(active, tree, text, home: inCs ? cs : const {});
+  final picks = gaiaRecallPicks(cand);
+  debugPrint('MT3-S1 ' + (inCs ? '[CS246] ' : '[none] ') + text + ' || candidates ' + cand.length.toString() + ', strong ' + cand.where((x) => x.strength >= kGaiaRecallThreshold).length.toString() + ' || picks: ' + [for (final p in picks) s(cand.firstWhere((x) => x.memory.id == p.id))].join(' ; ') + ' || top3: ' + [for (final x in cand.take(3)) s(x)].join(' ; '));
+}

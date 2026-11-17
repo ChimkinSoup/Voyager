@@ -1,0 +1,6 @@
+final r = c.read(gaiaRepositoryProvider);
+final m = GaiaMemories(r);
+for (final x in await r.listMemories()) {
+  if (x.pinned && x.text.startsWith('MT3 budget')) { await m.pin(x.id, pinned: false); }
+}
+debugPrint('MT3-UNPIN pinned now ' + (await r.listMemories()).where((x) => x.pinned).map((x) => x.text.length > 30 ? x.text.substring(0, 30) : x.text).join(' / '));

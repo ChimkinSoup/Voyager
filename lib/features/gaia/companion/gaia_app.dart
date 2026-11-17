@@ -2269,6 +2269,10 @@ class _MessagesState extends State<_Messages> {
   late Set<String> _seen;
   final _appearing = <String>{};
 
+  /// Done once the list's down at a message just sent, so it gathers in
+  /// where it's seen rather than below the list.
+  Future<void>? _scrolled;
+
   /// Each built message's context, so the list can tell where it sits.
   final _placed = <String, BuildContext>{};
 
@@ -2479,10 +2483,15 @@ class _MessagesState extends State<_Messages> {
     }
     final reduced = MediaQuery.disableAnimationsOf(context);
     final held = _held = reduced || !replied ? null : was.id;
+    final scrolled = Completer<void>();
+    if (sent) _scrolled = scrolled.future;
     // Not mid-build, as scrolling notifies.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      if (reduced) return _scroll.jumpTo(0);
+      if (!mounted || !_scroll.hasClients) return scrolled.complete();
+      if (reduced) {
+        _scroll.jumpTo(0);
+        return scrolled.complete();
+      }
       _scroll
           .animateTo(
             0,
@@ -2490,6 +2499,7 @@ class _MessagesState extends State<_Messages> {
             curve: Curves.easeInOutCubic,
           )
           .then((_) {
+            scrolled.complete();
             if (mounted && _held == held) setState(() => _held = null);
           });
     });
@@ -2760,9 +2770,11 @@ class _MessagesState extends State<_Messages> {
           part.mediaId,
     };
     final appear = _appearing.contains(message.id);
+    final scrolled = appear ? _scrolled : null;
     final last = _views[message.id];
     if (last != null &&
         last.appear == appear &&
+        identical(last.scrolled, scrolled) &&
         identical(last.message, message) &&
         last.imageFile == widget.imageFile &&
         last.gutter == gutter &&
@@ -2785,6 +2797,7 @@ class _MessagesState extends State<_Messages> {
       orbTier: orbTier,
       orbKey: orbKey,
       appear: appear,
+      scrolled: scrolled,
       onAppeared: () {
         if (mounted) setState(() => _appearing.remove(message.id));
       },
@@ -3749,6 +3762,7 @@ class _MessageView extends StatelessWidget {
     required this.orbTier,
     required this.orbKey,
     required this.appear,
+    required this.scrolled,
     required this.onAppeared,
   });
 
@@ -3777,6 +3791,9 @@ class _MessageView extends StatelessWidget {
   /// A message of the user's just sent from this window, to gather in;
   /// [onAppeared] once it has.
   final bool appear;
+
+  /// Done once the list's down at it, for [appear] to wait for.
+  final Future<void>? scrolled;
   final VoidCallback onAppeared;
 
   @override
@@ -3803,9 +3820,10 @@ class _MessageView extends StatelessWidget {
         controller: controller,
         child: GaiaAppear(
           play: appear,
-          ready: images.isEmpty
+          ready: images.isEmpty && scrolled == null
               ? null
               : () => Future.wait([
+                  ?scrolled,
                   for (final image in images)
                     GaiaImageThumb.precache(
                       context,

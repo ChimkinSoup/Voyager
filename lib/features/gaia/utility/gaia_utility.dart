@@ -54,11 +54,13 @@ class GaiaUtility {
     defaultTier = gaiaTierFromName(settings['defaultTier']);
   }
 
-  /// A new chat is being written: the router will be asked soon.
-  void warm() {
-    if (!autoRoute) return;
+  /// A new chat is being written: the router will be asked soon, and memory
+  /// recall too with [recall] (GAIA_MEMORY_TOPICS_HLD.md §4.3).
+  void warm({bool recall = false}) {
+    final count = (autoRoute ? 1 : 0) + (recall ? 1 : 0);
+    if (count == 0) return;
     unawaited(
-      _runner.warm().catchError((Object error) {
+      _runner.warm(count).catchError((Object error) {
         debugPrint('[gaia] utility: $error');
       }),
     );
@@ -77,16 +79,15 @@ class GaiaUtility {
       '${rubric.trim().isEmpty ? 'default' : 'custom'}',
     );
     try {
-      final answer = await _runner
-          .generate(
-            "Route the user's message in <input> to one of three model "
-            'tiers.\n\n'
-            '${rubric.trim().isEmpty ? kGaiaDefaultRouterRubric : rubric}'
-            '${defaultTier == null ? '' : '\n\nIf unsure, choose ${defaultTier!.name}.'}'
-            '\n\nReply with exactly one word: quick, standard or deep.',
-            _clip(prompt, 4000),
-          )
-          .timeout(_routeTimeout);
+      final answer = await _runner.generate(
+        "Route the user's message in <input> to one of three model "
+        'tiers.\n\n'
+        '${rubric.trim().isEmpty ? kGaiaDefaultRouterRubric : rubric}'
+        '${defaultTier == null ? '' : '\n\nIf unsure, choose ${defaultTier!.name}.'}'
+        '\n\nReply with exactly one word: quick, standard or deep.',
+        _clip(prompt, 4000),
+        timeout: _routeTimeout,
+      );
       final tier = parseRoute(answer);
       debugPrint(
         '[gaia] router: answered "$answer" in ${elapsed.elapsedMilliseconds} '
@@ -102,18 +103,56 @@ class GaiaUtility {
     }
   }
 
+  /// Stage 2 of memory recall (GAIA_MEMORY_TOPICS_HLD.md §4.3): which of
+  /// stage 1's [candidates] fit [message], in the chat titled [title] if it
+  /// has one. Null when it failed or timed out, so stage 1's picks go. It
+  /// has the router's timeout: both hold up a message.
+  Future<List<GaiaRecalledMemory>?> recall(
+    String message,
+    String? title,
+    List<GaiaRecalledMemory> candidates,
+  ) async {
+    final elapsed = Stopwatch()..start();
+    try {
+      final answer = await _runner.generate(
+        'Pick the memories about the user that an assistant answering '
+            "the user's message should know. Pick only those that bear on "
+            'this message, at most $kGaiaMaxRecalled, usually fewer, and '
+            'none when none do.\n\n'
+            'Reply with only a JSON array of the picked ids, [] for none.',
+        '${title == null ? '' : 'Chat: ${_clip(title, 200)}\n\n'}'
+            'Message:\n${_clip(message, 4000)}\n\n'
+            'Memories (id · topic · text):\n'
+            '${[for (final memory in candidates) '${memory.id} · ${memory.topic ?? 'Unsorted'} · ${_clip(memory.text, 1000)}'].join('\n')}',
+        usage: 'memory recall',
+        timeout: _routeTimeout,
+      );
+      final picks = parseRecallAnswer(answer, candidates);
+      debugPrint(
+        '[gaia] memory recall: picked ${picks.length} of '
+        '${candidates.length} in ${elapsed.elapsedMilliseconds} ms',
+      );
+      return picks;
+    } catch (error) {
+      debugPrint(
+        '[gaia] memory recall: failed after ${elapsed.elapsedMilliseconds} '
+        'ms, using stage 1: $error',
+      );
+      return null;
+    }
+  }
+
   /// A title for a chat from its first exchange, or null to keep the
   /// first-line one.
   Future<String?> title(String question, String reply) async {
     try {
-      final answer = await _runner
-          .generate(
-            'Write a title of at most six words for a chat that starts '
-                'with the exchange in <input>. Reply with the title only.',
-            'User: ${_clip(question, 2000)}\n\n'
-                'Assistant: ${_clip(reply, 2000)}',
-          )
-          .timeout(_titleTimeout);
+      final answer = await _runner.generate(
+        'Write a title of at most six words for a chat that starts '
+            'with the exchange in <input>. Reply with the title only.',
+        'User: ${_clip(question, 2000)}\n\n'
+            'Assistant: ${_clip(reply, 2000)}',
+        timeout: _titleTimeout,
+      );
       return cleanTitle(answer);
     } catch (error) {
       debugPrint('[gaia] title: $error');
@@ -137,14 +176,13 @@ class GaiaUtility {
       if (partner != null && partner.seq > message.seq) partner,
     ];
     try {
-      final answer = await _runner
-          .generate(
-            'Write a title of at most five words for the part of a '
-            'conversation that starts with the exchange in <input>. '
-            'Reply with the title only.',
-            turn.map(line).join('\n\n'),
-          )
-          .timeout(_titleTimeout);
+      final answer = await _runner.generate(
+        'Write a title of at most five words for the part of a '
+        'conversation that starts with the exchange in <input>. '
+        'Reply with the title only.',
+        turn.map(line).join('\n\n'),
+        timeout: _titleTimeout,
+      );
       return cleanTitle(answer);
     } catch (error) {
       debugPrint('[gaia] chapter title: $error');
@@ -156,14 +194,13 @@ class GaiaUtility {
   /// or null to leave the older turns out.
   Future<String?> summarize(String transcript) async {
     try {
-      final answer = await _runner
-          .generate(
-            'Summarise the conversation in <input> in under 300 words for '
-            'an assistant taking it over. Keep the facts, decisions and '
-            'open questions; leave out pleasantries.',
-            _clip(transcript, 200000),
-          )
-          .timeout(_summaryTimeout);
+      final answer = await _runner.generate(
+        'Summarise the conversation in <input> in under 300 words for '
+        'an assistant taking it over. Keep the facts, decisions and '
+        'open questions; leave out pleasantries.',
+        _clip(transcript, 200000),
+        timeout: _summaryTimeout,
+      );
       return answer.trim().isEmpty ? null : answer.trim();
     } catch (error) {
       debugPrint('[gaia] summary: $error');
@@ -181,16 +218,15 @@ class GaiaUtility {
         ? transcript
         : transcript.substring(transcript.length - 100000);
     try {
-      final answer = await _runner
-          .generate(
-            'Write one or two sentences, under 60 words, saying what the chat '
-            'in <input> is about and where it stands, for an assistant '
-            'deciding whether to read it. Reply with the summary only.',
-            previous == null
-                ? 'Chat:\n$turns'
-                : 'Summary so far: $previous\n\nNew turns:\n$turns',
-          )
-          .timeout(_summaryTimeout);
+      final answer = await _runner.generate(
+        'Write one or two sentences, under 60 words, saying what the chat '
+        'in <input> is about and where it stands, for an assistant '
+        'deciding whether to read it. Reply with the summary only.',
+        previous == null
+            ? 'Chat:\n$turns'
+            : 'Summary so far: $previous\n\nNew turns:\n$turns',
+        timeout: _summaryTimeout,
+      );
       final summary = answer.trim();
       return summary.isEmpty ? null : _clip(summary, 500);
     } catch (error) {
@@ -203,16 +239,15 @@ class GaiaUtility {
   /// null to go without one.
   Future<String?> caption(GaiaImageInput image) async {
     try {
-      final answer = await _runner
-          .generate(
-            'Describe the image in <input> in under 80 words for an '
-            "assistant that can't see it. Copy out any text in it that "
-            'matters, and say what any arrows, circles, highlights or other '
-            'marks point at. Reply with the description only.',
-            gaiaImageToken(image.label),
-            images: [image],
-          )
-          .timeout(_captionTimeout);
+      final answer = await _runner.generate(
+        'Describe the image in <input> in under 80 words for an '
+        "assistant that can't see it. Copy out any text in it that "
+        'matters, and say what any arrows, circles, highlights or other '
+        'marks point at. Reply with the description only.',
+        gaiaImageToken(image.label),
+        images: [image],
+        timeout: _captionTimeout,
+      );
       return answer.trim().isEmpty ? null : _clip(answer.trim(), 1000);
     } catch (error) {
       debugPrint('[gaia] caption: $error');
@@ -225,28 +260,27 @@ class GaiaUtility {
   /// (§11); null when it failed, so the turns are read again next time.
   Future<List<GaiaFoundMemory>?> curate(String transcript, String index) async {
     try {
-      final answer = await _runner
-          .generate(
-            'You keep a short list of lasting facts about the user for '
-                'their assistant, Gaia. Read the new turns of a chat in <input> '
-                'and pick at most 3 facts about the user worth remembering in '
-                'future, unrelated chats: lasting preferences, people, places '
-                'and projects in their life, decisions they made, how they like '
-                'to work. Leave out anything that only matters to this chat, '
-                'anything only the assistant said, anything already among the '
-                'memories kept, and secrets such as passwords or account '
-                'numbers. Usually there is nothing worth keeping.\n\n'
-                'Reply with only a JSON array, [] for nothing: each item '
-                '{"text": "...", "tags": ["..."]}, the text one fact in one '
-                'sentence under 200 characters that makes sense on its own, '
-                'in the first person as the user would put it ("I prefer '
-                'metric units", "My sister lives in Lisbon"), the tags one or '
-                'two one-word topics.',
-            'Memories kept:\n${index.trim().isEmpty ? '(none)' : index}\n\n'
-                // The newest kept: the chat is marked read up to its last.
-                'New turns:\n${transcript.length <= 100000 ? transcript : transcript.substring(transcript.length - 100000)}',
-          )
-          .timeout(_curateTimeout);
+      final answer = await _runner.generate(
+        'You keep a short list of lasting facts about the user for '
+            'their assistant, Gaia. Read the new turns of a chat in <input> '
+            'and pick at most 3 facts about the user worth remembering in '
+            'future, unrelated chats: lasting preferences, people, places '
+            'and projects in their life, decisions they made, how they like '
+            'to work. Leave out anything that only matters to this chat, '
+            'anything only the assistant said, anything already among the '
+            'memories kept, and secrets such as passwords or account '
+            'numbers. Usually there is nothing worth keeping.\n\n'
+            'Reply with only a JSON array, [] for nothing: each item '
+            '{"text": "...", "tags": ["..."]}, the text one fact in one '
+            'sentence under 200 characters that makes sense on its own, '
+            'in the first person as the user would put it ("I prefer '
+            'metric units", "My sister lives in Lisbon"), the tags one or '
+            'two one-word topics.',
+        'Memories kept:\n${index.trim().isEmpty ? '(none)' : index}\n\n'
+            // The newest kept: the chat is marked read up to its last.
+            'New turns:\n${transcript.length <= 100000 ? transcript : transcript.substring(transcript.length - 100000)}',
+        timeout: _curateTimeout,
+      );
       return parseCuratorAnswer(answer);
     } catch (error) {
       debugPrint('[gaia] curator: $error');
@@ -293,6 +327,37 @@ List<GaiaFoundMemory> parseCuratorAnswer(String answer) {
           ],
         ),
   ].take(3).toList();
+}
+
+/// The [candidates] a recall [answer] picks (GAIA_MEMORY_TOPICS_HLD.md
+/// §4.3): its JSON array of ids, wherever it is in the text, in its order,
+/// unknown and repeated ids dropped, within the caps of §4.4. Throws a
+/// [FormatException] when there's no array.
+@visibleForTesting
+List<GaiaRecalledMemory> parseRecallAnswer(
+  String answer,
+  List<GaiaRecalledMemory> candidates,
+) {
+  final start = answer.indexOf('[');
+  final end = answer.lastIndexOf(']');
+  if (start < 0 || end < start) {
+    throw FormatException('no JSON array', answer);
+  }
+  final list = jsonDecode(answer.substring(start, end + 1));
+  if (list is! List) throw FormatException('not a JSON array', answer);
+  final byId = {for (final memory in candidates) memory.id: memory};
+  final picks = <GaiaRecalledMemory>[];
+  var length = 0;
+  for (final id in list) {
+    if (picks.length == kGaiaMaxRecalled) break;
+    final memory = byId.remove(id);
+    if (memory == null) continue;
+    final size = memory.text.trim().length;
+    if (length + size > kGaiaMaxRecalledLength) continue;
+    length += size;
+    picks.add(memory);
+  }
+  return picks;
 }
 
 /// [answer]'s first line, without quotes, a heading mark or an end stop,

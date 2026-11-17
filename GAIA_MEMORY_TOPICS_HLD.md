@@ -1,9 +1,11 @@
 # Gaia — Memory Topics and Recall (HLD)
 
-Status: **Phases 1 and 2 built (2026-11-16).** Phase 1 is checked by unit tests and a
-two-profile sync pass; its live checks still to do are in §15. Phase 2 is checked by unit,
-controller and widget tests only; its live checks are all still to do (§16.4). Phases 3-6 not
-built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+Status: **Phases 1-3 built (2026-11-16).** Each is unit- and controller-tested, and the
+live checks of §15.4, §16.4 and §17.4 were run on 2026-11-16 (§18): all passed except
+those that need the phone, a week of real chats, more §11 bursts, or Phase 4 (§19). Stage 2
+(Phase 3) is behind a debug-menu switch that's off. The first §11 burst is in §11; the
+threshold isn't settled (§18.3). Decisions after the live pass are in §18.4: stage 1 is a
+candidate list only, and without stage 2 recall is left to `memory_search`. Phases 4-6 not built. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -193,7 +195,8 @@ or none.
   chat then don't run it. This covers your case of a vague first prompt followed by specific
   ones.
 - Never when the utility model is off or unavailable: stage 1's top 5 above the threshold are
-  used instead.
+  used instead. Live, that's rarely any, and that's accepted: the agent has `memory_search`
+  (§18.4).
 
 **Timing on the first message:** recall is its own call. The tier router
 (`GaiaUtility.route`) can't carry it, because the router is skipped when you picked the tier
@@ -333,8 +336,8 @@ is tested in the live pass but isn't a gate for any phase.
 | 1 | Data model, migration, project topics, `memory_search` by topic with no walls. The system prompt and `<gaia_project>` keep today's index. |
 | 2 | Stage 1 recall, the `<gaia_memories>` block, `recalled` per session, the recall chip. Pinning by hand. The system prompt switches to pins + topic list, and `<gaia_project>` stops listing memories. |
 | 3 | Stage 2 (Haiku pick) as its own call, threshold tuning, and **the plan-usage test (§11)**. |
-| 4 | The Memories tab tree: new, rename, move, add, re-parent, delete, search. Android menus. |
-| 5 | Placement on capture, suggested topics on cards and in the inbox, the curator's smaller input. |
+| 4 | The Memories tab tree: new, rename, move, add, re-parent, delete, search. Android menus. A project's filter includes its subtopics, labelled by topic, not "Global" (§18.4). |
+| 5 | Placement on capture, suggested topics on cards and in the inbox, the curator's smaller input. Then check stage 2's word-mismatch misses again (§18.4). |
 | 6 | Topic merge, **Sort these**, and pin and merge suggestions from the recall history. |
 
 - **The index stays until recall replaces it.** The system prompt switches in the same phase
@@ -374,9 +377,30 @@ single reading isn't enough to settle it.
 - **How often it runs:** across a week of your own chats, how many messages ran stage 2 under
   the new-strong-candidate rule (§4.3), compared with the first message alone.
 
-**What it decides:** the threshold, and whether stage 2 runs on later messages or only on the
-first one. Write the numbers into this section. If the cost turns out too high, the fallback is
+**What it decides:** the threshold (now only stage 2's trigger on later messages, §18.4), and
+whether stage 2 runs on later messages or only on the first one. Write the numbers into this section. If the cost turns out too high, the fallback is
 stage 2 on the first message only, with stage 1 alone after that.
+
+**First burst, 2026-11-16 18:32-18:40 (Monday evening)** (`gaiaqa`, qa-128, 290 active
+memories across 20 topics, debug build of the working tree; details in §18):
+- **Tokens per pass** (91 passes over 99 realistic messages; 8 had no candidate, so no pass):
+  mean 1,158 (input 2, cache read 40, cache write 1,066, output 51), median 1,044, most
+  2,586. Lower than the 3-5k estimate: the candidate list is short once stage 1 has cut it.
+- **5-hour %:** 24% before, 31% after. **This doesn't measure recall:** the account was in use
+  by other Claude Code sessions the whole time (it went on climbing about 1% a minute between
+  bursts), so the step can't be put down to the passes. The CLI does send
+  `rate_limit_event`: every pass logged a figure, none "not reported". A clean reading needs
+  the account otherwise idle.
+- **Against 20 Standard-tier turns** (Sonnet, short answers, new chats): mean 21,145 tokens a
+  turn (cache read 16,587, cache write 4,416, output 139). A recall pass is about 5% of that
+  in raw tokens, about a quarter of its cache writes.
+- **Latency:** with a process started ahead, median 664 ms, 90th percentile 1,777 ms, and 4 of
+  91 over the 5-second timeout (up to 12 s). Cold starts seen live: 1,086 ms and 2,185 ms,
+  well under the 2.6-4.2 s §17.2 item 7 expected. Beside the router on a first message, each
+  on its own process: router 581 ms, recall 1,405 ms; the message waited for recall. During a
+  slow patch on the service (19:02-19:07) 3 of 20 passes hit the timeout and stage 1 was used.
+- **Still to do:** two more bursts on other days with the account otherwise idle, and how
+  often stage 2 runs across a week of Juno's chats.
 
 ## 12. Out of scope
 
@@ -678,4 +702,295 @@ passes did.
   Global staying out of the project's topic after the upkeep runs.
 - **Mixed builds:** a device on an older build saves a memory in a project chat, and this
   build files it in the project's topic.
+
+## 17. Phase 3 build notes (2026-11-16)
+
+### 17.1 What was built
+
+- **Stage 2 (§4.3):** `GaiaUtility.recall` gives the utility model the message, the chat's
+  title (on a later message), and stage 1's candidates as `id · topic path · text`. It
+  answers with a JSON array of ids. `parseRecallAnswer` keeps the ids it knows, in the
+  answer's order, within §4.4's caps (8 memories, 4,000 characters). An answer of `[]` means
+  none, with no fallback. A failure, an answer with no array, or the 5-second timeout means
+  stage 1's picks are used instead.
+- **When it runs (§4.3):** on a chat's first message, if stage 1 found any candidate at all.
+  On a later message, only when stage 1 has a **new strong candidate**: one the session
+  wasn't given yet, with strength at or above `kGaiaRecallThreshold` (0.5). The
+  `memoryRecall` pipe request now returns stage 1's `{picks, candidates, strong}` (the
+  `GaiaRecall` record), so the companion can decide without a second request.
+- **Beside the router:** on a new chat's first message where the router runs, recall starts
+  before the router call and the two run in parallel. Where the router doesn't run (tier
+  picked, a remote message naming a tier), recall runs alone before the message goes out.
+- **A second process started ahead:** `ClaudeUtilityRunner` keeps up to two processes waiting
+  (`warm(count)`), so the router and recall don't wait on each other. `GaiaUtility.warm`
+  asks for one process for the router and one more for recall when stage 2 is on.
+- **The usage log for §11:** each recall pass logs
+  `[gaia] utility usage, memory recall: in N, cache read N, cache write N, out N, T ms
+  (started ahead | cold start), five-hour window X%`. The tokens are summed from the
+  result's `modelUsage`. The five-hour figure comes from the utility process's
+  `rate_limit_event` if the CLI sends one, and otherwise reads "not reported".
+- **The switch:** Gaia's debug menu → "Haiku picks recalled memories" (`GaiaDebug.recallPick`,
+  saved in the debug JSON, local to the desktop). It's **off by default**, as §11 asks, so
+  today's behaviour is unchanged until it's turned on.
+
+### 17.2 Decisions made while building
+
+1. **A debug switch, not a setting.** Gaia's settings sync and live in a drift table, so a
+   new setting would need a schema change. §11 decides whether stage 2 stays at all, so for
+   now it's a local debug toggle. Once §11 settles it, either make it the default by
+   removing the switch, or move it into settings if it should stay optional.
+2. **"A chat's first message"** means a message with no reply before it in the chat. A
+   retry of the first message counts as first. A later message's new session (handoff,
+   fork, resume that found none) doesn't: it runs stage 2 only with a new strong
+   candidate, the same as any later message.
+3. **Haiku can pick weak candidates.** That's the point of stage 2. A vague first message
+   ("walking the dog later") gets "Has a dog called Biscuit", which stage 1 alone leaves out.
+4. **The candidates sent** are stage 1's top 40 minus those the session was already given,
+   each text cut at 1,000 characters, with the message cut at 4,000. Pinned, archived and
+   proposed memories are never candidates, the same as in stage 1.
+5. **The title** goes only with later messages. On the first message the title is still
+   the message's first line, so sending it would only repeat the message.
+6. **The pass started beside the router is used for the chat's first session only.** A retry
+   as a new session runs recall again. Because that pass starts before the chat is saved on
+   the main instance, `memoryRecall` takes the chat's `projectId`, so the home boost works
+   for a new project chat.
+7. **Later messages start their process cold.** Nothing is warmed for an existing chat, so a
+   later message's stage 2 waits for a cold start (2.6-4.2 s for the router, §7.2 of
+   GAIA_HLD.md) inside the 5-second timeout. §11's latency test decides whether that's too
+   slow. If it is, the fix is to warm a process when the composer of an existing chat gets
+   focus while stage 2 is on.
+8. **The threshold stays at 0.5.** Tuning needs real chats (§17.4).
+9. **No combined router-and-recall call** (§4.3). That waits on §11's latency numbers.
+10. **Dummy mode and debug scripts never run stage 2**, the same as the router.
+
+### 17.3 How it was checked
+
+- **Unit tests:** `test/gaia_utility_test.dart` covers the answer parser (order, unknown and
+  repeated ids, the 8 and 4,000-character caps, no array), the input sent (message, title,
+  candidate lines with Unsorted), the usage label, a bad answer giving null, warming two
+  processes for recall, and summing tokens over models. `test/gaia_memory_recall_test.dart`
+  covers weak candidates passed on with `strong` false, a strong one setting it, given and
+  pinned memories left out of the candidates, and a chat not yet saved getting the home
+  boost from the `projectId` it's given.
+- **Controller tests** (`gaia_controller_test`, "stage 2, the utility model picks"): a
+  first message runs recall beside the router and picks a weak candidate, drops unknown ids
+  and logs the pass. A later message runs it only with a new strong candidate, and `[]`
+  sends no block. A bad answer falls back to stage 1. A first message whose tier was picked
+  runs recall without the router. With the switch off, stage 1 runs alone.
+- **The Gaia suites** (utility, recall, controller, topics, memories, host, debug): 560
+  passed.
+- **Full `flutter test`, run twice on the working tree.** The first run had 7,229 passed, 41
+  skipped and 3 failures, but which tests failed wasn't recorded. The second run had one
+  failure, `media_image_small_placeholder_test`, which passes on its own, as does
+  `heat_watch_section_test`. As in §15.3 and §16.3, both touch none of this.
+
+### 17.4 Live checks still to do for Phase 3
+
+All skipped in this build because they need a running app on the screen or spend the real
+account's plan. Turn the switch on first (debug menu → "Haiku picks recalled memories").
+
+- **The §11 test, in full.** It decides the threshold and whether stage 2 stays on later
+  messages:
+  - Tokens per pass, from the `utility usage, memory recall` log lines.
+  - The 5-hour percentage per 100 passes, three bursts on different days. There's no burst
+    script yet: in `gaiaqa`, seed about 300 memories across a dozen topics (a
+    `qa/steps/*.dart.txt` VM eval), then call `GaiaUtility.recall` 100 times by eval with
+    realistic messages, reading `GaiaUsage.fiveHour` before and after.
+  - The same for 20 Standard-tier turns, for comparison.
+  - Latency: with a process started ahead and cold, recall alone and beside the router. Look
+    at the `ms (started ahead | cold start)` field.
+  - How often stage 2 runs across a week of Juno's own chats. Count the `memory recall:
+    asking the utility model` lines, which say whether it was the first message or a new
+    strong candidate.
+
+  Write the numbers into §11.
+- **Threshold tuning** on `gaiaqa`'s seeded memories and on Juno's own: note which messages
+  trigger stage 2 and which memories each picks, misses and false hits included.
+- **Haiku's real answers:** does it reply with a bare array, and does `[]` come back for
+  unrelated messages? Do CS246 chats get no Obsidian memories (§13 live)?
+- **A vague first message followed by a specific one** runs stage 2 on the second (§13
+  live).
+- **Two processes started ahead:** on a new chat with the switch on, two `claude.exe`
+  utility processes wait (`Win32_Process`), the router and recall each log `process
+  started ahead`, and both processes are dropped after 5 idle minutes.
+- **Does the utility CLI send `rate_limit_event`?** If the log always reads "not
+  reported", take the five-hour figure from `claude_oauth_usage` as §11 says.
+- **Codex chats:** stage 2 runs on Gaia's Claude account. With no Claude account set up, it
+  fails and stage 1 is used (§9). Check how long that failure takes.
+- **The debug switch** shows in the menu, saves, and is still set after a restart.
+- **Phase 2's live checks (§16.4)** are all still to do as well.
+
+## 18. Live pass, 2026-11-16 (Phases 1-3)
+
+`gaiaqa` (qa-128) on an out-of-tree debug build of the working tree, driven by VM eval and
+`voy.ps1` (background input and frame grabs), with read-only SQLite. Seeded with 274
+memories across 14 new topics (`qa/steps/mt3-seed-*.dart.txt`): a project "CS246" with
+subtopics Assignments and Final exam, Obsidian with a Plugins subtopic, and ten more. With
+the profile's own, 290 active memories in 20 topics. Real turns ran on Juno's default Claude
+account (Haiku for most, Sonnet for §11). New bugs: BUG-378 to BUG-380.
+
+### 18.1 Phase 1 (§15.4)
+
+- **Juno's real instance:** passed. Read from a copy of its database: schema 201, one
+  topic for the one live project (CS245), linked, and no live-project memory outside its
+  topic. The three deleted projects have no topic: they were deleted before this build.
+- **A real agent turn with `memory_search` `topic`:** passed on Claude Code. Asked for the
+  "Final exam" memories, the agent called `memory_search {"topic": "Final exam"}` and got 13.
+  **Not run on Codex:** `gaiaqa`'s Codex agent is set to `gpt-6.1-sol`, which Codex refuses
+  on a ChatGPT account, so the turn failed before the model ran. Its system part and
+  `<gaia_memories>` were checked anyway (§18.2).
+- **The UI paths:** passed. From the Gaia page: rename (topic followed, v2 and v3), delete of
+  a project with no chats (the dialog has no box then; topic kept and unlinked, memory still
+  in it), delete with "Also delete its chat" checked (chat trashed, topic kept and
+  unlinked). From the companion: delete with the box unchecked (chat kept with no project,
+  topic kept and unlinked) and rename (topic followed). Restore from Settings → Trash, twice:
+  topic linked again each time, and the trashed chat came back.
+- **Capture into the project topic:** passed for `/remember` (filed in "CS246") and
+  `memory_propose` (proposed, filed in "CS246"). The curator ran on 20 chats and found
+  nothing to propose, so its filing wasn't seen.
+- **Mixed builds:** passed, simulated: a write to Firestore without `topicIds`, `pinned` and
+  `suggestedTopic`, as an older build's outbox makes it, with the server stamp. Editing a
+  filed memory kept its topic on this device and in the cloud (v2).
+- **Not run:** the phone (no emulator or `adb` on this PC), and the account switch through
+  Settings, which waits for Phase 4's nested topics.
+
+### 18.2 Phase 2 (§16.4)
+
+- **A real Claude Code turn:** passed. The session file's first turn has `<gaia_project>`
+  (naming the topic, no memory list), then `<gaia_memories>` with each memory's topic path,
+  then the message. The second turn sent only new memories. A new chat's prompt, read from
+  `sessionPrompt()` (the CLI's prompt file is deleted once read), has `## Always` with the
+  pins and `## Topics` with counts and subtopics, and no index. A new chat asked "what is my
+  favourite colour" answered "Teal." from a pin, with no recall part.
+- **A real Codex turn:** passed up to the model call (see §18.1). The rollout has `## Always`
+  and `## Topics` in the developer message and `<gaia_memories>` before the user message.
+- **A compaction:** passed. `/compact` emptied the session's recalled list (9 to 0), and the
+  next message got the valgrind memory again.
+- **The recall chip:** passed. "Recalled 2 memories" above the reply; opened, it lists each
+  memory under its path and says the agent may not have used them. Clicking one brought
+  Voyager's main window forward on the Memories tab, with its filter (Global) cleared and
+  the memory highlighted and scrolled to.
+- **Pinning:** passed. The row's pin button, `/remember --pin` and the card's pin then
+  Remember all pin. At the budget each refuses with its toast ("Remembered, not pinned" for
+  the command and the card). Exactly 2,000 characters is allowed. A memory is capped at 500
+  characters, so `/remember` of longer text is refused before the pin is looked at. BUG-380:
+  the row's toast stays up with a spinner.
+- **The Memories tab:** passed. The project filter lists the project topic's memories;
+  "Move to" → Global took a memory out of the topic and cleared its `projectId`, and it
+  stayed out after the upkeep ran (a project rename set it off). Two things to note for
+  Phase 4: memories in a project's subtopics aren't in the project's filter, and they're
+  labelled "Global" on the tab.
+- **Mixed builds:** passed, simulated as in §18.1: a memory saved with a live `projectId` and
+  no topics was filed in the project's topic by the upkeep and written back (v2).
+- **Recall quality:** §18.3. **Not run:** the phone's recall chip and reveal. Juno's own data
+  has 10 active memories, too few to tune on.
+- **BUG-378:** after the eval-driven Codex chat, the companion's chat pane and title stayed on
+  that chat while the sidebar and controller moved to others.
+
+### 18.3 Phase 3 (§17.4)
+
+- **The §11 test:** the first burst and the 20 Standard turns are in §11. The 5-hour
+  reading was spoiled by other use of the account; two more bursts are still to do.
+- **Haiku's answers:** all 91 were bare JSON arrays (a few with spaces or across a line), 10
+  were `[]`, none failed. One gave 10 ids for "give me a 20 minute bodyweight workout"; the
+  parser kept 8.
+- **CS246 against Obsidian:** passed. No CS246 message got an Obsidian memory, except
+  "How do I take notes on this lecture in Obsidian?", which should.
+- **A vague first message, then a specific one:** passed. "hey, quick question about my
+  course this term" ran stage 2 as a first message (5 picked of 18). "valgrind says I leak
+  memory in my destructor" then ran it as "a new strong candidate" (4 of 35, the valgrind
+  memory first).
+- **Two processes started ahead:** passed. A new chat had two Gaia utility processes
+  waiting, and the router and recall each logged "process started ahead". The 5-minute
+  drop was checked on a second runner (two spares gone by 5 minutes, a forced drop ends the
+  process in seconds). Gaia's own runner had four processes from timed-out jobs still running
+  8-15 minutes later: BUG-379.
+- **`rate_limit_event`:** sent; every pass logged a five-hour figure.
+- **Codex chats with no Claude account:** stage 2 fails with "Not logged in" in 467 ms cold
+  and 72 ms on a process started ahead, and stage 1 is used. With the account, recall ran in
+  a Codex chat (picked exactly the two A5 memories asked about).
+- **The debug switch:** passed. It's in the debug menu and off by default, saves to
+  `debug.json`, and was still on after a restart. Turned off again at the end.
+- **Threshold tuning, stage 1:** at 0.5 it picks almost nothing. Of 24 hand-picked messages
+  only one got a pick (valgrind, 0.52), though the top candidate was the right memory for
+  about 17 of them. Right top hits had strength 0.20-0.42; wrong ones 0.13-0.26 ("Write me a
+  haiku about autumn" → "The user writes in Canadian English", 0.26). No threshold separates
+  them, so lowering it trades misses for false hits. Words that don't match also cost:
+  "help" pulled "Dad wants help setting up his new iPhone" into three unrelated messages.
+  Stage 1 on its own (the switch off) gives today's users almost no recall on real memories.
+- **Threshold tuning, stage 2:** good on 99 messages. Misses: "when is Biscuit due for
+  shots" (the vaccine memory wasn't a candidate: "shots" against "vaccine booster"), "I've
+  been sleeping badly" (`[]`, though a sleep memory was a candidate). False hits: "help me
+  prepare for a co-op interview" → co-op savings; "I'm bored" → a GIC idea and Obsidian tags;
+  "write a cover letter" → the sync outbox and a test harness; "make a grocery list" → the
+  lifting split. "What should I study tonight" with no project filled the 8-memory cap with
+  CS246 final topics.
+- **Not run:** how often stage 2 runs across a week of Juno's chats, and the other two
+  bursts.
+
+**What it suggests (not decided):** stage 2 does the real work, so leaving it off leaves
+recall close to unused. Its cost per pass is about 1.2k tokens, mostly cache writes, and it
+answers in under a second most of the time. The threshold only decides when a later message
+runs stage 2, and at 0.5 few do, which keeps the cost to about one pass a chat. Settle both
+once the clean bursts are in.
+
+### 18.4 Decisions after the live pass (2026-11-16)
+
+1. **Stage 1 is a candidate list, not a selector.** It ranks well (the right memory on top for
+   about 17 of 24 messages), but no strength threshold separates right picks from wrong ones
+   (§18.3), so it isn't tuned to pick memories on its own. The threshold's one job is the
+   trigger for stage 2 on a later message (§4.3): a candidate not yet recalled in this session
+   whose strength clears it. Tuning it means trading how often stage 2 runs against missing a
+   change of subject, read from §11's "how often it runs".
+2. **When stage 2 can't run, recall is close to nothing, and that's accepted.** That's when
+   the debug switch is off, the utility model is off, there's no Claude account (a
+   Codex-only setup), or the pass times out (4 of 91 in the first burst). The code is
+   unchanged: stage 1's top 5 above the threshold go, which is rarely any. The agent relies on
+   `memory_search`. The system prompt says memories are added to messages and that
+   `memory_search` finds the rest, and the tool's description (`gaia_mcp.dart`) now says the
+   instructions list only pins and topics. Until Phase 2 it said they listed every memory, which
+   would have told the agent there was nothing more to find. A capped index in the system prompt
+   as a fallback was considered and left out: it brings back the per-session cost this design
+   removes.
+3. **Recall quality waits for the whole design.** Stage 2 stays behind the debug switch until
+   §11's clean bursts are in. Weak recall in the meantime is expected, not a bug.
+4. **Carried into later phases** (§10):
+   - Phase 4: a project's filter on the Memories tab includes its subtopics' memories, and
+     those memories are labelled with their topic, not "Global" (§18.2).
+   - Phase 5: stage 2's misses where the memory never reached stage 1's candidates because the
+     words differ ("shots" against "vaccine booster", §18.3). Placement's tags and topic paths
+     are what stage 1 matches on, so check these again once Phase 5 is in. If they still
+     miss, the fallback is LLM query expansion (as in MIRIX's Active Retrieval): the utility
+     model returns a few extra search terms for the message, and stage 1 runs again with them.
+
+## 19. Live checks for Phase 4's pass
+
+Checks that earlier phases left for Phase 4, all in one place. Run them in Phase 4's live pass
+along with its own checks. Wrap any eval that changes state in `Future(() => ...)` (BUG-378).
+
+1. **Account switch through Settings, with nested topics** (from §15.4). Nest topics under
+   others in the cloud. Sign out from Settings, sign in to another account, then sign back in.
+   Each topic should keep its parent and its memories after the second pull.
+2. **Re-parenting, on one device and across two** (§3.1, §15.2 item 5).
+   - Dragging a topic onto one of its own descendants is refused in the tree.
+   - On two devices, re-parent two topics under each other at the same time. After sync, the
+     cycle is broken at the topic with the oldest `updatedAt`, which shows as a root on both
+     devices. Nothing is lost or duplicated.
+3. **A project's subtopics on the Memories tab** (§18.2, §18.4). With memories in a project's
+   subtopics (e.g. CS246 › Final exam), the project's filter lists them, and each is labelled
+   with its topic path, not "Global".
+4. **The agent searches its memories when asked** (§18.4 item 2). With stage 2 off, in a real
+   Claude Code chat and, once `gaiaqa`'s Codex model works, a Codex chat, ask for something that
+   needs a memory that's in neither the pins nor `<gaia_memories>`. Check both of these:
+   - Whether the agent calls `memory_search` unprompted.
+   - That after "check your memories" it does, and answers from the result.
+
+   The tool's description was rewritten for this and hasn't been checked live.
+5. **Renaming a project's topic renames the project** (§15.2 item 3). Rename a linked project
+   topic from the tree. The project gets the new name, and the name holds after the upkeep
+   runs (rename another project to set it off).
+6. **Taking a memory out of its project's topic clears `projectId`** (§16.2 item 6). Take
+   memories out of a project's topic each way Phase 4 allows: "remove from topic", deleting the
+   topic, and merging it into another (if merge comes in Phase 6, check it then). Each memory
+   leaves the topic with its `projectId` cleared. After the upkeep runs, none is filed back.
 

@@ -394,10 +394,12 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'description':
         "Search what the user has asked Gaia to remember about them: "
         'preferences, people, projects, facts about their life. Returns '
-        'each matching memory in full. Your instructions list the memories '
-        'saved when this chat started; search for the full text of one, '
-        'or for any saved since. Every memory is searched, from any '
-        'project. Each result shows the topics it is filed under.',
+        'each matching memory in full. Your instructions list only the '
+        'pinned memories and the topics; those that fit a message are added '
+        'to it in <gaia_memories>, and most are in neither, so search when '
+        'a request may depend on something the user told Gaia. Every '
+        'memory is searched, from any project. Each result shows the '
+        'topics it is filed under.',
     'inputSchema': {
       'type': 'object',
       'properties': {

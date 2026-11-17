@@ -553,6 +553,18 @@ class _DebugMenu extends StatelessWidget {
           value: debug.allowScreenshots,
           onChanged: debug.setAllowScreenshots,
         ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Haiku picks recalled memories'),
+          subtitle: const Text(
+            "Recall's stage 2: the utility model picks from the matched "
+            "memories on a chat's first message, and on later ones with a "
+            'new strong match. Each pass is logged with its tokens. Off '
+            'until the plan-usage test is done.',
+          ),
+          value: debug.recallPick,
+          onChanged: debug.setRecallPick,
+        ),
       ],
     );
   }

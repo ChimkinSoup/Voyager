@@ -48,14 +48,15 @@ class GaiaMemories {
     for (final (memory, _) in await _active()) memory,
   ], GaiaTopicTree(await _repository.listMemoryTopics()));
 
-  /// The memories to add to [chatId]'s message, matched on [text] (the
-  /// message, and the end of the last reply), leaving out those its session
-  /// was already given ([recalled]) (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.4).
-  /// Stage 1 alone: its strongest few (§4.3's fallback, until Phase 3).
-  Future<List<GaiaRecalledMemory>> recall(
+  /// Stage 1 for [chatId]'s message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3),
+  /// matched on [text] (the message, and the end of the last reply), leaving
+  /// out the memories its session was already given ([recalled]). [projectId]
+  /// is the chat's project, for a new chat not saved here yet.
+  Future<GaiaRecall> recall(
     String chatId,
     String text, {
     List<String> recalled = const [],
+    String? projectId,
   }) async {
     final active = [
       for (final (memory, _) in await _active())
@@ -63,7 +64,7 @@ class GaiaMemories {
         if (!memory.pinned) memory,
     ];
     final tree = GaiaTopicTree(await _repository.listMemoryTopics());
-    final project = await _projectOf(chatId);
+    final project = await _projectOf(chatId) ?? await _live(projectId);
     final home = project == null
         ? const <String>{}
         : tree.subtree(gaiaProjectTopicId(project));
@@ -72,18 +73,30 @@ class GaiaMemories {
       for (final memory in active)
         if (given.contains(memory.id)) ...memory.topicIds,
     };
-    final picks = gaiaRecallPicks(
-      gaiaRecallCandidates(active, tree, text, home: home, near: near),
-      recalled: given,
+    final candidates = gaiaRecallCandidates(
+      active,
+      tree,
+      text,
+      home: home,
+      near: near,
     );
-    return [
-      for (final memory in picks)
-        (
-          id: memory.id,
-          text: memory.text,
-          topic: gaiaMemoryTopicPath(memory, tree, prefer: home),
-        ),
+    GaiaRecalledMemory shown(GaiaMemory memory) => (
+      id: memory.id,
+      text: memory.text,
+      topic: gaiaMemoryTopicPath(memory, tree, prefer: home),
+    );
+    final fresh = [
+      for (final candidate in candidates)
+        if (!given.contains(candidate.memory.id)) candidate,
     ];
+    return (
+      picks: [
+        for (final memory in gaiaRecallPicks(candidates, recalled: given))
+          shown(memory),
+      ],
+      candidates: [for (final candidate in fresh) shown(candidate.memory)],
+      strong: fresh.any((c) => c.strength >= kGaiaRecallThreshold),
+    );
   }
 
   /// Pins memory [id], or unpins it (GAIA_MEMORY_TOPICS_HLD.md §3.3). Throws
@@ -644,10 +657,6 @@ const kGaiaRecallThreshold = 0.5;
 /// How many strong candidates are given when stage 2 doesn't pick (§4.3).
 const _stageOnePicks = 5;
 
-/// The most memories, and characters of them, added to one message (§4.4).
-const _maxRecalled = 8;
-const _maxRecalledLength = 4000;
-
 /// How much a memory in the chat's project's topic (the home boost) and one
 /// in a topic already recalled in the session are worth over the others
 /// (§4.2).
@@ -740,14 +749,16 @@ List<GaiaMemory> gaiaRecallPicks(
   final picks = <GaiaMemory>[];
   var length = 0;
   for (final candidate in candidates) {
-    if (picks.length == _stageOnePicks || picks.length == _maxRecalled) break;
+    if (picks.length == _stageOnePicks || picks.length == kGaiaMaxRecalled) {
+      break;
+    }
     final memory = candidate.memory;
     if (candidate.strength < kGaiaRecallThreshold ||
         recalled.contains(memory.id)) {
       continue;
     }
     final size = memory.text.trim().length;
-    if (length + size > _maxRecalledLength) continue;
+    if (length + size > kGaiaMaxRecalledLength) continue;
     length += size;
     picks.add(memory);
   }

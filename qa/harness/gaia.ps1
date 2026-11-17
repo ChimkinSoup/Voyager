@@ -23,6 +23,9 @@
 # run real Claude Code turns (a few small model calls). -NoWindows skips the
 # window checks, which show Gaia's windows on screen and take the focus.
 # Expressions are passed to vm.exe as one argument: use single quotes in Dart.
+# Anything that changes state goes in Future(() => ...): an evaluate can run
+# mid-frame, and a notify there leaves a builder dirty but never rebuilt in a
+# debug build, frozen until a restart (BUG-378: GAIA.pickTier unwrapped).
 param(
   [Parameter(Position = 0)][string]$Command = 'help',
   [Parameter(Position = 1, ValueFromRemainingArguments)][string[]]$Rest,

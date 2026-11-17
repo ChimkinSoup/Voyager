@@ -994,7 +994,14 @@ class _MemoryRow extends ConsumerWidget {
         ref.read(gaiaRepositoryProvider),
       ).pin(memory.id, pinned: !memory.pinned);
     } on GaiaReadException catch (error) {
-      if (context.mounted) showVoyagerToast(context, message: error.message);
+      if (context.mounted) {
+        showVoyagerToast(
+          context,
+          message: error.message,
+          icon: PhosphorIconsRegular.warning,
+          dwell: const Duration(seconds: 4),
+        );
+      }
     }
   }
 

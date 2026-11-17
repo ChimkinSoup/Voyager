@@ -1,0 +1,3 @@
+final p = await GaiaMemories(c.read(gaiaRepositoryProvider)).sessionPrompt();
+File(r'C:\Users\Juno\AppData\Local\Temp\claude\e5ebcdb8936ec77e\df155935-b217-4d82-a7c1-845ec4cc8075\scratchpad\session_prompt.md').writeAsStringSync(p);
+debugPrint('MT3-PROMPT ' + p.length.toString());
