@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/typing_rewrites.dart';
+import 'package:voyager/core/vim/vim_text_ops.dart';
 
 /// A document's undo history while another is in its field.
 typedef SavedUndoHistory = ({List<TextEditingValue> steps, int index});
@@ -188,7 +189,8 @@ class MergeAwareUndoController extends UndoHistoryController {
     _steps.removeRange(_index + 1, _steps.length);
   }
 
-  void _restore(TextEditingValue value) {
+  void _restore(TextEditingValue step) {
+    final value = _atChange(step);
     // The same suspensions the field's own undo runs under — see
     // [ListEditingUndoGuard] and [TypingRewriteUndoGuard].
     _quietly(
@@ -204,6 +206,39 @@ class MergeAwareUndoController extends UndoHistoryController {
       ),
     );
     _report();
+  }
+
+  /// [step] with the caret at the end of what it changes in the field's
+  /// text, as desktop editors put it: after text an undo brings back, where
+  /// text it takes out was. A step keeps the caret it had when it was
+  /// recorded, so restoring that sent the caret back to wherever the typing
+  /// last paused, far from the change being undone. Vim's `u` moves it on to
+  /// the start of the change — see `VimSession`.
+  TextEditingValue _atChange(TextEditingValue step) {
+    final now = _text.text;
+    final then = step.text;
+    if (now == then) return step.copyWith(selection: _text.selection);
+    final shorter = now.length < then.length ? now.length : then.length;
+    var prefix = 0;
+    while (prefix < shorter &&
+        now.codeUnitAt(prefix) == then.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    var suffix = 0;
+    while (prefix + suffix < shorter &&
+        now.codeUnitAt(now.length - 1 - suffix) ==
+            then.codeUnitAt(then.length - 1 - suffix)) {
+      suffix++;
+    }
+    final end = then.length - suffix;
+    return step.copyWith(
+      // Never inside an emoji or accented letter: the end of the change can
+      // fall between its code units.
+      selection: TextSelection.collapsed(
+        offset: vimCharStart(then, end) == end ? end : vimCharEnd(then, end),
+      ),
+      composing: TextRange.empty,
+    );
   }
 
   void _quietly(VoidCallback body) {

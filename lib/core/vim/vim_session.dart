@@ -402,6 +402,23 @@ class VimSession {
     );
   }
 
+  /// Puts the Normal-mode caret where undo or redo first changed the text
+  /// from [before], as Vim does. The history restores a caret of its own:
+  /// where the typing last paused, which can be far from the change, or the
+  /// end of the restored text for Ctrl+Z.
+  void _caretAtChange(String before) {
+    if (mode != VimMode.normal) return;
+    final after = _text;
+    if (after == before) return;
+    var at = 0;
+    while (at < before.length &&
+        at < after.length &&
+        before.codeUnitAt(at) == after.codeUnitAt(at)) {
+      at++;
+    }
+    _setCursor(at);
+  }
+
   /// Last character of the line containing [offset] (line start when empty).
   int _lineLastChar(int offset) =>
       vimClampCaret(_text, vimLineEnd(_text, offset));
@@ -853,10 +870,12 @@ class VimSession {
 
     if (key == LogicalKeyboardKey.keyR) {
       if (undoController.value.canRedo) {
+        final before = _text;
         // Same UndoHistory assert as `u` — see [suppressListEditingWrites].
         suppressListEditingWrites(
           () => suppressTypingRewrites(undoController.redo),
         );
+        _caretAtChange(before);
       }
       return KeyEventResult.handled;
     }
@@ -1359,6 +1378,7 @@ class VimSession {
           // Prefer reverting a still-valid snippet expansion (same atom as
           // Ctrl/Cmd+Z). Esc steps the caret back, so this path matches on
           // text only — see SnippetSession.undoLastExpansion.
+          final before = _text;
           final undone = trySnippetUndo?.call() ?? false;
           // Flutter UndoHistory asserts the restored value sticks after
           // onTriggered. Journal/dream/todo `onChanged` handlers call
@@ -1370,6 +1390,7 @@ class VimSession {
               () => suppressTypingRewrites(undoController.undo),
             );
           }
+          _caretAtChange(before);
           _clearPending();
         }
       case 'U':

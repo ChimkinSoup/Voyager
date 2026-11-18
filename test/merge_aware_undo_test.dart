@@ -32,7 +32,11 @@ void main() {
   late MergeAwareUndoController undo;
   late List<String> changes;
 
-  Future<void> pumpField(WidgetTester tester) async {
+  Future<void> pumpField(
+    WidgetTester tester, {
+    bool vim = false,
+    bool flutterHistory = false,
+  }) async {
     text = TextEditingController();
     undo = MergeAwareUndoController(text);
     changes = [];
@@ -46,11 +50,11 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: VimEnabledScope(
-            enabled: false,
+            enabled: vim,
             child: Scaffold(
               body: TagHighlightedTextField(
                 controller: text,
-                undoController: undo,
+                undoController: flutterHistory ? null : undo,
                 focusNode: focusNode,
                 maxLines: null,
                 onChanged: changes.add,
@@ -179,5 +183,98 @@ void main() {
 
     await _ctrl(tester, LogicalKeyboardKey.keyZ);
     expect(text.text, 'first');
+  });
+
+  // Undo put back the caret a step was recorded with: "Hello  world" was a
+  // step with the caret after "world", so undoing an `x` on the "o" of
+  // "Hello" sent the caret to the "d". It goes to the change instead: its
+  // start for Vim, as Vim does, and its end for Ctrl+Z, as desktop editors do.
+  testWidgets('Ctrl+Z puts the caret after the text it brings back, and '
+      'Ctrl+Y where the text it takes out was', (tester) async {
+    await pumpField(tester);
+    await type(tester, 'Hello  world');
+    text.value = const TextEditingValue(
+      text: 'Hell  world',
+      selection: TextSelection.collapsed(offset: 4),
+    );
+    await tester.pump(_pause);
+    text.selection = const TextSelection.collapsed(offset: 11);
+
+    await _ctrl(tester, LogicalKeyboardKey.keyZ);
+    expect(text.text, 'Hello  world');
+    expect(text.selection, const TextSelection.collapsed(offset: 5));
+
+    await _ctrl(tester, LogicalKeyboardKey.keyZ, shift: true);
+    expect(text.text, 'Hell  world');
+    expect(text.selection, const TextSelection.collapsed(offset: 4));
+  });
+
+  testWidgets('Vim u and <C-r> put the caret at the change', (tester) async {
+    await pumpField(tester, vim: true);
+    await type(tester, 'Hello  world');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit0);
+    for (var i = 0; i < 4; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pump(_pause);
+    expect(text.text, 'Hell  world');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pump();
+    expect(text.text, 'Hello  world');
+    expect(text.selection.baseOffset, 4);
+
+    await _ctrl(tester, LogicalKeyboardKey.keyR);
+    expect(text.text, 'Hell  world');
+    expect(text.selection.baseOffset, 4);
+  });
+
+  testWidgets('Vim u of appended text leaves the caret on the last character, '
+      'not past it', (tester) async {
+    await pumpField(tester, vim: true);
+    await type(tester, 'Hello');
+    await type(tester, 'Hello world');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pump();
+    expect(text.text, 'Hello');
+    expect(text.selection.baseOffset, 4);
+  });
+
+  testWidgets('Vim u never puts the caret between a letter and its accent', (
+    tester,
+  ) async {
+    await pumpField(tester, vim: true);
+    await type(tester, 'cafe\u0301!');
+    await type(tester, 'cafe!');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pump();
+    expect(text.text, 'cafe\u0301!');
+    expect(text.selection.baseOffset, 3);
+  });
+
+  testWidgets('Vim u puts the caret at the change in a field with Flutter\'s '
+      'own history too', (tester) async {
+    await pumpField(tester, vim: true, flutterHistory: true);
+    await type(tester, 'Hello  world');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit0);
+    for (var i = 0; i < 4; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pump(_pause);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pump();
+    expect(text.text, 'Hello  world');
+    expect(text.selection.baseOffset, 4);
+    // The unattached merge-aware history still listens; let its timer run.
+    await tester.pump(_pause);
   });
 }

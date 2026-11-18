@@ -1024,7 +1024,8 @@ void main() {
       await press(tester, LogicalKeyboardKey.escape);
       await press(tester, _keyFor('u'));
       expect(controller.text, 'ee');
-      expect(controller.selection.baseOffset, 2);
+      // At the start of what `u` changed, as Vim puts it.
+      expect(controller.selection.baseOffset, 0);
       expect(_marks(tester).offsets, isEmpty);
     });
 
