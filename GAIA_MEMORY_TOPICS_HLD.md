@@ -15,13 +15,15 @@ on 2026-11-17 (§22): all passed except the phone's, and BUG-381 (a memory card'
 follow edits) was found and fixed. **Phase 6 (topic merge, Sort these, and pin and merge
 suggestions) built 2026-11-17** (§23): unit-, controller- and widget-tested, and checked
 live on 2026-11-17 (§24): all passed except the curator's pin flag (not yet seen) and the
-phone's; BUG-382 (Sort these' Accept also makes a memory's older offer) found, not fixed.
+phone's; BUG-382 (Sort these' Accept also makes a memory's older offer) found, and fixed in
+`e0c94843`.
 **The checks left after §24 were run on 2026-11-17 (§25):** the curator's pin flag and its
 filing in a project chat, a real Codex turn calling `memory_search` with `topic`, Sort these'
 × on one of two chips, and the phone for every phase. All passed. BUG-383 (the phone's first
-reveal from a recall chip doesn't scroll) found, not fixed. **Still open:** §11's two clean
-bursts and a week of real chats, which take separate days and now tune stage 2's later-message
-trigger rather than decide whether it's on; and BUG-378, BUG-382 and BUG-383. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+reveal from a recall chip doesn't scroll) found, and fixed in `e0c94843`. BUG-378 was closed
+as a harness problem, not the app's. **Still open:** §11's week of real chats, which tunes
+stage 2's later-message trigger rather than deciding whether it's on. §11's clean bursts were
+skipped. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -223,7 +225,10 @@ so this needs a second one.
 
 One combined call that returns both the tier and the memory ids would save a process start
 and a request on the chats where both run. It's left out for now, and only worth adding if
-the §11 test shows the second start costs noticeable time.
+the §11 test shows the second start costs noticeable time. **Decided 2026-11-17: not built.**
+In §11's first burst the message waited on recall's own answer (1,405 ms, beside the router's
+581 ms), not on a process start, and cold starts took 1.1-2.2 s. Recall would still need its
+own call wherever the router is skipped.
 
 Recall gets the router's 5-second timeout. If it times out, stage 1's picks are used and the
 message goes out.
@@ -374,6 +379,16 @@ is tested in the live pass but isn't a gate for any phase.
 by default on 2026-11-17 before the clean bursts (§25.1), so what's left here tunes the
 threshold and decides whether stage 2 keeps running on later messages.
 
+**The clean bursts were skipped (decided by Juno, 2026-11-17).** All they would add is the
+tokens per pass measured below, expressed as a share of the 5-hour limit. They would also
+need the account otherwise idle and use up real allowance. The week of real chats is still
+to do. The companion's own log is cleared at every start, so recall's lines also go to
+`gaia/recall.log` under the app's support folder, which isn't cleared (past 1 MB at a start it
+moves to `recall.log.1`). That covers one line per message recall runs on (first or later, with
+the candidate count and whether one is new and strong, or the pipe's error instead), each stage
+2 request, its picks, and its tokens and time. A message with no text and no reply before it
+skips recall and isn't logged.
+
 Gaia runs on a Claude subscription, not the API, so the cost that matters is how much of the
 **5-hour limit** each Haiku pass uses, not dollars. That percentage varies over time, so a
 single reading isn't enough to settle it.
@@ -419,8 +434,8 @@ memories across 20 topics, debug build of the working tree; details in §18):
   well under the 2.6-4.2 s §17.2 item 7 expected. Beside the router on a first message, each
   on its own process: router 581 ms, recall 1,405 ms; the message waited for recall. During a
   slow patch on the service (19:02-19:07) 3 of 20 passes hit the timeout and stage 1 was used.
-- **Still to do:** two more bursts on other days with the account otherwise idle, and how
-  often stage 2 runs across a week of Juno's chats.
+- **Still to do:** how often stage 2 runs across a week of Juno's chats. The two more bursts
+  were skipped (above).
 
 ## 12. Out of scope
 
@@ -760,7 +775,9 @@ passes did.
 1. **A debug switch, not a setting.** Gaia's settings sync and live in a drift table, so a
    new setting would need a schema change. §11 decides whether stage 2 stays at all, so for
    now it's a local debug toggle. Once §11 settles it, either make it the default by
-   removing the switch, or move it into settings if it should stay optional.
+   removing the switch, or move it into settings if it should stay optional. **Decided
+   2026-11-17 (§25.1):** stage 2 is on by default. The debug switch stays, and it can only turn
+   stage 2 off. There's no setting.
 2. **"A chat's first message"** means a message with no reply before it in the chat. A
    retry of the first message counts as first. A later message's new session (handoff,
    fork, resume that found none) doesn't: it runs stage 2 only with a new strong
@@ -783,6 +800,7 @@ passes did.
    focus while stage 2 is on.
 8. **The threshold stays at 0.5.** Tuning needs real chats (§17.4).
 9. **No combined router-and-recall call** (§4.3). That waits on §11's latency numbers.
+   Closed 2026-11-17: not built (§4.3).
 10. **Dummy mode and debug scripts never run stage 2**, the same as the router.
 
 ### 17.3 How it was checked
@@ -1745,8 +1763,16 @@ Decided by Juno after a review of §25.4.
 - **Tests:** `gaia_memories_test`, the curator's list test now also checks that a deleted
   active and a deleted archived memory stay out, and "set-aside memories don't crowd kept
   ones out of the curator's list" (50 dismissed and 40 kept, all matching: 40 kept and 20
-  dismissed listed). The memories, utility, controller and debug test files pass. Not checked
-  live against Haiku.
+  dismissed listed). The memories, utility, controller and debug test files pass.
+- **Live, real Haiku (2026-11-17):** a throwaway probe of `curatorContext` and
+  `GaiaUtility.curate` (`claude-haiku-5-5`, default account), three runs. Four memories were
+  seeded: one kept ("I'm a CS student at the University of Waterloo."), one dismissed proposal
+  ("I am left-handed."), one kept memory deleted ("I live in Vancouver."), and one archived
+  memory deleted ("I play badminton on Thursday nights."). The chat restated all four in other
+  words. The curator's list held only the kept memory and the dismissed one. All three runs
+  proposed only the two deleted facts ("I moved back to Vancouver last month." / "… in October
+  2026.", "I play badminton every Thursday night with friends.") and neither of the others.
+  The probe wasn't kept.
 
 Left on qa-128: the curator, Codex and remember chats from this pass; the CS246 group proposal
 and the two §24 duplicates in the inbox; the student fact remembered, in Profile; topics MT7

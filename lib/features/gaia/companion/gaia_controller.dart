@@ -7130,6 +7130,12 @@ class GaiaController extends ChangeNotifier {
     }
     final utility = _utility;
     final first = last == null;
+    // Counted over a week for §11: how often a later message runs stage 2.
+    debugPrint(
+      '[gaia] memory recall: ${first ? 'first message' : 'later message'}, '
+      '${found.candidates.length} candidates'
+      '${found.strong ? ', a new strong one' : ''}',
+    );
     if (utility == null ||
         !debug.recallPick ||
         debug.dummyMode ||

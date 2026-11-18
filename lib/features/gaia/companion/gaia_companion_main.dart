@@ -67,14 +67,28 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     // over it instead.
   }
   await log.writeAsString('');
+  // Recall's lines are also kept across companions for
+  // GAIA_MEMORY_TOPICS_HLD.md §11's week of chats. Past 1 MB at a start it
+  // moves to `.1`, replacing the one there, so it can't grow forever.
+  final recallLog = File(p.join(root.path, 'gaia', 'recall.log'));
+  try {
+    if (await recallLog.exists() && await recallLog.length() > 1 << 20) {
+      await recallLog.rename('${recallLog.path}.1');
+    }
+  } on FileSystemException {
+    // Still held: moved at a later start.
+  }
   final console = debugPrint;
   debugPrint = (message, {wrapWidth}) {
     console(message, wrapWidth: wrapWidth);
     try {
-      log.writeAsStringSync(
-        '${DateTime.now().toIso8601String()} $message\n',
-        mode: FileMode.append,
-      );
+      final line = '${DateTime.now().toIso8601String()} $message\n';
+      log.writeAsStringSync(line, mode: FileMode.append);
+      if (message != null &&
+          (message.startsWith('[gaia] memory recall') ||
+              message.startsWith('[gaia] utility usage, memory recall:'))) {
+        recallLog.writeAsStringSync(line, mode: FileMode.append);
+      }
     } on FileSystemException {
       // The console still has it.
     }
