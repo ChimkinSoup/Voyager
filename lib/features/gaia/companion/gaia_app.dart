@@ -2955,11 +2955,12 @@ class _MessagesState extends State<_Messages> {
                     ),
                   ),
                 ),
-                // And at its foot, where it goes under the composer.
+                // And at its foot, where it goes under the composer: only as
+                // wide as the composer, so what's beside it doesn't fade.
                 Positioned(
                   bottom: 0,
-                  left: 0,
-                  right: 0,
+                  left: max(12.0, (constraints.maxWidth - _column) / 2 - 12),
+                  right: max(12.0, (constraints.maxWidth - _column) / 2 - 12),
                   child: IgnorePointer(
                     child: Container(
                       height: _TopFade._fade,
