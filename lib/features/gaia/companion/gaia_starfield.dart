@@ -29,8 +29,23 @@ class GaiaStarfield extends StatefulWidget {
 
   final Widget child;
 
+  /// Turns the stars of the starfield behind [context] about a pole above
+  /// the middle, by radians, as the [GaiaSky] over them turns.
+  static void Function(double radians)? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_StarfieldScope>()?.stars.turn;
+
   @override
   State<GaiaStarfield> createState() => _GaiaStarfieldState();
+}
+
+class _StarfieldScope extends InheritedWidget {
+  const _StarfieldScope({required this.stars, required super.child});
+
+  final _Stars stars;
+
+  @override
+  bool updateShouldNotify(_StarfieldScope oldWidget) =>
+      oldWidget.stars != stars;
 }
 
 /// Enough for the largest chat area; smaller ones draw the first few.
@@ -123,7 +138,9 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
       child: RepaintBoundary(
         child: CustomPaint(
           painter: _StarPainter(_stars, widget.top, widget.left),
-          child: RepaintBoundary(child: widget.child),
+          child: RepaintBoundary(
+            child: _StarfieldScope(stars: _stars, child: widget.child),
+          ),
         ),
       ),
     );
@@ -184,6 +201,22 @@ class _Stars extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Turns the stars by [radians] about a pole half the field's height
+  /// above its middle, wrapping at the edges. That turning carries as many
+  /// stars across each edge as come in at the opposite one, so the field
+  /// stays even.
+  void turn(double radians) {
+    if (size.isEmpty || radians == 0) return;
+    final w = size.width, h = size.height;
+    final c = cos(radians), s = sin(radians);
+    for (var i = 0; i < _pool; i++) {
+      final px = x[i] * w - w / 2, py = y[i] * h + h / 2;
+      x[i] = (w / 2 + px * c - py * s) / w % 1;
+      y[i] = (px * s + py * c - h / 2) / h % 1;
+    }
+    notifyListeners();
+  }
+
   /// Drops the lean, for reduced motion.
   void settle() {
     leanX.fillRange(0, _pool, 0);
@@ -204,6 +237,8 @@ class _StarPainter extends CustomPainter {
   /// doesn't pop.
   static const _edge = 20.0;
 
+  static const _minRadius = 1.0;
+
   @override
   void paint(Canvas canvas, Size whole) {
     final size = Size(whole.width, max(0, whole.height - top));
@@ -221,9 +256,14 @@ class _StarPainter extends CustomPainter {
         min(py - r, size.height - py - r),
       );
       if (nearest <= 0) continue;
-      final alpha = stars.alpha[i] * min(nearest / _edge, 1);
+      // No smaller than a pixel or so across, dimmed to give the same light:
+      // a smaller dot flashes as it moves, bright on a pixel and dim
+      // between two.
+      final drawn = max(r, _minRadius);
+      final alpha =
+          stars.alpha[i] * min(nearest / _edge, 1) * (r / drawn) * (r / drawn);
       paint.color = Colors.white.withValues(alpha: alpha);
-      canvas.drawCircle(Offset(px, py), r, paint);
+      canvas.drawCircle(Offset(px, py), drawn, paint);
     }
   }
 

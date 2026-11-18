@@ -972,6 +972,49 @@ void main() {
     );
   });
 
+  test('only a prompt sent from the chat in view is just sent, not a chat '
+      'opened holding only a prompt', () async {
+    final at = DateTime.utc(2026, 11, 1);
+    await main.repository.upsertChat(
+      GaiaChat(
+        id: 'lone',
+        title: 'lone',
+        createdAt: at,
+        updatedAt: at,
+        lastMessageAt: at,
+      ),
+    );
+    await main.repository.upsertMessage(
+      GaiaMessage(
+        id: 'lone-0',
+        chatId: 'lone',
+        seq: 0,
+        role: GaiaMessageRole.user,
+        parts: const [GaiaTextPart('Hi')],
+        status: GaiaMessageStatus.complete,
+        createdAt: at,
+        updatedAt: at,
+      ),
+    );
+    await startCompanion();
+    runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+    final seen = <bool>[];
+    void listen() => seen.add(controller.justSent);
+    controller.addListener(listen);
+    await controller.send('Hello');
+    await settle();
+    controller.removeListener(listen);
+    expect(seen, contains(true));
+
+    // Loaded once, then opened again from a new chat with it cached.
+    await controller.openChat('lone');
+    await settle();
+    controller.newChat();
+    await controller.openChat('lone');
+    expect(controller.messages, hasLength(1));
+    expect(controller.justSent, isFalse);
+  });
+
   test('a quote alone is sent, titled by its first line', () async {
     await startCompanion();
     runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));

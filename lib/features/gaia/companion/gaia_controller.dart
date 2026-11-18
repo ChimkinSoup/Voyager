@@ -757,6 +757,7 @@ class GaiaController extends ChangeNotifier {
   void _viewChat(String? chatId) {
     _chatViewed = true;
     if (chatId == currentChatId) return;
+    _sentFrom = null;
     // A search's message left unreached isn't scrolled to later.
     revealing = null;
     _newChatSeesScreen = false;
@@ -1486,6 +1487,17 @@ class GaiaController extends ChangeNotifier {
   /// Whether [messages] is the current chat's, not empty while it loads.
   bool get messagesLoaded =>
       currentChatId == null || _messages.containsKey(currentChatId);
+
+  /// The chat in view whose first prompt was sent from it, until another
+  /// is viewed: opening a chat that holds only a prompt isn't a send.
+  String? _sentFrom;
+
+  /// A prompt was just sent from the empty chat in view, its only message.
+  bool get justSent =>
+      _sentFrom != null &&
+      _sentFrom == currentChatId &&
+      messages.length == 1 &&
+      messages.first.role == GaiaMessageRole.user;
 
   bool isRunning(String chatId) => _running.contains(chatId);
 
@@ -5715,6 +5727,7 @@ class GaiaController extends ChangeNotifier {
       createdAt: sentAt,
       updatedAt: sentAt,
     );
+    if (list.isEmpty && chatId == currentChatId) _sentFrom = chatId;
     list.add(question);
     notifyListeners();
     final imageParts = <GaiaImagePart>[];

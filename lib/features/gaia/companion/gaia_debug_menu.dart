@@ -545,6 +545,26 @@ class _DebugMenu extends StatelessWidget {
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          title: const Text('Sky debug'),
+          subtitle: const Text(
+            "A panel over the chat to tune the empty chat's sky: its rotation, "
+            'stars, constellations, meteors, aurora and exit.',
+          ),
+          value: debug.skyPanel,
+          onChanged: debug.setSkyPanel,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Constellation figures (experimental)'),
+          subtitle: const Text(
+            "Once the sky traces a constellation, a sketch of what it's named "
+            'for is drawn over it, fading with its lines.',
+          ),
+          value: debug.skyFigures,
+          onChanged: debug.setSkyFigures,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('Allow screenshots'),
           subtitle: const Text(
             "Gaia shows in screenshots, screen recordings and screen shares, "

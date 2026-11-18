@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
@@ -70,6 +71,43 @@ class GaiaDebug extends ChangeNotifier {
   /// `recallPick: false` from any other toggle's save, which isn't a choice.
   var recallPick = true;
 
+  /// The sky debug panel shows over Gaia's chat.
+  var skyPanel = false;
+
+  /// Degrees a minute the empty chat's sky turns.
+  var skyRotation = 6.0;
+
+  /// The sky's stars per million square logical pixels.
+  var skyStars = 320.0;
+
+  /// How deeply its stars shimmer, 0 to 1.
+  var skyTwinkle = 0.5;
+
+  /// Stars a second that sparkle into a four-pointed glint.
+  var skySparkles = 0.6;
+
+  /// Logical pixels a second the pen tracing a constellation moves.
+  var skyTraceSpeed = 80.0;
+
+  /// Once traced, a constellation's figure is sketched over it.
+  var skyFigures = false;
+
+  /// The average seconds from one meteor or satellite to the next.
+  var skyEventInterval = 15.0;
+
+  /// The aurora's strength, 0 to 1.
+  var skyAurora = 0.35;
+
+  /// How the sky leaves once a prompt is sent.
+  var skyExit = GaiaSkyExit.warp;
+
+  /// Seconds its exit lasts.
+  var skyExitTime = 1.2;
+
+  /// Bumped by the sky panel's Play exit, which plays the exit in place.
+  /// Not kept.
+  var skyExitTest = 0;
+
   /// Runs while [showFps] or [fpsAlert] is on.
   late final fps = FpsMonitorController()..addListener(_checkFps);
 
@@ -101,6 +139,20 @@ class GaiaDebug extends ChangeNotifier {
       slowAnimations = json['slowAnimations'] == true;
       allowScreenshots = json['allowScreenshots'] == true;
       recallPick = json['recallPickOff'] != true;
+      skyPanel = json['skyPanel'] == true;
+      // Within the sky panel's sliders: a time of 0 or less never ends.
+      double number(String key, double value, double min, double max) =>
+          ((json[key] as num?)?.toDouble() ?? value).clamp(min, max);
+      skyRotation = number('skyRotation', skyRotation, 0, 60);
+      skyStars = number('skyStars', skyStars, 0, 1200);
+      skyTwinkle = number('skyTwinkle', skyTwinkle, 0, 1);
+      skySparkles = number('skySparkles', skySparkles, 0, 3);
+      skyTraceSpeed = number('skyTraceSpeed', skyTraceSpeed, 20, 300);
+      skyFigures = json['skyFigures'] == true;
+      skyEventInterval = number('skyEventInterval', skyEventInterval, 3, 60);
+      skyAurora = number('skyAurora', skyAurora, 0, 1);
+      skyExit = GaiaSkyExit.values.asNameMap()[json['skyExit']] ?? skyExit;
+      skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
     }
@@ -158,6 +210,41 @@ class GaiaDebug extends ChangeNotifier {
 
   Future<void> setRecallPick(bool value) => _set(() => recallPick = value);
 
+  Future<void> setSkyPanel(bool value) => _set(() => skyPanel = value);
+
+  Future<void> setSkyRotation(double value, {bool save = true}) =>
+      _set(() => skyRotation = value, save: save);
+
+  Future<void> setSkyStars(double value, {bool save = true}) =>
+      _set(() => skyStars = value, save: save);
+
+  Future<void> setSkyTwinkle(double value, {bool save = true}) =>
+      _set(() => skyTwinkle = value, save: save);
+
+  Future<void> setSkySparkles(double value, {bool save = true}) =>
+      _set(() => skySparkles = value, save: save);
+
+  Future<void> setSkyTraceSpeed(double value, {bool save = true}) =>
+      _set(() => skyTraceSpeed = value, save: save);
+
+  Future<void> setSkyFigures(bool value) => _set(() => skyFigures = value);
+
+  Future<void> setSkyEventInterval(double value, {bool save = true}) =>
+      _set(() => skyEventInterval = value, save: save);
+
+  Future<void> setSkyAurora(double value, {bool save = true}) =>
+      _set(() => skyAurora = value, save: save);
+
+  Future<void> setSkyExit(GaiaSkyExit value) => _set(() => skyExit = value);
+
+  Future<void> setSkyExitTime(double value, {bool save = true}) =>
+      _set(() => skyExitTime = value, save: save);
+
+  void testSkyExit() {
+    skyExitTest++;
+    notifyListeners();
+  }
+
   /// The script [prompt] calls for, while [scriptedReplies] is on, else
   /// [gaiaDummyScript] while [dummyMode] is.
   GaiaDebugScript? scriptFor(String prompt) {
@@ -205,6 +292,17 @@ class GaiaDebug extends ChangeNotifier {
           'slowAnimations': slowAnimations,
           'allowScreenshots': allowScreenshots,
           'recallPickOff': !recallPick,
+          'skyPanel': skyPanel,
+          'skyRotation': skyRotation,
+          'skyStars': skyStars,
+          'skyTwinkle': skyTwinkle,
+          'skySparkles': skySparkles,
+          'skyTraceSpeed': skyTraceSpeed,
+          'skyFigures': skyFigures,
+          'skyEventInterval': skyEventInterval,
+          'skyAurora': skyAurora,
+          'skyExit': skyExit.name,
+          'skyExitTime': skyExitTime,
         }),
       );
     } catch (error) {
