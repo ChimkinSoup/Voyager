@@ -1,23 +1,33 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// The starfield behind Gaia's chat: dim stars that drift and lean towards
-/// the cursor while it's over them. It ticks only while [active] — Gaia on
-/// screen and in front — with the cursor over it, so a window left alone
-/// costs nothing; otherwise, and under reduced motion, it's still.
+/// The share of the [GaiaSky]'s turning that the starfield keeps once the
+/// sky has gone, so the stars turn on, slower, behind a filled chat.
+const kGaiaFilledSpin = 0.25;
+
+/// The starfield behind Gaia's chat: dim stars turning slowly about a pole
+/// above the middle, leaning towards the cursor while it's over them. It
+/// ticks only while [active] — Gaia on screen and in front — and turning or
+/// with the cursor over it; otherwise, and under reduced motion, it's still.
 class GaiaStarfield extends StatefulWidget {
   const GaiaStarfield({
     super.key,
     required this.active,
+    this.rotation = 0,
     this.top = 0,
     this.left,
     required this.child,
   });
 
   final ValueListenable<bool> active;
+
+  /// Degrees a minute the stars turn by themselves, while no [GaiaSky] is
+  /// turning them.
+  final double rotation;
 
   /// The stars keep below this, fading at it as at the other edges, so one
   /// can't sit half cut off under an opaque header.
@@ -33,6 +43,22 @@ class GaiaStarfield extends StatefulWidget {
   /// the middle, by radians, as the [GaiaSky] over them turns.
   static void Function(double radians)? of(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_StarfieldScope>()?.stars.turn;
+
+  /// Brightens the stars of the starfield behind [context] by a share, 0
+  /// to 1, as the [GaiaSky] over them leaves: they're the sky's stars that
+  /// stay behind.
+  static void Function(double glow)? glowOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_StarfieldScope>()?.stars.setGlow;
+
+  /// How far, in logical pixels, the nearest stars of the starfield behind
+  /// [context] lean towards the cursor just now. A [GaiaSky] over them leans
+  /// its own by it, each by its depth, so the whole sky leans as one.
+  static Offset Function()? leanOf(BuildContext context) {
+    final stars = context
+        .getInheritedWidgetOfExactType<_StarfieldScope>()
+        ?.stars;
+    return stars == null ? null : () => stars.lean;
+  }
 
   @override
   State<GaiaStarfield> createState() => _GaiaStarfieldState();
@@ -58,26 +84,40 @@ const _areaPerStar = 6000.0;
 /// distance from the centre.
 const _maxLean = 0.03;
 
+/// How often the stars step while only turning, their lean caught up with
+/// the cursor: they move well under a pixel a second, so a step this often
+/// looks the same as one every frame, and the window is still between.
+const _turnStep = Duration(milliseconds: 500);
+
 class _GaiaStarfieldState extends State<GaiaStarfield>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   final _stars = _Stars(Random());
-  var _lastTick = Duration.zero;
+
+  /// The frame of the last step, so the next knows how long it's been,
+  /// frames or not between them; null when stopped.
+  Duration? _lastTick;
+
+  /// Set while waiting out a [_turnStep].
+  Timer? _wake;
   var _reduced = false;
   var _hovered = false;
 
   @override
   void initState() {
     super.initState();
+    _stars.rate = widget.rotation * pi / 180 / 60;
     widget.active.addListener(_sync);
   }
 
   @override
   void didUpdateWidget(GaiaStarfield oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.active == widget.active) return;
-    oldWidget.active.removeListener(_sync);
-    widget.active.addListener(_sync);
+    _stars.rate = widget.rotation * pi / 180 / 60;
+    if (oldWidget.active != widget.active) {
+      oldWidget.active.removeListener(_sync);
+      widget.active.addListener(_sync);
+    }
     _sync();
   }
 
@@ -92,31 +132,49 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
   @override
   void dispose() {
     widget.active.removeListener(_sync);
+    _wake?.cancel();
     _ticker.dispose();
     _stars.dispose();
     super.dispose();
   }
 
   void _sync() {
-    final run = widget.active.value && _hovered && !_reduced;
-    if (run == _ticker.isActive) return;
-    if (run) {
-      _lastTick = Duration.zero;
-      _ticker.start();
-    } else {
+    final run =
+        widget.active.value && (_hovered || _stars.rate > 0) && !_reduced;
+    if (!run) {
+      _wake?.cancel();
+      _wake = null;
       _ticker.stop();
+      _lastTick = null;
+      return;
     }
+    // Waiting out a step, unless the cursor moved: leaning follows it.
+    if (_wake != null && _stars.settled) return;
+    _wake?.cancel();
+    _wake = null;
+    if (!_ticker.isActive) _ticker.start();
   }
 
-  void _tick(Duration elapsed) {
+  void _tick(Duration _) {
+    final now = SchedulerBinding.instance.currentFrameTimeStamp;
     // Capped, so a stall doesn't jump the field.
-    final dt = min((elapsed - _lastTick).inMicroseconds / 1e6, 0.1);
-    _lastTick = elapsed;
+    final dt = switch (_lastTick) {
+      final last? => min((now - last).inMicroseconds / 1e6, 0.25),
+      null => 0.0,
+    };
+    _lastTick = now;
     _stars.step(dt);
+    if (!_stars.settled) return;
+    _ticker.stop();
+    _wake = Timer(_turnStep, () {
+      _wake = null;
+      _sync();
+    });
   }
 
+  /// Every move, not only coming and going: a step being waited out
+  /// gives way to every frame while the lean catches up.
   void _hover(bool hovered) {
-    if (hovered == _hovered) return;
     _hovered = hovered;
     _sync();
   }
@@ -163,21 +221,15 @@ class _Stars extends ChangeNotifier {
       alpha = Float32List.fromList([
         for (var i = 0; i < _pool; i++) 0.1 + random.nextDouble() * 0.6,
       ]),
-      // Logical pixels a second.
-      dx = Float32List.fromList([
-        for (var i = 0; i < _pool; i++) (random.nextDouble() - 0.5) * 6,
-      ]),
-      dy = Float32List.fromList([
-        for (var i = 0; i < _pool; i++) (random.nextDouble() - 0.5) * 6,
-      ]),
       depth = Float32List.fromList([
         for (var i = 0; i < _pool; i++) 0.03 + random.nextDouble() * 0.97,
       ]);
 
-  final Float32List x, y, radius, alpha, dx, dy, depth;
+  final Float32List x, y, radius, alpha, depth;
 
-  /// Where each star's lean has eased to, in logical pixels.
-  final leanX = Float32List(_pool), leanY = Float32List(_pool);
+  /// Where the nearest stars' lean has eased to, in logical pixels: each
+  /// leans by it times its [depth], all easing alike.
+  var lean = Offset.zero;
 
   /// Logical, from the top left; null while the cursor is elsewhere.
   Offset? cursor;
@@ -185,19 +237,37 @@ class _Stars extends ChangeNotifier {
   /// Set by each paint.
   var size = Size.zero;
 
+  /// Radians a second the stars turn by themselves.
+  var rate = 0.0;
+
+  /// A sky turned them since the last step, so they don't turn themselves.
+  var _driven = false;
+
+  /// How much brighter they are, 0 to 1.
+  var glow = 0.0;
+
+  /// Where [lean] is easing to: towards the cursor, or back to rest.
+  Offset get _aim => cursor == null || size.isEmpty
+      ? Offset.zero
+      : (cursor! - size.center(Offset.zero)) * _maxLean;
+
+  /// The lean has caught up with the cursor, or come to rest without it.
+  bool get settled => (_aim - lean).distance < 0.01;
+
+  void setGlow(double value) {
+    if (value == glow) return;
+    glow = value;
+    notifyListeners();
+  }
+
   void step(double dt) {
     if (size.isEmpty) return;
-    final target = cursor == null
-        ? Offset.zero
-        : cursor! - size.center(Offset.zero);
     // Eases most of the way in about a second.
     final ease = 1 - exp(-dt / 0.4);
-    for (var i = 0; i < _pool; i++) {
-      x[i] = (x[i] + dx[i] * dt / size.width) % 1;
-      y[i] = (y[i] + dy[i] * dt / size.height) % 1;
-      leanX[i] += (target.dx * _maxLean * depth[i] - leanX[i]) * ease;
-      leanY[i] += (target.dy * _maxLean * depth[i] - leanY[i]) * ease;
-    }
+    // Anticlockwise, as the sky turns.
+    if (!_driven) _turn(-rate * dt);
+    _driven = false;
+    lean += (_aim - lean) * ease;
     notifyListeners();
   }
 
@@ -206,6 +276,11 @@ class _Stars extends ChangeNotifier {
   /// stars across each edge as come in at the opposite one, so the field
   /// stays even.
   void turn(double radians) {
+    _driven = true;
+    _turn(radians);
+  }
+
+  void _turn(double radians) {
     if (size.isEmpty || radians == 0) return;
     final w = size.width, h = size.height;
     final c = cos(radians), s = sin(radians);
@@ -219,8 +294,7 @@ class _Stars extends ChangeNotifier {
 
   /// Drops the lean, for reduced motion.
   void settle() {
-    leanX.fillRange(0, _pool, 0);
-    leanY.fillRange(0, _pool, 0);
+    lean = Offset.zero;
     notifyListeners();
   }
 }
@@ -247,9 +321,10 @@ class _StarPainter extends CustomPainter {
     final count = min(_pool, (size.width * size.height / _areaPerStar).ceil());
     final paint = Paint();
     final from = max(0.0, left?.value ?? 0);
+    final glow = 1 + stars.glow;
     for (var i = 0; i < count; i++) {
-      final px = stars.x[i] * size.width + stars.leanX[i];
-      final py = stars.y[i] * size.height + stars.leanY[i];
+      final px = stars.x[i] * size.width + stars.lean.dx * stars.depth[i];
+      final py = stars.y[i] * size.height + stars.lean.dy * stars.depth[i];
       final r = stars.radius[i];
       final nearest = min(
         min(px - from - r, size.width - px - r),
@@ -260,8 +335,14 @@ class _StarPainter extends CustomPainter {
       // a smaller dot flashes as it moves, bright on a pixel and dim
       // between two.
       final drawn = max(r, _minRadius);
-      final alpha =
-          stars.alpha[i] * min(nearest / _edge, 1) * (r / drawn) * (r / drawn);
+      final alpha = min(
+        1.0,
+        stars.alpha[i] *
+            glow *
+            min(nearest / _edge, 1) *
+            (r / drawn) *
+            (r / drawn),
+      );
       paint.color = Colors.white.withValues(alpha: alpha);
       canvas.drawCircle(Offset(px, py), drawn, paint);
     }

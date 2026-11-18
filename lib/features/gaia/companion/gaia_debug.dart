@@ -98,6 +98,12 @@ class GaiaDebug extends ChangeNotifier {
   /// The aurora's strength, 0 to 1.
   var skyAurora = 0.35;
 
+  /// How the aurora goes as the sky leaves.
+  var skyAuroraExit = GaiaAuroraExit.rise;
+
+  /// How a satellite crossing the sky looks.
+  var skySatellite = GaiaSatellite.dot;
+
   /// How the sky leaves once a prompt is sent.
   var skyExit = GaiaSkyExit.warp;
 
@@ -107,6 +113,14 @@ class GaiaDebug extends ChangeNotifier {
   /// Bumped by the sky panel's Play exit, which plays the exit in place.
   /// Not kept.
   var skyExitTest = 0;
+
+  /// The step the sky panel's tour is at ([GaiaController.playSkyTour]),
+  /// or null when none is running. Not kept.
+  String? skyTour;
+
+  /// [dummyMode] as kept while the sky tour has it on, so a save meanwhile
+  /// doesn't keep the tour's. Not kept.
+  bool? dummyKept;
 
   /// Runs while [showFps] or [fpsAlert] is on.
   late final fps = FpsMonitorController()..addListener(_checkFps);
@@ -146,11 +160,17 @@ class GaiaDebug extends ChangeNotifier {
       skyRotation = number('skyRotation', skyRotation, 0, 60);
       skyStars = number('skyStars', skyStars, 0, 1200);
       skyTwinkle = number('skyTwinkle', skyTwinkle, 0, 1);
-      skySparkles = number('skySparkles', skySparkles, 0, 3);
+      skySparkles = number('skySparkles', skySparkles, 0, 20);
       skyTraceSpeed = number('skyTraceSpeed', skyTraceSpeed, 20, 300);
       skyFigures = json['skyFigures'] == true;
       skyEventInterval = number('skyEventInterval', skyEventInterval, 3, 60);
       skyAurora = number('skyAurora', skyAurora, 0, 1);
+      skySatellite =
+          GaiaSatellite.values.asNameMap()[json['skySatellite']] ??
+          skySatellite;
+      skyAuroraExit =
+          GaiaAuroraExit.values.asNameMap()[json['skyAuroraExit']] ??
+          skyAuroraExit;
       skyExit = GaiaSkyExit.values.asNameMap()[json['skyExit']] ?? skyExit;
       skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
     } catch (error) {
@@ -235,6 +255,12 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setSkyAurora(double value, {bool save = true}) =>
       _set(() => skyAurora = value, save: save);
 
+  Future<void> setSkyAuroraExit(GaiaAuroraExit value) =>
+      _set(() => skyAuroraExit = value);
+
+  Future<void> setSkySatellite(GaiaSatellite value) =>
+      _set(() => skySatellite = value);
+
   Future<void> setSkyExit(GaiaSkyExit value) => _set(() => skyExit = value);
 
   Future<void> setSkyExitTime(double value, {bool save = true}) =>
@@ -242,6 +268,11 @@ class GaiaDebug extends ChangeNotifier {
 
   void testSkyExit() {
     skyExitTest++;
+    notifyListeners();
+  }
+
+  void setSkyTour(String? step) {
+    skyTour = step;
     notifyListeners();
   }
 
@@ -282,7 +313,7 @@ class GaiaDebug extends ChangeNotifier {
       await file.writeAsString(
         jsonEncode({
           'scriptedReplies': scriptedReplies,
-          'dummyMode': dummyMode,
+          'dummyMode': dummyKept ?? dummyMode,
           'replyDelayMs': replyDelay.inMilliseconds,
           'attachDelayMs': attachDelay.inMilliseconds,
           'streamSpeed': streamSpeed,
@@ -301,6 +332,8 @@ class GaiaDebug extends ChangeNotifier {
           'skyFigures': skyFigures,
           'skyEventInterval': skyEventInterval,
           'skyAurora': skyAurora,
+          'skySatellite': skySatellite.name,
+          'skyAuroraExit': skyAuroraExit.name,
           'skyExit': skyExit.name,
           'skyExitTime': skyExitTime,
         }),

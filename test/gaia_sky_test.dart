@@ -10,6 +10,7 @@ void main() {
     bool warp = false,
     int warpTest = 0,
     GaiaSkyExit exit = GaiaSkyExit.warp,
+    GaiaAuroraExit auroraExit = GaiaAuroraExit.rise,
     bool reduced = false,
     Widget child = const SizedBox.expand(),
   }) => MediaQuery(
@@ -26,6 +27,7 @@ void main() {
       figures: true,
       eventInterval: 15,
       aurora: 0.35,
+      auroraExit: auroraExit,
       exit: exit,
       exitTime: 1,
       exitTest: warpTest,
@@ -99,17 +101,20 @@ void main() {
     expect(ticking(tester), isFalse);
   });
 
-  testWidgets('fades out, its turning coasting to rest', (tester) async {
+  testWidgets('blinks out when another chat opens, whatever its exit', (
+    tester,
+  ) async {
     await pumpSky(tester, isActive: true);
     await frames(tester, 3);
 
+    // Not sent, so not a warp: a blink-out, over the exit's time.
     await tester.pumpWidget(sky(shown: false));
     active.value = false;
-    // Gone in a moment, still turning a little after.
-    await frames(tester, 0.5);
+    await frames(tester, 0.9);
     expect(ticking(tester), isTrue);
-    await frames(tester, 2);
+    await frames(tester, 0.2);
     expect(ticking(tester), isFalse);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('turns back mid-exit when the chat empties again', (
@@ -147,22 +152,6 @@ void main() {
     expect(ticking(tester), isTrue);
     await frames(tester, 1.1);
     expect(ticking(tester), isFalse);
-  });
-
-  testWidgets('blinks back in through a fade not yet done', (tester) async {
-    await pumpSky(tester, isActive: true);
-    await tester.pumpWidget(sky(exit: GaiaSkyExit.blinkOut));
-    await frames(tester, 1.5);
-
-    await tester.pumpWidget(sky(shown: false, exit: GaiaSkyExit.blinkOut));
-    await frames(tester, 0.15);
-    active.value = false;
-    await tester.pumpWidget(sky(exit: GaiaSkyExit.blinkOut));
-    await frames(tester, 0.9);
-    expect(ticking(tester), isTrue);
-    await frames(tester, 0.2);
-    expect(ticking(tester), isFalse);
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a test warp comes back', (tester) async {
@@ -260,6 +249,20 @@ void main() {
       await frames(tester, 0.9);
       expect(ticking(tester), isTrue);
       await frames(tester, 0.2);
+      expect(ticking(tester), isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final auroraExit in GaiaAuroraExit.values) {
+    testWidgets('its aurora goes by ${auroraExit.name}', (tester) async {
+      await pumpSky(tester, isActive: true);
+      await frames(tester, 1);
+
+      await tester.pumpWidget(
+        sky(shown: false, warp: true, auroraExit: auroraExit),
+      );
+      await frames(tester, 1.1);
       expect(ticking(tester), isFalse);
       expect(tester.takeException(), isNull);
     });

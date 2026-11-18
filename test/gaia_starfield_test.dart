@@ -64,6 +64,105 @@ void main() {
     expect(ticking(tester), isFalse);
   });
 
+  testWidgets('turning, steps every so often while active without the cursor', (
+    tester,
+  ) async {
+    active = ValueNotifier(false);
+    addTearDown(active.dispose);
+    await tester.pumpWidget(
+      GaiaStarfield(
+        active: active,
+        rotation: 2,
+        child: const SizedBox.expand(),
+      ),
+    );
+    expect(ticking(tester), isFalse);
+
+    active.value = true;
+    expect(ticking(tester), isTrue);
+    // A step, and then no frames until the next.
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await tester.pump(const Duration(milliseconds: 490));
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    final stars = tester.renderObject(find.byType(CustomPaint).first);
+    await tester.pump(const Duration(milliseconds: 20), EnginePhase.build);
+    expect(stars.debugNeedsPaint, isTrue);
+    await tester.pump();
+
+    // Leaves no step waiting: the test fails on a pending timer.
+    active.value = false;
+    await tester.pump();
+    expect(ticking(tester), isFalse);
+  });
+
+  testWidgets('ticks every frame only while leaning to catch the cursor', (
+    tester,
+  ) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    late Offset Function() lean;
+    await tester.pumpWidget(
+      GaiaStarfield(
+        active: active,
+        rotation: 2,
+        child: Builder(
+          builder: (context) {
+            lean = GaiaStarfield.leanOf(context)!;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    // At once, not at the next step.
+    final mouse = await hover(tester);
+    await mouse.moveBy(const Offset(200, 0));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(ticking(tester), isTrue);
+    }
+    expect(lean().dx, greaterThan(0));
+
+    // Caught up, it steps only every so often, the cursor still over it.
+    for (var i = 0; i < 300 && ticking(tester); i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(ticking(tester), isFalse);
+    expect(lean().dx, closeTo(201 * 0.03, 0.02));
+
+    // A move leans it again at once.
+    await mouse.moveBy(const Offset(-100, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(ticking(tester), isTrue);
+
+    active.value = false;
+    await tester.pump();
+  });
+
+  testWidgets('a glow repaints the stars', (tester) async {
+    await pumpField(tester);
+    late void Function(double) glow;
+    await tester.pumpWidget(
+      GaiaStarfield(
+        active: active,
+        child: Builder(
+          builder: (context) {
+            glow = GaiaStarfield.glowOf(context)!;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+    final stars = tester.renderObject(find.byType(CustomPaint).first);
+    expect(stars.debugNeedsPaint, isFalse);
+    glow(0.5);
+    expect(stars.debugNeedsPaint, isTrue);
+  });
+
   testWidgets('never ticks under reduced motion', (tester) async {
     await pumpField(tester, reduced: true);
     await hover(tester);

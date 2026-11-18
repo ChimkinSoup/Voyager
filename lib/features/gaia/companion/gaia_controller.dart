@@ -3018,6 +3018,74 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The sky panel's tour of each way the chat changes, one after another:
+  /// to a new chat; a first prompt sent from it, answered by
+  /// [gaiaDummyScript] rather than a provider; back to a new chat; the
+  /// tour's chat opened again, as from the sidebar; on to another chat.
+  /// Then back to the chat it started from, the tour's chat deleted.
+  Future<void> playSkyTour() async {
+    if (debug.skyTour != null) return;
+    final from = currentChatId;
+    final dummy = debug.dummyMode;
+    // Not saved, so a quit mid-tour leaves dummy mode as it was.
+    debug
+      ..dummyKept = dummy
+      ..dummyMode = true;
+    Future<void> pause(double seconds) =>
+        Future<void>.delayed(Duration(milliseconds: (seconds * 1000).round()));
+    Future<void> step(String name, FutureOr<void> Function() run) async {
+      debug.setSkyTour(name);
+      await run();
+      await pause(3);
+    }
+
+    String? tour;
+    try {
+      await step('To a new chat', newChat);
+      debug.setSkyTour('Sending a first prompt');
+      unawaited(send('Sky tour: a first prompt'));
+      for (var i = 0; i < 40 && currentChatId == null; i++) {
+        await pause(0.05);
+      }
+      tour = currentChatId;
+      if (tour == null) return;
+      // Its reply streamed in, then a moment to see it.
+      await pause(1);
+      for (var i = 0; i < 300 && isRunning(tour); i++) {
+        await pause(0.1);
+      }
+      await pause(1.5);
+      await step('Filled chat to a new chat', newChat);
+      await step('New chat to a filled one, as from the sidebar', () {
+        return selectChat(tour!);
+      });
+      final other = chats.where((chat) => chat.id != tour).firstOrNull;
+      if (other != null) {
+        await step('Filled chat to another', () => selectChat(other.id));
+      }
+    } finally {
+      debug
+        ..dummyMode = dummy
+        ..dummyKept = null;
+      try {
+        if (from == null || _chat(from) == null) {
+          newChat();
+        } else {
+          await selectChat(from);
+        }
+      } finally {
+        if (tour != null) {
+          try {
+            await deleteChat(tour);
+          } on GaiaPipeException {
+            // Said in the log; the chat stays, to delete by hand.
+          }
+        }
+        debug.setSkyTour(null);
+      }
+    }
+  }
+
   /// [newChat], the draft in view going with it: after the new chat's own
   /// draft, its images numbered on from that one's. Not while any of its
   /// images are still syncing, which a toast says.

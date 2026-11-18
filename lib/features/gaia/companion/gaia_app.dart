@@ -439,6 +439,8 @@ class _GaiaShell extends StatelessWidget {
                 Positioned.fill(
                   child: GaiaStarfield(
                     active: controller.focused,
+                    // Turning on, slower, once the sky has gone.
+                    rotation: controller.debug.skyRotation * kGaiaFilledSpin,
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
                     left: floater ? null : controller.sidebar.edge,
@@ -447,8 +449,8 @@ class _GaiaShell extends StatelessWidget {
                       shown:
                           controller.messages.isEmpty &&
                           controller.messagesLoaded,
-                      // Anything else, like opening another chat, fades
-                      // the sky instead.
+                      // Anything else, like opening another chat, blinks
+                      // the sky out instead.
                       sent: controller.justSent,
                       rotation: controller.debug.skyRotation,
                       stars: controller.debug.skyStars,
@@ -458,6 +460,8 @@ class _GaiaShell extends StatelessWidget {
                       figures: controller.debug.skyFigures,
                       eventInterval: controller.debug.skyEventInterval,
                       aurora: controller.debug.skyAurora,
+                      auroraExit: controller.debug.skyAuroraExit,
+                      satellite: controller.debug.skySatellite,
                       exit: controller.debug.skyExit,
                       exitTime: controller.debug.skyExitTime,
                       exitTest: controller.debug.skyExitTest,
@@ -487,7 +491,10 @@ class _GaiaShell extends StatelessWidget {
                   Positioned(
                     top: kGaiaHeaderHeight + 12,
                     right: 12,
-                    child: GaiaSkyPanel(debug: controller.debug),
+                    child: GaiaSkyPanel(
+                      debug: controller.debug,
+                      onTour: () => unawaited(controller.playSkyTour()),
+                    ),
                   ),
                 if (controller.debug.showFps)
                   Positioned(
@@ -2269,7 +2276,8 @@ GaiaMessage? _latestReply(List<GaiaMessage> messages) => messages
     .where((message) => message.role == GaiaMessageRole.assistant)
     .lastOrNull;
 
-class _MessagesState extends State<_Messages> {
+class _MessagesState extends State<_Messages>
+    with SingleTickerProviderStateMixin {
   final _scroll = ScrollController();
 
   /// One per chat, so its orb is carried on from one reply to the next: the
@@ -2298,6 +2306,21 @@ class _MessagesState extends State<_Messages> {
   String? _greeting;
   String? _greetingLeaving;
   var _greetingLine = '';
+
+  /// The greeting left for a filled chat opened, not a prompt sent: gone
+  /// quickly, before the chat's messages rise in over it.
+  var _greetingQuick = false;
+
+  /// The messages coming into view as a chat opens: those first built,
+  /// newest first, each in its [_enterSlots] order rising in a little
+  /// after the one below. Only those, not the whole chat; nothing scrolled
+  /// to once it's done. Done, it's at 1.
+  late final _enter = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+    value: 1,
+  );
+  final _enterSlots = <String, int>{};
 
   /// Each message's view as last built. Every change to Gaia rebuilds the
   /// list, and a message's view is costly to build: one whose message and
@@ -2359,7 +2382,7 @@ class _MessagesState extends State<_Messages> {
     _chatId = widget.messages.firstOrNull?.chatId;
     // The chapter being read, for the rail, before any scroll.
     _place();
-    if (!_takeReveal()) _arrive();
+    if (!_takeReveal()) _arrive(animate: false);
   }
 
   /// The message a search just scrolled to, lit a moment so it's found.
@@ -2387,9 +2410,22 @@ class _MessagesState extends State<_Messages> {
   String? _restoring;
 
   /// [_chatId] newly in the list: back where it was left scrolled up to, or
-  /// at its newest, rather than at the last chat's scroll.
-  void _arrive() {
+  /// at its newest, rather than at the last chat's scroll; with [animate],
+  /// its messages in view [_enter]ing once it's shown there.
+  void _arrive({required bool animate}) {
     _restoring = null;
+    _enterSlots.clear();
+    if (animate && !MediaQuery.disableAnimationsOf(context)) {
+      _enter.value = 0;
+      final chatId = _chatId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _restoring == null && _chatId == chatId) {
+          unawaited(_enter.forward());
+        }
+      });
+    } else {
+      _enter.value = 1;
+    }
     // Silently, as mid-build; the list lays out afresh for the new chat.
     if (_scroll.hasClients) _scroll.position.correctPixels(0);
     final chatId = _chatId;
@@ -2407,7 +2443,10 @@ class _MessagesState extends State<_Messages> {
       // A frame more unshown, for [_place] to find what's over it there.
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted || _restoring != chatId) return;
+      // Entering from what's shown now, not what was built at the bottom.
+      _enterSlots.clear();
       setState(() => _restoring = null);
+      if (_enter.value < 1) unawaited(_enter.forward());
       _place();
     });
   }
@@ -2501,9 +2540,15 @@ class _MessagesState extends State<_Messages> {
     final chatId = widget.messages.firstOrNull?.chatId;
     final sameChat = chatId == _chatId;
     _chatId = chatId;
-    // A reveal places the new chat itself; the last chat's restore is off.
-    if (!sameChat && revealed) _restoring = null;
-    if (!sameChat && !revealed) _arrive();
+    // A reveal places the new chat itself, unentered; the last chat's
+    // restore, and its entrance, are off.
+    if (!sameChat && revealed) {
+      _restoring = null;
+      _enterSlots.clear();
+      _enter.value = 1;
+    }
+    // Not a first prompt sent from a new chat, which gathers in instead.
+    if (!sameChat && !revealed) _arrive(animate: !sent);
     final was = _reply;
     final now = _reply = _latestReply(widget.messages);
     // A new reply in the same chat, running here: a message was sent from
@@ -2552,6 +2597,7 @@ class _MessagesState extends State<_Messages> {
     _renameFocus.dispose();
     _scroll.dispose();
     _over.dispose();
+    _enter.dispose();
     super.dispose();
   }
 
@@ -2872,12 +2918,13 @@ class _MessagesState extends State<_Messages> {
           _greetingLeaving = null;
           _greetingLine = widget.controller.greetingFor(_greeting!);
         } else if (_greeting != null) {
-          // Only where it's shown, and moving: otherwise nothing would
-          // see it out (_EmptyChat.onLeft).
-          if (widget.controller.justSent &&
-              constraints.maxHeight >= 200 &&
+          // Sent from, or another chat opened: it goes with the sky. Only
+          // where it's shown, and moving: otherwise nothing would see it
+          // out (_EmptyChat.onLeft).
+          if (constraints.maxHeight >= 200 &&
               !MediaQuery.disableAnimationsOf(context)) {
             _greetingLeaving = _greeting;
+            _greetingQuick = !widget.controller.justSent;
           }
           _greeting = null;
         }
@@ -2935,39 +2982,48 @@ class _MessagesState extends State<_Messages> {
                 child: _Placed(
                   id: message.id,
                   placed: _placed,
-                  // A Column with or without a divider, since a prompt gets its
-                  // divider once its reply starts: its view must carry on.
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Above a vendor divider: it heads the section.
-                      if (message.chapter case final chapter?)
-                        _ChapterDivider(
-                          title: chapter,
-                          renaming: _renaming == message.id,
-                          rename: _rename,
-                          renameFocus: _renameFocus,
-                          onEndRename: _endRename,
-                          menu: () => _chapterMenu(message),
+                  child: _Enter(
+                    animation: _enter,
+                    slot: _enter.value < 1
+                        ? _enterSlots.putIfAbsent(
+                            message.id,
+                            () => _enterSlots.length,
+                          )
+                        : _enterSlots[message.id],
+                    // A Column with or without a divider, since a prompt gets its
+                    // divider once its reply starts: its view must carry on.
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Above a vendor divider: it heads the section.
+                        if (message.chapter case final chapter?)
+                          _ChapterDivider(
+                            title: chapter,
+                            renaming: _renaming == message.id,
+                            rename: _rename,
+                            renameFocus: _renameFocus,
+                            onEndRename: _endRename,
+                            menu: () => _chapterMenu(message),
+                          ),
+                        if (switched != null || moved != null)
+                          _VendorDivider(
+                            text: moved == null
+                                ? 'Switched to '
+                                      '${kGaiaClis[messages[movedReply!].adapter]?.name ?? messages[movedReply].adapter} '
+                                      '· a transcript carried over'
+                                : 'Switched to $moved',
+                          ),
+                        _Flash(
+                          on: _flashed == message.id,
+                          onDone: () {
+                            if (mounted && _flashed == message.id) {
+                              setState(() => _flashed = null);
+                            }
+                          },
+                          child: view,
                         ),
-                      if (switched != null || moved != null)
-                        _VendorDivider(
-                          text: moved == null
-                              ? 'Switched to '
-                                    '${kGaiaClis[messages[movedReply!].adapter]?.name ?? messages[movedReply].adapter} '
-                                    '· a transcript carried over'
-                              : 'Switched to $moved',
-                        ),
-                      _Flash(
-                        on: _flashed == message.id,
-                        onDone: () {
-                          if (mounted && _flashed == message.id) {
-                            setState(() => _flashed = null);
-                          }
-                        },
-                        child: view,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -3013,16 +3069,25 @@ class _MessagesState extends State<_Messages> {
                   ),
                 ),
                 // A new chat says what the composer takes, rather than
-                // nothing at all: only where there's room for it. Fading in
-                // with the sky, out ahead of it, and across from one new
-                // chat's line to another's. Sent from, it stays as the
-                // sky's exit passes it, under the same key so it isn't
-                // swapped out.
+                // nothing at all: only where there's room for it. Rising in
+                // with the sky, and across from one new chat's line to
+                // another's. Left, it stays as the sky's exit passes it,
+                // under the same key so it isn't swapped out.
                 Positioned.fill(
                   child: AnimatedSwitcher(
                     duration: GaiaMotion.move,
                     reverseDuration: GaiaMotion.quick,
-                    switchInCurve: GaiaMotion.curve,
+                    // Only going fades here: coming, it rises in itself.
+                    transitionBuilder: (child, animation) => AnimatedBuilder(
+                      animation: animation,
+                      child: child,
+                      builder: (context, child) => Opacity(
+                        opacity: animation.status == AnimationStatus.reverse
+                            ? animation.value
+                            : 1,
+                        child: child,
+                      ),
+                    ),
                     child: greeting != null && constraints.maxHeight >= 200
                         ? _EmptyChat(
                             key: ValueKey(greeting),
@@ -3030,6 +3095,8 @@ class _MessagesState extends State<_Messages> {
                             sendKey: '${_sendCombo(widget.controller)}',
                             leaving: empty
                                 ? null
+                                : _greetingQuick
+                                ? GaiaMotion.move
                                 : Duration(
                                     milliseconds:
                                         (widget.controller.debug.skyExitTime *
@@ -3205,6 +3272,44 @@ class _TopFade extends StatelessWidget {
   }
 }
 
+/// A message coming into view as its chat opens: rising a little as it
+/// fades in, at its [slot] among those coming, from the newest up. A
+/// message with no slot is simply there.
+class _Enter extends StatelessWidget {
+  const _Enter({
+    required this.animation,
+    required this.slot,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final int? slot;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: animation,
+    child: child,
+    builder: (context, child) {
+      final slot = this.slot;
+      // Past the eighth, they all come with it.
+      final start = min(slot ?? 0, 7) * 0.06;
+      final t = slot == null
+          ? 1.0
+          : Curves.easeOutCubic.transform(
+              ((animation.value - start) / 0.5).clamp(0.0, 1.0),
+            );
+      return Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, 8 * (1 - t)),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 /// What a chat with no messages shows: a line to start from, and the keys
 /// worth knowing before the first message. Not clickable: the composer under
 /// it already has the focus.
@@ -3224,8 +3329,8 @@ class _EmptyChat extends StatelessWidget {
   /// The send keybind, as the user set it.
   final String sendKey;
 
-  /// The sky's exit, a prompt having been sent: it fades through the middle
-  /// of it, with the stars, and then [onLeft].
+  /// The sky's exit, a prompt sent or another chat opened: it goes through
+  /// the first half of it, with the stars, and then [onLeft].
   final Duration? leaving;
   final VoidCallback? onLeft;
 
@@ -3249,43 +3354,74 @@ class _EmptyChat extends StatelessWidget {
         Text(does, style: GaiaType.label.copyWith(color: GaiaInk.faint)),
       ],
     );
+    // Shown at [rise] of the way in, and gone [fall] of the way: rising
+    // in from a little below, and away above.
+    Widget part(double rise, double fall, double by, Widget child) {
+      final shown = Curves.easeOutCubic.transform(rise);
+      final gone = Curves.easeInCubic.transform(fall);
+      return Opacity(
+        opacity: (shown * (1 - gone)).clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, by * (1 - shown) - by * gone),
+          child: child,
+        ),
+      );
+    }
+
+    final line = Text(
+      greeting,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w500,
+        color: GaiaInk.dim,
+      ),
+    );
+    final hints = Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 20,
+      runSpacing: 8,
+      children: [
+        hint('/', 'commands'),
+        hint('Ctrl+V', 'paste an image'),
+        hint(sendKey, 'send'),
+      ],
+    );
     return IgnorePointer(
+      // In as it's built: the line, then the keys under it.
       child: TweenAnimationBuilder(
-        tween: Tween(begin: 1.0, end: leaving == null ? 1.0 : 0.0),
-        duration: leaving ?? Duration.zero,
-        curve: const Interval(0.2, 0.6, curve: Curves.easeOut),
-        onEnd: onLeft,
-        builder: (context, opacity, child) =>
-            Opacity(opacity: opacity, child: child),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            // The sky's stars kept out from behind it.
-            child: GaiaSkyClear(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    greeting,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
-                      color: GaiaInk.dim,
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 750),
+        builder: (context, enter, _) => TweenAnimationBuilder(
+          // Out through the sky's exit: the keys first, then the line.
+          tween: Tween(begin: 0.0, end: leaving == null ? 0.0 : 1.0),
+          duration: leaving ?? Duration.zero,
+          onEnd: onLeft,
+          builder: (context, leave, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              // The sky's stars kept out from behind it.
+              child: GaiaSkyClear(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    part(
+                      const Interval(0, 0.7).transform(enter),
+                      const Interval(0.15, 0.55).transform(leave),
+                      10,
+                      line,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 20,
-                    runSpacing: 8,
-                    children: [
-                      hint('/', 'commands'),
-                      hint('Ctrl+V', 'paste an image'),
-                      hint(sendKey, 'send'),
-                    ],
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    part(
+                      const Interval(0.3, 1).transform(enter),
+                      const Interval(0.05, 0.4).transform(leave),
+                      8,
+                      hints,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

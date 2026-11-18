@@ -173,9 +173,113 @@ void main() {
       if (opacity == 0) continue;
       shown++;
       expect(marker('a', 30), findsNothing);
-      expect(tester.getTopLeft(marker('a', seq)).dy, moreOrLessEquals(top));
+      // Where it was, but for the up to 8 px it may still be rising in by
+      // as the chat's messages come into view.
+      expect(
+        tester.getTopLeft(marker('a', seq)).dy,
+        moreOrLessEquals(top, epsilon: 8.01),
+      );
     }
     expect(shown, greaterThan(0));
+    await settle(tester);
+  });
+
+  testWidgets('a chat opened, the messages in view rise in; none scrolled '
+      'to after', (tester) async {
+    await start(tester);
+    // Faded by anything over it, or by its own entrance.
+    bool faded(Finder message) => tester
+        .widgetList<Opacity>(
+          find.ancestor(of: message, matching: find.byType(Opacity)),
+        )
+        .any((opacity) => opacity.opacity < 1);
+
+    unawaited(controller.selectChat('b'));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(faded(marker('b', 30)), isTrue);
+    await settle(tester);
+    expect(faded(marker('b', 30)), isFalse);
+
+    scroll(tester).jumpTo(6000);
+    await tester.pump();
+    final shown = [
+      for (var seq = 1; seq <= 30; seq++)
+        if (marker('b', seq).evaluate().isNotEmpty) seq,
+    ];
+    expect(shown, isNotEmpty);
+    for (final seq in shown) {
+      expect(faded(marker('b', seq)), isFalse, reason: 'b-$seq');
+    }
+    await settle(tester);
+  });
+
+  testWidgets('a filled chat opened from a new one, the greeting is gone '
+      'before its messages are in', (tester) async {
+    await start(tester);
+    // How much of the greeting's keys show: none once each is gone, though
+    // it may be in the tree a moment longer.
+    double shown(String text) {
+      final found = find.text(text);
+      if (found.evaluate().isEmpty) return 0;
+      return tester
+          .widgetList<Opacity>(
+            find.ancestor(of: found, matching: find.byType(Opacity)),
+          )
+          .fold(1.0, (shown, opacity) => shown * opacity.opacity);
+    }
+
+    controller.newChat();
+    await settle(tester);
+    expect(shown('commands'), 1);
+
+    unawaited(controller.selectChat('b'));
+    for (var i = 0; i < 18; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(shown('commands'), 0);
+    expect(shown(controller.greetingFor(GaiaDraft.newChatId)), 0);
+    await settle(tester);
+  });
+
+  testWidgets('the sky tour plays each change, then is back, its chat gone', (
+    tester,
+  ) async {
+    await start(tester);
+    final deleted = <Object?>[];
+    final answer = main.onRequest!;
+    main.onRequest = (method, params) async {
+      if (method == 'deleteChat') deleted.add((params as Map)['chatId']);
+      return answer(method, params);
+    };
+    final steps = <String>[];
+    void step() {
+      final now = controller.debug.skyTour;
+      if (now != null && steps.lastOrNull != now) steps.add(now);
+    }
+
+    controller.debug.addListener(step);
+    addTearDown(() => controller.debug.removeListener(step));
+    final done = controller.playSkyTour();
+    var finished = false;
+    unawaited(done.then((_) => finished = true));
+    for (var i = 0; i < 600 && !finished; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(finished, isTrue);
+    expect(steps, [
+      'To a new chat',
+      'Sending a first prompt',
+      'Filled chat to a new chat',
+      'New chat to a filled one, as from the sidebar',
+      'Filled chat to another',
+    ]);
+    expect(controller.debug.skyTour, isNull);
+    expect(controller.debug.dummyMode, isFalse);
+    expect(controller.currentChatId, 'a');
+    expect(deleted, hasLength(1));
+    expect(deleted.single, isNot(anyOf('a', 'b')));
     await settle(tester);
   });
 
@@ -331,6 +435,15 @@ void main() {
     expect(
       tester.getTopLeft(marker('b', 10)).dy,
       inInclusiveRange(top, top + 120),
+    );
+    // Not left unentered by the restore it cut off.
+    expect(
+      tester
+          .widgetList<Opacity>(
+            find.ancestor(of: marker('b', 10), matching: find.byType(Opacity)),
+          )
+          .every((opacity) => opacity.opacity == 1),
+      isTrue,
     );
   });
 }
