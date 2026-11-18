@@ -61,6 +61,7 @@ import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
@@ -441,23 +442,53 @@ class _GaiaShell extends StatelessWidget {
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
                     left: floater ? null : controller.sidebar.edge,
-                    child: floater
-                        ? chat()
-                        : GaiaSidebarLayout(
-                            sidebar: controller.sidebar,
-                            // A Material, which the sidebar's buttons paint
-                            // their ink on.
-                            side: Material(
-                              color: Theme.of(context).scaffoldBackgroundColor,
-                              child: _Sidebar(controller: controller),
+                    child: GaiaSky(
+                      active: controller.focused,
+                      shown:
+                          controller.messages.isEmpty &&
+                          controller.messagesLoaded,
+                      // Anything else, like opening another chat, fades
+                      // the sky instead.
+                      sent: controller.justSent,
+                      rotation: controller.debug.skyRotation,
+                      stars: controller.debug.skyStars,
+                      twinkle: controller.debug.skyTwinkle,
+                      sparkles: controller.debug.skySparkles,
+                      traceSpeed: controller.debug.skyTraceSpeed,
+                      figures: controller.debug.skyFigures,
+                      eventInterval: controller.debug.skyEventInterval,
+                      aurora: controller.debug.skyAurora,
+                      exit: controller.debug.skyExit,
+                      exitTime: controller.debug.skyExitTime,
+                      exitTest: controller.debug.skyExitTest,
+                      top: kGaiaHeaderHeight + 1,
+                      left: floater ? null : controller.sidebar.edge,
+                      child: floater
+                          ? chat()
+                          : GaiaSidebarLayout(
+                              sidebar: controller.sidebar,
+                              // A Material, which the sidebar's buttons paint
+                              // their ink on.
+                              side: Material(
+                                color: Theme.of(
+                                  context,
+                                ).scaffoldBackgroundColor,
+                                child: _Sidebar(controller: controller),
+                              ),
+                              chat: (shown, toggle) => chat(
+                                sidebarShown: shown,
+                                toggleSidebar: toggle,
+                              ),
                             ),
-                            chat: (shown, toggle) => chat(
-                              sidebarShown: shown,
-                              toggleSidebar: toggle,
-                            ),
-                          ),
+                    ),
                   ),
                 ),
+                if (controller.debug.skyPanel)
+                  Positioned(
+                    top: kGaiaHeaderHeight + 12,
+                    right: 12,
+                    child: GaiaSkyPanel(debug: controller.debug),
+                  ),
                 if (controller.debug.showFps)
                   Positioned(
                     // Above the composer, clear of the toasts below the header.
@@ -2260,6 +2291,14 @@ class _MessagesState extends State<_Messages> {
   /// for a message sent in it.
   String? _chatId;
 
+  /// The greeting in view, by its chat's key; and the one still leaving
+  /// after a prompt sent under it, going with the sky rather than ahead.
+  /// Its line is kept: sending hands the new chat's line on, so the next
+  /// new chat draws its own.
+  String? _greeting;
+  String? _greetingLeaving;
+  var _greetingLine = '';
+
   /// Each message's view as last built. Every change to Gaia rebuilds the
   /// list, and a message's view is costly to build: one whose message and
   /// placing haven't changed is given back as it was, which Flutter skips.
@@ -2827,6 +2866,22 @@ class _MessagesState extends State<_Messages> {
       // in Claude's apps; narrower chats keep only a small gutter.
       builder: (context, constraints) {
         final gutter = max(16.0, (constraints.maxWidth - _column) / 2);
+        final empty = messages.isEmpty && widget.controller.messagesLoaded;
+        if (empty) {
+          _greeting = widget.controller.currentChatId ?? GaiaDraft.newChatId;
+          _greetingLeaving = null;
+          _greetingLine = widget.controller.greetingFor(_greeting!);
+        } else if (_greeting != null) {
+          // Only where it's shown, and moving: otherwise nothing would
+          // see it out (_EmptyChat.onLeft).
+          if (widget.controller.justSent &&
+              constraints.maxHeight >= 200 &&
+              !MediaQuery.disableAnimationsOf(context)) {
+            _greetingLeaving = _greeting;
+          }
+          _greeting = null;
+        }
+        final greeting = empty ? _greeting : _greetingLeaving;
         // The rail's entries (GAIA_CHAPTERS_HLD.md §6.3): the chat's start,
         // while no chapter heads it, then each chapter in order.
         final chapters = [
@@ -2958,18 +3013,38 @@ class _MessagesState extends State<_Messages> {
                   ),
                 ),
                 // A new chat says what the composer takes, rather than
-                // nothing at all: only where there's room for it.
-                if (messages.isEmpty &&
-                    widget.controller.messagesLoaded &&
-                    constraints.maxHeight >= 200)
-                  Positioned.fill(
-                    child: _EmptyChat(
-                      greeting: widget.controller.greetingFor(
-                        widget.controller.currentChatId ?? GaiaDraft.newChatId,
-                      ),
-                      sendKey: '${_sendCombo(widget.controller)}',
-                    ),
+                // nothing at all: only where there's room for it. Fading in
+                // with the sky, out ahead of it, and across from one new
+                // chat's line to another's. Sent from, it stays as the
+                // sky's exit passes it, under the same key so it isn't
+                // swapped out.
+                Positioned.fill(
+                  child: AnimatedSwitcher(
+                    duration: GaiaMotion.move,
+                    reverseDuration: GaiaMotion.quick,
+                    switchInCurve: GaiaMotion.curve,
+                    child: greeting != null && constraints.maxHeight >= 200
+                        ? _EmptyChat(
+                            key: ValueKey(greeting),
+                            greeting: _greetingLine,
+                            sendKey: '${_sendCombo(widget.controller)}',
+                            leaving: empty
+                                ? null
+                                : Duration(
+                                    milliseconds:
+                                        (widget.controller.debug.skyExitTime *
+                                                1000)
+                                            .round(),
+                                  ),
+                            onLeft: () {
+                              if (_greetingLeaving == greeting) {
+                                setState(() => _greetingLeaving = null);
+                              }
+                            },
+                          )
+                        : const SizedBox.shrink(),
                   ),
+                ),
                 Positioned(
                   top: 8,
                   left: left,
@@ -3134,7 +3209,13 @@ class _TopFade extends StatelessWidget {
 /// worth knowing before the first message. Not clickable: the composer under
 /// it already has the focus.
 class _EmptyChat extends StatelessWidget {
-  const _EmptyChat({required this.greeting, required this.sendKey});
+  const _EmptyChat({
+    super.key,
+    required this.greeting,
+    required this.sendKey,
+    this.leaving,
+    this.onLeft,
+  });
 
   /// The chat's line, drawn once for it (GAIA_GREETINGS_HLD.md §5): this is
   /// rebuilt on every keystroke and resize.
@@ -3142,6 +3223,11 @@ class _EmptyChat extends StatelessWidget {
 
   /// The send keybind, as the user set it.
   final String sendKey;
+
+  /// The sky's exit, a prompt having been sent: it fades through the middle
+  /// of it, with the stars, and then [onLeft].
+  final Duration? leaving;
+  final VoidCallback? onLeft;
 
   @override
   Widget build(BuildContext context) {
@@ -3164,33 +3250,44 @@ class _EmptyChat extends StatelessWidget {
       ],
     );
     return IgnorePointer(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                greeting,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                  color: GaiaInk.dim,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 20,
-                runSpacing: 8,
+      child: TweenAnimationBuilder(
+        tween: Tween(begin: 1.0, end: leaving == null ? 1.0 : 0.0),
+        duration: leaving ?? Duration.zero,
+        curve: const Interval(0.2, 0.6, curve: Curves.easeOut),
+        onEnd: onLeft,
+        builder: (context, opacity, child) =>
+            Opacity(opacity: opacity, child: child),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            // The sky's stars kept out from behind it.
+            child: GaiaSkyClear(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  hint('/', 'commands'),
-                  hint('Ctrl+V', 'paste an image'),
-                  hint(sendKey, 'send'),
+                  Text(
+                    greeting,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                      color: GaiaInk.dim,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 20,
+                    runSpacing: 8,
+                    children: [
+                      hint('/', 'commands'),
+                      hint('Ctrl+V', 'paste an image'),
+                      hint(sendKey, 'send'),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
