@@ -397,7 +397,10 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         'each matching memory in full. Your instructions list only the '
         'pinned memories and the topics; those that fit a message are added '
         'to it in <gaia_memories>, and most are in neither, so search when '
-        'a request may depend on something the user told Gaia. Every '
+        'a request may depend on something the user told Gaia. When the '
+        "user names a file, folder, tool or setup you don't know, search "
+        'here first, before searching the disk or the workspace: it is '
+        'usually a memory, often with its path. Every '
         'memory is searched, from any project. Each result shows the '
         'topics it is filed under.',
     'inputSchema': {

@@ -235,6 +235,9 @@ class _Gathering extends ChangeNotifier {
   static const _minAlpha = 48;
   static const _stepsPerSecond = 60;
 
+  /// The most particles a gathering lets in.
+  static const _maxParticles = 20000;
+
   /// How many steps a particle wanders in for, about a vanished one's.
   static const _minLife = 22;
   static const _maxLife = 36;
@@ -297,10 +300,16 @@ class _Gathering extends ChangeNotifier {
     if (_disposed) return;
     final bytes = data!.buffer.asUint8List();
 
-    var count = 0;
+    var inked = 0;
     for (var i = 3; i < bytes.length; i += 4) {
-      if (bytes[i] >= _minAlpha) count++;
+      if (bytes[i] >= _minAlpha) inked++;
     }
+    // Every [stride]th inked pixel only: each particle costs every frame, and
+    // a long prompt filling the window has over a hundred thousand of them.
+    // The rest still show, in the picture behind the sweep.
+    final stride = math.max(1, (inked / _maxParticles).ceil());
+    final count = (inked + stride - 1) ~/ stride;
+    var seen = 0;
     _sourceX = Float32List(count);
     _sourceY = Float32List(count);
     _sourceAlpha = Float32List(count);
@@ -309,7 +318,7 @@ class _Gathering extends ChangeNotifier {
       for (var y = 0; y < height; y++) {
         final i = (y * width + x) * 4;
         final alpha = bytes[i + 3];
-        if (alpha < _minAlpha) continue;
+        if (alpha < _minAlpha || seen++ % stride != 0) continue;
         _sourceX[_count] = (fromX + x).toDouble();
         _sourceY[_count] = (fromY + y).toDouble();
         _sourceAlpha[_count] = alpha / 255;

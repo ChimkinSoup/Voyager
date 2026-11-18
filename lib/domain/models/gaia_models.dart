@@ -2002,12 +2002,13 @@ const kGaiaSortBatch = 30;
 
 /// Stage 1's answer for a message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3):
 /// its [picks] when stage 2 doesn't run, the [candidates] stage 2 picks from
-/// (none the session was given yet, best first), and whether any of them is
-/// [strong], which runs stage 2 on a later message.
+/// (none the session was given yet, best first), and why the best of them
+/// that is counts as [strong] ("strength", "rare words" or both), which runs
+/// stage 2 on a later message; null for none.
 typedef GaiaRecall = ({
   List<GaiaRecalledMemory> picks,
   List<GaiaRecalledMemory> candidates,
-  bool strong,
+  String? strong,
 });
 
 Map<String, Object?> gaiaRecallToJson(GaiaRecall recall) {
@@ -2033,9 +2034,9 @@ GaiaRecall gaiaRecallFromJson(Object? json) {
       ? (
           picks: list(json['picks']),
           candidates: list(json['candidates']),
-          strong: json['strong'] == true,
+          strong: json['strong'] as String?,
         )
-      : (picks: const [], candidates: const [], strong: false);
+      : (picks: const [], candidates: const [], strong: null);
 }
 
 /// The memories given to the agent with the message a reply answers

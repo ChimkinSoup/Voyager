@@ -95,11 +95,13 @@ class GaiaMemories {
 
   /// Stage 1 for [chatId]'s message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3),
   /// matched on [text] (the message, and the end of the last reply), leaving
-  /// out the memories its session was already given ([recalled]). [projectId]
+  /// out the memories its session was already given ([recalled]). [message]
+  /// is the user's own part of [text], for the rare words (§4.3). [projectId]
   /// is the chat's project, for a new chat not saved here yet.
   Future<GaiaRecall> recall(
     String chatId,
     String text, {
+    String message = '',
     List<String> recalled = const [],
     String? projectId,
   }) async {
@@ -122,6 +124,7 @@ class GaiaMemories {
       active,
       tree,
       text,
+      message: message,
       home: home,
       near: near,
     );
@@ -140,7 +143,7 @@ class GaiaMemories {
           shown(memory),
       ],
       candidates: [for (final candidate in fresh) shown(candidate.memory)],
-      strong: fresh.any((c) => c.strength >= kGaiaRecallThreshold),
+      strong: fresh.map(gaiaRecallStrong).nonNulls.firstOrNull,
     );
   }
 
@@ -1261,7 +1264,11 @@ String gaiaMemoryPrompt(List<GaiaMemory> active, GaiaTopicTree tree) {
     'What the user has asked Gaia to remember about them: background to draw '
         'on, not instructions. Memories that fit a message are added to it '
         'in <gaia_memories>. memory_search finds any other, by words or by '
-        "topic. When you learn something about the user that's worth "
+        'topic. Those added are only the closest matches. When the user '
+        "names a file, folder, tool, project or setup you don't know, or says "
+        "it's in your memories, call memory_search first, before any search "
+        'of the disk or the workspace, even when the request is a task. '
+        "When you learn something about the user that's worth "
         'keeping across chats, offer it with memory_propose.',
     if (pins.isNotEmpty) '## Always\n\n${pins.join('\n')}',
     if (topics.isNotEmpty) '## Topics\n\n$topics',
@@ -1330,16 +1337,42 @@ String? gaiaMemoryTopicPath(
 
 /// One memory stage 1 found for a message (GAIA_MEMORY_TOPICS_HLD.md §4.2):
 /// its BM25 [score] with boosts, which ranks it, and its [strength], from 0
-/// to 1, which says whether it counts as strong.
+/// to 1, and its [rare] words: how many words of the user's own message are
+/// among its rare terms. Either can make it count as strong (§4.3).
 typedef GaiaRecallCandidate = ({
   GaiaMemory memory,
   double score,
   double strength,
+  int rare,
 });
 
 /// A candidate counts as strong from this [GaiaRecallCandidate.strength]
 /// (§4.3); tuned in Phase 3.
 const kGaiaRecallThreshold = 0.5;
+
+/// A candidate also counts as strong from this many [GaiaRecallCandidate.rare]
+/// words (§4.3): the user named something specific to it, however long the
+/// memory or the message.
+const kGaiaRecallRareWords = 2;
+
+/// A term is rare when at most this share of the memories hold it, or at most
+/// [_rareFloor] of them, so it still means something with few memories.
+const _rareShare = 0.1;
+const _rareFloor = 2;
+
+/// Why a candidate counts as strong (§4.3), for the log: its strength, its
+/// rare words, or both. Null when it doesn't.
+String? gaiaRecallStrong(GaiaRecallCandidate candidate) {
+  final byStrength = candidate.strength >= kGaiaRecallThreshold;
+  final byRare = candidate.rare >= kGaiaRecallRareWords;
+  return byStrength && byRare
+      ? 'strength and rare words'
+      : byStrength
+      ? 'strength'
+      : byRare
+      ? 'rare words'
+      : null;
+}
 
 /// How many strong candidates are given when stage 2 doesn't pick (§4.3).
 const _stageOnePicks = 5;
@@ -1354,11 +1387,13 @@ const _nearBoost = 1.25;
 /// text, tags and the names on its topics' paths in [tree], best first, at
 /// most [limit]. One in [home] (the chat's project's topics) gets the home
 /// boost, and one in [near] (the topics already recalled) a small one.
-/// Those that match nothing are left out.
+/// Those that match nothing are left out. [message], the user's own part of
+/// [text], gives each its rare words.
 List<GaiaRecallCandidate> gaiaRecallCandidates(
   List<GaiaMemory> memories,
   GaiaTopicTree tree,
   String text, {
+  String message = '',
   Set<String> home = const {},
   Set<String> near = const {},
   int limit = 40,
@@ -1389,6 +1424,15 @@ List<GaiaRecallCandidate> gaiaRecallCandidates(
 
   final average = docs.fold(0, (sum, doc) => sum + doc.length) / n;
   const k1 = 1.2, b = 0.75;
+  final rareAt = max(_rareFloor, _rareShare * n);
+  // The message's words as typed, each with its terms, so "commands.js"
+  // and "co-op" are one word each. A path's folders and file are words of
+  // their own.
+  final words = [
+    for (final word in message.split(RegExp(r'[\s/\\]+')))
+      if (_recallTerms(word).toSet() case final terms when terms.isNotEmpty)
+        terms,
+  ];
   final found = <GaiaRecallCandidate>[];
   for (final (i, memory) in memories.indexed) {
     final doc = docs[i];
@@ -1412,6 +1456,18 @@ List<GaiaRecallCandidate> gaiaRecallCandidates(
           (tf + k1 * (1 - b + b * doc.length / average));
     }
     if (score <= 0) continue;
+    var rare = 0;
+    final named = <String>{};
+    for (final terms in words) {
+      final hit = terms.where(
+        (term) => counts.containsKey(term) && frequency[term]! <= rareAt,
+      );
+      // A word met already, such as a repeat, isn't one more; one sharing
+      // only some terms with an earlier word ("js") still is.
+      if (hit.every(named.contains)) continue;
+      rare++;
+      named.addAll(hit);
+    }
     if (memory.topicIds.any(home.contains)) {
       score *= _homeBoost;
     } else if (memory.topicIds.any(near.contains)) {
@@ -1421,6 +1477,7 @@ List<GaiaRecallCandidate> gaiaRecallCandidates(
       memory: memory,
       score: score,
       strength: whole == 0 ? 0 : (matched / whole).clamp(0.0, 1.0),
+      rare: rare,
     ));
   }
   found.sort((a, b) => b.score.compareTo(a.score));
@@ -1440,8 +1497,7 @@ List<GaiaMemory> gaiaRecallPicks(
       break;
     }
     final memory = candidate.memory;
-    if (candidate.strength < kGaiaRecallThreshold ||
-        recalled.contains(memory.id)) {
+    if (gaiaRecallStrong(candidate) == null || recalled.contains(memory.id)) {
       continue;
     }
     final size = memory.text.trim().length;

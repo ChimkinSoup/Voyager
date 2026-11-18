@@ -7120,6 +7120,7 @@ class GaiaController extends ChangeNotifier {
         await _pipe.request('memoryRecall', {
           'chatId': chatId,
           'text': text,
+          'message': prompt,
           'recalled': recalled,
           'projectId': chat?.projectId,
         }),
@@ -7134,13 +7135,13 @@ class GaiaController extends ChangeNotifier {
     debugPrint(
       '[gaia] memory recall: ${first ? 'first message' : 'later message'}, '
       '${found.candidates.length} candidates'
-      '${found.strong ? ', a new strong one' : ''}',
+      '${found.strong == null ? '' : ', a new strong one (${found.strong})'}',
     );
     if (utility == null ||
         !debug.recallPick ||
         debug.dummyMode ||
         found.candidates.isEmpty ||
-        !(first || found.strong)) {
+        !(first || found.strong != null)) {
       return found.picks;
     }
     debugPrint(

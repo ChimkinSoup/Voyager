@@ -23,7 +23,9 @@ filing in a project chat, a real Codex turn calling `memory_search` with `topic`
 reveal from a recall chip doesn't scroll) found, and fixed in `e0c94843`. BUG-378 was closed
 as a harness problem, not the app's. **Still open:** §11's week of real chats, which tunes
 stage 2's later-message trigger rather than deciding whether it's on. §11's clean bursts were
-skipped. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+skipped. **A second later-message trigger, rare words in the user's message, and a
+`memory_search` nudge in the system prompt were added 2026-11-17 (§26)** after a real chat
+missed a memory. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -197,6 +199,13 @@ The main instance scores every active memory against the message. This is a new
   the share of the memory's own terms (text, tags and path names, weighted by rarity) that
   appear in the text matched. The BM25 score with its boosts ranks the candidates, and
   strength decides whether one counts as strong (§4.3).
+- **Rare words, the second test for strong (added 2026-11-17, §26):** strength divides by the
+  memory's own terms, so a long, detailed memory can't reach 0.5 from a one-line message.
+  Each candidate also gets its **rare words**: how many words of the user's own message (not
+  the reply matched with it) are among the memory's rare terms, those held by at most 10% of
+  the memories or by at most 2 of them. A word counts once however many terms it has
+  ("commands.js", "co-op") or however often it's repeated. Neither the memory's length nor
+  the message's changes it.
 - **The output** is the top 40 candidates, with their scores and strengths.
 
 ### 4.3 Stage 2: Haiku picks
@@ -211,9 +220,10 @@ or none.
   in this session whose strength (§4.2) clears the threshold. The threshold starts at 0.5 and
   is tuned on real chats in the Phase 3 test (§11). Most follow-up messages in a single-topic
   chat then don't run it. This covers your case of a vague first prompt followed by specific
-  ones.
-- Never when the utility model is off or unavailable: stage 1's top 5 above the threshold are
-  used instead. Live, that's rarely any, and that's accepted: the agent has `memory_search`
+  ones. **Since 2026-11-17 (§26) a candidate is also strong with 2 or more rare words (§4.2)**,
+  whatever its strength; at 0.5 strength alone almost never fired.
+- Never when the utility model is off or unavailable: stage 1's top 5 strong candidates are
+  used instead (since 2026-11-17, strong by either test, §26.2). Live, that's rarely any, and that's accepted: the agent has `memory_search`
   (§18.4).
 
 **Timing on the first message:** recall is its own call. The tier router
@@ -981,7 +991,8 @@ once the clean bursts are in.
    (§18.3), so it isn't tuned to pick memories on its own. The threshold's one job is the
    trigger for stage 2 on a later message (§4.3): a candidate not yet recalled in this session
    whose strength clears it. Tuning it means trading how often stage 2 runs against missing a
-   change of subject, read from §11's "how often it runs".
+   change of subject, read from §11's "how often it runs". *Changed 2026-11-17: rare words
+   in the message are a second trigger (§26).*
 2. **When stage 2 can't run, recall is close to nothing, and that's accepted.** That's when
    the debug switch is off, the utility model is off, there's no Claude account (a
    Codex-only setup), or the pass times out (4 of 91 in the first burst). The code is
@@ -1780,3 +1791,102 @@ Phone Proj Renamed (its project too) with MT7 Sub under it, and Volunteering; MT
 MT7 Phone B and Teas in the trash; six of the seven "MT7 …" memories Unsorted and the Japan
 trip one in Travel; the cabin air filter memory back in Car. The emulator is signed in to
 qa-128.
+
+## 26. Rare words as a second trigger, and the memory_search nudge (2026-11-17)
+
+Decided by Juno after a real chat missed a memory.
+
+### 26.1 The miss
+
+A chat opened with an image ("What is this symbol?"), then asked "Could you add a sigma ->
+\sigma snippet in commands.js?". That second message was a later message, so stage 2 ran only
+with a new strong candidate. Stage 1 ranked the right memory first by far (the Latex Snippets
+memory naming `commands.js`, score 7.72 against 1.58 for the next), but its strength was 0.18:
+the memory is long (a full vault path, tags, an instruction), and strength divides by the
+memory's own terms. No memory went with the message, and the agent searched the disk from `/`.
+"It's in your memories, it's in my obsidian vault" next scored 0.07, and the agent still
+didn't call `memory_search`. The memory was only given on the message after, carried by the
+reply before it. The memory had no topic, so the system prompt's topic list didn't hint at it.
+
+### 26.2 What changed
+
+- **Two tests for strong, either enough:** strength at or above 0.5 as before, or 2 or more
+  rare words (§4.2) in the user's own message (`kGaiaRecallRareWords`). A rare term is held
+  by at most 10% of the memories, or by at most 2 of them. Only the message counts: the reply
+  matched with it is up to 1,000 characters of Gaia's own words, which would hold two rare
+  words of something on most turns, mostly about memories already given; strength still reads
+  the reply, so a vague follow-up keeps that path.
+- **Stage 1's own picks use the same two tests** (changed after review, 2026-11-17): when
+  stage 2 can't run or fails, a candidate strong by rare words goes too, so the commands.js
+  miss doesn't come back there. When stage 2 runs, it still decides what goes. In §26.3's
+  replay, Haiku picked the memory itself on 43 of the 46 rare-word hits.
+- **A path's folders and file are words of their own** (after review, 2026-11-17): the
+  message is split on `/` and `\` as well as spaces, so a pasted path names each part.
+- **`memoryRecall` takes `message`,** and its `strong` is now why the best new strong
+  candidate counts ("strength", "rare words", "strength and rare words") or null. The
+  companion's log line, and so `gaia/recall.log`, ends "a new strong one (rare words)" etc.,
+  for §11's week of chats.
+- **The system prompt's memory section** now says the memories added are only the closest
+  matches, and to call `memory_search` first, before any search of the disk or the workspace,
+  even for a task, when the user names a file, folder, tool, project or setup the agent
+  doesn't know, or says it's in its memories. `memory_search`'s description says the same
+  (made firmer after the live pass, §26.3).
+
+### 26.3 How it was checked
+
+- **Tests:** `gaia_memory_recall_test` covers the commands.js message against a copy of the
+  memory (strength under 0.5, rare words 3, strong by "rare words", unchanged with 30
+  unrelated sentences added), the reply not counting, a word counting once ("commands.js",
+  "snippet snippets snippet"), a term 20 of 21 memories hold not being rare, and
+  `GaiaMemories.recall` saying why. `gaia_controller_test` has a later message naming two rare
+  words of a long memory running stage 2 and giving it. With `kGaiaRecallRareWords` set to 99
+  the new tests fail. The recall and controller test files pass (394).
+- **Replay of §18's 99 messages** (a Python port of stage 1, against the gaiaqa profile's 325
+  active unpinned memories; each taken as a later message with nothing given yet, no reply):
+  strength fires on none, as §18.3 found. Rare words fire on 46. On 43 of those, the §18
+  burst's Haiku picked the very memory that fired it; the 3 others were "walking the dog later"
+  (Biscuit's walk times, which Haiku left out), "when is Biscuit due for shots" (the vaccine
+  memory, which Haiku missed in §18.3) and "write a python script to rename files" (Templater
+  scripts). The cutoff barely matters: at 5%, 10% and 15% it fires on 44, 46 and 48.
+- **What it still misses:** 36 of the 53 quiet messages had Haiku pick something in §18. Most
+  are vague ("I'm bored", "write a cover letter", "how can I study more efficiently"), where
+  those picks were mostly §18.3's false hits. The real misses name one word their topic's
+  memories share: "When is my final?", "my vault is getting slow", "how do I back up my
+  Obsidian vault", "Help me plan my leg day". In a real chat on one subject, many of those
+  memories would have been given on an earlier message. Whether one very rare word should be
+  enough is left to §11's week of chats, which now logs which test fired.
+- **Live, 2026-11-17** (`gaiaqa`, qa-128, in-tree debug build of the working tree, driven by
+  `gaia.ps1 ceval`; real Haiku, Sonnet and Codex turns). Seeded "MT8 I use the Latex Snippets
+  Obsidian plugin…", the same memory with its path pointed at a scratch copy of `commands.js`
+  (alpha, beta, gamma), active and Unsorted, among 325 others.
+  - **The trigger: passed.** A new Haiku chat: "What is the Greek letter sigma used for in
+    statistics?" logged "first message, 7 candidates" and ran stage 2 as before (0 of 7
+    picked). "Thanks. Can you say that more simply?" logged "later message, 3 candidates": no
+    strong one, no stage 2. "Could you add a sigma snippet in commands.js?" logged "later
+    message, 10 candidates, a new strong one (rare words)", stage 2 picked 1 of 10 in 1,159 ms,
+    the message went with the MT8 memory in `<gaia_memories>`, and the agent added the sigma
+    line to the scratch file.
+  - **The prompt line is in the session prompt: passed** (`sessionPrompt()`, 1,392 characters),
+    and in Codex's developer message.
+  - **The agent acting on it: mixed.** With stage 2 off, so nothing was given:
+    - Haiku, "Please add a tau snippet to commands.js": **failed.** It globbed the workspace,
+      ran `find /`, then searched `C:\Users\Juno` to depth 6 and read Juno's real vault
+      `commands.js` (tau was already there, so it changed nothing; the file's time is
+      unchanged). It never called `memory_search`.
+    - Read-only "Where is my commands.js snippets file? Just tell me the path, do not change or
+      open anything.": **Sonnet passed** (`memory_search` first, right path). **Haiku passed**
+      (one workspace glob, then `memory_search`, right path). **Codex (`gpt-6-luna`,
+      swapped in as in §25 and back) failed:** two `rg` searches of the workspace, then "I
+      couldn't find a `commands.js` file in the workspace."
+    So the line helped on a question, but not reliably on a task, and Codex ignored it.
+    Trying the same request on a profile is a hazard of its own: the agent can reach Juno's
+    real files (tau was asked for again below because the real file already has it).
+  - **The nudge made firmer (decided by Juno, 2026-11-17):** the system prompt now says to call
+    `memory_search` first, before any search of the disk or the workspace, even when the
+    request is a task; and `memory_search`'s own description (`gaia_mcp.dart`) says the same
+    for a file, folder, tool or setup the agent doesn't know. Rerun with stage 2 off:
+    **Haiku's tau task passed** (`memory_search` first, then the scratch file read and edited;
+    the real file's time unchanged) and **Codex's question passed** (`gpt-6-luna`:
+    `memory_search` first, right path). Sonnet wasn't rerun: it passed before the change.
+  - **Left on qa-128:** the MT8 memory, and the seven chats from this pass. Stage 2 was turned
+    back on, and Codex's model set back to `gpt-6.1-sol`.

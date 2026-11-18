@@ -69,6 +69,14 @@ final _memories = [
   _memory('kyoto', 'Kyoto temples open early'),
 ];
 
+/// A long memory, as the curator writes them: a short message covers little
+/// of it (the commands.js miss, GAIA_MEMORY_TOPICS_HLD.md §26).
+const _snippets =
+    'I use the Latex Snippets Obsidian plugin. All my snippets live in '
+    r'C:\Users\Juno\Obsidian Vault\Vault\~Latex Commands\commands.js. When I '
+    'ask for a snippet that converts "x" to "y", add it to that file in the '
+    'same format as the existing snippets, and make the change myself.';
+
 void main() {
   final tree = GaiaTopicTree(_topics);
 
@@ -156,6 +164,67 @@ void main() {
       expect(ids('this evening'), isEmpty);
     });
 
+    group('rare words (§4.3)', () {
+      final memories = [..._memories, _memory('snippets', _snippets)];
+      GaiaRecallCandidate snippets(String text, {String? message}) =>
+          gaiaRecallCandidates(
+            memories,
+            tree,
+            text,
+            message: message ?? text,
+          ).firstWhere((c) => c.memory.id == 'snippets');
+
+      test('a long memory is weak by strength but strong by its rare words, '
+          'however long the message', () {
+        const message =
+            r'Could you add a sigma -> \sigma snippet in commands.js?';
+        final short = snippets(message);
+        expect(short.strength, lessThan(kGaiaRecallThreshold));
+        expect(short.rare, greaterThanOrEqualTo(kGaiaRecallRareWords));
+        expect(gaiaRecallStrong(short), 'rare words');
+        final long = snippets(
+          '$message ${'Weather forecast rain umbrella lunch. ' * 30}',
+        );
+        expect(long.rare, short.rare);
+      });
+
+      test('only the message counts, not the reply matched with it', () {
+        final found = snippets(
+          'Do that one too\n\nThe snippet is in commands.js in your vault',
+          message: 'Do that one too',
+        );
+        expect(found.rare, 0);
+        expect(gaiaRecallStrong(found), isNull);
+      });
+
+      test('a word counts once, however many terms or repeats it has', () {
+        // "commands.js" is two terms but one word; a repeat isn't another.
+        expect(snippets('commands.js').rare, 1);
+        expect(snippets('snippet snippets snippet').rare, 1);
+        expect(snippets('snippets in commands.js').rare, 2);
+        // Two words sharing one rare term ("js") are still two.
+        expect(snippets('latex.js and commands.js').rare, 2);
+        // A path's folders and file are words of their own.
+        expect(snippets(r'~Latex\commands.js').rare, 2);
+        expect(snippets('~Latex/commands.js').rare, 2);
+      });
+
+      test('a term many memories hold is not rare', () {
+        final many = [
+          for (var i = 0; i < 20; i++) _memory('n$i', 'Obsidian note $i'),
+          _memory('nas', 'Obsidian vault backups go to the NAS'),
+        ];
+        int rare(String message) => gaiaRecallCandidates(
+          many,
+          tree,
+          message,
+          message: message,
+        ).firstWhere((c) => c.memory.id == 'nas').rare;
+        expect(rare('Obsidian note'), 0);
+        expect(rare('Obsidian vault on the NAS'), 2);
+      });
+    });
+
     test('common words alone match nothing', () {
       expect(gaiaRecallCandidates(_memories, tree, 'what is the'), isEmpty);
     });
@@ -170,17 +239,25 @@ void main() {
 
   group('picks (§4.3, §4.4)', () {
     GaiaRecallCandidate strong(String id, {int length = 20}) =>
-        (memory: _memory(id, 'x' * length), score: 1, strength: 1);
+        (memory: _memory(id, 'x' * length), score: 1, strength: 1, rare: 0);
 
     test('strong ones only, at most 5 from stage 1, none given already', () {
       final picks = gaiaRecallPicks(
         [
           for (var i = 0; i < 9; i++) strong('s$i'),
-          (memory: _memory('weak', 'weak'), score: 2, strength: 0.2),
+          (memory: _memory('weak', 'weak'), score: 2, strength: 0.2, rare: 0),
         ],
         recalled: {'s0'},
       );
       expect([for (final m in picks) m.id], ['s1', 's2', 's3', 's4', 's5']);
+    });
+
+    test('strong by rare words alone counts too (§26)', () {
+      final picks = gaiaRecallPicks([
+        (memory: _memory('rare', 'rare'), score: 1, strength: 0.1, rare: 2),
+        (memory: _memory('one', 'one'), score: 1, strength: 0.1, rare: 1),
+      ]);
+      expect([for (final m in picks) m.id], ['rare']);
     });
 
     test('within 4,000 characters in all', () {
@@ -274,14 +351,26 @@ void main() {
         '(§4.3)', () async {
       final weak = await memories.recall('loose', 'marmoset');
       expect(weak.picks, isEmpty);
-      expect(weak.strong, isFalse);
+      expect(weak.strong, isNull);
       expect(weak.candidates.first.id, 'marmoset');
       expect(weak.candidates.first.topic, 'University › CS246 › Assignments');
       final strong = await memories.recall(
         'loose',
         'CS246 assignment: submit with marmoset',
       );
-      expect(strong.strong, isTrue);
+      expect(strong.strong, 'strength');
+    });
+
+    test('two rare words in the message make a long memory strong, and say '
+        'so (§4.3)', () async {
+      await repository.upsertMemory(_memory('snippets', _snippets));
+      const message =
+          r'Could you add a sigma -> \sigma snippet in commands.js?';
+      final found = await memories.recall('loose', message, message: message);
+      expect(found.candidates.first.id, 'snippets');
+      expect(found.strong, 'rare words');
+      // Given by stage 1 too, for when stage 2 can't run.
+      expect([for (final m in found.picks) m.id], ['snippets']);
     });
 
     test("a new chat not saved yet goes by the project it's given", () async {

@@ -333,6 +333,7 @@ class _Main {
           await memories.recall(
             params['chatId']! as String,
             params['text']! as String,
+            message: params['message'] as String? ?? '',
             recalled: [...?(params['recalled'] as List?)?.cast<String>()],
             projectId: params['projectId'] as String?,
           ),
@@ -6358,6 +6359,28 @@ void main() {
         // It picked none, so none goes, strong or not.
         expect(runner.sent.last.prompt, isNot(contains('<gaia_memories>')));
       });
+
+      test(
+        'on a later message naming two rare words of a long memory',
+        () async {
+          await remember('biscuit', 'Has a dog called Biscuit');
+          await remember('lisbon', 'Lives in Lisbon, Portugal');
+          await remember(
+            'snippets',
+            'I use the Latex Snippets Obsidian plugin. All my snippets live '
+                'in my vault in commands.js. When I ask for a snippet that '
+                'converts one thing to another, add it to that file in the '
+                'same format as the existing snippets.',
+          );
+          await start(() => '["snippets"]');
+          await turn('Walking Biscuit the dog later');
+          calls.clear();
+
+          await turn('Put a sigma snippet in commands.js');
+          expect(calls, contains('recall'));
+          expect(runner.sent.last.prompt, contains('Latex Snippets'));
+        },
+      );
 
       test("a bad answer falls back to stage 1's picks", () async {
         await remember('biscuit', 'Has a dog called Biscuit');

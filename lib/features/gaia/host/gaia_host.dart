@@ -83,7 +83,7 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// after the utility model's placement for the latter, §3.2, §5),
 /// `memoryPrompt` (a new session's pins and
 /// topic list, GAIA_MEMORY_TOPICS_HLD.md §4.1), `memoryRecall {chatId, text,
-/// recalled, projectId}` (stage 1's `{picks, candidates, strong}` for a
+/// message, recalled, projectId}` (stage 1's `{picks, candidates, strong}` for a
 /// message, §4.2-§4.4), `recalled {chatId, memoryIds}` (the recall
 /// history, §3.3),
 /// `openMemory {memoryId}` (shown on the Gaia page, §4.5),
@@ -1700,6 +1700,7 @@ class GaiaHost {
           await _memoriesOrThrow().recall(
             params['chatId']! as String,
             params['text']! as String,
+            message: params['message'] as String? ?? '',
             recalled: [...?(params['recalled'] as List?)?.cast<String>()],
             projectId: params['projectId'] as String?,
           ),
