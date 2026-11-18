@@ -193,6 +193,34 @@ void main() {
     }
   });
 
+  testWidgets('inline math sits on the line of text it is in', (tester) async {
+    // A centred `$n$`, with nothing below its baseline, rode above the line.
+    await pump(tester, r'so $n$ flags and $np(1-p)$ ok');
+    // Asked outside a layout, as only a check of intrinsics may.
+    double baselineOf(RenderBox box) {
+      RenderObject.debugCheckingIntrinsics = true;
+      try {
+        final baseline = box.getDistanceToBaseline(TextBaseline.alphabetic)!;
+        return box.localToGlobal(Offset(0, baseline)).dy;
+      } finally {
+        RenderObject.debugCheckingIntrinsics = false;
+      }
+    }
+
+    final line = baselineOf(
+      tester.renderObject<RenderParagraph>(find.byType(RichText).first),
+    );
+    final maths = find.byType(Math);
+    expect(maths, findsNWidgets(2));
+    for (final (i, math) in maths.evaluate().indexed) {
+      expect(
+        baselineOf(math.renderObject! as RenderBox),
+        moreOrLessEquals(line, epsilon: 0.5),
+        reason: 'math $i',
+      );
+    }
+  });
+
   testWidgets('math in a bold header or bold text keeps its weight', (
     tester,
   ) async {

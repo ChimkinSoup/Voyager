@@ -516,9 +516,11 @@ class _BlockState extends State<_Block> {
       child: typeset,
     );
     final shown = scrolls
-        ? SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: measured,
+        ? _MathBaseline(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: measured,
+            ),
           )
         : measured;
     return typeset.parseError == null
@@ -827,7 +829,10 @@ class _BlockState extends State<_Block> {
           for (final (piece, gap) in _mathPieces(node)) {
             spans.add(
               WidgetSpan(
-                alignment: PlaceholderAlignment.middle,
+                // On the text's baseline: centred, math with nothing below
+                // its baseline, like `$n$`, rode above the line.
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
                 // A piece still wider than the line scrolls, not cut off.
                 child: _math(piece, style, scrolls: true),
               ),
@@ -1107,6 +1112,11 @@ class _RenderMeasuredMath extends RenderProxyBox {
   /// Whether something asked its size: math in prose never is.
   var _asked = false;
 
+  /// Its baseline from the top as last laid out, for [_MathBaseline], and
+  /// whether a dry layout asked it, which may have been before it had one.
+  double? _baseline;
+  var _baselineAsked = false;
+
   Size get _size {
     _asked = true;
     return _MeasuredMath._sizes[id] ?? Size.zero;
@@ -1127,15 +1137,57 @@ class _RenderMeasuredMath extends RenderProxyBox {
   @override
   void performLayout() {
     super.performLayout();
+    // Its height if it has none, as the line places a child without one.
+    final baseline =
+        child?.getDistanceToBaseline(TextBaseline.alphabetic) ?? size.height;
+    final moved = _baselineAsked && baseline != _baseline;
+    _baseline = baseline;
     final answered = _MeasuredMath._sizes[id];
     _MeasuredMath._sizes[id] = size;
-    if (!_asked || answered == size) return;
+    if (!moved && (!_asked || answered == size)) return;
     // Not now, mid-layout, and not after this frame, when selection reads
     // the text around it: just before the next frame lays out. This clears
     // the old answer from every ancestor that cached it, up to what asked.
     SchedulerBinding.instance.scheduleFrameCallback((_) {
       if (attached) markNeedsLayout();
     });
+  }
+}
+
+/// The baseline of the [_MeasuredMath] inside its scrollable, which keeps
+/// its child's to itself; scrolling sideways doesn't move it. Also what a
+/// dry layout gets, as the math can't answer one.
+class _MathBaseline extends SingleChildRenderObjectWidget {
+  const _MathBaseline({required super.child});
+
+  @override
+  _RenderMathBaseline createRenderObject(BuildContext context) =>
+      _RenderMathBaseline();
+}
+
+class _RenderMathBaseline extends RenderProxyBox {
+  _RenderMeasuredMath? get _math {
+    for (RenderObject? box = child; box != null;) {
+      if (box is _RenderMeasuredMath) return box;
+      box = box is RenderObjectWithChildMixin ? box.child : null;
+    }
+    return null;
+  }
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      _math?._baseline;
+
+  /// 0 for math not laid out yet, which is 0 tall, and lays out again once
+  /// it has one: null has the proxies above ask [RenderBox]'s own, which
+  /// throws. Not the scrollable's, which can't answer a dry one.
+  @override
+  double? computeDryBaseline(
+    BoxConstraints constraints,
+    TextBaseline baseline,
+  ) {
+    final math = _math?.._baselineAsked = true;
+    return math?._baseline ?? 0;
   }
 }
 
