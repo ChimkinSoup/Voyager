@@ -1314,9 +1314,11 @@ class _ClaudeProcess {
       if (error != null) _settle(error);
     }
     // A result before any turn: the resume was refused.
-    if (event case ClaudeResult(:final text) when _turn == null) {
+    if (event case ClaudeResult(:final text, cliStarted: false)
+        when _turn == null) {
       _settle(text.isEmpty ? 'it ended the session' : text);
     }
+    if (event is ClaudeResult && !_ends(event)) return;
     // Between turns there's nothing to report to.
     _onEvent?.call(event);
     if (event is ClaudeResult) {
@@ -1327,6 +1329,14 @@ class _ClaudeProcess {
       turn?.complete(event);
     }
   }
+
+  /// Whether [result] is the one for the turn on [prompt]: one that names
+  /// its prompts names it; one that names none is, unless the CLI began
+  /// that turn itself.
+  bool _ends(ClaudeResult result) => switch (result.promptIds) {
+    final ids? => ids.contains(prompt),
+    null => !result.cliStarted,
+  };
 
   void _fail(String reason) {
     _settle(reason);

@@ -688,6 +688,50 @@ void main() {
   );
 
   test(
+    'a resume after a process that left a background shell running ends '
+    "with the prompt's own result, not the stale task notification's",
+    skip: !_enabled,
+    timeout: _timeout,
+    () async {
+      final sessionId = _uuid.v4();
+      final first = runner('background_left');
+      try {
+        final result = await first.sendRaw(
+          chatId: 'contract',
+          sessionId: null,
+          newSessionId: sessionId,
+          model: _model,
+          prompt:
+              'Use the Bash tool with run_in_background set to true to run '
+              '`sleep 600`. Do not wait for it. Then reply with just: started',
+          tools: _AllowTools(),
+          onEvent: (_) {},
+        );
+        expect(result.isError, isFalse, reason: result.text);
+      } finally {
+        // With the shell still running, as an idle kill leaves it.
+        await first.killAll();
+      }
+      final second = runner('background_resume');
+      try {
+        final (result, events) = await turn(
+          second,
+          sessionId: sessionId,
+          resume: true,
+          prompt:
+              'Reply with exactly these words and nothing else: '
+              'gaia resume ok',
+        );
+        expect(result.isError, isFalse, reason: result.text);
+        expect(result.text.toLowerCase(), contains('gaia resume ok'));
+        expect(_text(events).toLowerCase(), contains('gaia resume ok'));
+      } finally {
+        await second.killAll();
+      }
+    },
+  );
+
+  test(
     "Gaia's tools over the control channel: ask_user answered, and a "
     'permission prompt denied',
     skip: !_enabled,

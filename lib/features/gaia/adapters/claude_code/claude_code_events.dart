@@ -112,11 +112,22 @@ class ClaudeResult extends ClaudeEvent {
     required this.text,
     this.contextTokens,
     this.modelUsage,
+    this.promptIds,
+    this.cliStarted = false,
   });
 
   final String sessionId;
   final bool isError;
   final String text;
+
+  /// The uuids of the prompts the turn answered (`user_message_uuids`); null
+  /// when it names none, as errors and older CLIs' results don't.
+  final List<String>? promptIds;
+
+  /// The CLI began the turn itself, on no prompt of Gaia's (`origin`): say
+  /// on a resume, an empty turn for a background task the last process left
+  /// running (`origin.kind: task-notification`, checked on 2.1.327).
+  final bool cliStarted;
 
   /// The context at the turn's last model call: its input, cache read and
   /// cache write tokens. Read leniently, since it's only shown: null when
@@ -343,6 +354,14 @@ ClaudeEvent parseClaudeLine(String line) {
         text: decoded['result'] as String? ?? field<String>(decoded, 'subtype'),
         contextTokens: claudeContextTokens(decoded['usage']),
         modelUsage: decoded['modelUsage'],
+        promptIds: switch (decoded['user_message_uuids']) {
+          final List ids when ids.isNotEmpty => [
+            for (final id in ids)
+              if (id is String) id,
+          ],
+          _ => null,
+        },
+        cliStarted: decoded['origin'] != null,
       );
     case 'rate_limit_event':
       final usage = claudeUsage(decoded['rate_limit_info']);

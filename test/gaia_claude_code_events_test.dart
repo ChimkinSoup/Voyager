@@ -328,6 +328,36 @@ void main() {
     expect(result.text, contains('claude-nonexistent-9'));
   });
 
+  test('a result says which prompts it answered, and whether the CLI began '
+      'its turn itself', () {
+    // As 2.1.327 sends them on a resume after a process that left a
+    // background shell running: an empty result for the stale task
+    // notification, then the prompt's own.
+    final stale =
+        parseClaudeLine(
+              '{"type":"result","subtype":"success","is_error":false,'
+              '"num_turns":0,"result":"","session_id":"s",'
+              '"origin":{"kind":"task-notification"}}',
+            )
+            as ClaudeResult;
+    expect(stale.cliStarted, isTrue);
+    expect(stale.promptIds, isNull);
+    final own =
+        parseClaudeLine(
+              '{"type":"result","subtype":"success","is_error":false,'
+              '"num_turns":1,"result":"hello there","session_id":"s",'
+              '"user_message_uuids":["u"]}',
+            )
+            as ClaudeResult;
+    expect(own.cliStarted, isFalse);
+    expect(own.promptIds, ['u']);
+    // Older CLIs' and errors' results name no prompt.
+    expect(
+      _events('single_turn.jsonl').whereType<ClaudeResult>().single.promptIds,
+      isNull,
+    );
+  });
+
   test('a known event missing a field it reads fails to parse', () {
     expect(
       () => parseClaudeLine('{"type":"result","is_error":false}'),
