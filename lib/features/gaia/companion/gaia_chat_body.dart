@@ -2,18 +2,50 @@ import 'dart:math';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// A chat's messages with its composer over their foot. What's above the
 /// composer's field ([GaiaFieldLine]), as its chips, floats over the messages
 /// rather than pushing them up: scrolled up, the text runs on under it. The
 /// list's [GaiaFloatGap] keeps that much room at its end, so at the bottom
 /// nothing's under it.
+///
+/// Between them it paints [halo], what's behind the chat, fading into the
+/// field ([GaiaFieldBox]) on every side: solid under the field and the gap
+/// round it that its hover light shows in, then fading out over [haloFade],
+/// round its rounded corners. So over the messages, the foot of them among
+/// it, but under the chips above the field.
 class GaiaChatBody extends MultiChildRenderObjectWidget {
-  GaiaChatBody({super.key, required Widget messages, required Widget composer})
-    : super(children: [messages, composer]);
+  GaiaChatBody({
+    super.key,
+    required Widget messages,
+    required Widget composer,
+    required this.halo,
+    required this.haloFade,
+  }) : super(children: [messages, composer]);
+
+  final Color halo;
+  final double haloFade;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => _RenderChatBody();
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderChatBody(halo, haloFade);
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    renderObject as _RenderChatBody
+      ..halo = halo
+      ..haloFade = haloFade;
+  }
+}
+
+/// The composer's field: its fill and the 2px gap round it, which the chat
+/// body's halo fades into.
+class GaiaFieldBox extends SingleChildRenderObjectWidget {
+  const GaiaFieldBox({super.key, super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderFieldBox();
 }
 
 /// Where the composer's field starts: what's above it floats.
@@ -48,7 +80,24 @@ class _RenderChatBody extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _BodyParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _BodyParentData> {
+  _RenderChatBody(this._halo, this._haloFade);
+
+  Color _halo;
+  set halo(Color value) {
+    if (value == _halo) return;
+    _halo = value;
+    markNeedsPaint();
+  }
+
+  double _haloFade;
+  set haloFade(double value) {
+    if (value == _haloFade) return;
+    _haloFade = value;
+    markNeedsPaint();
+  }
+
   _RenderFieldLine? _line;
+  _RenderFieldBox? _field;
   final _gaps = <_RenderFloatGap>{};
   final _lifts = <_RenderAboveFloat>{};
 
@@ -164,8 +213,113 @@ class _RenderChatBody extends RenderBox
   }
 
   @override
-  void paint(PaintingContext context, Offset offset) =>
-      defaultPaint(context, offset);
+  void paint(PaintingContext context, Offset offset) {
+    final messages = firstChild!;
+    final composer = childAfter(messages)!;
+    context.paintChild(
+      messages,
+      offset + (messages.parentData! as _BodyParentData).offset,
+    );
+    final at = offset + (composer.parentData! as _BodyParentData).offset;
+    // Read as it paints: whatever moves the field within the composer
+    // repaints this, or lays it out as the composer's size changes.
+    final field = _field;
+    if (field != null && field.attached && field.hasSize) {
+      final edge =
+          MatrixUtils.transformPoint(field.getTransformTo(this), Offset.zero) +
+              offset &
+          field.size;
+      _paintHalo(
+        context.canvas,
+        edge,
+        // Not past the composer's sides: its padding can be narrower than
+        // the fade, which would reach over the sidebar's divider.
+        Rect.fromLTRB(
+          at.dx,
+          edge.top - _haloFade,
+          at.dx + composer.size.width,
+          edge.bottom + _haloFade,
+        ),
+      );
+    }
+    context.paintChild(composer, at);
+  }
+
+  void _paintHalo(Canvas canvas, Rect edge, Rect clip) {
+    final color = _halo, fade = _haloFade;
+    const r = GaiaRadius.chip + 2;
+    final clear = color.withValues(alpha: 0);
+    final paint = Paint()..color = color;
+    canvas
+      ..save()
+      ..clipRect(clip)
+      ..drawRRect(
+        RRect.fromRectAndRadius(edge, const Radius.circular(r)),
+        paint,
+      );
+    // Each side, straight out from it, between the corners.
+    for (final (band, from, to) in [
+      (
+        Rect.fromLTRB(edge.left + r, edge.top - fade, edge.right - r, edge.top),
+        Alignment.bottomCenter,
+        Alignment.topCenter,
+      ),
+      (
+        Rect.fromLTRB(
+          edge.left + r,
+          edge.bottom,
+          edge.right - r,
+          edge.bottom + fade,
+        ),
+        Alignment.topCenter,
+        Alignment.bottomCenter,
+      ),
+      (
+        Rect.fromLTRB(
+          edge.left - fade,
+          edge.top + r,
+          edge.left,
+          edge.bottom - r,
+        ),
+        Alignment.centerRight,
+        Alignment.centerLeft,
+      ),
+      (
+        Rect.fromLTRB(
+          edge.right,
+          edge.top + r,
+          edge.right + fade,
+          edge.bottom - r,
+        ),
+        Alignment.centerLeft,
+        Alignment.centerRight,
+      ),
+    ]) {
+      paint.shader = LinearGradient(
+        begin: from,
+        end: to,
+        colors: [color, clear],
+      ).createShader(band);
+      canvas.drawRect(band, paint);
+    }
+    // Each corner, round out from its curve.
+    for (final (centre, out) in [
+      (edge.topLeft + const Offset(r, r), const Offset(-1, -1)),
+      (edge.topRight + const Offset(-r, r), const Offset(1, -1)),
+      (edge.bottomLeft + const Offset(r, -r), const Offset(-1, 1)),
+      (edge.bottomRight + const Offset(-r, -r), const Offset(1, 1)),
+    ]) {
+      paint.shader = RadialGradient(
+        colors: [color, color, clear],
+        stops: [0, r / (r + fade), 1],
+      ).createShader(Rect.fromCircle(center: centre, radius: r + fade));
+      canvas.drawRect(
+        Rect.fromPoints(centre, centre + out * (r + fade)),
+        paint,
+      );
+    }
+    canvas.restore();
+  }
 
   @override
   bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
@@ -193,6 +347,23 @@ class _RenderFieldLine extends RenderBox {
 
   @override
   void performLayout() => size = constraints.smallest;
+}
+
+class _RenderFieldBox extends RenderProxyBox {
+  _RenderChatBody? _body;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _body = _RenderChatBody._of(this)?.._field = this;
+  }
+
+  @override
+  void detach() {
+    if (_body?._field == this) _body!._field = null;
+    _body = null;
+    super.detach();
+  }
 }
 
 class _RenderFloatGap extends RenderSliver {

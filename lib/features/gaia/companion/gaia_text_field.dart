@@ -619,58 +619,66 @@ class _GaiaTextFieldState extends State<GaiaTextField>
       onEnter: _onHover,
       onHover: _onHover,
       onExit: _onExit,
-      child: CustomPaint(
-        painter: _LightPainter(
-          light: _light,
-          outgoing: () => _outgoing,
-          swap: _swap,
-          shown: _shown,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        // The light shows only in this gap round the field.
-        child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            decoration: BoxDecoration(
-              color: gaiaFieldFill,
-              borderRadius: BorderRadius.circular(GaiaRadius.chip),
-              // The light takes over from the edge under the cursor.
-              boxShadow: [
-                if (!_hovered)
-                  const BoxShadow(color: _edge, blurRadius: 1, spreadRadius: 1),
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (widget.leading case final leading?)
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: TextFieldTapRegion(child: leading),
-                  ),
-                Expanded(
-                  // Long prompts scroll without a bar.
-                  child: ScrollConfiguration(
-                    behavior: const _NoScrollbars(),
-                    // Voyager's Vim, snippets and autocorrect (§9.5), as its
-                    // own fields have them.
-                    child: VimTextScope(
-                      enabled: VimEnabledScope.of(context),
-                      controller: widget.controller,
-                      undoController: widget.undoController,
-                      multiline: true,
-                      builder: _field,
+      // So the light's frames as it follows the cursor repaint it alone, not
+      // what's painted round it, as the composer's halo.
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _LightPainter(
+            light: _light,
+            outgoing: () => _outgoing,
+            swap: _swap,
+            shown: _shown,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          // The light shows only in this gap round the field.
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              decoration: BoxDecoration(
+                color: gaiaFieldFill,
+                borderRadius: BorderRadius.circular(GaiaRadius.chip),
+                // The light takes over from the edge under the cursor.
+                boxShadow: [
+                  if (!_hovered)
+                    const BoxShadow(
+                      color: _edge,
+                      blurRadius: 1,
+                      spreadRadius: 1,
+                    ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (widget.leading case final leading?)
+                    Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: TextFieldTapRegion(child: leading),
+                    ),
+                  Expanded(
+                    // Long prompts scroll without a bar.
+                    child: ScrollConfiguration(
+                      behavior: const _NoScrollbars(),
+                      // Voyager's Vim, snippets and autocorrect (§9.5), as its
+                      // own fields have them.
+                      child: VimTextScope(
+                        enabled: VimEnabledScope.of(context),
+                        controller: widget.controller,
+                        undoController: widget.undoController,
+                        multiline: true,
+                        builder: _field,
+                      ),
                     ),
                   ),
-                ),
-                if (widget.trailing case final trailing?)
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    // Part of the field, so clicking it keeps the focus.
-                    child: TextFieldTapRegion(child: trailing),
-                  ),
-              ],
+                  if (widget.trailing case final trailing?)
+                    Padding(
+                      padding: const EdgeInsets.all(4),
+                      // Part of the field, so clicking it keeps the focus.
+                      child: TextFieldTapRegion(child: trailing),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

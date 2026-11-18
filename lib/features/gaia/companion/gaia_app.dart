@@ -387,6 +387,8 @@ class _GaiaShell extends StatelessWidget {
                   ),
                 ),
                 composer: _Composer(controller: controller),
+                halo: Theme.of(context).scaffoldBackgroundColor,
+                haloFade: _TopFade._fade,
               ),
             ),
           ],
@@ -3128,106 +3130,6 @@ class _TopFade extends StatelessWidget {
   }
 }
 
-/// What's behind the chat fading into the composer's field on every side,
-/// the messages' foot among it: the surface, solid under the field and the
-/// gap round it that its hover light shows in, then fading out over
-/// [_TopFade._fade], round the field's rounded corners. Painted under the
-/// composer, so over the messages but under the chips above the field. The
-/// field moves as they come and go, so it's found afresh at each paint.
-class _FieldHalo extends CustomPainter {
-  const _FieldHalo({
-    required this.color,
-    required this.self,
-    required this.field,
-  });
-
-  final Color color;
-
-  /// This painter's own [CustomPaint], and the field's box.
-  final GlobalKey self, field;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final me = self.currentContext?.findRenderObject() as RenderBox?;
-    final box = field.currentContext?.findRenderObject() as RenderBox?;
-    if (me == null || box == null || !box.attached || !box.hasSize) return;
-    // The field's box: its fill and the 2px gap round it, so the corners
-    // round 2px wider than the fill's.
-    final edge = box.localToGlobal(Offset.zero, ancestor: me) & box.size;
-    const fade = _TopFade._fade, r = GaiaRadius.chip + 2;
-    final clear = color.withValues(alpha: 0);
-    final paint = Paint()..color = color;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(edge, const Radius.circular(r)),
-      paint,
-    );
-    // Each side, straight out from it, between the corners.
-    for (final (band, from, to) in [
-      (
-        Rect.fromLTRB(edge.left + r, edge.top - fade, edge.right - r, edge.top),
-        Alignment.bottomCenter,
-        Alignment.topCenter,
-      ),
-      (
-        Rect.fromLTRB(
-          edge.left + r,
-          edge.bottom,
-          edge.right - r,
-          edge.bottom + fade,
-        ),
-        Alignment.topCenter,
-        Alignment.bottomCenter,
-      ),
-      (
-        Rect.fromLTRB(
-          edge.left - fade,
-          edge.top + r,
-          edge.left,
-          edge.bottom - r,
-        ),
-        Alignment.centerRight,
-        Alignment.centerLeft,
-      ),
-      (
-        Rect.fromLTRB(
-          edge.right,
-          edge.top + r,
-          edge.right + fade,
-          edge.bottom - r,
-        ),
-        Alignment.centerLeft,
-        Alignment.centerRight,
-      ),
-    ]) {
-      paint.shader = LinearGradient(
-        begin: from,
-        end: to,
-        colors: [color, clear],
-      ).createShader(band);
-      canvas.drawRect(band, paint);
-    }
-    // Each corner, round out from its curve.
-    for (final (centre, out) in [
-      (edge.topLeft + const Offset(r, r), const Offset(-1, -1)),
-      (edge.topRight + const Offset(-r, r), const Offset(1, -1)),
-      (edge.bottomLeft + const Offset(r, -r), const Offset(-1, 1)),
-      (edge.bottomRight + const Offset(-r, -r), const Offset(1, 1)),
-    ]) {
-      paint.shader = RadialGradient(
-        colors: [color, color, clear],
-        stops: const [0, r / (r + fade), 1],
-      ).createShader(Rect.fromCircle(center: centre, radius: r + fade));
-      canvas.drawRect(
-        Rect.fromPoints(centre, centre + out * (r + fade)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_FieldHalo oldDelegate) => oldDelegate.color != color;
-}
-
 /// What a chat with no messages shows: a line to start from, and the keys
 /// worth knowing before the first message. Not clickable: the composer under
 /// it already has the focus.
@@ -4762,9 +4664,6 @@ class _ComposerState extends State<_Composer> {
   late final StreamSubscription<void> _summoned;
   late final StreamSubscription<void> _usageOpened;
   final _vanish = GlobalKey<GaiaVanishState>();
-
-  /// The [_FieldHalo]'s own paint, which it finds the field from.
-  final _halo = GlobalKey();
   final _imagesVanish = GlobalKey<GaiaVanishState>();
 
   /// The side questions over the field, which Up and Down move along.
@@ -5883,98 +5782,106 @@ class _ComposerState extends State<_Composer> {
                           link: _fieldLink,
                           child: GaiaFieldLine(key: _fieldMark),
                         ),
-                        GaiaVanish(
-                          key: _vanish,
-                          controller: _text,
-                          builder: (context, vanishing) => GaiaTextField(
+                        GaiaFieldBox(
+                          child: GaiaVanish(
+                            key: _vanish,
                             controller: _text,
-                            focusNode: _focus,
-                            autofocus: true,
-                            minLines: vanishing ? null : 1,
-                            maxLines: vanishing ? null : 8,
-                            expands: vanishing,
-                            textAlignVertical: vanishing
-                                ? TextAlignVertical.top
-                                : null,
-                            hintText: vanishing
-                                ? null
-                                : switch (card?.kind) {
-                                    GaiaCardKind.question => 'Type an answer',
-                                    GaiaCardKind.permission =>
-                                      'Send to allow, or say why not',
-                                    GaiaCardKind.proposal
-                                        when card!.proposal?.delete ?? false =>
-                                      'Send to delete, or say what to change',
-                                    GaiaCardKind.proposal =>
-                                      'Send to save, or say what to change',
-                                    GaiaCardKind.control =>
-                                      'Send to run, or say why not',
-                                    null => 'Message Gaia',
-                                  },
-                            onPaste: _paste,
-                            undoController: controller.draftUndo,
-                            lists: true,
-                            onAddWord: (word) =>
-                                unawaited(controller.addWord(word)),
-                            // The tier picker's notch, opening rightwards from the
-                            // field's left edge.
-                            leading: Padding(
-                              // Level with the send button.
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: GaiaNotch(
-                                opensRight: true,
-                                items: [
-                                  GaiaNotchItem<bool?>(
-                                    trigger: (color) =>
-                                        Icon(Icons.add, size: 16, color: color),
-                                    options: [
-                                      GaiaNotchOption(
-                                        value: false,
-                                        label: 'Add files',
-                                        icon: (color, {required lit}) => Icon(
-                                          Icons.description_outlined,
-                                          size: 16,
-                                          color: color,
-                                        ),
+                            builder: (context, vanishing) => GaiaTextField(
+                              controller: _text,
+                              focusNode: _focus,
+                              autofocus: true,
+                              minLines: vanishing ? null : 1,
+                              maxLines: vanishing ? null : 8,
+                              expands: vanishing,
+                              textAlignVertical: vanishing
+                                  ? TextAlignVertical.top
+                                  : null,
+                              hintText: vanishing
+                                  ? null
+                                  : switch (card?.kind) {
+                                      GaiaCardKind.question => 'Type an answer',
+                                      GaiaCardKind.permission =>
+                                        'Send to allow, or say why not',
+                                      GaiaCardKind.proposal
+                                          when card!.proposal?.delete ??
+                                              false =>
+                                        'Send to delete, or say what to change',
+                                      GaiaCardKind.proposal =>
+                                        'Send to save, or say what to change',
+                                      GaiaCardKind.control =>
+                                        'Send to run, or say why not',
+                                      null => 'Message Gaia',
+                                    },
+                              onPaste: _paste,
+                              undoController: controller.draftUndo,
+                              lists: true,
+                              onAddWord: (word) =>
+                                  unawaited(controller.addWord(word)),
+                              // The tier picker's notch, opening rightwards from the
+                              // field's left edge.
+                              leading: Padding(
+                                // Level with the send button.
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                ),
+                                child: GaiaNotch(
+                                  opensRight: true,
+                                  items: [
+                                    GaiaNotchItem<bool?>(
+                                      trigger: (color) => Icon(
+                                        Icons.add,
+                                        size: 16,
+                                        color: color,
                                       ),
-                                      GaiaNotchOption(
-                                        value: true,
-                                        label: 'Add folder',
-                                        icon: (color, {required lit}) => Icon(
-                                          Icons.folder_outlined,
-                                          size: 16,
-                                          color: color,
+                                      options: [
+                                        GaiaNotchOption(
+                                          value: false,
+                                          label: 'Add files',
+                                          icon: (color, {required lit}) => Icon(
+                                            Icons.description_outlined,
+                                            size: 16,
+                                            color: color,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                    value: null,
-                                    onChanged: (folder) =>
-                                        _attach(folder: folder!),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Mid-reply it's the reply's stop, except for what
-                            // [_submit] takes before that stop: a side question
-                            // (GAIA_BTW_HLD.md §3), /queue (§13) and /remember
-                            // (§11) send as Enter does.
-                            trailing:
-                                running &&
-                                    gaiaBtwText(_text.text) == null &&
-                                    gaiaQueueText(_text.text) == null &&
-                                    gaiaRememberText(_text.text) == null
-                                ? GaiaButton(
-                                    icon: Icons.stop,
-                                    size: 32,
-                                    onPressed: () => controller.stop(
-                                      controller.currentChatId!,
+                                        GaiaNotchOption(
+                                          value: true,
+                                          label: 'Add folder',
+                                          icon: (color, {required lit}) => Icon(
+                                            Icons.folder_outlined,
+                                            size: 16,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ],
+                                      value: null,
+                                      onChanged: (folder) =>
+                                          _attach(folder: folder!),
                                     ),
-                                  )
-                                : GaiaButton(
-                                    icon: Icons.arrow_upward,
-                                    size: 32,
-                                    onPressed: _send,
-                                  ),
+                                  ],
+                                ),
+                              ),
+                              // Mid-reply it's the reply's stop, except for what
+                              // [_submit] takes before that stop: a side question
+                              // (GAIA_BTW_HLD.md §3), /queue (§13) and /remember
+                              // (§11) send as Enter does.
+                              trailing:
+                                  running &&
+                                      gaiaBtwText(_text.text) == null &&
+                                      gaiaQueueText(_text.text) == null &&
+                                      gaiaRememberText(_text.text) == null
+                                  ? GaiaButton(
+                                      icon: Icons.stop,
+                                      size: 32,
+                                      onPressed: () => controller.stop(
+                                        controller.currentChatId!,
+                                      ),
+                                    )
+                                  : GaiaButton(
+                                      icon: Icons.arrow_upward,
+                                      size: 32,
+                                      onPressed: _send,
+                                    ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -6008,18 +5915,7 @@ class _ComposerState extends State<_Composer> {
         );
       },
     );
-    return MediaPasteOwnerScope(
-      pasteImage: _pasteImage,
-      child: CustomPaint(
-        key: _halo,
-        painter: _FieldHalo(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          self: _halo,
-          field: _vanish,
-        ),
-        child: composer,
-      ),
-    );
+    return MediaPasteOwnerScope(pasteImage: _pasteImage, child: composer);
   }
 }
 
