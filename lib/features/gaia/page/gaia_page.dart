@@ -827,15 +827,11 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
     super.dispose();
   }
 
-  void _scrollToFocus() {
-    if (widget.focus == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final context = _focusKey.currentContext;
-      if (context != null && context.mounted) {
-        Scrollable.ensureVisible(context, alignment: 0.3);
-      }
-    });
-  }
+  /// Scrolled to once the focused row is first built, which may be only
+  /// after the memories load (BUG-383).
+  bool _scrollPending = false;
+
+  void _scrollToFocus() => _scrollPending = widget.focus != null;
 
   /// A dialog with the tree, for a window too narrow for two panes.
   Future<void> _pickShown() => showDialog<void>(
@@ -936,6 +932,15 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
       }
     }
     final sort = ref.watch(gaiaSortProvider);
+    if (_scrollPending) {
+      _scrollPending = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _focusKey.currentContext;
+        if (mounted && context != null) {
+          Scrollable.ensureVisible(context, alignment: 0.3);
+        }
+      });
+    }
     Widget row(GaiaMemory memory, bool narrow) => _MemoryRow(
       key: memory.id == widget.focus ? _focusKey : null,
       memory: memory,

@@ -1,0 +1,6 @@
+final r = c.read(gaiaRepositoryProvider);
+var n = 0;
+for (final m in await r.listMemories()) {
+  if (!m.isDeleted && m.text.startsWith('FV380 pin filler')) { await r.upsertMemory(m.copyWith(pinned: false, deletedAt: utcNow())); n++; }
+}
+debugPrint('FV380 cleaned ' + n.toString());

@@ -1,0 +1,12 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+await g.save('FV382 A: I keep my desk lamp on a warm white setting.', status: GaiaMemoryStatus.active, byUser: true);
+await g.save('FV382 B: I like my coffee with oat milk and no sugar.', status: GaiaMemoryStatus.active, byUser: true);
+final all = await r.listMemories();
+final a = all.firstWhere((m) => !m.isDeleted && m.text.startsWith('FV382 A'));
+var b = all.firstWhere((m) => !m.isDeleted && m.text.startsWith('FV382 B'));
+await r.upsertMemory(b.copyWith(suggestedTopic: (name: 'FV382 Profile', parentId: null)));
+final sort = c.read(gaiaSortProvider.notifier);
+sort.change(a.id, (topicIds: const <String>[], suggested: (name: 'FV382 Prefs', parentId: null), tags: const <String>[]));
+sort.change(b.id, (topicIds: const <String>[], suggested: (name: 'FV382 Prefs', parentId: null), tags: const <String>[]));
+debugPrint('FV382 a ' + a.id + ' topics ' + a.topicIds.toString() + ' b ' + b.id + ' topics ' + b.topicIds.toString());

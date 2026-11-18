@@ -1,0 +1,8 @@
+final r = c.read(gaiaRepositoryProvider);
+final topics = await r.listMemoryTopics();
+final names = <String, String>{};
+for (final t in topics) { if (!t.isDeleted) names[t.id] = t.name; }
+debugPrint('FV382 topics named FV382: ' + [for (final t in topics) if (!t.isDeleted && t.name.startsWith('FV382')) t.name].toString());
+for (final m in await r.listMemories()) {
+  if (!m.isDeleted && m.text.startsWith('FV382')) debugPrint('FV382 ' + m.text.substring(0, 7) + ' in ' + [for (final id in m.topicIds) names[id] ?? id].toString() + ' offer ' + (m.suggestedTopic?.name ?? 'none'));
+}

@@ -480,6 +480,78 @@ void main() {
   );
 
   testWidgets(
+    "accepting Sort's topic that already exists doesn't also make the "
+    "memory's older offer (BUG-382)",
+    (tester) async {
+      await pump(
+        tester,
+        suggested: {'m4': (name: 'Profile', parentId: null)},
+        overrides: [
+          gaiaSortMemoriesProvider.overrideWithValue(
+            (memories) async => {
+              for (final memory in memories)
+                memory.id: (
+                  topicIds: const <String>[],
+                  suggested: (name: 'Obsidian', parentId: null),
+                  tags: const <String>[],
+                ),
+            },
+          ),
+        ],
+      );
+      await tester.tap(row('Unsorted'));
+      await settle(tester);
+      await tester.tap(find.text('Sort these'));
+      await settle(tester);
+      await tester.tap(find.text('Accept'));
+      await settle(tester);
+      final topics = (await tester.runAsync(repository.listMemoryTopics))!;
+      expect(topics.where((topic) => topic.name == 'Profile'), isEmpty);
+      expect(await topicsOf(tester, 'm4'), ['obs']);
+      expect(
+        (await tester.runAsync(
+          () => repository.getMemory('m4'),
+        ))!.suggestedTopic,
+        isNull,
+      );
+    },
+    variant: _desktop,
+  );
+
+  testWidgets(
+    'a memory revealed as the page opens is scrolled to once the memories '
+    'load (BUG-383)',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      db = AppDatabase.inMemory();
+      repository = DriftGaiaRepository(db);
+      await tester.runAsync(
+        () => repository.upsertMemoryTopics(const [], [
+          for (var i = 0; i < 60; i++) _memory('m$i', 'Memory number $i', []),
+        ]),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            gaiaRepositoryProvider.overrideWithValue(repository),
+            gaiaRevealMemoryProvider.overrideWith((ref) => 'm0'),
+          ],
+          child: MaterialApp(
+            theme: VoyagerTheme.light(),
+            home: const Scaffold(body: GaiaPage()),
+          ),
+        ),
+      );
+      await settle(tester);
+      final shown = tester.getRect(find.text('Memory number 0'));
+      expect(shown.top, greaterThanOrEqualTo(0));
+      expect(shown.bottom, lessThanOrEqualTo(800));
+    },
+  );
+
+  testWidgets(
     "the inbox suggests a pin from this device's recall history, with Pin "
     'and Not now, and a merge, with Merge and Keep both (§3.3, §5)',
     (tester) async {

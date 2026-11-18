@@ -881,6 +881,9 @@ class GaiaMemories {
         ...{...memory.tags, ...placement.tags},
       ],
       suggestedTopic: offer,
+      // A new topic suggested replaces any older offer, even one filed in
+      // an existing topic of that name (BUG-382).
+      clearSuggestedTopic: placement.suggested != null && offer == null,
     );
     await _repository.upsertMemory(placed);
     return gaiaMemoryFiling(placed, tree);

@@ -849,6 +849,35 @@ void main() {
       );
     });
 
+    test("a placement's new topic replaces an older offer, whether that name "
+        'is there yet or not, and one without keeps it (BUG-382)', () async {
+      Future<GaiaMemory> placed(GaiaSuggestedTopic? suggested) async {
+        final saved = await memories.save(
+          'Biscuit needs a booster in ${suggested?.name}',
+          status: GaiaMemoryStatus.active,
+          suggested: (name: 'Profile', parentId: null),
+        );
+        await memories.place(saved!.id, (
+          topicIds: const [],
+          suggested: suggested,
+          tags: const [],
+        ));
+        return (await repository.getMemory(saved.id))!;
+      }
+
+      final there = await placed((name: 'Pets', parentId: null));
+      expect(there.topicIds, ['pets']);
+      expect(there.suggestedTopic, isNull);
+      expect(
+        (await placed((name: 'Vet visits', parentId: 'pets'))).suggestedTopic,
+        (name: 'Vet visits', parentId: 'pets'),
+      );
+      expect((await placed(null)).suggestedTopic, (
+        name: 'Profile',
+        parentId: null,
+      ));
+    });
+
     test("a proposal's placement landing after the user decided it leaves it "
         'as they filed it', () async {
       final saved = await memories.save(

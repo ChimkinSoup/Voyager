@@ -1,0 +1,7 @@
+final r = c.read(gaiaRepositoryProvider);
+final all = await r.listMemories();
+var used = 0;
+for (final m in all) { if (!m.isDeleted && m.status.name == 'active' && m.pinned) used += m.text.trim().length; }
+String? pick;
+for (final m in all) { if (!m.isDeleted && m.status.name == 'active' && !m.pinned && used + m.text.trim().length > 2000) { pick = m.id + ' | ' + m.text; break; } }
+debugPrint('FV380 used ' + used.toString() + ' pick ' + (pick ?? 'none'));

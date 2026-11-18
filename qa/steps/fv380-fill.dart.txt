@@ -1,0 +1,9 @@
+final r = c.read(gaiaRepositoryProvider);
+final g = GaiaMemories(r);
+for (var i = 1; i <= 4; i++) {
+  await g.save('FV380 pin filler ' + i.toString() + '. ' + List.filled(58, 'filler').join(' '), status: GaiaMemoryStatus.active, byUser: true);
+}
+final all = await r.listMemories();
+for (final m in all) {
+  if (!m.isDeleted && m.text.startsWith('FV380 pin filler')) { await g.pin(m.id, pinned: true); debugPrint('FV380 filler ' + m.id + ' len ' + m.text.trim().length.toString()); }
+}
