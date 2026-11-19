@@ -1630,7 +1630,7 @@ class _GaiaMemoryCardPreviewState extends State<GaiaMemoryCardPreview> {
     text: 'Prefers green tea with no sugar',
   );
 
-  // Made-up topics, so the chips and their × show.
+  // Made-up topics, so the chips show.
   static const _topics = <GaiaTopicLine>[
     (id: 'preview-food', path: 'Food/Drinks'),
     (id: 'preview-habits', path: 'Habits'),

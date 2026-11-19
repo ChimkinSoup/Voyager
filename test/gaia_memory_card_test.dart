@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
@@ -188,12 +189,23 @@ void main() {
     );
     await tester.pumpWidget(card());
     expect(find.text('Pets'), findsOneWidget);
-    expect(find.text('+ New topic: Vets under Pets'), findsOneWidget);
+    expect(find.text('+'), findsOneWidget);
 
-    await tester.tap(find.text('+ New topic: Vets under Pets'));
+    await tester.tap(find.text('New topic: Vets under Pets'));
     expect(newTopic, isTrue);
     await tester.pumpWidget(card());
-    expect(find.text('✓ New topic: Vets under Pets'), findsOneWidget);
+    expect(find.text('✓'), findsOneWidget);
+    // Ticked, a click declines it: still there, greyed and struck through.
+    await tester.tap(find.text('New topic: Vets under Pets'));
+    expect(newTopic, isFalse);
+    await tester.pumpWidget(card());
+    final struck = tester.widget<Text>(find.text('New topic: Vets under Pets'));
+    expect(struck.style?.decoration, TextDecoration.lineThrough);
+    expect(find.byTooltip('Bring it back'), findsOneWidget);
+    // Declined, a click brings it back, undecided.
+    await tester.tap(find.text('New topic: Vets under Pets'));
+    expect(newTopic, isNull);
+    newTopic = true;
 
     // Only the topics it isn't in are offered.
     // Pumped in steps: the editor's caret blinks for ever.
@@ -210,13 +222,15 @@ void main() {
     await settleMenu();
     expect(topics.map((topic) => topic.id), ['pets', 'lang']);
 
+    // A click on a topic's chip takes it off; so does Enter, focused.
     await tester.pumpWidget(card());
-    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.tap(find.text('Pets'));
     expect(topics.map((topic) => topic.id), ['lang']);
-    await tester.tap(find.byIcon(Icons.close).last);
-    expect(newTopic, isFalse);
     await tester.pumpWidget(card());
-    expect(find.textContaining('New topic'), findsNothing);
+    Focus.of(tester.element(find.text('Languages'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(topics, isEmpty);
 
     // Decided, it's a record without them.
     await tester.pumpWidget(

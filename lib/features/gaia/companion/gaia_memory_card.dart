@@ -79,6 +79,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   @override
   void dispose() {
     _text.dispose();
+    _menu?.remove();
     super.dispose();
   }
 
@@ -94,13 +95,23 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   ContextMenuController? _menu;
   var _wasOpen = false;
 
+  /// Fetching its choices: another press meanwhile mustn't open a second.
+  var _opening = false;
+
   /// A menu of the topics it isn't in, by [_addKey]'s button; the one
   /// picked is added.
   Future<void> _addTopic(List<GaiaTopicLine> topics) async {
-    final choices = [
-      for (final topic in await widget.topicChoices!())
-        if (!topics.any((had) => had.id == topic.id)) topic,
-    ];
+    if (_opening) return;
+    _opening = true;
+    final List<GaiaTopicLine> choices;
+    try {
+      choices = [
+        for (final topic in await widget.topicChoices!())
+          if (!topics.any((had) => had.id == topic.id)) topic,
+      ];
+    } finally {
+      _opening = false;
+    }
     final box = _addKey.currentContext?.findRenderObject() as RenderBox?;
     if (choices.isEmpty || box == null || !mounted) return;
     _menu = showGaiaMenu(
@@ -123,8 +134,9 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
 
   Widget _topics(ThemeData theme) {
     final filing = widget.filing!;
-    final suggested = filing.newTopic == false ? null : filing.suggested;
+    final suggested = filing.suggested;
     final taken = filing.newTopic == true;
+    final declined = filing.newTopic == false;
     final label = theme.textTheme.labelSmall?.copyWith(
       color: theme.colorScheme.primary,
       fontWeight: FontWeight.bold,
@@ -151,8 +163,20 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             style: label,
             checked: taken,
             filled: taken,
-            tooltip: taken ? "Don't make it" : 'Make this topic',
-            onTap: () => widget.onNewTopic?.call(taken ? null : true),
+            declined: declined,
+            tooltip: taken
+                ? "Don't make it"
+                : declined
+                ? 'Bring it back'
+                : 'Make this topic',
+            // Offered, taken, declined, and back to offered.
+            onTap: () => widget.onNewTopic?.call(
+              taken
+                  ? false
+                  : declined
+                  ? null
+                  : true,
+            ),
           ),
         if (widget.topicChoices != null)
           Listener(
@@ -295,6 +319,7 @@ class _TopicChip extends StatefulWidget {
     this.onTap,
     this.removes = false,
     this.filled = false,
+    this.declined = false,
     this.checked,
   });
 
@@ -305,6 +330,9 @@ class _TopicChip extends StatefulWidget {
   final bool removes;
   final bool filled;
 
+  /// Greyed and struck through: turned down, but still there to undo.
+  final bool declined;
+
   /// A ✓ before the label when true, a + when false; neither when null.
   final bool? checked;
 
@@ -314,6 +342,7 @@ class _TopicChip extends StatefulWidget {
 
 class _TopicChipState extends State<_TopicChip> {
   var _hovered = false;
+  var _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -321,13 +350,23 @@ class _TopicChipState extends State<_TopicChip> {
     final lit = widget.removes
         ? kGaiaStatusRose
         : HSLColor.fromColor(colors.primary).withSaturation(1).toColor();
-    final style = _hovered && widget.removes
+    final highlighted = _hovered || _focused;
+    final style = highlighted && widget.removes
         ? widget.style?.copyWith(color: kGaiaStatusRose)
+        : widget.declined
+        ? widget.style?.copyWith(
+            color: colors.onSurfaceVariant.withValues(alpha: 0.6),
+          )
         : widget.style;
     final label = Text(
       widget.label,
       overflow: TextOverflow.ellipsis,
-      style: style,
+      style: widget.declined
+          ? style?.copyWith(
+              decoration: TextDecoration.lineThrough,
+              decorationColor: style.color,
+            )
+          : style,
     );
     final checked = widget.checked;
     final text = checked == null
@@ -349,10 +388,15 @@ class _TopicChipState extends State<_TopicChip> {
               Flexible(child: label),
             ],
           );
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+    return FocusableActionDetector(
+      mouseCursor: SystemMouseCursors.click,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) => widget.onTap?.call(),
+        ),
+      },
+      onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
+      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -361,10 +405,10 @@ class _TopicChipState extends State<_TopicChip> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(GaiaRadius.chip),
-            border: Border.all(color: _hovered ? lit : colors.outlineVariant),
+            border: Border.all(color: highlighted ? lit : colors.outlineVariant),
             color: widget.filled
                 ? colors.primary.withValues(alpha: 0.12)
-                : _hovered
+                : highlighted
                 ? lit.withValues(alpha: 0.08)
                 : null,
           ),
