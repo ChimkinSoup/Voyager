@@ -498,7 +498,7 @@ class _DebugMenu extends StatelessWidget {
         heading('Memory card'),
         Text(
           'The card memory_propose puts in a reply: edit the text, then '
-          'Remember or Dismiss. Its topics are made up: drop one with its ×, '
+          'Remember or Dismiss. Its topics are made up: click one to drop it, '
           'or add one back with + Topic. Here they only change the card; '
           'nothing is saved.',
           style: muted,

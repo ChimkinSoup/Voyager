@@ -14,7 +14,7 @@ import 'package:voyager/features/gaia/companion/gaia_style.dart';
 ///
 /// Open, it shows the topics in [filing] and the new topic offered, which
 /// can be changed before Remember (§3.2): a topic taken out, one of
-/// [topicChoices] added ([onTopics]), and the new topic taken or dropped
+/// [topicChoices] added ([onTopics]), and the new topic taken or not
 /// ([onNewTopic]).
 class GaiaMemoryCard extends StatefulWidget {
   const GaiaMemoryCard({
@@ -129,51 +129,37 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
       color: theme.colorScheme.primary,
       fontWeight: FontWeight.bold,
     );
-    Widget chip(
-      Widget text, {
-      Key? key,
-      VoidCallback? onTap,
-      VoidCallback? onRemove,
-      String? tooltip,
-      bool filled = false,
-    }) => _TopicChip(
-      key: key,
-      onTap: onTap,
-      onRemove: onRemove,
-      filled: filled,
-      child: tooltip == null ? text : Tooltip(message: tooltip, child: text),
-    );
     return Wrap(
       spacing: 4,
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final topic in filing.topics)
-          chip(
-            Text(topic.path, overflow: TextOverflow.ellipsis, style: label),
-            onRemove: () => widget.onTopics?.call([
+          _TopicChip(
+            label: topic.path,
+            style: label,
+            tooltip: 'Remove',
+            removes: true,
+            onTap: () => widget.onTopics?.call([
               for (final other in filing.topics)
                 if (other.id != topic.id) other,
             ]),
           ),
         if (suggested != null)
-          chip(
-            Text(
-              '${taken ? '✓' : '+'} New topic: $suggested',
-              overflow: TextOverflow.ellipsis,
-              style: label,
-            ),
+          _TopicChip(
+            label: '${taken ? '✓' : '+'} New topic: $suggested',
+            style: label,
             filled: taken,
-            tooltip: taken ? "Don't make it yet" : 'Make this topic',
+            tooltip: taken ? "Don't make it" : 'Make this topic',
             onTap: () => widget.onNewTopic?.call(taken ? null : true),
-            onRemove: () => widget.onNewTopic?.call(false),
           ),
         if (widget.topicChoices != null)
           Listener(
             onPointerDown: (_) => _wasOpen = _menu?.isShown ?? false,
-            child: chip(
-              Text('+ Topic', style: label),
+            child: _TopicChip(
               key: _addKey,
+              label: '+ Topic',
+              style: label,
               onTap: () {
                 if (!_wasOpen) _addTopic(filing.topics);
               },
@@ -297,20 +283,24 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
 }
 
 /// A topic on the card: squared off with the composer's corners, its edge
-/// lit in the accent while hovered, as a still [GaiaButton]'s is. [onTap]
-/// takes a click anywhere on it but its ×, which is [onRemove]'s.
+/// lit while hovered, as a still [GaiaButton]'s is: in the accent, or in
+/// rose when a click [removes] it.
 class _TopicChip extends StatefulWidget {
   const _TopicChip({
     super.key,
-    required this.child,
+    required this.label,
+    required this.style,
+    this.tooltip,
     this.onTap,
-    this.onRemove,
+    this.removes = false,
     this.filled = false,
   });
 
-  final Widget child;
+  final String label;
+  final TextStyle? style;
+  final String? tooltip;
   final VoidCallback? onTap;
-  final VoidCallback? onRemove;
+  final bool removes;
   final bool filled;
 
   @override
@@ -323,11 +313,18 @@ class _TopicChipState extends State<_TopicChip> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final onRemove = widget.onRemove;
+    final lit = widget.removes
+        ? kGaiaStatusRose
+        : HSLColor.fromColor(colors.primary).withSaturation(1).toColor();
+    final text = Text(
+      widget.label,
+      overflow: TextOverflow.ellipsis,
+      style: _hovered && widget.removes
+          ? widget.style?.copyWith(color: kGaiaStatusRose)
+          : widget.style,
+    );
     return MouseRegion(
-      cursor: widget.onTap == null
-          ? MouseCursor.defer
-          : SystemMouseCursors.click,
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
@@ -335,43 +332,19 @@ class _TopicChipState extends State<_TopicChip> {
         child: AnimatedContainer(
           duration: GaiaMotion.quick,
           constraints: const BoxConstraints(maxWidth: 260),
-          padding: EdgeInsets.only(left: 8, right: onRemove == null ? 8 : 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(GaiaRadius.chip),
-            border: Border.all(
-              color: _hovered
-                  ? HSLColor.fromColor(
-                      colors.primary,
-                    ).withSaturation(1).toColor()
-                  : colors.outlineVariant,
-            ),
-            color: widget.filled || _hovered
-                ? colors.primary.withValues(alpha: widget.filled ? 0.12 : 0.06)
+            border: Border.all(color: _hovered ? lit : colors.outlineVariant),
+            color: widget.filled
+                ? colors.primary.withValues(alpha: 0.12)
+                : _hovered
+                ? lit.withValues(alpha: 0.08)
                 : null,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(child: widget.child),
-              if (onRemove != null)
-                InkWell(
-                  onTap: onRemove,
-                  customBorder: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.all(
-                      Radius.circular(GaiaRadius.chip),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: Icon(
-                      Icons.close,
-                      size: 10,
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          child: widget.tooltip == null
+              ? text
+              : Tooltip(message: widget.tooltip, child: text),
         ),
       ),
     );
