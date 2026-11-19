@@ -147,8 +147,9 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
           ),
         if (suggested != null)
           _TopicChip(
-            label: '${taken ? '✓' : '+'} New topic: $suggested',
+            label: 'New topic: $suggested',
             style: label,
+            checked: taken,
             filled: taken,
             tooltip: taken ? "Don't make it" : 'Make this topic',
             onTap: () => widget.onNewTopic?.call(taken ? null : true),
@@ -294,6 +295,7 @@ class _TopicChip extends StatefulWidget {
     this.onTap,
     this.removes = false,
     this.filled = false,
+    this.checked,
   });
 
   final String label;
@@ -302,6 +304,9 @@ class _TopicChip extends StatefulWidget {
   final VoidCallback? onTap;
   final bool removes;
   final bool filled;
+
+  /// A ✓ before the label when true, a + when false; neither when null.
+  final bool? checked;
 
   @override
   State<_TopicChip> createState() => _TopicChipState();
@@ -316,13 +321,34 @@ class _TopicChipState extends State<_TopicChip> {
     final lit = widget.removes
         ? kGaiaStatusRose
         : HSLColor.fromColor(colors.primary).withSaturation(1).toColor();
-    final text = Text(
+    final style = _hovered && widget.removes
+        ? widget.style?.copyWith(color: kGaiaStatusRose)
+        : widget.style;
+    final label = Text(
       widget.label,
       overflow: TextOverflow.ellipsis,
-      style: _hovered && widget.removes
-          ? widget.style?.copyWith(color: kGaiaStatusRose)
-          : widget.style,
+      style: style,
     );
+    final checked = widget.checked;
+    final text = checked == null
+        ? label
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // As wide as the wider of the two, so the chip keeps its
+              // size as it's ticked.
+              IndexedStack(
+                alignment: Alignment.center,
+                index: checked ? 1 : 0,
+                children: [
+                  Text('+', style: style),
+                  Text('✓', style: style),
+                ],
+              ),
+              const SizedBox(width: 4),
+              Flexible(child: label),
+            ],
+          );
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
