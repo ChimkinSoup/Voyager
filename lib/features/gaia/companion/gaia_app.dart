@@ -849,7 +849,7 @@ class _Header extends StatelessWidget {
             if (!floater) _WindowButtons(controller: controller),
             GaiaButton(
               icon: Icons.close,
-              size: 32,
+              size: 38,
               onPressed: controller.dismiss,
             ),
             const SizedBox(width: 12),
@@ -1159,7 +1159,7 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
       children: [
         GaiaButton(
           icon: Icons.remove,
-          size: 32,
+          size: 38,
           onPressed: windowManager.minimize,
         ),
         const SizedBox(width: 10),
@@ -1167,7 +1167,7 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
           icon: fullScreen || _maximized
               ? Icons.filter_none
               : Icons.crop_square,
-          size: 32,
+          size: 38,
           onPressed: fullScreen
               ? widget.controller.leaveFullScreen
               : _maximized
@@ -3464,8 +3464,8 @@ class _EmptyChat extends StatelessWidget {
   }
 }
 
-/// Back down to the newest message, while scrolled up from it: square, in
-/// the pinned prompt's colours.
+/// Back down to the newest message, while scrolled up from it: a little
+/// wider than tall, in the pinned prompt's colours.
 class _ToBottom extends StatelessWidget {
   const _ToBottom({required this.onTap});
 
@@ -3481,7 +3481,7 @@ class _ToBottom extends StatelessWidget {
         customBorder: _chipShape,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           child: Icon(
             Icons.keyboard_double_arrow_down_rounded,
             size: 18,
