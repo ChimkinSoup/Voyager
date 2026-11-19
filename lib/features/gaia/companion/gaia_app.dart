@@ -205,9 +205,25 @@ class _GaiaAppState extends State<GaiaApp> {
         decoration: gaiaFloating(colors, radius: GaiaRadius.row),
         waitDuration: const Duration(milliseconds: 400),
       ),
+      // Squared off with the composer's corners, as GaiaButton is.
+      iconButtonTheme: IconButtonThemeData(
+        style: theme.iconButtonTheme.style?.copyWith(
+          shape: const WidgetStatePropertyAll(_chipShape),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: theme.textButtonTheme.style?.copyWith(
+          shape: const WidgetStatePropertyAll(_chipShape),
+        ),
+      ),
     );
   }
 }
+
+/// A button's shape: square, with the composer's corners.
+const _chipShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(GaiaRadius.chip)),
+);
 
 /// The routes pushed over the chat's: dialogs and menus.
 class _Popups extends NavigatorObserver {
@@ -3448,7 +3464,7 @@ class _EmptyChat extends StatelessWidget {
   }
 }
 
-/// Back down to the newest message, while scrolled up from it: round, in
+/// Back down to the newest message, while scrolled up from it: square, in
 /// the pinned prompt's colours.
 class _ToBottom extends StatelessWidget {
   const _ToBottom({required this.onTap});
@@ -3460,9 +3476,9 @@ class _ToBottom extends StatelessWidget {
     final theme = Theme.of(context);
     return Material(
       color: gaiaPromptColor(theme),
-      shape: const CircleBorder(),
+      shape: _chipShape,
       child: InkWell(
-        customBorder: const CircleBorder(),
+        customBorder: _chipShape,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(8),
@@ -6837,7 +6853,7 @@ class _UsageRing extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(10),
       child: InkWell(
-        customBorder: const CircleBorder(),
+        customBorder: _chipShape,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(margin),

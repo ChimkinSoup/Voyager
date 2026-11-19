@@ -32,7 +32,8 @@ class GaiaAmbient extends InheritedWidget {
 /// cursor comes within [_reach] of the button, the light swings round to
 /// face it and follows it, a tint of the accent; over the button, it centres
 /// on the cursor, widens, and turns the accent at full saturation. Squared
-/// off with a [label], or round with only an [icon]. A [color] stands in for
+/// off with a [label], or square with only an [icon]; either way its
+/// corners are the composer's, [GaiaRadius.chip]. A [color] stands in for
 /// the accent and tints the label, as Cancel's red does.
 class GaiaButton extends StatefulWidget {
   const GaiaButton({
@@ -52,7 +53,7 @@ class GaiaButton extends StatefulWidget {
   final String? label;
   final IconData? icon;
 
-  /// The height, and a round button's width.
+  /// The height, and an icon-only button's width.
   final double size;
 
   /// The light's colour and the label's; the accent and white when null.
@@ -65,7 +66,7 @@ class GaiaButton extends StatefulWidget {
   /// for small buttons there can be many of, as on each attachment.
   final bool still;
 
-  /// The corner radius; when null, 6 squared off, or half [size] round.
+  /// The corner radius; [GaiaRadius.chip] when null.
   final double? radius;
 
   @override
@@ -97,11 +98,11 @@ class _GaiaButtonState extends State<GaiaButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final lit = _hovered || (_focused && enabled);
-    final round = widget.label == null;
-    final outer = widget.radius ?? (round ? widget.size / 2 : 6.0);
+    final square = widget.label == null;
+    final outer = widget.radius ?? GaiaRadius.chip;
     final iconSize = widget.size * 0.45;
     final foreground = widget.color ?? Colors.white;
-    final content = round
+    final content = square
         ? Icon(widget.icon, size: iconSize, color: foreground)
         : Row(
             mainAxisSize: MainAxisSize.min,
@@ -122,7 +123,7 @@ class _GaiaButtonState extends State<GaiaButton> {
           );
     final inner = Container(
       alignment: Alignment.center,
-      padding: round ? null : EdgeInsets.symmetric(horizontal: widget.padding),
+      padding: square ? null : EdgeInsets.symmetric(horizontal: widget.padding),
       child: content,
     );
     final Widget ring;
@@ -178,17 +179,17 @@ class _GaiaButtonState extends State<GaiaButton> {
           opacity: enabled ? 1 : 0.5,
           child: AnimatedScale(
             duration: const Duration(milliseconds: 100),
-            // A round one is small: the same press would hardly show.
+            // A square one is small: the same press would hardly show.
             scale: !_pressed
                 ? 1
-                : round
+                : square
                 ? 0.94
                 : 0.98,
             child: SizedBox(
               height: widget.size,
-              width: round ? widget.size : null,
+              width: square ? widget.size : null,
               // As wide as its label, unless made wider.
-              child: round ? ring : IntrinsicWidth(child: ring),
+              child: square ? ring : IntrinsicWidth(child: ring),
             ),
           ),
         ),

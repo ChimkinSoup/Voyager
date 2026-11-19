@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The header's offline icon, shown once the next tier's API stops
 /// answering, as the shell's badge is once sync does. A click checks again.
@@ -27,7 +28,9 @@ class GaiaOfflineIcon extends StatelessWidget {
           'Click to check again.',
       child: InkWell(
         onTap: retrying ? null : onRetry,
-        customBorder: const CircleBorder(),
+        customBorder: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(GaiaRadius.chip)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(4),
           // Dimmed while the check is out, so a click visibly does

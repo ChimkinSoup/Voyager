@@ -54,7 +54,7 @@ abstract final class GaiaRadius {
   static const panel = 12.0;
 }
 
-/// The chat's header: room for the round buttons' shadows. A divider's 1
+/// The chat's header: room for the buttons' shadows. A divider's 1
 /// sits under it.
 const kGaiaHeaderHeight = 52.0;
 

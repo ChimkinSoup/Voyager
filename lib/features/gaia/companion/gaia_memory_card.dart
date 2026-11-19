@@ -3,6 +3,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// A memory the agent offered (GAIA_HLD.md §11), in its reply. Open, with
 /// [onRemember], it's an editor over [text], changed through [onEdit], that
@@ -150,7 +151,11 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
           if (onRemove != null)
             InkWell(
               onTap: onRemove,
-              customBorder: const CircleBorder(),
+              customBorder: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(
+                  Radius.circular(GaiaRadius.chip),
+                ),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(3),
                 child: Icon(
