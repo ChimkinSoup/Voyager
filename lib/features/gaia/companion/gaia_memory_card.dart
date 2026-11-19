@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
+import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
@@ -97,20 +98,18 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
     ];
     final box = _addKey.currentContext?.findRenderObject() as RenderBox?;
     if (choices.isEmpty || box == null || !mounted) return;
-    final at = box.localToGlobal(Offset(0, box.size.height));
-    final picked = await showMenu<GaiaTopicLine>(
-      context: context,
-      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
-      items: [
-        for (final topic in choices)
-          PopupMenuItem(value: topic, height: 32, child: Text(topic.path)),
-      ],
-    );
-    // Its topics now, not as they were when the menu was asked for.
-    final now = widget.filing?.topics ?? topics;
-    if (picked != null && mounted && !now.any((had) => had.id == picked.id)) {
-      widget.onTopics?.call([...now, picked]);
-    }
+    showGaiaMenu(context, box.localToGlobal(Offset(0, box.size.height)), [
+      for (final topic in choices)
+        GaiaMenuItem(
+          label: topic.path,
+          onPressed: () {
+            // Its topics now, not as they were when the menu was opened.
+            final now = widget.filing?.topics ?? topics;
+            if (!mounted || now.any((had) => had.id == topic.id)) return;
+            widget.onTopics?.call([...now, topic]);
+          },
+        ),
+    ]);
   }
 
   Widget _topics(ThemeData theme) {
@@ -123,50 +122,17 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
     );
     Widget chip(
       Widget text, {
+      Key? key,
       VoidCallback? onTap,
       VoidCallback? onRemove,
       String? tooltip,
       bool filled = false,
-    }) => Container(
-      constraints: const BoxConstraints(maxWidth: 260),
-      padding: EdgeInsets.only(left: 8, right: onRemove == null ? 8 : 2),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        color: filled
-            ? theme.colorScheme.primary.withValues(alpha: 0.12)
-            : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: InkWell(
-              onTap: onTap,
-              child: tooltip == null
-                  ? text
-                  : Tooltip(message: tooltip, child: text),
-            ),
-          ),
-          if (onRemove != null)
-            InkWell(
-              onTap: onRemove,
-              customBorder: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(
-                  Radius.circular(GaiaRadius.chip),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: Icon(
-                  Icons.close,
-                  size: 10,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-        ],
-      ),
+    }) => _TopicChip(
+      key: key,
+      onTap: onTap,
+      onRemove: onRemove,
+      filled: filled,
+      child: tooltip == null ? text : Tooltip(message: tooltip, child: text),
     );
     return Wrap(
       spacing: 4,
@@ -195,7 +161,8 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
           ),
         if (widget.topicChoices != null)
           chip(
-            Text('+ Topic', key: _addKey, style: label),
+            Text('+ Topic', style: label),
+            key: _addKey,
             onTap: () => _addTopic(filing.topics),
           ),
       ],
@@ -310,6 +277,88 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// A topic on the card: squared off with the composer's corners, its edge
+/// lit in the accent while hovered, as a still [GaiaButton]'s is. [onTap]
+/// takes a click anywhere on it but its ×, which is [onRemove]'s.
+class _TopicChip extends StatefulWidget {
+  const _TopicChip({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onRemove,
+    this.filled = false,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
+  final bool filled;
+
+  @override
+  State<_TopicChip> createState() => _TopicChipState();
+}
+
+class _TopicChipState extends State<_TopicChip> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final onRemove = widget.onRemove;
+    return MouseRegion(
+      cursor: widget.onTap == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: GaiaMotion.quick,
+          constraints: const BoxConstraints(maxWidth: 260),
+          padding: EdgeInsets.only(left: 8, right: onRemove == null ? 8 : 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
+            border: Border.all(
+              color: _hovered
+                  ? HSLColor.fromColor(
+                      colors.primary,
+                    ).withSaturation(1).toColor()
+                  : colors.outlineVariant,
+            ),
+            color: widget.filled || _hovered
+                ? colors.primary.withValues(alpha: widget.filled ? 0.12 : 0.06)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: widget.child),
+              if (onRemove != null)
+                InkWell(
+                  onTap: onRemove,
+                  customBorder: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(
+                      Radius.circular(GaiaRadius.chip),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(
+                      Icons.close,
+                      size: 10,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
