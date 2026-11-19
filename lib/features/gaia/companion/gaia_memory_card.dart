@@ -89,6 +89,11 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
 
   final _addKey = GlobalKey();
 
+  /// The + Topic menu, and whether it was open as the button was pressed:
+  /// that press closes it, and mustn't open it again.
+  ContextMenuController? _menu;
+  var _wasOpen = false;
+
   /// A menu of the topics it isn't in, by [_addKey]'s button; the one
   /// picked is added.
   Future<void> _addTopic(List<GaiaTopicLine> topics) async {
@@ -98,18 +103,22 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
     ];
     final box = _addKey.currentContext?.findRenderObject() as RenderBox?;
     if (choices.isEmpty || box == null || !mounted) return;
-    showGaiaMenu(context, box.localToGlobal(Offset(0, box.size.height)), [
-      for (final topic in choices)
-        GaiaMenuItem(
-          label: topic.path,
-          onPressed: () {
-            // Its topics now, not as they were when the menu was opened.
-            final now = widget.filing?.topics ?? topics;
-            if (!mounted || now.any((had) => had.id == topic.id)) return;
-            widget.onTopics?.call([...now, topic]);
-          },
-        ),
-    ]);
+    _menu = showGaiaMenu(
+      context,
+      box.localToGlobal(Offset(0, box.size.height)),
+      [
+        for (final topic in choices)
+          GaiaMenuItem(
+            label: topic.path,
+            onPressed: () {
+              // Its topics now, not as they were when the menu was opened.
+              final now = widget.filing?.topics ?? topics;
+              if (!mounted || now.any((had) => had.id == topic.id)) return;
+              widget.onTopics?.call([...now, topic]);
+            },
+          ),
+      ],
+    );
   }
 
   Widget _topics(ThemeData theme) {
@@ -160,10 +169,15 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             onRemove: () => widget.onNewTopic?.call(false),
           ),
         if (widget.topicChoices != null)
-          chip(
-            Text('+ Topic', style: label),
-            key: _addKey,
-            onTap: () => _addTopic(filing.topics),
+          Listener(
+            onPointerDown: (_) => _wasOpen = _menu?.isShown ?? false,
+            child: chip(
+              Text('+ Topic', style: label),
+              key: _addKey,
+              onTap: () {
+                if (!_wasOpen) _addTopic(filing.topics);
+              },
+            ),
           ),
       ],
     );

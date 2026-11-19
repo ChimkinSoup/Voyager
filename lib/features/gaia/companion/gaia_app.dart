@@ -6674,7 +6674,7 @@ class _ComposerStatus extends StatelessWidget {
                       'could send screen text elsewhere, or be steered by it.'
                 : 'Can see screen: off',
             child: InkWell(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(GaiaRadius.chip),
               onTap: controller.toggleSeeScreen,
               child: Padding(
                 padding: const EdgeInsets.all(_UsageRing.margin),
@@ -6706,7 +6706,7 @@ class _ComposerStatus extends StatelessWidget {
             },
             child: Builder(
               builder: (button) => InkWell(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(GaiaRadius.chip),
                 // At the button, not the pointer, so Enter and Space open
                 // it too.
                 onTap: () {
