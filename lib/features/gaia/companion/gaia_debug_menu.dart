@@ -498,8 +498,9 @@ class _DebugMenu extends StatelessWidget {
         heading('Memory card'),
         Text(
           'The card memory_propose puts in a reply: edit the text, then '
-          'Remember or Dismiss. Here they only change the card; nothing is '
-          'saved.',
+          'Remember or Dismiss. Its topics are made up: drop one with its ×, '
+          'or add one back with + Topic. Here they only change the card; '
+          'nothing is saved.',
           style: muted,
         ),
         const GaiaMemoryCardPreview(),
@@ -1629,8 +1630,20 @@ class _GaiaMemoryCardPreviewState extends State<GaiaMemoryCardPreview> {
     text: 'Prefers green tea with no sugar',
   );
 
+  // Made-up topics, so the chips and their × show.
+  static const _topics = <GaiaTopicLine>[
+    (id: 'preview-food', path: 'Food/Drinks'),
+    (id: 'preview-habits', path: 'Habits'),
+  ];
+  static const _choices = <GaiaTopicLine>[
+    ..._topics,
+    (id: 'preview-health', path: 'Health'),
+  ];
+
   var _memory = _offered;
   var _text = _offered.text;
+  var _filed = _topics;
+  bool? _newTopic;
 
   // A new key on reset, so the editor starts over.
   var _shows = 0;
@@ -1657,6 +1670,10 @@ class _GaiaMemoryCardPreviewState extends State<GaiaMemoryCardPreview> {
             onEdit: (text) => _text = text,
             onRemember: (_) => _decide(GaiaCardState.accepted),
             onDismiss: () => _decide(GaiaCardState.rejected),
+            filing: (topics: _filed, suggested: 'Tea', newTopic: _newTopic),
+            onTopics: (topics) => setState(() => _filed = topics),
+            onNewTopic: (taken) => setState(() => _newTopic = taken),
+            topicChoices: () async => _choices,
           ),
         ),
         const SizedBox(height: 8),
@@ -1668,6 +1685,8 @@ class _GaiaMemoryCardPreviewState extends State<GaiaMemoryCardPreview> {
             onPressed: () => setState(() {
               _memory = _offered;
               _text = _offered.text;
+              _filed = _topics;
+              _newTopic = null;
               _shows++;
             }),
           ),

@@ -759,7 +759,7 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 12),
               GaiaButton(
                 icon: Icons.view_sidebar_outlined,
-                size: 32,
+                size: 34,
                 onPressed: toggle,
               ),
               const SizedBox(width: 10),
@@ -1863,7 +1863,7 @@ class _SidebarState extends State<_Sidebar> {
                 padding: const EdgeInsets.only(right: 10),
                 child: GaiaButton(
                   icon: Icons.search,
-                  size: 32,
+                  size: 34,
                   onPressed: () => showGaiaSearch(context, controller),
                 ),
               ),
