@@ -96,6 +96,35 @@ void main() {
     expect(ticking(tester), isFalse);
   });
 
+  testWidgets('turning fast, steps more often, still not every frame', (
+    tester,
+  ) async {
+    active = ValueNotifier(false);
+    addTearDown(active.dispose);
+    // 45°/min over 800x600: the farthest stars move about 13 px/s, so a
+    // step every 40 ms or so keeps each under half a pixel.
+    await tester.pumpWidget(
+      GaiaStarfield(
+        active: active,
+        rotation: 45,
+        child: const SizedBox.expand(),
+      ),
+    );
+    active.value = true;
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    final stars = tester.renderObject(find.byType(CustomPaint).first);
+    await tester.pump(const Duration(milliseconds: 15), EnginePhase.build);
+    expect(stars.debugNeedsPaint, isTrue);
+    await tester.pump();
+
+    active.value = false;
+    await tester.pump();
+    expect(ticking(tester), isFalse);
+  });
+
   testWidgets('ticks every frame only while leaning to catch the cursor', (
     tester,
   ) async {

@@ -439,8 +439,8 @@ class _GaiaShell extends StatelessWidget {
                 Positioned.fill(
                   child: GaiaStarfield(
                     active: controller.focused,
-                    // Turning on, slower, once the sky has gone.
-                    rotation: controller.debug.skyRotation * kGaiaFilledSpin,
+                    // Turning on as the sky did, once it has gone.
+                    rotation: controller.debug.skyRotation,
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
                     left: floater ? null : controller.sidebar.edge,
@@ -449,7 +449,7 @@ class _GaiaShell extends StatelessWidget {
                       shown:
                           controller.messages.isEmpty &&
                           controller.messagesLoaded,
-                      // Anything else, like opening another chat, blinks
+                      // Anything else, like opening another chat, fades
                       // the sky out instead.
                       sent: controller.justSent,
                       rotation: controller.debug.skyRotation,
@@ -463,6 +463,7 @@ class _GaiaShell extends StatelessWidget {
                       auroraExit: controller.debug.skyAuroraExit,
                       satellite: controller.debug.skySatellite,
                       exit: controller.debug.skyExit,
+                      plainBlink: controller.debug.skyPlainBlink,
                       exitTime: controller.debug.skyExitTime,
                       exitTest: controller.debug.skyExitTest,
                       top: kGaiaHeaderHeight + 1,
@@ -491,9 +492,14 @@ class _GaiaShell extends StatelessWidget {
                   Positioned(
                     top: kGaiaHeaderHeight + 12,
                     right: 12,
-                    child: GaiaSkyPanel(
-                      debug: controller.debug,
-                      onTour: () => unawaited(controller.playSkyTour()),
+                    // Kept within the window, scrolling past its foot.
+                    bottom: 12,
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: GaiaSkyPanel(
+                        debug: controller.debug,
+                        onTour: () => unawaited(controller.playSkyTour()),
+                      ),
                     ),
                   ),
                 if (controller.debug.showFps)
@@ -2311,6 +2317,11 @@ class _MessagesState extends State<_Messages>
   /// quickly, before the chat's messages rise in over it.
   var _greetingQuick = false;
 
+  /// The height the greeting was last centred in while shown. Leaving, it
+  /// keeps to it, so the composer changing under it, as another chat's
+  /// opens, doesn't move it.
+  var _greetingHeight = 0.0;
+
   /// The messages coming into view as a chat opens: those first built,
   /// newest first, each in its [_enterSlots] order rising in a little
   /// after the one below. Only those, not the whole chat; nothing scrolled
@@ -2917,6 +2928,7 @@ class _MessagesState extends State<_Messages>
           _greeting = widget.controller.currentChatId ?? GaiaDraft.newChatId;
           _greetingLeaving = null;
           _greetingLine = widget.controller.greetingFor(_greeting!);
+          _greetingHeight = constraints.maxHeight;
         } else if (_greeting != null) {
           // Sent from, or another chat opened: it goes with the sky. Only
           // where it's shown, and moving: otherwise nothing would see it
@@ -3072,8 +3084,13 @@ class _MessagesState extends State<_Messages>
                 // nothing at all: only where there's room for it. Rising in
                 // with the sky, and across from one new chat's line to
                 // another's. Left, it stays as the sky's exit passes it,
-                // under the same key so it isn't swapped out.
-                Positioned.fill(
+                // under the same key so it isn't swapped out, and where it
+                // was.
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: empty ? constraints.maxHeight : _greetingHeight,
                   child: AnimatedSwitcher(
                     duration: GaiaMotion.move,
                     reverseDuration: GaiaMotion.quick,

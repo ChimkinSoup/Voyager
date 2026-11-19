@@ -5,10 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// The share of the [GaiaSky]'s turning that the starfield keeps once the
-/// sky has gone, so the stars turn on, slower, behind a filled chat.
-const kGaiaFilledSpin = 0.25;
-
 /// The starfield behind Gaia's chat: dim stars turning slowly about a pole
 /// above the middle, leaning towards the cursor while it's over them. It
 /// ticks only while [active] — Gaia on screen and in front — and turning or
@@ -85,9 +81,13 @@ const _areaPerStar = 6000.0;
 const _maxLean = 0.03;
 
 /// How often the stars step while only turning, their lean caught up with
-/// the cursor: they move well under a pixel a second, so a step this often
+/// the cursor, if a step moves them no more than [_maxStepMove]: then it
 /// looks the same as one every frame, and the window is still between.
+/// Turning faster, they step more often, just often enough.
 const _turnStep = Duration(milliseconds: 500);
+
+/// Logical pixels the farthest stars may move in one [_turnStep].
+const _maxStepMove = 0.5;
 
 class _GaiaStarfieldState extends State<GaiaStarfield>
     with SingleTickerProviderStateMixin {
@@ -166,7 +166,12 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
     _stars.step(dt);
     if (!_stars.settled) return;
     _ticker.stop();
-    _wake = Timer(_turnStep, () {
+    // No step moving them more than [_maxStepMove].
+    final step = min(
+      _turnStep.inMicroseconds / 1e6,
+      _maxStepMove / _stars.drift,
+    );
+    _wake = Timer(Duration(microseconds: (step * 1e6).round()), () {
       _wake = null;
       _sync();
     });
@@ -239,6 +244,10 @@ class _Stars extends ChangeNotifier {
 
   /// Radians a second the stars turn by themselves.
   var rate = 0.0;
+
+  /// Logical pixels a second the farthest stars, at the bottom corners,
+  /// move as they turn by themselves.
+  double get drift => rate * Offset(size.width / 2, size.height * 1.5).distance;
 
   /// A sky turned them since the last step, so they don't turn themselves.
   var _driven = false;

@@ -75,40 +75,44 @@ class GaiaDebug extends ChangeNotifier {
   var skyPanel = false;
 
   /// Degrees a minute the empty chat's sky turns.
-  var skyRotation = 6.0;
+  var skyRotation = 45.0;
 
   /// The sky's stars per million square logical pixels.
-  var skyStars = 320.0;
+  var skyStars = 300.0;
 
   /// How deeply its stars shimmer, 0 to 1.
-  var skyTwinkle = 0.5;
+  var skyTwinkle = 0.7;
 
   /// Stars a second that sparkle into a four-pointed glint.
-  var skySparkles = 0.6;
+  var skySparkles = 8.0;
 
   /// Logical pixels a second the pen tracing a constellation moves.
-  var skyTraceSpeed = 80.0;
+  var skyTraceSpeed = 150.0;
 
   /// Once traced, a constellation's figure is sketched over it.
   var skyFigures = false;
 
   /// The average seconds from one meteor or satellite to the next.
-  var skyEventInterval = 15.0;
+  var skyEventInterval = 10.0;
 
   /// The aurora's strength, 0 to 1.
-  var skyAurora = 0.35;
+  var skyAurora = 0.8;
 
   /// How the aurora goes as the sky leaves.
-  var skyAuroraExit = GaiaAuroraExit.rise;
+  var skyAuroraExit = GaiaAuroraExit.ebb;
 
   /// How a satellite crossing the sky looks.
-  var skySatellite = GaiaSatellite.dot;
+  var skySatellite = GaiaSatellite.trail;
 
   /// How the sky leaves once a prompt is sent.
-  var skyExit = GaiaSkyExit.warp;
+  var skyExit = GaiaSkyExit.blinkOut;
+
+  /// Blinking out, each star simply fades, without a last glint, and the
+  /// starfield behind without brightening.
+  var skyPlainBlink = true;
 
   /// Seconds its exit lasts.
-  var skyExitTime = 1.2;
+  var skyExitTime = 1.0;
 
   /// Bumped by the sky panel's Play exit, which plays the exit in place.
   /// Not kept.
@@ -172,6 +176,7 @@ class GaiaDebug extends ChangeNotifier {
           GaiaAuroraExit.values.asNameMap()[json['skyAuroraExit']] ??
           skyAuroraExit;
       skyExit = GaiaSkyExit.values.asNameMap()[json['skyExit']] ?? skyExit;
+      skyPlainBlink = json['skyPlainBlink'] != false;
       skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
@@ -263,6 +268,9 @@ class GaiaDebug extends ChangeNotifier {
 
   Future<void> setSkyExit(GaiaSkyExit value) => _set(() => skyExit = value);
 
+  Future<void> setSkyPlainBlink(bool value) =>
+      _set(() => skyPlainBlink = value);
+
   Future<void> setSkyExitTime(double value, {bool save = true}) =>
       _set(() => skyExitTime = value, save: save);
 
@@ -335,6 +343,7 @@ class GaiaDebug extends ChangeNotifier {
           'skySatellite': skySatellite.name,
           'skyAuroraExit': skyAuroraExit.name,
           'skyExit': skyExit.name,
+          'skyPlainBlink': skyPlainBlink,
           'skyExitTime': skyExitTime,
         }),
       );

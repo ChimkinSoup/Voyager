@@ -101,18 +101,18 @@ void main() {
     expect(ticking(tester), isFalse);
   });
 
-  testWidgets('blinks out when another chat opens, whatever its exit', (
+  testWidgets('fades quickly when another chat opens, whatever its exit', (
     tester,
   ) async {
     await pumpSky(tester, isActive: true);
     await frames(tester, 3);
 
-    // Not sent, so not a warp: a blink-out, over the exit's time.
+    // Not sent, so no exit: a quick fade, well within the exit's time.
     await tester.pumpWidget(sky(shown: false));
     active.value = false;
-    await frames(tester, 0.9);
-    expect(ticking(tester), isTrue);
     await frames(tester, 0.2);
+    expect(ticking(tester), isTrue);
+    await frames(tester, 0.3);
     expect(ticking(tester), isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -141,6 +141,26 @@ void main() {
     await frames(tester, 0.9);
     expect(ticking(tester), isTrue);
     await frames(tester, 0.2);
+    expect(ticking(tester), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('back before it has faded, fades in rather than blinks', (
+    tester,
+  ) async {
+    active = ValueNotifier(false);
+    addTearDown(active.dispose);
+    await tester.pumpWidget(sky(exit: GaiaSkyExit.blinkOut));
+    await frames(tester, 1.1);
+    expect(ticking(tester), isFalse);
+
+    // Another chat opened, and left again partway through the fade.
+    await tester.pumpWidget(sky(shown: false, exit: GaiaSkyExit.blinkOut));
+    await frames(tester, 0.1);
+    await tester.pumpWidget(sky(exit: GaiaSkyExit.blinkOut));
+    // Fading back up the little it lost, not blinking in over a second
+    // from nothing.
+    await frames(tester, 0.4);
     expect(ticking(tester), isFalse);
     expect(tester.takeException(), isNull);
   });
