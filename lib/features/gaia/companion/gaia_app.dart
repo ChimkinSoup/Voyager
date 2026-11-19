@@ -849,7 +849,7 @@ class _Header extends StatelessWidget {
             if (!floater) _WindowButtons(controller: controller),
             GaiaButton(
               icon: Icons.close,
-              size: 38,
+              size: 34,
               onPressed: controller.dismiss,
             ),
             const SizedBox(width: 12),
@@ -1159,7 +1159,7 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
       children: [
         GaiaButton(
           icon: Icons.remove,
-          size: 38,
+          size: 34,
           onPressed: windowManager.minimize,
         ),
         const SizedBox(width: 10),
@@ -1167,7 +1167,7 @@ class _WindowButtonsState extends State<_WindowButtons> with WindowListener {
           icon: fullScreen || _maximized
               ? Icons.filter_none
               : Icons.crop_square,
-          size: 38,
+          size: 34,
           onPressed: fullScreen
               ? widget.controller.leaveFullScreen
               : _maximized
