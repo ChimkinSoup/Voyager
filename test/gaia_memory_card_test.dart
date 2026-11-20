@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -205,7 +207,6 @@ void main() {
     // Declined, a click brings it back, undecided.
     await tester.tap(find.text('New topic: Vets under Pets'));
     expect(newTopic, isNull);
-    newTopic = true;
 
     // Only the topics it isn't in are offered.
     // Pumped in steps: the editor's caret blinks for ever.
@@ -242,6 +243,58 @@ void main() {
       ),
     );
     expect(find.text('Languages'), findsNothing);
+  });
+
+  testWidgets('+ Topic: a second click closes its menu, Enter after it '
+      'opens it, and a press while it fetches opens only one', (tester) async {
+    var asked = 0;
+    Completer<List<GaiaTopicLine>>? fetch;
+    await tester.pumpWidget(
+      host(
+        GaiaMemoryCard(
+          memory: _tea,
+          onRemember: (_) {},
+          filing: (topics: const [], suggested: null, newTopic: null),
+          onTopics: (_) {},
+          topicChoices: () {
+            asked++;
+            fetch = Completer();
+            return fetch!.future;
+          },
+        ),
+      ),
+    );
+    // Pumped in steps: the editor's caret blinks for ever.
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    const choices = [(id: 'lang', path: 'Languages')];
+
+    // Two presses while the choices are fetched ask for them once.
+    await tester.tap(find.text('+ Topic'));
+    await tester.tap(find.text('+ Topic'));
+    expect(asked, 1);
+    fetch!.complete(choices);
+    await settle();
+    expect(find.text('Languages'), findsOneWidget);
+
+    // Open, a click on + Topic closes it and doesn't open it again.
+    await tester.tap(find.text('+ Topic'));
+    await settle();
+    expect(find.text('Languages'), findsNothing);
+    expect(asked, 1);
+
+    // Enter on it, after that click, still opens it.
+    Focus.of(tester.element(find.text('+ Topic'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(asked, 2);
+    fetch!.complete(choices);
+    await settle();
+    expect(find.text('Languages'), findsOneWidget);
   });
 
   testWidgets('the recall chip counts what was given, opens to list each '

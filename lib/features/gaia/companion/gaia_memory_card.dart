@@ -186,7 +186,10 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
               label: '+ Topic',
               style: label,
               onTap: () {
-                if (!_wasOpen) _addTopic(filing.topics);
+                // Read once: Enter or Space, later, has no press to set it.
+                final wasOpen = _wasOpen;
+                _wasOpen = false;
+                if (!wasOpen) _addTopic(filing.topics);
               },
             ),
           ),
