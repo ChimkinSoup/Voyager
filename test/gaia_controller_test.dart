@@ -326,7 +326,8 @@ class _Main {
         );
         return filing == null ? null : gaiaMemoryFilingToJson(filing);
       case 'memoryPrompt':
-        return memories.sessionPrompt();
+        final prompt = await memories.sessionPrompt();
+        return {'text': prompt.text, 'pinned': prompt.pinned};
       case 'memoryRecall':
         recallTexts.add(params['text']! as String);
         return gaiaRecallToJson(
@@ -335,6 +336,7 @@ class _Main {
             params['text']! as String,
             message: params['message'] as String? ?? '',
             recalled: [...?(params['recalled'] as List?)?.cast<String>()],
+            pinned: (params['pinned'] as List?)?.cast<String>(),
             projectId: params['projectId'] as String?,
           ),
         );

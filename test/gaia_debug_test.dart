@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// For scripts with no cards, which never call it.
@@ -371,5 +372,29 @@ void main() {
     await debug.setScriptedReplies(true);
     expect(debug.scriptFor('/msg1'), same(gaiaDebugScripts['/msg1']));
     expect(debug.scriptFor('hello'), same(gaiaDummyScript));
+  });
+
+  test('resetting the sky puts back only its defaults', () async {
+    final debug = GaiaDebug();
+    await debug.setSkyPanel(true);
+    await debug.setDummyMode(true);
+    await debug.setSkyRotation(3);
+    await debug.setSkyAuroraDrift(9);
+    await debug.setSkyRareAurora(true);
+    await debug.setSkyRareColours(GaiaRareAurora.gold);
+    await debug.setSkyShower(GaiaSkyShower.peak);
+    await debug.setSkyExit(GaiaSkyExit.warp);
+
+    await debug.resetSky();
+    final defaults = GaiaDebug();
+    expect(debug.skyRotation, defaults.skyRotation);
+    expect(debug.skyAuroraDrift, 2);
+    expect(debug.skyRareAurora, isFalse);
+    expect(debug.skyRareColours, isNull);
+    expect(debug.skyShower, GaiaSkyShower.calendar);
+    expect(debug.skyExit, defaults.skyExit);
+    // The rest of the debug settings are left as they were.
+    expect(debug.skyPanel, isTrue);
+    expect(debug.dummyMode, isTrue);
   });
 }

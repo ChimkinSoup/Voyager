@@ -338,6 +338,18 @@ void main() {
       ], isNot(anyOf(contains('marmoset'), contains('cpp'))));
     });
 
+    test('recalls one pinned since the session began, not one in its prompt',
+        () async {
+      await memories.pin('cpp', pinned: true);
+      final text = 'CS246 assignment: submit with marmoset, C++ clang-tidy';
+      final now = await memories.recall('loose', text, pinned: const []);
+      expect([for (final m in now.candidates) m.id], contains('cpp'));
+      final started = await memories.recall('loose', text, pinned: ['cpp']);
+      expect([
+        for (final m in [...started.picks, ...started.candidates]) m.id,
+      ], isNot(contains('cpp')));
+    });
+
     test("ranks the chat's project's memories first", () async {
       final inTrip = (await memories.recall(
         'in-trip',
@@ -507,7 +519,7 @@ void main() {
         await memories.pin('a', pinned: false);
         await memories.pin('e', pinned: true);
         expect((await repository.getMemory('e'))!.pinned, isTrue);
-        expect(await memories.sessionPrompt(), contains('- ${'e' * 450}'));
+        expect((await memories.sessionPrompt()).text, contains('- ${'e' * 450}'));
       },
     );
 
@@ -522,7 +534,7 @@ void main() {
       );
       await repository.upsertMemory(_memory('new', 'n' * 1900));
       await memories.pin('new', pinned: true);
-      final prompt = await memories.sessionPrompt();
+      final prompt = (await memories.sessionPrompt()).text;
       expect(prompt, contains('n' * 1900));
       expect(prompt, isNot(contains('o' * 1900)));
     });

@@ -3971,6 +3971,7 @@ class GaiaController extends ChangeNotifier {
       session = GaiaAgentSession(
         sessionId: pending.sourceSessionId,
         lastSeq: pending.lastSeq,
+        pinned: pending.pinned,
       );
       endAt = pending.keepAt;
     }
@@ -4027,6 +4028,7 @@ class GaiaController extends ChangeNotifier {
       sourceSessionId: session.sessionId,
       keepAt: keepAt,
       lastSeq: lastSeq,
+      pinned: session.pinned,
     );
   }
 
@@ -4730,6 +4732,8 @@ class GaiaController extends ChangeNotifier {
                   account: account.id,
                 ),
                 sessionId: result.sessionId,
+                // A fork's are its source's; handed over, it's given none.
+                pinned: fork != null ? fork.pinned : const [],
               )
             : null,
       );
@@ -4896,6 +4900,7 @@ class GaiaController extends ChangeNotifier {
       sourceSessionId: session.sessionId,
       keepAt: keepAt,
       lastSeq: anchorSeq,
+      pinned: session.pinned,
     );
   }
 
@@ -5039,6 +5044,7 @@ class GaiaController extends ChangeNotifier {
             sourceSessionId: session.sessionId,
             keepAt: keepAt,
             lastSeq: btw.anchorSeq + 2,
+            pinned: session.pinned,
           );
         }
       } on FileSystemException catch (error) {
@@ -6198,6 +6204,8 @@ class GaiaController extends ChangeNotifier {
     // The memories the session has been given (GAIA_MEMORY_TOPICS_HLD.md
     // §4.4), and this turn's, shown on the reply as a chip (§4.5).
     var toldRecalled = const <String>[];
+    // The pins its system prompt carries (§4.1), null when not known.
+    List<String>? toldPins;
     GaiaRecallPart? recallPart;
     List<GaiaPart> withRecall(List<GaiaPart> parts) => [?recallPart, ...parts];
     // Here at once, so a next message straight away resumes it; the main
@@ -6220,6 +6228,7 @@ class GaiaController extends ChangeNotifier {
                     project: toldProject,
                     folder: toldFolder,
                     recalled: toldRecalled,
+                    pinned: toldPins,
                   ),
                 },
         );
@@ -6235,6 +6244,7 @@ class GaiaController extends ChangeNotifier {
           'project': toldProject,
           'folder': toldFolder,
           'recalled': toldRecalled,
+          'pinned': toldPins,
         }),
       );
     }
@@ -6259,6 +6269,13 @@ class GaiaController extends ChangeNotifier {
       if (prompt.isNotEmpty) prompt,
       if (files.isNotEmpty) gaiaFilesPreamble(files),
     ].join('\n\n');
+    // A new session's memory prompt, noting the pins it carries.
+    Future<String> newSessionPrompt() async {
+      final prompt = await _memoryPrompt();
+      toldPins = prompt.pinned;
+      return prompt.text;
+    }
+
     Future<String> handedOver() async {
       if (script != null || agent == null || runner == null) return askedText;
       // The chat's project, on a session's first turn and the first after a
@@ -6268,6 +6285,8 @@ class GaiaController extends ChangeNotifier {
       toldProject = session?.project;
       toldFolder = session?.folder;
       toldRecalled = session?.recalled ?? const [];
+      // A fork's first session carries its source's.
+      toldPins = fork != null ? fork.pinned : session?.pinned;
       // A retry's chip shows what its own session was given.
       recallPart = null;
       final project = this.project(_chat(chatId)?.projectId);
@@ -6293,7 +6312,13 @@ class GaiaController extends ChangeNotifier {
       final recalled = native != null
           ? const <GaiaRecalledMemory>[]
           : await (early ??
-                _recall(chatId, question.seq, prompt, toldRecalled));
+                _recall(
+                  chatId,
+                  question.seq,
+                  prompt,
+                  toldRecalled,
+                  pinned: toldPins,
+                ));
       // Shown on the reply, or a retry's earlier chip taken off it.
       if (recalled.isNotEmpty || reply.parts.firstOrNull is GaiaRecallPart) {
         toldRecalled = [
@@ -6701,7 +6726,7 @@ class GaiaController extends ChangeNotifier {
               // A resumed session keeps the pins and topics it started
               // with, and a fork its source's.
               sessionInstructions: session == null && fork == null
-                  ? await _memoryPrompt()
+                  ? await newSessionPrompt()
                   : '',
               account: account,
               promptId: question.id,
@@ -6744,7 +6769,7 @@ class GaiaController extends ChangeNotifier {
           images: imageInputs,
           directories: directories,
           tools: tools,
-          sessionInstructions: await _memoryPrompt(),
+          sessionInstructions: await newSessionPrompt(),
           account: account,
           promptId: question.id,
           onEvent: onEvent,
@@ -7160,19 +7185,24 @@ class GaiaController extends ChangeNotifier {
 
   /// What a new session's system prompt carries of the memories
   /// (GAIA_MEMORY_TOPICS_HLD.md §4.1): the pins and the topic list as they
-  /// are now, which the session keeps. Empty when the main instance can't
-  /// say.
-  Future<String> _memoryPrompt() async {
+  /// are now, which the session keeps, and the pinned memories' ids. Empty
+  /// when the main instance can't say.
+  Future<({String text, List<String> pinned})> _memoryPrompt() async {
     try {
-      return await _pipe.request('memoryPrompt') as String? ?? '';
+      final prompt = await _pipe.request('memoryPrompt') as Map?;
+      return (
+        text: prompt?['text'] as String? ?? '',
+        pinned: [...?(prompt?['pinned'] as List?)?.cast<String>()],
+      );
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] memory prompt: $error');
-      return '';
+      return (text: '', pinned: const <String>[]);
     }
   }
 
   /// The memories for [chatId]'s message [prompt] at [seq] that its session
-  /// wasn't given yet ([recalled]) (GAIA_MEMORY_TOPICS_HLD.md §4.2-§4.4),
+  /// wasn't given yet ([recalled]) nor carries pinned ([pinned], null for
+  /// those pinned now) (GAIA_MEMORY_TOPICS_HLD.md §4.2-§4.4),
   /// matched with the end of the reply before it too, so a vague follow-up
   /// still has context. With [GaiaDebug.recallPick] on, the utility model
   /// picks them on the chat's first message, and on a later one with a new
@@ -7182,8 +7212,9 @@ class GaiaController extends ChangeNotifier {
     String chatId,
     int seq,
     String prompt,
-    List<String> recalled,
-  ) async {
+    List<String> recalled, {
+    List<String>? pinned,
+  }) async {
     final last = (_messages[chatId] ?? const <GaiaMessage>[])
         .where(
           (message) =>
@@ -7208,6 +7239,7 @@ class GaiaController extends ChangeNotifier {
           'text': text,
           'message': prompt,
           'recalled': recalled,
+          'pinned': pinned,
           'projectId': chat?.projectId,
         }),
       );

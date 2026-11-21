@@ -308,7 +308,8 @@ Map<GaiaTier, String> gaiaTiersFromJson(Object? json) => {
 /// (GAIA_PROJECTS_HLD.md §5.2), null for none, with that project's [folder]
 /// as it was told ([gaiaProjectFolder]), and the memories it was given in
 /// `<gaia_memories>` since it started or last compacted
-/// (GAIA_MEMORY_TOPICS_HLD.md §4.4).
+/// (GAIA_MEMORY_TOPICS_HLD.md §4.4), and the pinned memories its system
+/// prompt carries (§4.1), null for a session recorded before that was kept.
 class GaiaAgentSession {
   const GaiaAgentSession({
     required this.sessionId,
@@ -316,6 +317,7 @@ class GaiaAgentSession {
     this.project,
     this.folder,
     this.recalled = const [],
+    this.pinned,
   });
 
   final String sessionId;
@@ -323,8 +325,9 @@ class GaiaAgentSession {
   final String? project;
   final String? folder;
   final List<String> recalled;
+  final List<String>? pinned;
 
-  // [project], [folder] and [recalled] go even when null or empty: the
+  // [project], [folder], [recalled] and [pinned] go even when null or empty: the
   // upload merges into the stored document, which would otherwise keep the
   // old ones (BUG-376).
   Map<String, Object?> toJson() => {
@@ -333,6 +336,7 @@ class GaiaAgentSession {
     'project': project,
     'folder': folder,
     'recalled': recalled,
+    'pinned': pinned,
   };
 
   factory GaiaAgentSession.fromJson(Map<String, Object?> json) =>
@@ -346,32 +350,43 @@ class GaiaAgentSession {
             for (final id in ids)
               if (id is String) id,
         ],
+        pinned: switch (json['pinned']) {
+          final List ids => [
+            for (final id in ids)
+              if (id is String) id,
+          ],
+          _ => null,
+        },
       );
 }
 
 /// A fork's native session, not made yet (GAIA_FORKING_HLD.md §5.3): its
 /// first send on [sessionKey]'s adapter forks [sourceSessionId], kept up to
 /// [keepAt] (Claude Code's entry, or Codex's turn), and knows the chat up to
-/// [lastSeq]. Only for [sessionKey]'s device, adapter and account; never
-/// synced.
+/// [lastSeq], with the pinned memories the source's system prompt carries
+/// ([GaiaAgentSession.pinned]), null when not known. Only for [sessionKey]'s
+/// device, adapter and account; never synced.
 class GaiaForkRecord {
   const GaiaForkRecord({
     required this.sessionKey,
     required this.sourceSessionId,
     required this.keepAt,
     required this.lastSeq,
+    this.pinned,
   });
 
   final String sessionKey;
   final String sourceSessionId;
   final String keepAt;
   final int lastSeq;
+  final List<String>? pinned;
 
   Map<String, Object?> toJson() => {
     'sessionKey': sessionKey,
     'sourceSessionId': sourceSessionId,
     'keepAt': keepAt,
     'lastSeq': lastSeq,
+    'pinned': pinned,
   };
 
   /// Null for anything else.
@@ -387,6 +402,13 @@ class GaiaForkRecord {
         sourceSessionId: sourceSessionId,
         keepAt: keepAt,
         lastSeq: lastSeq.toInt(),
+        pinned: switch ((json as Map)['pinned']) {
+          final List ids => [
+            for (final id in ids)
+              if (id is String) id,
+          ],
+          _ => null,
+        },
       ),
     _ => null,
   };
@@ -2471,20 +2493,39 @@ class GaiaBtw extends SoftDeletable {
 /// A side question's own CLI session (GAIA_BTW_HLD.md §2): [sessionId] on
 /// [sessionKey]'s device, adapter and account ([gaiaSessionKey]).
 class GaiaBtwSession {
-  const GaiaBtwSession({required this.sessionKey, required this.sessionId});
+  const GaiaBtwSession({
+    required this.sessionKey,
+    required this.sessionId,
+    this.pinned,
+  });
 
   final String sessionKey;
   final String sessionId;
 
+  /// The pinned memories its system prompt carries
+  /// ([GaiaAgentSession.pinned]), null when not known.
+  final List<String>? pinned;
+
   Map<String, Object?> toJson() => {
     'sessionKey': sessionKey,
     'sessionId': sessionId,
+    'pinned': pinned,
   };
 
   /// Null for anything else.
   static GaiaBtwSession? fromJson(Object? json) => switch (json) {
     {'sessionKey': final String sessionKey, 'sessionId': final String id} =>
-      GaiaBtwSession(sessionKey: sessionKey, sessionId: id),
+      GaiaBtwSession(
+        sessionKey: sessionKey,
+        sessionId: id,
+        pinned: switch ((json as Map)['pinned']) {
+          final List ids => [
+            for (final id in ids)
+              if (id is String) id,
+          ],
+          _ => null,
+        },
+      ),
     _ => null,
   };
 }

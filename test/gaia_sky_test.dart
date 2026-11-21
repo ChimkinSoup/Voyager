@@ -1,4 +1,9 @@
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' show PointMode;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 
@@ -11,7 +16,10 @@ void main() {
     int warpTest = 0,
     GaiaSkyExit exit = GaiaSkyExit.warp,
     GaiaAuroraExit auroraExit = GaiaAuroraExit.rise,
+    GaiaSatellite satellite = GaiaSatellite.dot,
+    double eventInterval = 15,
     bool reduced = false,
+    int restRate = 0,
     Widget child = const SizedBox.expand(),
   }) => MediaQuery(
     data: MediaQueryData(disableAnimations: reduced),
@@ -20,17 +28,19 @@ void main() {
       shown: shown,
       sent: warp,
       rotation: 6,
+      restRate: restRate,
       stars: 320,
       twinkle: 0.5,
       sparkles: 2,
       traceSpeed: 80,
       figures: true,
-      eventInterval: 15,
+      eventInterval: eventInterval,
       aurora: 0.35,
       auroraExit: auroraExit,
       exit: exit,
       exitTime: 1,
       exitTest: warpTest,
+      satellite: satellite,
       child: child,
     ),
   );
@@ -99,6 +109,55 @@ void main() {
     expect(ticking(tester), isTrue);
     await frames(tester, 0.2);
     expect(ticking(tester), isFalse);
+  });
+
+  // The sky's repaints, at its own boundary: one a step.
+  int skyPaints(WidgetTester tester) {
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find
+          .descendant(
+            of: find.byType(GaiaSky),
+            matching: find.byType(RepaintBoundary),
+          )
+          .first,
+    );
+    return boundary.debugSymmetricPaintCount +
+        boundary.debugAsymmetricPaintCount;
+  }
+
+  // Frames of 1 ms over [seconds], like a fast display's, for the sky to
+  // step on as few or as many of as it likes.
+  Future<int> stepsOver(WidgetTester tester, double seconds) async {
+    final before = skyPaints(tester);
+    for (var i = 0; i < (seconds * 1000).round(); i++) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    return skyPaints(tester) - before;
+  }
+
+  testWidgets('at rest, steps at its rest rate', (tester) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    await tester.pumpWidget(sky(restRate: 30));
+    // Faded in, every frame. Nothing quick follows until the first
+    // constellation, two seconds in.
+    expect(await stepsOver(tester, 0.2), greaterThan(150));
+    await frames(tester, 0.8);
+    expect(await stepsOver(tester, 0.5), inInclusiveRange(14, 18));
+
+    active.value = false;
+    await tester.pump();
+    expect(await stepsOver(tester, 0.1), 0);
+  });
+
+  testWidgets('leaving, steps every frame again at once', (tester) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    await tester.pumpWidget(sky(restRate: 30));
+    await frames(tester, 1);
+
+    await tester.pumpWidget(sky(shown: false, warp: true, restRate: 30));
+    expect(await stepsOver(tester, 0.1), greaterThan(95));
   });
 
   testWidgets('fades quickly when another chat opens, whatever its exit', (
@@ -231,6 +290,73 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('no star sparkles behind a greeting', (tester) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    await tester.pumpWidget(
+      sky(
+        eventInterval: 1e6,
+        child: const Center(
+          child: GaiaSkyClear(child: SizedBox(width: 300, height: 200)),
+        ),
+      ),
+    );
+    final box = tester.renderObject<RenderBox>(find.byType(GaiaSky));
+    final greeting = Rect.fromCenter(
+      center: box.size.center(Offset.zero),
+      width: 300,
+      height: 200,
+    );
+    // Sparkles are the sky's only white, softened shapes.
+    final behind = <Offset>[], beside = <Offset>[];
+    for (var i = 0; i < 300; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      final canvas = TestRecordingCanvas();
+      box.paint(TestRecordingPaintingContext(canvas), Offset.zero);
+      for (final call in canvas.invocations) {
+        if (call.invocation.memberName != #drawPath) continue;
+        final [path, paint] = call.invocation.positionalArguments;
+        final color = (paint as Paint).color;
+        if (paint.maskFilter == null ||
+            color.r != 1 ||
+            color.g != 1 ||
+            color.b != 1) {
+          continue;
+        }
+        final at = (path as Path).getBounds().center;
+        (greeting.inflate(30).contains(at) ? behind : beside).add(at);
+      }
+    }
+    expect(beside, isNotEmpty);
+    expect(behind, isEmpty);
+    active.value = false;
+  });
+
+  testWidgets('a clear fades as its greeting does', (tester) async {
+    await pumpSky(tester);
+    await tester.pumpWidget(
+      sky(
+        child: const Center(
+          child: GaiaSkyClear(
+            opacity: 0.25,
+            child: SizedBox(width: 200, height: 40),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final canvas = TestRecordingCanvas();
+    tester
+        .renderObject<RenderBox>(find.byType(GaiaSky))
+        .paint(TestRecordingPaintingContext(canvas), Offset.zero);
+    final clears = [
+      for (final call in canvas.invocations)
+        if (call.invocation.memberName == #drawRRect)
+          (call.invocation.positionalArguments[1] as Paint).color.a,
+    ];
+    expect(clears, [closeTo(0.25, 0.01)]);
+  });
+
   testWidgets('a greeting moved while the sky is still repaints it', (
     tester,
   ) async {
@@ -288,6 +414,233 @@ void main() {
     });
   }
 
+  testWidgets('keeps its edge fade as it starts to leave', (tester) async {
+    await pumpSky(tester, isActive: true);
+    await frames(tester, 1);
+
+    await tester.pumpWidget(
+      sky(shown: false, warp: true, exit: GaiaSkyExit.fade),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+
+    final box = tester.renderObject<RenderBox>(find.byType(GaiaSky));
+    final canvas = TestRecordingCanvas();
+    box.paint(TestRecordingPaintingContext(canvas), Offset.zero);
+    final size = box.size;
+    var near = 0;
+    for (final call in canvas.invocations) {
+      if (call.invocation.memberName != #drawRawPoints) continue;
+      final [mode, points, paint] = call.invocation.positionalArguments;
+      if (mode != PointMode.points) continue;
+      final alpha = (paint as Paint).color.a;
+      final xy = points as Float32List;
+      for (var i = 0; i < xy.length; i += 2) {
+        final x = xy[i], y = xy[i + 1];
+        final edge = [x, size.width - x, y, size.height - y].reduce(min);
+        if (edge >= 24) continue;
+        near++;
+        // No brighter than the fade allows, give or take a level.
+        expect(alpha, lessThanOrEqualTo(edge / 24 + 0.1));
+      }
+    }
+    expect(near, greaterThan(0));
+  });
+
+  testWidgets("satellites leaving over the top don't fly on unseen", (
+    tester,
+  ) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    // Many skies, three satellites each (as many as one sky has up): enough
+    // that some head over the top.
+    Widget skies(GaiaSatellite satellite) => Stack(
+      textDirection: TextDirection.ltr,
+      children: [
+        for (var i = 0; i < 67; i++)
+          // Nothing but satellites, to keep this quick.
+          GaiaSky(
+            key: ValueKey(i),
+            active: active,
+            shown: true,
+            sent: false,
+            rotation: 0,
+            stars: 0,
+            twinkle: 0,
+            sparkles: 0,
+            traceSpeed: 80,
+            figures: false,
+            eventInterval: 1e6,
+            aurora: 0,
+            exit: GaiaSkyExit.fade,
+            exitTime: 1,
+            satellite: satellite,
+            child: const SizedBox.expand(),
+          ),
+      ],
+    );
+    await tester.pumpWidget(skies(GaiaSatellite.trail));
+    await frames(tester, 2);
+    for (final satellite in [
+      GaiaSatellite.dot,
+      GaiaSatellite.trail,
+      GaiaSatellite.dot,
+    ]) {
+      await tester.pumpWidget(skies(satellite));
+    }
+    // About one in seventeen heads over the top. Looked at every second
+    // until all have had time to cross.
+    final boxes = tester.renderObjectList<RenderBox>(find.byType(GaiaSky));
+    final above = <double>[];
+    for (var second = 0; second < 50; second++) {
+      // Steps as long as the sky takes whole, to keep this quick.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      for (final box in boxes) {
+        final canvas = TestRecordingCanvas();
+        box.paint(TestRecordingPaintingContext(canvas), Offset.zero);
+        for (final call in canvas.invocations) {
+          if (call.invocation.memberName != #drawCircle) continue;
+          final y = (call.invocation.positionalArguments[0] as Offset).dy;
+          if (y < -10.5) above.add(y);
+        }
+      }
+    }
+    expect(above, isEmpty);
+    active.value = false;
+  });
+
+  /// Satellites drawn as panels: one body each.
+  int panels(WidgetTester tester) {
+    final canvas = TestRecordingCanvas();
+    tester
+        .renderObject<RenderBox>(find.byType(GaiaSky))
+        .paint(TestRecordingPaintingContext(canvas), Offset.zero);
+    return canvas.invocations
+        .where(
+          (call) =>
+              call.invocation.memberName == #drawRect &&
+              (call.invocation.positionalArguments[0] as Rect).width == 2.6,
+        )
+        .length;
+  }
+
+  testWidgets('a satellite keeps its look when the style changes', (
+    tester,
+  ) async {
+    await pumpSky(tester, isActive: true);
+    await frames(tester, 1);
+    await tester.pumpWidget(sky(satellite: GaiaSatellite.panels));
+    await tester.pumpWidget(sky(satellite: GaiaSatellite.train));
+    await frames(tester, 1);
+    expect(panels(tester), 1);
+    active.value = false;
+  });
+
+  testWidgets('a change of style sends one only while there is room', (
+    tester,
+  ) async {
+    await pumpSky(tester, isActive: true);
+    await frames(tester, 1);
+    // Five panels and five dots asked for; three in all go up.
+    for (var i = 0; i < 10; i++) {
+      await tester.pumpWidget(
+        sky(satellite: i.isEven ? GaiaSatellite.panels : GaiaSatellite.dot),
+      );
+    }
+    await frames(tester, 1);
+    expect(panels(tester), 2);
+    active.value = false;
+  });
+
+  testWidgets('a quicker interval brings the next satellite sooner', (
+    tester,
+  ) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    await tester.pumpWidget(sky(satellite: GaiaSatellite.panels));
+    // The first goes up at 10 s; the next is due 37.5 to 62.5 s on.
+    await frames(tester, 11);
+    expect(panels(tester), 1);
+    await tester.pumpWidget(
+      sky(satellite: GaiaSatellite.panels, eventInterval: 3),
+    );
+    // On the new clock, within 12.5 s. Counted as each goes up: the first,
+    // flying at a random speed, may have left by then.
+    var up = 0, last = 1;
+    for (var i = 0; i < 13 / 0.05; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      final now = panels(tester);
+      if (now > last) up += now - last;
+      last = now;
+    }
+    expect(up, 1);
+    active.value = false;
+  });
+
+  testWidgets('its aurora softens at the sidebar as at the window edge', (
+    tester,
+  ) async {
+    active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    final left = ValueNotifier(0.0);
+    addTearDown(left.dispose);
+    final key = GlobalKey();
+    // Nothing but the aurora.
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: key,
+        child: GaiaSky(
+          active: active,
+          shown: true,
+          sent: false,
+          rotation: 0,
+          stars: 0,
+          twinkle: 0,
+          sparkles: 0,
+          traceSpeed: 80,
+          figures: false,
+          eventInterval: 1e6,
+          aurora: 1,
+          exit: GaiaSkyExit.fade,
+          exitTime: 1,
+          left: left,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await frames(tester, 2);
+    active.value = false;
+    await tester.pump();
+
+    // How much shows in the 4 px just right of x = 300.
+    Future<double> strip() async {
+      final boundary =
+          key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final bytes = (await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final data = await image.toByteData();
+        image.dispose();
+        return data!;
+      }))!;
+      final width = boundary.size.width.round();
+      var sum = 0;
+      for (var y = 0; y < boundary.size.height; y++) {
+        for (var x = 300; x < 304; x++) {
+          sum += bytes.getUint8((y * width + x) * 4 + 3);
+        }
+      }
+      return sum.toDouble();
+    }
+
+    final open = await strip();
+    expect(open, greaterThan(0));
+    left.value = 300;
+    await tester.pump();
+    // Fading in from the sidebar's edge, not cut off at full strength.
+    expect(await strip() / open, lessThan(0.9));
+  });
+
   testWidgets('stops when disposed', (tester) async {
     await pumpSky(tester);
     active.value = true;
@@ -295,6 +648,42 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     expect(ticking(tester), isFalse);
     active.value = false;
+  });
+
+  test("the rare aurora's colours share all its skies", () {
+    final shares = GaiaRareAurora.values.map((c) => c.share);
+    expect(shares.reduce((a, b) => a + b), closeTo(1, 1e-9));
+    expect(GaiaRareAurora.gold.share, lessThan(GaiaRareAurora.crimson.share));
+  });
+
+  group('meteor showers', () {
+    test('are strongest at their peak', () {
+      final shower = gaiaMeteorShower(DateTime(2026, 12, 14))!;
+      expect(shower.name, 'Geminids');
+      expect(shower.strength, closeTo(1, 1e-6));
+    });
+
+    test('fall away to a trace at the end of their days', () {
+      final last = gaiaMeteorShower(DateTime(2026, 8, 24))!;
+      expect(last.name, 'Perseids');
+      expect(last.strength, closeTo(0.05, 0.01));
+      expect(gaiaMeteorShower(DateTime(2026, 8, 25)), isNull);
+    });
+
+    test('carry on over the new year', () {
+      expect(gaiaMeteorShower(DateTime(2026, 12, 30))?.name, 'Quadrantids');
+      expect(gaiaMeteorShower(DateTime(2027, 1, 10))?.name, 'Quadrantids');
+    });
+
+    test('of two at once, take the stronger', () {
+      expect(gaiaMeteorShower(DateTime(2026, 4, 25))?.name, 'Lyrids');
+      expect(gaiaMeteorShower(DateTime(2026, 4, 30))?.name, 'Eta Aquariids');
+    });
+
+    test('leave most of the year without one', () {
+      expect(gaiaMeteorShower(DateTime(2026, 3, 1)), isNull);
+      expect(gaiaMeteorShower(DateTime(2026, 6, 15)), isNull);
+    });
   });
 }
 

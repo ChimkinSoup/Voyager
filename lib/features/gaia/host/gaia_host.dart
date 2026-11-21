@@ -82,8 +82,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// {memoryId, placement}` (a memory's `{topics, suggested}` for its card,
 /// after the utility model's placement for the latter, §3.2, §5),
 /// `memoryPrompt` (a new session's pins and
-/// topic list, GAIA_MEMORY_TOPICS_HLD.md §4.1), `memoryRecall {chatId, text,
-/// message, recalled, projectId}` (stage 1's `{picks, candidates, strong}` for a
+/// topic list as `{text, pinned}`, GAIA_MEMORY_TOPICS_HLD.md §4.1),
+/// `memoryRecall {chatId, text, message, recalled, pinned, projectId}` (stage 1's `{picks, candidates, strong}` for a
 /// message, §4.2-§4.4), `recalled {chatId, memoryIds}` (the recall
 /// history, §3.3),
 /// `openMemory {memoryId}` (shown on the Gaia page, §4.5),
@@ -1324,6 +1324,7 @@ class GaiaHost {
           project: params['project'] as String?,
           folder: params['folder'] as String?,
           recalled: [...?(params['recalled'] as List?)?.cast<String>()],
+          pinned: (params['pinned'] as List?)?.cast<String>(),
         );
         return null;
       case 'setSummary':
@@ -1694,7 +1695,8 @@ class GaiaHost {
         );
         return filing == null ? null : gaiaMemoryFilingToJson(filing);
       case 'memoryPrompt':
-        return await _memories?.sessionPrompt() ?? '';
+        final prompt = await _memories?.sessionPrompt();
+        return {'text': prompt?.text ?? '', 'pinned': prompt?.pinned ?? []};
       case 'memoryRecall':
         return gaiaRecallToJson(
           await _memoriesOrThrow().recall(
@@ -1702,6 +1704,7 @@ class GaiaHost {
             params['text']! as String,
             message: params['message'] as String? ?? '',
             recalled: [...?(params['recalled'] as List?)?.cast<String>()],
+            pinned: (params['pinned'] as List?)?.cast<String>(),
             projectId: params['projectId'] as String?,
           ),
         );

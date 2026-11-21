@@ -17,6 +17,8 @@ At the default 6°/min the difference is too small to see, but the logic is wron
 
 **Fix:** set the cap above `_turnStep`, for example `min(..., 1.0)`, or cap at `_turnStep.inMicroseconds / 1e6 * 2`. **Test:** pump 5 s while active without a cursor and check that the angle turned matches `rate × 5`.
 
+**Status:** Fixed 2026-11-20. Cap raised to `1.0` (`gaia_starfield.dart:225`); test `stepping, turns at its rate` in `test/gaia_starfield_test.dart`. Notes on the write-up above: the step is adaptive (`min(_turnStep, _maxStepMove / drift)`), so the loss was up to half, not always half; it was worst at slow rotation and in small windows, not fast; and `kGaiaFilledSpin` no longer exists (the starfield takes `skyRotation` directly).
+
 ### B2. Stars near the edges jump brighter when an exit starts, and dim suddenly when a blink-in ends
 `gaia_sky.dart:2173-2187`
 
@@ -32,12 +34,16 @@ While `exiting != null` (every exit, every blink-in, the reversal after an undon
 
 **Fix:** apply `min(nearest / _edge, 1)` in both branches. For warp/converge, you could also fade by the position of the moved end point, but the base fade is the actual bug.
 
+**Status:** Fixed 2026-11-20. The edge fade now applies in both branches (`gaia_sky.dart:2193`); test `keeps its edge fade as it starts to leave` in `test/gaia_sky_test.dart`.
+
 ### B3. A satellite that leaves through the top or bottom keeps one of the three slots after it's gone (uncommitted change)
 `gaia_sky.dart:1587-1597`, cap at `:1550`
 
 `y1 = y0 ± 0.25h`, so `y1` can be anywhere from `-0.17h` to `0.83h`. A satellite heading up crosses the top edge part way through its path and then keeps flying off-screen until `age >= life`. With the new 20–90 px/s speeds, `life` can be 60–80 s, so an invisible satellite can hold one of the three slots for half a minute or more. Off-screen satellites also keep being stepped and drawn (they're clipped, but `_satellite` still runs).
 
 **Fix:** compute `end` as the point where the line meets the sky's rectangle (plus the margin), or remove a satellite once it's more than `margin` outside `size` in any direction.
+
+**Status:** Fixed 2026-11-20. Only the top could happen (`y1` is at most `0.83h`). A path heading over the top now ends `margin` above it (`gaia_sky.dart:1611-1616`); test `satellites leaving over the top don't fly on unseen` in `test/gaia_sky_test.dart`.
 
 ### B4. After an undone send, the greeting jumps back instantly while the sky plays back slowly (verify)
 `gaia_app.dart:3399-3400`, `gaia_controller.dart:5838`
@@ -46,6 +52,8 @@ If a send fails, `undo()` puts the user back on a new chat, so the chat is empty
 
 **Fix:** reverse over the same duration, e.g. `duration: leaving ?? _lastLeaving ?? Duration.zero`, or give the reverse its own `exitTime`-based duration.
 
+**Status:** Fixed 2026-11-20. Confirmed by test first: the line went from 0.85 to full opacity on the first frame after the undo. The greeting now comes back over as long as it had been leaving (`_greetingBack` in `gaia_app.dart`), which is how the sky plays its exit back; test `a send undone mid-exit brings the line back with the sky` in `test/gaia_empty_chat_greeting_test.dart`.
+
 ### B5. The aurora gets a hard cut at the sidebar edge, where the stars fade out
 `gaia_sky.dart:2022-2024`, `:2083-2084`, clip at `:1799`
 
@@ -53,15 +61,21 @@ The aurora mesh always runs from `x = -step` to the full width, and its softened
 
 **Fix:** build the columns from `from - step`, and soften with `_normal((x - from + step) / _auroraBlur)`. Since `left` is already a repaint listenable, the aurora would follow the sidebar as it slides.
 
+**Status:** Fixed 2026-11-20. `_aurora` now takes the sidebar's edge and softens its left end there (`_normal((x - sidebar + step) / _auroraBlur)`); the columns stay where they were, so the waves aren't resampled as the sidebar slides. Test `its aurora softens at the sidebar as at the window edge` in `test/gaia_sky_test.dart` (before the fix, the 4 px at the sidebar's edge were exactly as bright as with no sidebar).
+
 ### B6. Switching satellite style mid-flight can make a train pop out (debug only)
 `gaia_sky.dart:1590-1592`, `:2488-2500`
 
 The train margin (`10 + _trainCars × _trainGap`) is calculated when a satellite spawns, using the style at that time, but each frame draws with the *current* style. If you switch to Train while a satellite is in flight, its path ends 10 px past the edge, so the head reaches the end while cars 1–7 are still on screen and the whole train disappears. `sendSatellite()` also ignores the new three-at-a-time cap. This is low priority since it only happens through the debug panel. Storing the style on `_Streak` would fix both.
 
+**Status:** Fixed 2026-11-20. Each satellite now keeps the style it set out with, so a change of style only affects new ones and the margin always matches. `sendSatellite()` now honours the three-at-a-time cap, so a style change sends nothing while three are up. Tests: `a satellite keeps its look when the style changes`, `a change of style sends one only while there is room`.
+
 ### B7. Changing an interval slider doesn't reschedule events that are already pending (debug only)
 `gaia_sky.dart:1545`, `:1552`
 
 `_nextEvent` and `_nextSatellite` are set from `eventInterval` only when they fire. If you drag "Meteors" from 60 down to 3, you can still wait up to `60 / 0.3 × 1.25 = 250 s` for the next satellite. Scaling the remaining time by `new / old` when the interval changes would fix it. Also, the slider is still labelled "Meteors" even though it now controls both meteors and satellites.
+
+**Status:** Fixed 2026-11-20. Changing `eventInterval` scales the pending `_nextEvent` and `_nextSatellite` by new / old. The slider is now labelled "Meteors & satellites". Test: `a quicker interval brings the next satellite sooner`.
 
 ### Checked and not a bug
 - **Which exit plays:** `_sky.exit` is fixed on the first frame the chat isn't empty, so a send could in theory show as a blink-out. It doesn't: `send()` sets `_sentFrom` before `list.add` (`gaia_controller.dart:5798`), so `justSent` is already true on that frame.
@@ -86,6 +100,8 @@ The sky ticks every frame while it's showing and the window is focused. Each fra
 At 6°/min, a star 1,500 px from the pole moves about 2.6 px/s, or 0.04 px per frame at 60 Hz. Twinkle runs at 0.4–1.6 rad/s and the aurora at 0.08–0.29 rad/s. None of these need 60–144 Hz. Only meteors, the tracing pen, sparkles, and exits/entrances do.
 
 **Suggestion:** use the starfield's approach. Tick every frame while a meteor, sparkle, pen, exit or `cleared` fade is active; otherwise step at 20–30 Hz with a `Timer`, the same way `_turnStep` works. On a 144 Hz display that's a 5–7× reduction most of the time.
+
+**Status:** Done 2026-11-21. Measured first (profile, Skia, 120 Hz): the empty-chat sky cost about 30% of a core and ~10% GPU, almost all from frame count (UI ~1 ms, raster ~1.6 ms a frame); a flat 60 Hz cap roughly halved it, and 30 Hz saved only ~2 points more. The sky now steps every frame only while something quick is on it (`_Sky.quick`: fading in or out, an exit or blink-in, a clear fading, a meteor, the pen tracing) or the starfield's lean is moving; otherwise it steps at the debug setting `skyRestRate` (sky panel "Rest fps": 30 / 60 / Off, default 60) with a `Timer`. Sparkles and satellites count as slow: sparkles come at ~5/s, so counting them would keep it at full rate always. Notes on the write-up above: the rotation is now set per user (44.6°/min here, not 6), and the list of fast things missed satellites and the lean. Tests `at rest, steps at its rest rate` and `leaving, steps every frame again at once` in `test/gaia_sky_test.dart`.
 
 ### P2. Stop rebuilding star buffers every frame
 `gaia_sky.dart:2164`, `:2275-2282`
@@ -135,6 +151,8 @@ There are seven exits and essentially one entrance. Some cheap mirrors:
 **D4. The greeting's clear fades on its own schedule.**
 The clear fades linearly with `1 - exiting`, while the greeting fades over `Interval(0.15, 0.55)` of its own leave. For a quick blink-out (`GaiaMotion.move`, shorter than `exitTime`), the greeting is gone well before its dark patch, so a soft dark blob sits where it was for most of the exit. Fading the clear with the greeting's own leave progress would line them up.
 
+**Status:** Done 2026-11-21. `GaiaSkyClear` takes an `opacity`, and the greeting passes its line's (the last of it to go), so the clear goes with the greeting. A clear removed part-faded fades on from there instead of jumping back to full. Tests: `a clear fades as its greeting does` in `test/gaia_sky_test.dart`, and the clear tracks the line in `a send undone mid-exit brings the line back with the sky`.
+
 **D5. Reduced motion jumps instantly.**
 Under `disableAnimations`, the sky appears and disappears in one frame. Reduced-motion guidance generally still allows short opacity crossfades. A 150–200 ms fade, ticked only for that duration, would feel less abrupt and still be calm.
 
@@ -142,6 +160,8 @@ Under `disableAnimations`, the sky appears and disappears in one frame. Reduced-
 
 **D6. Constellations and sparkles can land behind the greeting, where they're hidden.**
 `_stepDrawing` only avoids the window edges and the bottom 28% (`gaia_sky.dart:1483-1488`). Constellation centres sit at 0.18–0.68h, right across a centred greeting. The clear is drawn last in the background colour, so a traced figure loses its middle under a blurred patch, and its stars' flares are hidden too. Sparkles can also be spent on stars behind the clear. **Suggestion:** pass the clear rects into `_Sky` (the painter already has them) and treat them as exclusion zones when choosing a constellation (`points(c)` versus inflated clears) and a sparkle star.
+
+**Status:** Sparkles only, done 2026-11-21. No star inside a clear's painted patch is picked to sparkle. Constellations are left as they were on purpose: a large figure tracing across behind the greeting, fading through the middle, is wanted. Test: `no star sparkles behind a greeting` in `test/gaia_sky_test.dart`.
 
 **D7. The whole sky moves during a live window resize.**
 `layout()` derives the pole, `_rMin`, the sector and `starCount` from the size. Dragging the window edge moves every star's polar position each frame, so the whole sky slides, constellations jump, and the "first N" stars pop in and out as the area changes. The starfield, by contrast, keeps normalised positions. **Options:** settle the sky's geometry with a short delay after resizing finishes, or keep `_pole`/`_rMin` fixed to the largest size seen so far and let the clip hide the extra.

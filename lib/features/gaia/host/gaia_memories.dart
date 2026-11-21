@@ -86,29 +86,42 @@ class GaiaMemories {
       gaiaTopicLines(GaiaTopicTree(await _repository.listMemoryTopics()));
 
   /// What a new session's system prompt carries (GAIA_MEMORY_TOPICS_HLD.md
-  /// §4.1): the pinned memories and the topic list. Empty with no active
-  /// memories.
-  Future<String> sessionPrompt() async => gaiaMemoryPrompt(
-    await _active(),
-    GaiaTopicTree(await _repository.listMemoryTopics()),
-  );
+  /// §4.1): the pinned memories and the topic list, and which memories
+  /// are pinned in it. Empty with no active memories.
+  Future<({String text, List<String> pinned})> sessionPrompt() async {
+    final active = await _active();
+    return (
+      text: gaiaMemoryPrompt(
+        active,
+        GaiaTopicTree(await _repository.listMemoryTopics()),
+      ),
+      pinned: [
+        for (final memory in active)
+          if (memory.pinned) memory.id,
+      ],
+    );
+  }
 
   /// Stage 1 for [chatId]'s message (GAIA_MEMORY_TOPICS_HLD.md §4.2, §4.3),
   /// matched on [text] (the message, and the end of the last reply), leaving
-  /// out the memories its session was already given ([recalled]). [message]
-  /// is the user's own part of [text], for the rare words (§4.3). [projectId]
-  /// is the chat's project, for a new chat not saved here yet.
+  /// out the memories its session was already given ([recalled]) and those
+  /// its system prompt carries ([pinned]; null for those pinned now, as a
+  /// new session's will). [message] is the user's own part of [text], for
+  /// the rare words (§4.3). [projectId] is the chat's project, for a new
+  /// chat not saved here yet.
   Future<GaiaRecall> recall(
     String chatId,
     String text, {
     String message = '',
     List<String> recalled = const [],
+    List<String>? pinned,
     String? projectId,
   }) async {
     final active = [
       for (final memory in await _active())
-        // A pinned one is in the system prompt already.
-        if (!memory.pinned) memory,
+        // In the system prompt already. One pinned since the session began
+        // isn't, so it's recalled like any other.
+        if (!(pinned?.contains(memory.id) ?? memory.pinned)) memory,
     ];
     final tree = GaiaTopicTree(await _repository.listMemoryTopics());
     final project = await _projectOf(chatId) ?? await _live(projectId);

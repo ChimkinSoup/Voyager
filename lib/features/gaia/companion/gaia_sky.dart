@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -81,6 +82,75 @@ enum GaiaSatellite {
   train,
 }
 
+/// The rare aurora's colours, each with its share of the rare skies.
+enum GaiaRareAurora {
+  crimson(0.4),
+  mauve(0.25),
+  twilight(0.25),
+  gold(0.1);
+
+  const GaiaRareAurora(this.share);
+
+  final double share;
+}
+
+/// A meteor shower on the sky: as the real calendar has one tonight, or
+/// held at a strength.
+enum GaiaSkyShower { calendar, off, light, medium, peak }
+
+/// A yearly meteor shower: its peak, the days it's active either side of
+/// it, and how strong it is at its peak against the strongest, 0 to 1.
+typedef _Shower = ({
+  String name,
+  int month,
+  int day,
+  int before,
+  int after,
+  double strength,
+});
+
+/// The major yearly showers, as the IMO's calendar has them.
+const _showers = <_Shower>[
+  (name: 'Quadrantids', month: 1, day: 3, before: 6, after: 9, strength: 1),
+  (name: 'Lyrids', month: 4, day: 22, before: 8, after: 8, strength: 0.4),
+  (
+    name: 'Eta Aquariids',
+    month: 5,
+    day: 6,
+    before: 17,
+    after: 22,
+    strength: 0.6,
+  ),
+  (name: 'Perseids', month: 8, day: 12, before: 26, after: 12, strength: 1),
+  (name: 'Orionids', month: 10, day: 21, before: 19, after: 17, strength: 0.4),
+  (name: 'Leonids', month: 11, day: 17, before: 11, after: 13, strength: 0.4),
+  (name: 'Geminids', month: 12, day: 14, before: 10, after: 6, strength: 1),
+];
+
+/// The meteor shower on [date], and its strength, 0 to 1: strongest at its
+/// peak, falling away to a trace at either end of the days it's active. Of
+/// two at once, the stronger; null when none is.
+({String name, double strength})? gaiaMeteorShower(DateTime date) {
+  ({String name, double strength})? best;
+  for (final s in _showers) {
+    // The year either side too, for a shower active over the new year.
+    for (final year in [date.year - 1, date.year, date.year + 1]) {
+      final days =
+          date.difference(DateTime(year, s.month, s.day)).inMinutes / 1440;
+      final off = days.abs() / (days < 0 ? s.before : s.after);
+      if (off > 1) continue;
+      final strength = s.strength * (0.05 + 0.95 * pow(1 - off, 3));
+      if (strength > (best?.strength ?? 0)) {
+        best = (name: s.name, strength: strength);
+      }
+    }
+  }
+  return best;
+}
+
+/// Bursts a minute from a shower at full strength.
+const _burstPeak = 8.0 / 3;
+
 /// A night sky behind a new chat: stars turning slowly about a pole above
 /// the window, constellations that trace themselves one at a time, a meteor
 /// or satellite now and then, and a faint aurora along the top. Behind the
@@ -98,6 +168,7 @@ class GaiaSky extends StatefulWidget {
     required this.shown,
     required this.sent,
     required this.rotation,
+    this.restRate = 0,
     required this.stars,
     required this.twinkle,
     required this.sparkles,
@@ -106,11 +177,16 @@ class GaiaSky extends StatefulWidget {
     required this.eventInterval,
     required this.aurora,
     this.auroraExit = GaiaAuroraExit.rise,
+    this.auroraDrift = 1,
+    this.rareAurora = false,
+    this.rareColours,
+    this.shower = GaiaSkyShower.off,
     this.satellite = GaiaSatellite.dot,
     required this.exit,
     this.plainBlink = false,
     required this.exitTime,
     this.exitTest = 0,
+    this.burstTest = 0,
     this.top = 0,
     this.left,
     required this.child,
@@ -128,6 +204,11 @@ class GaiaSky extends StatefulWidget {
 
   /// Degrees a minute the sky turns.
   final double rotation;
+
+  /// Frames a second while nothing on the sky moves quickly; 0, every
+  /// frame. Twinkling, sparkles, the aurora, satellites and the turning
+  /// look the same at a lower rate, and the window is still between.
+  final int restRate;
 
   /// Stars per million square logical pixels.
   final double stars;
@@ -155,7 +236,20 @@ class GaiaSky extends StatefulWidget {
 
   final GaiaAuroraExit auroraExit;
 
-  /// A change sends one across at once, to see it by.
+  /// How fast the aurora's curtains wax and wane against one another, as a
+  /// share of their own pace; 0, each holds steady.
+  final double auroraDrift;
+
+  /// The rare aurora every time, rather than one sky in [kGaiaRareAurora].
+  final bool rareAurora;
+
+  /// The rare aurora's colours; null, rolled by their shares.
+  final GaiaRareAurora? rareColours;
+
+  final GaiaSkyShower shower;
+
+  /// A change sends one across at once, to see it by, if fewer than three
+  /// are up.
   final GaiaSatellite satellite;
 
   final GaiaSkyExit exit;
@@ -169,6 +263,9 @@ class GaiaSky extends StatefulWidget {
 
   /// A change plays the [exit] in place, the sky coming back after.
   final int exitTest;
+
+  /// A change sends a burst of a shower's meteors across at once.
+  final int burstTest;
 
   /// As [GaiaStarfield]'s: the sky keeps below this.
   final double top;
@@ -221,17 +318,39 @@ const _coast = 0.5;
 /// Seconds a clear takes to fade once what it kept clear has gone.
 const _clearFade = 0.4;
 
+/// Taken off the wait for a resting step, so the frame it asks for lands
+/// on the vsync at the step, not the one after.
+const _restSlack = Duration(milliseconds: 4);
+
+/// Logical pixels the lean may move in one step and still count as
+/// resting.
+const _leanRest = 0.01;
+
 class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   final _sky = _Sky(Random());
-  var _lastTick = Duration.zero;
+
+  /// The frame of the last step, so the next knows how long it's been,
+  /// frames or not between them; null when stopped.
+  Duration? _lastTick;
+
+  /// Set while waiting for a resting step, at [GaiaSky.restRate].
+  Timer? _wake;
+
+  /// The starfield's lean at the last step, to tell if it's moving.
+  Offset? _lastLean;
   var _reduced = false;
+
+  bool get _running => _ticker.isActive || _wake != null;
 
   @override
   void initState() {
     super.initState();
     _apply();
-    if (widget.shown) _blinkIn();
+    if (widget.shown) {
+      _sky.begin();
+      _blinkIn();
+    }
     widget.active.addListener(_sync);
   }
 
@@ -240,6 +359,7 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
     super.didUpdateWidget(oldWidget);
     _apply();
     if (oldWidget.satellite != widget.satellite) _sky.sendSatellite();
+    if (oldWidget.burstTest != widget.burstTest) _sky.sendShowerBurst();
     final test = oldWidget.exitTest != widget.exitTest && widget.shown;
     if ((oldWidget.shown && !widget.shown) || test) {
       if (_sky.exiting != null) {
@@ -254,6 +374,8 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
     } else if (!oldWidget.shown && widget.shown && _sky.exiting != null) {
       _sky.returning = true;
     } else if (!oldWidget.shown && widget.shown) {
+      // Back before it had faded: the same sky, not a new one.
+      if (_sky.opacity == 0) _sky.begin();
       _blinkIn();
     }
     if (oldWidget.active != widget.active) {
@@ -284,6 +406,7 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     widget.active.removeListener(_sync);
+    _wake?.cancel();
     _ticker.dispose();
     // Gone mid-exit, the starfield's left as bright as it was.
     _glow?.call(0);
@@ -304,6 +427,17 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
       ..aurora = widget.aurora
       ..satellite = widget.satellite
       ..auroraExit = widget.auroraExit
+      ..auroraDrift = widget.auroraDrift
+      ..forceRare = widget.rareAurora
+      ..rareColours = widget.rareColours
+      ..shower = switch (widget.shower) {
+        GaiaSkyShower.calendar =>
+          gaiaMeteorShower(DateTime.now())?.strength ?? 0,
+        GaiaSkyShower.off => 0,
+        GaiaSkyShower.light => 0.15,
+        GaiaSkyShower.medium => 0.4,
+        GaiaSkyShower.peak => 1,
+      }
       ..plainBlink = widget.plainBlink
       ..exitTime = widget.exitTime;
     // Not mid-exit: the exit under way keeps the way it's going.
@@ -325,19 +459,28 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
     final run =
         !_reduced && (_sky.leaving || (widget.shown && widget.active.value));
     if (!run) {
+      _wake?.cancel();
+      _wake = null;
       _ticker.stop();
+      _lastTick = null;
       _sky.settle();
       _glow?.call(0);
-    } else if (!_ticker.isActive) {
-      _lastTick = Duration.zero;
-      _ticker.start();
+    } else if (_wake == null || _sky.quick) {
+      // Waiting for a resting step, unless something quick has started.
+      _wake?.cancel();
+      _wake = null;
+      if (!_ticker.isActive) _ticker.start();
     }
   }
 
-  void _tick(Duration elapsed) {
+  void _tick(Duration _) {
+    final now = SchedulerBinding.instance.currentFrameTimeStamp;
     // Capped, so a stall doesn't jump the sky.
-    final dt = min((elapsed - _lastTick).inMicroseconds / 1e6, 0.1);
-    _lastTick = elapsed;
+    final dt = switch (_lastTick) {
+      final last? => min((now - last).inMicroseconds / 1e6, 0.1),
+      null => 0.0,
+    };
+    _lastTick = now;
     final spin = _sky.spin;
     _sky.step(dt);
     _starfield?.call(spin - _sky.spin);
@@ -350,6 +493,21 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
     });
     // Stops once it has left.
     _sync();
+    // The starfield's lean is drawn by both, so the sky keeps up with it.
+    final lean = _lean?.call();
+    final leaning =
+        lean != null && (lean - (_lastLean ?? lean)).distance > _leanRest;
+    _lastLean = lean;
+    final rate = widget.restRate;
+    if (rate <= 0 || !_ticker.isActive || _sky.quick || leaning) return;
+    _ticker.stop();
+    _wake = Timer(
+      Duration(microseconds: (1e6 / rate).round()) - _restSlack,
+      () {
+        _wake = null;
+        _sync();
+      },
+    );
   }
 
   /// The sky's own box, which [_clears] are measured from.
@@ -358,21 +516,24 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
   /// The [GaiaSkyClear]s over the sky.
   final _clears = <GlobalKey>{};
 
-  /// Each clear's box as last painted, for it to fade from once it's gone:
-  /// by then it can't be measured.
-  final _lastRects = <GlobalKey, Rect>{};
+  /// Each clear's box and opacity as last painted, for it to fade from once
+  /// it's gone: by then it can't be measured.
+  final _lastRects = <GlobalKey, (Rect, double)>{};
 
-  /// [_clears]' boxes, in the sky's.
-  List<Rect> _clearRects() {
+  /// [_clears]' boxes, in the sky's, each with its [GaiaSkyClear.opacity].
+  List<(Rect, double)> _clearRects() {
     final sky = _canvas.currentContext?.findRenderObject();
     if (sky is! RenderBox || !sky.hasSize) return const [];
     return [
       for (final key in _clears)
         if (key.currentContext?.findRenderObject() case final RenderBox box
             when box.attached && box.hasSize)
-          _lastRects[key] = MatrixUtils.transformRect(
-            box.getTransformTo(sky),
-            Offset.zero & box.size,
+          _lastRects[key] = (
+            MatrixUtils.transformRect(
+              box.getTransformTo(sky),
+              Offset.zero & box.size,
+            ),
+            (key.currentWidget! as _ClearBox).opacity,
           ),
     ];
   }
@@ -384,7 +545,10 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
       _clears.remove(key);
       final last = _lastRects.remove(key);
       // Fading only while the sky ticks; otherwise it's simply gone.
-      if (last != null && _ticker.isActive) _sky.cleared.add((last, 1.0));
+      if (last != null && _running) {
+        _sky.cleared.add(last);
+        _sync();
+      }
     }
     _sky.repaint();
   }
@@ -423,7 +587,11 @@ class _SkyScope extends InheritedWidget {
 /// Keeps the [GaiaSky] behind [child] clear: the stars fade out around it,
 /// so text over the sky is always legible.
 class GaiaSkyClear extends StatefulWidget {
-  const GaiaSkyClear({super.key, required this.child});
+  const GaiaSkyClear({super.key, this.opacity = 1, required this.child});
+
+  /// How much of the clear is kept, 0 to 1: fading with [child], so the
+  /// stars come back behind it as it goes.
+  final double opacity;
 
   final Widget child;
 
@@ -445,6 +613,13 @@ class _GaiaSkyClearState extends State<GaiaSkyClear> {
     _scope = scope;
   }
 
+  @override
+  void didUpdateWidget(GaiaSkyClear oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Repainted by the sky, which may be still.
+    if (oldWidget.opacity != widget.opacity) _scope?.clear(_key, add: true);
+  }
+
   // Out of the tree for the frame's paint as soon as it's taken out, not
   // only once it's gone for good: an inactive box can't be measured.
   @override
@@ -462,6 +637,7 @@ class _GaiaSkyClearState extends State<GaiaSkyClear> {
   @override
   Widget build(BuildContext context) => _ClearBox(
     key: _key,
+    opacity: widget.opacity,
     // Re-measured by the sky, which otherwise does so only as it paints:
     // still, it would keep the clear where the child was.
     onMoved: () => _scope?.clear(_key, add: true),
@@ -472,7 +648,15 @@ class _GaiaSkyClearState extends State<GaiaSkyClear> {
 /// Tells [onMoved] once the frame it painted in is done, whenever its box
 /// paints somewhere new or at a new size.
 class _ClearBox extends SingleChildRenderObjectWidget {
-  const _ClearBox({super.key, required this.onMoved, super.child});
+  const _ClearBox({
+    super.key,
+    required this.opacity,
+    required this.onMoved,
+    super.child,
+  });
+
+  /// Read by the sky as it measures the box.
+  final double opacity;
 
   final VoidCallback onMoved;
 
@@ -1176,7 +1360,7 @@ class _Streak {
     required this.at,
     required this.velocity,
     required this.life,
-    required this.satellite,
+    this.satellite,
     this.tail = 0,
     this.flareAt,
   });
@@ -1184,7 +1368,9 @@ class _Streak {
   Offset at;
   final Offset velocity;
   final double life;
-  final bool satellite;
+
+  /// How a satellite looks, fixed as it sets out; null for a meteor.
+  final GaiaSatellite? satellite;
 
   /// A meteor's tail, in logical pixels.
   final double tail;
@@ -1212,12 +1398,10 @@ class _Sky extends ChangeNotifier {
           : b > 0.3
           ? 1
           : 0;
-      final roll = _random.nextDouble();
-      tint[i] = roll < 0.7
-          ? 0
-          : roll < 0.88
-          ? 1
-          : 2;
+      // Colour shows in the brighter stars: the eye sees faint ones white.
+      tint[i] = _random.nextDouble() < 0.25 + 0.6 * (b - 0.12) / 0.78
+          ? 1 + _random.nextInt(kGaiaStarTints.length - 1)
+          : 0;
       rate[i] = 0.4 + _random.nextDouble() * 1.2;
       phase[i] = _random.nextDouble() * 2 * pi;
       // As the starfield's.
@@ -1249,7 +1433,7 @@ class _Sky extends ChangeNotifier {
   final bright = Float32List(_pool);
   final rate = Float32List(_pool), phase = Float32List(_pool);
 
-  /// Its size, 0 to 2, and colour: white, blue-white or warm.
+  /// Its size, 0 to 2, and colour, of [kGaiaStarTints].
   final kind = Uint8List(_pool), tint = Uint8List(_pool);
 
   /// How far it leans towards the cursor, as a share of [lean].
@@ -1271,8 +1455,29 @@ class _Sky extends ChangeNotifier {
   var sparkleRate = 0.0;
   var traceSpeed = 80.0;
   var figures = false;
-  var eventInterval = 15.0;
   var aurora = 0.0;
+  var auroraDrift = 1.0;
+  var forceRare = false;
+
+  /// The rare aurora's colours; null, [_rolledColours].
+  GaiaRareAurora? rareColours;
+
+  /// The rare aurora's colours, as rolled by their shares when it came.
+  var _rolledColours = GaiaRareAurora.crimson;
+
+  GaiaRareAurora get colours => rareColours ?? _rolledColours;
+
+  GaiaRareAurora _pickColours() {
+    var roll = _random.nextDouble();
+    for (final colours in GaiaRareAurora.values) {
+      roll -= colours.share;
+      if (roll < 0) return colours;
+    }
+    return GaiaRareAurora.values.last;
+  }
+
+  /// The meteor shower's strength, 0 to 1.
+  var shower = 0.0;
   var satellite = GaiaSatellite.dot;
   var auroraExit = GaiaAuroraExit.rise;
   var exit = GaiaSkyExit.warp;
@@ -1314,9 +1519,48 @@ class _Sky extends ChangeNotifier {
 
   var _nextEvent = 4.0;
   var _nextSatellite = 10.0;
+  var _nextShower = 2.0;
+
+  /// This sky's aurora is the rare one, as rolled when it came.
+  var _rare = false;
+
+  /// The aurora is the rare one.
+  bool get rare => forceRare || _rare;
+
+  /// Where each of the aurora's curtains is in its waxing and waning, in
+  /// radians, and how far all have come by [auroraDrift].
+  final _auroraPhase = Float64List(_bands.length);
+  var _auroraClock = 0.0;
+
+  /// Where the shower's radiant hangs, out of sight above a top corner:
+  /// which side, -1 the left, and how far beyond that side and above the
+  /// top, as shares of the sky's width and height.
+  var _radiantSide = 1.0, _radiantOut = 0.0, _radiantUp = 0.0;
+
+  /// Seconds until each meteor of the shower's burst under way.
+  final _burst = <double>[];
+
+  /// The average seconds from one meteor or satellite to the next. A change
+  /// rescales what is pending, so it comes on the new clock.
+  double get eventInterval => _eventInterval;
+  var _eventInterval = 15.0;
+  set eventInterval(double value) {
+    if (value == _eventInterval) return;
+    _nextEvent *= value / _eventInterval;
+    _nextSatellite *= value / _eventInterval;
+    _eventInterval = value;
+  }
+
+  /// At most three satellites up at once.
+  bool get _satelliteRoom =>
+      streaks.where((s) => s.satellite != null).length < 3;
 
   /// Stars sparkling: which, and for how long they have been.
   final sparkles = <({int star, double age})>[];
+
+  /// What's kept clear of stars, as last painted: no star there sparkles,
+  /// since none of it would show.
+  var hidden = <Rect>[];
   var _nextSparkle = 1.0;
 
   /// Set by each paint: the area below the header, and the sidebar's edge.
@@ -1331,6 +1575,15 @@ class _Sky extends ChangeNotifier {
 
   bool get leaving =>
       exiting != null || cleared.isNotEmpty || (!shown && opacity > 0);
+
+  /// Something on it moves too quickly for [GaiaSky.restRate]: coming or
+  /// going, a clear fading, a meteor, or the pen tracing.
+  bool get quick =>
+      leaving ||
+      (shown && opacity < 1) ||
+      // The pen tracing, the figure sketched in, or the lines unwriting.
+      (drawing != null && (held < 1.2 || held >= _hold)) ||
+      streaks.any((s) => s.satellite == null);
 
   /// The pole the sky turns about.
   Offset get pole => _pole;
@@ -1402,6 +1655,32 @@ class _Sky extends ChangeNotifier {
   /// Repaints, with nothing moved.
   void repaint() => notifyListeners();
 
+  /// Comes in with a new chat: an aurora of its own, now and then the rare
+  /// one, and a radiant somewhere new.
+  void begin() {
+    _rare = _random.nextInt(kGaiaRareAurora) == 0;
+    _rolledColours = _pickColours();
+    for (var i = 0; i < _auroraPhase.length; i++) {
+      _auroraPhase[i] = _random.nextDouble() * 2 * pi;
+    }
+    _radiantSide = _random.nextBool() ? 1 : -1;
+    _radiantOut = 0.15 + 0.35 * _random.nextDouble();
+    _radiantUp = 0.4 + 0.6 * _random.nextDouble();
+    _burst.clear();
+    _nextShower = 1 + 3 * _random.nextDouble();
+  }
+
+  /// How strong curtain [i] is just now against its usual, each waxing and
+  /// waning over minutes on its own clock: the aurora greener a while, then
+  /// more violet. Its green never goes far.
+  double auroraMix(int i) {
+    if (auroraDrift <= 0) return 1;
+    final (low, high, period) = _auroraDrifts[i];
+    final wave =
+        0.5 + 0.5 * sin(_auroraClock * 2 * pi / period + _auroraPhase[i]);
+    return low + (high - low) * wave;
+  }
+
   /// Seconds the pen takes over the whole of the constellation being
   /// traced, at [traceSpeed]: a small one is quick, a large one slow.
   double get _traceTime {
@@ -1425,6 +1704,7 @@ class _Sky extends ChangeNotifier {
     // turning with it carries on at the same pace.
     speed += (1 - speed) * (1 - exp(-dt / _coast));
     spin += rotation * dt * speed;
+    _auroraClock += dt * auroraDrift;
     for (var i = cleared.length - 1; i >= 0; i--) {
       final (rect, alpha) = cleared[i];
       final next = alpha - dt / _clearFade;
@@ -1539,7 +1819,8 @@ class _Sky extends ChangeNotifier {
     int? best;
     for (var tries = 0; tries < 8 && count > 0; tries++) {
       final i = _random.nextInt(count);
-      if (!view.contains(star(i))) continue;
+      final at = star(i);
+      if (!view.contains(at) || hidden.any((r) => r.contains(at))) continue;
       // At high rates the brightest would otherwise glint over themselves.
       if (sparkles.any((s) => s.star == i)) continue;
       if (best == null || bright[i] > bright[best]) best = i;
@@ -1564,11 +1845,66 @@ class _Sky extends ChangeNotifier {
     }
     _nextSatellite -= dt;
     // At most three up at once: a satellite due waits for one to leave.
-    if (_nextSatellite <= 0 && streaks.where((s) => s.satellite).length < 3) {
+    if (_nextSatellite <= 0 && _satelliteRoom) {
       // Within a quarter either side of the average.
       _nextSatellite = eventInterval / 0.3 * (0.75 + _random.nextDouble() / 2);
       streaks.add(_satellite());
     }
+    for (var i = _burst.length - 1; i >= 0; i--) {
+      _burst[i] -= dt;
+      if (_burst[i] > 0) continue;
+      _burst.removeAt(i);
+      streaks.add(_showerMeteor());
+    }
+    // In bursts, spaced at random, so they don't come in step.
+    final burstRate = shower * _burstPeak / 60;
+    if (burstRate <= 0) return;
+    _nextShower -= dt;
+    if (_nextShower > 0) return;
+    _nextShower = -log(1 - _random.nextDouble()) / burstRate;
+    _startBurst();
+  }
+
+  /// A burst of the shower's meteors now, if the sky is up.
+  void sendShowerBurst() {
+    if (size.isEmpty || exiting != null || !shown) return;
+    _startBurst();
+  }
+
+  /// Meteors within a few seconds, the first at once: four or five in a
+  /// faint shower, up to eight or nine at a peak.
+  void _startBurst() {
+    final count = 4 + (4 * shower).round() + _random.nextInt(2);
+    _burst.add(0);
+    for (var i = 1; i < count; i++) {
+      _burst.add(0.2 + 0.6 * count * _random.nextDouble());
+    }
+  }
+
+  /// One of the shower's meteors, high up and streaking away from its
+  /// radiant: all of them heading much the same way, fanning a little.
+  _Streak _showerMeteor() {
+    final span = size.width - from;
+    final radiant = Offset(
+      _radiantSide < 0
+          ? from - span * _radiantOut
+          : size.width + span * _radiantOut,
+      -size.height * _radiantUp,
+    );
+    // On the radiant's side, so it has room to run away from it.
+    final at = Offset(
+      from +
+          span * ((_radiantSide < 0 ? 0 : 0.35) + 0.65 * _random.nextDouble()),
+      size.height * (0.02 + 0.38 * _random.nextDouble()),
+    );
+    final direction = (at - radiant) / (at - radiant).distance;
+    return _Streak(
+      at: at,
+      velocity: direction * (550 + 300 * _random.nextDouble()),
+      // Most of them long: from 0.7 s to 2 s.
+      life: 0.7 + 1.3 * pow(_random.nextDouble(), 0.6).toDouble(),
+      tail: 140 + _random.nextDouble() * 140,
+    );
   }
 
   _Streak _meteor() {
@@ -1589,13 +1925,12 @@ class _Sky extends ChangeNotifier {
       // Most of them long: from 0.7 s to 2 s.
       life: 0.7 + 1.3 * pow(_random.nextDouble(), 0.6).toDouble(),
       tail: 140 + _random.nextDouble() * 140,
-      satellite: false,
     );
   }
 
   /// A satellite now, if the sky is up.
   void sendSatellite() {
-    if (size.isEmpty || exiting != null || !shown) return;
+    if (size.isEmpty || exiting != null || !shown || !_satelliteRoom) return;
     streaks.add(_satellite());
   }
 
@@ -1608,7 +1943,11 @@ class _Sky extends ChangeNotifier {
         ? 10 + _trainCars * _trainGap
         : 10.0;
     final start = Offset(rightwards ? from - 10 : size.width + 10, y0);
-    final end = Offset(rightwards ? size.width + margin : from - margin, y1);
+    var end = Offset(rightwards ? size.width + margin : from - margin, y1);
+    // Heading out over the top, it ends there, not off in the dark.
+    if (end.dy < -margin) {
+      end = start + (end - start) * ((-margin - y0) / (y1 - y0));
+    }
     // From 20 to 90 px/s, as many slow as fast.
     final speed = 20 * pow(4.5, _random.nextDouble());
     final life = (end - start).distance / speed;
@@ -1616,7 +1955,7 @@ class _Sky extends ChangeNotifier {
       at: start,
       velocity: (end - start) / life,
       life: life,
-      satellite: true,
+      satellite: satellite,
       // A trail always flares, else about a third do.
       flareAt: satellite == GaiaSatellite.trail || _random.nextDouble() < 0.35
           ? life * (0.3 + 0.4 * _random.nextDouble())
@@ -1687,6 +2026,41 @@ const List<_Band> _bands = [
     alpha: 0.28,
   ),
 ];
+
+/// One sky in this many has the rare aurora.
+const kGaiaRareAurora = 50;
+
+/// The rare aurora's curtains, as [_bands]': main, high, low.
+List<Color> _rareColors(GaiaRareAurora colours) => switch (colours) {
+  // The deep red of a great storm, high, over rose, a pink fringe below.
+  GaiaRareAurora.crimson => const [
+    Color(0xFFFF6B8B),
+    Color(0xFFFF4060),
+    Color(0xFFFFA0E6),
+  ],
+  // A mauve ribbon over a green picket fence, as STEVE is.
+  GaiaRareAurora.mauve => const [
+    Color(0xFFE08CFF),
+    Color(0xFFB46BFF),
+    Color(0xFF7CF2C8),
+  ],
+  // Sunlit, its tops blue and violet.
+  GaiaRareAurora.twilight => const [
+    Color(0xFF6FA8FF),
+    Color(0xFF9C7CFF),
+    Color(0xFF5CE6FF),
+  ],
+  // Not one the sky shows: warm gold over amber.
+  GaiaRareAurora.gold => const [
+    Color(0xFFFFC65C),
+    Color(0xFFFF8A4C),
+    Color(0xFFFFE6A0),
+  ],
+};
+
+/// How each of [_bands] waxes and wanes: its least and most against its
+/// usual strength, and its period in seconds.
+const _auroraDrifts = [(0.5, 1.1, 150.0), (0.2, 1.3, 110.0), (0.15, 1.7, 85.0)];
 
 /// The sigma of the aurora's soft edges.
 const _auroraBlur = 18.0;
@@ -1773,7 +2147,7 @@ class _SkyPainter extends CustomPainter {
   final Color background;
 
   /// What's to be kept clear of stars, like the greeting, in the sky's box.
-  final List<Rect> Function() clears;
+  final List<(Rect, double)> Function() clears;
 
   /// How far the nearest stars lean towards the cursor just now.
   final Offset Function()? lean;
@@ -1782,7 +2156,7 @@ class _SkyPainter extends CustomPainter {
   static const _edge = 24.0;
 
   /// Steps of opacity the stars are drawn in, batched by.
-  static const _levels = 24;
+  static const _levels = 64;
 
   /// Star radii by size; the last for a constellation's star as it flares.
   static const _radii = [0.5, 0.85, 1.25, 1.9];
@@ -1792,11 +2166,7 @@ class _SkyPainter extends CustomPainter {
   /// ones between, so as the sky turns it flashes at every pixel it crosses.
   static const _minRadius = 1.0;
 
-  static const _tints = [
-    Color(0xFFFFFFFF),
-    Color(0xFFCFDDFF),
-    Color(0xFFFFE6C8),
-  ];
+  static const _tints = kGaiaStarTints;
 
   /// A constellation's lines.
   static const _ink = Color(0xFFB8CCFF);
@@ -1805,7 +2175,8 @@ class _SkyPainter extends CustomPainter {
   void paint(Canvas canvas, Size whole) {
     // Eased at both ends, rather than ramped.
     final opacity = Curves.easeInOut.transform(sky.opacity);
-    if (opacity <= 0) return;
+    // Shown, it still keeps the greeting clear before it has faded in.
+    if (opacity <= 0 && !sky.shown) return;
     // Every part of the sky leans by it, by its own depth.
     sky.lean = lean?.call() ?? Offset.zero;
     final size = Size(whole.width, max(0, whole.height - top));
@@ -1813,6 +2184,10 @@ class _SkyPainter extends CustomPainter {
     canvas.translate(0, top);
     final from = max(0.0, left?.value ?? 0);
     sky.layout(size, from);
+    final kept = clears();
+    sky.hidden = [
+      for (final (rect, _) in kept) rect.shift(Offset(0, -top)).inflate(36),
+    ];
     canvas.clipRect(Rect.fromLTRB(from, 0, size.width, size.height));
     final exiting = sky.exiting;
     final dawn = sky.exit == GaiaSkyExit.dawn;
@@ -1841,11 +2216,15 @@ class _SkyPainter extends CustomPainter {
     // The aurora goes by its own exit as the sky does, rather than
     // dimming: gone just before the stars are.
     if (opacity > 0) {
+      final q = exiting == null ? 0.0 : min(1.0, exiting / 0.85);
       _aurora(
         canvas,
         size,
+        from,
         opacity,
-        exiting == null ? 0.0 : min(1.0, exiting / 0.85),
+        // Coming back, easing to a stop: brightening at full pace to the
+        // last frame, it looks to overshoot and dim when it stops.
+        sky.returning ? q * q : q,
       );
     }
     _stars(canvas, size, from, opacity, exiting);
@@ -1858,21 +2237,25 @@ class _SkyPainter extends CustomPainter {
     if (exiting != null && sky.exit == GaiaSkyExit.converge) {
       _gather(canvas, size, from, exiting);
     }
-    // Last, so nothing of the sky is behind the greeting. Going with the
-    // sky, so the starfield's stars there don't pop back.
+    // Last, so nothing of the sky is behind the greeting. Coming in, there
+    // from the start, as the starfield's stars are; going with the sky, so
+    // theirs there don't pop back.
     final clear = Paint()
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
     for (final (rect, alpha) in [
-      for (final rect in clears()) (rect, 1.0),
+      ...kept,
       ...sky.cleared,
     ]) {
       clear.color = background.withValues(
-        alpha: background.a * opacity * (1 - (exiting ?? 0)) * alpha,
+        alpha:
+            background.a *
+            (sky.shown ? 1 : opacity * (1 - (exiting ?? 0))) *
+            alpha,
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          rect.shift(Offset(0, -top)).inflate(20),
-          const Radius.circular(24),
+          rect.shift(Offset(0, -top)).inflate(36),
+          const Radius.circular(40),
         ),
         clear,
       );
@@ -1881,8 +2264,13 @@ class _SkyPainter extends CustomPainter {
 
   /// Sparkling stars: each swells into a four-pointed glint, then settles.
   void _sparkles(Canvas canvas, double opacity) {
-    final paint = Paint();
+    // Softened a little: a glint's spikes taper under a pixel wide, and
+    // drawn sharp they shimmer as they grow and drift across pixels.
+    final paint = Paint()
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.6);
     for (final s in sky.sparkles) {
+      // In the star's own colour.
+      final colour = _tints[sky.tint[s.star]];
       final glow = pow(sin(pi * s.age / _sparkleLife), 1.5).toDouble();
       final at = sky.star(s.star);
       final reach = (5 + 9 * sky.bright[s.star]) * glow;
@@ -1893,7 +2281,7 @@ class _SkyPainter extends CustomPainter {
         ..drawCircle(
           at,
           reach * 0.45,
-          paint..color = Colors.white.withValues(alpha: 0.12 * glow * opacity),
+          paint..color = colour.withValues(alpha: 0.12 * glow * opacity),
         )
         ..drawPath(
           Path()..addPolygon([
@@ -1906,7 +2294,7 @@ class _SkyPainter extends CustomPainter {
             at + Offset(-wide, 0),
             at + Offset(-waist, -waist),
           ], true),
-          paint..color = Colors.white.withValues(alpha: 0.85 * glow * opacity),
+          paint..color = colour.withValues(alpha: 0.85 * glow * opacity),
         );
     }
   }
@@ -2000,7 +2388,13 @@ class _SkyPainter extends CustomPainter {
 
   /// The aurora's curtains, [q] of the way, 0 to 1, through going by
   /// [_Sky.auroraExit].
-  void _aurora(Canvas canvas, Size size, double fade, double q) {
+  void _aurora(
+    Canvas canvas,
+    Size size,
+    double sidebar,
+    double fade,
+    double q,
+  ) {
     final exit = sky.auroraExit;
     // A surge early on, for a flare.
     final surge = exp(-pow((q - 0.25) / 0.15, 2)).toDouble();
@@ -2069,24 +2463,30 @@ class _SkyPainter extends CustomPainter {
         GaiaAuroraExit.arc ||
         GaiaAuroraExit.dusk => (full * (1 - 0.85 * q), h * band.y),
       };
+      final hue = sky.rare ? _rareColors(sky.colours)[i] : band.color;
       final color = switch (exit) {
-        GaiaAuroraExit.ebb || GaiaAuroraExit.dusk => Color.lerp(
-          band.color,
-          const Color(0xFF8A3C78),
-          q,
-        )!,
+        GaiaAuroraExit.ebb ||
+        GaiaAuroraExit.dusk => Color.lerp(hue, const Color(0xFF8A3C78), q)!,
         GaiaAuroraExit.flare => Color.lerp(
-          band.color,
+          hue,
           const Color(0xFFE6FFF4),
           0.25 * surge,
         )!,
-        _ => band.color,
+        _ => hue,
       };
       final rgb = color.toARGB32() & 0xFFFFFF;
       final breathe = 0.75 + 0.25 * sin(t * 0.17 + i * 2.1);
       // Brightest at its lower edge, as a curtain is: clear at g0, full
       // from g1 down.
-      final peak = min(1.0, band.alpha * strength * breathe);
+      // The rare one brighter, its reds being darker than the greens.
+      final peak = min(
+        1.0,
+        band.alpha *
+            strength *
+            breathe *
+            sky.auroraMix(i) *
+            (sky.rare ? 1.4 : 1),
+      );
       final g0 = base - height * 1.1, g1 = base + band.a1 * h;
       final first = v;
       for (var c = 0; c < columns; c++) {
@@ -2098,9 +2498,9 @@ class _SkyPainter extends CustomPainter {
                 wave;
         final reach = height * (0.55 + 0.45 * sin(x * band.k3 + t * band.s3));
         final top = y - reach;
-        // Its ends soften as its edges do.
+        // Its ends soften as its edges do, at the sidebar as the stars do.
         final ends =
-            _normal((x + step) / _auroraBlur) *
+            _normal((x - sidebar + step) / _auroraBlur) *
             _normal((last - x) / _auroraBlur);
         final from = top - 2.5 * _auroraBlur, to = y + 3 * _auroraBlur;
         for (var r = 0; r < _auroraRows; r++) {
@@ -2190,9 +2590,8 @@ class _SkyPainter extends CustomPainter {
       );
       if (nearest <= 0) return;
       final gone = p == null ? 0.0 : _converged(p, seed);
-      if (p == null) {
-        alpha *= min(nearest / _edge, 1);
-      } else {
+      alpha *= min(nearest / _edge, 1);
+      if (p != null) {
         alpha *= switch (exit) {
           GaiaSkyExit.warp => pow(1 - p, 1.2) * (1 + 1.5 * p),
           GaiaSkyExit.trails => pow(1 - p, 1.5) * (1 + 0.5 * p),
@@ -2358,7 +2757,7 @@ class _SkyPainter extends CustomPainter {
 
     final paint = Paint()..strokeCap = StrokeCap.round;
     for (final s in sky.streaks) {
-      if (s.satellite) {
+      if (s.satellite != null) {
         // A steady point, unless it catches the sun.
         final flare = switch (s.flareAt) {
           final at? => exp(-pow((s.age - at) / 0.7, 2)),
@@ -2415,7 +2814,7 @@ class _SkyPainter extends CustomPainter {
     final fade = going * edge(s.at);
     Color white(double alpha) => Colors.white.withValues(alpha: alpha * fade);
     final direction = s.velocity / s.velocity.distance;
-    switch (sky.satellite) {
+    switch (s.satellite!) {
       case GaiaSatellite.dot:
         canvas.drawCircle(
           s.at,
@@ -2608,6 +3007,18 @@ class GaiaSkyPanel extends StatelessWidget {
                     ),
                   ],
                 ),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: debug.resetSky,
+                      child: const Text('Reset to defaults'),
+                    ),
+                    TextButton(
+                      onPressed: debug.testSkyBurst,
+                      child: const Text('Shower burst'),
+                    ),
+                  ],
+                ),
                 if (debug.skyTour case final step?)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
@@ -2630,6 +3041,46 @@ class GaiaSkyPanel extends StatelessWidget {
                           60,
                           '${debug.skyRotation.round()}°/min',
                           debug.setSkyRotation,
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 64, child: Text('Star step')),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final step in kGaiaDebugStarSteps)
+                                    ChoiceChip(
+                                      label: Text('${step}px'),
+                                      visualDensity: VisualDensity.compact,
+                                      selected: debug.starStep == step,
+                                      onSelected: (_) =>
+                                          debug.setStarStep(step),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 64, child: Text('Rest fps')),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final rate in kGaiaDebugSkyRestRates)
+                                    ChoiceChip(
+                                      label: Text(rate == 0 ? 'Off' : '$rate'),
+                                      visualDensity: VisualDensity.compact,
+                                      selected: debug.skyRestRate == rate,
+                                      onSelected: (_) =>
+                                          debug.setSkyRestRate(rate),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                         row(
                           'Stars',
@@ -2664,12 +3115,49 @@ class GaiaSkyPanel extends StatelessWidget {
                           debug.setSkyTraceSpeed,
                         ),
                         row(
-                          'Meteors',
+                          'Meteors & satellites',
                           debug.skyEventInterval,
                           3,
                           60,
                           '${debug.skyEventInterval.round()}s',
                           debug.setSkyEventInterval,
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 64, child: Text('Shower')),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final shower in GaiaSkyShower.values)
+                                    ChoiceChip(
+                                      label: Text(switch (shower) {
+                                        GaiaSkyShower.calendar => 'Calendar',
+                                        GaiaSkyShower.off => 'Off',
+                                        GaiaSkyShower.light => 'Light',
+                                        GaiaSkyShower.medium => 'Medium',
+                                        GaiaSkyShower.peak => 'Peak',
+                                      }),
+                                      visualDensity: VisualDensity.compact,
+                                      selected: debug.skyShower == shower,
+                                      onSelected: (_) =>
+                                          debug.setSkyShower(shower),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(switch (gaiaMeteorShower(
+                            DateTime.now(),
+                          )) {
+                            final s? =>
+                              'Tonight: ${s.name}, '
+                                  '${percent(s.strength)} of a peak',
+                            null => 'No shower tonight',
+                          }),
                         ),
                         row(
                           'Aurora',
@@ -2678,6 +3166,64 @@ class GaiaSkyPanel extends StatelessWidget {
                           1,
                           percent(debug.skyAurora),
                           debug.setSkyAurora,
+                        ),
+                        row(
+                          'Aurora drift',
+                          debug.skyAuroraDrift,
+                          0,
+                          20,
+                          debug.skyAuroraDrift == 0
+                              ? 'Off'
+                              : '${debug.skyAuroraDrift.toStringAsFixed(1)}×',
+                          debug.setSkyAuroraDrift,
+                        ),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Always the rare aurora '
+                                '(else 1 in $kGaiaRareAurora)',
+                              ),
+                            ),
+                            Switch(
+                              value: debug.skyRareAurora,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              onChanged: debug.setSkyRareAurora,
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(
+                              width: 64,
+                              child: Text('Rare colours'),
+                            ),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final colours in [
+                                    null,
+                                    ...GaiaRareAurora.values,
+                                  ])
+                                    ChoiceChip(
+                                      label: Text(switch (colours) {
+                                        null => 'Random',
+                                        GaiaRareAurora.crimson => 'Crimson',
+                                        GaiaRareAurora.mauve => 'Mauve',
+                                        GaiaRareAurora.twilight => 'Twilight',
+                                        GaiaRareAurora.gold => 'Gold',
+                                      }),
+                                      visualDensity: VisualDensity.compact,
+                                      selected: debug.skyRareColours == colours,
+                                      onSelected: (_) =>
+                                          debug.setSkyRareColours(colours),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                         Row(
                           children: [

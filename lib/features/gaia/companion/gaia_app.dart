@@ -464,6 +464,7 @@ class _GaiaShell extends StatelessWidget {
                     active: controller.focused,
                     // Turning on as the sky did, once it has gone.
                     rotation: controller.debug.skyRotation,
+                    maxStepMove: controller.debug.starStep,
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
                     left: floater ? null : controller.sidebar.edge,
@@ -478,6 +479,7 @@ class _GaiaShell extends StatelessWidget {
                       // the sky out instead.
                       sent: controller.justSent,
                       rotation: controller.debug.skyRotation,
+                      restRate: controller.debug.skyRestRate,
                       stars: controller.debug.skyStars,
                       twinkle: controller.debug.skyTwinkle,
                       sparkles: controller.debug.skySparkles,
@@ -486,11 +488,16 @@ class _GaiaShell extends StatelessWidget {
                       eventInterval: controller.debug.skyEventInterval,
                       aurora: controller.debug.skyAurora,
                       auroraExit: controller.debug.skyAuroraExit,
+                      auroraDrift: controller.debug.skyAuroraDrift,
+                      rareAurora: controller.debug.skyRareAurora,
+                      rareColours: controller.debug.skyRareColours,
+                      shower: controller.debug.skyShower,
                       satellite: controller.debug.skySatellite,
                       exit: controller.debug.skyExit,
                       plainBlink: controller.debug.skyPlainBlink,
                       exitTime: controller.debug.skyExitTime,
                       exitTest: controller.debug.skyExitTest,
+                      burstTest: controller.debug.skyBurstTest,
                       top: kGaiaHeaderHeight + 1,
                       left: floater ? null : controller.sidebar.edge,
                       child: floater
@@ -2344,6 +2351,12 @@ class _MessagesState extends State<_Messages>
   String? _greetingLeaving;
   var _greetingLine = '';
 
+  /// The frame the greeting started leaving; and, its chat empty again
+  /// before it had gone, how long it had been going, which it comes back
+  /// over, as the sky plays its exit back.
+  Duration? _greetingLeftAt;
+  var _greetingBack = Duration.zero;
+
   /// The greeting left for a filled chat opened, not a prompt sent: gone
   /// quickly, before the chat's messages rise in over it.
   var _greetingQuick = false;
@@ -2978,6 +2991,11 @@ class _MessagesState extends State<_Messages>
         final empty = messages.isEmpty && widget.controller.messagesLoaded;
         if (empty) {
           _greeting = widget.controller.currentChatId ?? GaiaDraft.newChatId;
+          if (_greetingLeaving != null && _greetingLeftAt != null) {
+            _greetingBack =
+                SchedulerBinding.instance.currentFrameTimeStamp -
+                _greetingLeftAt!;
+          }
           _greetingLeaving = null;
           _greetingLine = widget.controller.greetingFor(_greeting!);
           _greetingHeight = constraints.maxHeight;
@@ -2988,6 +3006,7 @@ class _MessagesState extends State<_Messages>
           if (constraints.maxHeight >= 200 &&
               !MediaQuery.disableAnimationsOf(context)) {
             _greetingLeaving = _greeting;
+            _greetingLeftAt = SchedulerBinding.instance.currentFrameTimeStamp;
             _greetingQuick = !widget.controller.justSent;
           }
           _greeting = null;
@@ -3182,6 +3201,7 @@ class _MessagesState extends State<_Messages>
                                                 1000)
                                             .round(),
                                   ),
+                            back: _greetingBack,
                             onLeft: () {
                               if (_greetingLeaving == greeting) {
                                 setState(() => _greetingLeaving = null);
@@ -3410,6 +3430,7 @@ class _EmptyChat extends StatelessWidget {
     required this.greeting,
     required this.sendKey,
     this.leaving,
+    this.back = Duration.zero,
     this.onLeft,
   });
 
@@ -3423,6 +3444,9 @@ class _EmptyChat extends StatelessWidget {
   /// The sky's exit, a prompt sent or another chat opened: it goes through
   /// the first half of it, with the stars, and then [onLeft].
   final Duration? leaving;
+
+  /// How long it comes back over, no longer [leaving] before it had gone.
+  final Duration back;
   final VoidCallback? onLeft;
 
   @override
@@ -3488,13 +3512,19 @@ class _EmptyChat extends StatelessWidget {
         builder: (context, enter, _) => TweenAnimationBuilder(
           // Out through the sky's exit: the keys first, then the line.
           tween: Tween(begin: 0.0, end: leaving == null ? 0.0 : 1.0),
-          duration: leaving ?? Duration.zero,
+          duration: leaving ?? back,
           onEnd: onLeft,
           builder: (context, leave, _) => Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               // The sky's stars kept out from behind it.
               child: GaiaSkyClear(
+                // Going as the line does, the last of it to go.
+                opacity:
+                    1 -
+                    Curves.easeInCubic.transform(
+                      const Interval(0.15, 0.55).transform(leave),
+                    ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -653,6 +653,7 @@ void main() {
         sourceSessionId: 's1',
         keepAt: 'e1',
         lastSeq: 3,
+        pinned: ['p1'],
       );
       await repo.upsertChat(chat.copyWith(fork: record));
       final forked = (await repo.getChat('c1'))!.fork!;

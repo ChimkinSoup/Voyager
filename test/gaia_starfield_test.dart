@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,9 +12,12 @@ void main() {
     active = ValueNotifier(false);
     addTearDown(active.dispose);
     await tester.pumpWidget(
-      MediaQuery(
-        data: MediaQueryData(disableAnimations: reduced),
-        child: GaiaStarfield(active: active, child: const SizedBox.expand()),
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: MediaQuery(
+          data: MediaQueryData(disableAnimations: reduced),
+          child: GaiaStarfield(active: active, child: const SizedBox.expand()),
+        ),
       ),
     );
   }
@@ -70,10 +75,13 @@ void main() {
     active = ValueNotifier(false);
     addTearDown(active.dispose);
     await tester.pumpWidget(
-      GaiaStarfield(
-        active: active,
-        rotation: 2,
-        child: const SizedBox.expand(),
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          rotation: 2,
+          child: const SizedBox.expand(),
+        ),
       ),
     );
     expect(ticking(tester), isFalse);
@@ -96,6 +104,57 @@ void main() {
     expect(ticking(tester), isFalse);
   });
 
+  testWidgets('stepping, turns at its rate', (tester) async {
+    active = ValueNotifier(false);
+    addTearDown(active.dispose);
+    // 2°/min over 800x600 steps every 500 ms.
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          rotation: 2,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    final box = tester.renderObject<RenderBox>(find.byType(CustomPaint).first);
+    List<Offset> stars() {
+      final canvas = TestRecordingCanvas();
+      box.paint(TestRecordingPaintingContext(canvas), Offset.zero);
+      return [
+        for (final call in canvas.invocations)
+          if (call.invocation.memberName == #drawCircle)
+            call.invocation.positionalArguments[0] as Offset,
+      ];
+    }
+
+    active.value = true;
+    await tester.pump();
+    final size = box.size;
+    final middle = size.center(Offset.zero);
+    final before = stars().reduce(
+      (a, b) => (a - middle).distance < (b - middle).distance ? a : b,
+    );
+    for (var i = 0; i < 500; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    final after = stars().reduce(
+      (a, b) => (a - before).distance < (b - before).distance ? a : b,
+    );
+
+    // About the pole half the height above the middle. The last step may
+    // be up to one short of the 5 s.
+    final pole = Offset(size.width / 2, -size.height / 2);
+    final turned = ((after - pole).direction - (before - pole).direction).abs();
+    const rate = 2 * pi / 180 / 60;
+    expect(turned, greaterThan(rate * 4.4));
+    expect(turned, lessThanOrEqualTo(rate * 5.01));
+
+    active.value = false;
+    await tester.pump();
+  });
+
   testWidgets('turning fast, steps more often, still not every frame', (
     tester,
   ) async {
@@ -104,16 +163,48 @@ void main() {
     // 45°/min over 800x600: the farthest stars move about 13 px/s, so a
     // step every 40 ms or so keeps each under half a pixel.
     await tester.pumpWidget(
-      GaiaStarfield(
-        active: active,
-        rotation: 45,
-        child: const SizedBox.expand(),
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          rotation: 45,
+          child: const SizedBox.expand(),
+        ),
       ),
     );
     active.value = true;
     await tester.pump();
     expect(tester.binding.hasScheduledFrame, isFalse);
     await tester.pump(const Duration(milliseconds: 30));
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    final stars = tester.renderObject(find.byType(CustomPaint).first);
+    await tester.pump(const Duration(milliseconds: 15), EnginePhase.build);
+    expect(stars.debugNeedsPaint, isTrue);
+    await tester.pump();
+
+    active.value = false;
+    await tester.pump();
+    expect(ticking(tester), isFalse);
+  });
+
+  testWidgets('a larger step, steps half as often', (tester) async {
+    active = ValueNotifier(false);
+    addTearDown(active.dispose);
+    // As above, with a pixel a step: one every 78 ms or so, not 39.
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          rotation: 45,
+          maxStepMove: 1,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    active.value = true;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
     expect(tester.binding.hasScheduledFrame, isFalse);
     final stars = tester.renderObject(find.byType(CustomPaint).first);
     await tester.pump(const Duration(milliseconds: 15), EnginePhase.build);
@@ -132,14 +223,17 @@ void main() {
     addTearDown(active.dispose);
     late Offset Function() lean;
     await tester.pumpWidget(
-      GaiaStarfield(
-        active: active,
-        rotation: 2,
-        child: Builder(
-          builder: (context) {
-            lean = GaiaStarfield.leanOf(context)!;
-            return const SizedBox.expand();
-          },
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          rotation: 2,
+          child: Builder(
+            builder: (context) {
+              lean = GaiaStarfield.leanOf(context)!;
+              return const SizedBox.expand();
+            },
+          ),
         ),
       ),
     );
@@ -176,13 +270,16 @@ void main() {
     await pumpField(tester);
     late void Function(double) glow;
     await tester.pumpWidget(
-      GaiaStarfield(
-        active: active,
-        child: Builder(
-          builder: (context) {
-            glow = GaiaStarfield.glowOf(context)!;
-            return const SizedBox.expand();
-          },
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          child: Builder(
+            builder: (context) {
+              glow = GaiaStarfield.glowOf(context)!;
+              return const SizedBox.expand();
+            },
+          ),
         ),
       ),
     );
@@ -208,9 +305,12 @@ void main() {
     expect(ticking(tester), isTrue);
 
     await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(disableAnimations: true),
-        child: GaiaStarfield(active: active, child: const SizedBox.expand()),
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: GaiaStarfield(active: active, child: const SizedBox.expand()),
+        ),
       ),
     );
     expect(ticking(tester), isFalse);
@@ -223,9 +323,12 @@ void main() {
     active = ValueNotifier(true);
     addTearDown(active.dispose);
     await tester.pumpWidget(
-      GaiaStarfield(
-        active: active,
-        child: CustomPaint(painter: chat, size: const Size(400, 400)),
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: GaiaStarfield(
+          active: active,
+          child: CustomPaint(painter: chat, size: const Size(400, 400)),
+        ),
       ),
     );
     await hover(tester);

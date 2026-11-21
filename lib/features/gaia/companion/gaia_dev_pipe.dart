@@ -92,6 +92,7 @@ class GaiaDevPipe extends GaiaPipe {
           project: p['project'] as String?,
           folder: p['folder'] as String?,
           recalled: [...?(p['recalled'] as List?)?.cast<String>()],
+          pinned: (p['pinned'] as List?)?.cast<String>(),
         );
         return null;
       case 'setSummary':

@@ -16,6 +16,7 @@ class GaiaStarfield extends StatefulWidget {
     super.key,
     required this.active,
     this.rotation = 0,
+    this.maxStepMove = _maxStepMove,
     this.top = 0,
     this.left,
     this.placing = false,
@@ -28,6 +29,10 @@ class GaiaStarfield extends StatefulWidget {
   /// Degrees a minute the stars turn by themselves, while no [GaiaSky] is
   /// turning them.
   final double rotation;
+
+  /// Logical pixels the farthest stars may move in one step while only
+  /// turning.
+  final double maxStepMove;
 
   /// The stars keep below this, fading at it as at the other edges, so one
   /// can't sit half cut off under an opaque header.
@@ -220,9 +225,10 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
 
   void _tick(Duration _) {
     final now = SchedulerBinding.instance.currentFrameTimeStamp;
-    // Capped, so a stall doesn't jump the field.
+    // Capped, so a stall doesn't jump the field; above a [_turnStep], so a
+    // step turns the stars as far as the time it waited out.
     final dt = switch (_lastTick) {
-      final last? => min((now - last).inMicroseconds / 1e6, 0.25),
+      final last? => min((now - last).inMicroseconds / 1e6, 0.6),
       null => 0.0,
     };
     _lastTick = now;
@@ -232,7 +238,7 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
     // No step moving them more than [_maxStepMove].
     final step = min(
       _turnStep.inMicroseconds / 1e6,
-      _maxStepMove / _stars.drift,
+      widget.maxStepMove / _stars.drift,
     );
     _wake = Timer(Duration(microseconds: (step * 1e6).round()), () {
       _wake = null;
@@ -323,6 +329,17 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
   }
 }
 
+/// The stars' colours, white first, as the sky's are too: blue-white, warm,
+/// blue, yellow-orange and red-orange.
+const kGaiaStarTints = [
+  Color(0xFFFFFFFF),
+  Color(0xFFCFDDFF),
+  Color(0xFFFFE6C8),
+  Color(0xFF9DB8FF),
+  Color(0xFFFFD58F),
+  Color(0xFFFFA877),
+];
+
 /// The stars' state, in a share of the area so a resize keeps the field.
 /// Notifies when they've moved.
 class _Stars extends ChangeNotifier {
@@ -341,9 +358,19 @@ class _Stars extends ChangeNotifier {
       ]),
       depth = Float32List.fromList([
         for (var i = 0; i < _pool; i++) 0.03 + random.nextDouble() * 0.97,
+      ]),
+      // Shown only on the larger stars: the eye sees faint ones white.
+      tint = Uint8List.fromList([
+        for (var i = 0; i < _pool; i++)
+          random.nextDouble() < 0.45
+              ? 1 + random.nextInt(kGaiaStarTints.length - 1)
+              : 0,
       ]);
 
   final Float32List x, y, radius, alpha, depth;
+
+  /// Each star's colour, of [kGaiaStarTints].
+  final Uint8List tint;
 
   /// Stars placed by hand, each a lone star or a cluster of them, in a
   /// share of the area as the rest are: drawn as the nearest, brightest of
@@ -590,7 +617,14 @@ class _StarPainter extends CustomPainter {
       return over >= 1 ? 0 : (1 - full) / (1 - over);
     }
 
-    void star(double x, double y, double r, double a, double depth) {
+    void star(
+      double x,
+      double y,
+      double r,
+      double a,
+      double depth, [
+      int tint = 0,
+    ]) {
       final px = x * size.width + stars.lean.dx * depth;
       final py = y * size.height + stars.lean.dy * depth;
       final nearest = min(
@@ -614,7 +648,9 @@ class _StarPainter extends CustomPainter {
             (r / drawn) *
             (r / drawn),
       );
-      paint.color = Colors.white.withValues(alpha: alpha * dim(py));
+      paint.color = kGaiaStarTints[r > 1 ? tint : 0].withValues(
+        alpha: alpha * dim(py),
+      );
       canvas.drawCircle(Offset(px, py), drawn, paint);
     }
 
@@ -625,6 +661,7 @@ class _StarPainter extends CustomPainter {
         stars.radius[i],
         stars.alpha[i],
         stars.depth[i],
+        stars.tint[i],
       );
     }
     for (final group in stars.placed) {

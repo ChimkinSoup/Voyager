@@ -13,6 +13,12 @@ import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
+/// The starfield steps the debug menu offers, in logical pixels.
+const kGaiaDebugStarSteps = [0.5, 0.75, 1.0];
+
+/// The sky's resting frame rates the debug menu offers; 0, every frame.
+const kGaiaDebugSkyRestRates = [30, 60, 0];
+
 /// The streaming speeds the debug menu offers, in characters a second.
 const kGaiaDebugStreamSpeeds = [25, 50, 100, 200, 400, 800, 1600, 6400];
 
@@ -77,6 +83,15 @@ class GaiaDebug extends ChangeNotifier {
   /// Degrees a minute the empty chat's sky turns.
   var skyRotation = 45.0;
 
+  /// One of [kGaiaDebugStarSteps]: how far the starfield's farthest stars
+  /// may move in one step while only turning. Larger steps less often, so
+  /// fewer frames.
+  var starStep = 1.0;
+
+  /// One of [kGaiaDebugSkyRestRates]: the sky's frames a second while
+  /// nothing on it moves quickly.
+  var skyRestRate = 60;
+
   /// The sky's stars per million square logical pixels.
   var skyStars = 300.0;
 
@@ -105,6 +120,19 @@ class GaiaDebug extends ChangeNotifier {
   /// How the aurora goes as the sky leaves.
   var skyAuroraExit = GaiaAuroraExit.ebb;
 
+  /// How fast the aurora's curtains wax and wane against one another; 0,
+  /// each holds steady.
+  var skyAuroraDrift = 2.0;
+
+  /// The rare aurora every time, rather than one sky in [kGaiaRareAurora].
+  var skyRareAurora = false;
+
+  /// The rare aurora's colours; null, rolled by their shares.
+  GaiaRareAurora? skyRareColours;
+
+  /// The meteor shower: as the calendar has one, or held at a strength.
+  var skyShower = GaiaSkyShower.calendar;
+
   /// How a satellite crossing the sky looks.
   var skySatellite = GaiaSatellite.trail;
 
@@ -121,6 +149,10 @@ class GaiaDebug extends ChangeNotifier {
   /// Bumped by the sky panel's Play exit, which plays the exit in place.
   /// Not kept.
   var skyExitTest = 0;
+
+  /// Bumped by the sky panel's Shower burst, which sends a burst of a
+  /// shower's meteors across. Not kept.
+  var skyBurstTest = 0;
 
   /// The step the sky panel's tour is at ([GaiaController.playSkyTour]),
   /// or null when none is running. Not kept.
@@ -166,6 +198,14 @@ class GaiaDebug extends ChangeNotifier {
       double number(String key, double value, double min, double max) =>
           ((json[key] as num?)?.toDouble() ?? value).clamp(min, max);
       skyRotation = number('skyRotation', skyRotation, 0, 60);
+      if (json['starStep'] case final num step
+          when kGaiaDebugStarSteps.contains(step.toDouble())) {
+        starStep = step.toDouble();
+      }
+      if (json['skyRestRate'] case final int rate
+          when kGaiaDebugSkyRestRates.contains(rate)) {
+        skyRestRate = rate;
+      }
       skyStars = number('skyStars', skyStars, 0, 1200);
       skyTwinkle = number('skyTwinkle', skyTwinkle, 0, 1);
       skySparkles = number('skySparkles', skySparkles, 0, 20);
@@ -180,6 +220,12 @@ class GaiaDebug extends ChangeNotifier {
       skyAuroraExit =
           GaiaAuroraExit.values.asNameMap()[json['skyAuroraExit']] ??
           skyAuroraExit;
+      skyAuroraDrift = number('skyAuroraDrift', skyAuroraDrift, 0, 20);
+      skyRareAurora = json['skyRareAurora'] == true;
+      skyRareColours = GaiaRareAurora.values
+          .asNameMap()[json['skyRareColours']];
+      skyShower =
+          GaiaSkyShower.values.asNameMap()[json['skyShower']] ?? skyShower;
       skyExit = GaiaSkyExit.values.asNameMap()[json['skyExit']] ?? skyExit;
       skyPlainBlink = json['skyPlainBlink'] != false;
       skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
@@ -245,6 +291,10 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setSkyRotation(double value, {bool save = true}) =>
       _set(() => skyRotation = value, save: save);
 
+  Future<void> setStarStep(double value) => _set(() => starStep = value);
+
+  Future<void> setSkyRestRate(int value) => _set(() => skyRestRate = value);
+
   Future<void> setSkyStars(double value, {bool save = true}) =>
       _set(() => skyStars = value, save: save);
 
@@ -270,6 +320,18 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setSkyAuroraExit(GaiaAuroraExit value) =>
       _set(() => skyAuroraExit = value);
 
+  Future<void> setSkyAuroraDrift(double value, {bool save = true}) =>
+      _set(() => skyAuroraDrift = value, save: save);
+
+  Future<void> setSkyRareAurora(bool value) =>
+      _set(() => skyRareAurora = value);
+
+  Future<void> setSkyRareColours(GaiaRareAurora? value) =>
+      _set(() => skyRareColours = value);
+
+  Future<void> setSkyShower(GaiaSkyShower value) =>
+      _set(() => skyShower = value);
+
   Future<void> setSkySatellite(GaiaSatellite value) =>
       _set(() => skySatellite = value);
 
@@ -284,6 +346,36 @@ class GaiaDebug extends ChangeNotifier {
   void testSkyExit() {
     skyExitTest++;
     notifyListeners();
+  }
+
+  void testSkyBurst() {
+    skyBurstTest++;
+    notifyListeners();
+  }
+
+  /// Every setting in the sky panel back to its default.
+  Future<void> resetSky() {
+    final defaults = GaiaDebug();
+    return _set(() {
+      skyRotation = defaults.skyRotation;
+      starStep = defaults.starStep;
+      skyRestRate = defaults.skyRestRate;
+      skyStars = defaults.skyStars;
+      skyTwinkle = defaults.skyTwinkle;
+      skySparkles = defaults.skySparkles;
+      skyTraceSpeed = defaults.skyTraceSpeed;
+      skyEventInterval = defaults.skyEventInterval;
+      skyShower = defaults.skyShower;
+      skyAurora = defaults.skyAurora;
+      skyAuroraDrift = defaults.skyAuroraDrift;
+      skyRareAurora = defaults.skyRareAurora;
+      skyRareColours = defaults.skyRareColours;
+      skyAuroraExit = defaults.skyAuroraExit;
+      skySatellite = defaults.skySatellite;
+      skyExitTime = defaults.skyExitTime;
+      skyExit = defaults.skyExit;
+      skyPlainBlink = defaults.skyPlainBlink;
+    });
   }
 
   void setSkyTour(String? step) {
@@ -340,6 +432,8 @@ class GaiaDebug extends ChangeNotifier {
           'recallPickOff': !recallPick,
           'skyPanel': skyPanel,
           'skyRotation': skyRotation,
+          'starStep': starStep,
+          'skyRestRate': skyRestRate,
           'skyStars': skyStars,
           'skyTwinkle': skyTwinkle,
           'skySparkles': skySparkles,
@@ -350,6 +444,10 @@ class GaiaDebug extends ChangeNotifier {
           'skyAurora': skyAurora,
           'skySatellite': skySatellite.name,
           'skyAuroraExit': skyAuroraExit.name,
+          'skyAuroraDrift': skyAuroraDrift,
+          'skyRareAurora': skyRareAurora,
+          'skyRareColours': skyRareColours?.name,
+          'skyShower': skyShower.name,
           'skyExit': skyExit.name,
           'skyPlainBlink': skyPlainBlink,
           'skyExitTime': skyExitTime,

@@ -243,6 +243,7 @@ class GaiaChatStore {
     String? project,
     String? folder,
     List<String> recalled = const [],
+    List<String>? pinned,
   }) => _serial(() async {
     final chat = await _repository.getChat(chatId);
     if (chat == null) return;
@@ -259,6 +260,7 @@ class GaiaChatStore {
                   project: project,
                   folder: folder,
                   recalled: recalled,
+                  pinned: pinned,
                 ),
               },
       ),
