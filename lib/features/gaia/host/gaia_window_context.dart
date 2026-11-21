@@ -1026,6 +1026,10 @@ GaiaWindowScan? gaiaReadWindow(
   int hwnd, {
   required bool browser,
   ({int left, int top, int width, int height})? region,
+  String? matching,
+  Set<String>? types,
+  bool offscreen = false,
+  bool pageOnly = false,
 }) {
   if (browser || gaiaHostsChromiumPage(hwnd)) {
     gaiaSettleScan(
@@ -1035,7 +1039,16 @@ GaiaWindowScan? gaiaReadWindow(
       tries: 4,
     );
   }
-  return gaiaScanWindow(hwnd, browser: browser, text: true, region: region);
+  return gaiaScanWindow(
+    hwnd,
+    browser: browser,
+    text: true,
+    region: region,
+    matching: matching,
+    types: types,
+    offscreen: offscreen,
+    pageOnly: pageOnly,
+  );
 }
 
 /// How much of a window's tree goes to the agent, and of one leaf's text: what
@@ -1251,8 +1264,12 @@ GaiaWindowScan? gaiaSettleScan(
 /// Reads [hwnd]'s controls in one fetch of its tree; call within
 /// [gaiaScreenWork]. With [text] off, only what [GaiaWindowScan.sensitive]
 /// needs. [region] keeps the tree to controls touching it, in physical screen
-/// pixels. [find] fills [GaiaWindowScan.matches] with the on-screen controls
-/// of that name. Null when its tree couldn't be read at all. [onMatch] is
+/// pixels. [matching] and [types] keep it to controls with that text in their
+/// name or value, and of those types, each under what it's in; either matches
+/// regardless of case. [offscreen] keeps the controls UI Automation says are
+/// off screen too, as a page's below the fold, marked so. [pageOnly] matches
+/// only controls inside a Document, so not a browser's tabs or address bar. [find] fills [GaiaWindowScan.matches] with the on-screen
+/// controls of that name. Null when its tree couldn't be read at all. [onMatch] is
 /// handed each match's element as it's found, and [onScrollable] each
 /// on-screen control that can scroll, neither inside a sensitive field: what
 /// [gaiaActOnControl] acts on.
@@ -1261,6 +1278,10 @@ GaiaWindowScan? gaiaScanWindow(
   required bool browser,
   required bool text,
   ({int left, int top, int width, int height})? region,
+  String? matching,
+  Set<String>? types,
+  bool offscreen = false,
+  bool pageOnly = false,
   ({String name, String? type})? find,
   void Function(
     IUIAutomation uia,
@@ -1300,6 +1321,12 @@ GaiaWindowScan? gaiaScanWindow(
       UIA_IsTextPatternAvailablePropertyId,
       UIA_HasKeyboardFocusPropertyId,
       if (onScrollable != null) UIA_IsScrollPatternAvailablePropertyId,
+      if (text) ...[
+        UIA_IsTogglePatternAvailablePropertyId,
+        UIA_ToggleToggleStatePropertyId,
+        UIA_IsSelectionItemPatternAvailablePropertyId,
+        UIA_SelectionItemIsSelectedPropertyId,
+      ],
     ]) {
       cache.addProperty(property);
     }
@@ -1353,7 +1380,40 @@ GaiaWindowScan? gaiaScanWindow(
             bounds.top < region.top + region.height &&
             bounds.bottom > region.top);
 
-    void walk(IUIAutomationElement element, int depth) {
+    // [above] is the name of the printed control this one is under.
+    final needle = matching?.toLowerCase();
+    final kinds = types?.map((type) => type.toLowerCase()).toSet();
+    bool keeps(String type, String name, String? value) =>
+        (kinds == null || kinds.contains(type.toLowerCase())) &&
+        (needle == null ||
+            name.toLowerCase().contains(needle) ||
+            (value?.toLowerCase().contains(needle) ?? false));
+
+    // The printed controls being walked under, each null once it's written:
+    // with a filter, one is written only above a control that's kept.
+    final open = <String?>[];
+    void emit(String line, {required bool kept}) {
+      if (!kept) return;
+      for (var i = 0; i < open.length; i++) {
+        if (open[i] case final above?) {
+          lines.writeln(above);
+          open[i] = null;
+        }
+      }
+      lines.writeln(line);
+    }
+
+    // The window itself: its title isn't a match, as a wait's text would
+    // otherwise show at once whenever the title has it.
+    var atRoot = true;
+    void walk(
+      IUIAutomationElement element,
+      int depth,
+      String above, {
+      bool inPage = false,
+    }) {
+      final isRoot = atRoot;
+      atRoot = false;
       if (text && lines.length >= _maxTreeText) {
         cut = true;
         return;
@@ -1382,7 +1442,10 @@ GaiaWindowScan? gaiaScanWindow(
         if (focused) sensitiveFocused = true;
         matchIf(element, type, name, bounds, isSensitive: true);
         if (text && inRegion(bounds)) {
-          lines.writeln('${'  ' * depth}$type (sensitive, not read) $place');
+          emit(
+            '${'  ' * depth}$type (sensitive, not read) $place',
+            kept: keeps(type, '', null),
+          );
         }
         return;
       }
@@ -1395,32 +1458,51 @@ GaiaWindowScan? gaiaScanWindow(
       // Nor its children, as above.
       if (hideUnnamed && gaiaFieldUnjudged(type, name)) {
         unjudged.add(bounds);
-        if (text && element.cachedIsOffscreen == 0 && inRegion(bounds)) {
-          lines.writeln('${'  ' * depth}$type (no name, not read) $place');
+        if (text &&
+            (offscreen || element.cachedIsOffscreen == 0) &&
+            inRegion(bounds)) {
+          emit(
+            '${'  ' * depth}$type (no name, not read)'
+            '${element.cachedIsOffscreen == 0 ? '' : ' (off screen)'} $place',
+            kept: keeps(type, '', null),
+          );
         }
         return;
       }
       final children = calloc<COMObject>();
+      var printed = false;
       try {
         element.getCachedChildren(children.cast());
         final leaf = children.ref.isNull;
-        var printed = false;
-        if (text && element.cachedIsOffscreen == 0 && inRegion(bounds)) {
+        if (text &&
+            (offscreen || element.cachedIsOffscreen == 0) &&
+            inRegion(bounds)) {
           final value = _valueControls.contains(type) || leaf
               ? _valueOf(element, type, leaf: leaf)
               : null;
           if (value != null && value.length >= _maxLeafText) cut = true;
-          if (name.isNotEmpty ||
+          // A name the same as the one it's under only repeats it, as a
+          // list row's checkbox and link repeat the row's.
+          final shown = name == above ? '' : name;
+          final sized =
+              bounds.right > bounds.left && bounds.bottom > bounds.top;
+          if (shown.isNotEmpty ||
               value != null ||
-              !_silentControls.contains(type)) {
+              (sized && !_silentControls.contains(type))) {
             // As JSON strings, so what a page says can't pass for another line.
-            lines.writeln(
-              '${'  ' * depth}$type'
-              '${name.isEmpty ? '' : ' ${jsonEncode(_capped(name, _maxControlName))}'}'
-              '${value == null ? '' : ' = ${jsonEncode(value)}'}'
-              ' $place',
-            );
+            final line =
+                '${'  ' * depth}$type'
+                '${shown.isEmpty ? '' : ' ${jsonEncode(_capped(shown, _maxControlName))}'}'
+                '${value == null ? '' : ' = ${jsonEncode(value)}'}'
+                '${_stateOf(element)}'
+                '${element.cachedIsOffscreen == 0 ? '' : ' (off screen)'}'
+                ' $place';
+            final kept =
+                !isRoot && (!pageOnly || inPage) && keeps(type, name, value);
+            emit(line, kept: kept);
+            open.add(kept ? null : line);
             printed = true;
+            above = name;
           }
         }
         if (leaf) return;
@@ -1433,6 +1515,8 @@ GaiaWindowScan? gaiaScanWindow(
               walk(
                 _detached(IUIAutomationElement(child)),
                 printed ? depth + 1 : depth,
+                above,
+                inPage: inPage || type == 'Document',
               );
             }
           } finally {
@@ -1441,12 +1525,13 @@ GaiaWindowScan? gaiaScanWindow(
           }
         }
       } finally {
+        if (printed) open.removeLast();
         _releaseFound(children);
         free(children);
       }
     }
 
-    walk(_detached(IUIAutomationElement(cached)), 0);
+    walk(_detached(IUIAutomationElement(cached)), 0, '');
     return (
       url: url,
       tree: lines.toString().trimRight(),
@@ -1798,6 +1883,38 @@ GaiaDirectMiss? _missOf(int hr) => switch (hr.toUnsigned(32)) {
   0x80040201 => GaiaDirectMiss.notFound,
   _ => null,
 };
+
+/// What a checkbox, radio button or list item says of itself, as a read shows
+/// it: checked, mixed or selected; nothing for none of them. Each only where
+/// its pattern is: a control without one still answers its default, which for
+/// a toggle is mixed.
+String _stateOf(IUIAutomationElement element) {
+  final toggle = calloc<VARIANT>();
+  try {
+    if (_cachedFlag(element, UIA_IsTogglePatternAvailablePropertyId) &&
+        SUCCEEDED(
+          element.getCachedPropertyValue(
+            UIA_ToggleToggleStatePropertyId,
+            toggle,
+          ),
+        ) &&
+        toggle.ref.vt == VT_I4) {
+      switch (toggle.ref.lVal) {
+        case ToggleState_On:
+          return ' (checked)';
+        case ToggleState_Indeterminate:
+          return ' (mixed)';
+      }
+    }
+  } finally {
+    VariantClear(toggle);
+    free(toggle);
+  }
+  return _cachedFlag(element, UIA_IsSelectionItemPatternAvailablePropertyId) &&
+          _cachedFlag(element, UIA_SelectionItemIsSelectedPropertyId)
+      ? ' (selected)'
+      : '';
+}
 
 bool _cachedFlag(IUIAutomationElement element, int property) {
   final value = calloc<VARIANT>();

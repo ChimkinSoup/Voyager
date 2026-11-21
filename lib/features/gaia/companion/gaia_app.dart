@@ -3532,18 +3532,24 @@ class _ToBottom extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: gaiaPromptColor(theme),
-      shape: _chipShape,
-      child: InkWell(
-        customBorder: _chipShape,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Icon(
-            Icons.keyboard_double_arrow_down_rounded,
-            size: 18,
-            color: theme.colorScheme.primary,
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.all(Radius.circular(GaiaRadius.chip)),
+        boxShadow: [kGaiaChipShadow],
+      ),
+      child: Material(
+        color: gaiaPromptColor(theme),
+        shape: _chipShape,
+        child: InkWell(
+          customBorder: _chipShape,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Icon(
+              Icons.keyboard_double_arrow_down_rounded,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
           ),
         ),
       ),
@@ -6511,6 +6517,7 @@ class _ContextChip extends StatelessWidget {
           theme.scaffoldBackgroundColor,
         ),
         borderRadius: BorderRadius.circular(GaiaRadius.chip),
+        boxShadow: const [kGaiaChipShadow],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

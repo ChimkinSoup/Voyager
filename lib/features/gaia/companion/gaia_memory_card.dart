@@ -132,7 +132,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
     );
   }
 
-  Widget _topics(ThemeData theme) {
+  Widget _topics(ThemeData theme, Color background) {
     final filing = widget.filing!;
     final suggested = filing.suggested;
     final taken = filing.newTopic == true;
@@ -150,6 +150,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
           _TopicChip(
             label: topic.path,
             style: label,
+            background: background,
             tooltip: 'Remove',
             removes: true,
             onTap: () => widget.onTopics?.call([
@@ -161,6 +162,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
           _TopicChip(
             label: 'New topic: $suggested',
             style: label,
+            background: background,
             checked: taken,
             filled: taken,
             declined: declined,
@@ -189,6 +191,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
               key: _addKey,
               label: '+ Topic',
               style: label,
+              background: background,
               onTap: () {
                 // Read once: Enter or Space, later, has no press to set it.
                 final wasOpen = _wasOpen;
@@ -206,6 +209,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final memory = widget.memory;
+    final tint = accent.withValues(alpha: _answerable ? 0.08 : 0.03);
     return Container(
       constraints: const BoxConstraints(maxWidth: 520),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -216,7 +220,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
           color: (_answerable ? accent : theme.colorScheme.outlineVariant)
               .withValues(alpha: _answerable ? 0.7 : 0.4),
         ),
-        color: accent.withValues(alpha: _answerable ? 0.08 : 0.03),
+        color: tint,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,7 +256,10 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             Text(memory.text, style: theme.textTheme.bodyMedium),
           if (_answerable && widget.filing != null) ...[
             const SizedBox(height: 6),
-            _topics(theme),
+            _topics(
+              theme,
+              Color.alphaBlend(tint, theme.scaffoldBackgroundColor),
+            ),
           ],
           const SizedBox(height: 8),
           if (_answerable)
@@ -322,6 +329,7 @@ class _TopicChip extends StatefulWidget {
     super.key,
     required this.label,
     required this.style,
+    required this.background,
     this.tooltip,
     this.onTap,
     this.removes = false,
@@ -332,6 +340,9 @@ class _TopicChip extends StatefulWidget {
 
   final String label;
   final TextStyle? style;
+
+  /// The card's colour, which the chip is solid over.
+  final Color background;
   final String? tooltip;
   final VoidCallback? onTap;
   final bool removes;
@@ -412,12 +423,19 @@ class _TopicChipState extends State<_TopicChip> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(GaiaRadius.chip),
-            border: Border.all(color: highlighted ? lit : colors.outlineVariant),
-            color: widget.filled
-                ? colors.primary.withValues(alpha: 0.12)
-                : highlighted
-                ? lit.withValues(alpha: 0.08)
-                : null,
+            border: Border.all(
+              color: highlighted ? lit : colors.outlineVariant,
+            ),
+            // Solid, under its shadow.
+            color: Color.alphaBlend(
+              widget.filled
+                  ? colors.primary.withValues(alpha: 0.12)
+                  : highlighted
+                  ? lit.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              widget.background,
+            ),
+            boxShadow: const [kGaiaChipShadow],
           ),
           child: widget.tooltip == null
               ? text

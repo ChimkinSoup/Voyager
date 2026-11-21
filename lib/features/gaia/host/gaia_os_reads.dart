@@ -27,6 +27,10 @@ class GaiaOsReads {
       GaiaForegroundWindow window, {
       required bool browser,
       ({int left, int top, int width, int height})? region,
+      String? matching,
+      Set<String>? types,
+      bool offscreen,
+      bool pageOnly,
     })?
     scan,
     Future<String?> Function(int hwnd)? address,
@@ -35,6 +39,8 @@ class GaiaOsReads {
     List<GaiaListedWindow> Function()? windows,
     Future<GaiaClipboard> Function()? clipboard,
     GaiaForegroundWindow? Function(int hwnd)? describe,
+    Future<void> Function(Duration)? wait,
+    DateTime Function()? now,
   }) : _voyagerPid = voyagerPid ?? pid,
        _target = target ?? gaiaOsTarget,
        _scan = scan ?? _scanWindow,
@@ -43,7 +49,9 @@ class GaiaOsReads {
        _frame = frame ?? gaiaWindowFrame,
        _windows = windows ?? gaiaListWindows,
        _clipboard = clipboard ?? gaiaReadClipboard,
-       _describe = describe ?? _describeWindow;
+       _describe = describe ?? _describeWindow,
+       _wait = wait ?? Future<void>.delayed,
+       _now = now ?? DateTime.now;
 
   final int Function() companionPid;
   final List<String> Function() exclusions;
@@ -56,6 +64,10 @@ class GaiaOsReads {
     GaiaForegroundWindow window, {
     required bool browser,
     ({int left, int top, int width, int height})? region,
+    String? matching,
+    Set<String>? types,
+    bool offscreen,
+    bool pageOnly,
   })
   _scan;
   final Future<String?> Function(int hwnd) _address;
@@ -65,6 +77,11 @@ class GaiaOsReads {
   final List<GaiaListedWindow> Function() _windows;
   final Future<GaiaClipboard> Function() _clipboard;
   final GaiaForegroundWindow? Function(int hwnd) _describe;
+  final Future<void> Function(Duration) _wait;
+  final DateTime Function() _now;
+
+  /// How often a read waiting on `until` or `gone` looks again.
+  static const _pollEvery = Duration(milliseconds: 500);
 
   static GaiaForegroundWindow? _describeWindow(int hwnd) =>
       IsWindow(hwnd) == 0 ? null : gaiaDescribeWindow(hwnd);
@@ -77,11 +94,23 @@ class GaiaOsReads {
     GaiaForegroundWindow window, {
     required bool browser,
     ({int left, int top, int width, int height})? region,
+    String? matching,
+    Set<String>? types,
+    bool offscreen = false,
+    bool pageOnly = false,
   }) {
     final hwnd = window.hwnd;
     return gaiaScreenWork<GaiaWindowScan?>(
       hwnd,
-      () => gaiaReadWindow(hwnd, browser: browser, region: region),
+      () => gaiaReadWindow(
+        hwnd,
+        browser: browser,
+        region: region,
+        matching: matching,
+        types: types,
+        offscreen: offscreen,
+        pageOnly: pageOnly,
+      ),
     );
   }
 
@@ -89,12 +118,15 @@ class GaiaOsReads {
       gaiaScreenWork<String?>(hwnd, () => gaiaReadAddress(hwnd));
 
   /// Answers [tool] about [pinned], an Auto session's window, or else the target
-  /// as it stands now. In a [session], a null [pinned] is no window yet.
+  /// as it stands now. In a [session], a null [pinned] is no window yet. A read
+  /// waiting on `until` or `gone` calls [check] before each look after its
+  /// first, and stops with whatever it throws.
   Future<GaiaOsAnswer> read(
     String tool,
     Map<String, Object?> arguments, {
     GaiaForegroundWindow? pinned,
     bool session = false,
+    Future<void> Function()? check,
   }) async {
     if (tool == 'os_windows') return _listWindows(pinned, session: session);
     if (tool == 'os_clipboard') return _readClipboard();
@@ -114,7 +146,12 @@ class GaiaOsReads {
     final browser = gaiaIsBrowser(window.exe);
     final answer = await switch (tool) {
       'os_focused_window' => _focusedWindow(window, browser: browser),
-      'os_read_screen' => _readScreen(window, arguments, browser: browser),
+      'os_read_screen' => _readScreen(
+        window,
+        arguments,
+        browser: browser,
+        check: check,
+      ),
       'os_screenshot' => _screenshot(window, browser: browser),
       _ => throw GaiaReadException('Unknown tool: $tool'),
     };
@@ -198,19 +235,53 @@ class GaiaOsReads {
     GaiaForegroundWindow window,
     Map<String, Object?> arguments, {
     required bool browser,
+    required Future<void> Function()? check,
   }) async {
+    final (:matching, :types) = _filter(arguments);
+    final filtered = matching != null || types != null;
+    final offscreen = switch (arguments['offscreen']) {
+      null || false => false,
+      true => true,
+      _ => throw GaiaReadException('offscreen is true or false.'),
+    };
+    final region = _region(arguments);
+    final wait = _waitFor(arguments);
+    final waited = wait == null
+        ? null
+        : await _waitUntil(
+            window,
+            wait,
+            region: region,
+            browser: browser,
+            check: check,
+          );
     final scan =
-        await _scan(window, browser: browser, region: _region(arguments)) ??
+        await _scan(
+          window,
+          browser: browser,
+          region: region,
+          matching: matching,
+          types: types,
+          offscreen: offscreen,
+        ) ??
         (throw GaiaReadException(_stuck));
     _checkAddress(window, scan.url, browser: browser);
     return (
       text: _framed(window, scan.url, [
         'Each control: its type, its name, = its value, then '
             '[left,top widthxheight] in physical screen pixels. Indented '
-            "under what it's in.",
+            "under what it's in, and with no name when it has the name of "
+            "what it's in. (checked), (mixed) or (selected) when it is.",
+        ?waited,
+        if (filtered) 'Only the controls that match, each under what it\'s in.',
+        if (offscreen)
+          'Off-screen controls too, marked (off screen): scroll to one before '
+              'clicking it.',
         if (scan.cut) 'Cut short: the window has more than this.',
         '',
-        if (scan.tree.isEmpty)
+        if (scan.tree.isEmpty && filtered)
+          'No control matches.'
+        else if (scan.tree.isEmpty)
           'UI Automation shows nothing here. os_screenshot may.'
         else
           scan.tree,
@@ -218,6 +289,51 @@ class GaiaOsReads {
       image: null,
       mimeType: null,
     );
+  }
+
+  /// Reads [window] until [wait]'s `until` text shows and its `gone` text
+  /// doesn't, or its time is up, and says which. A control counts only as a
+  /// read would show it: on screen, and in [region], and in a browser only on
+  /// the page, not its tabs or address bar. [check] goes before each
+  /// look after the first.
+  Future<String> _waitUntil(
+    GaiaForegroundWindow window,
+    ({String? until, String? gone, Duration timeout}) wait, {
+    required ({int left, int top, int width, int height})? region,
+    required bool browser,
+    required Future<void> Function()? check,
+  }) async {
+    Future<bool> shows(String text) async {
+      final scan =
+          await _scan(
+            window,
+            browser: browser,
+            region: region,
+            matching: text,
+            pageOnly: browser,
+          ) ??
+          (throw GaiaReadException(_stuck));
+      _checkAddress(window, scan.url, browser: browser);
+      return scan.tree.isNotEmpty;
+    }
+
+    final start = _now();
+    while (true) {
+      final until = wait.until;
+      final gone = wait.gone;
+      final missing = until != null && !await shows(until);
+      final there = gone != null && await shows(gone);
+      final took = _now().difference(start);
+      final seconds = (took.inMilliseconds / 1000).toStringAsFixed(1);
+      if (!missing && !there) {
+        return 'Waited $seconds s: ${[if (until != null) '${jsonEncode(until)} showed', if (gone != null) '${jsonEncode(gone)} went'].join(' and ')}.';
+      }
+      if (took >= wait.timeout) {
+        return 'Gave up after $seconds s: ${[if (missing) '${jsonEncode(until)} never showed', if (there) '${jsonEncode(gone)} was still there'].join(' and ')}. This is the window as it is now.';
+      }
+      await _wait(_pollEvery);
+      await check?.call();
+    }
   }
 
   Future<GaiaOsAnswer> _screenshot(
@@ -437,6 +553,61 @@ class GaiaOsReads {
     }
     throw GaiaReadException(
       'region needs left, top, width and height, in physical screen pixels.',
+    );
+  }
+
+  /// [arguments]' `find` and `types`; malformed ones are the agent's to fix.
+  static ({String? matching, Set<String>? types}) _filter(
+    Map<String, Object?> arguments,
+  ) {
+    final find = arguments['find'];
+    if (find != null && (find is! String || find.trim().isEmpty)) {
+      throw GaiaReadException('find needs some text to look for.');
+    }
+    final types = arguments['types'];
+    if (types != null &&
+        (types is! List || types.isEmpty || types.any((t) => t is! String))) {
+      throw GaiaReadException(
+        'types needs a list of control types, as os_read_screen shows them: '
+        'Button.',
+      );
+    }
+    return (
+      matching: (find as String?)?.trim(),
+      types: (types as List?)?.cast<String>().toSet(),
+    );
+  }
+
+  /// [arguments]' `until`, `gone` and `timeout`, in seconds: 10 if left out,
+  /// and at most 30. Null with neither text, as there's nothing to wait for;
+  /// malformed ones are the agent's to fix.
+  static ({String? until, String? gone, Duration timeout})? _waitFor(
+    Map<String, Object?> arguments,
+  ) {
+    String? text(String key) {
+      final value = arguments[key];
+      if (value == null) return null;
+      if (value is! String || value.trim().isEmpty) {
+        throw GaiaReadException('$key needs some text to wait for.');
+      }
+      return value.trim();
+    }
+
+    final until = text('until');
+    final gone = text('gone');
+    final timeout = arguments['timeout'];
+    if (timeout != null && (timeout is! num || timeout <= 0)) {
+      throw GaiaReadException('timeout needs a number of seconds above 0.');
+    }
+    if (until == null && gone == null) {
+      if (timeout == null) return null;
+      throw GaiaReadException('timeout needs until or gone to wait for.');
+    }
+    final seconds = ((timeout as num?) ?? 10).clamp(0, 30);
+    return (
+      until: until,
+      gone: gone,
+      timeout: Duration(milliseconds: (seconds * 1000).round()),
     );
   }
 

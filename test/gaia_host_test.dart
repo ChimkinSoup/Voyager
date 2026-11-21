@@ -294,21 +294,30 @@ void main() {
         title: 'notes.txt',
         console: false,
       ),
-      scan: (window, {required browser, region}) async {
-        await osGate?.future;
-        return (
-          url: null,
-          tree: 'Button "Save"',
-          cut: false,
-          sensitive: const <({int left, int top, int right, int bottom})>[],
-          unjudged: const <({int left, int top, int right, int bottom})>[],
-          matches: const <GaiaControlMatch>[],
-          controls: 1,
-          hasDocument: false,
-          sensitiveFocused: false,
-          anyFocused: false,
-        );
-      },
+      scan:
+          (
+            window, {
+            required browser,
+            region,
+            matching,
+            types,
+            offscreen = false,
+            pageOnly = false,
+          }) async {
+            await osGate?.future;
+            return (
+              url: null,
+              tree: matching == 'Inbox' ? '' : 'Button "Save"',
+              cut: false,
+              sensitive: const <({int left, int top, int right, int bottom})>[],
+              unjudged: const <({int left, int top, int right, int bottom})>[],
+              matches: const <GaiaControlMatch>[],
+              controls: 1,
+              hasDocument: false,
+              sensitiveFocused: false,
+              anyFocused: false,
+            );
+          },
     ),
     osControl: GaiaOsControl(
       companionPid: () => 1,
@@ -955,6 +964,50 @@ void main() {
         async.flushMicrotasks();
         expect(answer, isNull);
         expect((failure! as GaiaPipeException).message, contains('aborted'));
+      });
+    });
+
+    group('a read waiting on the screen', () {
+      const waiting = {
+        'chatId': 'c1',
+        'tool': 'os_read_screen',
+        'arguments': {'until': 'Inbox', 'timeout': 30},
+      };
+
+      test('stops at Abort', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+          Object? failure;
+          companions.single.pipe
+              .request('osRead', waiting)
+              .catchError((Object e) => failure = e);
+          async.elapse(const Duration(seconds: 2));
+          expect(failure, isNull);
+          host.onHotkey(GaiaHotkey.abort);
+          async.elapse(const Duration(seconds: 1));
+          expect((failure! as GaiaPipeException).message, contains('aborted'));
+        });
+      });
+
+      test('stops when can see screen goes off', () {
+        run(show: true, (async, host) {
+          connect(async);
+          request(async, 'putChat', {'chat': chat()});
+          request(async, 'setSeeScreen', {'chatId': 'c1', 'on': true});
+          Object? failure;
+          companions.single.pipe
+              .request('osRead', waiting)
+              .catchError((Object e) => failure = e);
+          async.elapse(const Duration(seconds: 2));
+          request(async, 'setSeeScreen', {'chatId': 'c1', 'on': false});
+          async.elapse(const Duration(seconds: 1));
+          expect(
+            (failure! as GaiaPipeException).message,
+            contains('can see screen'),
+          );
+        });
       });
     });
 

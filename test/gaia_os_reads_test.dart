@@ -64,6 +64,11 @@ GaiaOsReads _reads({
   String? address,
   GaiaWindowShot? shot,
   void Function()? onRead,
+  void Function(String? matching, Set<String>? types)? onFilter,
+  void Function(bool offscreen)? onOffscreen,
+  void Function(String? matching, bool pageOnly)? onPageOnly,
+  GaiaWindowScan? Function(String? matching)? scanning,
+  _FakeClock? clock,
   bool Function()? vaultUnlocked,
 }) => GaiaOsReads(
   companionPid: () => 1,
@@ -71,10 +76,24 @@ GaiaOsReads _reads({
   vaultUnlocked: vaultUnlocked ?? () => false,
   voyagerPid: 40,
   target: (_) => window,
-  scan: (window, {required browser, region}) async {
-    onRead?.call();
-    return scan;
-  },
+  scan:
+      (
+        window, {
+        required browser,
+        region,
+        matching,
+        types,
+        offscreen = false,
+        pageOnly = false,
+      }) async {
+        onRead?.call();
+        onFilter?.call(matching, types);
+        onOffscreen?.call(offscreen);
+        onPageOnly?.call(matching, pageOnly);
+        return scanning == null ? scan : scanning(matching);
+      },
+  wait: clock?.wait,
+  now: clock?.now,
   address: (_) async => address,
   shoot: (_, {required browser}) async {
     onRead?.call();
@@ -82,6 +101,17 @@ GaiaOsReads _reads({
   },
   frame: (_) => (left: 1, top: 2, width: 3, height: 4),
 );
+
+/// Time that passes only as a read waits.
+class _FakeClock {
+  var _at = DateTime(2026, 11, 20);
+  final waits = <Duration>[];
+  DateTime now() => _at;
+  Future<void> wait(Duration duration) async {
+    waits.add(duration);
+    _at = _at.add(duration);
+  }
+}
 
 Matcher _refusal(String words) => throwsA(
   isA<GaiaReadException>().having(
@@ -539,6 +569,192 @@ void main() {
         }),
         _refusal('region needs'),
       );
+    });
+
+    test(
+      'find and types reach the scan, and say the read is filtered',
+      () async {
+        (String?, Set<String>?)? filter;
+        final answer =
+            await _reads(
+              scan: _scanned(),
+              onFilter: (matching, types) => filter = (matching, types),
+            ).read('os_read_screen', const {
+              'find': ' Save ',
+              'types': ['Button'],
+            });
+        expect(filter?.$1, 'Save');
+        expect(filter?.$2, {'Button'});
+        expect(answer.text, contains('Only the controls that match'));
+        final plain = await _reads(
+          scan: _scanned(),
+          onFilter: (matching, types) => filter = (matching, types),
+        ).read('os_read_screen', const {});
+        expect(filter, (null, null));
+        expect(plain.text, isNot(contains('Only the controls that match')));
+      },
+    );
+
+    test('offscreen reaches the scan and says so; not for a wait', () async {
+      final asked = <bool>[];
+      final answer = await _reads(
+        clock: _FakeClock(),
+        scanning: (_) => _scanned(),
+        onOffscreen: asked.add,
+      ).read('os_read_screen', const {'offscreen': true, 'until': 'Save'});
+      expect(asked, [false, true]);
+      expect(answer.text, contains('marked (off screen)'));
+      final plain = await _reads(
+        scan: _scanned(),
+      ).read('os_read_screen', const {});
+      expect(plain.text, isNot(contains('(off screen)')));
+      await expectLater(
+        _reads(scan: _scanned()).read('os_read_screen', const {'offscreen': 1}),
+        _refusal('offscreen is true or false'),
+      );
+    });
+
+    test('a filter that matches nothing says so', () async {
+      final answer = await _reads(
+        scan: _scanned(tree: ''),
+      ).read('os_read_screen', const {'find': 'Inbox'});
+      expect(answer.text, contains('No control matches.'));
+      expect(answer.text, isNot(contains('os_screenshot may')));
+    });
+
+    test('a malformed find or types is the agent\'s to fix', () async {
+      await expectLater(
+        _reads(scan: _scanned()).read('os_read_screen', const {'find': ' '}),
+        _refusal('find needs'),
+      );
+      await expectLater(
+        _reads(scan: _scanned()).read('os_read_screen', const {'types': []}),
+        _refusal('types needs'),
+      );
+      await expectLater(
+        _reads(
+          scan: _scanned(),
+        ).read('os_read_screen', const {'types': 'Button'}),
+        _refusal('types needs'),
+      );
+    });
+
+    group('until and gone', () {
+      test('until reads again until the text shows, then reads', () async {
+        final clock = _FakeClock();
+        var looks = 0;
+        final answer = await _reads(
+          clock: clock,
+          scanning: (matching) {
+            if (matching == null) {
+              return _scanned(tree: 'Link "Inbox" [1,2 3x4]');
+            }
+            expect(matching, 'Inbox');
+            return _scanned(tree: ++looks < 4 ? '' : 'Link "Inbox" [1,2 3x4]');
+          },
+        ).read('os_read_screen', const {'until': 'Inbox'});
+        expect(looks, 4);
+        expect(clock.waits, hasLength(3));
+        expect(answer.text, contains('Waited 1.5 s: "Inbox" showed.'));
+        expect(answer.text, contains('Link "Inbox" [1,2 3x4]'));
+      });
+
+      test(
+        "in a browser, a wait looks only on the page, the read at all of it",
+        () async {
+          final looks = <(String?, bool)>[];
+          await _reads(
+            window: _chrome,
+            address: 'https://example.com/',
+            clock: _FakeClock(),
+            onPageOnly: (matching, pageOnly) => looks.add((matching, pageOnly)),
+            scanning: (_) => _scanned(tree: 'Link "Inbox" [1,2 3x4]'),
+          ).read('os_read_screen', const {'until': 'Inbox'});
+          expect(looks, [('Inbox', true), (null, false)]);
+        },
+      );
+
+      test('gone reads again until the text goes', () async {
+        final clock = _FakeClock();
+        var looks = 0;
+        final answer = await _reads(
+          clock: clock,
+          scanning: (matching) => _scanned(
+            tree: matching == 'Loading' && ++looks < 3 ? 'Text "Loading"' : '',
+          ),
+        ).read('os_read_screen', const {'gone': 'Loading'});
+        expect(answer.text, contains('Waited 1.0 s: "Loading" went.'));
+      });
+
+      test('out of time, it says so and reads anyway', () async {
+        final clock = _FakeClock();
+        final answer = await _reads(
+          clock: clock,
+          scanning: (matching) =>
+              _scanned(tree: matching == null ? 'Button "Save" [1,2 3x4]' : ''),
+        ).read('os_read_screen', const {'until': 'Inbox', 'timeout': 2});
+        expect(
+          answer.text,
+          contains('Gave up after 2.0 s: "Inbox" never showed.'),
+        );
+        expect(answer.text, contains('Button "Save" [1,2 3x4]'));
+      });
+
+      test('a timeout over 30 s waits 30', () async {
+        final clock = _FakeClock();
+        final answer = await _reads(
+          clock: clock,
+          scanning: (_) => _scanned(tree: ''),
+        ).read('os_read_screen', const {'until': 'Inbox', 'timeout': 100});
+        expect(answer.text, contains('Gave up after 30.0 s'));
+      });
+
+      test('with nothing to wait for, it reads once', () async {
+        final clock = _FakeClock();
+        var reads = 0;
+        await _reads(
+          clock: clock,
+          scanning: (_) {
+            reads++;
+            return _scanned();
+          },
+        ).read('os_read_screen', const {});
+        expect(reads, 1);
+        expect(clock.waits, isEmpty);
+      });
+
+      test('check stops the wait with what it throws', () async {
+        var looks = 0;
+        var checks = 0;
+        final read =
+            _reads(
+              clock: _FakeClock(),
+              scanning: (matching) {
+                if (matching != null) looks++;
+                return _scanned(tree: '');
+              },
+            ).read(
+              'os_read_screen',
+              const {'until': 'Inbox'},
+              check: () async {
+                if (++checks == 3) throw GaiaReadException('Stopped.');
+              },
+            );
+        await expectLater(read, _refusal('Stopped.'));
+        expect(looks, 3);
+      });
+
+      test('malformed ones are the agent\'s to fix', () async {
+        Future<void> refused(Map<String, Object?> arguments, String words) =>
+            expectLater(
+              _reads(scan: _scanned()).read('os_read_screen', arguments),
+              _refusal(words),
+            );
+        await refused(const {'until': ' '}, 'until needs');
+        await refused(const {'gone': 3}, 'gone needs');
+        await refused(const {'timeout': 5}, 'timeout needs until or gone');
+        await refused(const {'until': 'Inbox', 'timeout': 0}, 'above 0');
+      });
     });
 
     test('a screenshot says where it is and what it hides', () async {

@@ -294,6 +294,7 @@ void main() {
     late List<GaiaCardPart> activity;
     var resumed = 0;
     var screenReads = <Map<String, Object?>>[];
+    var screenFails = false;
 
     GaiaChatTools tools({Duration hold = const Duration(hours: 1)}) =>
         GaiaChatTools(
@@ -310,6 +311,7 @@ void main() {
           },
           screen: (tool, arguments) async {
             screenReads.add(arguments);
+            if (screenFails) throw GaiaToolException('see screen is off');
             return GaiaToolResult(text: 'screen $tool', isError: false);
           },
           proposals: proposals,
@@ -332,6 +334,7 @@ void main() {
       activity = [];
       resumed = 0;
       screenReads = [];
+      screenFails = false;
       aborted = false;
       reads = [];
       committed = [];
@@ -750,7 +753,7 @@ void main() {
           runAnswer = (_) => {'ran': 2, 'steps': steps};
           final turn = tools();
           for (var i = 0; i < 101; i++) {
-            await turn.call('os_steps', const {});
+            await turn.call('os_steps', const {'read_after': false});
           }
           final card = activity.last;
           expect(card.input['steps'], hasLength(200));
@@ -812,9 +815,61 @@ void main() {
           'read_after': true,
         });
         expect(stopped.text, contains('screen os_read_screen'));
-        final plain = await tools().call('os_key', {'keys': 'A'});
-        expect(plain.text, isNot(contains('os_read_screen')));
+        expect(screenReads.last, isEmpty);
+        await tools().call('os_key', {
+          'keys': 'A',
+          'read_after': {
+            'find': 'Inbox',
+            'types': ['Link'],
+          },
+        });
+        expect(screenReads.last, {
+          'find': 'Inbox',
+          'types': ['Link'],
+        });
       });
+
+      test(
+        'read_after is on by default for click, type, key and steps',
+        () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 2, 'steps': steps};
+          for (final tool in kGaiaReadAfterByDefault) {
+            final result = await tools().call(tool, const {});
+            expect(
+              result.text,
+              endsWith('The screen now:\nscreen os_read_screen'),
+            );
+          }
+          expect(screenReads, hasLength(4));
+          final off = await tools().call('os_key', {
+            'keys': 'A',
+            'read_after': false,
+          });
+          expect(off.text, isNot(contains('os_read_screen')));
+          final scroll = await tools().call('os_scroll', const {});
+          expect(scroll.text, isNot(contains('os_read_screen')));
+          expect(screenReads, hasLength(4));
+        },
+      );
+
+      test(
+        'a default read that fails is left out; an asked one says so',
+        () async {
+          planAuto = true;
+          runAnswer = (_) => {'ran': 2, 'steps': steps};
+          screenFails = true;
+          final unasked = await tools().call('os_key', {'keys': 'A'});
+          expect(unasked.text, startsWith('Sent all 2 steps.'));
+          expect(unasked.text, isNot(contains('The screen')));
+          expect(unasked.isError, isFalse);
+          final asked = await tools().call('os_key', {
+            'keys': 'A',
+            'read_after': true,
+          });
+          expect(asked.text, contains('The screen could not be read'));
+        },
+      );
 
       test('step by step, it asks again before each', () async {
         runAnswer = (call) => {'ran': call, 'steps': steps};

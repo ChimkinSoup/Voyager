@@ -557,6 +557,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           },
           'required': ['left', 'top', 'width', 'height'],
         },
+        ..._readFilter,
+        ..._readWait,
       },
     },
   },
@@ -607,7 +609,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         },
         'double': {'type': 'boolean', 'description': 'A double click.'},
         ..._anywhere,
-        ..._readAfter,
+        ..._readAfterByDefault,
       },
     },
   },
@@ -615,7 +617,9 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'os_scroll',
     'description':
         'Scroll the mouse wheel over a control or point, or over the middle of '
-        'the window with neither. Approved or not like os_click.',
+        'the window with neither. Approved or not like os_click. To read a '
+        'long page, try os_read_screen with offscreen first: it often has '
+        'the whole page, with no scrolling.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -649,7 +653,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       'properties': {
         ..._controlTarget,
         'text': {'type': 'string'},
-        ..._readAfter,
+        ..._readAfterByDefault,
       },
       'required': ['text'],
     },
@@ -665,7 +669,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       'type': 'object',
       'properties': {
         'keys': {'type': 'string'},
-        ..._readAfter,
+        ..._readAfterByDefault,
       },
       'required': ['keys'],
     },
@@ -712,7 +716,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
             'required': ['action'],
           },
         },
-        ..._readAfter,
+        ..._readAfterByDefault,
       },
       'required': ['steps'],
     },
@@ -876,15 +880,97 @@ const _anywhere = <String, Object?>{
   },
 };
 
-/// The screen read with an action's result (§5.6).
-const _readAfter = <String, Object?>{
-  'read_after': {
+/// `os_read_screen`'s choices of what to read, which `read_after` takes too.
+const _readFilter = <String, Object?>{
+  'offscreen': {
     'type': 'boolean',
     'description':
-        'Also return the window as os_read_screen reads it once this has '
-        'run, which saves a call. Needs "can see screen".',
+        'Also the controls scrolled out of view, as the rest of a long page, '
+        'so it can be read without scrolling. Not every app has them: a long '
+        'list often holds only the rows near the screen.',
+  },
+  'find': {
+    'type': 'string',
+    'description':
+        'Only controls with this text in their name or value, ignoring case, '
+        "each under what it's in.",
+  },
+  'types': {
+    'type': 'array',
+    'items': {'type': 'string'},
+    'description':
+        'Only controls of these types, as os_read_screen shows them: '
+        '["Button", "Edit", "Link"]. With find, both must match.',
   },
 };
+
+/// `os_read_screen`'s wait, which `read_after` takes too.
+const _readWait = <String, Object?>{
+  'until': {
+    'type': 'string',
+    'description':
+        'Wait until a control with this text in its name or value shows, as '
+        'when a page loads, then read. Ignores case.',
+  },
+  'gone': {
+    'type': 'string',
+    'description':
+        'Wait until no control shows this text, as when "Loading" goes, then '
+        'read. Ignores case.',
+  },
+  'timeout': {
+    'type': 'number',
+    'description':
+        'How long to wait for until or gone, in seconds: 10 if left out, at '
+        'most 30. If it runs out, the read says so and shows the window as '
+        'it is.',
+  },
+};
+
+/// The screen read with an action's result (§5.6).
+const _readAfter = <String, Object?>{
+  'read_after': {'anyOf': _readAfterShape, 'description': _readAfterAbout},
+};
+
+/// [_readAfter] for the actions that read unless told not to.
+const _readAfterByDefault = <String, Object?>{
+  'read_after': {
+    'anyOf': _readAfterShape,
+    'default': true,
+    'description': '$_readAfterAbout On unless false.',
+  },
+};
+
+const _readAfterShape = <Object?>[
+  {'type': 'boolean'},
+  {
+    'type': 'object',
+    'properties': {
+      'region': {
+        'type': 'object',
+        'properties': {
+          'left': {'type': 'integer'},
+          'top': {'type': 'integer'},
+          'width': {'type': 'integer'},
+          'height': {'type': 'integer'},
+        },
+        'required': ['left', 'top', 'width', 'height'],
+      },
+      ..._readFilter,
+      ..._readWait,
+    },
+  },
+];
+
+const _readAfterAbout =
+    'Also return the window as os_read_screen reads it once this has run, '
+    'which saves a call. true for the whole window, or '
+    "os_read_screen's region, find and types to read less, and its until, "
+    'gone and timeout to wait for the screen, as for a page to load. Needs '
+    '"can see screen".';
+
+/// The actions whose `read_after` is on unless it's false.
+const kGaiaReadAfterByDefault = {'os_click', 'os_type', 'os_key', 'os_steps'};
 
 /// The `voyager_*` read tools: the main instance answers them.
 bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');

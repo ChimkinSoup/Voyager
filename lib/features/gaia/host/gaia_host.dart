@@ -2003,6 +2003,8 @@ class GaiaHost {
         ),
         // Read after session(), which may have started one.
         session: _osControl.sessionChat == chatId,
+        // A read that waits on the screen stops at Abort or the grant's end.
+        check: check,
       );
     } on GaiaReadException catch (error) {
       throw GaiaPipeException(error.message);

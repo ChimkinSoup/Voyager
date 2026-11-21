@@ -442,6 +442,7 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     if (auto) {
       return _withRead(
         await _autoControl(id, plan, inWindow: tool != 'os_clipboard'),
+        tool,
         arguments,
       );
     }
@@ -526,6 +527,7 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
       stopped == null
           ? _sentResult(total, notes)
           : _stoppedResult(ran, total, stopped, notes),
+      tool,
       arguments,
     );
   }
@@ -614,21 +616,39 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     isError: false,
   );
 
-  /// With `read_after` (§5.6), [result] and the screen as it is now, read
-  /// as `os_read_screen` reads it, so acting and looking take one call.
+  /// With `read_after` (§5.6), on by default for [kGaiaReadAfterByDefault],
+  /// [result] and the screen as it is now, read as `os_read_screen` reads it,
+  /// so acting and looking take one call.
   Future<GaiaToolResult> _withRead(
     GaiaToolResult result,
+    String tool,
     Map<String, Object?> arguments,
   ) async {
-    if (arguments['read_after'] != true) return result;
+    final asked = arguments['read_after'];
+    if (asked != null && asked is! bool && asked is! Map<String, Object?>) {
+      return GaiaToolResult(
+        text:
+            '${result.text}\n\nThe screen was not read: read_after is true, '
+            'false or an object.',
+        isError: result.isError,
+      );
+    }
+    final filter = switch (asked ?? kGaiaReadAfterByDefault.contains(tool)) {
+      true => const <String, Object?>{},
+      final Map<String, Object?> filter => filter,
+      _ => null,
+    };
+    if (filter == null) return result;
     await Future<void>.delayed(_readSettle);
     try {
-      final read = await screen('os_read_screen', const {});
+      final read = await screen('os_read_screen', filter);
       return GaiaToolResult(
         text: '${result.text}\n\nThe screen now:\n${read.text}',
         isError: result.isError,
       );
     } catch (error) {
+      // Unasked, a failed read is left out: "can see screen" may be off.
+      if (asked == null) return result;
       return GaiaToolResult(
         text: '${result.text}\n\nThe screen could not be read: $error',
         isError: result.isError,

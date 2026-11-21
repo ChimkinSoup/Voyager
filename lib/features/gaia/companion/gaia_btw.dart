@@ -646,6 +646,7 @@ class GaiaBtwChip extends StatelessWidget {
               theme.scaffoldBackgroundColor,
             ),
             borderRadius: BorderRadius.circular(GaiaRadius.chip),
+            boxShadow: const [kGaiaChipShadow],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

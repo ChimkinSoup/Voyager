@@ -1104,6 +1104,10 @@ class _ClaudeProcess {
         environment: {
           ...claudeEnvironment(configDir),
           'MCP_TOOL_TIMEOUT': '${kGaiaMcpToolTimeout.inMilliseconds}',
+          // Gaia's tools load upfront, not behind ToolSearch, which cost
+          // nearly every session a round-trip before its first one (checked
+          // on 2.1.330: -p honours it).
+          'ENABLE_TOOL_SEARCH': 'false',
         },
         includeParentEnvironment: false,
       ),

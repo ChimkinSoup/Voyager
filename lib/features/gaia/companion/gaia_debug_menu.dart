@@ -1398,7 +1398,8 @@ class _ToolResultsPreviewState extends State<_ToolResultsPreview> {
         text: _screen([
           'Each control: its type, its name, = its value, then '
               '[left,top widthxheight] in physical screen pixels. Indented '
-              "under what it's in.",
+              "under what it's in, and with no name when it has the name of "
+              "what it's in. (checked), (mixed) or (selected) when it is.",
           '',
           'Window "Trip plan.md - Notes" [120,80 1400x900]',
           '  Button "New note" [140,130 96x32]',

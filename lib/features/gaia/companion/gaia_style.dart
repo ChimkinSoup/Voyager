@@ -42,6 +42,15 @@ BoxDecoration gaiaFloating(ColorScheme colors, {required double radius}) =>
       ],
     );
 
+/// A chip's shadow, as it floats over the chat's text: [gaiaFloating]'s,
+/// scaled to a chip.
+const kGaiaChipShadow = BoxShadow(
+  color: Color(0x4D000000),
+  offset: Offset(0, 1),
+  blurRadius: 4,
+  spreadRadius: -1,
+);
+
 /// Gaia's corner radii, by what's rounded.
 abstract final class GaiaRadius {
   /// A chip, a menu's row, a small button.

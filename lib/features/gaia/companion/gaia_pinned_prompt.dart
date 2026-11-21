@@ -71,42 +71,48 @@ class GaiaPinnedPrompt extends StatelessWidget {
             text: chapter!,
             style: style?.copyWith(color: accent),
           );
-    return Material(
-      color: gaiaPromptColor(theme),
-      borderRadius: shape,
-      child: InkWell(
+    return DecoratedBox(
+      decoration: BoxDecoration(
         borderRadius: shape,
-        onTap: onTap ?? onChapterTap,
-        child: Padding(
-          padding: _padding,
-          child: Row(
-            children: [
-              Container(
-                width: 3,
-                height: _railHeight,
-                decoration: BoxDecoration(
+        boxShadow: const [kGaiaChipShadow],
+      ),
+      child: Material(
+        color: gaiaPromptColor(theme),
+        borderRadius: shape,
+        child: InkWell(
+          borderRadius: shape,
+          onTap: onTap ?? onChapterTap,
+          child: Padding(
+            padding: _padding,
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: _railHeight,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.keyboard_double_arrow_up_rounded,
+                  size: 14,
                   color: accent,
-                  borderRadius: BorderRadius.circular(2),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.keyboard_double_arrow_up_rounded,
-                size: 14,
-                color: accent,
-              ),
-              const SizedBox(width: 10),
-              if (title != null && prompt != null) ...[
-                // Its own tap target, over the box's, which goes to the
-                // prompt.
-                Flexible(
-                  child: GestureDetector(onTap: onChapterTap, child: title),
-                ),
-                Text(' · ', style: style?.copyWith(color: accent)),
-                Expanded(child: prompt),
-              ] else
-                Expanded(child: title ?? prompt!),
-            ],
+                const SizedBox(width: 10),
+                if (title != null && prompt != null) ...[
+                  // Its own tap target, over the box's, which goes to the
+                  // prompt.
+                  Flexible(
+                    child: GestureDetector(onTap: onChapterTap, child: title),
+                  ),
+                  Text(' · ', style: style?.copyWith(color: accent)),
+                  Expanded(child: prompt),
+                ] else
+                  Expanded(child: title ?? prompt!),
+              ],
+            ),
           ),
         ),
       ),
